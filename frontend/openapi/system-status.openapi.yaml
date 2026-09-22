@@ -1,0 +1,44 @@
+openapi: 3.1.0
+info:
+  title: RedStar M0 technical API (temporary frontend fixture)
+  version: 0.0.1
+  description: >-
+    Temporary fixture to prove the openapi-typescript pipeline before backend
+    publishes the authoritative contract. Replace input with backend OpenAPI
+    at the M0 integration checkpoint. Not a product API.
+paths:
+  /api/system/status:
+    get:
+      operationId: getSystemStatus
+      summary: Technical system status
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatus'
+        '500':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatusError'
+components:
+  schemas:
+    SystemStatus:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [UP, DEGRADED, DOWN]
+        timestamp:
+          type: string
+          format: date-time
+    SystemStatusError:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
