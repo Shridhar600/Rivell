@@ -1,6 +1,7 @@
 package com.rivell.workbench.contracts;
 
 import java.util.UUID;
+import java.util.List;
 
 public record ContractIngestionResult(
         UUID contractId,
@@ -9,7 +10,7 @@ public record ContractIngestionResult(
         int versionNumber,
         String filename,
         ParseStatus parseStatus,
-        java.util.List<String> parseWarnings,
+        List<String> parseWarnings,
         String sha256,
         String storageKey,
         int nodeCount) {

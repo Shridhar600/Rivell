@@ -20,6 +20,7 @@ import com.rivell.workbench.foundation.StorageKey;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
+import java.util.HexFormat;
 
 /**
  * Knowledge ingestion: store the immutable source, deterministically extract structure,
@@ -186,7 +187,7 @@ public class KnowledgeIngestionService {
     private String sha256Hex(byte[] bytes) {
         try {
             var digest = MessageDigest.getInstance("SHA-256");
-            return java.util.HexFormat.of().formatHex(digest.digest(bytes));
+            return HexFormat.of().formatHex(digest.digest(bytes));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is not available", e);
         }

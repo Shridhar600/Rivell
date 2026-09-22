@@ -34,6 +34,7 @@ import com.rivell.workbench.contracts.DocumentStructureParser;
 import com.rivell.workbench.contracts.ParseResult;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
+import java.io.ByteArrayInputStream;
 
 /**
  * Deterministic DOCX structural parser.
@@ -67,7 +68,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
             var rawTopLevelChildren =
                     ZipGuard.countTopLevelBodyChildren(scan.mainDocumentXml());
             var wordPackage = WordprocessingMLPackage.load(
-                    new java.io.ByteArrayInputStream(docxBytes));
+                    new ByteArrayInputStream(docxBytes));
             var body = wordPackage.getMainDocumentPart().getJaxbElement().getBody();
             var walk = new BodyWalk(ownerAggregateId, wordPackage);
             walk.body(body);

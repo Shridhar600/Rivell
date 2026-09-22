@@ -9,6 +9,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.HashMap;
+import java.time.Instant;
+import java.util.Comparator;
 
 /**
  * Segmentation of the deterministic source-node tree into coherent regions
@@ -26,7 +28,7 @@ final class KnowledgeStructure {
 
         List<KnowledgeCandidate> toCandidates(
                 KnowledgeArtifact artifact, ExtractionUnit unit,
-                ApplicabilityScope scope, java.time.Instant now);
+                ApplicabilityScope scope, Instant now);
     }
 
     static final class HeadingSection implements Region {
@@ -53,7 +55,7 @@ final class KnowledgeStructure {
         @Override
         public List<KnowledgeCandidate> toCandidates(
                 KnowledgeArtifact artifact, ExtractionUnit unit,
-                ApplicabilityScope scope, java.time.Instant now) {
+                ApplicabilityScope scope, Instant now) {
             if (unit.contentText() == null || unit.contentText().isBlank()) {
                 return List.of();
             }
@@ -93,7 +95,7 @@ final class KnowledgeStructure {
         @Override
         public List<KnowledgeCandidate> toCandidates(
                 KnowledgeArtifact artifact, ExtractionUnit unit,
-                ApplicabilityScope scope, java.time.Instant now) {
+                ApplicabilityScope scope, Instant now) {
             var candidates = new ArrayList<KnowledgeCandidate>();
             for (var rowCells : cellsByRow.values()) {
                 if (rowCells.stream().allMatch(cell ->
@@ -155,7 +157,7 @@ final class KnowledgeStructure {
         @Override
         public List<KnowledgeCandidate> toCandidates(
                 KnowledgeArtifact artifact, ExtractionUnit unit,
-                ApplicabilityScope scope, java.time.Instant now) {
+                ApplicabilityScope scope, Instant now) {
             var columns = new LinkedHashMap<String, String>();
             for (KnowledgeSourceNode cell : cells) {
                 if (cell.text() == null || cell.text().isBlank()) {
@@ -188,7 +190,7 @@ final class KnowledgeStructure {
 
     private static KnowledgeCandidate candidate(
             KnowledgeArtifact artifact, ExtractionUnit unit, ApplicabilityScope scope,
-            java.time.Instant now, String rawLabel, String contentText) {
+            Instant now, String rawLabel, String contentText) {
         return new KnowledgeCandidate(
                 UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                 candidateType(artifact.artifactType()), ReviewStatus.PENDING,
@@ -257,7 +259,7 @@ final class KnowledgeStructure {
         for (var row : byId.values().stream()
                 .filter(node -> table.id().equals(node.parentId())
                         && node.nodeType() == KnowledgeNodeType.TABLE_ROW)
-                .sorted(java.util.Comparator.comparingInt(KnowledgeSourceNode::ordinal))
+                .sorted(Comparator.comparingInt(KnowledgeSourceNode::ordinal))
                 .toList()) {
             rowsByOrdinal.put(row.ordinal(), cellsOf(row, byId));
         }
@@ -276,7 +278,7 @@ final class KnowledgeStructure {
                 .filter(node -> row.id().equals(node.parentId())
                         && (node.nodeType() == KnowledgeNodeType.SPREADSHEET_CELL
                                 || node.nodeType() == KnowledgeNodeType.TABLE_CELL))
-                .sorted(java.util.Comparator.comparingInt(KnowledgeSourceNode::ordinal))
+                .sorted(Comparator.comparingInt(KnowledgeSourceNode::ordinal))
                 .toList();
     }
 
@@ -285,12 +287,12 @@ final class KnowledgeStructure {
             KnowledgeSourceNode workbook, List<Region> regions) {
         for (KnowledgeSourceNode sheet : nodes.stream()
                 .filter(node -> workbook.id().equals(node.parentId()))
-                .sorted(java.util.Comparator.comparingInt(KnowledgeSourceNode::ordinal))
+                .sorted(Comparator.comparingInt(KnowledgeSourceNode::ordinal))
                 .toList()) {
             var rows = nodes.stream()
                     .filter(node -> sheet.id().equals(node.parentId())
                             && node.nodeType() == KnowledgeNodeType.SPREADSHEET_ROW)
-                    .sorted(java.util.Comparator.comparingInt(KnowledgeSourceNode::rowIndex))
+                    .sorted(Comparator.comparingInt(KnowledgeSourceNode::rowIndex))
                     .toList();
             if (rows.isEmpty()) {
                 continue;
@@ -318,7 +320,7 @@ final class KnowledgeStructure {
         return byId.values().stream()
                 .filter(node -> row.id().equals(node.parentId())
                         && node.nodeType() == KnowledgeNodeType.SPREADSHEET_CELL)
-                .sorted(java.util.Comparator.comparingInt(KnowledgeSourceNode::columnIndex))
+                .sorted(Comparator.comparingInt(KnowledgeSourceNode::columnIndex))
                 .toList();
     }
 
@@ -326,7 +328,7 @@ final class KnowledgeStructure {
             KnowledgeSourceNode parent, List<KnowledgeSourceNode> nodes) {
         return nodes.stream()
                 .filter(node -> parent.id().equals(node.parentId()))
-                .sorted(java.util.Comparator.comparingInt(KnowledgeSourceNode::ordinal))
+                .sorted(Comparator.comparingInt(KnowledgeSourceNode::ordinal))
                 .toList();
     }
 }

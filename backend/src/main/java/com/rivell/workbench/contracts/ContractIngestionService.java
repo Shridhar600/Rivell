@@ -17,6 +17,9 @@ import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
 import java.io.ByteArrayInputStream;
+import java.util.Set;
+import java.util.HexFormat;
+import java.util.Optional;
 
 /**
  * Contract ingestion: store immutable source, parse, persist canonical structure.
@@ -133,7 +136,7 @@ public class ContractIngestionService {
         return buffer;
     }
 
-    private java.util.Optional<String> parsedTitle(java.util.List<DocumentNode> nodes) {
+    private Optional<String> parsedTitle(List<DocumentNode> nodes) {
         return nodes.stream()
                 .filter(node -> node.nodeType() == DocumentNodeType.TITLE)
                 .map(DocumentNode::text)
@@ -154,13 +157,13 @@ public class ContractIngestionService {
 
     static String sanitizeFilename(String filename) {
         return com.rivell.workbench.foundation.FilenameSanitizer.sanitize(
-                filename, java.util.Set.of(".docx"));
+                filename, Set.of(".docx"));
     }
 
     private String sha256Hex(byte[] bytes) {
         try {
             var digest = MessageDigest.getInstance("SHA-256");
-            return java.util.HexFormat.of().formatHex(digest.digest(bytes));
+            return HexFormat.of().formatHex(digest.digest(bytes));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is not available", e);
         }

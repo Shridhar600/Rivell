@@ -3,6 +3,7 @@ package com.rivell.workbench.knowledge;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.Instant;
 
 /**
  * Persistence boundary for the knowledge module. Implementations live in platform.
@@ -41,8 +42,8 @@ public interface KnowledgeRepository {
             String editedContentText,
             CandidatePayload editedPayload,
             String reviewNote,
-            java.time.Instant reviewedAt,
-            java.time.Instant updatedAt);
+            Instant reviewedAt,
+            Instant updatedAt);
 
     List<KnowledgeCandidate> findPublishedCandidates(UUID organizationId);
 
