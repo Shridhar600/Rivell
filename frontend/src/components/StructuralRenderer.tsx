@@ -1,11 +1,18 @@
+import { createElement, type ElementType } from 'react'
 import type { components } from '../api/schema'
 import { buildDocumentTree, type TreeNode } from '../lib/documentTree'
 
 type DocumentNode = components['schemas']['DocumentNode']
 
-const HEADING_TAGS = { 2: 'h2', 3: 'h3', 4: 'h4', 5: 'h5', 6: 'h6' } as const
+const HEADING_TAGS: Record<number, ElementType> = {
+  2: 'h2',
+  3: 'h3',
+  4: 'h4',
+  5: 'h5',
+  6: 'h6',
+}
 
-function headingTag(level: number | null): 'h2' | 'h3' | 'h4' | 'h5' | 'h6' {
+function headingTag(level: number | null): ElementType {
   if (level != null && level >= 2 && level <= 6) return HEADING_TAGS[level]
   return 'h2'
 }
@@ -43,14 +50,12 @@ function NodeView({
           {treeNode.text}
         </h1>
       )
-    case 'HEADING': {
-      const Tag = headingTag(treeNode.headingLevel)
-      return (
-        <Tag {...common} id={`node-${treeNode.id}`}>
-          {treeNode.text}
-        </Tag>
+    case 'HEADING':
+      return createElement(
+        headingTag(treeNode.headingLevel),
+        { ...common, id: `node-${treeNode.id}` },
+        treeNode.text,
       )
-    }
     case 'PARAGRAPH':
       return (
         <p {...common} id={`node-${treeNode.id}`}>
