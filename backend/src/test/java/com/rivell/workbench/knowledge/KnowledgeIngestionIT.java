@@ -132,11 +132,12 @@ class KnowledgeIngestionIT {
         assertThat(rule.scope().declaredContractTypes()).containsExactly("MSA");
         assertThat(rule.conflictSignals()).isEmpty();
 
-        var tableRows = candidates.stream()
+        var dataRow = candidates.stream()
                 .filter(candidate -> candidate.payload().columns().containsKey("Preferred"))
-                .toList();
-        assertThat(tableRows).isNotEmpty();
-        assertThat(tableRows.get(0).payload().columns().get("Fallback")).isEqualTo("2x annual fees");
+                .filter(candidate -> "1x annual fees".equals(candidate.payload().columns().get("Preferred")))
+                .findFirst().orElseThrow();
+        assertThat(dataRow.payload().columns().get("Fallback")).isEqualTo("2x annual fees");
+        assertThat(dataRow.rawLabel()).isEqualTo("Liability cap");
     }
 
     @Test
