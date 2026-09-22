@@ -42,6 +42,9 @@ import com.redstar.workbench.contracts.SourceSpan;
  * content list; elements skipped with a warning cannot shift later spans. Elements inside
  * a body-level structured document tag anchor to that tag's bodyIndex. {@code paragraphIndex} /
  * {@code tableIndex} are document-order counts of their kind in the main part.
+ *
+ * Ordering: {@code ordinal} is the per-parent sibling position in physical document order
+ * (one stable sibling sequence across all node types); rows and cells use row/cell position.
  */
 @Component
 public class DocxStructuralParser implements DocumentStructureParser {
@@ -151,7 +154,6 @@ public class DocxStructuralParser implements DocumentStructureParser {
         private UUID bodyNodeId;
         private int paragraphSequence;
         private int tableSequence;
-
         private BodyWalk(UUID contractVersionId, WordprocessingMLPackage wordPackage) {
             this.contractVersionId = contractVersionId;
             this.wordPackage = wordPackage;
@@ -170,25 +172,34 @@ public class DocxStructuralParser implements DocumentStructureParser {
             nodes.add(new DocumentNode(
                     bodyNodeId, contractVersionId, null, DocumentNodeType.BODY, 0,
                     null, null, null, SourceSpan.ofBody(PART_PATH), null));
-            content(body.getContent(), null, bodyNodeId);
+            content(body.getContent(), null, bodyNodeId, 0);
         }
 
         /**
          * Walks one block-level container. {@code anchorBodyIndex} is the body index of the
          * containing top-level element when nested inside a structured document tag.
+         * {@code firstOrdinal} is the next sibling position under {@code parentId}; returns
+         * the next unused sibling position so structured document tag content continues the
+         * parent's order instead of restarting it.
          */
-        private void content(List<Object> elements, Integer anchorBodyIndex, UUID parentId) {
+        private int content(
+                List<Object> elements, Integer anchorBodyIndex, UUID parentId, int firstOrdinal) {
+            var siblingOrdinal = firstOrdinal;
             for (int i = 0; i < elements.size(); i++) {
                 var element = unwrap(elements.get(i));
                 var bodyIndex = anchorBodyIndex != null ? anchorBodyIndex : i;
                 if (element instanceof P paragraph) {
-                    nodes.add(paragraphNode(paragraph, bodyIndex, parentId, paragraphSequence));
+                    nodes.add(paragraphNode(
+                            paragraph, bodyIndex, parentId, siblingOrdinal, paragraphSequence));
+                    siblingOrdinal++;
                     paragraphSequence++;
                 } else if (element instanceof Tbl table) {
-                    tableNodes(table, bodyIndex, parentId, tableSequence);
+                    tableNodes(table, bodyIndex, parentId, siblingOrdinal, tableSequence);
+                    siblingOrdinal++;
                     tableSequence++;
                 } else if (element instanceof SdtBlock sdtBlock) {
-                    content(sdtBlock.getSdtContent().getContent(), bodyIndex, parentId);
+                    siblingOrdinal = content(
+                            sdtBlock.getSdtContent().getContent(), bodyIndex, parentId, siblingOrdinal);
                 } else if (element instanceof SectPr) {
                     // Section properties describe layout, not content.
                 } else {
@@ -196,10 +207,11 @@ public class DocxStructuralParser implements DocumentStructureParser {
                             + (element == null ? "null" : element.getClass().getSimpleName()));
                 }
             }
+            return siblingOrdinal;
         }
 
         private DocumentNode paragraphNode(
-                P paragraph, int bodyIndex, UUID parentId, int sequence) {
+                P paragraph, int bodyIndex, UUID parentId, int ordinal, int paragraphSequence) {
             var styleId = styleId(paragraph);
             var nodeType = DocumentNodeType.PARAGRAPH;
             Integer headingLevel = null;
@@ -210,16 +222,17 @@ public class DocxStructuralParser implements DocumentStructureParser {
                 headingLevel = headingLevel(styleId);
             }
             return new DocumentNode(
-                    UUID.randomUUID(), contractVersionId, parentId, nodeType, sequence,
+                    UUID.randomUUID(), contractVersionId, parentId, nodeType, ordinal,
                     textOf(paragraph), headingLevel, numberingLabel(paragraph, styleId),
-                    SourceSpan.ofParagraph(PART_PATH, bodyIndex, sequence), styleId);
+                    SourceSpan.ofParagraph(PART_PATH, bodyIndex, paragraphSequence), styleId);
         }
 
-        private void tableNodes(Tbl table, int bodyIndex, UUID parentId, int sequence) {
+        private void tableNodes(
+                Tbl table, int bodyIndex, UUID parentId, int ordinal, int tableSequence) {
             var tableId = UUID.randomUUID();
             nodes.add(new DocumentNode(
-                    tableId, contractVersionId, parentId, DocumentNodeType.TABLE, sequence,
-                    null, null, null, SourceSpan.ofTable(PART_PATH, bodyIndex, sequence), null));
+                    tableId, contractVersionId, parentId, DocumentNodeType.TABLE, ordinal,
+                    null, null, null, SourceSpan.ofTable(PART_PATH, bodyIndex, tableSequence), null));
 
             var rowIndex = 0;
             for (Object rawRow : table.getContent()) {
@@ -230,7 +243,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
                 nodes.add(new DocumentNode(
                         rowId, contractVersionId, tableId, DocumentNodeType.TABLE_ROW, rowIndex,
                         null, null, null,
-                        SourceSpan.ofRow(PART_PATH, bodyIndex, sequence, rowIndex), null));
+                        SourceSpan.ofRow(PART_PATH, bodyIndex, tableSequence, rowIndex), null));
 
                 var cellIndex = 0;
                 for (Object rawCell : row.getContent()) {
@@ -241,7 +254,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
                             UUID.randomUUID(), contractVersionId, rowId,
                             DocumentNodeType.TABLE_CELL, cellIndex,
                             cellText(cell), null, null,
-                            SourceSpan.ofCell(PART_PATH, bodyIndex, sequence, rowIndex, cellIndex),
+                            SourceSpan.ofCell(PART_PATH, bodyIndex, tableSequence, rowIndex, cellIndex),
                             null));
                     cellIndex++;
                 }

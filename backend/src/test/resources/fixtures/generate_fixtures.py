@@ -166,4 +166,33 @@ write_document('with-omitted-parts.docx', doc, extra_parts={
     '<Relationship Id="rIdFtn" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>'
 ))
 
+# --- interleaved-blocks.docx: paragraphs and tables interleaved at body level,
+# plus a nested table inside a table cell (deferred structure, must warn)
+def table(rows):
+    out = []
+    for row_cells in rows:
+        cells = ''.join(f'<w:tc><w:tcPr/><w:p><w:r><w:t>{c}</w:t></w:r></w:p></w:tc>'
+                        for c in row_cells)
+        out.append(f'<w:tr>{cells}</w:tr>')
+    return f'<w:tbl><w:tblPr/>{"".join(out)}</w:tbl>'
+
+
+nested_table_cell = (
+    '<w:tc><w:tcPr/>'
+    '<w:p><w:r><w:t>Cell with nested content</w:t></w:r></w:p>'
+    + table([['nested a', 'nested b']])
+    + '</w:tc>')
+
+body = [
+    p('Interleaved Structure', 'Heading1'),
+    p('First paragraph before any table.'),
+    table([['one', 'two'], ['three', 'four']]),
+    p('Paragraph between the two tables.'),
+    f'<w:tbl><w:tblPr/><w:tr>{nested_table_cell}</w:tr></w:tbl>',
+    p('Last paragraph after all tables.'),
+]
+doc = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W} {R_NS}><w:body>{''.join(body)}{sect_pr()}</w:body></w:document>'''
+write_document('interleaved-blocks.docx', doc)
+
 print('fixtures written to', OUT)

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import com.redstar.workbench.contracts.DocumentNode;
 import com.redstar.workbench.contracts.DocumentNodeType;
 import com.redstar.workbench.contracts.ParseStatus;
+import com.redstar.workbench.contracts.SourceSpan;
 
 class DocxStructuralParserTest {
 
@@ -191,6 +192,62 @@ class DocxStructuralParserTest {
         assertThat(nodes).hasSize(3);
         assertThat(nodes.get(1).text()).isEqualTo("Consulting Terms");
         assertThat(nodes.get(2).text()).isEqualTo("The rates apply for the initial term.");
+    }
+
+    @Test
+    void bodyChildOrdinalsFollowPhysicalDocumentOrderForInterleavedBlocks() {
+        var result = parse("fixtures/interleaved-blocks.docx");
+        var nodes = result.nodes();
+        var bodyId = nodes.get(0).id();
+
+        // BODY + heading + paragraph + table + paragraph + table(with nested) + paragraph
+        assertThat(nodes).hasSize(7 + 2 + 1 + 2 + 1 + 2);
+
+        var bodyChildren = nodes.stream()
+                .filter(node -> bodyId.equals(node.parentId()))
+                .toList();
+
+        // one stable sibling order that agrees with the physical document order
+        var orderedTypes = bodyChildren.stream()
+                .sorted(java.util.Comparator.comparingInt(DocumentNode::ordinal))
+                .map(node -> node.nodeType() + ":" + (node.text() == null ? "" : node.text()))
+                .toList();
+
+        assertThat(orderedTypes).containsExactly(
+                "HEADING:Interleaved Structure",
+                "PARAGRAPH:First paragraph before any table.",
+                "TABLE:",
+                "PARAGRAPH:Paragraph between the two tables.",
+                "TABLE:",
+                "PARAGRAPH:Last paragraph after all tables.");
+
+        // ordinals are contiguous sibling positions, not per-type counters
+        assertThat(bodyChildren.stream().map(DocumentNode::ordinal).sorted())
+                .containsExactly(0, 1, 2, 3, 4, 5);
+
+        // spans agree with sibling order: bodyIndex strictly increases with ordinal
+        var bodyIndexes = bodyChildren.stream()
+                .sorted(java.util.Comparator.comparingInt(DocumentNode::ordinal))
+                .map(node -> node.sourceSpan().bodyIndex())
+                .toList();
+        assertThat(bodyIndexes).isSorted();
+
+        // paragraphIndex/tableIndex remain per-kind locators
+        var paragraphs = bodyChildren.stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.PARAGRAPH
+                        || node.nodeType() == DocumentNodeType.HEADING)
+                .map(DocumentNode::sourceSpan)
+                .map(SourceSpan::paragraphIndex)
+                .toList();
+        assertThat(paragraphs).containsExactly(0, 1, 2, 3);
+        var tables = bodyChildren.stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.TABLE)
+                .map(node -> node.sourceSpan().tableIndex())
+                .toList();
+        assertThat(tables).containsExactly(0, 1);
+
+        // deferred nested table inside a cell is reported, not silently lost
+        assertThat(result.warnings()).contains("UNSUPPORTED_NESTED_TABLE");
     }
 
     @Test

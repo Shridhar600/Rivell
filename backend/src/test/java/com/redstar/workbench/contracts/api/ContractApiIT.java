@@ -97,6 +97,39 @@ class ContractApiIT {
     }
 
     @Test
+    void returnsInterleavedStructureInPhysicalDocumentOrderAfterReload() throws Exception {
+        var result = uploadFixture("fixtures/interleaved-blocks.docx", "interleaved.docx");
+
+        MvcResult structure = mockMvc.perform(get(
+                        "/api/contracts/{id}/versions/{n}/structure", result.contractId(), 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.parseStatus").value("OK"))
+                .andExpect(jsonPath("$.parseWarnings[0]").value("UNSUPPORTED_NESTED_TABLE"))
+                .andReturn();
+
+        var nodes = objectMapper.readTree(structure.getResponse().getContentAsString())
+                .get("nodes");
+        // BODY is nodes[0]; its children follow in returned order
+        var bodyId = nodes.get(0).get("id").asText();
+        var bodyChildren = new java.util.ArrayList<String>();
+        for (var node : nodes) {
+            if (node.get("parentId") != null && node.get("parentId").asText().equals(bodyId)) {
+                var text = node.get("text") == null || node.get("text").isNull()
+                        ? ""
+                        : node.get("text").asText();
+                bodyChildren.add(node.get("nodeType").asText() + ":" + text);
+            }
+        }
+        assertThat(bodyChildren).containsExactly(
+                "HEADING:Interleaved Structure",
+                "PARAGRAPH:First paragraph before any table.",
+                "TABLE:",
+                "PARAGRAPH:Paragraph between the two tables.",
+                "TABLE:",
+                "PARAGRAPH:Last paragraph after all tables.");
+    }
+
+    @Test
     void returnsTableStructureForTableFixture() throws Exception {
         var result = uploadFixture("fixtures/with-table.docx", "msa.docx");
 
