@@ -34,7 +34,7 @@ public class ContractIngestionService {
     private final DocumentStorage documentStorage;
     private final DocumentStructureParser documentStructureParser;
     private final ContractRepository repository;
-    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+    private final TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
     private final DataSize maxFileSize;
@@ -43,7 +43,7 @@ public class ContractIngestionService {
             DocumentStorage documentStorage,
             DocumentStructureParser documentStructureParser,
             ContractRepository repository,
-            org.springframework.transaction.support.TransactionTemplate transactionTemplate,
+            TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
             DataSize maxFileSize) {
