@@ -1,6 +1,6 @@
 import type { components } from '../api/schema'
 
-export type DocumentNode = components['schemas']['DocumentNode']
+export type DocumentNode = components['schemas']['NodeView']
 
 export interface TreeNode extends DocumentNode {
   children: TreeNode[]
@@ -63,11 +63,6 @@ export function buildOutlineItems(nodes: DocumentNode[]): OutlineItem[] {
   return items
 }
 
-export function isParseFailed(
-  parseStatus: string | null | undefined,
-  parseQuality: string | null | undefined,
-): boolean {
-  const failed = (value: string | null | undefined) =>
-    value != null && value.toLowerCase().includes('fail')
-  return failed(parseStatus) || failed(parseQuality)
+export function isParseFailed(parseStatus: string | null | undefined): boolean {
+  return parseStatus === 'FAILED'
 }

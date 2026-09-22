@@ -6,7 +6,7 @@ import { OutlineTree } from './OutlineTree'
 import { SourceSpanPanel } from './SourceSpanPanel'
 import { StructuralRenderer } from './StructuralRenderer'
 
-type DocumentNode = components['schemas']['DocumentNode']
+type DocumentNode = components['schemas']['NodeView']
 
 function node(partial: Partial<DocumentNode> & { id: string }): DocumentNode {
   return {

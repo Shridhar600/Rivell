@@ -7,10 +7,15 @@ import {
 import { apiBaseUrl, createApiClient } from './client'
 import type { components } from './schema'
 
-export type ContractSummary = components['schemas']['ContractSummary']
-export type StructureResponse = components['schemas']['StructureResponse']
-export type DocumentNode = components['schemas']['DocumentNode']
-export type SourceSpan = components['schemas']['SourceSpan']
+export type IngestResponse = components['schemas']['IngestResponse']
+export type ContractSummary = components['schemas']['ContractSummaryResponse']
+export type StructureResponse = components['schemas']['ContractStructureResponse']
+export type DocumentNode = components['schemas']['NodeView']
+export type SourceSpan = components['schemas']['SourceSpanView']
+
+export function isParseStatusFailed(parseStatus: string | null | undefined): boolean {
+  return parseStatus === 'FAILED'
+}
 
 function errorMessage(error: unknown, fallback: string): string {
   if (
@@ -29,13 +34,31 @@ export async function fetchContract(
   contractId: string,
 ): Promise<ContractSummary> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/contracts/{contractId}', {
-    params: { path: { contractId } },
+  const { data, error } = await client.GET('/api/contracts/{id}', {
+    params: { path: { id: contractId } },
   })
 
   if (!data) {
     throw new Error(errorMessage(error, 'Contract unavailable'))
   }
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
   return data
 }
 
@@ -45,13 +68,31 @@ export async function fetchContractStructure(
 ): Promise<StructureResponse> {
   const client = createApiClient()
   const { data, error } = await client.GET(
-    '/api/contracts/{contractId}/versions/{versionNumber}/structure',
-    { params: { path: { contractId, versionNumber } } },
+    '/api/contracts/{id}/versions/{versionNumber}/structure',
+    { params: { path: { id: contractId, versionNumber } } },
   )
 
   if (!data) {
     throw new Error(errorMessage(error, 'Structure unavailable'))
   }
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
+  return data
+}
   return data
 }
 
@@ -61,7 +102,7 @@ export function createUploadFormData(file: File): FormData {
   return formData
 }
 
-export async function uploadContract(file: File): Promise<ContractSummary> {
+export async function uploadContract(file: File): Promise<IngestResponse> {
   const client = createApiClient()
   const { data, error } = await client.POST('/api/contracts', {
     body: { file: file.name },
@@ -95,7 +136,7 @@ export function useContractStructureQuery(
 }
 
 export function useUploadContract(): UseMutationResult<
-  ContractSummary,
+  IngestResponse,
   Error,
   File
 > {

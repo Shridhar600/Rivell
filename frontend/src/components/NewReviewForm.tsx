@@ -34,7 +34,7 @@ export function NewReviewForm() {
     if (error || !file) return
 
     upload.mutate(file, {
-      onSuccess: (summary) => navigate(`/reviews/${summary.contractId}`),
+      onSuccess: (ingest) => navigate(`/reviews/${ingest.contractId}`),
     })
   }
 

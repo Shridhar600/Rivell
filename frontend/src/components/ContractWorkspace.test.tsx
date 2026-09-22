@@ -14,23 +14,22 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 const summary = {
-  contractId: 'c1',
+  id: 'c1',
   title: 'Master Services Agreement',
-  filename: 'msa.docx',
-  versionNumber: 1,
-  parseStatus: 'COMPLETED',
-  parseQuality: 'OK',
-  parserVersion: 'redstar-docx-parser-1',
-  sha256: 'abc123',
+  latestVersion: {
+    versionNumber: 1,
+    parseStatus: 'OK',
+    sha256: 'abc123',
+    nodeCount: 3,
+  },
 }
 
 const structureOk = {
   contractId: 'c1',
   versionNumber: 1,
   parserVersion: 'redstar-docx-parser-1',
-  parseStatus: 'COMPLETED',
-  parseQuality: 'OK',
-  warnings: [],
+  parseStatus: 'OK',
+  nodeCount: 3,
   nodes: [
     {
       id: 't',
@@ -128,7 +127,7 @@ describe('ContractWorkspace', () => {
     expect(view).toHaveAttribute('target', '_blank')
 
     const download = screen.getByRole('link', { name: /download original/i })
-    expect(download).toHaveAttribute('download', 'msa.docx')
+    expect(download).toHaveAttribute('download', 'original.docx')
   })
 
   it('selects a node from the outline and shows its source span', async () => {
@@ -179,7 +178,7 @@ describe('ContractWorkspace', () => {
         () => {
           failures += 1
           if (failures <= 2) {
-            return jsonResponse({ message: 'boom' }, 500)
+            return new Response(null, { status: 500 })
           }
           return jsonResponse(summary)
         },
@@ -190,7 +189,7 @@ describe('ContractWorkspace', () => {
     renderWorkspace()
 
     const alert = await screen.findByRole('alert', {}, { timeout: 5000 })
-    expect(alert).toHaveTextContent(/boom|unavailable/i)
+    expect(alert).toHaveTextContent(/unavailable/i)
 
     await userEvent.click(screen.getByRole('button', { name: /try again/i }))
     expect(
@@ -206,8 +205,6 @@ describe('ContractWorkspace', () => {
           jsonResponse({
             ...structureOk,
             parseStatus: 'FAILED',
-            parseQuality: 'FAILED',
-            warnings: ['unreadable body part'],
             nodes: [],
           }),
       ],
@@ -216,8 +213,10 @@ describe('ContractWorkspace', () => {
         () =>
           jsonResponse({
             ...summary,
-            parseStatus: 'FAILED',
-            parseQuality: 'FAILED',
+            latestVersion: {
+              ...summary.latestVersion,
+              parseStatus: 'FAILED',
+            },
           }),
       ],
     ])
@@ -231,7 +230,6 @@ describe('ContractWorkspace', () => {
     expect(
       screen.getByRole('link', { name: /download original/i }),
     ).toBeInTheDocument()
-    expect(screen.getByText('unreadable body part')).toBeInTheDocument()
   })
 
   it('shows empty state when structure has no nodes and parse succeeded', async () => {

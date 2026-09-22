@@ -2,7 +2,7 @@ import { createElement, type ElementType } from 'react'
 import type { components } from '../api/schema'
 import { buildDocumentTree, type TreeNode } from '../lib/documentTree'
 
-type DocumentNode = components['schemas']['DocumentNode']
+type DocumentNode = components['schemas']['NodeView']
 
 const HEADING_TAGS: Record<number, ElementType> = {
   2: 'h2',

@@ -13,13 +13,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-const summary = {
+const ingest = {
   contractId: 'c9',
-  title: null,
-  filename: 'upload.docx',
+  contractVersionId: 'v9',
   versionNumber: 1,
-  parseStatus: 'COMPLETED',
-  parseQuality: 'OK',
+  parseStatus: 'OK',
+  sha256: 'abc',
+  nodeCount: 0,
 }
 
 function renderForm() {
@@ -70,7 +70,7 @@ describe('NewReviewForm', () => {
   it('uploads a docx and navigates to the contract workspace', async () => {
     const fetchMock = vi.fn(
       (_input: RequestInfo | URL, _init?: RequestInit) =>
-        Promise.resolve(jsonResponse(summary, 201)),
+        Promise.resolve(jsonResponse(ingest)),
     )
     vi.stubGlobal('fetch', fetchMock)
 
@@ -103,7 +103,7 @@ describe('NewReviewForm', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
-        Promise.resolve(jsonResponse({ message: 'not a docx' }, 400)),
+        Promise.resolve(new Response(null, { status: 400 })),
       ),
     )
 
@@ -118,7 +118,7 @@ describe('NewReviewForm', () => {
     )
 
     const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
-    expect(alert).toHaveTextContent(/not a docx|upload/i)
+    expect(alert).toHaveTextContent(/upload|failed/i)
     expect(screen.getByLabelText(/contract file/i)).toBeInTheDocument()
   })
 })

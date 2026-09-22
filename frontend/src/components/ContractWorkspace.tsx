@@ -1,10 +1,6 @@
 import { useCallback, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
-import {
-  originalDocumentUrl,
-  useContractQuery,
-  useContractStructureQuery,
-} from '../api/contracts'
+import { originalDocumentUrl, useContractQuery, useContractStructureQuery } from '../api/contracts'
 import { buildOutlineItems, isParseFailed } from '../lib/documentTree'
 import { EmptyState } from './EmptyState'
 import { ErrorState } from './ErrorState'
@@ -21,7 +17,7 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
   const contract = contractQuery.data
   const structureQuery = useContractStructureQuery(
     contractId,
-    contract?.versionNumber,
+    contract?.latestVersion?.versionNumber,
   )
   const structure = structureQuery.data
 
@@ -58,20 +54,24 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
     )
   }
 
-  const originalUrl = originalDocumentUrl(contractId, contract.versionNumber)
+  const versionNumber = contract.latestVersion?.versionNumber ?? 1
+  const originalUrl = originalDocumentUrl(contractId, versionNumber)
   const parseFailed = isParseFailed(
-    structure?.parseStatus ?? contract.parseStatus,
-    structure?.parseQuality ?? contract.parseQuality,
+    structure?.parseStatus ?? contract.latestVersion?.parseStatus,
   )
 
   const header = (
     <header className="workspace__header">
       <div>
-        <h1>{contract.title ?? contract.filename}</h1>
+        <h1>{contract.title ?? 'Untitled contract'}</h1>
         <p className="workspace__meta">
-          {contract.filename} · v{contract.versionNumber}
-          {contract.sha256 ? ` · sha256 ${contract.sha256.slice(0, 12)}…` : ''}
-          {contract.parserVersion ? ` · ${contract.parserVersion}` : ''}
+          v{versionNumber}
+          {contract.latestVersion?.parseStatus
+            ? ` · parse ${contract.latestVersion.parseStatus}`
+            : ''}
+          {contract.latestVersion?.sha256
+            ? ` · sha256 ${contract.latestVersion.sha256.slice(0, 12)}…`
+            : ''}
         </p>
       </div>
       <div className="workspace__actions">
@@ -83,7 +83,7 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
         >
           View Original
         </a>
-        <a href={originalUrl} download={contract.filename} className="button">
+        <a href={originalUrl} download="original.docx" className="button">
           Download Original
         </a>
       </div>
@@ -103,32 +103,9 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
     )
   } else if (parseFailed) {
     body = (
-      <>
-        <div role="alert" className="state state--error">
-          <p>Document parsing failed. The original file remains available.</p>
-          {structure.warnings.length > 0 ? (
-            <ul>
-              {structure.warnings.map((warning) => (
-                <li key={warning}>{warning}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-        {structure.nodes.length > 0 ? (
-          <div className="workspace__grid">
-            <OutlineTree
-              items={buildOutlineItems(structure.nodes)}
-              selectedId={selectedId}
-              onSelect={selectNode}
-            />
-            <StructuralRenderer
-              nodes={structure.nodes}
-              selectedId={selectedId}
-              onSelect={selectNode}
-            />
-          </div>
-        ) : null}
-      </>
+      <div role="alert" className="state state--error">
+        <p>Document parsing failed. The original file remains available.</p>
+      </div>
     )
   } else if (structure.nodes.length === 0) {
     body = (

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { components } from '../api/schema'
 import { buildDocumentTree, buildOutlineItems, isParseFailed } from './documentTree'
 
-type DocumentNode = components['schemas']['DocumentNode']
+type DocumentNode = components['schemas']['NodeView']
 
 function node(partial: Partial<DocumentNode> & { id: string }): DocumentNode {
   return {
@@ -67,10 +67,10 @@ describe('buildOutlineItems', () => {
 })
 
 describe('isParseFailed', () => {
-  it('detects failure in parseStatus or parseQuality case-insensitively', () => {
-    expect(isParseFailed('FAILED', 'OK')).toBe(true)
-    expect(isParseFailed('COMPLETED', 'failed')).toBe(true)
-    expect(isParseFailed('COMPLETED', 'OK')).toBe(false)
-    expect(isParseFailed('failed', null)).toBe(true)
+  it('uses the structured FAILED status only', () => {
+    expect(isParseFailed('FAILED')).toBe(true)
+    expect(isParseFailed('OK')).toBe(false)
+    expect(isParseFailed('failed')).toBe(false)
+    expect(isParseFailed(null)).toBe(false)
   })
 })

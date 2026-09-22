@@ -1,6 +1,6 @@
 import type { components } from '../api/schema'
 
-type SourceSpan = components['schemas']['SourceSpan']
+type SourceSpan = components['schemas']['SourceSpanView']
 
 function formatIndex(
   label: string,

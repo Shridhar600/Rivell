@@ -14,13 +14,24 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-const summary = {
+const ingest = {
   contractId: 'c1',
-  title: 'MSA',
-  filename: 'msa.docx',
+  contractVersionId: 'v1',
   versionNumber: 1,
-  parseStatus: 'COMPLETED',
-  parseQuality: 'OK',
+  parseStatus: 'OK',
+  sha256: 'abc',
+  nodeCount: 3,
+}
+
+const summary = {
+  id: 'c1',
+  title: 'MSA',
+  latestVersion: {
+    versionNumber: 1,
+    parseStatus: 'OK',
+    sha256: 'abc',
+    nodeCount: 3,
+  },
 }
 
 afterEach(() => {
@@ -37,7 +48,7 @@ describe('fetchContract', () => {
 
     const result = await fetchContract('c1')
 
-    expect(result.contractId).toBe('c1')
+    expect(result.id).toBe('c1')
     const request = fetchMock.mock.calls[0][0] as Request
     expect(request.url).toContain('/api/contracts/c1')
     expect(request.method).toBe('GET')
@@ -61,9 +72,8 @@ describe('fetchContractStructure', () => {
       contractId: 'c1',
       versionNumber: 1,
       parserVersion: 'redstar-docx-parser-1',
-      parseStatus: 'COMPLETED',
-      parseQuality: 'OK',
-      warnings: [],
+      parseStatus: 'OK',
+      nodeCount: 0,
       nodes: [],
     }
     const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -94,7 +104,7 @@ describe('createUploadFormData', () => {
 describe('uploadContract', () => {
   it('POSTs multipart form data with the file field', async () => {
     const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
-      Promise.resolve(jsonResponse(summary, 201)),
+      Promise.resolve(jsonResponse(ingest)),
     )
     vi.stubGlobal('fetch', fetchMock)
 
@@ -103,7 +113,7 @@ describe('uploadContract', () => {
     })
     const result = await uploadContract(file)
 
-    expect(result.contractId).toBe('c1')
+    expect(result.id).toBe('c1')
     const request = fetchMock.mock.calls[0][0] as Request
     expect(request.url).toContain('/api/contracts')
     expect(request.method).toBe('POST')

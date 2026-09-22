@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system/status": {
         parameters: {
             query?: never;
@@ -20,23 +36,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/contracts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["createContract"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/contracts/{contractId}": {
+    "/api/contracts/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -52,14 +52,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/contracts/{contractId}/versions/{versionNumber}/structure": {
+    "/api/contracts/{id}/versions/{versionNumber}/structure": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["getContractStructure"];
+        get: operations["getStructure"];
         put?: never;
         post?: never;
         delete?: never;
@@ -68,7 +68,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/contracts/{contractId}/versions/{versionNumber}/original": {
+    "/api/contracts/{id}/versions/{versionNumber}/original": {
         parameters: {
             query?: never;
             header?: never;
@@ -88,52 +88,77 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        IngestResponse: {
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: uuid */
+            contractVersionId?: string;
+            /** Format: int32 */
+            versionNumber?: number;
+            parseStatus?: string;
+            sha256?: string;
+            /** Format: int32 */
+            nodeCount?: number;
+        };
         SystemStatusResponse: {
             service?: string;
             status?: string;
         };
-        SourceSpan: {
-            partPath: string;
-            bodyIndex: number;
-            paragraphIndex?: number | null;
-            tableIndex?: number | null;
-            rowIndex?: number | null;
-            cellIndex?: number | null;
-            runStart?: number | null;
-            runEnd?: number | null;
+        ContractSummaryResponse: {
+            /** Format: uuid */
+            id?: string;
+            title?: string;
+            latestVersion?: components["schemas"]["LatestVersion"];
         };
-        DocumentNode: {
-            id: string;
-            parentId: string | null;
-            /** @enum {string} */
-            nodeType: "TITLE" | "HEADING" | "PARAGRAPH" | "TABLE" | "TABLE_ROW" | "TABLE_CELL" | "BODY";
-            ordinal: number;
-            text: string | null;
-            headingLevel: number | null;
-            rawStyleId: string | null;
-            sourceSpan: components["schemas"]["SourceSpan"];
+        LatestVersion: {
+            /** Format: int32 */
+            versionNumber?: number;
+            parseStatus?: string;
+            sha256?: string;
+            /** Format: int32 */
+            nodeCount?: number;
         };
-        ContractSummary: {
-            contractId: string;
-            title?: string | null;
-            filename: string;
-            versionNumber: number;
-            parseStatus: string;
-            parseQuality?: string | null;
-            parserVersion?: string | null;
-            sha256?: string | null;
-            warnings?: string[];
-            /** Format: date-time */
-            createdAt?: string;
+        ContractStructureResponse: {
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: int32 */
+            versionNumber?: number;
+            parserVersion?: string;
+            parseStatus?: string;
+            /** Format: int32 */
+            nodeCount?: number;
+            nodes?: components["schemas"]["NodeView"][];
         };
-        StructureResponse: {
-            contractId: string;
-            versionNumber: number;
-            parserVersion: string;
-            parseStatus: string;
-            parseQuality: string;
-            warnings: string[];
-            nodes: components["schemas"]["DocumentNode"][];
+        NodeView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            parentId?: string;
+            nodeType?: string;
+            /** Format: int32 */
+            ordinal?: number;
+            text?: string;
+            /** Format: int32 */
+            headingLevel?: number;
+            sourceSpan?: components["schemas"]["SourceSpanView"];
+            rawStyleId?: string;
+        };
+        SourceSpanView: {
+            partPath?: string;
+            /** Format: int32 */
+            bodyIndex?: number;
+            /** Format: int32 */
+            paragraphIndex?: number;
+            /** Format: int32 */
+            tableIndex?: number;
+            /** Format: int32 */
+            rowIndex?: number;
+            /** Format: int32 */
+            cellIndex?: number;
+            /** Format: int32 */
+            runStart?: number;
+            /** Format: int32 */
+            runEnd?: number;
         };
     };
     responses: never;
@@ -144,6 +169,33 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["IngestResponse"];
+                };
+            };
+        };
+    };
     status: {
         parameters: {
             query?: never;
@@ -164,46 +216,12 @@ export interface operations {
             };
         };
     };
-    createContract: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": {
-                    /** Format: binary */
-                    file: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Contract created and parsed */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContractSummary"];
-                };
-            };
-            /** @description Invalid upload */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     getContract: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                contractId: string;
+                id: string;
             };
             cookie?: never;
         };
@@ -215,24 +233,17 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContractSummary"];
+                    "*/*": components["schemas"]["ContractSummaryResponse"];
                 };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    getContractStructure: {
+    getStructure: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                contractId: string;
+                id: string;
                 versionNumber: number;
             };
             cookie?: never;
@@ -245,15 +256,8 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StructureResponse"];
+                    "*/*": components["schemas"]["ContractStructureResponse"];
                 };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -262,28 +266,21 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                contractId: string;
+                id: string;
                 versionNumber: number;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Original DOCX bytes */
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                    "*/*": string;
                 };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
