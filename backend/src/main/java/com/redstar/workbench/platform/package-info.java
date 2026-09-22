@@ -1,4 +1,4 @@
 @org.springframework.modulith.ApplicationModule(
         displayName = "Platform",
-        allowedDependencies = {"foundation", "organization"})
+        allowedDependencies = {"contracts", "foundation", "organization"})
 package com.redstar.workbench.platform;
