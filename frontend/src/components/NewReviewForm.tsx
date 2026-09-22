@@ -25,6 +25,12 @@ export function NewReviewForm() {
     setValidationError(file ? validateFile(file) : null)
   }
 
+  function startUpload(file: File) {
+    upload.mutate(file, {
+      onSuccess: (ingest) => navigate(`/reviews/${ingest.contractId}`),
+    })
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -33,9 +39,7 @@ export function NewReviewForm() {
     setValidationError(error)
     if (error || !file) return
 
-    upload.mutate(file, {
-      onSuccess: (ingest) => navigate(`/reviews/${ingest.contractId}`),
-    })
+    startUpload(file)
   }
 
   return (
@@ -77,7 +81,7 @@ export function NewReviewForm() {
           message={upload.error.message || 'Upload failed.'}
           onRetry={() => {
             const file = inputRef.current?.files?.[0]
-            if (file) upload.mutate(file)
+            if (file) startUpload(file)
           }}
         />
       ) : null}

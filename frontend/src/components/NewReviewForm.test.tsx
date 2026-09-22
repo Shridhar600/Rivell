@@ -18,6 +18,8 @@ const ingest = {
   contractVersionId: 'v9',
   versionNumber: 1,
   parseStatus: 'OK',
+  parseWarnings: [],
+  filename: 'upload.docx',
   sha256: 'abc',
   nodeCount: 0,
 }
@@ -120,5 +122,121 @@ describe('NewReviewForm', () => {
     const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
     expect(alert).toHaveTextContent(/upload|failed/i)
     expect(screen.getByLabelText(/contract file/i)).toBeInTheDocument()
+  })
+
+  it('surfaces the backend upload error detail', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
+        Promise.resolve(
+          jsonResponse(
+            {
+              code: 'INVALID_UPLOAD',
+              title: 'Invalid upload',
+              detail: 'Only .docx files are supported',
+            },
+            400,
+          ),
+        ),
+      ),
+    )
+
+    renderForm()
+
+    const file = new File(['bad'], 'upload.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    await userEvent.upload(screen.getByLabelText(/contract file/i), file)
+    await userEvent.click(
+      screen.getByRole('button', { name: /start review/i }),
+    )
+
+    const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
+    expect(alert).toHaveTextContent(/only .docx files are supported/i)
+  })
+
+  it('navigates to the workspace when a failed upload is retried successfully', async () => {
+    let attempts = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        const request = input as Request
+        const url = String(input instanceof Request ? input.url : input)
+
+        if (request.method === 'POST') {
+          attempts += 1
+          if (attempts === 1) {
+            return Promise.resolve(
+              jsonResponse(
+                {
+                  code: 'INVALID_UPLOAD',
+                  title: 'Invalid upload',
+                  detail: 'Transient upload failure',
+                },
+                400,
+              ),
+            )
+          }
+          return Promise.resolve(jsonResponse(ingest))
+        }
+
+        if (url.includes('/structure')) {
+          return Promise.resolve(
+            jsonResponse({
+              contractId: 'c9',
+              versionNumber: 1,
+              parserVersion: 'redstar-docx-parser-2',
+              parseStatus: 'OK',
+              parseWarnings: [],
+              nodeCount: 0,
+              nodes: [],
+            }),
+          )
+        }
+
+        if (url.includes('/api/contracts/c9')) {
+          return Promise.resolve(
+            jsonResponse({
+              id: 'c9',
+              title: 'Uploaded contract',
+              latestVersion: {
+                versionNumber: 1,
+                parseStatus: 'OK',
+                parseWarnings: [],
+                parserVersion: 'redstar-docx-parser-2',
+                sha256: 'abc',
+                filename: 'upload.docx',
+                nodeCount: 0,
+              },
+            }),
+          )
+        }
+
+        return Promise.resolve(
+          jsonResponse({ service: 'redstar-backend', status: 'ready' }),
+        )
+      }),
+    )
+
+    renderForm()
+
+    const file = new File(['docx-bytes'], 'upload.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    await userEvent.upload(screen.getByLabelText(/contract file/i), file)
+    await userEvent.click(
+      screen.getByRole('button', { name: /start review/i }),
+    )
+
+    const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
+    expect(alert).toHaveTextContent(/transient upload failure/i)
+
+    await userEvent.click(
+      within(reviewForm()).getByRole('button', { name: /try again/i }),
+    )
+
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
+      /uploaded contract/i,
+    )
   })
 })

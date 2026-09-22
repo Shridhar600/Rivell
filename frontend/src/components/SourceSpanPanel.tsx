@@ -31,7 +31,7 @@ export function SourceSpanPanel({
   ].filter((part): part is string => part != null)
 
   return (
-    <p className="source-span" aria-label={label}>
+    <p className="source-span" role="status">
       <strong>{label}:</strong> <code>{parts.join(' · ')}</code>
     </p>
   )

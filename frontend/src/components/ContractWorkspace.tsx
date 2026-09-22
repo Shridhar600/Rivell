@@ -1,45 +1,52 @@
-import { useCallback, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
-import { originalDocumentUrl, useContractQuery, useContractStructureQuery } from '../api/contracts'
-import { buildOutlineItems, isParseFailed } from '../lib/documentTree'
+import {
+  originalDocumentUrl,
+  useContractQuery,
+  useContractStructureQuery,
+} from '../api/contracts'
+import { isParseFailed, isParsing } from '../lib/parseStatus'
+import { DocumentViewer } from './DocumentViewer'
 import { EmptyState } from './EmptyState'
 import { ErrorState } from './ErrorState'
 import { LoadingState } from './LoadingState'
-import { OutlineTree } from './OutlineTree'
-import { SourceSpanPanel } from './SourceSpanPanel'
-import { StructuralRenderer } from './StructuralRenderer'
+import { ParseNotice } from './ParseNotice'
 
 export function ContractWorkspace({ contractId }: { contractId: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedId = searchParams.get('node')
+  const headingRef = useRef<HTMLHeadingElement>(null)
 
   const contractQuery = useContractQuery(contractId)
   const contract = contractQuery.data
   const structureQuery = useContractStructureQuery(
     contractId,
-    contract?.latestVersion?.versionNumber,
+    contract?.latestVersion.versionNumber,
   )
   const structure = structureQuery.data
 
-  const selectNode = useCallback(
-    (nodeId: string) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev)
-          next.set('node', nodeId)
-          return next
-        },
-        { replace: false },
-      )
-      requestAnimationFrame(() => {
-        const el = document.getElementById(`node-${nodeId}`)
-        if (typeof el?.scrollIntoView === 'function') {
-          el.scrollIntoView({ block: 'nearest' })
-        }
-      })
-    },
-    [setSearchParams],
-  )
+  const loadedContractId = contract?.id
+
+  useEffect(() => {
+    if (loadedContractId) headingRef.current?.focus()
+  }, [contractId, loadedContractId])
+
+  useEffect(() => {
+    if (!structure || !selectedId) return
+    const element = document.getElementById(`node-${selectedId}`)
+    if (typeof element?.scrollIntoView === 'function') {
+      element.scrollIntoView({ block: 'nearest' })
+    }
+  }, [structure, selectedId])
+
+  const selectNode = (nodeId: string) => {
+    if (nodeId === selectedId) return
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous)
+      next.set('node', nodeId)
+      return next
+    })
+  }
 
   if (contractQuery.isPending) {
     return <LoadingState label="Loading contract…" />
@@ -54,24 +61,22 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
     )
   }
 
-  const versionNumber = contract.latestVersion?.versionNumber ?? 1
-  const originalUrl = originalDocumentUrl(contractId, versionNumber)
-  const parseFailed = isParseFailed(
-    structure?.parseStatus ?? contract.latestVersion?.parseStatus,
-  )
+  const latest = contract.latestVersion
+  const parseStatus = structure?.parseStatus ?? latest.parseStatus
+  const warnings = structure?.parseWarnings ?? latest.parseWarnings
+  const originalUrl = originalDocumentUrl(contractId, latest.versionNumber)
 
   const header = (
     <header className="workspace__header">
       <div>
-        <h1>{contract.title ?? 'Untitled contract'}</h1>
+        <h1 tabIndex={-1} ref={headingRef}>
+          {contract.title ?? 'Untitled contract'}
+        </h1>
         <p className="workspace__meta">
-          v{versionNumber}
-          {contract.latestVersion?.parseStatus
-            ? ` · parse ${contract.latestVersion.parseStatus}`
-            : ''}
-          {contract.latestVersion?.sha256
-            ? ` · sha256 ${contract.latestVersion.sha256.slice(0, 12)}…`
-            : ''}
+          v{latest.versionNumber} · {latest.filename} · parse {parseStatus}
+          {warnings.length > 0 ? ` · ${warnings.length} warning(s)` : ''}
+          {latest.parserVersion ? ` · ${latest.parserVersion}` : ''}
+          {` · sha256 ${latest.sha256.slice(0, 12)}…`}
         </p>
       </div>
       <div className="workspace__actions">
@@ -83,7 +88,7 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
         >
           View Original
         </a>
-        <a href={originalUrl} download="original.docx" className="button">
+        <a href={originalUrl} download={latest.filename} className="button">
           Download Original
         </a>
       </div>
@@ -101,11 +106,23 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
         onRetry={() => void structureQuery.refetch()}
       />
     )
-  } else if (parseFailed) {
+  } else if (isParsing(structure.parseStatus)) {
+    body = <ParseNotice status={structure.parseStatus} warnings={[]} />
+  } else if (isParseFailed(structure.parseStatus)) {
     body = (
-      <div role="alert" className="state state--error">
-        <p>Document parsing failed. The original file remains available.</p>
-      </div>
+      <>
+        <ParseNotice
+          status={structure.parseStatus}
+          warnings={structure.parseWarnings}
+        />
+        {structure.nodes.length > 0 ? (
+          <DocumentViewer
+            structure={structure}
+            selectedId={selectedId}
+            onSelect={selectNode}
+          />
+        ) : null}
+      </>
     )
   } else if (structure.nodes.length === 0) {
     body = (
@@ -115,26 +132,18 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
       />
     )
   } else {
-    const selectedNode = structure.nodes.find((n) => n.id === selectedId)
     body = (
-      <div className="workspace__grid">
-        <OutlineTree
-          items={buildOutlineItems(structure.nodes)}
+      <>
+        <ParseNotice
+          status={structure.parseStatus}
+          warnings={structure.parseWarnings}
+        />
+        <DocumentViewer
+          structure={structure}
           selectedId={selectedId}
           onSelect={selectNode}
         />
-        <div>
-          <StructuralRenderer
-            nodes={structure.nodes}
-            selectedId={selectedId}
-            onSelect={selectNode}
-          />
-          <SourceSpanPanel
-            label="Selected region"
-            span={selectedNode?.sourceSpan ?? null}
-          />
-        </div>
-      </div>
+      </>
     )
   }
 

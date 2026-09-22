@@ -13,6 +13,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Upload and parse a DOCX contract */
         post: operations["upload"];
         delete?: never;
         options?: never;
@@ -43,6 +44,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Get a contract with its latest version state */
         get: operations["getContract"];
         put?: never;
         post?: never;
@@ -59,6 +61,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Get the canonical structure of a contract version */
         get: operations["getStructure"];
         put?: never;
         post?: never;
@@ -75,6 +78,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Download the original uploaded DOCX of a contract version */
         get: operations["downloadOriginal"];
         put?: never;
         post?: never;
@@ -88,77 +92,100 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Result of a contract upload and initial parse */
         IngestResponse: {
             /** Format: uuid */
-            contractId?: string;
+            contractId: string;
             /** Format: uuid */
-            contractVersionId?: string;
+            contractVersionId: string;
             /** Format: int32 */
-            versionNumber?: number;
-            parseStatus?: string;
-            sha256?: string;
+            versionNumber: number;
+            /** @enum {string} */
+            parseStatus: "PARSING" | "OK" | "FAILED";
+            parseWarnings: string[];
+            filename: string;
+            sha256: string;
             /** Format: int32 */
-            nodeCount?: number;
+            nodeCount: number;
+        };
+        /** @description Error returned by contract API failures */
+        ErrorResponse: {
+            code: string;
+            title: string;
+            detail: string;
         };
         SystemStatusResponse: {
             service?: string;
             status?: string;
         };
+        /** @description Contract with its latest version state */
         ContractSummaryResponse: {
             /** Format: uuid */
-            id?: string;
-            title?: string;
-            latestVersion?: components["schemas"]["LatestVersion"];
+            id: string;
+            title: string | null;
+            latestVersion: components["schemas"]["LatestVersion"];
         };
+        /** @description Latest version of the contract */
         LatestVersion: {
             /** Format: int32 */
-            versionNumber?: number;
-            parseStatus?: string;
-            sha256?: string;
+            versionNumber: number;
+            /** @enum {string} */
+            parseStatus: "PARSING" | "OK" | "FAILED";
+            parseWarnings: string[];
+            parserVersion: string | null;
+            sha256: string;
+            filename: string;
             /** Format: int32 */
-            nodeCount?: number;
+            nodeCount: number;
         };
+        /** @description Canonical structure of a contract version */
         ContractStructureResponse: {
             /** Format: uuid */
-            contractId?: string;
+            contractId: string;
             /** Format: int32 */
-            versionNumber?: number;
-            parserVersion?: string;
-            parseStatus?: string;
+            versionNumber: number;
+            parserVersion: string | null;
+            /** @enum {string} */
+            parseStatus: "PARSING" | "OK" | "FAILED";
+            parseWarnings: string[];
             /** Format: int32 */
-            nodeCount?: number;
-            nodes?: components["schemas"]["NodeView"][];
+            nodeCount: number;
+            nodes: components["schemas"]["NodeView"][];
         };
+        /** @description One node of the canonical document tree */
         NodeView: {
             /** Format: uuid */
-            id?: string;
+            id: string;
             /** Format: uuid */
-            parentId?: string;
-            nodeType?: string;
+            parentId: string | null;
+            /** @enum {string} */
+            nodeType: "BODY" | "TITLE" | "HEADING" | "PARAGRAPH" | "TABLE" | "TABLE_ROW" | "TABLE_CELL";
             /** Format: int32 */
-            ordinal?: number;
-            text?: string;
+            ordinal: number;
+            text: string | null;
             /** Format: int32 */
-            headingLevel?: number;
-            sourceSpan?: components["schemas"]["SourceSpanView"];
-            rawStyleId?: string;
+            headingLevel: number | null;
+            numberingLabel: string | null;
+            sourceSpan: components["schemas"]["SourceSpanView"];
+            rawStyleId: string | null;
         };
+        /** @description Location of a node in the source DOCX */
         SourceSpanView: {
-            partPath?: string;
+            partPath: string;
             /** Format: int32 */
-            bodyIndex?: number;
+            bodyIndex: number;
             /** Format: int32 */
-            paragraphIndex?: number;
+            paragraphIndex: number | null;
             /** Format: int32 */
-            tableIndex?: number;
+            tableIndex: number | null;
             /** Format: int32 */
-            rowIndex?: number;
+            rowIndex: number | null;
             /** Format: int32 */
-            cellIndex?: number;
+            cellIndex: number | null;
             /** Format: int32 */
-            runStart?: number;
+            runStart: number | null;
             /** Format: int32 */
-            runEnd?: number;
+            runEnd: number | null;
         };
     };
     responses: never;
@@ -185,13 +212,31 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description Processed; inspect parseStatus for the outcome */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "*/*": components["schemas"]["IngestResponse"];
+                };
+            };
+            /** @description Invalid upload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upload exceeds the configured size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -227,13 +272,22 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Contract found */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "*/*": components["schemas"]["ContractSummaryResponse"];
+                };
+            };
+            /** @description Contract does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -250,13 +304,22 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Structure found */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "*/*": components["schemas"]["ContractStructureResponse"];
+                };
+            };
+            /** @description Contract or version does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -273,13 +336,24 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Original document bytes */
             200: {
+                headers: {
+                    /** @description attachment with the sanitized original filename (RFC 6266/5987) */
+                    "Content-Disposition"?: unknown;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                };
+            };
+            /** @description Contract or version does not exist in this organization */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": string;
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };

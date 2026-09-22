@@ -6,6 +6,7 @@
   --color-border: #d8d8dc;
   --color-accent: #1f4b99;
   --color-danger: #a4262c;
+  --color-warning: #8a6116;
   --color-success: #107c10;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -75,6 +76,11 @@ a {
 .state--error {
   border-color: var(--color-danger);
   color: var(--color-danger);
+}
+
+.state--warning {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
 }
 
 .state--success {
@@ -167,6 +173,12 @@ a {
   gap: var(--space-1);
 }
 
+.outline__list .outline__list {
+  margin-top: var(--space-1);
+  padding-inline-start: var(--space-3);
+  border-inline-start: 1px solid var(--color-border);
+}
+
 .outline__button {
   border: 0;
   background: none;
@@ -180,6 +192,12 @@ a {
 
 .outline__button:hover {
   color: var(--color-accent);
+}
+
+.outline__button:focus-visible,
+.doc-node:focus-visible {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: 2px;
 }
 
 .outline__button[aria-current='true'] {
@@ -231,6 +249,20 @@ a {
 
 .source-span code {
   word-break: break-all;
+}
+
+.parse-notice h2 {
+  margin: 0 0 var(--space-1);
+  font-size: 1rem;
+}
+
+.parse-notice p {
+  margin: 0;
+}
+
+.parse-notice__warnings {
+  margin: var(--space-1) 0 0;
+  padding-inline-start: var(--space-4);
 }
 
 .upload-form {
