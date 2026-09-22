@@ -16,6 +16,7 @@ import com.rivell.workbench.foundation.StorageKey;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
+import java.io.ByteArrayInputStream;
 
 /**
  * Contract ingestion: store immutable source, parse, persist canonical structure.
@@ -70,7 +71,7 @@ public class ContractIngestionService {
         var artifactId = UUID.randomUUID();
         var storageKey = new StorageKey(
                 identity.organizationId() + "/contracts/" + artifactId + ".docx");
-        documentStorage.store(storageKey, new java.io.ByteArrayInputStream(bytes));
+        documentStorage.store(storageKey, new ByteArrayInputStream(bytes));
 
         UUID contractId;
         UUID versionId;
@@ -93,7 +94,7 @@ public class ContractIngestionService {
             versionId = staged.versionId();
 
             ParseResult parseResult;
-            try (var parsedSource = new java.io.ByteArrayInputStream(bytes)) {
+            try (var parsedSource = new ByteArrayInputStream(bytes)) {
                 parseResult = documentStructureParser.parse(parsedSource, versionId);
             }
 

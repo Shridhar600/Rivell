@@ -56,8 +56,8 @@ class SystemApiIT {
     void exposesSystemStatusSeparatelyFromDependencyHealth() throws Exception {
         mockMvc.perform(get("/api/system/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.service").value("rivell-backend"))
-                .andExpect(jsonPath("$.status").value("ready"));
+                .andExpect(jsonPath("$.data.service").value("rivell-backend"))
+                .andExpect(jsonPath("$.data.status").value("ready"));
 
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(status().isOk())
@@ -81,7 +81,7 @@ class SystemApiIT {
                         "/api/contracts/{id}/versions/{versionNumber}/structure",
                         "/api/contracts/{id}/versions/{versionNumber}/original");
         assertThat(openApi.at("/paths/~1api~1system~1status/get/responses/200/content/application~1json/schema/$ref")
-                .asText()).endsWith("/SystemStatusResponse");
+                .asText()).endsWith("SystemStatusResponse");
 
         var output = Path.of("target/openapi/openapi.json");
         Files.createDirectories(output.getParent());

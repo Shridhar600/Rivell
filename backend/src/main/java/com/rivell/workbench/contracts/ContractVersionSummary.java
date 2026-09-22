@@ -1,5 +1,6 @@
 package com.rivell.workbench.contracts;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -10,7 +11,7 @@ public record ContractVersionSummary(
         UUID contractId,
         int versionNumber,
         ParseStatus parseStatus,
-        java.util.List<String> parseWarnings,
+        List<String> parseWarnings,
         String parserVersion,
         String sha256,
         String filename,

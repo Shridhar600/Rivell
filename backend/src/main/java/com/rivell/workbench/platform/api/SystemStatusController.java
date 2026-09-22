@@ -5,12 +5,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.rivell.workbench.foundation.api.ApiResult;
+
 @RestController
 @RequestMapping("/api/system")
 class SystemStatusController {
 
     @GetMapping(value = "/status", produces = MediaType.APPLICATION_JSON_VALUE)
-    SystemStatusResponse status() {
-        return new SystemStatusResponse("rivell-backend", "ready");
+    ApiResult<SystemStatusResponse> status() {
+        return ApiResult.ok(new SystemStatusResponse("rivell-backend", "ready"));
     }
 }

@@ -10,6 +10,7 @@ import java.util.Objects;
  */
 public record StructureExtraction(
         String parserVersion,
+        IngestStatus status,
         List<String> warnings,
         List<KnowledgeSourceNode> nodes) {
 
@@ -17,12 +18,13 @@ public record StructureExtraction(
         if (parserVersion == null || parserVersion.isBlank()) {
             throw new IllegalArgumentException("Parser version must not be blank");
         }
+        Objects.requireNonNull(status, "status");
         warnings = warnings == null ? List.of() : List.copyOf(warnings);
         nodes = nodes == null ? List.of() : List.copyOf(nodes);
     }
 
     public static StructureExtraction failed(String parserVersion, List<String> warnings) {
         Objects.requireNonNull(parserVersion);
-        return new StructureExtraction(parserVersion, warnings, List.of());
+        return new StructureExtraction(parserVersion, IngestStatus.FAILED, warnings, List.of());
     }
 }

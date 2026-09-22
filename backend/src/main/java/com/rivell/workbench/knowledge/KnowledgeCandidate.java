@@ -48,6 +48,13 @@ public record KnowledgeCandidate(
         Objects.requireNonNull(updatedAt, "updatedAt");
     }
 
+    public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
+        return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
+                editedContentText, editedPayload, supersedingCandidateId, scope, signals,
+                reviewNote, reviewedAt, createdAt, updatedAt);
+    }
+
     public boolean isPublished() {
         return reviewStatus == ReviewStatus.PUBLISHED;
     }

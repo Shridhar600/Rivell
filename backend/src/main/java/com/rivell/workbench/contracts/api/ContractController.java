@@ -16,17 +16,23 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.rivell.workbench.contracts.ContractIngestionResult;
 import com.rivell.workbench.contracts.ContractIngestionService;
-import com.rivell.workbench.contracts.ContractDownloadService;
 import com.rivell.workbench.contracts.ContractQueryService;
+import com.rivell.workbench.contracts.ContractDownloadService;
+import com.rivell.workbench.foundation.api.ApiResult;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 
+/**
+ * Pure HTTP surface for contracts: delegates to application services, maps domain
+ * read models onto response DTOs, and returns the uniform {@link ApiResponse} envelope.
+ * Business logic and error mapping live in services and the global handler.
+ */
 @RestController
 @RequestMapping("/api/contracts")
 class ContractController {
@@ -48,18 +54,20 @@ class ContractController {
     }
 
     @Operation(summary = "Upload and parse a DOCX contract")
-    @ApiResponse(responseCode = "200", description = "Processed; inspect parseStatus for the outcome",
-            content = @Content(schema = @Schema(implementation = IngestResponse.class)))
-    @ApiResponse(responseCode = "400", description = "Invalid upload",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    @ApiResponse(responseCode = "413", description = "Upload exceeds the configured size limit",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Processed; inspect parseStatus for the outcome",
+                    content = @Content(schema = @Schema(implementation = IngestResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid upload",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "413", description = "Upload exceeds the configured size limit",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    IngestResponse upload(@RequestPart("file") MultipartFile file) throws IOException {
+    ApiResult<IngestResponse> upload(@RequestPart("file") MultipartFile file) throws IOException {
         try (var stream = file.getInputStream()) {
-            ContractIngestionResult result = ingestionService.ingest(
+            var result = ingestionService.ingest(
                     file.getOriginalFilename(), file.getContentType(), stream);
-            return new IngestResponse(
+            return ApiResult.ok(new IngestResponse(
                     result.contractId(),
                     result.contractVersionId(),
                     result.versionNumber(),
@@ -67,22 +75,24 @@ class ContractController {
                     result.parseWarnings(),
                     result.filename(),
                     result.sha256(),
-                    result.nodeCount());
+                    result.nodeCount()));
         }
     }
 
     @Operation(summary = "Get a contract with its latest version state")
-    @ApiResponse(responseCode = "200", description = "Contract found",
-            content = @Content(schema = @Schema(implementation = ContractSummaryResponse.class)))
-    @ApiResponse(responseCode = "404", description = "Contract does not exist in this organization",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Contract found",
+                    content = @Content(schema = @Schema(implementation = ContractSummaryResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Contract does not exist in this organization",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @GetMapping("/{id}")
-    ContractSummaryResponse getContract(@PathVariable UUID id) {
-        var contract = queryService.getContract(id);
-        var version = queryService.getLatestVersionSummary(id);
-        return new ContractSummaryResponse(
-                contract.id(),
-                contract.title(),
+    ApiResult<ContractSummaryResponse> getContract(@PathVariable UUID id) {
+        var summary = queryService.getContractSummary(id);
+        var version = summary.latestVersion();
+        return ApiResult.ok(new ContractSummaryResponse(
+                summary.contract().id(),
+                summary.contract().title(),
                 new ContractSummaryResponse.LatestVersion(
                         version.versionNumber(),
                         version.parseStatus(),
@@ -90,19 +100,21 @@ class ContractController {
                         version.parserVersion(),
                         version.sha256(),
                         version.filename(),
-                        version.nodeCount()));
+                        version.nodeCount())));
     }
 
     @Operation(summary = "Get the canonical structure of a contract version")
-    @ApiResponse(responseCode = "200", description = "Structure found",
-            content = @Content(schema = @Schema(implementation = ContractStructureResponse.class)))
-    @ApiResponse(responseCode = "404", description = "Contract or version does not exist in this organization",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Structure found",
+                    content = @Content(schema = @Schema(implementation = ContractStructureResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Contract or version does not exist in this organization",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @GetMapping("/{id}/versions/{versionNumber}/structure")
-    ContractStructureResponse getStructure(
+    ApiResult<ContractStructureResponse> getStructure(
             @PathVariable UUID id, @PathVariable int versionNumber) {
         var structure = queryService.getStructure(id, versionNumber);
-        return new ContractStructureResponse(
+        return ApiResult.ok(new ContractStructureResponse(
                 structure.contractId(),
                 structure.versionNumber(),
                 structure.parserVersion(),
@@ -128,16 +140,18 @@ class ContractController {
                                         node.sourceSpan().runStart(),
                                         node.sourceSpan().runEnd()),
                                 node.rawStyleId()))
-                        .toList());
+                        .toList()));
     }
 
     @Operation(summary = "Download the original uploaded DOCX of a contract version")
-    @ApiResponse(responseCode = "200", description = "Original document bytes",
-            headers = @Header(name = "Content-Disposition",
-                    description = "attachment with the sanitized original filename (RFC 6266/5987)"),
-            content = @Content(mediaType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
-    @ApiResponse(responseCode = "404", description = "Contract or version does not exist in this organization",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Original document bytes",
+                    headers = @Header(name = "Content-Disposition",
+                            description = "attachment with the sanitized original filename (RFC 6266/5987)"),
+                    content = @Content(mediaType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document")),
+            @ApiResponse(responseCode = "404", description = "Contract or version does not exist in this organization",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @GetMapping("/{id}/versions/{versionNumber}/original")
     ResponseEntity<byte[]> downloadOriginal(
             @PathVariable UUID id, @PathVariable int versionNumber) throws IOException {

@@ -67,14 +67,14 @@ class ContractApiIT {
 
         mockMvc.perform(get("/api/contracts/{id}", result.contractId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(result.contractId().toString()))
-                .andExpect(jsonPath("$.title").value("Mutual Non-Disclosure Agreement"))
-                .andExpect(jsonPath("$.latestVersion.versionNumber").value(1))
-                .andExpect(jsonPath("$.latestVersion.parseStatus").value("OK"))
-                .andExpect(jsonPath("$.latestVersion.parseWarnings").isEmpty())
-                .andExpect(jsonPath("$.latestVersion.filename").value("simple-contract.docx"))
-                .andExpect(jsonPath("$.latestVersion.sha256").value(result.sha256()))
-                .andExpect(jsonPath("$.latestVersion.nodeCount").value(7));
+                .andExpect(jsonPath("$.data.id").value(result.contractId().toString()))
+                .andExpect(jsonPath("$.data.title").value("Mutual Non-Disclosure Agreement"))
+                .andExpect(jsonPath("$.data.latestVersion.versionNumber").value(1))
+                .andExpect(jsonPath("$.data.latestVersion.parseStatus").value("OK"))
+                .andExpect(jsonPath("$.data.latestVersion.parseWarnings").isEmpty())
+                .andExpect(jsonPath("$.data.latestVersion.filename").value("simple-contract.docx"))
+                .andExpect(jsonPath("$.data.latestVersion.sha256").value(result.sha256()))
+                .andExpect(jsonPath("$.data.latestVersion.nodeCount").value(7));
     }
 
     @Test
@@ -84,16 +84,16 @@ class ContractApiIT {
         mockMvc.perform(get("/api/contracts/{id}/versions/{n}/structure",
                         result.contractId(), 1))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.versionNumber").value(1))
-                .andExpect(jsonPath("$.parseStatus").value("OK"))
-                .andExpect(jsonPath("$.parseWarnings").isEmpty())
-                .andExpect(jsonPath("$.nodeCount").value(7))
-                .andExpect(jsonPath("$.nodes[0].nodeType").value("BODY"))
-                .andExpect(jsonPath("$.nodes[1].nodeType").value("TITLE"))
-                .andExpect(jsonPath("$.nodes[1].text").value("Mutual Non-Disclosure Agreement"))
-                .andExpect(jsonPath("$.nodes[3].nodeType").value("HEADING"))
-                .andExpect(jsonPath("$.nodes[3].headingLevel").value(1))
-                .andExpect(jsonPath("$.nodes[1].sourceSpan.bodyIndex").value(0));
+                .andExpect(jsonPath("$.data.versionNumber").value(1))
+                .andExpect(jsonPath("$.data.parseStatus").value("OK"))
+                .andExpect(jsonPath("$.data.parseWarnings").isEmpty())
+                .andExpect(jsonPath("$.data.nodeCount").value(7))
+                .andExpect(jsonPath("$.data.nodes[0].nodeType").value("BODY"))
+                .andExpect(jsonPath("$.data.nodes[1].nodeType").value("TITLE"))
+                .andExpect(jsonPath("$.data.nodes[1].text").value("Mutual Non-Disclosure Agreement"))
+                .andExpect(jsonPath("$.data.nodes[3].nodeType").value("HEADING"))
+                .andExpect(jsonPath("$.data.nodes[3].headingLevel").value(1))
+                .andExpect(jsonPath("$.data.nodes[1].sourceSpan.bodyIndex").value(0));
     }
 
     @Test
@@ -103,12 +103,12 @@ class ContractApiIT {
         MvcResult structure = mockMvc.perform(get(
                         "/api/contracts/{id}/versions/{n}/structure", result.contractId(), 1))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.parseStatus").value("OK"))
-                .andExpect(jsonPath("$.parseWarnings[0]").value("UNSUPPORTED_NESTED_TABLE"))
+                .andExpect(jsonPath("$.data.parseStatus").value("OK"))
+                .andExpect(jsonPath("$.data.parseWarnings[0]").value("UNSUPPORTED_NESTED_TABLE"))
                 .andReturn();
 
         var nodes = objectMapper.readTree(structure.getResponse().getContentAsString())
-                .get("nodes");
+                .get("data").get("nodes");
         // BODY is nodes[0]; its children follow in returned order
         var bodyId = nodes.get(0).get("id").asText();
         var bodyChildren = new java.util.ArrayList<String>();
@@ -136,9 +136,9 @@ class ContractApiIT {
         mockMvc.perform(get("/api/contracts/{id}/versions/{n}/structure",
                         result.contractId(), 1))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.nodes[?(@.nodeType == 'TABLE')]").exists())
-                .andExpect(jsonPath("$.nodes[?(@.nodeType == 'TABLE_ROW')]").exists())
-                .andExpect(jsonPath("$.nodes[?(@.nodeType == 'TABLE_CELL')]").exists());
+                .andExpect(jsonPath("$.data.nodes[?(@.nodeType == 'TABLE')]").exists())
+                .andExpect(jsonPath("$.data.nodes[?(@.nodeType == 'TABLE_ROW')]").exists())
+                .andExpect(jsonPath("$.data.nodes[?(@.nodeType == 'TABLE_CELL')]").exists());
     }
 
     @Test
@@ -153,8 +153,8 @@ class ContractApiIT {
         mockMvc.perform(get("/api/contracts/{id}/versions/{n}/structure",
                         result.contractId(), 1))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.parseStatus").value("OK"))
-                .andExpect(jsonPath("$.parseWarnings.length()").value(2));
+                .andExpect(jsonPath("$.data.parseStatus").value("OK"))
+                .andExpect(jsonPath("$.data.parseWarnings.length()").value(2));
     }
 
     @Test
@@ -167,8 +167,8 @@ class ContractApiIT {
         mockMvc.perform(get("/api/contracts/{id}/versions/{n}/structure",
                         result.contractId(), 1))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.parseStatus").value("FAILED"))
-                .andExpect(jsonPath("$.parseWarnings.length()").value(1));
+                .andExpect(jsonPath("$.data.parseStatus").value("FAILED"))
+                .andExpect(jsonPath("$.data.parseWarnings.length()").value(1));
     }
 
     @Test
@@ -268,10 +268,10 @@ class ContractApiIT {
 
         MvcResult result = mockMvc.perform(multipart("/api/contracts").file(file))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.contractId").isString())
+                .andExpect(jsonPath("$.data.contractId").isString())
                 .andReturn();
 
-        var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        var json = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
         var parseStatus = json.has("parseStatus") ? json.get("parseStatus").asText() : "OK";
         java.util.List<String> warnings = new java.util.ArrayList<>();
         if (json.has("parseWarnings") && json.get("parseWarnings").isArray()) {

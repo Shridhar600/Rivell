@@ -9,7 +9,7 @@ import com.rivell.workbench.organization.Permissions;
 /**
  * Organization-scoped contract reads. All access goes through the current identity and
  * the {@link AuthorizationService}; cross-organization access is indistinguishable from
- * a missing contract.
+ * a missing contract. Composition of read models happens here, not in controllers.
  */
 public class ContractQueryService {
 
@@ -24,6 +24,12 @@ public class ContractQueryService {
         this.repository = repository;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+    }
+
+    public ContractSummary getContractSummary(UUID contractId) {
+        var contract = getContract(contractId);
+        var latestVersion = getLatestVersionSummary(contractId);
+        return new ContractSummary(contract, latestVersion);
     }
 
     public Contract getContract(UUID contractId) {

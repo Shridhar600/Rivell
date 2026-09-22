@@ -42,6 +42,7 @@ import com.rivell.workbench.knowledge.MergedCellRegion;
 import com.rivell.workbench.knowledge.PublicationAction;
 import com.rivell.workbench.knowledge.PublicationItem;
 import com.rivell.workbench.knowledge.ReviewStatus;
+import java.util.LinkedHashMap;
 
 @Repository
 class JdbcKnowledgeRepository implements KnowledgeRepository {
@@ -653,7 +654,7 @@ private String writeUuidList(List<UUID> values) {
         }
         try {
             var node = objectMapper.readTree(json);
-            var columns = new java.util.LinkedHashMap<String, String>();
+            var columns = new LinkedHashMap<String, String>();
             var fields = node.fields();
             while (fields.hasNext()) {
                 var field = fields.next();

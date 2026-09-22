@@ -5,6 +5,11 @@ public final class Permissions {
     public static final Permission CONTRACT_UPLOAD = new Permission("contracts:upload");
     public static final Permission CONTRACT_READ = new Permission("contracts:read");
 
+    public static final Permission KNOWLEDGE_UPLOAD = new Permission("knowledge:upload");
+    public static final Permission KNOWLEDGE_READ = new Permission("knowledge:read");
+    public static final Permission KNOWLEDGE_REVIEW = new Permission("knowledge:review");
+    public static final Permission KNOWLEDGE_PUBLISH = new Permission("knowledge:publish");
+
     private Permissions() {
     }
 }
