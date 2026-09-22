@@ -113,7 +113,7 @@ describe('uploadContract', () => {
     })
     const result = await uploadContract(file)
 
-    expect(result.id).toBe('c1')
+    expect(result.contractId).toBe('c1')
     const request = fetchMock.mock.calls[0][0] as Request
     expect(request.url).toContain('/api/contracts')
     expect(request.method).toBe('POST')

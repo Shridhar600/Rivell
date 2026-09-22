@@ -43,24 +43,6 @@ export async function fetchContract(
   }
   return data
 }
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
 
 export async function fetchContractStructure(
   contractId: string,
@@ -75,24 +57,6 @@ export async function fetchContractStructure(
   if (!data) {
     throw new Error(errorMessage(error, 'Structure unavailable'))
   }
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
-  return data
-}
   return data
 }
 
