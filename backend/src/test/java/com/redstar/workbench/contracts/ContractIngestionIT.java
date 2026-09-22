@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.InputStream;
-import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -43,7 +42,7 @@ class ContractIngestionIT {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("redstar.storage.local.root",
-                () -> Path.of("target", "test-documents", UUID.randomUUID().toString()).toString());
+                () -> "target/test-documents/" + UUID.randomUUID());
     }
 
     @Autowired
