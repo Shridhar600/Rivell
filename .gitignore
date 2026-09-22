@@ -24,13 +24,29 @@ backend/AGENTS.md
 # Build / runtime output
 backend/target/
 backend/var/
+node_modules/
 frontend/dist/
 frontend/dist-ssr/
-frontend/node_modules/
 frontend/coverage/
-frontend/*.log
 
-# OS / editor noise
-.DS_Store
+# Package manager / logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS noise (repo-wide)
+.vscode/*
+!.vscode/extensions.json
 .idea/
-*.swp
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+
+# Local variant files (*.env.local, *.local config)
+*.local
