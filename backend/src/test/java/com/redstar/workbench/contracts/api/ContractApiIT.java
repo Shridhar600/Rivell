@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,6 +35,8 @@ class ContractApiIT {
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName
             .parse("pgvector/pgvector:0.8.6-pg17-trixie")
             .asCompatibleSubstituteFor("postgres");
+    private static final String DOCX_MEDIA_TYPE =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
     @Container
     static final PostgreSQLContainer postgres = new PostgreSQLContainer(POSTGRES_IMAGE)
@@ -48,6 +51,8 @@ class ContractApiIT {
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("redstar.storage.local.root",
                 () -> "target/test-documents/" + UUID.randomUUID());
+        // tiny limit proves 413 behavior without large payloads (fixtures are < 3KB)
+        registry.add("redstar.contracts.upload.max-file-size", () -> "4KB");
     }
 
     @Autowired
@@ -57,7 +62,7 @@ class ContractApiIT {
     ObjectMapper objectMapper;
 
     @Test
-    void uploadsDocxAndReturnsSummary() throws Exception {
+    void uploadsDocxAndReturnsSummaryWithParseOutcome() throws Exception {
         var result = uploadFixture("fixtures/simple-contract.docx", "simple-contract.docx");
 
         mockMvc.perform(get("/api/contracts/{id}", result.contractId()))
@@ -66,7 +71,10 @@ class ContractApiIT {
                 .andExpect(jsonPath("$.title").value("Mutual Non-Disclosure Agreement"))
                 .andExpect(jsonPath("$.latestVersion.versionNumber").value(1))
                 .andExpect(jsonPath("$.latestVersion.parseStatus").value("OK"))
-                .andExpect(jsonPath("$.latestVersion.sha256").value(result.sha256()));
+                .andExpect(jsonPath("$.latestVersion.parseWarnings").isEmpty())
+                .andExpect(jsonPath("$.latestVersion.filename").value("simple-contract.docx"))
+                .andExpect(jsonPath("$.latestVersion.sha256").value(result.sha256()))
+                .andExpect(jsonPath("$.latestVersion.nodeCount").value(7));
     }
 
     @Test
@@ -78,7 +86,7 @@ class ContractApiIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.versionNumber").value(1))
                 .andExpect(jsonPath("$.parseStatus").value("OK"))
-                .andExpect(jsonPath("$.parserVersion").value("redstar-docx-parser-1"))
+                .andExpect(jsonPath("$.parseWarnings").isEmpty())
                 .andExpect(jsonPath("$.nodeCount").value(7))
                 .andExpect(jsonPath("$.nodes[0].nodeType").value("BODY"))
                 .andExpect(jsonPath("$.nodes[1].nodeType").value("TITLE"))
@@ -101,22 +109,67 @@ class ContractApiIT {
     }
 
     @Test
-    void downloadsExactOriginalBytes() throws Exception {
+    void exposesFilenameAndWarningsForLimitedParses() throws Exception {
+        var result = uploadFixture("fixtures/with-omitted-parts.docx", "omitted-parts.docx");
+
+        assertThat(result.parseStatus()).isEqualTo("OK");
+        assertThat(result.parseWarnings()).contains(
+                "HEADERS_OR_FOOTERS_NOT_REPRESENTED",
+                "FOOTNOTES_NOT_REPRESENTED");
+
+        mockMvc.perform(get("/api/contracts/{id}/versions/{n}/structure",
+                        result.contractId(), 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.parseStatus").value("OK"))
+                .andExpect(jsonPath("$.parseWarnings.length()").value(2));
+    }
+
+    @Test
+    void reportsFailedParseThroughPublicContract() throws Exception {
+        var result = uploadFixture("fixtures/invalid-bytes.docx", "broken.docx");
+
+        assertThat(result.parseStatus()).isEqualTo("FAILED");
+        assertThat(result.parseWarnings()).isNotEmpty();
+
+        mockMvc.perform(get("/api/contracts/{id}/versions/{n}/structure",
+                        result.contractId(), 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.parseStatus").value("FAILED"))
+                .andExpect(jsonPath("$.parseWarnings.length()").value(1));
+    }
+
+    @Test
+    void downloadsExactOriginalBytesWithAttachmentDisposition() throws Exception {
         byte[] original;
         try (var stream = getClass().getClassLoader().getResourceAsStream("fixtures/simple-contract.docx")) {
             assertThat(stream).isNotNull();
             original = stream.readAllBytes();
         }
-        var result = uploadFixture("fixtures/simple-contract.docx", "original.docx");
+        var result = uploadFixture("fixtures/simple-contract.docx", "original-with-path.docx");
 
         MvcResult download = mockMvc.perform(get(
                         "/api/contracts/{id}/versions/{n}/original", result.contractId(), 1))
                 .andExpect(status().isOk())
-                .andExpect(content().contentType(
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+                .andExpect(content().contentType(DOCX_MEDIA_TYPE))
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("attachment")))
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("original-with-path.docx")))
                 .andReturn();
 
         assertThat(download.getResponse().getContentAsByteArray()).isEqualTo(original);
+    }
+
+    @Test
+    void rejectsUploadsBeyondConfiguredLimitWith413() throws Exception {
+        var file = new MockMultipartFile(
+                "file", "large.docx", DOCX_MEDIA_TYPE, new byte[8192]);
+
+        mockMvc.perform(multipart("/api/contracts").file(file))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code").value("413"))
+                .andExpect(jsonPath("$.title").value("Payload too large"))
+                .andExpect(jsonPath("$.detail").isNotEmpty());
     }
 
     @Test
@@ -125,13 +178,16 @@ class ContractApiIT {
                 "file", "contract.pdf", "application/pdf", "not a docx".getBytes());
 
         mockMvc.perform(multipart("/api/contracts").file(file))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400"))
+                .andExpect(jsonPath("$.title").value("Invalid request"));
     }
 
     @Test
     void returnsNotFoundForUnknownContract() throws Exception {
         mockMvc.perform(get("/api/contracts/{id}", UUID.randomUUID()))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("404"));
 
         mockMvc.perform(get("/api/contracts/{id}/versions/{n}/structure", UUID.randomUUID(), 1))
                 .andExpect(status().isNotFound());
@@ -140,29 +196,62 @@ class ContractApiIT {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void crossOrganizationAccessReturnsNotFound() throws Exception {
+        var result = uploadFixture("fixtures/simple-contract.docx", "isolation.docx");
+
+        mockMvc.perform(get("/api/contracts/{id}", result.contractId()))
+                .andExpect(status().isOk());
+
+        // Simulate another organization's contract in the database
+        var otherOrgContract = UUID.randomUUID();
+        jdbcClient.sql("""
+                insert into contract (id, organization_id, title, created_at)
+                values (:id, :orgId, null, :createdAt)
+                """)
+                .param("id", otherOrgContract)
+                .param("orgId", UUID.randomUUID())
+                .param("createdAt", java.time.OffsetDateTime.now())
+                .update();
+
+        mockMvc.perform(get("/api/contracts/{id}", otherOrgContract))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/contracts/{id}/versions/{n}/structure", otherOrgContract, 1))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/contracts/{id}/versions/{n}/original", otherOrgContract, 1))
+                .andExpect(status().isNotFound());
+    }
+
+    @Autowired
+    org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
+
     private UploadResult uploadFixture(String fixture, String filename) throws Exception {
         byte[] bytes;
         try (var stream = getClass().getClassLoader().getResourceAsStream(fixture)) {
             assertThat(stream).as("classpath resource %s", fixture).isNotNull();
             bytes = stream.readAllBytes();
         }
-        var file = new MockMultipartFile(
-                "file", filename,
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                bytes);
+        var file = new MockMultipartFile("file", filename, DOCX_MEDIA_TYPE, bytes);
 
         MvcResult result = mockMvc.perform(multipart("/api/contracts").file(file))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contractId").isString())
-                .andExpect(jsonPath("$.parseStatus").value("OK"))
                 .andReturn();
 
         var json = objectMapper.readTree(result.getResponse().getContentAsString());
+        var parseStatus = json.has("parseStatus") ? json.get("parseStatus").asText() : "OK";
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+        if (json.has("parseWarnings") && json.get("parseWarnings").isArray()) {
+            json.get("parseWarnings").forEach(w -> warnings.add(w.asText()));
+        }
         return new UploadResult(
                 UUID.fromString(json.get("contractId").asText()),
-                json.get("sha256").asText());
+                json.get("sha256").asText(),
+                parseStatus,
+                java.util.Collections.unmodifiableList(warnings));
     }
 
-    private record UploadResult(UUID contractId, String sha256) {
+    private record UploadResult(
+            UUID contractId, String sha256, String parseStatus, java.util.List<String> parseWarnings) {
     }
 }

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 
 import com.tngtech.archunit.core.importer.ClassFileImporter;
+import com.tngtech.archunit.core.importer.ImportOption;
 
 class ArchitectureTest {
 
@@ -40,7 +41,9 @@ class ArchitectureTest {
 
     @Test
     void domainModulesDoNotDependOnPlatformOrFileSystemTypes() {
-        var classes = new ClassFileImporter().importPackages("com.redstar.workbench");
+        var classes = new ClassFileImporter()
+                .withImportOption(new ImportOption.DoNotIncludeTests())
+                .importPackages("com.redstar.workbench");
 
         noClasses()
                 .that().resideInAnyPackage(
@@ -54,6 +57,18 @@ class ArchitectureTest {
                         "..redline..",
                         "..audit..")
                 .should().dependOnClassesThat().resideInAnyPackage("java.nio.file..", "..platform..")
+                .check(classes);
+    }
+
+    @Test
+    void contractModuleDoesNotTouchSqlImplementation() {
+        var classes = new ClassFileImporter()
+                .withImportOption(new ImportOption.DoNotIncludeTests())
+                .importPackages("com.redstar.workbench");
+
+        noClasses()
+                .that().resideInAnyPackage("..contracts..")
+                .should().dependOnClassesThat().resideInAnyPackage("org.springframework.jdbc..")
                 .check(classes);
     }
 }

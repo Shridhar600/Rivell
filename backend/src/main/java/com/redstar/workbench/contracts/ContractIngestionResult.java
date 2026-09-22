@@ -7,7 +7,9 @@ public record ContractIngestionResult(
         UUID contractVersionId,
         UUID sourceArtifactId,
         int versionNumber,
+        String filename,
         ParseStatus parseStatus,
+        java.util.List<String> parseWarnings,
         String sha256,
         String storageKey,
         int nodeCount) {

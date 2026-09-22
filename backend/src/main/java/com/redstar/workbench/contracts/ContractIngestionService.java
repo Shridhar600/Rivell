@@ -4,185 +4,179 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.HexFormat;
+import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.util.unit.DataSize;
 
 import com.redstar.workbench.foundation.DocumentStorage;
 import com.redstar.workbench.foundation.StorageKey;
+import com.redstar.workbench.organization.AuthorizationService;
 import com.redstar.workbench.organization.IdentityProvider;
+import com.redstar.workbench.organization.Permissions;
 
-@Service
+/**
+ * Contract ingestion: store immutable source, parse, persist canonical structure.
+ *
+ * Flow: bounded upload read, storage first (immutable file), then a staging transaction that
+ * records {@link ParseStatus#PARSING}, parsing outside any transaction, then a short outcome
+ * transaction. A failure after storage but before staging is compensated by removing the
+ * stored file.
+ */
 public class ContractIngestionService {
 
-    private static final String DOCX_CONTENT_TYPE =
+    public static final String DOCX_CONTENT_TYPE =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
     private final DocumentStorage documentStorage;
     private final DocumentStructureParser documentStructureParser;
+    private final ContractRepository repository;
+    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
-    private final JdbcClient jdbcClient;
+    private final AuthorizationService authorizationService;
+    private final DataSize maxFileSize;
 
     public ContractIngestionService(
             DocumentStorage documentStorage,
             DocumentStructureParser documentStructureParser,
+            ContractRepository repository,
+            org.springframework.transaction.support.TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
-            JdbcClient jdbcClient) {
+            AuthorizationService authorizationService,
+            DataSize maxFileSize) {
         this.documentStorage = documentStorage;
         this.documentStructureParser = documentStructureParser;
+        this.repository = repository;
+        this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
-        this.jdbcClient = jdbcClient;
+        this.authorizationService = authorizationService;
+        this.maxFileSize = maxFileSize;
     }
 
-    @Transactional
     public ContractIngestionResult ingest(String filename, String contentType, InputStream source)
             throws IOException {
-        var normalizedFilename = requireDocxFilename(filename);
-        var bytes = source.readAllBytes();
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.CONTRACT_UPLOAD)) {
+            throw new UnauthorizedContractAccessException(identity.userId());
+        }
+
+        var safeFilename = sanitizeFilename(filename);
+        var bytes = readBounded(source, maxFileSize.toBytes());
         var sha256 = sha256Hex(bytes);
-        var organizationId = identityProvider.currentIdentity().organizationId();
-        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        var now = Instant.now();
 
         var artifactId = UUID.randomUUID();
         var storageKey = new StorageKey(
-                organizationId + "/contracts/" + artifactId + ".docx");
+                identity.organizationId() + "/contracts/" + artifactId + ".docx");
         documentStorage.store(storageKey, new java.io.ByteArrayInputStream(bytes));
 
-        jdbcClient.sql("""
-                insert into source_artifact
-                  (id, organization_id, filename, content_type, size_bytes, sha256, storage_key, created_at)
-                values (:id, :orgId, :filename, :contentType, :sizeBytes, :sha256, :storageKey, :createdAt)
-                """)
-                .param("id", artifactId)
-                .param("orgId", organizationId)
-                .param("filename", normalizedFilename)
-                .param("contentType", contentType == null || contentType.isBlank()
-                        ? DOCX_CONTENT_TYPE
-                        : contentType)
-                .param("sizeBytes", (long) bytes.length)
-                .param("sha256", sha256)
-                .param("storageKey", storageKey.value())
-                .param("createdAt", now)
-                .update();
+        UUID contractId;
+        UUID versionId;
+        try {
+            var staged = transactionTemplate.execute(status -> {
+                var ids = new UUID[] {UUID.randomUUID(), UUID.randomUUID()};
+                repository.insertSourceArtifact(
+                        artifactId, identity.organizationId(), safeFilename,
+                        contentType == null || contentType.isBlank()
+                                ? DOCX_CONTENT_TYPE
+                                : contentType,
+                        bytes.length, sha256, storageKey.value());
+                repository.insertContract(ids[0], identity.organizationId(), null, now);
+                repository.insertVersion(
+                        ids[1], ids[0], artifactId, 1, ContractRole.ORIGINAL,
+                        null, ParseStatus.PARSING, List.of(), now);
+                return new StagedIngestion(ids[0], ids[1]);
+            });
+            contractId = staged.contractId();
+            versionId = staged.versionId();
 
-        var contractId = UUID.randomUUID();
-        var contractVersionId = UUID.randomUUID();
+            ParseResult parseResult;
+            try (var parsedSource = new java.io.ByteArrayInputStream(bytes)) {
+                parseResult = documentStructureParser.parse(parsedSource, versionId);
+            }
 
-        var parseResult = documentStructureParser.parse(
-                new java.io.ByteArrayInputStream(bytes), contractVersionId);
+            transactionTemplate.executeWithoutResult(status -> {
+                repository.updateVersionParseOutcome(
+                        versionId, parseResult.parserVersion(),
+                        parseResult.status(), parseResult.warnings());
+                repository.insertNodes(versionId, parseResult.nodes());
+                parsedTitle(parseResult.nodes()).ifPresent(title ->
+                        repository.updateContractTitle(contractId, title));
+            });
 
-        var title = parseResult.nodes().stream()
+            return new ContractIngestionResult(
+                    contractId,
+                    versionId,
+                    artifactId,
+                    1,
+                    safeFilename,
+                    parseResult.status(),
+                    parseResult.warnings(),
+                    sha256,
+                    storageKey.value(),
+                    parseResult.nodes().size());
+        } catch (RuntimeException | IOException e) {
+            deleteQuietly(storageKey);
+            throw e;
+        }
+    }
+
+    private byte[] readBounded(InputStream source, long limitBytes) throws IOException {
+        var limit = (int) Math.min(limitBytes, Integer.MAX_VALUE - 1L);
+        var buffer = source.readNBytes(limit + 1);
+        if (buffer.length > limit) {
+            throw new UploadLimitExceededException(DataSize.ofBytes(limitBytes));
+        }
+        return buffer;
+    }
+
+    private java.util.Optional<String> parsedTitle(java.util.List<DocumentNode> nodes) {
+        return nodes.stream()
                 .filter(node -> node.nodeType() == DocumentNodeType.TITLE)
                 .map(DocumentNode::text)
                 .filter(text -> text != null && !text.isBlank())
-                .findFirst()
-                .orElse(null);
-
-        jdbcClient.sql("""
-                insert into contract (id, organization_id, title, created_at)
-                values (:id, :orgId, :title, :createdAt)
-                """)
-                .param("id", contractId)
-                .param("orgId", organizationId)
-                .param("title", title)
-                .param("createdAt", now)
-                .update();
-
-        jdbcClient.sql("""
-                insert into contract_version
-                  (id, contract_id, version_number, source_artifact_id, role, parser_version, parse_status, parse_warnings, created_at)
-                values (:id, :contractId, 1, :artifactId, 'ORIGINAL', :parserVersion, :parseStatus,
-                        cast(:warnings as jsonb), :createdAt)
-                """)
-                .param("id", contractVersionId)
-                .param("contractId", contractId)
-                .param("artifactId", artifactId)
-                .param("parserVersion", parseResult.parserVersion())
-                .param("parseStatus", parseResult.status().name())
-                .param("warnings", toJsonArray(parseResult.warnings()))
-                .param("createdAt", now)
-                .update();
-
-        insertNodes(contractVersionId, parseResult.nodes());
-
-        return new ContractIngestionResult(
-                contractId,
-                contractVersionId,
-                artifactId,
-                1,
-                parseResult.status(),
-                sha256,
-                storageKey.value(),
-                parseResult.nodes().size());
+                .findFirst();
     }
 
-    private void insertNodes(UUID contractVersionId, java.util.List<DocumentNode> nodes) {
-        for (var node : nodes) {
-            var span = node.sourceSpan();
-            jdbcClient.sql("""
-                    insert into document_node
-                      (id, contract_version_id, parent_id, node_type, ordinal, text, heading_level,
-                       part_path, body_index, paragraph_index, table_index, row_index, cell_index,
-                       run_start, run_end, raw_style_id)
-                    values (:id, :versionId, :parentId, :nodeType, :ordinal, :text, :headingLevel,
-                            :partPath, :bodyIndex, :paragraphIndex, :tableIndex, :rowIndex, :cellIndex,
-                            :runStart, :runEnd, :rawStyleId)
-                    """)
-                    .param("id", node.id())
-                    .param("versionId", contractVersionId)
-                    .param("parentId", node.parentId())
-                    .param("nodeType", node.nodeType().name())
-                    .param("ordinal", node.ordinal())
-                    .param("text", node.text())
-                    .param("headingLevel", node.headingLevel())
-                    .param("partPath", span.partPath())
-                    .param("bodyIndex", span.bodyIndex())
-                    .param("paragraphIndex", span.paragraphIndex())
-                    .param("tableIndex", span.tableIndex())
-                    .param("rowIndex", span.rowIndex())
-                    .param("cellIndex", span.cellIndex())
-                    .param("runStart", span.runStart())
-                    .param("runEnd", span.runEnd())
-                    .param("rawStyleId", node.rawStyleId())
-                    .update();
+    private void deleteQuietly(StorageKey storageKey) {
+        try {
+            documentStorage.delete(storageKey);
+        } catch (IOException cleanupFailure) {
+            // Orphaned immutable file; reconciliation is out of M1 scope.
         }
     }
 
-    private String requireDocxFilename(String filename) {
+    private record StagedIngestion(UUID contractId, UUID versionId) {
+    }
+
+    static String sanitizeFilename(String filename) {
         if (filename == null || filename.isBlank()) {
             throw new IllegalArgumentException("Filename must not be blank");
         }
-        var normalized = filename.trim();
-        if (!normalized.toLowerCase(Locale.ROOT).endsWith(".docx")) {
+        var base = filename.trim();
+        var slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
+        if (slash >= 0) {
+            base = base.substring(slash + 1);
+        }
+        var cleaned = base.replaceAll("[\\p{Cntrl}]", "");
+        if (cleaned.isBlank()) {
+            throw new IllegalArgumentException("Filename must not be blank");
+        }
+        if (!cleaned.toLowerCase(Locale.ROOT).endsWith(".docx")) {
             throw new IllegalArgumentException("Only .docx files are supported");
         }
-        return normalized;
+        return cleaned;
     }
 
     private String sha256Hex(byte[] bytes) {
         try {
             var digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(bytes));
+            return java.util.HexFormat.of().formatHex(digest.digest(bytes));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is not available", e);
         }
-    }
-
-    private String toJsonArray(java.util.List<String> values) {
-        var escaped = values.stream()
-                .map(value -> "\"" + value
-                        .replace("\\", "\\\\")
-                        .replace("\"", "\\\"")
-                        .replace("\n", "\\n")
-                        .replace("\r", "\\r")
-                        .replace("\t", "\\t") + "\"")
-                .toList();
-        return "[" + String.join(",", escaped) + "]";
     }
 }

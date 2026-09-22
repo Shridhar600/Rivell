@@ -1,2 +1,2 @@
-@org.springframework.modulith.ApplicationModule(displayName = "Knowledge")
+@org.springframework.modulith.ApplicationModule(allowedDependencies = {})
 package com.redstar.workbench.knowledge;

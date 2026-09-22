@@ -7,14 +7,16 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+import com.redstar.workbench.contracts.DocumentNode;
 import com.redstar.workbench.contracts.DocumentNodeType;
 import com.redstar.workbench.contracts.ParseStatus;
 
 class DocxStructuralParserTest {
 
-    private static final String PARSER_VERSION = "redstar-docx-parser-1";
+    private static final String PARSER_VERSION = "redstar-docx-parser-2";
     private static final UUID VERSION_ID = UUID.randomUUID();
-    private final DocxStructuralParser parser = new DocxStructuralParser();
+    private final DocxStructuralParser parser =
+            new DocxStructuralParser(new DocxParserProperties(200L * 1024 * 1024));
 
     @Test
     void parsesSimpleContractIntoOrderedOutline() {
@@ -37,6 +39,7 @@ class DocxStructuralParserTest {
         assertThat(nodes.get(1).rawStyleId()).isEqualTo("Title");
         assertThat(nodes.get(1).ordinal()).isZero();
         assertThat(nodes.get(1).sourceSpan().bodyIndex()).isZero();
+        assertThat(nodes.get(1).sourceSpan().paragraphIndex()).isZero();
 
         assertThat(nodes.get(2).nodeType()).isEqualTo(DocumentNodeType.PARAGRAPH);
         assertThat(nodes.get(2).ordinal()).isEqualTo(1);
@@ -106,6 +109,91 @@ class DocxStructuralParserTest {
     }
 
     @Test
+    void resolvesAutomaticNumberingForDecimalAndBulletLists() {
+        var result = parse("fixtures/numbered-list.docx");
+        var nodes = result.nodes();
+
+        assertThat(result.status()).isEqualTo(ParseStatus.OK);
+        var labels = nodes.stream()
+                .filter(node -> node.numberingLabel() != null)
+                .map(DocumentNode::numberingLabel)
+                .toList();
+
+        // three decimal items, two bullet items
+        assertThat(labels).hasSize(5);
+        assertThat(labels.get(0)).startsWith("1");
+        assertThat(labels.get(1)).startsWith("2");
+        assertThat(labels.get(2)).startsWith("3");
+        assertThat(labels.get(3)).isNotBlank();
+        assertThat(labels.get(4)).isNotBlank();
+
+        // unnumbered paragraphs keep a null label
+        assertThat(nodes.get(1).numberingLabel()).isNull();
+        assertThat(nodes.get(nodes.size() - 1).numberingLabel()).isNull();
+    }
+
+    @Test
+    void anchorsSpansToTrueBodyPositionsAndCapturesContainers() {
+        var result = parse("fixtures/with-sdt-and-breaks.docx");
+        var nodes = result.nodes();
+
+        // BODY + heading + before-para + 2 sdt paragraphs + break/tab paragraph + hyperlink;
+        // the foreign element the loader removed surfaces as a limitation warning
+        assertThat(nodes).hasSize(7);
+        assertThat(result.warnings()).contains("SOME_BODY_CONTENT_COULD_NOT_BE_REPRESENTED");
+
+        var heading = nodes.get(1);
+        assertThat(heading.nodeType()).isEqualTo(DocumentNodeType.HEADING);
+        assertThat(heading.sourceSpan().bodyIndex()).isZero();
+        assertThat(heading.sourceSpan().paragraphIndex()).isZero();
+
+        // the loader dropped the unsupported element; subsequent paragraphs keep their
+        // deterministic positions in the parsed body
+        var beforeSdt = nodes.get(2);
+        assertThat(beforeSdt.text()).isEqualTo("Before the content control.");
+        assertThat(beforeSdt.sourceSpan().bodyIndex()).isEqualTo(1);
+        assertThat(beforeSdt.sourceSpan().paragraphIndex()).isEqualTo(1);
+
+        // sdt paragraphs anchor to the sdt's body index and keep a global paragraph sequence
+        var firstInSdt = nodes.get(3);
+        assertThat(firstInSdt.text()).isEqualTo("Inside content control.");
+        assertThat(firstInSdt.sourceSpan().bodyIndex()).isEqualTo(2);
+        assertThat(firstInSdt.sourceSpan().paragraphIndex()).isEqualTo(2);
+
+        var secondInSdt = nodes.get(4);
+        assertThat(secondInSdt.sourceSpan().bodyIndex()).isEqualTo(2);
+        assertThat(secondInSdt.sourceSpan().paragraphIndex()).isEqualTo(3);
+
+        var withBreaks = nodes.get(5);
+        assertThat(withBreaks.text()).isEqualTo("line one\nline two\tafter tab");
+        assertThat(withBreaks.sourceSpan().bodyIndex()).isEqualTo(3);
+
+        var withHyperlink = nodes.get(6);
+        assertThat(withHyperlink.text()).isEqualTo("visit the site");
+        assertThat(withHyperlink.sourceSpan().bodyIndex()).isEqualTo(4);
+        assertThat(withHyperlink.sourceSpan().paragraphIndex()).isEqualTo(5);
+    }
+
+    private String withHyperlinkText(com.redstar.workbench.contracts.DocumentNode node) {
+        return node.text();
+    }
+
+    @Test
+    void warnsAboutPartsThatAreNotRepresented() {
+        var result = parse("fixtures/with-omitted-parts.docx");
+
+        assertThat(result.status()).isEqualTo(ParseStatus.OK);
+        assertThat(result.warnings()).contains(
+                "HEADERS_OR_FOOTERS_NOT_REPRESENTED",
+                "FOOTNOTES_NOT_REPRESENTED");
+
+        var nodes = result.nodes();
+        assertThat(nodes).hasSize(3);
+        assertThat(nodes.get(1).text()).isEqualTo("Consulting Terms");
+        assertThat(nodes.get(2).text()).isEqualTo("The rates apply for the initial term.");
+    }
+
+    @Test
     void reportsFailedStatusForInvalidBytes() {
         var result = parse("fixtures/invalid-bytes.docx");
 
@@ -113,6 +201,7 @@ class DocxStructuralParserTest {
         assertThat(result.parserVersion()).isEqualTo(PARSER_VERSION);
         assertThat(result.nodes()).isEmpty();
         assertThat(result.warnings()).isNotEmpty();
+        assertThat(result.warnings().get(0)).startsWith("The document could not be parsed");
     }
 
     private com.redstar.workbench.contracts.ParseResult parse(String fixture) {

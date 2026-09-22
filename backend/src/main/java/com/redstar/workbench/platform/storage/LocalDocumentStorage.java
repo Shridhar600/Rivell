@@ -39,6 +39,20 @@ public final class LocalDocumentStorage implements DocumentStorage {
         return Files.newInputStream(target);
     }
 
+    @Override
+    public long size(StorageKey key) throws IOException {
+        var target = resolve(key);
+        rejectSymbolicLinks(target);
+        return Files.size(target);
+    }
+
+    @Override
+    public void delete(StorageKey key) throws IOException {
+        var target = resolve(key);
+        rejectSymbolicLinks(target);
+        Files.deleteIfExists(target);
+    }
+
     private Path resolve(StorageKey key) {
         var target = root.resolve(Objects.requireNonNull(key, "key").value()).normalize();
         if (!target.startsWith(root)) {
