@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.util.Objects;
 import java.util.Set;
 
-import com.rivell.workbench.foundation.text.Texts;
+import com.rivell.workbench.foundation.Texts;
 
 /**
  * Human-declared ingestion manifest (Architecture Decision #7.1). Values are stored

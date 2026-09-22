@@ -1,4 +1,4 @@
-package com.rivell.workbench.foundation.api;
+package com.rivell.workbench.foundation;
 
 import java.time.Instant;
 import java.util.Objects;

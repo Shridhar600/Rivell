@@ -19,7 +19,8 @@ import org.springframework.web.multipart.MultipartFile;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractDownloadService;
-import com.rivell.workbench.foundation.api.ApiResult;
+import com.rivell.workbench.foundation.ApiResult;
+import com.rivell.workbench.foundation.ErrorResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;

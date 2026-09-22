@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.rivell.workbench.foundation.api.ApiResult;
+import com.rivell.workbench.foundation.ApiResult;
 
 @RestController
 @RequestMapping("/api/system")

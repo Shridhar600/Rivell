@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.rivell.workbench.foundation.text.Texts;
+import com.rivell.workbench.foundation.Texts;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;

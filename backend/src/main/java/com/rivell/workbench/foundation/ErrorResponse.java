@@ -1,4 +1,4 @@
-package com.rivell.workbench.contracts.api;
+package com.rivell.workbench.foundation;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 

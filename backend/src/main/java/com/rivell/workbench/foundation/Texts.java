@@ -1,4 +1,4 @@
-package com.rivell.workbench.foundation.text;
+package com.rivell.workbench.foundation;
 
 /**
  * Shared text rules for untrusted input: trim-or-null normalization used across

@@ -19,7 +19,7 @@ import com.rivell.workbench.knowledge.KnowledgeArtifactNotFoundException;
 import com.rivell.workbench.knowledge.KnowledgeCandidateNotFoundException;
 import com.rivell.workbench.knowledge.KnowledgeUploadLimitExceededException;
 import com.rivell.workbench.knowledge.UnauthorizedKnowledgeAccessException;
-import com.rivell.workbench.contracts.api.ErrorResponse;
+import com.rivell.workbench.foundation.ErrorResponse;
 
 /**
  * Global API error mapping for all controllers. Domain exceptions map to explicit,
