@@ -170,6 +170,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                                     :tableIndex, :rowIndex, :cellIndex, :runStart, :runEnd,
                                     :sheetName, :columnIndex, :mergedRegion::jsonb, :rawStyleId)
                             """)
+                    .param("id", node.id())
                     .param("artifactId", artifactId)
                     .param("parentId", node.parentId())
                     .param("nodeType", node.nodeType().name())
@@ -655,7 +656,10 @@ private String writeUuidList(List<UUID> values) {
         try {
             var node = objectMapper.readTree(json);
             var columns = new LinkedHashMap<String, String>();
-            var fields = node.fields();
+            var source = node.has("columns") && node.get("columns").isObject()
+                    ? node.get("columns")
+                    : node;
+            var fields = source.fields();
             while (fields.hasNext()) {
                 var field = fields.next();
                 if (field.getValue().isTextual()) {

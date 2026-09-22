@@ -170,7 +170,11 @@ final class KnowledgeStructure {
             }
             var rawLabel = columns.values().iterator().next();
             var contentText = String.join(" | ", columns.values());
-            return List.of(candidate(artifact, unit, scope, now, rawLabel, contentText));
+            return List.of(new KnowledgeCandidate(
+                    UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
+                    candidateType(artifact.artifactType()), ReviewStatus.PENDING,
+                    rawLabel, contentText, new CandidatePayload(columns), null,
+                    null, null, null, scope, List.of(), null, null, now, now));
         }
 
         private String rowContent() {
