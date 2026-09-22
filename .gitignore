@@ -4,3 +4,6 @@ frontend/AGENTS.md
 backend/AGENTS.md
 backend/target/
 backend/var/
+
+# Generated OpenAPI handshake artifact
+/openapi.json
