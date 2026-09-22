@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router'
 import { AppShell } from '../components/AppShell'
+import { ContractPage } from '../routes/ContractPage'
 import { KnowledgePage } from '../routes/KnowledgePage'
 import { ReviewsPage } from '../routes/ReviewsPage'
 
@@ -10,6 +11,7 @@ export const appRoutes = [
     children: [
       { index: true, element: <Navigate to="/reviews" replace /> },
       { path: 'reviews', element: <ReviewsPage /> },
+      { path: 'reviews/:contractId', element: <ContractPage /> },
       { path: 'knowledge', element: <KnowledgePage /> },
     ],
   },

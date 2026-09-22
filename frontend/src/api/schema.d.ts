@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system/status": {
         parameters: {
             query?: never;
@@ -20,13 +36,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contracts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getContract"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{id}/versions/{versionNumber}/structure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getStructure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{id}/versions/{versionNumber}/original": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadOriginal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        IngestResponse: {
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: uuid */
+            contractVersionId?: string;
+            /** Format: int32 */
+            versionNumber?: number;
+            parseStatus?: string;
+            sha256?: string;
+            /** Format: int32 */
+            nodeCount?: number;
+        };
         SystemStatusResponse: {
             service?: string;
             status?: string;
+        };
+        ContractSummaryResponse: {
+            /** Format: uuid */
+            id?: string;
+            title?: string;
+            latestVersion?: components["schemas"]["LatestVersion"];
+        };
+        LatestVersion: {
+            /** Format: int32 */
+            versionNumber?: number;
+            parseStatus?: string;
+            sha256?: string;
+            /** Format: int32 */
+            nodeCount?: number;
+        };
+        ContractStructureResponse: {
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: int32 */
+            versionNumber?: number;
+            parserVersion?: string;
+            parseStatus?: string;
+            /** Format: int32 */
+            nodeCount?: number;
+            nodes?: components["schemas"]["NodeView"][];
+        };
+        NodeView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            parentId?: string;
+            nodeType?: string;
+            /** Format: int32 */
+            ordinal?: number;
+            text?: string;
+            /** Format: int32 */
+            headingLevel?: number;
+            sourceSpan?: components["schemas"]["SourceSpanView"];
+            rawStyleId?: string;
+        };
+        SourceSpanView: {
+            partPath?: string;
+            /** Format: int32 */
+            bodyIndex?: number;
+            /** Format: int32 */
+            paragraphIndex?: number;
+            /** Format: int32 */
+            tableIndex?: number;
+            /** Format: int32 */
+            rowIndex?: number;
+            /** Format: int32 */
+            cellIndex?: number;
+            /** Format: int32 */
+            runStart?: number;
+            /** Format: int32 */
+            runEnd?: number;
         };
     };
     responses: never;
@@ -37,6 +169,33 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["IngestResponse"];
+                };
+            };
+        };
+    };
     status: {
         parameters: {
             query?: never;
@@ -53,6 +212,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemStatusResponse"];
+                };
+            };
+        };
+    };
+    getContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ContractSummaryResponse"];
+                };
+            };
+        };
+    };
+    getStructure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ContractStructureResponse"];
+                };
+            };
+        };
+    };
+    downloadOriginal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
                 };
             };
         };
