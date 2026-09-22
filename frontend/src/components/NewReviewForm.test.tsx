@@ -185,7 +185,7 @@ describe('NewReviewForm', () => {
             jsonResponse({
               contractId: 'c9',
               versionNumber: 1,
-              parserVersion: 'redstar-docx-parser-2',
+              parserVersion: 'rivell-docx-parser-2',
               parseStatus: 'OK',
               parseWarnings: [],
               nodeCount: 0,
@@ -203,7 +203,7 @@ describe('NewReviewForm', () => {
                 versionNumber: 1,
                 parseStatus: 'OK',
                 parseWarnings: [],
-                parserVersion: 'redstar-docx-parser-2',
+                parserVersion: 'rivell-docx-parser-2',
                 sha256: 'abc',
                 filename: 'upload.docx',
                 nodeCount: 0,
@@ -213,7 +213,7 @@ describe('NewReviewForm', () => {
         }
 
         return Promise.resolve(
-          jsonResponse({ service: 'redstar-backend', status: 'ready' }),
+          jsonResponse({ service: 'rivell-backend', status: 'ready' }),
         )
       }),
     )

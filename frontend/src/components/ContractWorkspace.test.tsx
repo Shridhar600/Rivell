@@ -54,7 +54,7 @@ const summary = {
     versionNumber: 1,
     parseStatus: 'OK',
     parseWarnings: [],
-    parserVersion: 'redstar-docx-parser-2',
+    parserVersion: 'rivell-docx-parser-2',
     sha256: 'abc123def456',
     filename: 'msa.docx',
     nodeCount: 5,
@@ -108,7 +108,7 @@ const nodes: StructureNode[] = [
 const structureOk = {
   contractId: 'c1',
   versionNumber: 1,
-  parserVersion: 'redstar-docx-parser-2',
+  parserVersion: 'rivell-docx-parser-2',
   parseStatus: 'OK',
   parseWarnings: [],
   nodeCount: nodes.length,

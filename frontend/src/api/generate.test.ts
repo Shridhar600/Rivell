@@ -34,7 +34,7 @@ describe('generated OpenAPI client workflow', () => {
       StatusGet['responses'][200]['content']['application/json']
 
     const ok: SuccessBody = {
-      service: 'redstar-backend',
+      service: 'rivell-backend',
       status: 'ready',
     }
 
@@ -93,7 +93,7 @@ describe('generated OpenAPI client workflow', () => {
         versionNumber: 1,
         parseStatus: 'OK',
         parseWarnings: [],
-        parserVersion: 'redstar-docx-parser-2',
+        parserVersion: 'rivell-docx-parser-2',
         sha256: 'b'.repeat(64),
         filename: 'msa.docx',
         nodeCount: 1,
@@ -105,7 +105,7 @@ describe('generated OpenAPI client workflow', () => {
     const structure: Structure = {
       contractId: '11111111-1111-1111-1111-111111111111',
       versionNumber: 1,
-      parserVersion: 'redstar-docx-parser-2',
+      parserVersion: 'rivell-docx-parser-2',
       parseStatus: 'OK',
       parseWarnings: [],
       nodeCount: 1,

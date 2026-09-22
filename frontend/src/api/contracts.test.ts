@@ -47,7 +47,7 @@ const summary = {
     versionNumber: 1,
     parseStatus: 'OK',
     parseWarnings: [],
-    parserVersion: 'redstar-docx-parser-2',
+    parserVersion: 'rivell-docx-parser-2',
     sha256: 'a'.repeat(64),
     filename: 'msa.docx',
     nodeCount: 3,
@@ -57,7 +57,7 @@ const summary = {
 const structure = {
   contractId: 'c1',
   versionNumber: 1,
-  parserVersion: 'redstar-docx-parser-2',
+  parserVersion: 'rivell-docx-parser-2',
   parseStatus: 'OK',
   parseWarnings: ['SOME_BODY_CONTENT_COULD_NOT_BE_REPRESENTED'],
   nodeCount: 1,

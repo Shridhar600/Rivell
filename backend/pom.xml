@@ -11,11 +11,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.redstar</groupId>
-    <artifactId>redstar-backend</artifactId>
+    <groupId>com.rivell</groupId>
+    <artifactId>rivell-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>redstar-backend</name>
-    <description>Backend for the RedStar contract review workbench</description>
+    <name>rivell-backend</name>
+    <description>Backend for the Rivell contract review workbench</description>
 
     <properties>
         <java.version>21</java.version>

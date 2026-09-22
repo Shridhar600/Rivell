@@ -19,7 +19,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
-const readyBody = { service: 'redstar-backend', status: 'ready' }
+const readyBody = { service: 'rivell-backend', status: 'ready' }
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -55,7 +55,7 @@ describe('SystemStatusPanel', () => {
 
     renderPanel()
     expect(await screen.findByText(/system ready/i)).toBeInTheDocument()
-    expect(screen.getByText(/redstar-backend/)).toBeInTheDocument()
+    expect(screen.getByText(/rivell-backend/)).toBeInTheDocument()
   })
 
   it('shows error state and retries the query', async () => {
