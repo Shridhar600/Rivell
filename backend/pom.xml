@@ -25,6 +25,7 @@
         <jobrunr.version>8.8.1</jobrunr.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <archunit.version>1.4.1</archunit.version>
+        <docx4j.version>11.5.14</docx4j.version>
     </properties>
 
     <dependencyManagement>
@@ -78,6 +79,16 @@
             <groupId>org.jobrunr</groupId>
             <artifactId>jobrunr-spring-boot-3-starter</artifactId>
             <version>${jobrunr.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.docx4j</groupId>
+            <artifactId>docx4j-core</artifactId>
+            <version>${docx4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.docx4j</groupId>
+            <artifactId>docx4j-JAXB-ReferenceImpl</artifactId>
+            <version>${docx4j.version}</version>
         </dependency>
 
         <dependency>
