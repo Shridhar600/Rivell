@@ -19,6 +19,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+const readyBody = { service: 'redstar-backend', status: 'ready' }
+
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -39,41 +41,30 @@ describe('SystemStatusPanel', () => {
 
     renderPanel()
     expect(screen.getByRole('status')).toHaveTextContent(/loading/i)
-    resolveFetch(
-      jsonResponse({ status: 'UP', timestamp: '2026-09-22T00:00:00.000Z' }),
-    )
+    resolveFetch(jsonResponse(readyBody))
     await waitFor(() =>
-      expect(screen.getByText(/system up/i)).toBeInTheDocument(),
+      expect(screen.getByText(/system ready/i)).toBeInTheDocument(),
     )
   })
 
   it('shows success status from the API', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(() =>
-        Promise.resolve(
-          jsonResponse({
-            status: 'UP',
-            timestamp: '2026-09-22T00:00:00.000Z',
-          }),
-        ),
-      ),
+      vi.fn(() => Promise.resolve(jsonResponse(readyBody))),
     )
 
     renderPanel()
-    expect(await screen.findByText(/system up/i)).toBeInTheDocument()
+    expect(await screen.findByText(/system ready/i)).toBeInTheDocument()
+    expect(screen.getByText(/redstar-backend/)).toBeInTheDocument()
   })
 
   it('shows error state and retries the query', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ message: 'boom' }, 500))
       .mockResolvedValueOnce(
-        jsonResponse({
-          status: 'UP',
-          timestamp: '2026-09-22T00:00:00.000Z',
-        }),
+        jsonResponse({ message: 'boom' }, 500),
       )
+      .mockResolvedValueOnce(jsonResponse(readyBody))
     vi.stubGlobal('fetch', fetchMock)
 
     renderPanel()
@@ -81,6 +72,6 @@ describe('SystemStatusPanel', () => {
     expect(alert).toHaveTextContent(/unavailable|failed|error|boom/i)
 
     await userEvent.click(screen.getByRole('button', { name: /try again/i }))
-    expect(await screen.findByText(/system up/i)).toBeInTheDocument()
+    expect(await screen.findByText(/system ready/i)).toBeInTheDocument()
   })
 })

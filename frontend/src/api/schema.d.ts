@@ -11,8 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Technical system status */
-        get: operations["getSystemStatus"];
+        get: operations["status"];
         put?: never;
         post?: never;
         delete?: never;
@@ -25,14 +24,9 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        SystemStatus: {
-            /** @enum {string} */
-            status: "UP" | "DEGRADED" | "DOWN";
-            /** Format: date-time */
-            timestamp: string;
-        };
-        SystemStatusError: {
-            message: string;
+        SystemStatusResponse: {
+            service?: string;
+            status?: string;
         };
     };
     responses: never;
@@ -43,7 +37,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    getSystemStatus: {
+    status: {
         parameters: {
             query?: never;
             header?: never;
@@ -58,16 +52,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SystemStatus"];
-                };
-            };
-            /** @description Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SystemStatusError"];
+                    "application/json": components["schemas"]["SystemStatusResponse"];
                 };
             };
         };

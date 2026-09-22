@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { components, paths } from './schema'
 
-type SystemStatus = components['schemas']['SystemStatus']
+type SystemStatusResponse = components['schemas']['SystemStatusResponse']
 
 describe('generated OpenAPI client workflow', () => {
   it('exposes typed system status path from generated schema', () => {
@@ -10,12 +10,12 @@ describe('generated OpenAPI client workflow', () => {
       StatusGet['responses'][200]['content']['application/json']
 
     const ok: SuccessBody = {
-      status: 'UP',
-      timestamp: '2026-09-22T00:00:00.000Z',
+      service: 'redstar-backend',
+      status: 'ready',
     }
 
-    const typed: SystemStatus = ok
-    expect(typed.status).toBe('UP')
+    const typed: SystemStatusResponse = ok
+    expect(typed.status).toBe('ready')
     expect('/api/system/status' satisfies keyof paths).toBe(
       '/api/system/status',
     )

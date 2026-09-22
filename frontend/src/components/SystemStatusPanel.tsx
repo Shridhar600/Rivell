@@ -18,10 +18,12 @@ export function SystemStatusPanel() {
     )
   }
 
+  const { service, status } = query.data
+
   return (
     <p className="state state--success" data-testid="system-status">
-      System {query.data.status === 'UP' ? 'up' : query.data.status.toLowerCase()} —{' '}
-      {query.data.status}
+      System {status ?? 'unknown'}
+      {service ? ` — ${service}` : ''}
     </p>
   )
 }

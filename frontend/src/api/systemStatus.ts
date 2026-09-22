@@ -5,18 +5,25 @@ import type { paths } from './schema'
 export type SystemStatus =
   paths['/api/system/status']['get']['responses'][200]['content']['application/json']
 
-export type SystemStatusError =
-  paths['/api/system/status']['get']['responses'][500]['content']['application/json']
+function errorMessage(error: unknown): string {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    error.message.length > 0
+  ) {
+    return error.message
+  }
+  return 'System status unavailable'
+}
 
 export async function fetchSystemStatus(): Promise<SystemStatus> {
   const client = createApiClient()
   const { data, error } = await client.GET('/api/system/status')
 
-  if (error || !data) {
-    const message =
-      (error as SystemStatusError | undefined)?.message ??
-      'System status unavailable'
-    throw new Error(message)
+  if (!data) {
+    throw new Error(errorMessage(error))
   }
 
   return data
