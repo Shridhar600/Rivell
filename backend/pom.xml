@@ -26,6 +26,7 @@
         <testcontainers.version>2.0.5</testcontainers.version>
         <archunit.version>1.4.1</archunit.version>
         <docx4j.version>11.5.14</docx4j.version>
+        <poi.version>5.5.1</poi.version>
     </properties>
 
     <dependencyManagement>
@@ -90,6 +91,11 @@
             <artifactId>docx4j-JAXB-ReferenceImpl</artifactId>
             <version>${docx4j.version}</version>
         </dependency>
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>${poi.version}</version>
+		</dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
