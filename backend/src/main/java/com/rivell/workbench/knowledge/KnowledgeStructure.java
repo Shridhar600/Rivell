@@ -97,7 +97,13 @@ final class KnowledgeStructure {
                 KnowledgeArtifact artifact, ExtractionUnit unit,
                 ApplicabilityScope scope, Instant now) {
             var candidates = new ArrayList<KnowledgeCandidate>();
+            boolean headerRow = true;
             for (var rowCells : cellsByRow.values()) {
+                if (headerRow) {
+                    // The first row supplies column labels; it is not knowledge itself.
+                    headerRow = false;
+                    continue;
+                }
                 if (rowCells.stream().allMatch(cell ->
                         cell.text() == null || cell.text().isBlank())) {
                     continue;
