@@ -270,6 +270,30 @@ describe('ContractWorkspace', () => {
     })
   })
 
+  it('does not stack history entries when the same node is selected again', async () => {
+    stubFetch([
+      ['/versions/1/structure', () => jsonResponse(structureOk)],
+      ['/api/contracts/c1', () => jsonResponse(summary)],
+    ])
+
+    const { router } = renderWorkspace()
+
+    const feesButton = await screen.findByRole('button', { name: 'Fees' })
+    await userEvent.click(feesButton)
+    await waitFor(() => {
+      expect(feesButton).toHaveAttribute('aria-current', 'true')
+    })
+
+    await userEvent.click(feesButton)
+    await act(async () => {
+      await router.navigate(-1)
+    })
+
+    await waitFor(() => {
+      expect(feesButton).not.toHaveAttribute('aria-current')
+    })
+  })
+
   it('shows the parse limitations panel for a parse with warnings', async () => {
     stubFetch([
       [

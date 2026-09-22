@@ -40,6 +40,7 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
   }, [structure, selectedId])
 
   const selectNode = (nodeId: string) => {
+    if (nodeId === selectedId) return
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous)
       next.set('node', nodeId)
