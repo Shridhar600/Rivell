@@ -74,7 +74,12 @@ class SystemApiIT {
 
         assertThat(Set.copyOf(openApi.path("paths").properties().stream()
                 .map(entry -> entry.getKey()).toList()))
-                .containsExactly("/api/system/status");
+                .containsExactlyInAnyOrder(
+                        "/api/system/status",
+                        "/api/contracts",
+                        "/api/contracts/{id}",
+                        "/api/contracts/{id}/versions/{versionNumber}/structure",
+                        "/api/contracts/{id}/versions/{versionNumber}/original");
         assertThat(openApi.at("/paths/~1api~1system~1status/get/responses/200/content/application~1json/schema/$ref")
                 .asText()).endsWith("/SystemStatusResponse");
 
