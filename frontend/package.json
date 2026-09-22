@@ -11,7 +11,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate:api": "openapi-typescript \"${OPENAPI_SCHEMA:-./openapi/openapi.json}\" -o \"${OPENAPI_OUTPUT:-./src/api/schema.d.ts}\""
+    "generate:api": "openapi-typescript \"${OPENAPI_SCHEMA:-./openapi/m1-provisional.openapi.json}\" -o \"${OPENAPI_OUTPUT:-./src/api/schema.d.ts}\""
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",

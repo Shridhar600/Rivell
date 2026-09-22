@@ -20,6 +20,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createContract"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{contractId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getContract"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{contractId}/versions/{versionNumber}/structure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getContractStructure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{contractId}/versions/{versionNumber}/original": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadOriginal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -27,6 +91,49 @@ export interface components {
         SystemStatusResponse: {
             service?: string;
             status?: string;
+        };
+        SourceSpan: {
+            partPath: string;
+            bodyIndex: number;
+            paragraphIndex?: number | null;
+            tableIndex?: number | null;
+            rowIndex?: number | null;
+            cellIndex?: number | null;
+            runStart?: number | null;
+            runEnd?: number | null;
+        };
+        DocumentNode: {
+            id: string;
+            parentId: string | null;
+            /** @enum {string} */
+            nodeType: "TITLE" | "HEADING" | "PARAGRAPH" | "TABLE" | "TABLE_ROW" | "TABLE_CELL" | "BODY";
+            ordinal: number;
+            text: string | null;
+            headingLevel: number | null;
+            rawStyleId: string | null;
+            sourceSpan: components["schemas"]["SourceSpan"];
+        };
+        ContractSummary: {
+            contractId: string;
+            title?: string | null;
+            filename: string;
+            versionNumber: number;
+            parseStatus: string;
+            parseQuality?: string | null;
+            parserVersion?: string | null;
+            sha256?: string | null;
+            warnings?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        StructureResponse: {
+            contractId: string;
+            versionNumber: number;
+            parserVersion: string;
+            parseStatus: string;
+            parseQuality: string;
+            warnings: string[];
+            nodes: components["schemas"]["DocumentNode"][];
         };
     };
     responses: never;
@@ -54,6 +161,129 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SystemStatusResponse"];
                 };
+            };
+        };
+    };
+    createContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Contract created and parsed */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractSummary"];
+                };
+            };
+            /** @description Invalid upload */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contractId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractSummary"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getContractStructure: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contractId: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StructureResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    downloadOriginal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contractId: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Original DOCX bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -20,4 +20,34 @@ describe('generated OpenAPI client workflow', () => {
       '/api/system/status',
     )
   })
+
+  it('exposes M1 contract paths from generated schema', () => {
+    expect('/api/contracts' satisfies keyof paths).toBe('/api/contracts')
+    expect('/api/contracts/{contractId}' satisfies keyof paths).toBe(
+      '/api/contracts/{contractId}',
+    )
+    expect(
+      '/api/contracts/{contractId}/versions/{versionNumber}/structure' satisfies keyof paths,
+    ).toBe(
+      '/api/contracts/{contractId}/versions/{versionNumber}/structure',
+    )
+    expect(
+      '/api/contracts/{contractId}/versions/{versionNumber}/original' satisfies keyof paths,
+    ).toBe(
+      '/api/contracts/{contractId}/versions/{versionNumber}/original',
+    )
+
+    type Node = components['schemas']['DocumentNode']
+    const node: Node = {
+      id: 'n1',
+      parentId: null,
+      nodeType: 'PARAGRAPH',
+      ordinal: 0,
+      text: 'hello',
+      headingLevel: null,
+      rawStyleId: null,
+      sourceSpan: { partPath: 'word/document.xml', bodyIndex: 0 },
+    }
+    expect(node.nodeType).toBe('PARAGRAPH')
+  })
 })
