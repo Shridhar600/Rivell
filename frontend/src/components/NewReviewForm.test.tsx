@@ -18,6 +18,8 @@ const ingest = {
   contractVersionId: 'v9',
   versionNumber: 1,
   parseStatus: 'OK',
+  parseWarnings: [],
+  filename: 'upload.docx',
   sha256: 'abc',
   nodeCount: 0,
 }
