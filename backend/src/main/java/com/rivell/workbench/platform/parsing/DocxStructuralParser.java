@@ -60,7 +60,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
     }
 
     @Override
-    public ParseResult parse(InputStream source, UUID contractVersionId) {
+    public ParseResult parse(InputStream source, UUID ownerAggregateId) {
         try {
             var docxBytes = source.readAllBytes();
             var scan = ZipGuard.scan(docxBytes, properties.maxUncompressedBytes());
@@ -69,7 +69,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
             var wordPackage = WordprocessingMLPackage.load(
                     new java.io.ByteArrayInputStream(docxBytes));
             var body = wordPackage.getMainDocumentPart().getJaxbElement().getBody();
-            var walk = new BodyWalk(contractVersionId, wordPackage);
+            var walk = new BodyWalk(ownerAggregateId, wordPackage);
             walk.body(body);
             var warnings = new ArrayList<>(walk.warnings());
             if (rawTopLevelChildren != body.getContent().size()) {
@@ -147,15 +147,15 @@ public class DocxStructuralParser implements DocumentStructureParser {
 
     private final class BodyWalk {
 
-        private final UUID contractVersionId;
+        private final UUID ownerAggregateId;
         private final WordprocessingMLPackage wordPackage;
         private final List<DocumentNode> nodes = new ArrayList<>();
         private final Set<String> warnings = new LinkedHashSet<>();
         private UUID bodyNodeId;
         private int paragraphSequence;
         private int tableSequence;
-        private BodyWalk(UUID contractVersionId, WordprocessingMLPackage wordPackage) {
-            this.contractVersionId = contractVersionId;
+        private BodyWalk(UUID ownerAggregateId, WordprocessingMLPackage wordPackage) {
+            this.ownerAggregateId = ownerAggregateId;
             this.wordPackage = wordPackage;
         }
 
@@ -170,7 +170,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
         private void body(Body body) {
             var bodyNodeId = UUID.randomUUID();
             nodes.add(new DocumentNode(
-                    bodyNodeId, contractVersionId, null, DocumentNodeType.BODY, 0,
+                    bodyNodeId, ownerAggregateId, null, DocumentNodeType.BODY, 0,
                     null, null, null, SourceSpan.ofBody(PART_PATH), null));
             content(body.getContent(), null, bodyNodeId, 0);
         }
@@ -222,7 +222,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
                 headingLevel = headingLevel(styleId);
             }
             return new DocumentNode(
-                    UUID.randomUUID(), contractVersionId, parentId, nodeType, ordinal,
+                    UUID.randomUUID(), ownerAggregateId, parentId, nodeType, ordinal,
                     textOf(paragraph), headingLevel, numberingLabel(paragraph, styleId),
                     SourceSpan.ofParagraph(PART_PATH, bodyIndex, paragraphSequence), styleId);
         }
@@ -231,7 +231,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
                 Tbl table, int bodyIndex, UUID parentId, int ordinal, int tableSequence) {
             var tableId = UUID.randomUUID();
             nodes.add(new DocumentNode(
-                    tableId, contractVersionId, parentId, DocumentNodeType.TABLE, ordinal,
+                    tableId, ownerAggregateId, parentId, DocumentNodeType.TABLE, ordinal,
                     null, null, null, SourceSpan.ofTable(PART_PATH, bodyIndex, tableSequence), null));
 
             var rowIndex = 0;
@@ -241,7 +241,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
                 }
                 var rowId = UUID.randomUUID();
                 nodes.add(new DocumentNode(
-                        rowId, contractVersionId, tableId, DocumentNodeType.TABLE_ROW, rowIndex,
+                        rowId, ownerAggregateId, tableId, DocumentNodeType.TABLE_ROW, rowIndex,
                         null, null, null,
                         SourceSpan.ofRow(PART_PATH, bodyIndex, tableSequence, rowIndex), null));
 
@@ -251,7 +251,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
                         continue;
                     }
                     nodes.add(new DocumentNode(
-                            UUID.randomUUID(), contractVersionId, rowId,
+                            UUID.randomUUID(), ownerAggregateId, rowId,
                             DocumentNodeType.TABLE_CELL, cellIndex,
                             cellText(cell), null, null,
                             SourceSpan.ofCell(PART_PATH, bodyIndex, tableSequence, rowIndex, cellIndex),

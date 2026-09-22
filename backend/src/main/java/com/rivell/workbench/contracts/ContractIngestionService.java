@@ -6,7 +6,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
@@ -153,22 +152,8 @@ public class ContractIngestionService {
     }
 
     static String sanitizeFilename(String filename) {
-        if (filename == null || filename.isBlank()) {
-            throw new IllegalArgumentException("Filename must not be blank");
-        }
-        var base = filename.trim();
-        var slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
-        if (slash >= 0) {
-            base = base.substring(slash + 1);
-        }
-        var cleaned = base.replaceAll("[\\p{Cntrl}]", "");
-        if (cleaned.isBlank()) {
-            throw new IllegalArgumentException("Filename must not be blank");
-        }
-        if (!cleaned.toLowerCase(Locale.ROOT).endsWith(".docx")) {
-            throw new IllegalArgumentException("Only .docx files are supported");
-        }
-        return cleaned;
+        return com.rivell.workbench.foundation.FilenameSanitizer.sanitize(
+                filename, java.util.Set.of(".docx"));
     }
 
     private String sha256Hex(byte[] bytes) {
