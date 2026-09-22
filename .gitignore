@@ -1,6 +1,36 @@
+# Private engineering context (intentionally never published)
 docs/
 AGENTS.md
 frontend/AGENTS.md
 backend/AGENTS.md
+
+# Secrets and local environment configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+.keystore
+.npmrc
+.netrc
+
+# Local-only config overlays (secrets may live here)
+**/application-local.properties
+**/application-local.yml
+
+# Build / runtime output
 backend/target/
 backend/var/
+frontend/dist/
+frontend/dist-ssr/
+frontend/node_modules/
+frontend/coverage/
+frontend/*.log
+
+# OS / editor noise
+.DS_Store
+.idea/
+*.swp
