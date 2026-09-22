@@ -11,6 +11,7 @@ public record DocumentNode(
         int ordinal,
         String text,
         Integer headingLevel,
+        String numberingLabel,
         SourceSpan sourceSpan,
         String rawStyleId) {
 

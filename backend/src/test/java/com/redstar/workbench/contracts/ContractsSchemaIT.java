@@ -1,9 +1,9 @@
 package com.redstar.workbench.contracts;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -42,9 +42,9 @@ class ContractsSchemaIT {
     JdbcClient jdbcClient;
 
     @Test
-    void appliesContractsMigration() {
-        assertThat(jdbcClient.sql("select count(*) from flyway_schema_history where version = '2'")
-                .query(Integer.class).single()).isEqualTo(1);
+    void appliesContractsMigrations() {
+        assertThat(jdbcClient.sql("select count(*) from flyway_schema_history where version in ('2','3')")
+                .query(Integer.class).single()).isEqualTo(2);
         assertThat(tableExists("source_artifact")).isTrue();
         assertThat(tableExists("contract")).isTrue();
         assertThat(tableExists("contract_version")).isTrue();
@@ -59,75 +59,13 @@ class ContractsSchemaIT {
         var versionId = UUID.randomUUID();
         var bodyNodeId = UUID.randomUUID();
         var childNodeId = UUID.randomUUID();
-        var now = OffsetDateTime.of(2026, 9, 22, 12, 0, 0, 0, ZoneOffset.UTC);
+        var now = OffsetDateTime.now();
 
-        jdbcClient.sql("""
-                insert into source_artifact
-                  (id, organization_id, filename, content_type, size_bytes, sha256, storage_key, created_at)
-                values (:id, :orgId, :filename, :contentType, :sizeBytes, :sha256, :storageKey, :createdAt)
-                """)
-                .param("id", artifactId)
-                .param("orgId", organizationId)
-                .param("filename", "nda.docx")
-                .param("contentType", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-                .param("sizeBytes", 42L)
-                .param("sha256", "a".repeat(64))
-                .param("storageKey", "org/contracts/nda.docx")
-                .param("createdAt", now)
-                .update();
-
-        jdbcClient.sql("""
-                insert into contract (id, organization_id, title, created_at)
-                values (:id, :orgId, :title, :createdAt)
-                """)
-                .param("id", contractId)
-                .param("orgId", organizationId)
-                .param("title", "Mutual NDA")
-                .param("createdAt", now)
-                .update();
-
-        jdbcClient.sql("""
-                insert into contract_version
-                  (id, contract_id, version_number, source_artifact_id, role, parser_version, parse_status, parse_warnings, created_at)
-                values (:id, :contractId, 1, :artifactId, 'ORIGINAL', 'redstar-docx-parser-1', 'OK', cast(:warnings as jsonb), :createdAt)
-                """)
-                .param("id", versionId)
-                .param("contractId", contractId)
-                .param("artifactId", artifactId)
-                .param("warnings", "[]")
-                .param("createdAt", now)
-                .update();
-
-        jdbcClient.sql("""
-                insert into document_node
-                  (id, contract_version_id, parent_id, node_type, ordinal, text, heading_level,
-                   part_path, body_index, paragraph_index, table_index, row_index, cell_index,
-                   run_start, run_end, raw_style_id)
-                values (:id, :versionId, null, 'BODY', 0, null, null,
-                        'word/document.xml', 0, null, null, null, null, null, null, null)
-                """)
-                .param("id", bodyNodeId)
-                .param("versionId", versionId)
-                .update();
-
-        jdbcClient.sql("""
-                insert into document_node
-                  (id, contract_version_id, parent_id, node_type, ordinal, text, heading_level,
-                   part_path, body_index, paragraph_index, table_index, row_index, cell_index,
-                   run_start, run_end, raw_style_id)
-                values (:id, :versionId, :parentId, 'TITLE', 0, :text, null,
-                        'word/document.xml', 0, 0, null, null, null, null, null, 'Title')
-                """)
-                .param("id", childNodeId)
-                .param("versionId", versionId)
-                .param("parentId", bodyNodeId)
-                .param("text", "Mutual Non-Disclosure Agreement")
-                .update();
-
-        var sha = jdbcClient.sql("select sha256 from source_artifact where id = :id")
-                .param("id", artifactId)
-                .query(String.class).single();
-        assertThat(sha).isEqualTo("a".repeat(64));
+        insertArtifact(artifactId, organizationId, now);
+        insertContractRow(contractId, organizationId, "Mutual NDA", now);
+        insertVersionRow(versionId, contractId, artifactId, organizationId, 1, now);
+        insertNode(bodyNodeId, versionId, null, "BODY", 0);
+        insertNode(childNodeId, versionId, bodyNodeId, "TITLE", 0);
 
         var title = jdbcClient.sql("""
                 select n.text from document_node n
@@ -137,13 +75,6 @@ class ContractsSchemaIT {
                 .query(String.class).single();
         assertThat(title).isEqualTo("Mutual Non-Disclosure Agreement");
 
-        var parentCount = jdbcClient.sql(
-                        "select count(*) from document_node where contract_version_id = :versionId and parent_id = :parentId")
-                .param("versionId", versionId)
-                .param("parentId", bodyNodeId)
-                .query(Integer.class).single();
-        assertThat(parentCount).isEqualTo(1);
-
         var versionNumber = jdbcClient.sql("select version_number from contract_version where id = :id")
                 .param("id", versionId)
                 .query(Integer.class).single();
@@ -151,47 +82,132 @@ class ContractsSchemaIT {
     }
 
     @Test
-    void rejectsDuplicateVersionNumbersPerContract() {
+    void rejectsParentFromAnotherContractVersion() {
+        var organizationId = UUID.randomUUID();
+        var now = OffsetDateTime.now();
+        insertArtifact(UUID.randomUUID(), organizationId, now);
         var contractId = UUID.randomUUID();
+        insertContractRow(contractId, organizationId, null, now);
         var artifactId = UUID.randomUUID();
-        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        insertArtifact(artifactId, organizationId, now);
+        var versionA = UUID.randomUUID();
+        var versionB = UUID.randomUUID();
+        insertVersionRow(versionA, contractId, artifactId, organizationId, 1, now);
+        insertVersionRow(versionB, contractId, artifactId, organizationId, 2, now);
 
-        jdbcClient.sql("""
-                insert into contract (id, organization_id, title, created_at)
-                values (:id, :orgId, null, :createdAt)
-                """)
-                .param("id", contractId)
-                .param("orgId", UUID.randomUUID())
-                .param("createdAt", now)
-                .update();
+        var parentNode = UUID.randomUUID();
+        insertNode(parentNode, versionA, null, "BODY", 0);
 
-        jdbcClient.sql("""
-                insert into source_artifact
-                  (id, organization_id, filename, content_type, size_bytes, sha256, storage_key, created_at)
-                values (:id, :orgId, 'a.docx', 'application/octet-stream', 1, :sha256, 'k', :createdAt)
-                """)
-                .param("id", artifactId)
-                .param("orgId", UUID.randomUUID())
-                .param("sha256", "b".repeat(64))
-                .param("createdAt", now)
-                .update();
-
-        insertVersion(UUID.randomUUID(), contractId, artifactId, now);
-        org.assertj.core.api.Assertions.assertThatThrownBy(
-                        () -> insertVersion(UUID.randomUUID(), contractId, artifactId, now))
+        // a child that declares version B but points at a parent from version A is impossible
+        assertThatThrownBy(() -> insertNode(UUID.randomUUID(), versionB, parentNode, "TITLE", 0))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
-    private void insertVersion(UUID id, UUID contractId, UUID artifactId, OffsetDateTime now) {
+    @Test
+    void rejectsVersionReferencingArtifactOfAnotherOrganization() {
+        var orgA = UUID.randomUUID();
+        var orgB = UUID.randomUUID();
+        var now = OffsetDateTime.now();
+        var artifactA = UUID.randomUUID();
+        var contractA = UUID.randomUUID();
+        insertArtifact(artifactA, orgA, now);
+        insertContractRow(contractA, orgA, null, now);
+
+        assertThatThrownBy(() -> insertVersionRow(
+                UUID.randomUUID(), contractA, artifactA, orgB, 1, now))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void rejectsContractVersionOfAnotherOrganization() {
+        var orgA = UUID.randomUUID();
+        var orgB = UUID.randomUUID();
+        var now = OffsetDateTime.now();
+        var contractA = UUID.randomUUID();
+        var artifactB = UUID.randomUUID();
+        insertArtifact(artifactB, orgB, now);
+        insertContractRow(contractA, orgA, null, now);
+
+        assertThatThrownBy(() -> insertVersionRow(
+                UUID.randomUUID(), contractA, artifactB, orgA, 1, now))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void rejectsDuplicateVersionNumbersPerContract() {
+        var contractId = UUID.randomUUID();
+        var artifactId = UUID.randomUUID();
+        var organizationId = UUID.randomUUID();
+        var now = OffsetDateTime.now();
+
+        insertArtifact(artifactId, organizationId, now);
+        insertContractRow(contractId, organizationId, null, now);
+
+        insertVersionRow(UUID.randomUUID(), contractId, artifactId, organizationId, 1, now);
+        assertThatThrownBy(() -> insertVersionRow(
+                UUID.randomUUID(), contractId, artifactId, organizationId, 1, now))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    private void insertArtifact(UUID id, UUID organizationId, OffsetDateTime now) {
+        jdbcClient.sql("""
+                insert into source_artifact
+                  (id, organization_id, filename, content_type, size_bytes, sha256, storage_key, created_at)
+                values (:id, :orgId, 'nda.docx', 'application/octet-stream', 42, :sha256, 'k', :createdAt)
+                """)
+                .param("id", id)
+                .param("orgId", organizationId)
+                .param("sha256", "a".repeat(64))
+                .param("createdAt", now)
+                .update();
+    }
+
+    private void insertContractRow(
+            UUID id, UUID organizationId, String title, OffsetDateTime now) {
+        jdbcClient.sql("""
+                insert into contract (id, organization_id, title, created_at)
+                values (:id, :orgId, :title, :createdAt)
+                """)
+                .param("id", id)
+                .param("orgId", organizationId)
+                .param("title", title)
+                .param("createdAt", now)
+                .update();
+    }
+
+    private void insertVersionRow(
+            UUID id, UUID contractId, UUID artifactId, UUID organizationId, int versionNumber,
+            OffsetDateTime now) {
         jdbcClient.sql("""
                 insert into contract_version
-                  (id, contract_id, version_number, source_artifact_id, role, parser_version, parse_status, parse_warnings, created_at)
-                values (:id, :contractId, 1, :artifactId, 'ORIGINAL', 'p', 'OK', cast('{}' as jsonb), :createdAt)
+                  (id, contract_id, version_number, source_artifact_id, organization_id, role,
+                   parser_version, parse_status, parse_warnings, created_at)
+                values (:id, :contractId, :versionNumber, :artifactId, :organizationId, 'ORIGINAL',
+                        'p', 'OK', cast('[]' as jsonb), :createdAt)
                 """)
                 .param("id", id)
                 .param("contractId", contractId)
+                .param("versionNumber", versionNumber)
                 .param("artifactId", artifactId)
+                .param("organizationId", organizationId)
                 .param("createdAt", now)
+                .update();
+    }
+
+    private void insertNode(UUID id, UUID versionId, UUID parentId, String nodeType, int ordinal) {
+        jdbcClient.sql("""
+                insert into document_node
+                  (id, contract_version_id, parent_id, node_type, ordinal, text, heading_level,
+                   numbering_label, part_path, body_index)
+                values (:id, :versionId, :parentId, :nodeType, :ordinal, :text, null, null,
+                        'word/document.xml', 0)
+                """)
+                .param("id", id)
+                .param("versionId", versionId)
+                .param("parentId", parentId)
+                .param("nodeType", nodeType)
+                .param("ordinal", ordinal)
+                .param("text", "TITLE".equals(nodeType) ? "Mutual Non-Disclosure Agreement" : null)
                 .update();
     }
 

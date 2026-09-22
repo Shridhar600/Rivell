@@ -2,6 +2,11 @@ package com.redstar.workbench.contracts;
 
 import java.util.Objects;
 
+/**
+ * Location of a node in the source document. {@code bodyIndex} is the true index of the element in
+ * the main document body's content list; skipped elements cannot shift it.
+ * {@code paragraphIndex} / {@code tableIndex} are document-order counts of their kind.
+ */
 public record SourceSpan(
         String partPath,
         int bodyIndex,
@@ -21,8 +26,8 @@ public record SourceSpan(
         }
     }
 
-    public static SourceSpan ofBody(String partPath, int bodyIndex) {
-        return new SourceSpan(partPath, bodyIndex, null, null, null, null, null, null);
+    public static SourceSpan ofBody(String partPath) {
+        return new SourceSpan(partPath, 0, null, null, null, null, null, null);
     }
 
     public static SourceSpan ofParagraph(String partPath, int bodyIndex, int paragraphIndex) {
@@ -37,11 +42,13 @@ public record SourceSpan(
         return new SourceSpan(partPath, bodyIndex, null, tableIndex, rowIndex, null, null, null);
     }
 
-    public static SourceSpan ofCell(String partPath, int bodyIndex, int tableIndex, int rowIndex, int cellIndex) {
+    public static SourceSpan ofCell(
+            String partPath, int bodyIndex, int tableIndex, int rowIndex, int cellIndex) {
         return new SourceSpan(partPath, bodyIndex, null, tableIndex, rowIndex, cellIndex, null, null);
     }
 
-    public static SourceSpan ofRuns(String partPath, int bodyIndex, int paragraphIndex, int runStart, int runEnd) {
+    public static SourceSpan ofRuns(
+            String partPath, int bodyIndex, int paragraphIndex, int runStart, int runEnd) {
         return new SourceSpan(partPath, bodyIndex, paragraphIndex, null, null, null, runStart, runEnd);
     }
 
@@ -53,10 +60,5 @@ public record SourceSpan(
                 && (cellIndex == null || cellIndex >= 0)
                 && (runStart == null || runStart >= 0)
                 && (runEnd == null || runEnd >= 0);
-    }
-
-    public SourceSpan requireNonNullIds() {
-        Objects.requireNonNull(partPath);
-        return this;
     }
 }

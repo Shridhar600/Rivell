@@ -1,2 +1,2 @@
-@org.springframework.modulith.ApplicationModule(displayName = "Workflow")
+@org.springframework.modulith.ApplicationModule(allowedDependencies = {})
 package com.redstar.workbench.workflow;

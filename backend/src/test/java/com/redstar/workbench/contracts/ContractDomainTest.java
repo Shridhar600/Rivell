@@ -70,18 +70,18 @@ class ContractDomainTest {
 
         var node = new DocumentNode(
                 UUID.randomUUID(), versionId, null, DocumentNodeType.TITLE, 0,
-                "Mutual NDA", null, span, "Title");
+                "Mutual NDA", null, null, span, "Title");
 
         assertThat(node.nodeType()).isEqualTo(DocumentNodeType.TITLE);
         assertThat(node.sourceSpan().bodyIndex()).isZero();
 
         assertThatThrownBy(() -> new DocumentNode(
                 UUID.randomUUID(), versionId, null, DocumentNodeType.PARAGRAPH, -1,
-                "x", null, span, null))
+                "x", null, null, span, null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new DocumentNode(
                 UUID.randomUUID(), versionId, null, DocumentNodeType.PARAGRAPH, 0,
-                "x", null, null, null))
+                "x", null, null, null, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -99,7 +99,7 @@ class ContractDomainTest {
 
     @Test
     void rejectsBlankSpanPartPath() {
-        assertThatThrownBy(() -> SourceSpan.ofBody(" ", 0))
+        assertThatThrownBy(() -> SourceSpan.ofBody(" "))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

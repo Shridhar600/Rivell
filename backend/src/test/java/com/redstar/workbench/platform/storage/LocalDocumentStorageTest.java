@@ -50,6 +50,21 @@ class LocalDocumentStorageTest {
         }
     }
 
+    @Test
+    void reportsStoredContentSizeAndDeletesCompletely() throws Exception {
+        DocumentStorage storage = new LocalDocumentStorage(root);
+        var key = new StorageKey("one/source.docx");
+        var expected = new byte[] {0, 1, 2, 3, 4};
+
+        storage.store(key, new ByteArrayInputStream(expected));
+        assertThat(storage.size(key)).isEqualTo(expected.length);
+
+        storage.delete(key);
+        assertThatThrownBy(() -> storage.open(key)).isInstanceOf(IOException.class);
+
+        storage.delete(key); // deleting a missing key is not an error
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {
             "", "../secret", "a/../secret", "/absolute", "C:/windows", "C:relative", "a\\windows"
