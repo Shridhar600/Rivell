@@ -7,7 +7,7 @@ export function AppShell() {
   return (
     <div className="app-shell">
       <header className="app-shell__header">
-        <span className="app-shell__brand">RedStar Workbench</span>
+        <span className="app-shell__brand">Rivell Workbench</span>
         <nav aria-label="Primary">
           <ul className="nav">
             <li>

@@ -2,13 +2,13 @@ services:
   postgres:
     image: pgvector/pgvector:0.8.6-pg17-trixie
     environment:
-      POSTGRES_DB: redstar
-      POSTGRES_USER: redstar
-      POSTGRES_PASSWORD: redstar
+      POSTGRES_DB: rivell
+      POSTGRES_USER: rivell
+      POSTGRES_PASSWORD: rivell
     ports:
-      - "127.0.0.1:${REDSTAR_POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${RIVELL_POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U redstar -d redstar"]
+      test: ["CMD-SHELL", "pg_isready -U rivell -d rivell"]
       interval: 2s
       timeout: 5s
       retries: 15
