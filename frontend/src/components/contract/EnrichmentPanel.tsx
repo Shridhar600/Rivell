@@ -1,6 +1,7 @@
 import type { ReviewProfile } from '../../api/semantics'
 import { useEnrichContract } from '../../api/semantics'
 import { ReviewProfileForm } from './ReviewProfileForm'
+import { profileKey } from '../../lib/contractSemantics'
 
 export function EnrichmentPanel({
   contractId,
@@ -31,6 +32,7 @@ export function EnrichmentPanel({
         </p>
       )}
       <ReviewProfileForm
+        key={profileKey(storedProfile)}
         initialProfile={storedProfile}
         submitLabel={
           mode === 'initial' ? 'Run semantic analysis' : 'Try semantic analysis again'

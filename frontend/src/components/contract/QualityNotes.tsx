@@ -19,6 +19,10 @@ export function QualityNotes({
   return (
     <section aria-labelledby="quality-heading" className="semantic-quality">
       <h3 id="quality-heading">Analysis quality</h3>
+      <p className="section-note">
+        These notes describe the machine analysis. Human corrections are shown in the
+        relevant sections.
+      </p>
       {degraded ? (
         <div className="state state--warning" role="status">
           <p>

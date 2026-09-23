@@ -1,4 +1,5 @@
 import { useEnrichContract, type ReviewProfile } from '../../api/semantics'
+import { profileKey } from '../../lib/contractSemantics'
 import { ReviewProfileForm } from './ReviewProfileForm'
 
 export function ReRunAnalysis({
@@ -21,6 +22,7 @@ export function ReRunAnalysis({
           and applied again to the new results.
         </p>
         <ReviewProfileForm
+          key={profileKey(storedProfile)}
           initialProfile={storedProfile}
           submitLabel="Re-run semantic analysis"
           pending={enrich.isPending}

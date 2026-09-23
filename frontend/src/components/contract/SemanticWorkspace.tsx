@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import type { RegionLabelNode } from '../../lib/contractSemantics'
+import { buildRegionLabelMap } from '../../lib/contractSemantics'
 import { useContractStructureQuery } from '../../api/contracts'
 import { useSemanticsQuery } from '../../api/semantics'
 import { ErrorState } from '../ErrorState'
@@ -40,61 +41,59 @@ export function SemanticWorkspace({
   const semanticsQuery = useSemanticsQuery(contractId, versionNumber)
   const structureQuery = useContractStructureQuery(contractId, versionNumber)
   const containerRef = useRef<HTMLDivElement>(null)
-  const previousSection = useRef<SectionKey | undefined>(undefined)
-  const previousClause = useRef<string | null | undefined>(undefined)
-  const previousStatus = useRef<string | undefined>(undefined)
+  const focusedSection = useRef<SectionKey | null>(null)
+  const focusedClause = useRef<string | null>(null)
 
   const semantics = semanticsQuery.data
+  const refreshFailed = semanticsQuery.isError && semantics != null
   const section = normalizeSection(searchParams.get('section'))
-  const clauseId = searchParams.get('clause')
+  const clauseKey = searchParams.get('clause')
 
   useEffect(() => {
-    if (
-      previousSection.current !== undefined &&
-      previousSection.current !== section
-    ) {
-      containerRef.current
-        ?.querySelector<HTMLElement>('[data-section-heading]')
-        ?.focus()
-    }
-    previousSection.current = section
-  }, [section])
+    if (focusedSection.current === section) return
+    const heading = containerRef.current?.querySelector<HTMLElement>(
+      '[data-section-heading]',
+    )
+    if (!heading) return
+    heading.focus()
+    focusedSection.current = section
+  }, [section, semantics])
 
   useEffect(() => {
-    if (
-      previousClause.current !== undefined &&
-      previousClause.current !== clauseId
-    ) {
-      document.querySelector<HTMLElement>('[data-clause-heading]')?.focus()
+    if (!clauseKey) {
+      focusedClause.current = null
+      return
     }
-    previousClause.current = clauseId
-  }, [clauseId])
+    if (focusedClause.current === clauseKey) return
+    const heading = document.querySelector<HTMLElement>('[data-clause-heading]')
+    if (!heading) return
+    heading.focus()
+    focusedClause.current = clauseKey
+  }, [clauseKey, semantics])
 
-  const enrichmentStatus = semanticsQuery.isPending
-    ? 'LOADING'
-    : semantics == null
-      ? 'NONE'
-      : semantics.enrichmentStatus
-  useEffect(() => {
-    if (
-      previousStatus.current !== undefined &&
-      previousStatus.current !== 'READY' &&
-      enrichmentStatus === 'READY'
-    ) {
-      containerRef.current
-        ?.querySelector<HTMLElement>('[data-section-heading]')
-        ?.focus()
-    }
-    previousStatus.current = enrichmentStatus
-  }, [enrichmentStatus])
 
-  const nodes: RegionLabelNode[] = (structureQuery.data?.nodes ?? []).map(
-    (node) => ({
-      id: node.id,
-      text: node.text,
-      numberingLabel: node.numberingLabel,
-    }),
-  )
+
+  const structureNodes = structureQuery.data?.nodes ?? []
+  const nodes: RegionLabelNode[] = structureNodes.map((node) => ({
+    id: node.id,
+    text: node.text,
+    numberingLabel: node.numberingLabel,
+  }))
+  const nodeIndex = new Map(structureNodes.map((node, index) => [node.id, index]))
+  const orderOf = (nodeId: string) => nodeIndex.get(nodeId) ?? Number.MAX_SAFE_INTEGER
+  const orderedClauses = semantics
+    ? [...semantics.clauses].sort(
+        (a, b) => orderOf(a.headingNodeId) - orderOf(b.headingNodeId),
+      )
+    : []
+  const orderedRelationships = semantics
+    ? [...semantics.relationships].sort(
+        (a, b) =>
+          orderOf(a.sourceRegionNodeId) - orderOf(b.sourceRegionNodeId) ||
+          orderOf(a.targetRegionNodeId) - orderOf(b.targetRegionNodeId),
+      )
+    : []
+  const labelByNodeId = buildRegionLabelMap(orderedClauses, nodes)
 
   const navigateToNode = (nodeId: string) => {
     const next = new URLSearchParams(searchParams)
@@ -107,7 +106,7 @@ export function SemanticWorkspace({
     return <LoadingState label="Loading semantic analysis…" />
   }
 
-  if (semanticsQuery.isError) {
+  if (semanticsQuery.isError && semantics == null) {
     return (
       <ErrorState
         message={semanticsQuery.error.message}
@@ -137,6 +136,11 @@ export function SemanticWorkspace({
         <button type="button" onClick={() => void semanticsQuery.refetch()}>
           Check again
         </button>
+        {refreshFailed ? (
+          <p className="state state--warning">
+            The latest refresh failed. Showing the last known state.
+          </p>
+        ) : null}
       </section>
     )
   }
@@ -174,9 +178,9 @@ export function SemanticWorkspace({
     semantics.observations?.providerDegraded === true ||
     semantics.observations?.budgetExhausted === true
 
-  const selectClause = (nextClauseId: string | null) => {
+  const selectClause = (nextClauseKey: string | null) => {
     const next = new URLSearchParams(searchParams)
-    if (nextClauseId) next.set('clause', nextClauseId)
+    if (nextClauseKey) next.set('clause', nextClauseKey)
     else next.delete('clause')
     setSearchParams(next)
   }
@@ -189,6 +193,7 @@ export function SemanticWorkspace({
           parties={semantics.parties}
           contractId={contractId}
           versionNumber={versionNumber}
+          onRefresh={() => void semanticsQuery.refetch()}
         />
       )
       break
@@ -199,8 +204,7 @@ export function SemanticWorkspace({
       content = (
         <ReferencesPanel
           references={semantics.references}
-          clauses={semantics.clauses}
-          nodes={nodes}
+          labelByNodeId={labelByNodeId}
           onNavigateToNode={navigateToNode}
         />
       )
@@ -208,21 +212,21 @@ export function SemanticWorkspace({
     case 'clauses':
       content = (
         <ClausesPanel
-          clauses={semantics.clauses}
-          selectedClauseId={clauseId}
+          clauses={orderedClauses}
+          selectedClauseKey={clauseKey}
           onSelectClause={selectClause}
           contractId={contractId}
           versionNumber={versionNumber}
           onNavigateToNode={navigateToNode}
+          onRefresh={() => void semanticsQuery.refetch()}
         />
       )
       break
     case 'relationships':
       content = (
         <RelationshipsPanel
-          relationships={semantics.relationships}
-          clauses={semantics.clauses}
-          nodes={nodes}
+          relationships={orderedRelationships}
+          labelByNodeId={labelByNodeId}
           onNavigateToNode={navigateToNode}
         />
       )
@@ -268,8 +272,16 @@ export function SemanticWorkspace({
           })}
         </ul>
       </nav>
+      {refreshFailed ? (
+        <p className="state state--warning">
+          The latest refresh failed. Showing the last loaded analysis.{' '}
+          <button type="button" onClick={() => void semanticsQuery.refetch()}>
+            Retry
+          </button>
+        </p>
+      ) : null}
       {degraded && section !== 'overview' ? (
-        <p className="state state--warning" role="status">
+        <p className="state state--warning">
           Some contract semantics could not be resolved automatically. Available
           interpretations are shown as they are.
         </p>

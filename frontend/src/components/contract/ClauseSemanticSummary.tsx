@@ -1,5 +1,9 @@
 import type { SemanticClause } from '../../api/semantics'
-import { conceptLabel } from '../../lib/contractSemantics'
+import {
+  conceptLabel,
+  effectivePrimaryConcept,
+  machinePrimaryConcept,
+} from '../../lib/contractSemantics'
 
 export function ClauseSemanticSummary({
   clause,
@@ -13,16 +17,22 @@ export function ClauseSemanticSummary({
   return (
     <section aria-labelledby="clause-summary-heading" className="panel clause-summary">
       <h3 id="clause-summary-heading">Clause semantics</h3>
-      {clause.primaryConcept ? (
+      {effectivePrimaryConcept(clause) ? (
         <p className="clause-summary__concept">
           <span className="clause-summary__label">Primary concept</span>
           <span className="chip chip--primary">
-            {conceptLabel(clause.primaryConcept)}
+            {conceptLabel(effectivePrimaryConcept(clause) as string)}
           </span>
         </p>
       ) : (
         <p className="semantic-empty">No primary concept was determined.</p>
       )}
+      {machinePrimaryConcept(clause) ? (
+        <p className="clause-summary__machine">
+          Rivell originally classified this clause as{' '}
+          {conceptLabel(machinePrimaryConcept(clause) as string)}.
+        </p>
+      ) : null}
       {clause.secondaryConcepts.length > 0 ? (
         <p className="clause-summary__concept">
           <span className="clause-summary__label">Also relates to</span>

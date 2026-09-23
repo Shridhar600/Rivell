@@ -30,7 +30,7 @@ describe('clause semantics', () => {
   it('lists clauses and opens the selected clause from the URL', async () => {
     stubContractApi()
     const { router } = renderRoute(
-      '/reviews/c1?view=semantics&section=clauses&clause=cl6',
+      '/reviews/c1?view=semantics&section=clauses&clause=node-6',
     )
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
@@ -47,7 +47,7 @@ describe('clause semantics', () => {
     expect(within(secondary).getByText('Indemnification')).toBeInTheDocument()
 
     await userEvent.click(within(list).getByText('5. Termination'))
-    expect(router.state.location.search).toContain('clause=cl5')
+    expect(router.state.location.search).toContain('clause=node-5')
   })
 
   it('moves focus to the clause detail when a clause is selected', async () => {
@@ -63,7 +63,7 @@ describe('clause semantics', () => {
 
   it('renders typed facts with verification and provenance', async () => {
     stubContractApi()
-    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=cl6')
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const factList = document.querySelector('.fact-list') as HTMLElement
@@ -85,7 +85,7 @@ describe('clause semantics', () => {
 
   it('renders termination facts with domain wording', async () => {
     stubContractApi()
-    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=cl5')
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-5')
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const factList = document.querySelector('.fact-list') as HTMLElement
@@ -97,7 +97,7 @@ describe('clause semantics', () => {
 
   it('corrects the primary concept and keeps the other classifications', async () => {
     const api = stubContractApi()
-    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=cl6')
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const detail = document.querySelector('.clause-detail') as HTMLElement
@@ -131,11 +131,64 @@ describe('clause semantics', () => {
       ).toBeInTheDocument()
     })
     expect(within(detail).getByText('Corrected')).toBeInTheDocument()
+    const primary = detail.querySelector('.clause-concept-primary') as HTMLElement
+    expect(within(primary).getByText('Indemnification')).toBeInTheDocument()
+    expect(
+      within(detail).getByText(
+        /Rivell originally classified this clause as Limitation of liability/,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a human classification on an unclassified clause everywhere', async () => {
+    stubContractApi({
+      semantics: fixtureSemantics({
+        clauses: [
+          {
+            id: 'cl1',
+            headingNodeId: 'node-1',
+            heading: '1. Definitions',
+            primaryConcept: null,
+            secondaryConcepts: [],
+            correctedPrimaryConcept: 'CONFIDENTIALITY',
+            machineFacts: [],
+            effectiveFacts: [],
+            interpretations: [],
+            corrected: true,
+          },
+        ],
+      }),
+    })
+    const { router } = renderRoute(
+      '/reviews/c1?view=semantics&section=clauses&clause=node-1',
+    )
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const list = document.querySelector('.clause-list') as HTMLElement
+    expect(within(list).getByText(/Confidentiality/)).toBeInTheDocument()
+    expect(within(list).queryByText('No primary concept')).not.toBeInTheDocument()
+    const primary = document.querySelector(
+      '.clause-concept-primary',
+    ) as HTMLElement
+    expect(within(primary).getByText('Confidentiality')).toBeInTheDocument()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'View clause in document' }),
+    )
+    expect(router.state.location.search).toContain('view=document')
+    expect(router.state.location.search).toContain('node=node-1')
+    await waitFor(() => {
+      expect(document.querySelector('.clause-summary')).not.toBeNull()
+    })
+    const summaryConcept = document.querySelector(
+      '.clause-summary__concept',
+    ) as HTMLElement
+    expect(within(summaryConcept).getByText('Confidentiality')).toBeInTheDocument()
   })
 
   it('corrects fact values and keeps the machine interpretation visible', async () => {
     const api = stubContractApi()
-    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=cl5')
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-5')
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const detail = document.querySelector('.clause-detail') as HTMLElement
@@ -165,14 +218,155 @@ describe('clause semantics', () => {
     await waitFor(() => {
       expect(within(detail).getByText('30 days')).toBeInTheDocument()
     })
+    const machineLine = within(detail).getByText(
+      /Rivell originally interpreted: 60 days/,
+    )
+    expect(machineLine).toBeInTheDocument()
+    expect(within(machineLine).getByText('Supported by source')).toBeInTheDocument()
+    const correctedRow = machineLine.closest('.data-list__row') as HTMLElement
+    expect(within(correctedRow).getByText('Corrected')).toBeInTheDocument()
+  })
+
+
+  it('warns that a classification correction replaces the fact correction', async () => {
+    stubContractApi({
+      semantics: fixtureSemantics({
+        clauses: [
+          {
+            id: 'cl6',
+            headingNodeId: 'node-6',
+            heading: '6. Limitation of Liability',
+            primaryConcept: 'LIMITATION_OF_LIABILITY',
+            secondaryConcepts: [],
+            correctedPrimaryConcept: null,
+            machineFacts: [
+              {
+                factSchema: 'liability-facts',
+                schemaVersion: 1,
+                values: { liabilityCapMultiple: '3' },
+              },
+            ],
+            effectiveFacts: [
+              {
+                factSchema: 'liability-facts',
+                schemaVersion: 1,
+                values: { liabilityCapMultiple: '2' },
+              },
+            ],
+            interpretations: [],
+            corrected: true,
+          },
+        ],
+      }),
+    })
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const editor = within(document.querySelector('.clause-detail') as HTMLElement)
+      .getByText('Correct classification')
+      .closest('details') as HTMLElement
     expect(
-      within(detail).getByText(/Rivell originally interpreted: 60 days/),
+      within(editor).getByText(
+        /replaces the fact-value correction on this clause/i,
+      ),
     ).toBeInTheDocument()
+  })
+
+  it('warns that a fact correction replaces the classification correction', async () => {
+    stubContractApi({
+      semantics: fixtureSemantics({
+        clauses: [
+          {
+            id: 'cl6',
+            headingNodeId: 'node-6',
+            heading: '6. Limitation of Liability',
+            primaryConcept: 'LIMITATION_OF_LIABILITY',
+            secondaryConcepts: [],
+            correctedPrimaryConcept: 'INDEMNIFICATION',
+            machineFacts: [
+              {
+                factSchema: 'liability-facts',
+                schemaVersion: 1,
+                values: { liabilityCapMultiple: '3' },
+              },
+            ],
+            effectiveFacts: [
+              {
+                factSchema: 'liability-facts',
+                schemaVersion: 1,
+                values: { liabilityCapMultiple: '3' },
+              },
+            ],
+            interpretations: [],
+            corrected: true,
+          },
+        ],
+      }),
+    })
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const editor = within(document.querySelector('.clause-detail') as HTMLElement)
+      .getByText('Correct fact values')
+      .closest('details') as HTMLElement
+    expect(
+      within(editor).getByText(
+        /replaces the classification correction on this clause/i,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('reflects the backend replacement when a concept correction is saved', async () => {
+    stubContractApi()
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const detail = document.querySelector('.clause-detail') as HTMLElement
+    const factEditor = within(detail)
+      .getByText('Correct fact values')
+      .closest('details') as HTMLElement
+    const capInput = within(factEditor).getByLabelText('Liability cap multiple')
+    await userEvent.clear(capInput)
+    await userEvent.type(capInput, '2')
+    await userEvent.click(
+      within(factEditor).getByRole('button', { name: 'Save fact values' }),
+    )
+    await waitFor(() => {
+      expect(within(detail).getByText('2×')).toBeInTheDocument()
+    })
+
+    const conceptEditor = within(detail)
+      .getByText('Correct classification')
+      .closest('details') as HTMLElement
+    expect(
+      within(conceptEditor).getByText(
+        /replaces the fact-value correction on this clause/i,
+      ),
+    ).toBeInTheDocument()
+
+    await userEvent.selectOptions(
+      within(conceptEditor).getByLabelText('Primary concept'),
+      'INDEMNIFICATION',
+    )
+    await userEvent.click(
+      within(conceptEditor).getByRole('button', { name: 'Save classification' }),
+    )
+    await waitFor(() => {
+      expect(
+        within(detail).getByText(/Rivell originally classified this clause as/),
+      ).toBeInTheDocument()
+    })
+    expect(within(detail).getByText('3×')).toBeInTheDocument()
+    expect(
+      within(conceptEditor).queryByText(
+        /replaces the fact-value correction on this clause/i,
+      ),
+    ).not.toBeInTheDocument()
   })
 
   it('validates fact values before sending them', async () => {
     const api = stubContractApi()
-    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=cl6')
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const editor = within(document.querySelector('.clause-detail') as HTMLElement)
@@ -194,9 +388,31 @@ describe('clause semantics', () => {
     ).toBe(false)
   })
 
+
+  it('rejects a blank numeric fact value before sending it', async () => {
+    const api = stubContractApi()
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-5')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const editor = within(document.querySelector('.clause-detail') as HTMLElement)
+      .getByText('Correct fact values')
+      .closest('details') as HTMLElement
+    await userEvent.clear(within(editor).getByLabelText('Notice period (days)'))
+    await userEvent.click(
+      within(editor).getByRole('button', { name: 'Save fact values' }),
+    )
+
+    expect(await within(editor).findByRole('alert')).toHaveTextContent(
+      /is required/i,
+    )
+    expect(api.requests.some((request) => request.url.endsWith('/facts'))).toBe(
+      false,
+    )
+  })
+
   it('explains clauses with no classification and no facts', async () => {
     stubContractApi()
-    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=cl1')
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-1')
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const detail = document.querySelector('.clause-detail') as HTMLElement
@@ -217,7 +433,6 @@ describe('clause semantics', () => {
             id: 'cl9',
             headingNodeId: 'node-9',
             heading: '9. Data Retention',
-            contentText: '9. Data Retention\nRecords are kept for 30 days.',
             primaryConcept: null,
             secondaryConcepts: [],
             correctedPrimaryConcept: null,
@@ -241,7 +456,7 @@ describe('clause semantics', () => {
         ],
       }),
     })
-    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=cl9')
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-9')
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const detail = document.querySelector('.clause-detail') as HTMLElement
@@ -254,7 +469,7 @@ describe('clause semantics', () => {
 
   it('does not leak an unsaved concept draft across clause selection', async () => {
     stubContractApi()
-    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=cl6')
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const editor = within(document.querySelector('.clause-detail') as HTMLElement)
@@ -278,7 +493,7 @@ describe('clause semantics', () => {
   it('navigates from the clause detail to the document region', async () => {
     stubContractApi()
     const { router } = renderRoute(
-      '/reviews/c1?view=semantics&section=clauses&clause=cl6',
+      '/reviews/c1?view=semantics&section=clauses&clause=node-6',
     )
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
@@ -288,9 +503,11 @@ describe('clause semantics', () => {
 
     expect(router.state.location.search).toContain('view=document')
     expect(router.state.location.search).toContain('node=node-6')
-    expect(document.querySelector('[data-node-id="node-6"]')).toHaveClass(
-      'doc-node--selected',
-    )
+    const target = document.querySelector('[data-node-id="node-6"]') as HTMLElement
+    expect(target).toHaveClass('doc-node--selected')
+    await waitFor(() => {
+      expect(target).toHaveFocus()
+    })
   })
 })
 
@@ -311,7 +528,7 @@ describe('clause semantics', () => {
     )
     expect(router.state.location.search).toContain('view=semantics')
     expect(router.state.location.search).toContain('section=clauses')
-    expect(router.state.location.search).toContain('clause=cl6')
+    expect(router.state.location.search).toContain('clause=node-6')
   })
 
   it('does not show a clause summary for a non-clause region', async () => {

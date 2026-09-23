@@ -20,6 +20,8 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
   const selectedId = searchParams.get('node')
   const view = searchParams.get('view') === 'semantics' ? 'semantics' : 'document'
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const focusedNodeRef = useRef<string | null>(null)
+  const previousViewRef = useRef<string | undefined>(undefined)
 
   const contractQuery = useContractQuery(contractId)
   const contract = contractQuery.data
@@ -47,6 +49,22 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
     }
   }, [structure, selectedId])
 
+  useEffect(() => {
+    const arrivedInDocument =
+      view === 'document' &&
+      (previousViewRef.current === undefined || previousViewRef.current !== 'document')
+    if (arrivedInDocument && selectedId && structure) {
+      if (focusedNodeRef.current !== selectedId) {
+        const element = document.getElementById(`node-${selectedId}`)
+        if (element) {
+          element.focus()
+          focusedNodeRef.current = selectedId
+        }
+      }
+    }
+    previousViewRef.current = view
+  }, [view, selectedId, structure])
+
   const selectNode = (nodeId: string) => {
     if (nodeId === selectedId) return
     setSearchParams((previous) => {
@@ -56,11 +74,11 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
     })
   }
 
-  const openClauseSemantics = (clauseId: string) => {
+  const openClauseSemantics = (clauseKey: string) => {
     const next = new URLSearchParams(searchParams)
     next.set('view', 'semantics')
     next.set('section', 'clauses')
-    next.set('clause', clauseId)
+    next.set('clause', clauseKey)
     setSearchParams(next)
   }
 
@@ -71,7 +89,7 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
   const selectedRegionExtra = selectedClause ? (
     <ClauseSemanticSummary
       clause={selectedClause}
-      onOpen={() => openClauseSemantics(selectedClause.id)}
+      onOpen={() => openClauseSemantics(selectedClause.headingNodeId)}
     />
   ) : null
 

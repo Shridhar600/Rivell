@@ -1426,3 +1426,15 @@ a {
   margin: var(--space-1) 0;
   color: var(--color-muted);
 }
+
+.correction__warning {
+  margin: var(--space-1) 0;
+  color: var(--color-warning);
+}
+
+.clause-concept-machine,
+.clause-summary__machine {
+  margin: var(--space-1) 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}

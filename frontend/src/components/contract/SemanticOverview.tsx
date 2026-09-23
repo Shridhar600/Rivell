@@ -61,14 +61,19 @@ function MetadataList({ semantics }: { semantics: SemanticContract }) {
                 ? fact.correctedValue
                 : fact.value}
             </span>
-            {fact.corrected ? (
+            {fact.corrected && fact.correctedValue !== null ? (
               <span className="badge badge--edited">Corrected</span>
             ) : null}
-            <span className="metadata-list__source">
-              {fact.sourceNodeCount === 1
-                ? 'Source: 1 region'
-                : `Source: ${fact.sourceNodeCount} regions`}
-            </span>
+            {fact.corrected && fact.correctedValue === null ? (
+              <span className="metadata-list__source">Correction recorded</span>
+            ) : null}
+            {fact.sourceNodeCount > 0 ? (
+              <span className="metadata-list__source">
+                {fact.sourceNodeCount === 1
+                  ? 'Source: 1 region'
+                  : `Source: ${fact.sourceNodeCount} regions`}
+              </span>
+            ) : null}
           </dd>
         </div>
       ))}

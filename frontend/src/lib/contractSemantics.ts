@@ -6,7 +6,12 @@ import {
 } from './domainLabels'
 
 export { humanizeCode } from './domainLabels'
-import type { PartyRole, ReviewProfileInput, SemanticFact } from '../api/semantics'
+import type {
+  PartyRole,
+  ReviewProfile,
+  ReviewProfileInput,
+  SemanticFact,
+} from '../api/semantics'
 
 export const TAXONOMY_CONCEPTS = [
   'CONFIDENTIALITY',
@@ -229,7 +234,9 @@ export function describeFact(fact: SemanticFact): FactRow[] {
       rows.push({
         field: 'capBasis',
         label: 'Cap basis',
-        value: CAP_BASIS_LABELS[basis] ?? 'Not specified',
+        value:
+          CAP_BASIS_LABELS[basis] ??
+          (basis === 'UNSPECIFIED' ? 'Not specified' : humanizeCode(basis)),
       })
     }
     if (values.consequentialDamagesExcluded !== undefined) {
@@ -319,6 +326,15 @@ const AVAILABLE_TO_OPTION_LABELS: Record<string, string> = {
   UNSPECIFIED: 'Not specified',
 }
 
+const FACT_SCHEMA_LABELS: Record<string, string> = {
+  'liability-facts': 'Liability facts',
+  'termination-facts': 'Termination facts',
+}
+
+export function factSchemaLabel(factSchema: string): string {
+  return FACT_SCHEMA_LABELS[factSchema] ?? humanizeCode(factSchema)
+}
+
 const FACT_EDITOR_FIELDS: Record<string, FactEditorField[]> = {
   'liability-facts': [
     { field: 'liabilityCapMultiple', label: 'Liability cap multiple', kind: 'decimal' },
@@ -402,6 +418,21 @@ export function factDivergence(
   return divergences
 }
 
+export type ConceptCarrier = {
+  primaryConcept: string | null
+  correctedPrimaryConcept: string | null
+}
+
+export function effectivePrimaryConcept(clause: ConceptCarrier): string | null {
+  return clause.correctedPrimaryConcept ?? clause.primaryConcept
+}
+
+export function machinePrimaryConcept(clause: ConceptCarrier): string | null {
+  if (clause.correctedPrimaryConcept === null) return null
+  if (clause.correctedPrimaryConcept === clause.primaryConcept) return null
+  return clause.primaryConcept
+}
+
 export type RegionLabelSource = { headingNodeId: string; heading: string }
 export type RegionLabelNode = {
   id: string
@@ -416,18 +447,36 @@ function truncateLabel(label: string): string {
   return `${label.slice(0, REGION_LABEL_MAX_LENGTH - 1).trimEnd()}…`
 }
 
+export function buildRegionLabelMap(
+  clauses: RegionLabelSource[],
+  nodes: RegionLabelNode[],
+): Map<string, string> {
+  const labels = new Map<string, string>()
+  for (const node of nodes) {
+    const label =
+      node.numberingLabel && node.text
+        ? `${node.numberingLabel} ${node.text}`
+        : node.numberingLabel ?? node.text
+    if (label) labels.set(node.id, truncateLabel(label))
+  }
+  for (const clause of clauses) labels.set(clause.headingNodeId, clause.heading)
+  return labels
+}
+
 export function resolveRegionLabel(
   nodeId: string,
   clauses: RegionLabelSource[],
   nodes: RegionLabelNode[],
 ): string | null {
-  const clause = clauses.find((candidate) => candidate.headingNodeId === nodeId)
-  if (clause) return clause.heading
-  const node = nodes.find((candidate) => candidate.id === nodeId)
-  if (!node) return null
-  const label =
-    node.numberingLabel && node.text
-      ? `${node.numberingLabel} ${node.text}`
-      : node.numberingLabel ?? node.text
-  return label ? truncateLabel(label) : null
+  return buildRegionLabelMap(clauses, nodes).get(nodeId) ?? null
+}
+
+export function profileKey(profile: ReviewProfile | null): string {
+  if (!profile) return 'none'
+  return [
+    profile.contractType,
+    profile.ourSideRole,
+    profile.paperSource,
+    profile.jurisdiction,
+  ].join('|')
 }

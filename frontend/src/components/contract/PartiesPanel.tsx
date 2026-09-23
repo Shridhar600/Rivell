@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import type { PartyRole, SemanticParty } from '../../api/semantics'
 import { useCorrectPartyRole } from '../../api/semantics'
 import { PARTY_ROLES, roleLabel } from '../../lib/contractSemantics'
+import { CorrectionFailure } from './CorrectionFailure'
 
 function RoleChips({ roles }: { roles: string[] }) {
   if (roles.length === 0) {
@@ -22,14 +23,21 @@ function PartyRoleEditor({
   party,
   contractId,
   versionNumber,
+  onRefresh,
 }: {
   party: SemanticParty
   contractId: string
   versionNumber: number
+  onRefresh: () => void
 }) {
   const correct = useCorrectPartyRole(contractId, versionNumber)
+  const [serverRoles, setServerRoles] = useState(party.effectiveRoles)
   const [selected, setSelected] = useState<string[]>(party.effectiveRoles)
   const [error, setError] = useState<string | null>(null)
+  if (serverRoles !== party.effectiveRoles) {
+    setServerRoles(party.effectiveRoles)
+    setSelected(party.effectiveRoles)
+  }
 
   const toggle = (role: PartyRole) => {
     setSelected((previous) =>
@@ -79,9 +87,7 @@ function PartyRoleEditor({
         </button>
       </form>
       {correct.isError ? (
-        <p role="alert" className="correction__error">
-          {correct.error.message}
-        </p>
+        <CorrectionFailure error={correct.error} onRefresh={onRefresh} />
       ) : null}
       {correct.isSuccess && !correct.isPending ? (
         <p role="status" className="correction__status">
@@ -96,10 +102,12 @@ export function PartiesPanel({
   parties,
   contractId,
   versionNumber,
+  onRefresh,
 }: {
   parties: SemanticParty[]
   contractId: string
   versionNumber: number
+  onRefresh: () => void
 }) {
   return (
     <section aria-labelledby="parties-heading">
@@ -136,14 +144,17 @@ export function PartiesPanel({
                 </div>
               </div>
               <p className="provenance-note">
-                {party.sourceNodeCount === 1
-                  ? 'Supported by 1 source region'
-                  : `Supported by ${party.sourceNodeCount} source regions`}
+                {party.sourceNodeCount === 0
+                  ? 'No source regions recorded'
+                  : party.sourceNodeCount === 1
+                    ? 'Supported by 1 source region'
+                    : `Supported by ${party.sourceNodeCount} source regions`}
               </p>
               <PartyRoleEditor
                 party={party}
                 contractId={contractId}
                 versionNumber={versionNumber}
+                onRefresh={onRefresh}
               />
             </li>
           ))}

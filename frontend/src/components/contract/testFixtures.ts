@@ -105,7 +105,6 @@ export function fixtureSemantics(
     contractId: 'c1',
     versionNumber: 1,
     enrichmentStatus: 'READY',
-    pipelineVersion: 'rivell-contract-enrichment-1',
     reviewProfile: {
       contractType: 'MSA',
       ourSideRole: 'CUSTOMER',
@@ -187,7 +186,6 @@ export function fixtureSemantics(
         id: 'cl1',
         headingNodeId: 'node-1',
         heading: '1. Definitions',
-        contentText: '1. Definitions\n"Services" means…',
         primaryConcept: null,
         secondaryConcepts: [],
         correctedPrimaryConcept: null,
@@ -200,7 +198,6 @@ export function fixtureSemantics(
         id: 'cl5',
         headingNodeId: 'node-5',
         heading: '5. Termination',
-        contentText: '5. Termination\nEither party may terminate on 60 days notice.',
         primaryConcept: 'TERM_TERMINATION',
         secondaryConcepts: [],
         correctedPrimaryConcept: null,
@@ -234,8 +231,6 @@ export function fixtureSemantics(
         id: 'cl6',
         headingNodeId: 'node-6',
         heading: '6. Limitation of Liability',
-        contentText:
-          '6. Limitation of Liability\n6.1 …shall not exceed three (3) times the Fees…',
         primaryConcept: 'LIMITATION_OF_LIABILITY',
         secondaryConcepts: ['INDEMNIFICATION'],
         correctedPrimaryConcept: null,
@@ -372,6 +367,7 @@ export type StubOptions = {
 export function stubContractApi(options: StubOptions = {}) {
   const requests: RecordedRequest[] = []
   let semantics = options.semantics === undefined ? fixtureSemantics() : options.semantics
+  let semanticsStatus = options.semanticsStatus ?? 200
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(String(input), init)
@@ -390,10 +386,10 @@ export function stubContractApi(options: StubOptions = {}) {
       return jsonResponse(envelope(fixtureStructure))
     }
     if (method === 'GET' && url.includes('/versions/1/semantics')) {
-      if (options.semanticsStatus && options.semanticsStatus !== 200) {
+      if (semanticsStatus !== 200) {
         return jsonResponse(
-          { code: String(options.semanticsStatus), title: 'Error', detail: 'x' },
-          options.semanticsStatus,
+          { code: String(semanticsStatus), title: 'Error', detail: 'x' },
+          semanticsStatus,
         )
       }
       if (semantics === null) {
@@ -422,6 +418,7 @@ export function stubContractApi(options: StubOptions = {}) {
       return jsonResponse(envelope(semantics))
     }
     if (method === 'POST' && url.includes('/semantics/clauses/')) {
+      const clauseId = url.split('/semantics/clauses/')[1]?.split('/')[0]
       if (url.endsWith('/concepts')) {
         if (options.conceptCorrectionResponse) {
           return options.conceptCorrectionResponse(body)
@@ -430,12 +427,12 @@ export function stubContractApi(options: StubOptions = {}) {
         semantics = {
           ...(semantics as SemanticContract),
           clauses: (semantics as SemanticContract).clauses.map((clause) =>
-            clause.id === 'cl6'
+            clause.id === clauseId
               ? {
                   ...clause,
                   corrected: true,
                   correctedPrimaryConcept: primary,
-                  primaryConcept: primary,
+                  effectiveFacts: clause.machineFacts,
                 }
               : clause,
           ),
@@ -450,10 +447,11 @@ export function stubContractApi(options: StubOptions = {}) {
         semantics = {
           ...(semantics as SemanticContract),
           clauses: (semantics as SemanticContract).clauses.map((clause) =>
-            clause.id === 'cl5'
+            clause.id === clauseId
               ? {
                   ...clause,
                   corrected: true,
+                  correctedPrimaryConcept: null,
                   effectiveFacts: clause.effectiveFacts.map((fact) => ({
                     ...fact,
                     values: { ...fact.values, ...values },
@@ -475,6 +473,9 @@ export function stubContractApi(options: StubOptions = {}) {
     getSemantics: () => semantics,
     setSemantics: (next: SemanticContract | null) => {
       semantics = next
+    },
+    setSemanticsStatus: (status: number) => {
+      semanticsStatus = status
     },
   }
 }

@@ -1,28 +1,26 @@
-import type { SemanticClause, SemanticRelationship } from '../../api/semantics'
-import {
-  relationshipTypeVerb,
-  resolveRegionLabel,
-  type RegionLabelNode,
-} from '../../lib/contractSemantics'
+import type { SemanticRelationship } from '../../api/semantics'
+import { relationshipTypeVerb } from '../../lib/contractSemantics'
 import { VerificationBadge } from './VerificationBadge'
+
+function detectorLabel(detector: string): string {
+  if (detector === 'DETERMINISTIC') return 'Stated in the clause text'
+  if (detector === 'SEMANTIC') return 'Inferred from the clause texts'
+  return 'Detection method not recognised'
+}
 
 function RelationshipRow({
   relationship,
-  clauses,
-  nodes,
+  labelByNodeId,
   onNavigateToNode,
 }: {
   relationship: SemanticRelationship
-  clauses: SemanticClause[]
-  nodes: RegionLabelNode[]
+  labelByNodeId: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
 }) {
   const sourceLabel =
-    resolveRegionLabel(relationship.sourceRegionNodeId, clauses, nodes) ??
-    'Selected clause'
+    labelByNodeId.get(relationship.sourceRegionNodeId) ?? 'Selected clause'
   const targetLabel =
-    resolveRegionLabel(relationship.targetRegionNodeId, clauses, nodes) ??
-    'Referenced clause'
+    labelByNodeId.get(relationship.targetRegionNodeId) ?? 'Referenced clause'
 
   return (
     <li className="relationship-row">
@@ -47,9 +45,7 @@ function RelationshipRow({
       </div>
       <div className="relationship-row__meta">
         <span className="relationship-row__detector">
-          {relationship.detector === 'DETERMINISTIC'
-            ? 'Stated in the clause text'
-            : 'Inferred from the clause texts'}
+          {detectorLabel(relationship.detector)}
         </span>
         {relationship.verification !== 'NOT_VERIFIED' ? (
           <VerificationBadge verification={relationship.verification} />
@@ -61,13 +57,11 @@ function RelationshipRow({
 
 export function RelationshipsPanel({
   relationships,
-  clauses,
-  nodes,
+  labelByNodeId,
   onNavigateToNode,
 }: {
   relationships: SemanticRelationship[]
-  clauses: SemanticClause[]
-  nodes: RegionLabelNode[]
+  labelByNodeId: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
 }) {
   return (
@@ -90,8 +84,7 @@ export function RelationshipsPanel({
               <RelationshipRow
                 key={relationship.id}
                 relationship={relationship}
-                clauses={clauses}
-                nodes={nodes}
+                labelByNodeId={labelByNodeId}
                 onNavigateToNode={onNavigateToNode}
               />
             ))}

@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import {
   useMutation,
   useQuery,
@@ -99,7 +100,6 @@ export type SemanticClause = {
   id: string
   headingNodeId: string
   heading: string
-  contentText: string
   primaryConcept: string | null
   secondaryConcepts: string[]
   correctedPrimaryConcept: string | null
@@ -134,7 +134,6 @@ export type SemanticContract = {
   contractId: string
   versionNumber: number
   enrichmentStatus: EnrichmentStatus
-  pipelineVersion: string
   reviewProfile: ReviewProfile
   metadata: SemanticMetadataFact[]
   parties: SemanticParty[]
@@ -230,7 +229,6 @@ function parseClause(value: unknown, what: string): SemanticClause {
     id: readString(clause, 'id', what),
     headingNodeId: readString(clause, 'headingNodeId', what),
     heading: readString(clause, 'heading', what),
-    contentText: readString(clause, 'contentText', what),
     primaryConcept: readOptionalNullableString(clause, 'primaryConcept', what),
     secondaryConcepts: readStringArray(clause, 'secondaryConcepts', what),
     correctedPrimaryConcept: readOptionalNullableString(
@@ -299,7 +297,6 @@ export function parseSemanticContract(
     contractId: readString(response, 'contractId', what),
     versionNumber: readNumber(response, 'versionNumber', what),
     enrichmentStatus,
-    pipelineVersion: readString(response, 'pipelineVersion', what),
     reviewProfile: parseReviewProfile(response.reviewProfile, what),
     metadata: readArray(response, 'metadata', what, parseMetadataFact),
     parties: readArray(response, 'parties', what, parseParty),
@@ -310,6 +307,20 @@ export function parseSemanticContract(
     quality: readStringArray(response, 'quality', what),
     observations: parseObservations(response.observations, what),
   }
+}
+
+export class SemanticApiError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'SemanticApiError'
+    this.status = status
+  }
+}
+
+export function isConflictError(error: unknown): boolean {
+  return error instanceof SemanticApiError && error.status === 409
 }
 
 export const semanticsKeys = {
@@ -329,7 +340,10 @@ export async function fetchSemantics(
 
   if (response.status === 404) return null
   if (!data) {
-    throw new Error(errorMessage(error, 'Semantic analysis unavailable'))
+    throw new SemanticApiError(
+      errorMessage(error, 'Semantic analysis unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseSemanticContract, 'semantics')
 }
@@ -338,6 +352,7 @@ export function useSemanticsQuery(
   contractId: string,
   versionNumber: number | undefined,
 ): UseQueryResult<SemanticContract | null, Error> {
+  const pollAttempts = useRef(0)
   return useQuery({
     queryKey: semanticsKeys.semantics(contractId, versionNumber ?? 0),
     queryFn: () => {
@@ -347,8 +362,15 @@ export function useSemanticsQuery(
       return fetchSemantics(contractId, versionNumber)
     },
     enabled: versionNumber !== undefined,
-    refetchInterval: (query) =>
-      query.state.data?.enrichmentStatus === 'ENRICHING' ? 3000 : false,
+    refetchInterval: (query) => {
+      if (query.state.data?.enrichmentStatus !== 'ENRICHING') {
+        pollAttempts.current = 0
+        return false
+      }
+      if (pollAttempts.current >= 20) return false
+      pollAttempts.current += 1
+      return 3000
+    },
   })
 }
 
@@ -375,12 +397,15 @@ export function useEnrichContract(
 ): UseMutationResult<SemanticContract, Error, ReviewProfileInput> {
   return useSemanticsMutation(contractId, versionNumber, async (profile) => {
     const client = createApiClient()
-    const { data, error } = await client.POST(
+    const { data, error, response } = await client.POST(
       '/api/contracts/{id}/versions/{versionNumber}/enrichment',
       { params: { path: { id: contractId, versionNumber } }, body: profile },
     )
     if (!data) {
-      throw new Error(errorMessage(error, 'Semantic analysis failed'))
+      throw new SemanticApiError(
+        errorMessage(error, 'Semantic analysis failed'),
+        response.status,
+      )
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
@@ -396,7 +421,7 @@ export function useCorrectPartyRole(
 > {
   return useSemanticsMutation(contractId, versionNumber, async ({ partyId, roles }) => {
     const client = createApiClient()
-    const { data, error } = await client.POST(
+    const { data, error, response } = await client.POST(
       '/api/contracts/{id}/versions/{versionNumber}/semantics/parties/{partyId}/role',
       {
         params: { path: { id: contractId, versionNumber, partyId } },
@@ -404,7 +429,10 @@ export function useCorrectPartyRole(
       },
     )
     if (!data) {
-      throw new Error(errorMessage(error, 'Role correction failed'))
+      throw new SemanticApiError(
+        errorMessage(error, 'Role correction failed'),
+        response.status,
+      )
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
@@ -420,7 +448,7 @@ export function useCorrectClauseConcept(
 > {
   return useSemanticsMutation(contractId, versionNumber, async ({ clauseId, primary }) => {
     const client = createApiClient()
-    const { data, error } = await client.POST(
+    const { data, error, response } = await client.POST(
       '/api/contracts/{id}/versions/{versionNumber}/semantics/clauses/{clauseId}/concepts',
       {
         params: { path: { id: contractId, versionNumber, clauseId } },
@@ -428,7 +456,10 @@ export function useCorrectClauseConcept(
       },
     )
     if (!data) {
-      throw new Error(errorMessage(error, 'Classification correction failed'))
+      throw new SemanticApiError(
+        errorMessage(error, 'Classification correction failed'),
+        response.status,
+      )
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
@@ -444,7 +475,7 @@ export function useCorrectClauseFacts(
 > {
   return useSemanticsMutation(contractId, versionNumber, async ({ clauseId, values }) => {
     const client = createApiClient()
-    const { data, error } = await client.POST(
+    const { data, error, response } = await client.POST(
       '/api/contracts/{id}/versions/{versionNumber}/semantics/clauses/{clauseId}/facts',
       {
         params: { path: { id: contractId, versionNumber, clauseId } },
@@ -452,7 +483,10 @@ export function useCorrectClauseFacts(
       },
     )
     if (!data) {
-      throw new Error(errorMessage(error, 'Fact correction failed'))
+      throw new SemanticApiError(
+        errorMessage(error, 'Fact correction failed'),
+        response.status,
+      )
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })

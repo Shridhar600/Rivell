@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react'
-import type { SemanticClause, SemanticReference } from '../../api/semantics'
+import type { SemanticReference } from '../../api/semantics'
 import { referenceKindLabel, referenceStatusLabel } from '../../lib/contractSemantics'
-import type { RegionLabelNode } from '../../lib/contractSemantics'
-import { resolveRegionLabel } from '../../lib/contractSemantics'
 
 function statusOrder(reference: SemanticReference): number {
   switch (reference.status) {
@@ -21,17 +19,15 @@ function statusOrder(reference: SemanticReference): number {
 
 function ReferenceRow({
   reference,
-  clauses,
-  nodes,
+  labelByNodeId,
   onNavigateToNode,
 }: {
   reference: SemanticReference
-  clauses: SemanticClause[]
-  nodes: RegionLabelNode[]
+  labelByNodeId: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
 }) {
   const targetLabel = reference.targetNodeId
-    ? resolveRegionLabel(reference.targetNodeId, clauses, nodes)
+    ? labelByNodeId.get(reference.targetNodeId) ?? null
     : null
 
   let resolution: ReactNode
@@ -83,13 +79,11 @@ function ReferenceRow({
 
 export function ReferencesPanel({
   references,
-  clauses,
-  nodes,
+  labelByNodeId,
   onNavigateToNode,
 }: {
   references: SemanticReference[]
-  clauses: SemanticClause[]
-  nodes: RegionLabelNode[]
+  labelByNodeId: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
 }) {
   const sorted = [...references].sort(
@@ -115,8 +109,7 @@ export function ReferencesPanel({
               <ReferenceRow
                 key={reference.id}
                 reference={reference}
-                clauses={clauses}
-                nodes={nodes}
+                labelByNodeId={labelByNodeId}
                 onNavigateToNode={onNavigateToNode}
               />
             ))}

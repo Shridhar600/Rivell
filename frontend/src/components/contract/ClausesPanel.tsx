@@ -4,8 +4,12 @@ import { useCorrectClauseConcept } from '../../api/semantics'
 import {
   TAXONOMY_CONCEPTS,
   conceptLabel,
+  effectivePrimaryConcept,
+  factDivergence,
+  machinePrimaryConcept,
 } from '../../lib/contractSemantics'
 import { ClauseFacts } from './ClauseFacts'
+import { CorrectionFailure } from './CorrectionFailure'
 
 function ConceptChips({ concepts }: { concepts: string[] }) {
   return (
@@ -23,15 +27,23 @@ function ConceptEditor({
   clause,
   contractId,
   versionNumber,
+  onRefresh,
 }: {
   clause: SemanticClause
   contractId: string
   versionNumber: number
+  onRefresh: () => void
 }) {
   const correct = useCorrectClauseConcept(contractId, versionNumber)
-  const [selected, setSelected] = useState(
-    clause.correctedPrimaryConcept ?? clause.primaryConcept ?? '',
-  )
+  const replacesFactCorrection =
+    factDivergence(clause.machineFacts, clause.effectiveFacts).length > 0
+  const effective = effectivePrimaryConcept(clause) ?? ''
+  const [serverConcept, setServerConcept] = useState(effective)
+  const [selected, setSelected] = useState(effective)
+  if (serverConcept !== effective) {
+    setServerConcept(effective)
+    setSelected(effective)
+  }
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = (event: FormEvent) => {
@@ -68,6 +80,12 @@ function ConceptEditor({
           This corrects what the clause is about. It is not an approval or rejection of
           the clause.
         </p>
+        {replacesFactCorrection ? (
+          <p className="correction__warning" role="status">
+            Saving a classification correction replaces the fact-value correction on
+            this clause.
+          </p>
+        ) : null}
         {error ? (
           <p role="alert" className="correction__error">
             {error}
@@ -78,9 +96,7 @@ function ConceptEditor({
         </button>
       </form>
       {correct.isError ? (
-        <p role="alert" className="correction__error">
-          {correct.error.message}
-        </p>
+        <CorrectionFailure error={correct.error} onRefresh={onRefresh} />
       ) : null}
       {correct.isSuccess && !correct.isPending ? (
         <p role="status" className="correction__status">
@@ -96,11 +112,13 @@ function ClauseDetail({
   contractId,
   versionNumber,
   onNavigateToNode,
+  onRefresh,
 }: {
   clause: SemanticClause
   contractId: string
   versionNumber: number
   onNavigateToNode: (nodeId: string) => void
+  onRefresh: () => void
 }) {
   return (
     <div className="clause-detail">
@@ -121,11 +139,11 @@ function ClauseDetail({
       </div>
       <div className="clause-detail__concepts">
         <h4>Concepts</h4>
-        {clause.primaryConcept ? (
+        {effectivePrimaryConcept(clause) ? (
           <p className="clause-concept-primary">
             <span className="clause-concept-primary__label">Primary</span>
             <span className="chip chip--primary">
-              {conceptLabel(clause.primaryConcept)}
+              {conceptLabel(effectivePrimaryConcept(clause) as string)}
             </span>
           </p>
         ) : (
@@ -133,6 +151,12 @@ function ClauseDetail({
             No primary concept was determined for this clause.
           </p>
         )}
+        {machinePrimaryConcept(clause) ? (
+          <p className="clause-concept-machine">
+            Rivell originally classified this clause as{' '}
+            {conceptLabel(machinePrimaryConcept(clause) as string)}.
+          </p>
+        ) : null}
         {clause.secondaryConcepts.length > 0 ? (
           <div className="clause-concept-secondary">
             <h5>Also relates to</h5>
@@ -143,12 +167,14 @@ function ClauseDetail({
           clause={clause}
           contractId={contractId}
           versionNumber={versionNumber}
+          onRefresh={onRefresh}
         />
       </div>
       <ClauseFacts
         clause={clause}
         contractId={contractId}
         versionNumber={versionNumber}
+        onRefresh={onRefresh}
       />
     </div>
   )
@@ -156,21 +182,23 @@ function ClauseDetail({
 
 export function ClausesPanel({
   clauses,
-  selectedClauseId,
+  selectedClauseKey,
   onSelectClause,
   contractId,
   versionNumber,
   onNavigateToNode,
+  onRefresh,
 }: {
   clauses: SemanticClause[]
-  selectedClauseId: string | null
-  onSelectClause: (clauseId: string | null) => void
+  selectedClauseKey: string | null
+  onSelectClause: (clauseKey: string | null) => void
   contractId: string
   versionNumber: number
   onNavigateToNode: (nodeId: string) => void
+  onRefresh: () => void
 }) {
   const selected =
-    clauses.find((clause) => clause.id === selectedClauseId) ?? null
+    clauses.find((clause) => clause.headingNodeId === selectedClauseKey) ?? null
 
   return (
     <section aria-labelledby="clauses-heading">
@@ -189,18 +217,23 @@ export function ClausesPanel({
                 <button
                   type="button"
                   className={
-                    clause.id === selectedClauseId
+                    clause.headingNodeId === selectedClauseKey
                       ? 'clause-list__button clause-list__button--selected'
                       : 'clause-list__button'
                   }
-                  aria-current={clause.id === selectedClauseId ? 'true' : undefined}
-                  onClick={() => onSelectClause(clause.id)}
+                  aria-current={
+                    clause.headingNodeId === selectedClauseKey ? 'true' : undefined
+                  }
+                  onClick={() => onSelectClause(clause.headingNodeId)}
                 >
                   <span className="clause-list__heading">{clause.heading}</span>
                   <span className="clause-list__meta">
-                    {clause.primaryConcept
-                      ? conceptLabel(clause.primaryConcept)
+                    {effectivePrimaryConcept(clause)
+                      ? conceptLabel(effectivePrimaryConcept(clause) as string)
                       : 'No primary concept'}
+                    {clause.secondaryConcepts.length > 0
+                      ? ` · +${clause.secondaryConcepts.length} more`
+                      : ''}
                     {clause.effectiveFacts.length > 0
                       ? ` · ${clause.effectiveFacts.length} fact${
                           clause.effectiveFacts.length === 1 ? '' : 's'
@@ -214,12 +247,23 @@ export function ClausesPanel({
           <div className="clause-workspace__detail">
             {selected ? (
               <ClauseDetail
-                key={selected.id}
+                key={selected.headingNodeId}
                 clause={selected}
                 contractId={contractId}
                 versionNumber={versionNumber}
                 onNavigateToNode={onNavigateToNode}
+                onRefresh={onRefresh}
               />
+            ) : selectedClauseKey ? (
+              <div className="state state--warning" role="status">
+                <p>
+                  This clause selection is not available in the current analysis. It
+                  may belong to an earlier analysis run.
+                </p>
+                <button type="button" onClick={() => onSelectClause(null)}>
+                  Clear clause selection
+                </button>
+              </div>
             ) : (
               <p className="semantic-empty">
                 Select a clause to inspect its concepts, facts and interpretations.

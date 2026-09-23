@@ -173,6 +173,188 @@ describe('semantic analysis lifecycle', () => {
     expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument()
   })
 
+
+  it('renders corrected metadata values and correction-only records', async () => {
+    stubContractApi({
+      semantics: fixtureSemantics({
+        metadata: [
+          {
+            field: 'AGREEMENT_TITLE',
+            value: 'Draft Agreement',
+            correctedValue: 'Master Services Agreement',
+            corrected: true,
+            sourceNodeCount: 1,
+          },
+          {
+            field: 'TERM',
+            value: '12 months',
+            correctedValue: null,
+            corrected: true,
+            sourceNodeCount: 1,
+          },
+        ],
+      }),
+    })
+    renderRoute('/reviews/c1?view=semantics')
+
+    await screen.findByRole('heading', { name: 'Overview' })
+    const metadata = document.querySelector('.metadata-list') as HTMLElement
+    expect(
+      within(metadata).getByText('Master Services Agreement'),
+    ).toBeInTheDocument()
+    expect(within(metadata).getByText('Corrected')).toBeInTheDocument()
+    expect(within(metadata).getByText('Correction recorded')).toBeInTheDocument()
+  })
+
+
+  it('maps a conflict on correction to a refresh action', async () => {
+    const api = stubContractApi({
+      partyCorrectionResponse: () =>
+        jsonResponse(
+          {
+            code: '409',
+            title: 'Invalid state',
+            detail: 'Enrichment for contract 9f2a1c44 is already running',
+          },
+          409,
+        ),
+    })
+    renderRoute('/reviews/c1?view=semantics&section=parties')
+
+    await screen.findByRole('heading', { name: 'Parties' })
+    const card = screen
+      .getByRole('heading', { name: 'Northwind Customer Group LLC' })
+      .closest('li') as HTMLElement
+    await userEvent.click(within(card).getByLabelText('Party A'))
+    await userEvent.click(within(card).getByRole('button', { name: 'Save roles' }))
+
+    expect(
+      await within(card).findByText(/semantic analysis for this contract is not ready/i),
+    ).toBeInTheDocument()
+    expect(
+      within(card).queryByText(/9f2a1c44/),
+    ).not.toBeInTheDocument()
+
+    const before = api.requests.filter(
+      (request) => request.method === 'GET' && request.url.includes('/semantics'),
+    ).length
+    await userEvent.click(
+      within(card).getByRole('button', { name: 'Refresh analysis state' }),
+    )
+    await waitFor(() => {
+      const after = api.requests.filter(
+        (request) => request.method === 'GET' && request.url.includes('/semantics'),
+      ).length
+      expect(after).toBeGreaterThan(before)
+    })
+  })
+
+  it('labels an unknown relationship detector neutrally', async () => {
+    stubContractApi({
+      semantics: fixtureSemantics({
+        relationships: [
+          {
+            id: 'rel9',
+            sourceRegionNodeId: 'node-5',
+            targetRegionNodeId: 'node-6',
+            type: 'DEPENDS_ON',
+            detector: 'FUTURE_METHOD',
+            basis: 'x',
+            probability: 0.5,
+            verification: 'NOT_VERIFIED',
+          },
+        ],
+      }),
+    })
+    renderRoute('/reviews/c1?view=semantics&section=relationships')
+
+    await screen.findByRole('heading', { name: 'Clause relationships' })
+    expect(
+      screen.getByText('Detection method not recognised'),
+    ).toBeInTheDocument()
+  })
+
+  it('orders clauses by the document structure, not the response order', async () => {
+    stubContractApi({
+      semantics: fixtureSemantics({
+        clauses: [
+          {
+            id: 'cl6',
+            headingNodeId: 'node-6',
+            heading: '6. Limitation of Liability',
+            primaryConcept: 'LIMITATION_OF_LIABILITY',
+            secondaryConcepts: [],
+            correctedPrimaryConcept: null,
+            machineFacts: [],
+            effectiveFacts: [],
+            interpretations: [],
+            corrected: false,
+          },
+          {
+            id: 'cl1',
+            headingNodeId: 'node-1',
+            heading: '1. Definitions',
+            primaryConcept: null,
+            secondaryConcepts: [],
+            correctedPrimaryConcept: null,
+            machineFacts: [],
+            effectiveFacts: [],
+            interpretations: [],
+            corrected: false,
+          },
+        ],
+      }),
+    })
+    renderRoute('/reviews/c1?view=semantics&section=clauses')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const buttons = Array.from(
+      document.querySelectorAll('.clause-list__button'),
+    ).map((button) => button.textContent)
+    expect(buttons[0]).toContain('1. Definitions')
+    expect(buttons[1]).toContain('6. Limitation of Liability')
+  })
+
+  it('keeps the cached analysis when a refresh fails', async () => {
+    const api = stubContractApi({
+      semantics: fixtureSemantics({ enrichmentStatus: 'ENRICHING' }),
+    })
+    renderRoute('/reviews/c1?view=semantics')
+
+    await screen.findByRole('heading', { name: 'Analysis in progress' })
+    api.setSemantics(fixtureSemantics({ enrichmentStatus: 'ENRICHING' }))
+    api.setSemanticsStatus(500)
+    await userEvent.click(screen.getByRole('button', { name: 'Check again' }))
+
+    expect(
+      await screen.findByText(
+        /the latest refresh failed/i,
+        {},
+        { timeout: 5000 },
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Analysis in progress' }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows an explicit stale-selection state for an unknown clause key', async () => {
+    stubContractApi()
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=missing-node')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    expect(
+      screen.getByText(/not available in the current analysis/i),
+    ).toBeInTheDocument()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Clear clause selection' }),
+    )
+    expect(
+      screen.queryByText(/not available in the current analysis/i),
+    ).not.toBeInTheDocument()
+  })
+
 describe('semantic overview', () => {
   it('shows the profile, metadata, coverage and quality notes', async () => {
     stubContractApi()
@@ -268,9 +450,11 @@ describe('semantic sections', () => {
       expect(router.state.location.search).toContain('view=document')
     })
     expect(router.state.location.search).toContain('node=node-63')
-    expect(document.querySelector('[data-node-id="node-63"]')).toHaveClass(
-      'doc-node--selected',
-    )
+    const target = document.querySelector('[data-node-id="node-63"]') as HTMLElement
+    expect(target).toHaveClass('doc-node--selected')
+    await waitFor(() => {
+      expect(target).toHaveFocus()
+    })
   })
 
   it('shows clause relationships with verbs and navigation', async () => {

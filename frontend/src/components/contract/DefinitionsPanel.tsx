@@ -22,9 +22,11 @@ export function DefinitionsPanel({ terms }: { terms: SemanticDefinedTerm[] }) {
               </div>
               <p className="term-card__definition">{term.definition}</p>
               <p className="provenance-note">
-                {term.referenceCount === 1
-                  ? 'Used once in the contract text'
-                  : `Used ${term.referenceCount} times in the contract text`}
+                {term.referenceCount === 0
+                  ? 'No references found in the contract text'
+                  : term.referenceCount === 1
+                    ? 'Used once in the contract text'
+                    : `Used ${term.referenceCount} times in the contract text`}
               </p>
             </li>
           ))}

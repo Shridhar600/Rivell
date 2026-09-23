@@ -9,9 +9,11 @@ import {
   describeFact,
   factDivergence,
   factEditorFields,
+  factSchemaLabel,
   humanizeCode,
   interpretationKindDescription,
 } from '../../lib/contractSemantics'
+import { CorrectionFailure } from './CorrectionFailure'
 import { VerificationBadge } from './VerificationBadge'
 
 function FactCard({
@@ -21,6 +23,8 @@ function FactCard({
   clauseId,
   contractId,
   versionNumber,
+  hasConceptCorrection,
+  onRefresh,
 }: {
   fact: SemanticFact
   machineFact: SemanticFact | null
@@ -28,6 +32,8 @@ function FactCard({
   clauseId: string
   contractId: string
   versionNumber: number
+  hasConceptCorrection: boolean
+  onRefresh: () => void
 }) {
   const rows = describeFact(fact)
   const machineRows = new Map(
@@ -45,7 +51,7 @@ function FactCard({
 
   return (
     <div className="fact-card">
-      <h5>{humanizeCode(fact.factSchema)}</h5>
+      <h5>{factSchemaLabel(fact.factSchema)}</h5>
       <dl className="data-list fact-list">
         {rows.map((row) => {
           const divergence = divergenceByField.get(row.field)
@@ -55,16 +61,29 @@ function FactCard({
               <dt>{row.label}</dt>
               <dd>
                 <span className="fact-list__value">{row.value}</span>
-                {interpretation ? (
+                {divergence ? (
+                  <span className="badge badge--edited">Corrected</span>
+                ) : interpretation ? (
                   <VerificationBadge verification={interpretation.verification} />
                 ) : null}
                 {divergence ? (
                   <span className="fact-list__machine">
                     Rivell originally interpreted:{' '}
                     {machineRows.get(row.field) ?? divergence.machineValue}
+                    {interpretation ? (
+                      <>
+                        {' '}
+                        <VerificationBadge
+                          verification={interpretation.verification}
+                        />
+                        {` · ${interpretationKindDescription(interpretation.kind)} · `}
+                        {interpretation.sourceNodeCount === 1
+                          ? '1 source region'
+                          : `${interpretation.sourceNodeCount} source regions`}
+                      </>
+                    ) : null}
                   </span>
-                ) : null}
-                {interpretation ? (
+                ) : interpretation ? (
                   <span className="fact-list__provenance">
                     {interpretationKindDescription(interpretation.kind)} ·{' '}
                     {interpretation.sourceNodeCount === 1
@@ -82,6 +101,8 @@ function FactCard({
         clauseId={clauseId}
         contractId={contractId}
         versionNumber={versionNumber}
+        replacesConceptCorrection={hasConceptCorrection}
+        onRefresh={onRefresh}
       />
     </div>
   )
@@ -92,11 +113,15 @@ function FactEditor({
   clauseId,
   contractId,
   versionNumber,
+  replacesConceptCorrection,
+  onRefresh,
 }: {
   fact: SemanticFact
   clauseId: string
   contractId: string
   versionNumber: number
+  replacesConceptCorrection: boolean
+  onRefresh: () => void
 }) {
   const fields = factEditorFields(fact.factSchema)
   const correct = useCorrectClauseFacts(contractId, versionNumber)
@@ -122,6 +147,9 @@ function FactEditor({
     for (const field of fields) {
       const value = draft[field.field]
       if (value === undefined) continue
+      if (value.trim() === '') {
+        return `${field.label} is required.`
+      }
       if (field.kind === 'decimal') {
         const number = Number(value)
         if (!Number.isFinite(number) || number <= 0) {
@@ -143,10 +171,6 @@ function FactEditor({
     const validationError = validate()
     if (validationError) {
       setError(validationError)
-      return
-    }
-    if (!hasChanges) {
-      setError('Change at least one value before saving.')
       return
     }
     setError(null)
@@ -219,6 +243,11 @@ function FactEditor({
             )
           })}
         </div>
+        {replacesConceptCorrection ? (
+          <p className="correction__warning" role="status">
+            Saving fact values replaces the classification correction on this clause.
+          </p>
+        ) : null}
         {error ? (
           <p role="alert" className="correction__error">
             {error}
@@ -229,9 +258,7 @@ function FactEditor({
         </button>
       </form>
       {correct.isError ? (
-        <p role="alert" className="correction__error">
-          {correct.error.message}
-        </p>
+        <CorrectionFailure error={correct.error} onRefresh={onRefresh} />
       ) : null}
       {correct.isSuccess && !correct.isPending ? (
         <p role="status" className="correction__status">
@@ -246,10 +273,12 @@ export function ClauseFacts({
   clause,
   contractId,
   versionNumber,
+  onRefresh,
 }: {
   clause: SemanticClause
   contractId: string
   versionNumber: number
+  onRefresh: () => void
 }) {
   const machineBySchema = new Map(
     clause.machineFacts.map((fact) => [fact.factSchema, fact]),
@@ -278,6 +307,8 @@ export function ClauseFacts({
             clauseId={clause.id}
             contractId={contractId}
             versionNumber={versionNumber}
+            hasConceptCorrection={clause.correctedPrimaryConcept !== null}
+            onRefresh={onRefresh}
           />
         ))
       )}
