@@ -8,6 +8,8 @@ import java.util.UUID;
 /**
  * An immutable uploaded legal knowledge source. Original bytes are never mutated;
  * {@code sha256} identifies the exact stored content (Architecture Decision #11).
+ * The human-declared artifact type remains authoritative; the machine assessment is
+ * advisory evidence retained beside it.
  */
 public record KnowledgeArtifact(
         UUID id,
@@ -22,6 +24,7 @@ public record KnowledgeArtifact(
         IngestStatus ingestStatus,
         String parserVersion,
         List<String> parseWarnings,
+        ArtifactTypeAssessment assessment,
         Instant createdAt) {
 
     public KnowledgeArtifact {
@@ -49,6 +52,12 @@ public record KnowledgeArtifact(
             String parserVersion, IngestStatus status, List<String> warnings) {
         return new KnowledgeArtifact(id, organizationId, artifactType, filename, contentType,
                 sizeBytes, sha256, storageKey, manifest, status, parserVersion, warnings,
-                createdAt);
+                assessment, createdAt);
+    }
+
+    public KnowledgeArtifact withAssessment(ArtifactTypeAssessment assessed) {
+        return new KnowledgeArtifact(id, organizationId, artifactType, filename, contentType,
+                sizeBytes, sha256, storageKey, manifest, ingestStatus, parserVersion,
+                parseWarnings, assessed, createdAt);
     }
 }

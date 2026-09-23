@@ -83,6 +83,7 @@ class ExtractionUnitConceptClassificationIT {
                 "concept_limitation_of_liability", 0.05,
                 "concept_indemnification", 0.02,
                 "concept_governing_law", 0.11);
+        private volatile Map<String, String> choices = Map.of();
         private volatile RuntimeException failure;
         private volatile DecisionExecutionRequest lastRequest;
 
@@ -111,12 +112,37 @@ class ExtractionUnitConceptClassificationIT {
             }
             this.lastRequest = request;
             var answers = new LinkedHashMap<String, com.rivell.workbench.intelligence.SemanticAnswer>();
-            for (var name : request.pack().questions().keySet()) {
-                answers.put(name, new com.rivell.workbench.intelligence.YesNoAnswer(
-                        probabilities.getOrDefault(name, 0.5)));
+            for (var entry : request.pack().questions().entrySet()) {
+                var question = entry.getValue();
+                if (question instanceof com.rivell.workbench.intelligence.ChoiceQuestion choice) {
+                    var selected = scriptedChoice(entry.getKey(), choice, request);
+                    var probabilitiesMap = new LinkedHashMap<String, Double>();
+                    for (var option : choice.criteria().keySet()) {
+                        probabilitiesMap.put(option, option.equals(selected) ? 1.0 : 0.0);
+                    }
+                    answers.put(entry.getKey(), new com.rivell.workbench.intelligence.ChoiceAnswer(
+                            selected, 1.0, probabilitiesMap));
+                } else {
+                    answers.put(entry.getKey(), new com.rivell.workbench.intelligence.YesNoAnswer(
+                            probabilities.getOrDefault(entry.getKey(), 0.5)));
+                }
             }
             return new ProviderExecutionResult(
                     answers, "fake-resolved-v2", new TokenUsage(180, 6));
+        }
+
+        private String scriptedChoice(
+                String name, com.rivell.workbench.intelligence.ChoiceQuestion question,
+                DecisionExecutionRequest request) {
+            var scripted = choices.get(name);
+            if (scripted != null) {
+                return scripted;
+            }
+            if (name.equals("artifact_class") && request.state().payload() instanceof java.util.Map<?, ?> payload
+                    && payload.get("declaredType") instanceof String declared) {
+                return declared;
+            }
+            return question.criteria().keySet().iterator().next();
         }
     }
 

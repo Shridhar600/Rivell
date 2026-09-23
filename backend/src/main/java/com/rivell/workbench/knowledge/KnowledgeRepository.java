@@ -16,6 +16,8 @@ public interface KnowledgeRepository {
     void updateIngestOutcome(
             UUID artifactId, String parserVersion, IngestStatus status, List<String> warnings);
 
+    void updateArtifactAssessment(UUID artifactId, ArtifactTypeAssessment assessment);
+
     Optional<KnowledgeArtifact> findArtifact(UUID artifactId, UUID organizationId);
 
     List<KnowledgeArtifact> listArtifacts(UUID organizationId);

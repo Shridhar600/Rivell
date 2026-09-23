@@ -14,12 +14,24 @@ import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({KnowledgeUploadProperties.class, ConceptClassificationProperties.class})
+@EnableConfigurationProperties({
+        KnowledgeUploadProperties.class, ConceptClassificationProperties.class,
+        SemanticPolicyProperties.class})
 class KnowledgeServicesConfiguration {
 
     @Bean
     DecisionSpec extractionUnitConceptSpec() {
         return ExtractionUnitConceptSpec.spec();
+    }
+
+    @Bean
+    SemanticCompilationService semanticCompilationService(
+            com.rivell.workbench.intelligence.SemanticDecisionService decisionService,
+            SemanticPolicyProperties policyProperties,
+            ConceptClassificationProperties conceptProperties,
+            DuplicateConflictDetector conflictDetector) {
+        return new SemanticCompilationService(
+                decisionService, policyProperties, conceptProperties, conflictDetector);
     }
 
     @Bean
@@ -32,7 +44,7 @@ class KnowledgeServicesConfiguration {
             DocumentStorage documentStorage,
             List<KnowledgeStructureExtractor> structureExtractors,
             KnowledgeRepository knowledgeRepository,
-            DuplicateConflictDetector duplicateConflictDetector,
+            SemanticCompilationService semanticCompilationService,
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
@@ -41,7 +53,7 @@ class KnowledgeServicesConfiguration {
                 documentStorage,
                 structureExtractors,
                 knowledgeRepository,
-                duplicateConflictDetector,
+                semanticCompilationService,
                 transactionTemplate,
                 identityProvider,
                 authorizationService,

@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.knowledge.ApplicabilityScope;
 import com.rivell.workbench.knowledge.ArtifactManifest;
 import com.rivell.workbench.knowledge.ArtifactType;
+import com.rivell.workbench.knowledge.ArtifactTypeAssessment;
 import com.rivell.workbench.knowledge.CandidatePayload;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.ConflictSignal;
@@ -68,12 +69,13 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                          sha256, storage_key, declared_contract_types, contract_pack_key,
                          party_perspective, paper_source, jurisdiction, language, effective_from,
                          effective_to, manifest_note, ingest_status, parser_version, parse_warnings,
-                         created_at)
+                         artifact_assessment, created_at)
                         values (:id, :organizationId, :artifactType, :filename, :contentType,
                                 :sizeBytes, :sha256, :storageKey, :declaredContractTypes::jsonb,
                                 :contractPackKey, :partyPerspective, :paperSource, :jurisdiction,
                                 :language, :effectiveFrom, :effectiveTo, :manifestNote,
-                                :ingestStatus, :parserVersion, :parseWarnings::jsonb, :createdAt)
+                                :ingestStatus, :parserVersion, :parseWarnings::jsonb,
+                                :artifactAssessment::jsonb, :createdAt)
                         """)
                 .param("id", artifact.id())
                 .param("organizationId", artifact.organizationId())
@@ -95,6 +97,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .param("ingestStatus", artifact.ingestStatus().name())
                 .param("parserVersion", artifact.parserVersion())
                 .param("parseWarnings", writeList(artifact.parseWarnings()))
+                .param("artifactAssessment", writeArtifactAssessment(artifact.assessment()))
                 .param("createdAt", Timestamp.from(artifact.createdAt()))
                 .update();
     }
@@ -112,6 +115,19 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .param("parserVersion", parserVersion)
                 .param("status", status.name())
                 .param("warnings", writeList(warnings))
+                .param("id", artifactId)
+                .update();
+    }
+
+    @Override
+    @Transactional
+    public void updateArtifactAssessment(UUID artifactId, ArtifactTypeAssessment assessment) {
+        jdbcClient.sql("""
+                        update knowledge_artifact
+                        set artifact_assessment = :assessment::jsonb
+                        where id = :id
+                        """)
+                .param("assessment", writeArtifactAssessment(assessment))
                 .param("id", artifactId)
                 .update();
     }
@@ -525,6 +541,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 IngestStatus.valueOf(rs.getString("ingest_status")),
                 rs.getString("parser_version"),
                 readList(rs.getString("parse_warnings")),
+                readArtifactAssessment(rs.getString("artifact_assessment")),
                 instant(rs, "created_at"));
     }
 
@@ -830,6 +847,43 @@ private String writeUuidList(List<UUID> values) {
 
     private ReviewCategory readReviewCategory(String value) {
         return value == null ? null : ReviewCategory.valueOf(value);
+    }
+
+    private String writeArtifactAssessment(ArtifactTypeAssessment assessment) {
+        if (assessment == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(java.util.Map.of(
+                    "assessedType", assessment.assessedType().name(),
+                    "probability", assessment.probability(),
+                    "state", assessment.state().name(),
+                    "specId", assessment.specId(),
+                    "specVersion", assessment.specVersion(),
+                    "executionId", assessment.executionId().toString(),
+                    "warnings", assessment.warnings()));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize artifact assessment", e);
+        }
+    }
+
+    private ArtifactTypeAssessment readArtifactAssessment(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            var node = objectMapper.readTree(json);
+            return new ArtifactTypeAssessment(
+                    ArtifactType.valueOf(node.get("assessedType").asText()),
+                    node.get("probability").asDouble(),
+                    ArtifactTypeAssessment.AssessmentState.valueOf(node.get("state").asText()),
+                    node.get("specId").asText(),
+                    node.get("specVersion").asInt(),
+                    UUID.fromString(node.get("executionId").asText()),
+                    readList(node.get("warnings").toString()));
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not read artifact assessment", e);
+        }
     }
 
     private record PublicationRow(UUID id, long number, String note, Instant createdAt) {

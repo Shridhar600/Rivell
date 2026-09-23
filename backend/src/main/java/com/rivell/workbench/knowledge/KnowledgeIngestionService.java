@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -17,6 +18,7 @@ import org.springframework.util.unit.DataSize;
 import com.rivell.workbench.foundation.DocumentStorage;
 import com.rivell.workbench.foundation.FilenameSanitizer;
 import com.rivell.workbench.foundation.StorageKey;
+import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
@@ -39,7 +41,7 @@ public class KnowledgeIngestionService {
     private final DocumentStorage documentStorage;
     private final List<KnowledgeStructureExtractor> structureExtractors;
     private final KnowledgeRepository repository;
-    private final DuplicateConflictDetector duplicateConflictDetector;
+    private final SemanticCompilationService semanticCompilation;
     private final TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
@@ -49,7 +51,7 @@ public class KnowledgeIngestionService {
             DocumentStorage documentStorage,
             List<KnowledgeStructureExtractor> structureExtractors,
             KnowledgeRepository repository,
-            DuplicateConflictDetector duplicateConflictDetector,
+            SemanticCompilationService semanticCompilation,
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
@@ -57,7 +59,7 @@ public class KnowledgeIngestionService {
         this.documentStorage = documentStorage;
         this.structureExtractors = List.copyOf(structureExtractors);
         this.repository = repository;
-        this.duplicateConflictDetector = duplicateConflictDetector;
+        this.semanticCompilation = semanticCompilation;
         this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
@@ -91,7 +93,7 @@ public class KnowledgeIngestionService {
                 artifactId, identity.organizationId(), artifactType,
                 safeFilename, resolvedContentType(safeFilename, contentType),
                 bytes.length, sha256, storageKey.value(),
-                effectiveManifest, IngestStatus.EXTRACTING, null, List.of(), now);
+                effectiveManifest, IngestStatus.EXTRACTING, null, List.of(), null, now);
 
         try {
             transactionTemplate.executeWithoutResult(status ->
@@ -102,27 +104,45 @@ public class KnowledgeIngestionService {
                     ? new KnowledgeCompiler.CompiledKnowledge(List.of(), List.of(), extraction.warnings())
                     : KnowledgeCompiler.compile(artifact, extraction.nodes());
 
-            var publishedBefore = repository.findPublishedCandidates(identity.organizationId());
-            var candidates = compiled.units().isEmpty()
-                    ? List.<KnowledgeCandidate>of()
-                    : compiled.candidates().stream()
-                            .map(candidate -> candidate.withConflictSignals(
-                                    duplicateConflictDetector.inspect(candidate, publishedBefore)))
-                            .toList();
+            var initialAssessment = artifact.assessment();
+            var initialCandidates = compiled.candidates();
+            var semanticAvailable = true;
+            ArtifactTypeAssessment assessment = initialAssessment;
+            List<KnowledgeCandidate> candidates = initialCandidates;
+            if (extraction.status() != IngestStatus.FAILED && !compiled.units().isEmpty()) {
+                var publishedBefore = repository.findPublishedCandidates(identity.organizationId());
+                var semantic = semanticCompilation.compile(
+                        artifact, compiled.units(), compiled.candidates(), publishedBefore);
+                semanticAvailable = semantic.semanticAvailable();
+                assessment = semantic.assessment();
+                candidates = semantic.candidates();
+            }
+            var finalAssessment = assessment;
+            var finalCandidates = candidates;
 
+            var outcomeWarnings = new ArrayList<>(extraction.warnings());
+            if (!semanticAvailable) {
+                outcomeWarnings.add("SEMANTIC_COMPILATION_UNAVAILABLE");
+            }
+            var outcomeStatus = extraction.status();
             transactionTemplate.executeWithoutResult(status -> {
                 repository.updateIngestOutcome(
-                        artifactId, extraction.parserVersion(), extraction.status(),
-                        extraction.warnings());
+                        artifactId, extraction.parserVersion(), outcomeStatus,
+                        outcomeWarnings);
+                if (finalAssessment != null) {
+                    repository.updateArtifactAssessment(artifactId, finalAssessment);
+                }
                 if (!extraction.nodes().isEmpty()) {
                     repository.insertNodes(artifactId, extraction.nodes());
                     repository.insertUnits(artifactId, compiled.units());
-                    repository.insertCandidates(artifactId, candidates);
+                    repository.insertCandidates(artifactId, finalCandidates);
                 }
             });
 
-            return artifact.withIngestOutcome(
-                    extraction.parserVersion(), extraction.status(), extraction.warnings());
+            return artifact
+                    .withAssessment(finalAssessment)
+                    .withIngestOutcome(
+                            extraction.parserVersion(), outcomeStatus, outcomeWarnings);
         } catch (RuntimeException e) {
             deleteQuietly(storageKey);
             throw e;
