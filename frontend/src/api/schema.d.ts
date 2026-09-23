@@ -73,6 +73,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/candidates/bulk-approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve multiple eligible pending candidates; eligibility is determined by the server */
+        post: operations["bulkApprove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/artifacts": {
         parameters: {
             query?: never;
@@ -317,6 +334,9 @@ export interface components {
     schemas: {
         PublishRequest: {
             candidateIds?: string[];
+            supersededCandidates?: {
+                [key: string]: string;
+            };
             note?: string;
         };
         /** @description Error returned by contract API failures */
@@ -381,6 +401,15 @@ export interface components {
                 [key: string]: string;
             };
             legalConceptKey?: string;
+            classifiedConcepts?: {
+                [key: string]: number;
+            };
+            positions?: ("PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED")[];
+            /** @enum {string} */
+            variantRole?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
+            escalationTrigger?: string;
+            requiresApproval?: boolean;
+            interpretations?: components["schemas"]["InterpretationView"][];
             editedContentText?: string;
             editedPayloadColumns?: {
                 [key: string]: string;
@@ -397,6 +426,9 @@ export interface components {
             /** Format: date */
             effectiveTo?: string;
             conflictSignals?: components["schemas"]["ConflictSignalView"][];
+            /** @enum {string} */
+            reviewCategory?: "ROUTINE" | "ELEVATED" | "HIGH";
+            reviewReasons?: ("DUPLICATE_DETECTED" | "CONFLICT_DETECTED" | "SUPERSESSION_PROPOSED" | "ARTIFACT_TYPE_MISMATCH" | "VERIFICATION_DISPUTED" | "UNVERIFIED_GENERATIVE_FIELD" | "LOW_CLASSIFICATION_CONFIDENCE" | "NEW_PROHIBITED_OR_ESCALATION_POSITION" | "SCOPE_NARROWING_PROPOSED" | "SEMANTIC_ANALYSIS_UNAVAILABLE" | "SEMANTIC_COMPILATION_UNAVAILABLE")[];
             reviewNote?: string;
             /** Format: date-time */
             reviewedAt?: string;
@@ -412,12 +444,60 @@ export interface components {
             /** Format: uuid */
             publishedCandidateId?: string;
         };
+        InterpretationView: {
+            field?: string;
+            proposedValue?: string;
+            kind?: string;
+            specId?: string;
+            /** Format: int32 */
+            specVersion?: number;
+            /** Format: int32 */
+            supportingSourceNodes?: number;
+            /** @enum {string} */
+            verification?: "NOT_VERIFIED" | "VERIFIED" | "UNCERTAIN" | "DISPUTED";
+        };
         ReviewEditRequest: {
             contentText?: string;
             payloadColumns?: {
                 [key: string]: string;
             };
+            scope?: components["schemas"]["ScopeEdit"];
+            semanticFields?: components["schemas"]["SemanticEdit"];
             note?: string;
+        };
+        ScopeEdit: {
+            contractPackKey?: string;
+            declaredContractTypes?: string[];
+            partyPerspective?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveTo?: string;
+        };
+        SemanticEdit: {
+            positions?: ("PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED")[];
+            requiresApproval?: boolean;
+            escalationTrigger?: string;
+            /** @enum {string} */
+            variantRole?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
+        };
+        BulkApproveRequest: {
+            candidateIds?: string[];
+        };
+        ApiResultBulkApprovalView: {
+            data?: components["schemas"]["BulkApprovalView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        BulkApprovalView: {
+            approvedIds?: string[];
+            skipped?: {
+                [key: string]: string;
+            };
         };
         ApiResultKnowledgeArtifactDetailResponse: {
             data?: components["schemas"]["KnowledgeArtifactDetailResponse"];
@@ -425,6 +505,16 @@ export interface components {
             status?: number;
             /** Format: date-time */
             timestamp?: string;
+        };
+        ArtifactAssessmentView: {
+            assessedType?: string;
+            /** Format: double */
+            probability?: number;
+            state?: string;
+            specId?: string;
+            /** Format: int32 */
+            specVersion?: number;
+            warnings?: string[];
         };
         KnowledgeArtifactDetailResponse: {
             /** Format: uuid */
@@ -452,6 +542,7 @@ export interface components {
             ingestStatus?: "RECEIVED" | "EXTRACTING" | "EXTRACTED" | "FAILED";
             parserVersion?: string;
             parseWarnings?: string[];
+            artifactAssessment?: components["schemas"]["ArtifactAssessmentView"];
             /** Format: date-time */
             createdAt?: string;
         };
@@ -934,6 +1025,48 @@ export interface operations {
             };
             /** @description Invalid state for this operation */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    bulkApprove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultBulkApprovalView"];
+                };
+            };
+            /** @description No candidates supplied */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A candidate does not exist in this organization */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

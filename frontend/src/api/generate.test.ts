@@ -241,6 +241,79 @@ describe('generated OpenAPI client workflow', () => {
     expect(unknownConcept).toBe('FORCE_MAJEURE')
   })
 
+  it('documents the M4 semantic compilation contract', () => {
+    expect('/api/knowledge/candidates/bulk-approve' satisfies keyof paths).toBe(
+      '/api/knowledge/candidates/bulk-approve',
+    )
+
+    type Bulk =
+      paths['/api/knowledge/candidates/bulk-approve']['post']['responses'][200]['content']['*/*']
+    const bulk: Bulk = {
+      data: {
+        approvedIds: ['11111111-1111-1111-1111-111111111111'],
+        skipped: { '22222222-2222-2222-2222-222222222222': 'not ROUTINE' },
+      },
+      status: 200,
+      timestamp: '2026-09-23T14:00:00Z',
+    }
+    expect(bulk.data?.skipped).toBeDefined()
+
+    const publish: NonNullable<
+      paths['/api/knowledge/publications']['post']['requestBody']
+    >['content']['application/json'] = {
+      candidateIds: ['11111111-1111-1111-1111-111111111111'],
+      supersededCandidates: {
+        '11111111-1111-1111-1111-111111111111':
+          '22222222-2222-2222-2222-222222222222',
+      },
+      note: 'Q4 refresh',
+    }
+    expect(publish.supersededCandidates).toBeDefined()
+
+    const edit: NonNullable<
+      paths['/api/knowledge/candidates/{id}/edit']['post']['requestBody']
+    >['content']['application/json'] = {
+      contentText: 'Edited',
+      scope: { jurisdiction: 'US', declaredContractTypes: ['MSA'] },
+      semanticFields: {
+        positions: ['PREFERRED'],
+        requiresApproval: true,
+        variantRole: 'FALLBACK',
+        escalationTrigger: 'GC approval above 2x',
+      },
+      note: 'clarified',
+    }
+    expect(edit.semanticFields?.positions).toEqual(['PREFERRED'])
+
+    const candidate: components['schemas']['CandidateView'] = {
+      reviewCategory: 'HIGH',
+      reviewReasons: ['VERIFICATION_DISPUTED', 'CONFLICT_DETECTED'],
+      positions: ['PREFERRED'],
+      variantRole: 'UNSPECIFIED',
+      requiresApproval: true,
+      escalationTrigger: 'GC approval above 2x',
+      classifiedConcepts: { INDEMNIFICATION: 0.7 },
+      interpretations: [
+        {
+          field: 'positions',
+          proposedValue: 'PREFERRED',
+          kind: 'BOUNDED_CLASSIFICATION',
+          specId: 'playbook-position',
+          specVersion: 1,
+          supportingSourceNodes: 2,
+          verification: 'NOT_VERIFIED',
+        },
+      ],
+    }
+    expect(candidate.reviewCategory).toBe('HIGH')
+
+    // @ts-expect-error review category is a closed enum in the M4 contract
+    const unknownCategory: NonNullable<
+      components['schemas']['CandidateView']['reviewCategory']
+    > = 'CRITICAL'
+    expect(unknownCategory).toBe('CRITICAL')
+  })
+
   it('types corrected required, nullable, enum and error contract fields', () => {
     const ingest: IngestResponse = {
       contractId: '11111111-1111-1111-1111-111111111111',
