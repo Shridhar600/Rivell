@@ -476,6 +476,34 @@ public class ContractEnrichmentIT {
     }
 
     @Test
+    void generativeExtractionServesOpenEndedCapValue() throws Exception {
+        var bytes = fixtureBytes("m5-dual-concept.docx");
+        var ingested = ingestionService.ingest("m5-dual-concept.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+
+        var liability = semantics.clauses().stream()
+                .filter(clause -> clause.contentText().contains("aggregate liability"))
+                .findFirst()
+                .orElseThrow();
+        var capFacts = liability.facts().stream()
+                .filter(fact -> fact.factSchema().equals("liability-facts"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(capFacts.values()).containsEntry("liabilityCapMultiple", "4");
+        assertThat(capFacts.values()).containsEntry("capBasis", "PRECEDING_12_MONTH_FEES");
+        var interpretation = liability.interpretations().stream()
+                .filter(candidate -> candidate.field().equals("liabilityCapMultiple"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(interpretation.kind()).isEqualTo(InterpretationKind.GENERATIVE_EXTRACTION);
+        assertThat(interpretation.verification()).isEqualTo(VerificationState.VERIFIED);
+        assertThat(interpretation.verificationExecutionId()).isNotNull();
+    }
+
+    @Test
     void crossOrganizationSemanticStateIsInvisible() throws Exception {
         var bytes = fixtureBytes("m5-nda-counterparty.docx");
         var ingested = ingestionService.ingest("m5-nda-counterparty.docx",

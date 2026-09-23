@@ -202,10 +202,10 @@ dual_concept_body = (
     + p('This amendment is entered into as of June 1, 2026 by and between '
         'Meridian Media Corp ("Customer") and Bluepeak Software Ltd ("Supplier").', 'Normal')
     + p('6. Limitation of Liability', 'Heading1')
-    + p('1.1 Supplier\'s aggregate liability shall not exceed the Fees paid in the '
-        'preceding twelve (12) months. Supplier shall further indemnify Customer '
-        'against third-party intellectual property infringement claims arising from '
-        'the licensed software.', 'Normal')
+    + p('1.1 Supplier\'s aggregate liability shall not exceed four times the Fees paid '
+        'in the twelve (12) months immediately preceding the claim. Supplier shall '
+        'further indemnify Customer against third-party intellectual property '
+        'infringement claims arising from the licensed software.', 'Normal')
     + p('2. Data Protection', 'Heading1')
     + p('2.1 Each Party shall process personal data only on documented instructions '
         'from the other Party and shall implement appropriate technical and '
