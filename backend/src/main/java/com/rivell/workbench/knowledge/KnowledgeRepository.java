@@ -49,6 +49,7 @@ public interface KnowledgeRepository {
             CandidatePayload editedPayload,
             SemanticFields editedSemanticFields,
             ApplicabilityScope scope,
+            UUID supersedingCandidateId,
             String reviewNote,
             Instant reviewedAt,
             Instant updatedAt);

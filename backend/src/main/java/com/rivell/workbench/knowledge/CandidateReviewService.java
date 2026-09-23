@@ -121,6 +121,7 @@ public class CandidateReviewService {
                 updated.id(), identity.organizationId(), candidate.reviewStatus(),
                 updated.reviewStatus(), updated.editedContentText(),
                 updated.editedPayload(), updated.editedSemanticFields(), updated.scope(),
+                updated.supersedingCandidateId(),
                 updated.reviewNote(), updated.reviewedAt(),
                 updated.updatedAt());
         return updated;

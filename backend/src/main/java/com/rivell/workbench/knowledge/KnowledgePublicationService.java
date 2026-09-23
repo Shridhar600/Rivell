@@ -107,6 +107,7 @@ public class KnowledgePublicationService {
                         candidate.id(), organizationId, candidate.reviewStatus(),
                         ReviewStatus.PUBLISHED, candidate.editedContentText(),
                         candidate.editedPayload(), candidate.editedSemanticFields(), candidate.scope(),
+                        candidate.supersedingCandidateId(),
                         candidate.reviewNote(), candidate.reviewedAt(),
                         now);
             }

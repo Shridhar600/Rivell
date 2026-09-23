@@ -245,6 +245,57 @@ class KnowledgeReviewPublicationIT {
                 .isEqualTo(ReviewStatus.APPROVED);
     }
 
+    @Test
+    void humanSupersessionSelectionPersistsOnCandidateAndPublication() throws Exception {
+        var first = ingestClauseLibrary();
+        var candidateA = firstVariant(first);
+        reviewService.approve(candidateA.id(), null);
+        publicationService.publish(java.util.List.of(candidateA.id()), null, "v1");
+
+        var second = ingestClauseLibrary();
+        var candidateB = firstVariant(second);
+        reviewService.approve(candidateB.id(), null);
+
+        var publication = publicationService.publish(
+                java.util.List.of(candidateB.id()),
+                java.util.Map.of(candidateB.id(), candidateA.id()),
+                "B replaces A");
+
+        // publication detail carries the explicit human-authorized SUPERSEDE item
+        var reloadedPublication = queryService.getPublication(publication.id());
+        assertThat(reloadedPublication.items())
+                .anyMatch(item -> item.action() == PublicationAction.SUPERSEDE
+                        && item.candidateId().equals(candidateB.id())
+                        && item.supersededCandidateId().equals(candidateA.id()));
+
+        // the candidate-level replaces relationship must survive reload
+        var reloadedB = queryService.getCandidate(candidateB.id());
+        assertThat(reloadedB.supersedingCandidateId()).isEqualTo(candidateA.id());
+    }
+
+    @Test
+    void crossOrganizationSupersessionIsRejected() throws Exception {
+        var first = ingestClauseLibrary();
+        var candidateA = firstVariant(first);
+        reviewService.approve(candidateA.id(), null);
+        publicationService.publish(java.util.List.of(candidateA.id()), null, null);
+
+        // candidate A belongs to the FIRST organization; B is ingested, approved and
+        // published in a SECOND organization where A does not exist — the supersession
+        // must be rejected (the foreign published candidate is invisible)
+        identityProvider.use(new UserIdentity(
+                identityProvider.current.userId(),
+                java.util.UUID.randomUUID(), java.util.Set.of("ADMIN")));
+        var second = ingestClauseLibrary();
+        var candidateB = firstVariant(second);
+        reviewService.approve(candidateB.id(), null);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> publicationService.publish(
+                java.util.List.of(candidateB.id()),
+                java.util.Map.of(candidateB.id(), candidateA.id()), null))
+                .isInstanceOf(InvalidPublicationException.class);
+    }
+
     private KnowledgeArtifact ingestClauseLibrary() {
         try (var stream = getClass().getClassLoader()
                 .getResourceAsStream("fixtures/clause-library.docx")) {

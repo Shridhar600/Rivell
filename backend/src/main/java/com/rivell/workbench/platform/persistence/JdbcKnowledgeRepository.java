@@ -379,12 +379,14 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             UUID candidateId, UUID organizationId, ReviewStatus expectedStatus,
             ReviewStatus reviewStatus, String editedContentText,
             CandidatePayload editedPayload, SemanticFields editedSemanticFields,
-            ApplicabilityScope scope, String reviewNote, Instant reviewedAt, Instant updatedAt) {
+            ApplicabilityScope scope, UUID supersedingCandidateId, String reviewNote,
+            Instant reviewedAt, Instant updatedAt) {
         jdbcClient.sql("""
                         update knowledge_candidate
                         set review_status = :reviewStatus, edited_content_text = :editedContentText,
                             edited_payload = :editedPayload::jsonb,
                             edited_semantic_fields = :editedSemanticFields::jsonb,
+                            superseding_candidate_id = :supersedingCandidateId,
                             contract_pack_key = :contractPackKey,
                             declared_contract_types = :declaredContractTypes::jsonb,
                             party_perspective = :partyPerspective, paper_source = :paperSource,
@@ -406,6 +408,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .param("jurisdiction", scope.jurisdiction())
                 .param("effectiveFrom", scope.effectiveFrom())
                 .param("effectiveTo", scope.effectiveTo())
+                .param("supersedingCandidateId", supersedingCandidateId)
                 .param("reviewNote", reviewNote)
                 .param("reviewedAt", toTimestamp(reviewedAt))
                 .param("updatedAt", Timestamp.from(updatedAt))
