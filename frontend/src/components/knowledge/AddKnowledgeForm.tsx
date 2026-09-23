@@ -176,7 +176,11 @@ export function AddKnowledgeForm() {
             value={form.artifactType}
             disabled={upload.isPending}
             aria-invalid={errors.artifactType ? true : undefined}
-            aria-describedby="knowledge-artifact-type-hint"
+            aria-describedby={
+              errors.artifactType
+                ? 'knowledge-artifact-type-hint knowledge-artifact-type-error'
+                : 'knowledge-artifact-type-hint'
+            }
             onChange={(event) =>
               setField('artifactType', event.target.value as ArtifactType | '')
             }
@@ -194,7 +198,7 @@ export function AddKnowledgeForm() {
               : 'The selected type is authoritative and defines how Rivell compiles this source.'}
           </p>
           {errors.artifactType ? (
-            <p className="field__error" role="alert">
+            <p id="knowledge-artifact-type-error" className="field__error" role="alert">
               {errors.artifactType}
             </p>
           ) : null}

@@ -28,10 +28,6 @@ export type ParseStatus = IngestResponse['parseStatus']
 
 const PARSE_STATUSES: readonly ParseStatus[] = ['PARSING', 'OK', 'FAILED']
 
-export function isParseStatus(value: unknown): value is ParseStatus {
-  return typeof value === 'string' && (PARSE_STATUSES as readonly string[]).includes(value)
-}
-
 function parseSourceSpan(value: unknown, what: string): SourceSpan {
   const span = asRecord(value, what)
   return {
