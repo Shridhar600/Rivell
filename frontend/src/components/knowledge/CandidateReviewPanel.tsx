@@ -209,9 +209,9 @@ export function CandidateReviewPanel({
             </dd>
           </div>
           <SemanticFieldReview candidate={candidate} />
-          {!hasPayload && effectiveText ? (
+          {effectiveText && (!hasPayload || textDiverged) ? (
             <div className="data-list__row">
-              <dt>Content</dt>
+              <dt>{hasPayload ? 'Extracted text' : 'Content'}</dt>
               <dd className="extracted-content">{effectiveText}</dd>
             </div>
           ) : null}

@@ -815,6 +815,36 @@ describe('candidate review workspace', () => {
     expect(within(panel).getByText('MACHINE TEXT')).toBeInTheDocument()
   })
 
+
+  it('renders edited text for payload-row candidates', async () => {
+    stubKnowledgeApi({
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Liability cap',
+          contentText: 'Liability cap | 1x annual fees',
+          payloadColumns: { Clause: 'Liability cap', Preferred: '1x annual fees' },
+          editedContentText: 'Liability cap | 1x annual fees | reviewed',
+          editedPayloadColumns: { Clause: 'Liability cap', Preferred: '1x annual fees' },
+          reviewStatus: 'EDITED',
+        }),
+      ],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    expect(
+      within(panel).getByText('Liability cap | 1x annual fees | reviewed'),
+    ).toBeInTheDocument()
+    expect(
+      within(panel).getByRole('heading', { name: /machine proposal/i }),
+    ).toBeInTheDocument()
+    expect(
+      within(panel).getByText('Liability cap | 1x annual fees'),
+    ).toBeInTheDocument()
+  })
+
   it('shows a disputed generative proposal instead of hiding it', async () => {
     stubKnowledgeApi({
       candidates: [
