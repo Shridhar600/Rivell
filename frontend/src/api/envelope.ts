@@ -51,6 +51,50 @@ export function readNullableNumber(
   return value
 }
 
+export function readOptionalNullableString(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): string | null {
+  const value = source[key]
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string') throw malformed(what)
+  return value
+}
+
+export function readOptionalNullableNumber(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): number | null {
+  const value = source[key]
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw malformed(what)
+  return value
+}
+
+export function readOptionalBoolean(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): boolean {
+  const value = source[key]
+  if (value === null || value === undefined) return false
+  if (typeof value !== 'boolean') throw malformed(what)
+  return value
+}
+
+export function readOptionalNumber(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): number {
+  const value = source[key]
+  if (value === null || value === undefined) return 0
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw malformed(what)
+  return value
+}
+
 export function readStringArray(
   source: Record<string, unknown>,
   key: string,
