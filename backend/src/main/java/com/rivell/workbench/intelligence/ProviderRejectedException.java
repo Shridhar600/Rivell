@@ -6,4 +6,8 @@ public class ProviderRejectedException extends SemanticDecisionException {
     public ProviderRejectedException(String message) {
         super(message);
     }
+
+    public ProviderRejectedException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
