@@ -44,6 +44,22 @@ class IntelligenceConfiguration {
     }
 
     @Bean
+    GenerativeProviderRegistry generativeProviderRegistry(
+            List<com.rivell.workbench.intelligence.GenerativeReasoningProvider> providers) {
+        var byId = providers.stream()
+                .collect(Collectors.toMap(
+                        com.rivell.workbench.intelligence.GenerativeReasoningProvider::id,
+                        Function.identity()));
+        return providerId -> Optional.ofNullable(byId.get(providerId));
+    }
+
+    @Bean
+    GenerativeReasoningService generativeReasoningService(
+            ModelPolicy modelPolicy, GenerativeProviderRegistry providerRegistry, Clock clock) {
+        return new GenerativeReasoningService(modelPolicy, providerRegistry, clock);
+    }
+
+    @Bean
     Clock decisionClock() {
         return Clock.systemUTC();
     }

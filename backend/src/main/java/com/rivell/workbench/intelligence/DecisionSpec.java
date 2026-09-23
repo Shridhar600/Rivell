@@ -4,7 +4,8 @@ package com.rivell.workbench.intelligence;
  * A versioned semantic decision: software behavior, not an ad-hoc prompt. A changed
  * question, criterion, or purpose requires a new spec version.
  */
-public record DecisionSpec(String id, int version, String purpose, int stateSchemaVersion, QuestionPack pack) {
+public record DecisionSpec(String id, int version, String purpose, int stateSchemaVersion, QuestionPack pack)
+        implements SemanticAsset {
 
     public DecisionSpec {
         if (id == null || id.isBlank()) {

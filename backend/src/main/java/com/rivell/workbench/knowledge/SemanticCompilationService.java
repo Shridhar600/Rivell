@@ -27,16 +27,19 @@ public class SemanticCompilationService {
     private final SemanticPolicyProperties properties;
     private final ConceptClassificationProperties conceptProperties;
     private final DuplicateConflictDetector conflictDetector;
+    private final GenerativeFieldExtractor generativeFieldExtractor;
 
     public SemanticCompilationService(
             SemanticDecisionService decisionService,
             SemanticPolicyProperties properties,
             ConceptClassificationProperties conceptProperties,
-            DuplicateConflictDetector conflictDetector) {
+            DuplicateConflictDetector conflictDetector,
+            GenerativeFieldExtractor generativeFieldExtractor) {
         this.decisionService = decisionService;
         this.properties = properties;
         this.conceptProperties = conceptProperties;
         this.conflictDetector = conflictDetector;
+        this.generativeFieldExtractor = generativeFieldExtractor;
     }
 
     public record SemanticCompilation(
@@ -127,6 +130,9 @@ public class SemanticCompilationService {
                 ? yesNo.probability() >= properties.approvalProposal()
                 : null;
         builder.positions(positions).requiresApproval(requiresApproval);
+        if (positions.contains(PositionRole.ESCALATION)) {
+            interpretEscalationTrigger(state, stateColumnsHasEscalation(state), builder, fields);
+        }
         if (!positions.isEmpty()) {
             fields.put("positions", new FieldInterpretation(
                     "positions", InterpretationKind.BOUNDED_CLASSIFICATION,
@@ -141,6 +147,52 @@ public class SemanticCompilationService {
                     M4SemanticSpecs.PLAYBOOK_APPROVAL_SPEC, M4SemanticSpecs.playbookPositions().version(),
                     execution.metadata().executionId(), List.of(), VerificationState.NOT_VERIFIED, null));
         }
+    }
+
+    /**
+     * Deterministic first: verbatim table cell values already carry the trigger. Only
+     * free prose without a usable column value goes through generative extraction, and
+     * the extracted value is independently verified before becoming a candidate field.
+     */
+    private void interpretEscalationTrigger(
+            M4SemanticStates.PlaybookUnitState state,
+            boolean deterministicValueAvailable,
+            SemanticFieldsBuilder builder,
+            Map<String, FieldInterpretation> fields) {
+        var verbatim = deterministicValueAvailable
+                ? state.columns().entrySet().stream()
+                        .filter(entry -> entry.getValue() != null
+                                && entry.getValue().toLowerCase(java.util.Locale.ROOT).contains("escalat"))
+                        .map(Map.Entry::getValue)
+                        .findFirst()
+                : java.util.Optional.<String>empty();
+        if (verbatim.isPresent()) {
+            var value = verbatim.get();
+            builder.escalationTrigger(value);
+            fields.put("escalationTrigger", new FieldInterpretation(
+                    "escalationTrigger", InterpretationKind.DETERMINISTIC, value,
+                    "deterministic-column-extraction", 1,
+                    java.util.UUID.randomUUID(), List.of(), VerificationState.VERIFIED, null));
+            return;
+        }
+        var extracted = generativeFieldExtractor.extractEscalationTrigger(state);
+        if (extracted.isPresent()) {
+            var verified = extracted.get();
+            fields.put("escalationTrigger", new FieldInterpretation(
+                    "escalationTrigger", InterpretationKind.GENERATIVE_EXTRACTION, verified.value(),
+                    M4ReasoningSpecs.ESCALATION_TRIGGER_SPEC, M4ReasoningSpecs.escalationTrigger().version(),
+                    verified.generationExecutionId(), List.of(), verified.verification(),
+                    verified.verificationExecutionId()));
+            if (verified.verification() == VerificationState.VERIFIED) {
+                builder.escalationTrigger(verified.value());
+            }
+        }
+    }
+
+    private boolean stateColumnsHasEscalation(M4SemanticStates.PlaybookUnitState state) {
+        return state.columns().values().stream()
+                .anyMatch(value -> value != null
+                        && value.toLowerCase(java.util.Locale.ROOT).contains("escalat"));
     }
 
     private void interpretClauseVariant(
@@ -214,6 +266,11 @@ public class SemanticCompilationService {
 
         SemanticFieldsBuilder variantRole(PositionRole value) {
             this.variantRole = value;
+            return this;
+        }
+
+        SemanticFieldsBuilder escalationTrigger(String value) {
+            this.escalationTrigger = value;
             return this;
         }
 

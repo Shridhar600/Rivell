@@ -25,13 +25,23 @@ class KnowledgeServicesConfiguration {
     }
 
     @Bean
+    GenerativeFieldExtractor generativeFieldExtractor(
+            com.rivell.workbench.intelligence.GenerativeReasoningService reasoningService,
+            com.rivell.workbench.intelligence.SemanticDecisionService decisionService,
+            SemanticPolicyProperties policyProperties) {
+        return new GenerativeFieldExtractor(reasoningService, decisionService, policyProperties);
+    }
+
+    @Bean
     SemanticCompilationService semanticCompilationService(
             com.rivell.workbench.intelligence.SemanticDecisionService decisionService,
             SemanticPolicyProperties policyProperties,
             ConceptClassificationProperties conceptProperties,
-            DuplicateConflictDetector conflictDetector) {
+            DuplicateConflictDetector conflictDetector,
+            GenerativeFieldExtractor generativeFieldExtractor) {
         return new SemanticCompilationService(
-                decisionService, policyProperties, conceptProperties, conflictDetector);
+                decisionService, policyProperties, conceptProperties, conflictDetector,
+                generativeFieldExtractor);
     }
 
     @Bean
