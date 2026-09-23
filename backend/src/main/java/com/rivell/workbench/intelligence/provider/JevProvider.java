@@ -4,24 +4,31 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import com.rivell.workbench.intelligence.ChoiceQuestion;
 import com.rivell.workbench.intelligence.DecisionExecutionRequest;
+import com.rivell.workbench.intelligence.NoProviderConfiguredException;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.intelligence.ProviderRejectedException;
 import com.rivell.workbench.intelligence.ProviderTimeoutException;
 import com.rivell.workbench.intelligence.ProviderUnavailableException;
 import com.rivell.workbench.intelligence.ProviderExecutionResult;
 import com.rivell.workbench.intelligence.RatingQuestion;
+import com.rivell.workbench.intelligence.SemanticAnswer;
 import com.rivell.workbench.intelligence.SemanticDecisionProvider;
 import com.rivell.workbench.intelligence.SemanticQuestion;
 import com.rivell.workbench.intelligence.TokenUsage;
@@ -48,13 +55,12 @@ public final class JevProvider implements SemanticDecisionProvider {
         var httpClient = HttpClient.newBuilder()
                 .connectTimeout(properties.connectTimeout())
                 .build();
-        var requestFactory = new org.springframework.http.client.JdkClientHttpRequestFactory(httpClient);
+        var requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(properties.readTimeout());
         this.restClient = RestClient.builder()
                 .baseUrl(properties.baseUrl())
                 .requestFactory(requestFactory)
-                .defaultHeader(org.springframework.http.HttpHeaders.AUTHORIZATION,
-                        "Bearer " + properties.apiKey())
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
                 .build();
     }
 
@@ -75,9 +81,9 @@ public final class JevProvider implements SemanticDecisionProvider {
     }
 
     @Override
-    public ProviderExecutionResult execute(com.rivell.workbench.intelligence.DecisionExecutionRequest request) {
+    public ProviderExecutionResult execute(DecisionExecutionRequest request) {
         if (!properties.isConfigured()) {
-            throw new com.rivell.workbench.intelligence.NoProviderConfiguredException(
+            throw new NoProviderConfiguredException(
                     "Jev provider has no API key configured");
         }
         var payload = serialize(request);
@@ -94,7 +100,7 @@ public final class JevProvider implements SemanticDecisionProvider {
                     .body(payload)
                     .retrieve()
                     .body(String.class);
-        } catch (org.springframework.web.client.RestClientResponseException e) {
+        } catch (RestClientResponseException e) {
             throw mapHttpFailure(e.getStatusCode());
         } catch (RestClientException e) {
             throw translateTransportFailure(e);
@@ -128,10 +134,10 @@ public final class JevProvider implements SemanticDecisionProvider {
     private ProviderUnavailableException translateTransportFailure(RestClientException e) {
         var cause = e.getCause();
         while (cause != null) {
-            if (cause instanceof java.net.http.HttpTimeoutException) {
+            if (cause instanceof HttpTimeoutException) {
                 throw new ProviderTimeoutException("Provider did not respond in time");
             }
-            if (cause instanceof java.net.http.HttpConnectTimeoutException) {
+            if (cause instanceof HttpConnectTimeoutException) {
                 throw new ProviderTimeoutException("Provider connection timed out");
             }
             cause = cause.getCause();
@@ -140,7 +146,7 @@ public final class JevProvider implements SemanticDecisionProvider {
     }
 
     private ProviderExecutionResult toResult(
-            com.rivell.workbench.intelligence.DecisionExecutionRequest request,
+            DecisionExecutionRequest request,
             JevRequestDtos.SystemOneResponse response) {
         if (response == null || response.model() == null || response.model().isBlank()) {
             throw new ProviderProtocolException("Provider response has no resolved model");
@@ -149,7 +155,7 @@ public final class JevProvider implements SemanticDecisionProvider {
                 || response.usage().inputTokens() == null || response.usage().outputTokens() == null) {
             throw new ProviderProtocolException("Provider response has no token usage");
         }
-        var answers = new LinkedHashMap<String, com.rivell.workbench.intelligence.SemanticAnswer>();
+        var answers = new LinkedHashMap<String, SemanticAnswer>();
         for (var entry : request.pack().questions().entrySet()) {
             var node = response.answers() == null ? null : response.answers().get(entry.getKey());
             if (node == null || node.isNull()) {
@@ -163,7 +169,7 @@ public final class JevProvider implements SemanticDecisionProvider {
                 new TokenUsage(response.usage().inputTokens(), response.usage().outputTokens()));
     }
 
-    private String serialize(com.rivell.workbench.intelligence.DecisionExecutionRequest request) {
+    private String serialize(DecisionExecutionRequest request) {
         var questions = new LinkedHashMap<String, Object>();
         for (var entry : request.pack().questions().entrySet()) {
             questions.put(entry.getKey(), questionPayload(entry.getKey(), entry.getValue()));

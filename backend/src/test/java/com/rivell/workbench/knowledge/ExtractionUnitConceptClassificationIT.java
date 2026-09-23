@@ -177,7 +177,7 @@ class ExtractionUnitConceptClassificationIT {
         var artifact = ingest("fixtures/clause-library.docx", "library.docx");
         var unit = firstTextualUnit(artifact);
 
-        var classification = classifier.classify(unit.id());
+        var classification = classifier.classify(artifact.id(), unit.id());
 
         assertThat(classification.unitId()).isEqualTo(unit.id());
         assertThat(classification.artifactId()).isEqualTo(artifact.id());
@@ -214,7 +214,7 @@ class ExtractionUnitConceptClassificationIT {
                 "concept_indemnification", 0.05,
                 "concept_governing_law", 0.04));
 
-        var classification = classifier.classify(unit.id());
+        var classification = classifier.classify(artifact.id(), unit.id());
 
         assertThat(classification.proposedConcepts()).isEmpty();
         assertThat(classification.noneMatched()).isTrue();
@@ -230,7 +230,7 @@ class ExtractionUnitConceptClassificationIT {
         identityProvider.use(new UserIdentity(
                 ownerIdentity.userId(), java.util.UUID.randomUUID(), Set.of("ADMIN")));
         try {
-            assertThatThrownBy(() -> classifier.classify(unit.id()))
+            assertThatThrownBy(() -> classifier.classify(artifact.id(), unit.id()))
                     .isInstanceOf(KnowledgeUnitNotFoundException.class);
         } finally {
             identityProvider.use(ownerIdentity);
@@ -244,7 +244,7 @@ class ExtractionUnitConceptClassificationIT {
         fakeProvider.failWith(new com.rivell.workbench.intelligence.ProviderUnavailableException(
                 "provider down"));
 
-        assertThatThrownBy(() -> classifier.classify(unit.id()))
+        assertThatThrownBy(() -> classifier.classify(artifact.id(), unit.id()))
                 .isInstanceOf(ConceptClassificationUnavailableException.class);
     }
 
@@ -252,7 +252,7 @@ class ExtractionUnitConceptClassificationIT {
     void rejectsUnitsWithoutText() throws Exception {
         var artifact = ingest("fixtures/knowledge-playbook.docx", "empty.docx");
 
-        assertThatThrownBy(() -> classifier.classify(tableUnitId(artifact)))
+        assertThatThrownBy(() -> classifier.classify(artifact.id(), tableUnitId(artifact)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("no text to classify");
     }

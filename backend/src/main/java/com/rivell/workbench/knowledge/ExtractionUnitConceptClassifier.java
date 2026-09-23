@@ -43,13 +43,16 @@ public class ExtractionUnitConceptClassifier {
         this.authorizationService = authorizationService;
     }
 
-    public UnitConceptClassification classify(UUID unitId) {
+    public UnitConceptClassification classify(UUID artifactId, UUID unitId) {
         var identity = identityProvider.currentIdentity();
         if (!authorizationService.isAuthorized(identity, Permissions.KNOWLEDGE_READ)) {
             throw new UnauthorizedKnowledgeAccessException(identity.userId());
         }
         var unit = repository.findUnit(unitId, identity.organizationId())
                 .orElseThrow(() -> new KnowledgeUnitNotFoundException(unitId));
+        if (!unit.artifactId().equals(artifactId)) {
+            throw new KnowledgeUnitNotFoundException(unitId);
+        }
         if (unit.contentText() == null || unit.contentText().isBlank()) {
             throw new IllegalArgumentException("The extraction unit has no text to classify");
         }

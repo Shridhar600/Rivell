@@ -289,7 +289,7 @@ class KnowledgeController {
     @PostMapping("/artifacts/{artifactId}/units/{unitId}/classification")
     ApiResult<UnitConceptClassificationView> classifyUnit(
             @PathVariable UUID artifactId, @PathVariable UUID unitId) {
-        return ApiResult.ok(UnitConceptClassificationView.from(conceptClassifier.classify(unitId)));
+        return ApiResult.ok(UnitConceptClassificationView.from(conceptClassifier.classify(artifactId, unitId)));
     }
 
     @Operation(summary = "Download the original uploaded knowledge source")

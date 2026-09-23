@@ -86,7 +86,7 @@ final class JevAnswerMapper {
         var probabilities = probabilityMap(questionName, answer.get("probabilities"));
         var expectedKeys = IntStream.range(0, question.levels().size())
                 .mapToObj(String::valueOf)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
         if (!expectedKeys.equals(probabilities.keySet())) {
             throw new ProviderProtocolException(
                     "Answer for " + questionName + " has level probabilities that do not match the rubric");
