@@ -91,6 +91,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/artifacts/{artifactId}/units/{unitId}/classification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Propose the bounded legal concepts an extraction unit expresses */
+        post: operations["classifyUnit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/contracts": {
         parameters: {
             query?: never;
@@ -437,6 +454,49 @@ export interface components {
             parseWarnings?: string[];
             /** Format: date-time */
             createdAt?: string;
+        };
+        ApiResultUnitConceptClassificationView: {
+            data?: components["schemas"]["UnitConceptClassificationView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ConceptView: {
+            /** @enum {string} */
+            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            /** Format: double */
+            probability?: number;
+        };
+        MetadataView: {
+            /** Format: uuid */
+            executionId?: string;
+            specId?: string;
+            /** Format: int32 */
+            specVersion?: number;
+            /** Format: int32 */
+            stateSchemaVersion?: number;
+            providerId?: string;
+            requestedModelAlias?: string;
+            resolvedModel?: string;
+            /** Format: int64 */
+            durationMs?: number;
+            /** Format: int32 */
+            questionCount?: number;
+            /** Format: int32 */
+            inputTokens?: number;
+            /** Format: int32 */
+            outputTokens?: number;
+        };
+        UnitConceptClassificationView: {
+            /** Format: uuid */
+            unitId?: string;
+            /** Format: uuid */
+            artifactId?: string;
+            proposedConcepts?: components["schemas"]["ConceptView"][];
+            evaluatedConcepts?: components["schemas"]["ConceptView"][];
+            noneMatched?: boolean;
+            metadata?: components["schemas"]["MetadataView"];
         };
         ApiResultIngestResponse: {
             data?: components["schemas"]["IngestResponse"];
@@ -959,6 +1019,56 @@ export interface operations {
             };
             /** @description Unsupported knowledge source type */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    classifyUnit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifactId: string;
+                unitId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultUnitConceptClassificationView"];
+                };
+            };
+            /** @description The unit has no text to classify */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unit does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Semantic classification is not available */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

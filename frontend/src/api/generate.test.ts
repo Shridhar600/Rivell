@@ -204,6 +204,43 @@ describe('generated OpenAPI client workflow', () => {
     expect(publication.items?.[0].action).toBe('ADD')
   })
 
+  it('documents the M3 unit-classification endpoint and its domain view', () => {
+    expect(
+      '/api/knowledge/artifacts/{artifactId}/units/{unitId}/classification' satisfies keyof paths,
+    ).toBe('/api/knowledge/artifacts/{artifactId}/units/{unitId}/classification')
+
+    type Classification =
+      paths['/api/knowledge/artifacts/{artifactId}/units/{unitId}/classification']['post']['responses'][200]['content']['*/*']
+
+    const response: Classification = {
+      data: {
+        unitId: '11111111-1111-1111-1111-111111111111',
+        artifactId: '22222222-2222-2222-2222-222222222222',
+        proposedConcepts: [
+          { concept: 'LIMITATION_OF_LIABILITY', probability: 0.91 },
+        ],
+        evaluatedConcepts: [
+          { concept: 'CONFIDENTIALITY', probability: 0.02 },
+          { concept: 'LIMITATION_OF_LIABILITY', probability: 0.91 },
+        ],
+        noneMatched: false,
+      },
+      status: 200,
+      timestamp: '2026-09-23T14:00:00Z',
+    }
+
+    expect(response.data?.proposedConcepts?.[0].concept).toBe(
+      'LIMITATION_OF_LIABILITY',
+    )
+    expect(response.data?.noneMatched).toBe(false)
+
+    // @ts-expect-error the M3 concept set is a closed enum in the contract
+    const unknownConcept: NonNullable<
+      components['schemas']['ConceptView']['concept']
+    > = 'FORCE_MAJEURE'
+    expect(unknownConcept).toBe('FORCE_MAJEURE')
+  })
+
   it('types corrected required, nullable, enum and error contract fields', () => {
     const ingest: IngestResponse = {
       contractId: '11111111-1111-1111-1111-111111111111',
