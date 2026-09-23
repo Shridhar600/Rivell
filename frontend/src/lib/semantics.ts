@@ -6,6 +6,8 @@ import type {
   PositionRole,
   ReviewCategory,
   ReviewReason,
+  ScopeEditInput,
+  SemanticFieldsEditInput,
   VerificationState,
 } from '../api/knowledge'
 
@@ -105,10 +107,19 @@ export function interpretationFor(
   return candidate.interpretations.find((entry) => entry.field === field) ?? null
 }
 
-export function proposedPositions(candidate: Candidate): PositionRole[] | null {
-  const interpretation = interpretationFor(candidate, 'positions')
+export function machineProposalValue(
+  interpretation: Interpretation | null,
+): string | null {
   if (!interpretation) return null
-  return interpretation.proposedValue
+  const value = interpretation.proposedValue.trim()
+  if (value.length === 0 || value === 'UNAVAILABLE') return null
+  return value
+}
+
+export function proposedPositions(candidate: Candidate): PositionRole[] | null {
+  const proposed = machineProposalValue(interpretationFor(candidate, 'positions'))
+  if (proposed === null) return null
+  return proposed
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry): entry is PositionRole =>
@@ -124,26 +135,50 @@ function samePositionSet(a: PositionRole[], b: PositionRole[]): boolean {
 
 export function positionsDiverge(candidate: Candidate): boolean {
   const proposed = proposedPositions(candidate)
-  if (proposed === null) return false
+  if (proposed === null || proposed.length === 0) return false
   return !samePositionSet(candidate.positions, proposed)
 }
 
 export function variantRoleDiverge(candidate: Candidate): boolean {
-  const interpretation = interpretationFor(candidate, 'variantRole')
-  if (!interpretation || candidate.variantRole === null) return false
-  return candidate.variantRole !== interpretation.proposedValue
+  const proposed = machineProposalValue(interpretationFor(candidate, 'variantRole'))
+  if (proposed === null) return false
+  return (candidate.variantRole ?? 'UNSPECIFIED') !== proposed
 }
 
 export function escalationDiverge(candidate: Candidate): boolean {
-  const interpretation = interpretationFor(candidate, 'escalationTrigger')
-  if (!interpretation || candidate.escalationTrigger === null) return false
-  return candidate.escalationTrigger !== interpretation.proposedValue
+  const proposed = machineProposalValue(
+    interpretationFor(candidate, 'escalationTrigger'),
+  )
+  if (proposed === null) return false
+  return (candidate.escalationTrigger ?? '') !== proposed
 }
 
 export function approvalDiverge(candidate: Candidate): boolean {
-  const interpretation = interpretationFor(candidate, 'requiresApproval')
-  if (!interpretation || candidate.requiresApproval === null) return false
-  return String(candidate.requiresApproval) !== interpretation.proposedValue
+  const proposed = machineProposalValue(
+    interpretationFor(candidate, 'requiresApproval'),
+  )
+  if (proposed === null) return false
+  return candidate.requiresApproval === null || String(candidate.requiresApproval) !== proposed
+}
+
+export function proposedApproval(candidate: Candidate): boolean | null {
+  const proposed = machineProposalValue(
+    interpretationFor(candidate, 'requiresApproval'),
+  )
+  if (proposed === null) return null
+  if (proposed === 'true') return true
+  if (proposed === 'false') return false
+  return null
+}
+
+export function proposedVariantRole(candidate: Candidate): PositionRole | null {
+  const proposed = machineProposalValue(interpretationFor(candidate, 'variantRole'))
+  if (proposed === null || !(proposed in POSITION_LABELS)) return null
+  return proposed as PositionRole
+}
+
+export function proposedEscalationTrigger(candidate: Candidate): string | null {
+  return machineProposalValue(interpretationFor(candidate, 'escalationTrigger'))
 }
 
 export interface ScopeDifference {
@@ -202,6 +237,16 @@ export function formatPositions(positions: PositionRole[]): string {
   return positions.map((role) => POSITION_LABELS[role]).join(', ')
 }
 
+export function sameStringMap(
+  a: Record<string, string>,
+  b: Record<string, string>,
+): boolean {
+  const keysA = Object.keys(a)
+  const keysB = Object.keys(b)
+  if (keysA.length !== keysB.length) return false
+  return keysA.every((key) => a[key] === b[key])
+}
+
 export interface ScopeDraft {
   contractPackKey: string
   declaredContractTypes: string
@@ -231,15 +276,7 @@ export function splitContractTypes(value: string): string[] {
     .filter((entry) => entry.length > 0)
 }
 
-export function scopeInputFrom(draft: ScopeDraft): {
-  contractPackKey?: string
-  declaredContractTypes: string[]
-  partyPerspective?: string
-  paperSource?: string
-  jurisdiction?: string
-  effectiveFrom?: string
-  effectiveTo?: string
-} {
+export function scopeInputFrom(draft: ScopeDraft): ScopeEditInput {
   const optional = (value: string) => {
     const trimmed = value.trim()
     return trimmed.length > 0 ? trimmed : undefined
@@ -268,7 +305,6 @@ function normalizeDraftValue(value: string): string {
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0)
     .join(',')
-    .toLowerCase()
 }
 
 export interface SemanticDraft {
@@ -292,35 +328,40 @@ export function semanticDraftFrom(candidate: Candidate): SemanticDraft {
   }
 }
 
-export interface SemanticFieldsInput {
-  positions?: PositionRole[]
-  requiresApproval?: boolean
-  escalationTrigger?: string
-  variantRole?: PositionRole
-}
-
 export function semanticInputFrom(
   draft: SemanticDraft,
   candidate: Candidate,
-): SemanticFieldsInput | undefined {
-  const input: SemanticFieldsInput = {}
+): SemanticFieldsEditInput | undefined {
   const isPlaybook = candidate.candidateType === 'PLAYBOOK_RULE'
   const isClause = candidate.candidateType === 'CLAUSE_VARIANT'
 
-  if (isPlaybook && !samePositionSet(draft.positions, candidate.positions)) {
-    if (draft.positions.length > 0) input.positions = draft.positions
+  const approvalDraft =
+    draft.requiresApproval === 'unset' ? null : draft.requiresApproval === 'true'
+  const escalationDraft = draft.escalationTrigger.trim()
+  const effectiveVariantRole = candidate.variantRole ?? 'UNSPECIFIED'
+
+  const positionsChanged =
+    isPlaybook && !samePositionSet(draft.positions, candidate.positions)
+  const approvalChanged = isPlaybook && approvalDraft !== candidate.requiresApproval
+  const escalationChanged =
+    isPlaybook && escalationDraft !== (candidate.escalationTrigger ?? '')
+  const variantRoleChanged =
+    isClause && draft.variantRole !== effectiveVariantRole
+
+  if (!positionsChanged && !approvalChanged && !escalationChanged && !variantRoleChanged) {
+    return undefined
   }
-  if (isPlaybook && draft.requiresApproval !== 'unset') {
-    const value = draft.requiresApproval === 'true'
-    if (value !== candidate.requiresApproval) input.requiresApproval = value
-  }
+
+  // The backend replaces the whole human-corrected record, so send the complete
+  // applicable set; the draft is seeded from effective values and therefore
+  // preserves earlier corrections. Empty/absent values keep the machine proposal.
+  const input: SemanticFieldsEditInput = {}
   if (isPlaybook) {
-    const trimmed = draft.escalationTrigger.trim()
-    if (trimmed.length > 0 && trimmed !== candidate.escalationTrigger) {
-      input.escalationTrigger = trimmed
-    }
+    if (draft.positions.length > 0) input.positions = draft.positions
+    if (approvalDraft !== null) input.requiresApproval = approvalDraft
+    if (escalationDraft.length > 0) input.escalationTrigger = escalationDraft
   }
-  if (isClause && draft.variantRole !== candidate.variantRole) {
+  if (isClause) {
     input.variantRole = draft.variantRole
   }
 

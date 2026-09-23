@@ -39,7 +39,20 @@ export function PublicationDialog({
     if (dialog && typeof dialog.showModal === 'function' && !dialog.open) {
       dialog.showModal()
     }
+    return () => {
+      if (dialog && dialog.open && typeof dialog.close === 'function') {
+        dialog.close()
+      }
+    }
   }, [])
+
+  function closeDialog() {
+    const dialog = dialogRef.current
+    if (dialog && dialog.open && typeof dialog.close === 'function') {
+      dialog.close()
+    }
+    onClose()
+  }
 
   const supersessions = approved
     .filter((candidate) => supersessionChoices[candidate.id])
@@ -79,7 +92,10 @@ export function PublicationDialog({
       ref={dialogRef}
       className="dialog"
       aria-labelledby="publish-dialog-heading"
-      onCancel={onClose}
+      onCancel={(event) => {
+        event.preventDefault()
+        closeDialog()
+      }}
     >
       <form className="dialog__form" onSubmit={handleSubmit}>
         <h2 id="publish-dialog-heading">Publish knowledge version</h2>
@@ -172,7 +188,7 @@ export function PublicationDialog({
             type="button"
             className="button"
             disabled={publish.isPending}
-            onClick={onClose}
+            onClick={closeDialog}
           >
             Cancel
           </button>

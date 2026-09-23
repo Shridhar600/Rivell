@@ -7,7 +7,10 @@ import {
   humanizeCode,
   interpretationFor,
   positionsDiverge,
+  proposedApproval,
+  proposedEscalationTrigger,
   proposedPositions,
+  proposedVariantRole,
   variantRoleDiverge,
   POSITION_LABELS,
   VERIFICATION_LABELS,
@@ -17,7 +20,7 @@ import { VerificationBadge } from './VerificationBadge'
 const KIND_LABELS: Record<string, string> = {
   DETERMINISTIC: 'Taken from a structured source value',
   BOUNDED_CLASSIFICATION: 'Classified from the source text',
-  GENERATIVE_EXTRACTION: 'Extracted from prose, independently verified',
+  GENERATIVE_EXTRACTION: 'Extracted from prose',
 }
 
 function kindLabel(kind: string): string {
@@ -70,66 +73,81 @@ function SemanticRow({
 }
 
 export function SemanticFieldReview({ candidate }: { candidate: Candidate }) {
-  const hasSemantics =
-    candidate.positions.length > 0 ||
-    candidate.variantRole !== null ||
-    candidate.escalationTrigger !== null ||
-    candidate.requiresApproval !== null ||
-    candidate.interpretations.length > 0
-
-  if (!hasSemantics) return null
+  const isPlaybook = candidate.candidateType === 'PLAYBOOK_RULE'
+  const isClause = candidate.candidateType === 'CLAUSE_VARIANT'
 
   const positionsInterpretation = interpretationFor(candidate, 'positions')
   const variantInterpretation = interpretationFor(candidate, 'variantRole')
   const escalationInterpretation = interpretationFor(candidate, 'escalationTrigger')
   const approvalInterpretation = interpretationFor(candidate, 'requiresApproval')
 
-  const proposed = proposedPositions(candidate)
+  const proposedPositionList = proposedPositions(candidate)
+  const proposedRole = proposedVariantRole(candidate)
+  const proposedApprovalValue = proposedApproval(candidate)
+  const proposedTrigger = proposedEscalationTrigger(candidate)
+
+  const showPositions =
+    (isPlaybook && candidate.positions.length > 0) || positionsInterpretation !== null
+  const showVariant = isClause || variantInterpretation !== null
+  const showEscalation =
+    (isPlaybook && candidate.escalationTrigger !== null) ||
+    escalationInterpretation !== null
+  const showApproval =
+    (isPlaybook && candidate.requiresApproval !== null) ||
+    approvalInterpretation !== null
+
+  if (!showPositions && !showVariant && !showEscalation && !showApproval) {
+    return null
+  }
 
   return (
     <>
-      {candidate.positions.length > 0 || positionsInterpretation ? (
+      {showPositions ? (
         <SemanticRow
           label="Negotiation position"
           effective={formatPositions(candidate.positions)}
-          proposed={proposed ? formatPositions(proposed) : null}
+          proposed={
+            proposedPositionList && proposedPositionList.length > 0
+              ? formatPositions(proposedPositionList)
+              : null
+          }
           diverged={positionsDiverge(candidate)}
           verification={positionsInterpretation?.verification ?? null}
           kind={positionsInterpretation?.kind ?? null}
           support={positionsInterpretation?.supportingSourceNodes ?? 0}
         />
       ) : null}
-      {candidate.variantRole !== null || variantInterpretation ? (
+      {showVariant ? (
         <SemanticRow
           label="Clause variant role"
-          effective={
-            candidate.variantRole
-              ? POSITION_LABELS[candidate.variantRole]
-              : 'Unspecified'
-          }
-          proposed={variantInterpretation?.proposedValue ?? null}
+          effective={POSITION_LABELS[candidate.variantRole ?? 'UNSPECIFIED']}
+          proposed={proposedRole ? POSITION_LABELS[proposedRole] : null}
           diverged={variantRoleDiverge(candidate)}
           verification={variantInterpretation?.verification ?? null}
           kind={variantInterpretation?.kind ?? null}
           support={variantInterpretation?.supportingSourceNodes ?? 0}
         />
       ) : null}
-      {candidate.escalationTrigger !== null || escalationInterpretation ? (
+      {showEscalation ? (
         <SemanticRow
           label="Escalation trigger"
           effective={candidate.escalationTrigger ?? 'None extracted'}
-          proposed={escalationInterpretation?.proposedValue ?? null}
+          proposed={proposedTrigger}
           diverged={escalationDiverge(candidate)}
           verification={escalationInterpretation?.verification ?? null}
           kind={escalationInterpretation?.kind ?? null}
           support={escalationInterpretation?.supportingSourceNodes ?? 0}
         />
       ) : null}
-      {candidate.requiresApproval !== null || approvalInterpretation ? (
+      {showApproval ? (
         <SemanticRow
           label="General counsel approval"
           effective={formatBoolean(candidate.requiresApproval)}
-          proposed={approvalInterpretation?.proposedValue ?? null}
+          proposed={
+            proposedApprovalValue === null
+              ? null
+              : formatBoolean(proposedApprovalValue)
+          }
           diverged={approvalDiverge(candidate)}
           verification={approvalInterpretation?.verification ?? null}
           kind={approvalInterpretation?.kind ?? null}

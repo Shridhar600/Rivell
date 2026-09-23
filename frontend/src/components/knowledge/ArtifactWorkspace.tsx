@@ -61,7 +61,9 @@ export function ArtifactWorkspace({ artifactId }: { artifactId: string }) {
         warnings={artifact.parseWarnings}
       />
       <ArtifactManifest artifact={artifact} />
-      {extracted ? <CandidateReviewWorkspace artifact={artifact} /> : null}
+      {extracted ? (
+        <CandidateReviewWorkspace key={artifact.id} artifact={artifact} />
+      ) : null}
       {extracted ? <SourceStructureSection artifactId={artifactId} /> : null}
       {extracted ? (
         <details className="disclosure">

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -298,6 +298,26 @@ describe('knowledge publication', () => {
       supersededCandidates?: Record<string, string>
     }
     expect(body.supersededCandidates).toEqual({ c1: 'old1' })
+  })
+
+
+  it('closes the dialog before unmounting on cancel', async () => {
+    const closeSpy = vi.spyOn(HTMLDialogElement.prototype, 'close')
+    stubKnowledgeApi({ candidates: [approvedOne], publications: [] })
+
+    renderRoute('/knowledge/artifacts/a1')
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /publish approved \(1\)/i }),
+    )
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /cancel/i }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+    expect(closeSpy).toHaveBeenCalled()
+    closeSpy.mockRestore()
   })
 
   it('keeps publishing disabled until a candidate is approved', async () => {

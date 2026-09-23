@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -217,6 +217,17 @@ interface ApiState {
 
 function stubKnowledgeApi(state: ApiState) {
   const requests: Request[] = []
+  const machineById = new Map(
+    state.candidates.map((entry) => [
+      entry.id,
+      {
+        positions: entry.positions,
+        requiresApproval: entry.requiresApproval,
+        escalationTrigger: entry.escalationTrigger,
+        variantRole: entry.variantRole,
+      },
+    ]),
+  )
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const request = input as Request
     requests.push(request)
@@ -278,9 +289,14 @@ function stubKnowledgeApi(state: ApiState) {
         }
         note?: string
       }
-      state.candidates = state.candidates.map((entry) =>
-        entry.id === id
-          ? {
+      state.candidates = state.candidates.map((entry) => {
+        if (entry.id !== id) return entry
+        const machine = machineById.get(id)!
+        const edited =
+          body.semanticFields && Object.keys(body.semanticFields).length > 0
+            ? body.semanticFields
+            : null
+        return {
               ...entry,
               reviewStatus: 'EDITED',
               editedContentText: body.contentText ?? entry.editedContentText,
@@ -307,17 +323,34 @@ function stubKnowledgeApi(state: ApiState) {
               effectiveTo: body.scope
                 ? (body.scope.effectiveTo ?? null)
                 : entry.effectiveTo,
-              positions: body.semanticFields?.positions ?? entry.positions,
+              positions:
+                edited && edited.positions && edited.positions.length > 0
+                  ? edited.positions
+                  : edited
+                    ? machine.positions
+                    : entry.positions,
               requiresApproval:
-                body.semanticFields?.requiresApproval ?? entry.requiresApproval,
+                edited && edited.requiresApproval !== undefined
+                  ? edited.requiresApproval
+                  : edited
+                    ? machine.requiresApproval
+                    : entry.requiresApproval,
               escalationTrigger:
-                body.semanticFields?.escalationTrigger ?? entry.escalationTrigger,
-              variantRole: body.semanticFields?.variantRole ?? entry.variantRole,
+                edited && edited.escalationTrigger !== undefined
+                  ? edited.escalationTrigger
+                  : edited
+                    ? machine.escalationTrigger
+                    : entry.escalationTrigger,
+              variantRole:
+                edited && edited.variantRole !== undefined
+                  ? edited.variantRole
+                  : edited
+                    ? machine.variantRole
+                    : entry.variantRole,
               reviewNote: body.note ?? null,
               updatedAt: '2026-09-23T06:00:00Z',
             }
-          : entry,
-      )
+      })
       return ok(state.candidates.find((entry) => entry.id === id))
     }
     if (path.endsWith('/reject')) {
@@ -342,7 +375,8 @@ function stubKnowledgeApi(state: ApiState) {
       return found.id === id ? ok(found) : errorResponse('404', 404, 'Not found')
     }
     if (path.includes('/api/knowledge/artifacts/')) {
-      return ok(artifactDetail)
+      const artifactId = path.split('/')[4]
+      return ok({ ...artifactDetail, id: artifactId })
     }
     return errorResponse('404', 404, 'Not found')
   })
@@ -654,6 +688,292 @@ describe('candidate review workspace', () => {
     ).toBeInTheDocument()
   })
 
+
+  it('preserves earlier human semantic corrections across sequential edits', async () => {
+    const state: ApiState = {
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Liability cap',
+          positions: ['PREFERRED'],
+          requiresApproval: false,
+          interpretations: [
+            {
+              field: 'positions',
+              proposedValue: 'PREFERRED',
+              kind: 'BOUNDED_CLASSIFICATION',
+              specId: 'playbook-position',
+              specVersion: 1,
+              supportingSourceNodes: 1,
+              verification: 'NOT_VERIFIED',
+            },
+            {
+              field: 'requiresApproval',
+              proposedValue: 'false',
+              kind: 'BOUNDED_CLASSIFICATION',
+              specId: 'playbook-position',
+              specVersion: 1,
+              supportingSourceNodes: 1,
+              verification: 'NOT_VERIFIED',
+            },
+          ],
+        }),
+      ],
+    }
+    const { requests } = stubKnowledgeApi(state)
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    // Edit 1: set approval to Required.
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Edit' }))
+    await userEvent.selectOptions(screen.getByLabelText(/general counsel approval/i), 'true')
+    await userEvent.click(screen.getByRole('button', { name: /save edit/i }))
+    await waitFor(() => expect(state.candidates[0].requiresApproval).toBe(true))
+
+    // Edit 2: change positions only; approval correction must survive.
+    const panelAfterFirst = await screen.findByRole('article', {
+      name: /Liability cap/i,
+    })
+    await userEvent.click(within(panelAfterFirst).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Preferred' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Fallback' }))
+    await userEvent.click(screen.getByRole('button', { name: /save edit/i }))
+
+    await waitFor(() => expect(state.candidates[0].positions).toEqual(['FALLBACK']))
+    expect(state.candidates[0].requiresApproval).toBe(true)
+
+    const editRequests = requests.filter((request) => request.url.endsWith('/edit'))
+    expect(editRequests).toHaveLength(2)
+    const secondBody = (await editRequests[1].clone().json()) as {
+      semanticFields?: { positions?: string[]; requiresApproval?: boolean }
+    }
+    expect(secondBody.semanticFields?.positions).toEqual(['FALLBACK'])
+    expect(secondBody.semanticFields?.requiresApproval).toBe(true)
+  })
+
+  it('sends only changed content and payload on a semantic-only edit', async () => {
+    const state: ApiState = {
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Liability cap',
+          positions: ['PREFERRED'],
+          interpretations: [
+            {
+              field: 'positions',
+              proposedValue: 'PREFERRED',
+              kind: 'BOUNDED_CLASSIFICATION',
+              specId: 'playbook-position',
+              specVersion: 1,
+              supportingSourceNodes: 1,
+              verification: 'NOT_VERIFIED',
+            },
+          ],
+        }),
+      ],
+    }
+    const { requests } = stubKnowledgeApi(state)
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Preferred' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Fallback' }))
+    await userEvent.click(screen.getByRole('button', { name: /save edit/i }))
+
+    await waitFor(() => expect(state.candidates[0].positions).toEqual(['FALLBACK']))
+    const editRequest = requests.find((request) => request.url.endsWith('/edit'))!
+    const body = (await editRequest.clone().json()) as Record<string, unknown>
+    expect(body.semanticFields).toBeDefined()
+    expect(body.contentText).toBeUndefined()
+    expect(body.payloadColumns).toBeUndefined()
+    expect(body.scope).toBeUndefined()
+  })
+
+  it('renders human-corrected content as effective and keeps the machine text', async () => {
+    stubKnowledgeApi({
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Termination',
+          contentText: 'MACHINE TEXT',
+          editedContentText: 'HUMAN CORRECTED TEXT',
+          reviewStatus: 'EDITED',
+        }),
+      ],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Termination/i })
+    expect(within(panel).getByText('HUMAN CORRECTED TEXT')).toBeInTheDocument()
+    expect(
+      within(panel).getByRole('heading', { name: /machine proposal/i }),
+    ).toBeInTheDocument()
+    expect(within(panel).getByText('MACHINE TEXT')).toBeInTheDocument()
+  })
+
+  it('shows a disputed generative proposal instead of hiding it', async () => {
+    stubKnowledgeApi({
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Escalation',
+          escalationTrigger: null,
+          interpretations: [
+            {
+              field: 'escalationTrigger',
+              proposedValue: 'Anything above 2x requires GC approval.',
+              kind: 'GENERATIVE_EXTRACTION',
+              specId: 'escalation-trigger-extraction',
+              specVersion: 1,
+              supportingSourceNodes: 3,
+              verification: 'DISPUTED',
+            },
+          ],
+        }),
+      ],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Escalation/i })
+    expect(within(panel).getByText('None extracted')).toBeInTheDocument()
+    expect(
+      within(panel).getByText(/Rivell proposed: Anything above 2x requires GC approval/),
+    ).toBeInTheDocument()
+    expect(within(panel).getByText('Source support disputed')).toBeInTheDocument()
+  })
+
+  it('renders clause variant semantics only for clause variants and formats proposals', async () => {
+    stubKnowledgeApi({
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Confidentiality',
+          candidateType: 'CLAUSE_VARIANT',
+          variantRole: 'PREFERRED',
+          interpretations: [
+            {
+              field: 'variantRole',
+              proposedValue: 'FALLBACK',
+              kind: 'BOUNDED_CLASSIFICATION',
+              specId: 'clause-variant-role',
+              specVersion: 1,
+              supportingSourceNodes: 1,
+              verification: 'NOT_VERIFIED',
+            },
+          ],
+        }),
+        candidate({
+          id: 'c2',
+          rawLabel: 'Scope of application',
+          variantRole: 'UNSPECIFIED',
+          positions: [],
+        }),
+      ],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const clausePanel = await screen.findByRole('article', { name: /Confidentiality/i })
+    expect(within(clausePanel).getByText('Clause variant role')).toBeInTheDocument()
+    expect(within(clausePanel).getByText(/Rivell proposed: Fallback/)).toBeInTheDocument()
+
+    await userEvent.click(
+      within(queue()).getByRole('button', { name: /Scope of application/ }),
+    )
+    const playbookPanel = await screen.findByRole('article', {
+      name: /Scope of application/i,
+    })
+    expect(
+      within(playbookPanel).queryByText('Clause variant role'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('suppresses the narrowing suggestion once the human applied it', async () => {
+    stubKnowledgeApi({
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Liability cap',
+          jurisdiction: 'UK',
+          interpretations: [
+            {
+              field: 'scope',
+              proposedValue: 'UK',
+              kind: 'BOUNDED_CLASSIFICATION',
+              specId: 'scope-narrowing',
+              specVersion: 1,
+              supportingSourceNodes: 1,
+              verification: 'NOT_VERIFIED',
+            },
+          ],
+        }),
+      ],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    expect(
+      within(panel).queryByText(/Rivell suggests narrowing jurisdiction/i),
+    ).not.toBeInTheDocument()
+    expect(
+      within(panel).getByText(/adjusted from the artifact manifest/i),
+    ).toBeInTheDocument()
+  })
+
+  it('formats machine proposals in product language', async () => {
+    stubKnowledgeApi({
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Liability cap',
+          requiresApproval: true,
+          interpretations: [
+            {
+              field: 'requiresApproval',
+              proposedValue: 'false',
+              kind: 'BOUNDED_CLASSIFICATION',
+              specId: 'playbook-position',
+              specVersion: 1,
+              supportingSourceNodes: 1,
+              verification: 'NOT_VERIFIED',
+            },
+          ],
+        }),
+      ],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    expect(
+      within(panel).getByText(/Rivell proposed: Not required/),
+    ).toBeInTheDocument()
+  })
+
+  it('rejects a save with no changes and sends no request', async () => {
+    const state: ApiState = {
+      candidates: [candidate({ id: 'c1', rawLabel: 'Liability cap' })],
+    }
+    const { requests } = stubKnowledgeApi(state)
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(screen.getByRole('button', { name: /save edit/i }))
+
+    expect(
+      await screen.findByText(/an edit must change content/i),
+    ).toBeInTheDocument()
+    expect(requests.some((request) => request.url.endsWith('/edit'))).toBe(false)
+  })
+
   it('requires a reason before rejecting and records it', async () => {
     const state: ApiState = { candidates: baseCandidates() }
     const { requests } = stubKnowledgeApi(state)
@@ -860,6 +1180,48 @@ describe('candidate review workspace', () => {
     expect(
       screen.getByText(/Termination: not ROUTINE after re-evaluation/i),
     ).toBeInTheDocument()
+  })
+
+
+  it('resets workspace filters when navigating to another artifact', async () => {
+    stubKnowledgeApi({ candidates: baseCandidates() })
+
+    const { router } = renderArtifact('/knowledge/artifacts/a1')
+
+    await screen.findByRole('region', { name: 'Candidates' })
+    await act(async () => {
+      await router.navigate('/knowledge/artifacts/a2')
+    })
+    await screen.findByRole('region', { name: 'Candidates' })
+    await act(async () => {
+      await router.navigate('/knowledge/artifacts/a1')
+    })
+    await screen.findByRole('region', { name: 'Candidates' })
+
+    await userEvent.selectOptions(within(queue()).getByLabelText('Status'), 'APPROVED')
+    expect(within(queue()).getByLabelText('Status')).toHaveValue('APPROVED')
+
+    await act(async () => {
+      await router.navigate('/knowledge/artifacts/a2')
+    })
+    await screen.findByRole('region', { name: 'Candidates' })
+    expect(within(queue()).getByLabelText('Status')).toHaveValue('ALL')
+  })
+
+  it('moves focus to the review panel when a candidate is selected', async () => {
+    stubKnowledgeApi({ candidates: baseCandidates() })
+
+    renderArtifact()
+
+    await screen.findByRole('region', { name: 'Candidates' })
+    const item = await within(queue()).findByRole('button', { name: /Termination/ })
+    await userEvent.click(item)
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { level: 3, name: /Termination/ }),
+      ).toHaveFocus()
+    })
   })
 
   it('does not stack history entries when the same candidate is selected again', async () => {

@@ -38,6 +38,8 @@ export function CandidateReviewWorkspace({
   >({})
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
   const panelRef = useRef<HTMLDivElement>(null)
+  const panelHeadingRef = useRef<HTMLHeadingElement>(null)
+  const skipPanelFocus = useRef(true)
 
   const selectedCandidateId = selectedId
   const publishedSelected = candidatesQuery.data?.find(
@@ -48,7 +50,15 @@ export function CandidateReviewWorkspace({
   )
 
   useEffect(() => {
-    if (!selectedId) return
+    if (!selectedId) {
+      skipPanelFocus.current = false
+      return
+    }
+    const heading = panelHeadingRef.current
+    if (heading && !skipPanelFocus.current && typeof heading.focus === 'function') {
+      heading.focus({ preventScroll: true })
+    }
+    skipPanelFocus.current = false
     const element = panelRef.current
     if (element && typeof element.scrollIntoView === 'function') {
       element.scrollIntoView({ block: 'nearest' })
@@ -166,6 +176,7 @@ export function CandidateReviewWorkspace({
         {selected ? (
           <CandidateReviewPanel
             key={selected.id}
+            headingRef={panelHeadingRef}
             candidate={selected}
             artifact={artifact}
             units={unitsQuery.data ?? []}

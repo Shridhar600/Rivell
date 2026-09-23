@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import {
+  POSITION_ROLES,
   useEditCandidate,
   type ArtifactDetail,
   type Candidate,
@@ -14,6 +15,7 @@ import {
   interpretationFor,
   positionsDiverge,
   proposedPositions,
+  sameStringMap,
   scopeDifferences,
   scopeDraftChanged,
   scopeDraftFrom,
@@ -26,15 +28,6 @@ import {
 } from '../../lib/semantics'
 import { ErrorState } from '../ErrorState'
 import { ApplicabilityScopeEditor } from './ApplicabilityScopeEditor'
-
-const POSITION_OPTIONS: PositionRole[] = [
-  'PREFERRED',
-  'FALLBACK',
-  'PROHIBITED',
-  'ESCALATION',
-  'COMMENTARY',
-  'UNSPECIFIED',
-]
 
 export function CandidateEditForm({
   candidate,
@@ -80,12 +73,11 @@ export function CandidateEditForm({
     event.preventDefault()
     const semanticInput = semanticInputFrom(semantic, candidate)
     const scopeChanged = scopeDraftChanged(scope, candidate)
-    if (
-      !hasColumns &&
-      contentText.trim().length === 0 &&
-      !scopeChanged &&
-      semanticInput === undefined
-    ) {
+    const initialContent = effectiveContentText(candidate) ?? ''
+    const contentChanged = contentText !== initialContent
+    const columnsChanged = hasColumns && !sameStringMap(columns, initialColumns)
+
+    if (!contentChanged && !columnsChanged && !scopeChanged && semanticInput === undefined) {
       setValidationError('An edit must change content, a column, scope, or interpretation.')
       return
     }
@@ -93,8 +85,9 @@ export function CandidateEditForm({
     edit.mutate(
       {
         candidateId: candidate.id,
-        contentText: contentText.trim().length > 0 ? contentText : undefined,
-        payloadColumns: hasColumns ? columns : undefined,
+        contentText:
+          contentChanged && contentText.trim().length > 0 ? contentText : undefined,
+        payloadColumns: columnsChanged ? columns : undefined,
         scope: scopeChanged ? scopeInputFrom(scope) : undefined,
         semanticFields: semanticInput,
         note,
@@ -158,7 +151,7 @@ export function CandidateEditForm({
               <div className="field">
                 <span className="field__label">Negotiation position</span>
                 <div className="checkbox-group">
-                  {POSITION_OPTIONS.map((role) => (
+                  {POSITION_ROLES.map((role) => (
                     <label key={role} className="checkbox">
                       <input
                         type="checkbox"
@@ -231,7 +224,7 @@ export function CandidateEditForm({
                   }))
                 }
               >
-                {POSITION_OPTIONS.map((role) => (
+                {POSITION_ROLES.map((role) => (
                   <option key={role} value={role}>
                     {POSITION_LABELS[role]}
                   </option>
@@ -260,7 +253,8 @@ export function CandidateEditForm({
                 .
               </p>
             ) : null}
-            {scopeInterpretation ? (
+            {scopeInterpretation &&
+            scopeInterpretation.proposedValue !== scope.jurisdiction ? (
               <p className="field__hint">
                 Rivell suggests narrowing jurisdiction to{' '}
                 {scopeInterpretation.proposedValue} based on the source.
