@@ -17,6 +17,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+function ok(body: unknown): Response {
+  return jsonResponse({ data: body, status: 200, timestamp: '2026-09-23T05:00:00Z' })
+}
+
 function span(bodyIndex: number, partial: Partial<SourceSpan> = {}): SourceSpan {
   return {
     partPath: 'word/document.xml',
@@ -153,8 +157,8 @@ afterEach(() => {
 describe('ContractWorkspace', () => {
   it('renders the document, outline and original links after loading', async () => {
     stubFetch([
-      ['/versions/1/structure', () => jsonResponse(structureOk)],
-      ['/api/contracts/c1', () => jsonResponse(summary)],
+      ['/versions/1/structure', () => ok(structureOk)],
+      ['/api/contracts/c1', () => ok(summary)],
     ])
 
     renderWorkspace()
@@ -195,8 +199,8 @@ describe('ContractWorkspace', () => {
 
   it('selects a node from the outline and shows its source span', async () => {
     stubFetch([
-      ['/versions/1/structure', () => jsonResponse(structureOk)],
-      ['/api/contracts/c1', () => jsonResponse(summary)],
+      ['/versions/1/structure', () => ok(structureOk)],
+      ['/api/contracts/c1', () => ok(summary)],
     ])
 
     renderWorkspace()
@@ -215,8 +219,8 @@ describe('ContractWorkspace', () => {
 
   it('scrolls a deep-linked selection into view', async () => {
     stubFetch([
-      ['/versions/1/structure', () => jsonResponse(structureOk)],
-      ['/api/contracts/c1', () => jsonResponse(summary)],
+      ['/versions/1/structure', () => ok(structureOk)],
+      ['/api/contracts/c1', () => ok(summary)],
     ])
 
     renderWorkspace('/reviews/c1?node=p')
@@ -230,8 +234,8 @@ describe('ContractWorkspace', () => {
 
   it('reports a stale node id without crashing', async () => {
     stubFetch([
-      ['/versions/1/structure', () => jsonResponse(structureOk)],
-      ['/api/contracts/c1', () => jsonResponse(summary)],
+      ['/versions/1/structure', () => ok(structureOk)],
+      ['/api/contracts/c1', () => ok(summary)],
     ])
 
     renderWorkspace('/reviews/c1?node=deleted-node')
@@ -243,8 +247,8 @@ describe('ContractWorkspace', () => {
 
   it('follows browser back and forward for URL selection', async () => {
     stubFetch([
-      ['/versions/1/structure', () => jsonResponse(structureOk)],
-      ['/api/contracts/c1', () => jsonResponse(summary)],
+      ['/versions/1/structure', () => ok(structureOk)],
+      ['/api/contracts/c1', () => ok(summary)],
     ])
 
     const { router } = renderWorkspace()
@@ -272,8 +276,8 @@ describe('ContractWorkspace', () => {
 
   it('does not stack history entries when the same node is selected again', async () => {
     stubFetch([
-      ['/versions/1/structure', () => jsonResponse(structureOk)],
-      ['/api/contracts/c1', () => jsonResponse(summary)],
+      ['/versions/1/structure', () => ok(structureOk)],
+      ['/api/contracts/c1', () => ok(summary)],
     ])
 
     const { router } = renderWorkspace()
@@ -299,7 +303,7 @@ describe('ContractWorkspace', () => {
       [
         '/versions/1/structure',
         () =>
-          jsonResponse({
+          ok({
             ...structureOk,
             parseWarnings: ['HEADERS_OR_FOOTERS_NOT_REPRESENTED'],
           }),
@@ -307,7 +311,7 @@ describe('ContractWorkspace', () => {
       [
         '/api/contracts/c1',
         () =>
-          jsonResponse({
+          ok({
             ...summary,
             latestVersion: {
               ...summary.latestVersion,
@@ -332,7 +336,7 @@ describe('ContractWorkspace', () => {
       [
         '/versions/1/structure',
         () =>
-          jsonResponse({
+          ok({
             ...structureOk,
             parseStatus: 'PARSING',
             nodes: [],
@@ -342,7 +346,7 @@ describe('ContractWorkspace', () => {
       [
         '/api/contracts/c1',
         () =>
-          jsonResponse({
+          ok({
             ...summary,
             latestVersion: {
               ...summary.latestVersion,
@@ -364,7 +368,7 @@ describe('ContractWorkspace', () => {
       [
         '/versions/1/structure',
         () =>
-          jsonResponse({
+          ok({
             ...structureOk,
             parseStatus: 'FAILED',
             parseWarnings: ['SOME_BODY_CONTENT_COULD_NOT_BE_REPRESENTED'],
@@ -375,7 +379,7 @@ describe('ContractWorkspace', () => {
       [
         '/api/contracts/c1',
         () =>
-          jsonResponse({
+          ok({
             ...summary,
             latestVersion: {
               ...summary.latestVersion,
@@ -403,9 +407,9 @@ describe('ContractWorkspace', () => {
     stubFetch([
       [
         '/versions/1/structure',
-        () => jsonResponse({ ...structureOk, nodes: [], nodeCount: 0 }),
+        () => ok({ ...structureOk, nodes: [], nodeCount: 0 }),
       ],
-      ['/api/contracts/c1', () => jsonResponse(summary)],
+      ['/api/contracts/c1', () => ok(summary)],
     ])
 
     renderWorkspace()
@@ -435,10 +439,10 @@ describe('ContractWorkspace', () => {
               404,
             )
           }
-          return jsonResponse(summary)
+          return ok(summary)
         },
       ],
-      ['/versions/1/structure', () => jsonResponse(structureOk)],
+      ['/versions/1/structure', () => ok(structureOk)],
     ])
 
     renderWorkspace()
@@ -459,9 +463,9 @@ describe('ContractWorkspace', () => {
     stubFetch([
       [
         '/versions/1/structure',
-        () => jsonResponse({ ...structureOk, nodes: 'broken' }),
+        () => ok({ ...structureOk, nodes: 'broken' }),
       ],
-      ['/api/contracts/c1', () => jsonResponse(summary)],
+      ['/api/contracts/c1', () => ok(summary)],
     ])
 
     renderWorkspace()

@@ -17,6 +17,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+function envelope(data: unknown): { data: unknown; status: number; timestamp: string } {
+  return { data, status: 200, timestamp: '2026-09-23T05:00:00Z' }
+}
+
 function node(partial: Partial<NodeView> & { id: string }): NodeView {
   return {
     parentId: null,
@@ -93,7 +97,7 @@ afterEach(() => {
 
 describe('fetchContract', () => {
   it('GETs and validates the contract summary', async () => {
-    const { requests } = stubFetch(() => jsonResponse(summary))
+    const { requests } = stubFetch(() => jsonResponse(envelope(summary)))
 
     const result = await fetchContract('c1')
 
@@ -126,7 +130,13 @@ describe('fetchContract', () => {
   })
 
   it('rejects a malformed successful summary instead of crashing later', async () => {
-    stubFetch(() => jsonResponse({ id: 'c1', title: 'MSA' }))
+    stubFetch(() => jsonResponse(envelope({ id: 'c1', title: 'MSA' })))
+
+    await expect(fetchContract('c1')).rejects.toThrow(/malformed contract response/i)
+  })
+
+  it('requires the runtime ApiResult envelope for contract reads', async () => {
+    stubFetch(() => jsonResponse(summary))
 
     await expect(fetchContract('c1')).rejects.toThrow(/malformed contract response/i)
   })
@@ -134,7 +144,7 @@ describe('fetchContract', () => {
 
 describe('fetchContractStructure', () => {
   it('GETs and validates structure for the given version', async () => {
-    const { requests } = stubFetch(() => jsonResponse(structure))
+    const { requests } = stubFetch(() => jsonResponse(envelope(structure)))
 
     const result = await fetchContractStructure('c1', 1)
 
@@ -146,7 +156,7 @@ describe('fetchContractStructure', () => {
   })
 
   it('rejects malformed structure payloads', async () => {
-    stubFetch(() => jsonResponse({ ...structure, nodes: 'not-an-array' }))
+    stubFetch(() => jsonResponse(envelope({ ...structure, nodes: 'not-an-array' })))
 
     await expect(fetchContractStructure('c1', 1)).rejects.toThrow(
       /malformed structure response/i,
@@ -155,10 +165,12 @@ describe('fetchContractStructure', () => {
 
   it('rejects nodes without a usable source span', async () => {
     stubFetch(() =>
-      jsonResponse({
-        ...structure,
-        nodes: [{ id: 'p1', nodeType: 'PARAGRAPH' }],
-      }),
+      jsonResponse(
+        envelope({
+          ...structure,
+          nodes: [{ id: 'p1', nodeType: 'PARAGRAPH' }],
+        }),
+      ),
     )
 
     await expect(fetchContractStructure('c1', 1)).rejects.toThrow(
@@ -168,12 +180,14 @@ describe('fetchContractStructure', () => {
 
   it('accepts unknown future node types at the boundary', async () => {
     stubFetch(() =>
-      jsonResponse({
-        ...structure,
-        nodes: [
-          node({ id: 'x1', nodeType: 'FUTURE_BLOCK' as NodeView['nodeType'] }),
-        ],
-      }),
+      jsonResponse(
+        envelope({
+          ...structure,
+          nodes: [
+            node({ id: 'x1', nodeType: 'FUTURE_BLOCK' as NodeView['nodeType'] }),
+          ],
+        }),
+      ),
     )
 
     const result = await fetchContractStructure('c1', 1)
@@ -184,7 +198,7 @@ describe('fetchContractStructure', () => {
 
 describe('uploadContract', () => {
   it('POSTs multipart form data with the file field', async () => {
-    const { requests } = stubFetch(() => jsonResponse(ingest))
+    const { requests } = stubFetch(() => jsonResponse(envelope(ingest)))
 
     const file = new File(['bytes'], 'msa.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -223,7 +237,14 @@ describe('uploadContract', () => {
   })
 
   it('rejects a malformed ingest response', async () => {
-    stubFetch(() => jsonResponse({ contractId: 'c1' }))
+    stubFetch(() => jsonResponse(envelope({ contractId: 'c1' })))
+
+    const file = new File(['bytes'], 'msa.docx')
+    await expect(uploadContract(file)).rejects.toThrow(/malformed upload response/i)
+  })
+
+  it('requires the runtime ApiResult envelope on upload', async () => {
+    stubFetch(() => jsonResponse(ingest))
 
     const file = new File(['bytes'], 'msa.docx')
     await expect(uploadContract(file)).rejects.toThrow(/malformed upload response/i)

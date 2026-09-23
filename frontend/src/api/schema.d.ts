@@ -4,6 +4,93 @@
  */
 
 export interface paths {
+    "/api/knowledge/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the organization's published knowledge versions */
+        get: operations["listPublications"];
+        put?: never;
+        /** Publish approved candidates as a new versioned knowledge snapshot */
+        post: operations["publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/candidates/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a candidate */
+        post: operations["reject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/candidates/{id}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Edit a candidate's content or payload; the original is preserved */
+        post: operations["edit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/candidates/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a candidate for publication */
+        post: operations["approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the organization's knowledge artifacts */
+        get: operations["listArtifacts"];
+        put?: never;
+        /** Upload a legal knowledge source with its human-declared manifest */
+        post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/contracts": {
         parameters: {
             query?: never;
@@ -14,7 +101,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Upload and parse a DOCX contract */
-        post: operations["upload"];
+        post: operations["upload_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -29,6 +116,125 @@ export interface paths {
             cookie?: never;
         };
         get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/publications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one published knowledge version */
+        get: operations["getPublication"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/candidates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one knowledge candidate */
+        get: operations["getCandidate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/artifacts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a knowledge artifact with its manifest and ingestion state */
+        get: operations["getArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/artifacts/{id}/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the extraction units of a knowledge artifact */
+        get: operations["getUnits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/artifacts/{id}/structure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the deterministic structural parse of a knowledge source */
+        get: operations["getStructure"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/artifacts/{id}/original": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the original uploaded knowledge source */
+        get: operations["downloadOriginal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/artifacts/{id}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the compiled knowledge candidates of a knowledge artifact */
+        get: operations["getCandidates"];
         put?: never;
         post?: never;
         delete?: never;
@@ -62,7 +268,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get the canonical structure of a contract version */
-        get: operations["getStructure"];
+        get: operations["getStructure_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -79,7 +285,7 @@ export interface paths {
             cookie?: never;
         };
         /** Download the original uploaded DOCX of a contract version */
-        get: operations["downloadOriginal"];
+        get: operations["downloadOriginal_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -92,6 +298,153 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PublishRequest: {
+            candidateIds?: string[];
+            note?: string;
+        };
+        /** @description Error returned by contract API failures */
+        ErrorResponse: {
+            code: string;
+            title: string;
+            detail: string;
+        };
+        ApiResultPublicationView: {
+            data?: components["schemas"]["PublicationView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ItemView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            candidateId?: string;
+            /** Format: uuid */
+            supersededCandidateId?: string;
+            /** @enum {string} */
+            action?: "ADD" | "SUPERSEDE";
+        };
+        PublicationView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            organizationId?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
+            note?: string;
+            items?: components["schemas"]["ItemView"][];
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ReviewDecisionRequest: {
+            note?: string;
+        };
+        ApiResultCandidateView: {
+            data?: components["schemas"]["CandidateView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        CandidateView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            artifactId?: string;
+            /** Format: uuid */
+            extractionUnitId?: string;
+            /** @enum {string} */
+            candidateType?: "PLAYBOOK_RULE" | "CLAUSE_VARIANT" | "TEMPLATE_CLAUSE" | "PRECEDENT" | "REFERENCE";
+            /** @enum {string} */
+            reviewStatus?: "PENDING" | "APPROVED" | "EDITED" | "REJECTED" | "PUBLISHED";
+            rawLabel?: string;
+            contentText?: string;
+            payloadColumns?: {
+                [key: string]: string;
+            };
+            legalConceptKey?: string;
+            editedContentText?: string;
+            editedPayloadColumns?: {
+                [key: string]: string;
+            };
+            /** Format: uuid */
+            supersedingCandidateId?: string;
+            contractPackKey?: string;
+            declaredContractTypes?: string[];
+            partyPerspective?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveTo?: string;
+            conflictSignals?: components["schemas"]["ConflictSignalView"][];
+            reviewNote?: string;
+            /** Format: date-time */
+            reviewedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ConflictSignalView: {
+            /** @enum {string} */
+            conflictType?: "DUPLICATE" | "CONTRADICTS_EXISTING" | "SUPERSEDES_EXISTING" | "OVERLAPPING_EFFECTIVE_PERIOD" | "JURISDICTION_MISMATCH" | "AUTHORITY_CONFLICT" | "UNKNOWN";
+            message?: string;
+            /** Format: uuid */
+            publishedCandidateId?: string;
+        };
+        ReviewEditRequest: {
+            contentText?: string;
+            payloadColumns?: {
+                [key: string]: string;
+            };
+            note?: string;
+        };
+        ApiResultKnowledgeArtifactDetailResponse: {
+            data?: components["schemas"]["KnowledgeArtifactDetailResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        KnowledgeArtifactDetailResponse: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            artifactType?: "PLAYBOOK" | "CLAUSE_LIBRARY" | "TEMPLATE" | "EXECUTED_PRECEDENT" | "NEGOTIATION_HISTORY" | "EXTERNAL_REFERENCE";
+            filename?: string;
+            contentType?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            sha256?: string;
+            storageKey?: string;
+            declaredContractTypes?: string[];
+            contractPackKey?: string;
+            partyPerspective?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+            language?: string;
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveTo?: string;
+            manifestNote?: string;
+            /** @enum {string} */
+            ingestStatus?: "RECEIVED" | "EXTRACTING" | "EXTRACTED" | "FAILED";
+            parserVersion?: string;
+            parseWarnings?: string[];
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ApiResultIngestResponse: {
+            data?: components["schemas"]["IngestResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
         /** @description Result of a contract upload and initial parse */
         IngestResponse: {
             /** Format: uuid */
@@ -108,15 +461,130 @@ export interface components {
             /** Format: int32 */
             nodeCount: number;
         };
-        /** @description Error returned by contract API failures */
-        ErrorResponse: {
-            code: string;
-            title: string;
-            detail: string;
+        ApiResultSystemStatusResponse: {
+            data?: components["schemas"]["SystemStatusResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
         };
         SystemStatusResponse: {
             service?: string;
             status?: string;
+        };
+        ApiResultListPublicationView: {
+            data?: components["schemas"]["PublicationView"][];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ApiResultListKnowledgeArtifactSummaryResponse: {
+            data?: components["schemas"]["KnowledgeArtifactSummaryResponse"][];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        KnowledgeArtifactSummaryResponse: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            artifactType?: "PLAYBOOK" | "CLAUSE_LIBRARY" | "TEMPLATE" | "EXECUTED_PRECEDENT" | "NEGOTIATION_HISTORY" | "EXTERNAL_REFERENCE";
+            filename?: string;
+            contentType?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            sha256?: string;
+            /** @enum {string} */
+            ingestStatus?: "RECEIVED" | "EXTRACTING" | "EXTRACTED" | "FAILED";
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ApiResultListExtractionUnitView: {
+            data?: components["schemas"]["ExtractionUnitView"][];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ExtractionUnitView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            artifactId?: string;
+            /** Format: int32 */
+            ordinal?: number;
+            /** @enum {string} */
+            kind?: "HEADING_SECTION" | "TABLE" | "SPREADSHEET_ROW";
+            title?: string;
+            contentText?: string;
+            sourceNodeIds?: string[];
+        };
+        ApiResultListKnowledgeStructureNodeView: {
+            data?: components["schemas"]["KnowledgeStructureNodeView"][];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        KnowledgeStructureNodeView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            artifactId?: string;
+            /** Format: uuid */
+            parentId?: string;
+            /** @enum {string} */
+            nodeType?: "BODY" | "TITLE" | "HEADING" | "PARAGRAPH" | "TABLE" | "TABLE_ROW" | "TABLE_CELL" | "WORKBOOK" | "SHEET" | "SPREADSHEET_ROW" | "SPREADSHEET_CELL";
+            /** Format: int32 */
+            ordinal?: number;
+            text?: string;
+            /** Format: int32 */
+            headingLevel?: number;
+            numberingLabel?: string;
+            partPath?: string;
+            /** Format: int32 */
+            bodyIndex?: number;
+            /** Format: int32 */
+            paragraphIndex?: number;
+            /** Format: int32 */
+            tableIndex?: number;
+            /** Format: int32 */
+            rowIndex?: number;
+            /** Format: int32 */
+            columnIndex?: number;
+            /** Format: int32 */
+            runStart?: number;
+            /** Format: int32 */
+            runEnd?: number;
+            sheetName?: string;
+            mergedRegion?: components["schemas"]["MergedRegionView"];
+            rawStyleId?: string;
+        };
+        MergedRegionView: {
+            /** Format: int32 */
+            firstRow?: number;
+            /** Format: int32 */
+            lastRow?: number;
+            /** Format: int32 */
+            firstColumn?: number;
+            /** Format: int32 */
+            lastColumn?: number;
+        };
+        ApiResultListCandidateView: {
+            data?: components["schemas"]["CandidateView"][];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ApiResultContractSummaryResponse: {
+            data?: components["schemas"]["ContractSummaryResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
         };
         /** @description Contract with its latest version state */
         ContractSummaryResponse: {
@@ -137,6 +605,13 @@ export interface components {
             filename: string;
             /** Format: int32 */
             nodeCount: number;
+        };
+        ApiResultContractStructureResponse: {
+            data?: components["schemas"]["ContractStructureResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
         };
         /** @description Canonical structure of a contract version */
         ContractStructureResponse: {
@@ -196,7 +671,304 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listPublications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultListPublicationView"];
+                };
+            };
+        };
+    };
+    publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultPublicationView"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid state for this operation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReviewDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultCandidateView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid state for this operation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    edit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewEditRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultCandidateView"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid state for this operation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReviewDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultCandidateView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid state for this operation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listArtifacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultListKnowledgeArtifactSummaryResponse"];
+                };
+            };
+        };
+    };
     upload: {
+        parameters: {
+            query: {
+                artifactType: "PLAYBOOK" | "CLAUSE_LIBRARY" | "TEMPLATE" | "EXECUTED_PRECEDENT" | "NEGOTIATION_HISTORY" | "EXTERNAL_REFERENCE";
+                declaredContractTypes?: string;
+                contractPackKey?: string;
+                partyPerspective?: string;
+                paperSource?: string;
+                jurisdiction?: string;
+                language?: string;
+                effectiveFrom?: string;
+                effectiveTo?: string;
+                note?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultKnowledgeArtifactDetailResponse"];
+                };
+            };
+            /** @description Invalid upload or manifest */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Upload exceeds the configured size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unsupported knowledge source type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    upload_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -212,13 +984,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Processed; inspect parseStatus for the outcome */
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["IngestResponse"];
+                    "*/*": components["schemas"]["ApiResultIngestResponse"];
                 };
             };
             /** @description Invalid upload */
@@ -256,12 +1028,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SystemStatusResponse"];
+                    "application/json": components["schemas"]["ApiResultSystemStatusResponse"];
                 };
             };
         };
     };
-    getContract: {
+    getPublication: {
         parameters: {
             query?: never;
             header?: never;
@@ -272,16 +1044,109 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Contract found */
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ContractSummaryResponse"];
+                    "*/*": components["schemas"]["ApiResultPublicationView"];
                 };
             };
-            /** @description Contract does not exist in this organization */
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultCandidateView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultKnowledgeArtifactDetailResponse"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getUnits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultListExtractionUnitView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -298,19 +1163,145 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultListKnowledgeStructureNodeView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    downloadOriginal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Original document bytes */
+            200: {
+                headers: {
+                    /** @description attachment with the sanitized original filename (RFC 6266/5987) */
+                    "Content-Disposition"?: unknown;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description Artifact does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultListCandidateView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultContractSummaryResponse"];
+                };
+            };
+            /** @description Contract does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getStructure_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
                 versionNumber: number;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Structure found */
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ContractStructureResponse"];
+                    "*/*": components["schemas"]["ApiResultContractStructureResponse"];
                 };
             };
             /** @description Contract or version does not exist in this organization */
@@ -324,7 +1315,7 @@ export interface operations {
             };
         };
     };
-    downloadOriginal: {
+    downloadOriginal_1: {
         parameters: {
             query?: never;
             header?: never;
