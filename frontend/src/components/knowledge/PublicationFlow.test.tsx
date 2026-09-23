@@ -122,6 +122,7 @@ function stubKnowledgeApi(state: ApiState) {
       }
       const body = (await request.clone().json()) as {
         candidateIds: string[]
+        supersededCandidates?: Record<string, string>
         note?: string
       }
       const publication: Publication = {
@@ -132,8 +133,10 @@ function stubKnowledgeApi(state: ApiState) {
         items: body.candidateIds.map((candidateId, index) => ({
           id: `item-${index}`,
           candidateId,
-          supersededCandidateId: null,
-          action: 'ADD' as const,
+          supersededCandidateId: body.supersededCandidates?.[candidateId] ?? null,
+          action: body.supersededCandidates?.[candidateId]
+            ? ('SUPERSEDE' as const)
+            : ('ADD' as const),
         })),
         createdAt: '2026-09-23T07:00:00Z',
       }
@@ -231,6 +234,70 @@ describe('knowledge publication', () => {
       await screen.findByRole('link', { name: 'Termination' }),
     ).toHaveAttribute('href', '/knowledge/artifacts/a1?candidate=c1')
     expect(screen.getAllByText('Add')).toHaveLength(2)
+  })
+
+
+  it('summarizes supersession and sends it only after an explicit choice', async () => {
+    const superseding = candidate({
+      id: 'c1',
+      rawLabel: 'New liability rule',
+      reviewStatus: 'APPROVED',
+      reviewCategory: 'HIGH',
+      legalConceptKey: 'LIMITATION_OF_LIABILITY',
+      conflictSignals: [
+        {
+          conflictType: 'SUPERSEDES_EXISTING',
+          message: 'Appears intended to replace a published position (p=0.93)',
+          publishedCandidateId: 'old1',
+        },
+      ],
+    })
+    const old = candidate({
+      id: 'old1',
+      rawLabel: 'Old liability rule',
+      reviewStatus: 'PUBLISHED',
+      legalConceptKey: 'LIMITATION_OF_LIABILITY',
+    })
+    const state: ApiState = { candidates: [superseding, old], publications: [] }
+    const { requests } = stubKnowledgeApi(state)
+
+    renderRoute('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /New liability rule/i })
+    await userEvent.click(
+      within(panel).getByRole('checkbox', {
+        name: /replace this published knowledge when publishing/i,
+      }),
+    )
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /publish approved \(1\)/i }),
+    )
+
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).getByRole('heading', { name: /replacing published knowledge/i }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('Old liability rule')).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(/1 candidate with high review attention/i),
+    ).toBeInTheDocument()
+
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: /publish version/i }),
+    )
+    await screen.findByRole('heading', {
+      level: 1,
+      name: /knowledge publication v9/i,
+    })
+
+    const publishRequest = requests.find(
+      (request) => request.method === 'POST' && request.url.endsWith('/publications'),
+    )!
+    const body = (await publishRequest.clone().json()) as {
+      supersededCandidates?: Record<string, string>
+    }
+    expect(body.supersededCandidates).toEqual({ c1: 'old1' })
   })
 
   it('keeps publishing disabled until a candidate is approved', async () => {

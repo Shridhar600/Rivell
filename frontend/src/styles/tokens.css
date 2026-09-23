@@ -867,3 +867,35 @@ a {
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+.bulk-toolbar {
+  grid-column: 1 / -1;
+}
+
+.candidate-list__row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.candidate-list__select {
+  padding-top: var(--space-2);
+}
+
+.dialog__section-heading {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: 0.9375rem;
+}
+
+.bulk-result {
+  margin-top: var(--space-2);
+}
+
+.bulk-result p {
+  margin: 0 0 var(--space-1);
+}
+
+.bulk-result ul {
+  margin: 0;
+  padding-left: var(--space-3);
+}

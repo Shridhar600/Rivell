@@ -212,6 +212,7 @@ function baseCandidates(): Candidate[] {
 interface ApiState {
   candidates: Candidate[]
   structureError?: boolean
+  bulkSkipped?: Record<string, string>
 }
 
 function stubKnowledgeApi(state: ApiState) {
@@ -231,6 +232,19 @@ function stubKnowledgeApi(state: ApiState) {
         : ok(structureNodes)
     }
     if (path.endsWith('/units')) return ok(units)
+    if (path.endsWith('/bulk-approve')) {
+      const body = (await request.clone().json()) as { candidateIds?: string[] }
+      const requested = body.candidateIds ?? []
+      const approvedIds = requested.filter(
+        (candidateId) => !state.bulkSkipped?.[candidateId],
+      )
+      state.candidates = state.candidates.map((entry) =>
+        approvedIds.includes(entry.id)
+          ? { ...entry, reviewStatus: 'APPROVED', updatedAt: '2026-09-23T06:00:00Z' }
+          : entry,
+      )
+      return ok({ approvedIds, skipped: state.bulkSkipped ?? {} })
+    }
     if (path.endsWith('/approve')) {
       const id = path.split('/').at(-2)!
       const body = await request.clone().json().catch(() => ({}))
@@ -770,6 +784,81 @@ describe('candidate review workspace', () => {
 
     expect(
       await screen.findByText(/selected candidate is not part of this knowledge source/i),
+    ).toBeInTheDocument()
+  })
+
+
+  it('bulk approves only eligible candidates and announces server outcomes', async () => {
+    const state: ApiState = {
+      candidates: [
+        candidate({ id: 'c1', rawLabel: 'Termination', reviewCategory: 'ROUTINE' }),
+        candidate({ id: 'c2', rawLabel: 'Liability cap', reviewCategory: 'HIGH' }),
+        candidate({
+          id: 'c3',
+          rawLabel: 'Governing law',
+          reviewCategory: 'ROUTINE',
+          reviewStatus: 'APPROVED',
+        }),
+      ],
+    }
+    const { requests } = stubKnowledgeApi(state)
+
+    renderArtifact()
+
+    expect(
+      await screen.findByText(/1 of 3 candidates are eligible for bulk approval/i),
+    ).toBeInTheDocument()
+
+    expect(
+      screen.getByRole('checkbox', { name: /select Termination for bulk approval/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: /select Liability cap for bulk approval/i }),
+    ).toBeNull()
+
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: /select Termination for bulk approval/i }),
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: /approve selected \(1\)/i }),
+    )
+
+    await waitFor(() => {
+      expect(state.candidates[0].reviewStatus).toBe('APPROVED')
+    })
+    const bulkRequest = requests.find((request) =>
+      request.url.endsWith('/bulk-approve'),
+    )!
+    const body = (await bulkRequest.clone().json()) as { candidateIds: string[] }
+    expect(body.candidateIds).toEqual(['c1'])
+    expect(await screen.findByText(/approved 1 candidate/i)).toBeInTheDocument()
+  })
+
+  it('surfaces server-skipped bulk candidates with reasons', async () => {
+    const state: ApiState = {
+      candidates: [
+        candidate({ id: 'c1', rawLabel: 'Termination', reviewCategory: 'ROUTINE' }),
+      ],
+      bulkSkipped: { c1: 'not ROUTINE after re-evaluation' },
+    }
+    stubKnowledgeApi(state)
+
+    renderArtifact()
+
+    await userEvent.click(
+      await screen.findByRole('checkbox', {
+        name: /select Termination for bulk approval/i,
+      }),
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: /approve selected \(1\)/i }),
+    )
+
+    expect(
+      await screen.findByText(/1 skipped by the server/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Termination: not ROUTINE after re-evaluation/i),
     ).toBeInTheDocument()
   })
 

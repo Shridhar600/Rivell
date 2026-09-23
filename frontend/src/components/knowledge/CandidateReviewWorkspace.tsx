@@ -11,9 +11,11 @@ import {
   approvedCandidates,
   type ReviewStatusFilter,
 } from '../../lib/candidates'
+import { isBulkEligible } from '../../lib/semantics'
 import { EmptyState } from '../EmptyState'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
+import { BulkReviewToolbar } from './BulkReviewToolbar'
 import { CandidateQueue } from './CandidateQueue'
 import { CandidateReviewPanel } from './CandidateReviewPanel'
 import { PublicationDialog } from './PublicationDialog'
@@ -34,6 +36,7 @@ export function CandidateReviewWorkspace({
   const [supersessionChoices, setSupersessionChoices] = useState<
     Record<string, string>
   >({})
+  const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
   const panelRef = useRef<HTMLDivElement>(null)
 
   const selectedCandidateId = selectedId
@@ -61,6 +64,27 @@ export function CandidateReviewWorkspace({
         next[candidateId] = peerId
       }
       return next
+    })
+  }
+
+  function toggleBulkSelection(candidateId: string) {
+    setSelectedForBulk((previous) => {
+      const next = new Set(previous)
+      if (next.has(candidateId)) {
+        next.delete(candidateId)
+      } else {
+        next.add(candidateId)
+      }
+      return next
+    })
+  }
+
+  function toggleAllEligible() {
+    setSelectedForBulk((previous) => {
+      const eligible = candidatesQuery.data?.filter(isBulkEligible) ?? []
+      const allSelected =
+        eligible.length > 0 && eligible.every((candidate) => previous.has(candidate.id))
+      return allSelected ? new Set() : new Set(eligible.map((candidate) => candidate.id))
     })
   }
 
@@ -110,6 +134,13 @@ export function CandidateReviewWorkspace({
 
   return (
     <section className="review-workspace" aria-label="Candidate review">
+      <BulkReviewToolbar
+        candidates={candidates}
+        selectedIds={selectedForBulk}
+        onToggleAll={toggleAllEligible}
+        onClear={() => setSelectedForBulk(new Set())}
+        artifactId={artifact.id}
+      />
       <CandidateQueue
         candidates={candidates}
         selectedId={selectedId}
@@ -128,6 +159,8 @@ export function CandidateReviewWorkspace({
             Publish approved ({approved.length})
           </button>
         }
+        selectedForBulk={selectedForBulk}
+        onToggleBulk={toggleBulkSelection}
       />
       <div className="review-workspace__panel" ref={panelRef}>
         {selected ? (
@@ -159,6 +192,7 @@ export function CandidateReviewWorkspace({
         <PublicationDialog
           artifact={artifact}
           approved={approved}
+          supersessionChoices={supersessionChoices}
           onClose={() => setPublishOpen(false)}
         />
       ) : null}
