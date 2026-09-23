@@ -142,6 +142,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contracts/{id}/versions/{versionNumber}/semantics/parties/{partyId}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct a party's role (machine interpretation preserved) */
+        post: operations["correctPartyRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{id}/versions/{versionNumber}/semantics/clauses/{clauseId}/facts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct a clause's typed fact values (machine proposal preserved) */
+        post: operations["correctFacts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{id}/versions/{versionNumber}/semantics/clauses/{clauseId}/concepts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct a clause's primary concept (machine proposal preserved) */
+        post: operations["correctConcept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{id}/versions/{versionNumber}/enrichment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run semantic enrichment on a contract version */
+        post: operations["enrich"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system/status": {
         parameters: {
             query?: never;
@@ -303,6 +371,23 @@ export interface paths {
         };
         /** Get the canonical structure of a contract version */
         get: operations["getStructure_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{id}/versions/{versionNumber}/semantics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the typed semantic contract of a contract version */
+        get: operations["getSemantics"];
         put?: never;
         post?: never;
         delete?: never;
@@ -611,6 +696,162 @@ export interface components {
             sha256: string;
             /** Format: int32 */
             nodeCount: number;
+        };
+        PartyRoleCorrection: {
+            /** @description Corrected roles of the party in this agreement */
+            roles: ("CUSTOMER" | "SUPPLIER" | "DISCLOSING_PARTY" | "RECEIVING_PARTY" | "LICENSOR" | "LICENSEE" | "PARTY_A" | "PARTY_B")[];
+        };
+        ApiResultSemanticContractResponse: {
+            data?: components["schemas"]["SemanticContractResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ClauseView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            headingNodeId?: string;
+            heading?: string;
+            contentText?: string;
+            primaryConcept?: string;
+            secondaryConcepts?: string[];
+            correctedPrimaryConcept?: string;
+            machineFacts?: components["schemas"]["FactView"][];
+            effectiveFacts?: components["schemas"]["FactView"][];
+            interpretations?: components["schemas"]["InterpretationSummary"][];
+            corrected?: boolean;
+        };
+        DefinedTermView: {
+            /** Format: uuid */
+            id?: string;
+            term?: string;
+            definition?: string;
+            /** Format: int32 */
+            referenceCount?: number;
+            duplicate?: boolean;
+        };
+        FactView: {
+            factSchema?: string;
+            /** Format: int32 */
+            schemaVersion?: number;
+            values?: {
+                [key: string]: string;
+            };
+        };
+        InterpretationSummary: {
+            field?: string;
+            kind?: string;
+            proposedValue?: string;
+            specId?: string;
+            /** Format: int32 */
+            sourceNodeCount?: number;
+            verification?: string;
+        };
+        MetadataFactView: {
+            field?: string;
+            value?: string;
+            correctedValue?: string;
+            corrected?: boolean;
+            /** Format: int32 */
+            sourceNodeCount?: number;
+        };
+        ObservationsView: {
+            /** Format: int32 */
+            regionCount?: number;
+            /** Format: int32 */
+            decisionExecutionCount?: number;
+            /** Format: int32 */
+            questionCount?: number;
+            /** Format: int32 */
+            generativeExtractionCount?: number;
+            /** Format: int32 */
+            deterministicFactCount?: number;
+            providerDegraded?: boolean;
+            budgetExhausted?: boolean;
+        };
+        PartyView: {
+            /** Format: uuid */
+            id?: string;
+            name?: string;
+            aliases?: string[];
+            machineRoles?: string[];
+            effectiveRoles?: string[];
+            corrected?: boolean;
+            /** Format: int32 */
+            sourceNodeCount?: number;
+        };
+        ReferenceView: {
+            /** Format: uuid */
+            id?: string;
+            referenceText?: string;
+            kind?: string;
+            status?: string;
+            /** Format: uuid */
+            targetNodeId?: string;
+            /** Format: int32 */
+            candidateCount?: number;
+        };
+        RelationshipView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            sourceRegionNodeId?: string;
+            /** Format: uuid */
+            targetRegionNodeId?: string;
+            type?: string;
+            detector?: string;
+            basis?: string;
+            /** Format: double */
+            probability?: number;
+            verification?: string;
+        };
+        ReviewProfileView: {
+            contractType?: string;
+            ourSideRole?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+        };
+        SemanticContractResponse: {
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: int32 */
+            versionNumber?: number;
+            enrichmentStatus?: string;
+            pipelineVersion?: string;
+            reviewProfile?: components["schemas"]["ReviewProfileView"];
+            metadata?: components["schemas"]["MetadataFactView"][];
+            parties?: components["schemas"]["PartyView"][];
+            definedTerms?: components["schemas"]["DefinedTermView"][];
+            references?: components["schemas"]["ReferenceView"][];
+            clauses?: components["schemas"]["ClauseView"][];
+            relationships?: components["schemas"]["RelationshipView"][];
+            quality?: string[];
+            observations?: components["schemas"]["ObservationsView"];
+        };
+        FactValuesCorrection: {
+            /** @description Corrected fact values; fields must belong to the clause's existing fact schema */
+            values: {
+                [key: string]: string;
+            };
+        };
+        ConceptCorrection: {
+            /** @description Corrected primary concept; must be one of the clause's classified concepts */
+            primary: string;
+        };
+        ReviewProfileInput: {
+            /**
+             * @description Declared contract type for enrichment
+             * @enum {string}
+             */
+            contractType: "NDA" | "MSA" | "OTHER";
+            /** @enum {string} */
+            ourSideRole?: "CUSTOMER" | "SUPPLIER" | "DISCLOSING_PARTY" | "RECEIVING_PARTY" | "LICENSOR" | "LICENSEE" | "PARTY_A" | "PARTY_B";
+            /** @enum {string} */
+            paperSource?: "OUR_PAPER" | "COUNTERPARTY_PAPER" | "THIRD_PARTY";
+            /** @enum {string} */
+            jurisdiction?: "US" | "UK" | "UNSPECIFIED";
         };
         ApiResultSystemStatusResponse: {
             data?: components["schemas"]["SystemStatusResponse"];
@@ -1256,6 +1497,216 @@ export interface operations {
             };
         };
     };
+    correctPartyRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+                partyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartyRoleCorrection"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Contract, version, or party does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Semantics are not READY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+        };
+    };
+    correctFacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+                clauseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FactValuesCorrection"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Correction violates the fact schema */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Contract, version, or clause does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Semantics are not READY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+        };
+    };
+    correctConcept: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+                clauseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConceptCorrection"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Correction violates the model invariants */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Contract, version, or clause does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Semantics are not READY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+        };
+    };
+    enrich: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewProfileInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Invalid profile */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Contract or version does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Enrichment already running */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+        };
+    };
     status: {
         parameters: {
             query?: never;
@@ -1554,6 +2005,38 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getSemantics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
+                };
+            };
+            /** @description Contract or version or semantics does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultSemanticContractResponse"];
                 };
             };
         };
