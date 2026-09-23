@@ -7,7 +7,8 @@ import java.util.UUID;
 /**
  * The typed semantic model of one contract version: immutable source + hierarchical
  * structure (M1) + this semantic layer (AD #5). Represents only what the contract
- * contains — never whether it is acceptable.
+ * contains — never whether it is acceptable. Carries safe enrichment observations
+ * (AD #30) for later evaluation work.
  */
 public record ContractSemantics(
         UUID id,
@@ -23,7 +24,7 @@ public record ContractSemantics(
         List<ClauseSemantics> clauses,
         List<SemanticRelationship> relationships,
         QualityReasons quality,
-        List<Interpretation> interpretations) {
+        Observations observations) {
 
     public ContractSemantics {
         Objects.requireNonNull(id, "id");
@@ -41,18 +42,6 @@ public record ContractSemantics(
         clauses = clauses == null ? List.of() : List.copyOf(clauses);
         relationships = relationships == null ? List.of() : List.copyOf(relationships);
         Objects.requireNonNull(quality, "quality");
-        interpretations = interpretations == null ? List.of() : List.copyOf(interpretations);
-    }
-
-    public ContractSemantics withStatus(EnrichmentStatus status) {
-        return new ContractSemantics(id, contractVersionId, organizationId, status,
-                pipelineVersion, reviewProfile, metadata, parties, definedTerms, references,
-                clauses, relationships, quality, interpretations);
-    }
-
-    public ContractSemantics withQuality(QualityReasons quality) {
-        return new ContractSemantics(id, contractVersionId, organizationId, enrichmentStatus,
-                pipelineVersion, reviewProfile, metadata, parties, definedTerms, references,
-                clauses, relationships, quality, interpretations);
     }
 }
+

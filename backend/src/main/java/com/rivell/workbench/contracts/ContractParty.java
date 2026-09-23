@@ -49,4 +49,9 @@ public record ContractParty(
         return new ContractParty(id, contractVersionId, rawName, normalizedName, aliases,
                 interpretations, machineRoles, correction, correctedBy);
     }
+
+    public ContractParty withMachineRoles(List<PartyRole> roles) {
+        return new ContractParty(id, contractVersionId, rawName, normalizedName, aliases,
+                interpretations, roles, correction, correctedBy);
+    }
 }

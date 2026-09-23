@@ -67,7 +67,7 @@ class ContractSemanticsSchemaIT {
         var semantics = new ContractSemantics(UUID.randomUUID(), versionId, UUID.randomUUID(),
                 EnrichmentStatus.ENRICHING, "rivell-contract-enrichment-1",
                 ReviewProfile.minimal(ContractType.NDA), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), QualityReasons.NONE, List.of());
+                List.of(), List.of(), List.of(), QualityReasons.NONE, null);
 
         assertThatThrownBy(() -> semanticsRepository.insertSemanticsRow(semantics))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
@@ -136,12 +136,12 @@ class ContractSemanticsSchemaIT {
                         Jurisdiction.US),
                 List.of(metadata), List.of(party), List.of(definedTerm), List.of(reference),
                 List.of(clause), List.of(relationship), QualityReasons.NONE,
-                List.of(machineInterpretation));
+                new Observations(3, 2, 10, 0, 2, false, false));
 
         transactionTemplate.executeWithoutResult(status -> {
             semanticsRepository.insertSemanticsRow(semantics);
             semanticsRepository.replaceSemantics(
-                    semantics.withStatus(EnrichmentStatus.READY));
+                    readyCopy(semantics));
         });
 
         var loaded = semanticsRepository.find(versionId, organizationId).orElseThrow();
@@ -156,6 +156,8 @@ class ContractSemanticsSchemaIT {
         assertThat(loaded.definedTerms().get(0).term()).isEqualTo("Fees");
         assertThat(loaded.references()).hasSize(1);
         assertThat(loaded.references().get(0).targetNodeId()).isEqualTo(targetHeadingId);
+        assertThat(loaded.observations()).isNotNull();
+        assertThat(loaded.observations().regionCount()).isEqualTo(3);
         assertThat(loaded.clauses()).hasSize(1);
         assertThat(loaded.clauses().get(0).primaryConcept())
                 .contains(LegalConcept.LIMITATION_OF_LIABILITY);
@@ -164,7 +166,14 @@ class ContractSemanticsSchemaIT {
                 .containsEntry("liabilityCapMultiple", "3");
         assertThat(loaded.relationships()).hasSize(1);
         assertThat(loaded.relationships().get(0).type()).isEqualTo(RelationshipType.CARVES_OUT);
-        assertThat(loaded.interpretations()).hasSize(1);
+    }
+
+    private ContractSemantics readyCopy(ContractSemantics semantics) {
+        return new ContractSemantics(semantics.id(), semantics.contractVersionId(),
+                semantics.organizationId(), EnrichmentStatus.READY, semantics.pipelineVersion(),
+                semantics.reviewProfile(), semantics.metadata(), semantics.parties(),
+                semantics.definedTerms(), semantics.references(), semantics.clauses(),
+                semantics.relationships(), semantics.quality(), semantics.observations());
     }
 
     @Test
@@ -183,7 +192,7 @@ class ContractSemanticsSchemaIT {
                 EnrichmentStatus.READY, "rivell-contract-enrichment-1",
                 ReviewProfile.minimal(ContractType.NDA), List.of(), List.of(party),
                 List.of(), List.of(), List.of(clause), List.of(), QualityReasons.NONE,
-                List.of());
+                null);
 
         transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(semantics));
         var loadedParty = semanticsRepository.find(versionId, organizationId).orElseThrow()
@@ -220,7 +229,7 @@ class ContractSemanticsSchemaIT {
                         status, "rivell-contract-enrichment-1",
                         ReviewProfile.minimal(ContractType.NDA),
                         List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                        QualityReasons.NONE, List.of())));
+                        QualityReasons.NONE, null)));
     }
 
     private UUID stagedVersion(UUID organizationId) {

@@ -4,6 +4,7 @@ public final class Permissions {
 
     public static final Permission CONTRACT_UPLOAD = new Permission("contracts:upload");
     public static final Permission CONTRACT_READ = new Permission("contracts:read");
+    public static final Permission CONTRACT_ENRICH = new Permission("contracts:enrich");
 
     public static final Permission KNOWLEDGE_UPLOAD = new Permission("knowledge:upload");
     public static final Permission KNOWLEDGE_READ = new Permission("knowledge:read");

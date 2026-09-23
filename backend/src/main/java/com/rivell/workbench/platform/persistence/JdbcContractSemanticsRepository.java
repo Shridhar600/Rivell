@@ -36,6 +36,7 @@ import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.LegalFact;
 import com.rivell.workbench.contracts.MetadataFact;
 import com.rivell.workbench.contracts.MetadataField;
+import com.rivell.workbench.contracts.Observations;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyCorrection;
 import com.rivell.workbench.contracts.PartyRole;
@@ -73,10 +74,10 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         jdbcClient.sql("""
                 insert into contract_semantics
                   (id, contract_version_id, organization_id, enrichment_status, pipeline_version,
-                   review_profile, quality, warnings, interpretations, created_at)
+                   review_profile, quality, warnings, observations, created_at)
                 values (:id, :versionId, :organizationId, :status, :pipelineVersion,
                         cast(:profile as jsonb), cast(:quality as jsonb), cast(:warnings as jsonb),
-                        cast(:interpretations as jsonb), :createdAt)
+                        cast(:observations as jsonb), :createdAt)
                 """)
                 .param("id", semantics.id())
                 .param("versionId", semantics.contractVersionId())
@@ -86,7 +87,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 .param("profile", toJson(reviewProfile(semantics.reviewProfile())))
                 .param("quality", toJson(quality(semantics.quality())))
                 .param("warnings", toJson(List.of()))
-                .param("interpretations", toJson(interpretations(semantics.interpretations())))
+                .param("observations", toJson(observations(semantics.observations())))
                 .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
                 .update();
     }
@@ -123,17 +124,17 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         jdbcClient.sql("""
                 insert into contract_semantics
                   (id, contract_version_id, organization_id, enrichment_status, pipeline_version,
-                   review_profile, quality, warnings, interpretations, created_at)
+                   review_profile, quality, warnings, observations, created_at)
                 values (:id, :versionId, :organizationId, :status, :pipelineVersion,
                         cast(:profile as jsonb), cast(:quality as jsonb), cast(:warnings as jsonb),
-                        cast(:interpretations as jsonb), :createdAt)
+                        cast(:observations as jsonb), :createdAt)
                 on conflict (contract_version_id) do update set
                   enrichment_status = excluded.enrichment_status,
                   pipeline_version = excluded.pipeline_version,
                   review_profile = excluded.review_profile,
                   quality = excluded.quality,
                   warnings = excluded.warnings,
-                  interpretations = excluded.interpretations
+                  observations = excluded.observations
                 """)
                 .param("id", semantics.id())
                 .param("versionId", semantics.contractVersionId())
@@ -143,7 +144,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 .param("profile", toJson(reviewProfile(semantics.reviewProfile())))
                 .param("quality", toJson(quality(semantics.quality())))
                 .param("warnings", toJson(List.of()))
-                .param("interpretations", toJson(interpretations(semantics.interpretations())))
+                .param("observations", toJson(observations(semantics.observations())))
                 .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
                 .update();
 
@@ -313,7 +314,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
     public Optional<ContractSemantics> find(UUID contractVersionId, UUID organizationId) {
         var header = jdbcClient.sql("""
                 select id, enrichment_status, pipeline_version, review_profile, quality,
-                       interpretations
+                       observations
                 from contract_semantics
                 where contract_version_id = :versionId and organization_id = :organizationId
                 """)
@@ -325,7 +326,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                         rs.getString("pipeline_version"),
                         parseProfile(rs.getString("review_profile")),
                         parseQuality(rs.getString("quality")),
-                        parseInterpretations(rs.getString("interpretations"))))
+                        parseObservations(rs.getString("observations"))))
                 .optional();
         if (header.isEmpty()) {
             return Optional.empty();
@@ -470,7 +471,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         return Optional.of(new ContractSemantics(semanticsId, versionId, organizationId,
                 headerValue.status(), headerValue.pipelineVersion(), headerValue.profile(),
                 metadata, parties, definedTerms, references, clauses, relationships,
-                headerValue.quality(), headerValue.interpretations()));
+                headerValue.quality(), headerValue.observations()));
     }
 
     @Override
@@ -510,8 +511,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
 
     private record SemanticsHeader(
             UUID id, EnrichmentStatus status, String pipelineVersion,
-            ReviewProfile profile, QualityReasons quality,
-            List<Interpretation> interpretations) {
+            ReviewProfile profile, QualityReasons quality, Observations observations) {
     }
 
     private record MetadataRow(
@@ -555,6 +555,36 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
 
     private List<String> quality(QualityReasons quality) {
         return quality.notes().stream().map(Enum::name).toList();
+    }
+
+    private Map<String, Object> observations(Observations observations) {
+        if (observations == null) {
+            return null;
+        }
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("regionCount", observations.regionCount());
+        payload.put("decisionExecutionCount", observations.decisionExecutionCount());
+        payload.put("questionCount", observations.questionCount());
+        payload.put("generativeExtractionCount", observations.generativeExtractionCount());
+        payload.put("deterministicFactCount", observations.deterministicFactCount());
+        payload.put("providerDegraded", observations.providerDegraded());
+        payload.put("budgetExhausted", observations.budgetExhausted());
+        return payload;
+    }
+
+    private Observations parseObservations(String json) {
+        var node = readTree(json);
+        if (node == null || !node.hasNonNull("regionCount")) {
+            return null;
+        }
+        return new Observations(
+                node.get("regionCount").asInt(),
+                node.path("decisionExecutionCount").asInt(0),
+                node.path("questionCount").asInt(0),
+                node.path("generativeExtractionCount").asInt(0),
+                node.path("deterministicFactCount").asInt(0),
+                node.path("providerDegraded").asBoolean(false),
+                node.path("budgetExhausted").asBoolean(false));
     }
 
     private QualityReasons parseQuality(String json) {

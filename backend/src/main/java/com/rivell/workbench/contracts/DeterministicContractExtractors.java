@@ -28,7 +28,8 @@ public final class DeterministicContractExtractors {
             "([A-Z][A-Za-z0-9&.,'’\\-]*(?:[ ]+[A-Z][A-Za-z0-9&.,'’\\-]*)*)");
     private static final Pattern ROLE_LABEL_PATTERN = Pattern.compile("\\(\\s*\"([^\"]{2,60})\"\\s*\\)");
     private static final Pattern REFERENCE_PATTERN = Pattern.compile(
-            "\\b(Section|Clause|Article|Schedule|Exhibit|Annex)\\s+([0-9]+(?:\\.[0-9]+)*|[A-Z0-9]+)");
+            "\\b(Sections?|Clauses?|Articles?|Schedules?|Exhibits?|Annex(?:es)?)\\s+"
+                    + "([0-9]+(?:\\.[0-9]+)*|[A-Z0-9]+)");
     private static final Pattern EXTERNAL_DOCUMENT_PATTERN = Pattern.compile(
             "\\b(the )?([A-Z][A-Za-z ]{3,40}(?:Agreement|DPA|Addendum))\\s+dated\\s+"
                     + "([A-Z][a-z]+ \\d{1,2}, \\d{4})");
@@ -266,7 +267,8 @@ public final class DeterministicContractExtractors {
     }
 
     private ReferenceKind referenceKind(String keyword) {
-        return switch (keyword) {
+        var singular = keyword.endsWith("s") ? keyword.substring(0, keyword.length() - 1) : keyword;
+        return switch (singular) {
             case "Section", "Clause", "Article" -> ReferenceKind.SECTION;
             case "Schedule" -> ReferenceKind.SCHEDULE;
             case "Exhibit" -> ReferenceKind.EXHIBIT;

@@ -128,7 +128,7 @@ class SemanticContractModelTest {
         var semantics = new ContractSemantics(UUID.randomUUID(), VERSION_ID, ORG_ID,
                 EnrichmentStatus.READY, "rivell-contract-enrichment-1", reviewProfile,
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                QualityReasons.of(List.of(ReviewQualityNote.NONE)), List.of());
+                QualityReasons.of(List.of(ReviewQualityNote.NONE)), null);
 
         assertThat(semantics.enrichmentStatus()).isEqualTo(EnrichmentStatus.READY);
         assertThat(semantics.reviewProfile().contractType()).isEqualTo(ContractType.NDA);

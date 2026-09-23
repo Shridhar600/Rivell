@@ -13,7 +13,7 @@ CREATE TABLE contract_semantics (
     review_profile JSONB NOT NULL,
     quality JSONB NOT NULL DEFAULT '[]'::jsonb,
     warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
-    interpretations JSONB NOT NULL DEFAULT '[]'::jsonb,
+    observations JSONB,
     created_at TIMESTAMPTZ NOT NULL,
     UNIQUE (id, organization_id),
     UNIQUE (contract_version_id)
