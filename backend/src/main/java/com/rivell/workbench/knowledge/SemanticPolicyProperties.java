@@ -19,7 +19,8 @@ public record SemanticPolicyProperties(
         double verificationVerified,
         double verificationDisputed,
         double conflictProposal,
-        double supersedeProposal) {
+        double supersedeProposal,
+        int maxInterpretedCandidates) {
 
     public SemanticPolicyProperties {
         artifactTypeMatch = threshold(artifactTypeMatch, 0.70);
@@ -30,8 +31,10 @@ public record SemanticPolicyProperties(
         scopeNarrowProposal = threshold(scopeNarrowProposal, 0.80);
         verificationVerified = threshold(verificationVerified, 0.85);
         verificationDisputed = threshold(verificationDisputed, 0.35);
+        jurisdictionProposal = threshold(jurisdictionProposal, 0.80);
         conflictProposal = threshold(conflictProposal, 0.80);
         supersedeProposal = threshold(supersedeProposal, 0.80);
+        maxInterpretedCandidates = maxInterpretedCandidates <= 0 ? 50 : maxInterpretedCandidates;
     }
 
     private static double threshold(double value, double fallback) {

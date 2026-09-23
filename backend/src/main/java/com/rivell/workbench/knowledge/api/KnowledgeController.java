@@ -259,7 +259,8 @@ class KnowledgeController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
     @PostMapping("/publications")
     ApiResult<PublicationView> publish(@RequestBody PublishRequest request) {
-        var publication = publicationService.publish(request.candidateIds(), request.note());
+        var publication = publicationService.publish(
+                request.candidateIds(), request.supersededCandidates(), request.note());
         return ApiResult.ok(new PublicationView(
                 publication.id(),
                 publication.organizationId(),

@@ -148,7 +148,7 @@ class KnowledgeReviewPublicationIT {
         var artifact = ingestClauseLibrary();
         var candidate = firstVariant(artifact);
         reviewService.approve(candidate.id(), null);
-        var publication = publicationService.publish(List.of(candidate.id()), "v1");
+        var publication = publicationService.publish(List.of(candidate.id()), null, "v1");
 
         assertThat(publication.publicationNumber()).isEqualTo(1);
         assertThat(publication.items()).hasSize(1);
@@ -163,7 +163,7 @@ class KnowledgeReviewPublicationIT {
                 .isInstanceOf(InvalidCandidateReviewStateException.class);
         assertThatThrownBy(() -> reviewService.reject(candidate.id(), null))
                 .isInstanceOf(InvalidCandidateReviewStateException.class);
-        assertThatThrownBy(() -> publicationService.publish(List.of(candidate.id()), null))
+        assertThatThrownBy(() -> publicationService.publish(List.of(candidate.id()), null, null))
                 .isInstanceOf(InvalidPublicationException.class);
     }
 
@@ -177,8 +177,8 @@ class KnowledgeReviewPublicationIT {
         reviewService.approve(candidateA.id(), null);
         reviewService.approve(candidateB.id(), null);
 
-        var publication1 = publicationService.publish(List.of(candidateA.id()), "initial");
-        var publication2 = publicationService.publish(List.of(candidateB.id()), null);
+        var publication1 = publicationService.publish(List.of(candidateA.id()), null, "initial");
+        var publication2 = publicationService.publish(List.of(candidateB.id()), null, null);
         assertThat(publication2.publicationNumber()).isEqualTo(2);
 
         var reloaded = queryService.getPublication(publication2.id());
@@ -203,7 +203,7 @@ class KnowledgeReviewPublicationIT {
 
         var publicationsBefore = queryService.listPublications().size();
         assertThatThrownBy(() -> publicationService.publish(
-                List.of(pending.id(), rejected.id()), null))
+                List.of(pending.id(), rejected.id()), null, null))
                 .isInstanceOf(InvalidPublicationException.class);
         assertThat(queryService.listPublications()).hasSize(publicationsBefore);
     }
@@ -218,7 +218,7 @@ class KnowledgeReviewPublicationIT {
         identityProvider.use(new UserIdentity(
                 ownerIdentity.userId(), UUID.randomUUID(), Set.of("ADMIN")));
         try {
-            assertThatThrownBy(() -> publicationService.publish(List.of(candidate.id()), null))
+            assertThatThrownBy(() -> publicationService.publish(List.of(candidate.id()), null, null))
                     .isInstanceOf(KnowledgeCandidateNotFoundException.class);
         } finally {
             identityProvider.use(ownerIdentity);
@@ -234,7 +234,7 @@ class KnowledgeReviewPublicationIT {
 
         FailingKnowledgeRepository.armed = true;
         try {
-            assertThatThrownBy(() -> publicationService.publish(List.of(candidate.id()), "v1"))
+            assertThatThrownBy(() -> publicationService.publish(List.of(candidate.id()), null, "v1"))
                     .isInstanceOf(IllegalStateException.class);
         } finally {
             FailingKnowledgeRepository.armed = false;

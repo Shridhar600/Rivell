@@ -40,7 +40,8 @@ public class KnowledgePublicationService {
         this.authorizationService = authorizationService;
     }
 
-    public KnowledgePublication publish(List<UUID> candidateIds, String note) {
+    public KnowledgePublication publish(
+            List<UUID> candidateIds, java.util.Map<UUID, UUID> supersededCandidates, String note) {
         var identity = identityProvider.currentIdentity();
         if (!authorizationService.isAuthorized(identity, Permissions.KNOWLEDGE_PUBLISH)) {
             throw new UnauthorizedKnowledgeAccessException(identity.userId());
@@ -59,6 +60,10 @@ public class KnowledgePublicationService {
                 throw new InvalidPublicationException(candidateId,
                         "only APPROVED candidates can be published (current state: "
                                 + candidate.reviewStatus() + ")");
+            }
+            if (supersededCandidates != null && supersededCandidates.containsKey(candidateId)) {
+                candidate = candidate.withSupersedingCandidateId(
+                        supersededCandidates.get(candidateId), organizationId);
             }
             candidates.add(candidate);
         }
@@ -80,6 +85,12 @@ public class KnowledgePublicationService {
                     throw new InvalidPublicationException(candidate.id(),
                             "superseded candidate must itself be published");
                 }
+                if (superseded.legalConceptKey() != null
+                        && candidate.legalConceptKey() != null
+                        && !superseded.legalConceptKey().equals(candidate.legalConceptKey())) {
+                    throw new InvalidPublicationException(candidate.id(),
+                            "superseded candidate must cover the same legal concept");
+                }
                 items.add(new PublicationItem(
                         UUID.randomUUID(), publicationId, candidate.id(), supersededId,
                         PublicationAction.SUPERSEDE));
@@ -93,8 +104,10 @@ public class KnowledgePublicationService {
             repository.insertPublication(publication);
             for (var candidate : candidates) {
                 repository.updateReviewState(
-                        candidate.id(), ReviewStatus.PUBLISHED, candidate.editedContentText(),
-                        candidate.editedPayload(), candidate.reviewNote(), candidate.reviewedAt(),
+                        candidate.id(), organizationId, candidate.reviewStatus(),
+                        ReviewStatus.PUBLISHED, candidate.editedContentText(),
+                        candidate.editedPayload(), candidate.editedSemanticFields(), candidate.scope(),
+                        candidate.reviewNote(), candidate.reviewedAt(),
                         now);
             }
         });

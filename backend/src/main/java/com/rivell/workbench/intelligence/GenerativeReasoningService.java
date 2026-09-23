@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * The single domain-facing entry point for bounded generative extraction. Validates
@@ -41,7 +42,7 @@ public class GenerativeReasoningService {
             var result = provider.generate(new GenerationRequest(binding.modelAlias(), state, spec));
             validateFields(spec, result.fields());
             var metadata = new DecisionExecutionMetadata(
-                    java.util.UUID.randomUUID(), spec.id(), spec.version(), spec.stateSchemaVersion(),
+                    UUID.randomUUID(), spec.id(), spec.version(), spec.stateSchemaVersion(),
                     binding.providerId(), binding.modelAlias(), result.resolvedModel(),
                     startedAt, Duration.between(startedAt, clock.instant()).toMillis(),
                     DecisionOutcome.COMPLETED, spec.fields().size(), result.usage());

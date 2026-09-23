@@ -78,6 +78,22 @@ public record KnowledgeCandidate(
                 reviewNote, reviewedAt, createdAt, updatedAt);
     }
 
+    public KnowledgeCandidate withSupersedingCandidateId(
+            UUID supersededId, UUID organizationId) {
+        if (supersededId == null) {
+            throw new IllegalArgumentException("Superseded candidate id must not be null");
+        }
+        if (supersededId.equals(id)) {
+            throw new IllegalArgumentException("A candidate cannot supersede itself");
+        }
+        return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
+                semanticFields, editedSemanticFields, interpretations,
+                editedContentText, editedPayload, supersededId, scope,
+                conflictSignals, reviewCategory, reviewReasons,
+                reviewNote, reviewedAt, createdAt, updatedAt);
+    }
+
     public KnowledgeCandidate withReviewOutcome(ReviewCategory category, Set<ReviewReason> reasons) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,

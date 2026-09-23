@@ -4,6 +4,7 @@ package com.rivell.workbench.knowledge;
  * Explicit, auditable reasons why a candidate carries its review category.
  */
 public enum ReviewReason {
+    DUPLICATE_DETECTED,
     CONFLICT_DETECTED,
     SUPERSESSION_PROPOSED,
     ARTIFACT_TYPE_MISMATCH,
@@ -12,5 +13,6 @@ public enum ReviewReason {
     LOW_CLASSIFICATION_CONFIDENCE,
     NEW_PROHIBITED_OR_ESCALATION_POSITION,
     SCOPE_NARROWING_PROPOSED,
-    SEMANTIC_ANALYSIS_UNAVAILABLE
+    SEMANTIC_ANALYSIS_UNAVAILABLE,
+    SEMANTIC_COMPILATION_UNAVAILABLE
 }

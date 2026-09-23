@@ -376,22 +376,42 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     @Override
     @Transactional
     public void updateReviewState(
-            UUID candidateId, ReviewStatus reviewStatus, String editedContentText,
-            CandidatePayload editedPayload, String reviewNote, Instant reviewedAt, Instant updatedAt) {
+            UUID candidateId, UUID organizationId, ReviewStatus expectedStatus,
+            ReviewStatus reviewStatus, String editedContentText,
+            CandidatePayload editedPayload, SemanticFields editedSemanticFields,
+            ApplicabilityScope scope, String reviewNote, Instant reviewedAt, Instant updatedAt) {
         jdbcClient.sql("""
                         update knowledge_candidate
                         set review_status = :reviewStatus, edited_content_text = :editedContentText,
-                            edited_payload = :editedPayload::jsonb, review_note = :reviewNote,
+                            edited_payload = :editedPayload::jsonb,
+                            edited_semantic_fields = :editedSemanticFields::jsonb,
+                            contract_pack_key = :contractPackKey,
+                            declared_contract_types = :declaredContractTypes::jsonb,
+                            party_perspective = :partyPerspective, paper_source = :paperSource,
+                            jurisdiction = :jurisdiction, effective_from = :effectiveFrom,
+                            effective_to = :effectiveTo,
+                            review_note = :reviewNote,
                             reviewed_at = :reviewedAt, updated_at = :updatedAt
-                        where id = :id
+                        where id = :id and organization_id = :organizationId
+                          and review_status = :expectedStatus
                         """)
                 .param("reviewStatus", reviewStatus.name())
                 .param("editedContentText", editedContentText)
                 .param("editedPayload", writePayload(editedPayload))
+                .param("editedSemanticFields", writeNullableSemanticFields(editedSemanticFields))
+                .param("contractPackKey", scope.contractPackKey())
+                .param("declaredContractTypes", writeStringSet(scope.declaredContractTypes()))
+                .param("partyPerspective", scope.partyPerspective())
+                .param("paperSource", scope.paperSource())
+                .param("jurisdiction", scope.jurisdiction())
+                .param("effectiveFrom", scope.effectiveFrom())
+                .param("effectiveTo", scope.effectiveTo())
                 .param("reviewNote", reviewNote)
                 .param("reviewedAt", toTimestamp(reviewedAt))
                 .param("updatedAt", Timestamp.from(updatedAt))
                 .param("id", candidateId)
+                .param("organizationId", organizationId)
+                .param("expectedStatus", expectedStatus.name())
                 .update();
     }
 
@@ -748,8 +768,12 @@ private String writeUuidList(List<UUID> values) {
             var array = objectMapper.readTree(json);
             var signals = new ArrayList<ConflictSignal>(array.size());
             for (var element : array) {
+                var type = resolveConflictType(element.path("conflictType").asText(null));
+                if (type == null) {
+                    continue;
+                }
                 signals.add(new ConflictSignal(
-                        ConflictType.valueOf(element.get("conflictType").asText()),
+                        type,
                         element.get("message").asText(),
                         element.hasNonNull("publishedCandidateId")
                                 ? UUID.fromString(element.get("publishedCandidateId").asText())
@@ -758,6 +782,19 @@ private String writeUuidList(List<UUID> values) {
             return signals;
         } catch (IOException e) {
             throw new IllegalStateException("Could not read conflict signals", e);
+        }
+    }
+
+    private ConflictType resolveConflictType(String value) {
+        if (value == null) {
+            return ConflictType.UNKNOWN;
+        }
+        try {
+            return ConflictType.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            org.slf4j.LoggerFactory.getLogger(JdbcKnowledgeRepository.class)
+                    .warn("Unknown stored conflict type {} — advisory signal kept as UNKNOWN", value);
+            return ConflictType.UNKNOWN;
         }
     }
 
@@ -781,6 +818,10 @@ private String writeUuidList(List<UUID> values) {
         } catch (IOException e) {
             throw new IllegalStateException("Could not read merged region", e);
         }
+    }
+
+    private String writeNullableSemanticFields(SemanticFields fields) {
+        return fields == null ? null : writeSemanticFields(fields);
     }
 
     private String writeSemanticFields(SemanticFields fields) {

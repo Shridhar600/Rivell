@@ -3,14 +3,21 @@ package com.rivell.workbench.knowledge;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+
+import org.slf4j.LoggerFactory;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.DecisionExecution;
+import com.rivell.workbench.intelligence.ProviderProtocolException;
+import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
 
@@ -61,23 +68,30 @@ public class SemanticCompilationService {
         try {
             assessment = new ArtifactTypeAssessor(decisionService, properties)
                     .assess(artifact, sampleTexts(units));
-        } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
+        } catch (SemanticDecisionException e) {
             assessment = null;
         }
 
         var semanticAvailable = assessment != null;
+        var budget = properties.maxInterpretedCandidates();
         var compiled = new ArrayList<KnowledgeCandidate>(candidates.size());
         for (var candidate : candidates) {
             var unit = unitsById.get(candidate.extractionUnitId());
             KnowledgeCandidate enriched;
-            try {
-                enriched = interpret(candidate, artifact, unit);
-            } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
-                org.slf4j.LoggerFactory.getLogger(SemanticCompilationService.class)
-                        .warn("Semantic interpretation degraded for candidate {} ({} {})",
-                        candidate.id(), e.getClass().getSimpleName(), e.getMessage());
+            if (budget <= 0) {
                 semanticAvailable = false;
                 enriched = candidate;
+            } else {
+                try {
+                    enriched = interpret(candidate, artifact, unit);
+                    budget--;
+                } catch (SemanticDecisionException e) {
+                    LoggerFactory.getLogger(SemanticCompilationService.class)
+                            .warn("Semantic interpretation degraded for candidate {} ({} {})",
+                            candidate.id(), e.getClass().getSimpleName(), e.getMessage());
+                    semanticAvailable = false;
+                    enriched = candidate;
+                }
             }
             var signals = conflictDetector.inspect(enriched, publishedCandidates);
             var withSignals = enriched.withConflictSignals(signals);
@@ -95,13 +109,14 @@ public class SemanticCompilationService {
         var concepts = classifyConcepts(state);
         var fields = new LinkedHashMap<String, FieldInterpretation>();
         var builder = new SemanticFieldsBuilder(concepts.probabilities());
+        var provenance = unit.sourceNodeIds();
 
         switch (artifact.artifactType()) {
-            case PLAYBOOK -> interpretPlaybook(state, builder, fields);
-            case CLAUSE_LIBRARY -> interpretClauseVariant(state, builder, fields);
+            case PLAYBOOK -> interpretPlaybook(state, provenance, builder, fields);
+            case CLAUSE_LIBRARY -> interpretClauseVariant(state, provenance, builder, fields);
             case TEMPLATE, EXECUTED_PRECEDENT, NEGOTIATION_HISTORY, EXTERNAL_REFERENCE -> { }
         }
-        interpretScopeNarrowing(state, fields);
+        interpretScopeNarrowing(state, provenance, fields);
 
         var semantic = builder.build();
         var conceptKey = SemanticFields.primaryConcept(
@@ -124,6 +139,7 @@ public class SemanticCompilationService {
 
     private void interpretPlaybook(
             M4SemanticStates.PlaybookUnitState state,
+            List<UUID> provenance,
             SemanticFieldsBuilder builder,
             Map<String, FieldInterpretation> fields) {
         var execution = decisionService.evaluate(M4SemanticSpecs.playbookPositions(), state);
@@ -140,21 +156,21 @@ public class SemanticCompilationService {
                 : null;
         builder.positions(positions).requiresApproval(requiresApproval);
         if (positions.contains(PositionRole.ESCALATION)) {
-            interpretEscalationTrigger(state, stateColumnsHasEscalation(state), builder, fields);
+            interpretEscalationTrigger(state, provenance, stateColumnsHasEscalation(state), builder, fields);
         }
         if (!positions.isEmpty()) {
             fields.put("positions", new FieldInterpretation(
                     "positions", InterpretationKind.BOUNDED_CLASSIFICATION,
                     positions.stream().map(Enum::name).sorted().reduce((a, b) -> a + "," + b).orElseThrow(),
                     M4SemanticSpecs.PLAYBOOK_POSITION_SPEC, M4SemanticSpecs.playbookPositions().version(),
-                    execution.metadata().executionId(), List.of(), VerificationState.NOT_VERIFIED, null));
+                    execution.metadata().executionId(), provenance, VerificationState.NOT_VERIFIED, null));
         }
         if (requiresApproval != null) {
             fields.put("requiresApproval", new FieldInterpretation(
                     "requiresApproval", InterpretationKind.BOUNDED_CLASSIFICATION,
                     String.valueOf(requiresApproval),
-                    M4SemanticSpecs.PLAYBOOK_APPROVAL_SPEC, M4SemanticSpecs.playbookPositions().version(),
-                    execution.metadata().executionId(), List.of(), VerificationState.NOT_VERIFIED, null));
+                    M4SemanticSpecs.PLAYBOOK_POSITION_SPEC, M4SemanticSpecs.playbookPositions().version(),
+                    execution.metadata().executionId(), provenance, VerificationState.NOT_VERIFIED, null));
         }
     }
 
@@ -165,23 +181,24 @@ public class SemanticCompilationService {
      */
     private void interpretEscalationTrigger(
             M4SemanticStates.PlaybookUnitState state,
+            List<UUID> provenance,
             boolean deterministicValueAvailable,
             SemanticFieldsBuilder builder,
             Map<String, FieldInterpretation> fields) {
         var verbatim = deterministicValueAvailable
                 ? state.columns().entrySet().stream()
                         .filter(entry -> entry.getValue() != null
-                                && entry.getValue().toLowerCase(java.util.Locale.ROOT).contains("escalat"))
+                                && entry.getValue().toLowerCase(Locale.ROOT).contains("escalat"))
                         .map(Map.Entry::getValue)
                         .findFirst()
-                : java.util.Optional.<String>empty();
+                : Optional.<String>empty();
         if (verbatim.isPresent()) {
             var value = verbatim.get();
             builder.escalationTrigger(value);
             fields.put("escalationTrigger", new FieldInterpretation(
                     "escalationTrigger", InterpretationKind.DETERMINISTIC, value,
                     "deterministic-column-extraction", 1,
-                    java.util.UUID.randomUUID(), List.of(), VerificationState.VERIFIED, null));
+                    null, provenance, VerificationState.VERIFIED, null));
             return;
         }
         try {
@@ -191,55 +208,72 @@ public class SemanticCompilationService {
                 fields.put("escalationTrigger", new FieldInterpretation(
                         "escalationTrigger", InterpretationKind.GENERATIVE_EXTRACTION, verified.value(),
                         M4ReasoningSpecs.ESCALATION_TRIGGER_SPEC, M4ReasoningSpecs.escalationTrigger().version(),
-                        verified.generationExecutionId(), List.of(), verified.verification(),
+                        verified.generationExecutionId(), provenance, verified.verification(),
                         verified.verificationExecutionId()));
                 if (verified.verification() == VerificationState.VERIFIED) {
                     builder.escalationTrigger(verified.value());
                 }
             }
-        } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
-            org.slf4j.LoggerFactory.getLogger(SemanticCompilationService.class)
-                    .warn("Escalation trigger extraction skipped ({})", e.getClass().getSimpleName());
+        } catch (SemanticDecisionException e) {
+            LoggerFactory.getLogger(SemanticCompilationService.class)
+                    .warn("Escalation trigger extraction unavailable ({})", e.getClass().getSimpleName());
+            fields.put("escalationTrigger", new FieldInterpretation(
+                    "escalationTrigger", InterpretationKind.GENERATIVE_EXTRACTION, "UNAVAILABLE",
+                    M4ReasoningSpecs.ESCALATION_TRIGGER_SPEC, M4ReasoningSpecs.escalationTrigger().version(),
+                    null, provenance, VerificationState.UNCERTAIN, null));
         }
     }
 
     private boolean stateColumnsHasEscalation(M4SemanticStates.PlaybookUnitState state) {
         return state.columns().values().stream()
                 .anyMatch(value -> value != null
-                        && value.toLowerCase(java.util.Locale.ROOT).contains("escalat"));
+                        && value.toLowerCase(Locale.ROOT).contains("escalat"));
     }
 
     private void interpretClauseVariant(
             M4SemanticStates.PlaybookUnitState state,
+            List<UUID> provenance,
             SemanticFieldsBuilder builder,
             Map<String, FieldInterpretation> fields) {
         var execution = decisionService.evaluate(M4SemanticSpecs.clauseVariantRole(), state);
-        var answer = (ChoiceAnswer) execution.answers().get("variant_role");
-        var selected = PositionRole.valueOf(answer.selected());
+        if (!(execution.answers().get("variant_role") instanceof ChoiceAnswer answer)) {
+            throw new ProviderProtocolException(
+                    "Variant role answer is not a selection");
+        }
+        var selected = parsePositionRole(answer.selected());
         var probability = answer.probabilities().get(answer.selected());
         if (probability >= properties.variantRoleProposal()) {
             builder.variantRole(selected);
             fields.put("variantRole", new FieldInterpretation(
                     "variantRole", InterpretationKind.BOUNDED_CLASSIFICATION, selected.name(),
                     M4SemanticSpecs.CLAUSE_VARIANT_ROLE_SPEC, M4SemanticSpecs.clauseVariantRole().version(),
-                    execution.metadata().executionId(), List.of(), VerificationState.NOT_VERIFIED, null));
+                    execution.metadata().executionId(), provenance, VerificationState.NOT_VERIFIED, null));
+        }
+    }
+
+    private static PositionRole parsePositionRole(String value) {
+        try {
+            return PositionRole.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            throw new ProviderProtocolException(
+                    "Unknown variant role label " + value);
         }
     }
 
     private void interpretScopeNarrowing(
             M4SemanticStates.PlaybookUnitState state,
+            List<UUID> provenance,
             Map<String, FieldInterpretation> fields) {
         var execution = decisionService.evaluate(M4SemanticSpecs.scopeNarrowing(), state);
         var narrows = execution.answers().get("narrows_scope");
         var jurisdiction = execution.answers().get("jurisdiction");
         if (narrows instanceof YesNoAnswer yesNo && yesNo.probability() >= properties.scopeNarrowProposal()
                 && jurisdiction instanceof ChoiceAnswer choice
-                && choice.probabilities().get(choice.selected()) >= properties.jurisdictionProposal()
-                && !choice.selected().equals(KnownJurisdiction.UNSPECIFIED.name())) {
+                && choice.probabilities().get(choice.selected()) >= properties.jurisdictionProposal()) {
             fields.put("scope", new FieldInterpretation(
                     "scope", InterpretationKind.BOUNDED_CLASSIFICATION, choice.selected(),
                     M4SemanticSpecs.SCOPE_NARROWING_SPEC, M4SemanticSpecs.scopeNarrowing().version(),
-                    execution.metadata().executionId(), List.of(), VerificationState.NOT_VERIFIED, null));
+                    execution.metadata().executionId(), provenance, VerificationState.NOT_VERIFIED, null));
         }
     }
 

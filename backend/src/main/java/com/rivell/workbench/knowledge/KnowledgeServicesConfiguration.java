@@ -33,8 +33,10 @@ class KnowledgeServicesConfiguration {
     }
 
     @Bean
-    CandidateReviewCategorizer candidateReviewCategorizer(SemanticPolicyProperties properties) {
-        return new CandidateReviewCategorizer(properties);
+    CandidateReviewCategorizer candidateReviewCategorizer(
+            SemanticPolicyProperties properties,
+            ConceptClassificationProperties conceptProperties) {
+        return new CandidateReviewCategorizer(properties, conceptProperties);
     }
 
     @Bean
@@ -51,8 +53,10 @@ class KnowledgeServicesConfiguration {
     }
 
     @Bean
-    DuplicateConflictDetector duplicateConflictDetector() {
-        return new ExactDuplicateConflictDetector();
+    DuplicateConflictDetector duplicateConflictDetector(
+            com.rivell.workbench.intelligence.SemanticDecisionService decisionService,
+            SemanticPolicyProperties policyProperties) {
+        return new SemanticConflictAnalyzer(decisionService, policyProperties);
     }
 
     @Bean
@@ -88,9 +92,11 @@ class KnowledgeServicesConfiguration {
     @Bean
     CandidateReviewService candidateReviewService(
             KnowledgeRepository knowledgeRepository,
+            TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
-        return new CandidateReviewService(knowledgeRepository, identityProvider, authorizationService);
+        return new CandidateReviewService(
+                knowledgeRepository, transactionTemplate, identityProvider, authorizationService);
     }
 
     @Bean

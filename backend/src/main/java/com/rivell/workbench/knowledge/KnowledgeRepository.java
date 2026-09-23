@@ -42,9 +42,13 @@ public interface KnowledgeRepository {
 
     void updateReviewState(
             UUID candidateId,
+            UUID organizationId,
+            ReviewStatus expectedStatus,
             ReviewStatus reviewStatus,
             String editedContentText,
             CandidatePayload editedPayload,
+            SemanticFields editedSemanticFields,
+            ApplicabilityScope scope,
             String reviewNote,
             Instant reviewedAt,
             Instant updatedAt);

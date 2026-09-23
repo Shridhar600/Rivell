@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.springframework.transaction.support.TransactionTemplate;
+
 import com.rivell.workbench.foundation.Texts;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
@@ -21,14 +23,17 @@ import com.rivell.workbench.organization.Permissions;
 public class CandidateReviewService {
 
     private final KnowledgeRepository repository;
+    private final TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
 
     public CandidateReviewService(
             KnowledgeRepository repository,
+            TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         this.repository = repository;
+        this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
     }
@@ -113,8 +118,10 @@ public class CandidateReviewService {
                 .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
         var updated = change.apply(candidate);
         repository.updateReviewState(
-                updated.id(), updated.reviewStatus(), updated.editedContentText(),
-                updated.editedPayload(), updated.reviewNote(), updated.reviewedAt(),
+                updated.id(), identity.organizationId(), candidate.reviewStatus(),
+                updated.reviewStatus(), updated.editedContentText(),
+                updated.editedPayload(), updated.editedSemanticFields(), updated.scope(),
+                updated.reviewNote(), updated.reviewedAt(),
                 updated.updatedAt());
         return updated;
     }
@@ -134,21 +141,26 @@ public class CandidateReviewService {
         }
         var approved = new ArrayList<UUID>();
         var skipped = new LinkedHashMap<UUID, String>();
-        for (var candidateId : new java.util.LinkedHashSet<>(candidateIds)) {
-            var candidate = repository.findCandidate(candidateId, identity.organizationId())
-                    .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
-            if (candidate.reviewStatus() != ReviewStatus.PENDING) {
-                skipped.put(candidateId, "not pending");
-                continue;
+        transactionTemplate.executeWithoutResult(status -> {
+            for (var candidateId : new java.util.LinkedHashSet<>(candidateIds)) {
+                var candidate = repository.findCandidate(candidateId, identity.organizationId());
+                if (candidate.isEmpty()) {
+                    skipped.put(candidateId, "not found in this organization");
+                    continue;
+                }
+                var loaded = candidate.get();
+                if (loaded.reviewStatus() != ReviewStatus.PENDING) {
+                    skipped.put(candidateId, "not pending");
+                    continue;
+                }
+                if (loaded.reviewCategory() != ReviewCategory.ROUTINE) {
+                    skipped.put(candidateId, "review-risk category "
+                            + (loaded.reviewCategory() == null ? "UNSET" : loaded.reviewCategory()));
+                    continue;
+                }
+                approved.add(approve(candidateId, null).id());
             }
-            if (candidate.reviewCategory() == null
-                    || candidate.reviewCategory() != ReviewCategory.ROUTINE) {
-                skipped.put(candidateId, "review-risk category "
-                        + (candidate.reviewCategory() == null ? "UNSET" : candidate.reviewCategory()));
-                continue;
-            }
-            approved.add(approve(candidateId, null).id());
-        }
+        });
         return new BulkApprovalResult(List.copyOf(approved), java.util.Map.copyOf(skipped));
     }
 

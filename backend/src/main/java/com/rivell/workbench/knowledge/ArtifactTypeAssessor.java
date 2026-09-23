@@ -32,7 +32,7 @@ public class ArtifactTypeAssessor {
                 execution.answers().get("artifact_class");
         var assessedType = ArtifactType.valueOf(answer.selected());
         var probability = answer.probabilities().get(answer.selected());
-        var state = classify(assessedType, artifact.artifactType(), probability);
+        var state = classify(assessedType, artifact.artifactType(), answer);
         List<String> warnings = assessedType != artifact.artifactType()
                 ? List.of("HUMAN_DECLARED_TYPE_DIFFERS_FROM_MACHINE_ASSESSMENT")
                 : List.of();
@@ -44,13 +44,19 @@ public class ArtifactTypeAssessor {
     }
 
     private ArtifactTypeAssessment.AssessmentState classify(
-            ArtifactType assessed, ArtifactType declared, double probability) {
-        if (probability >= properties.artifactTypeMatch()) {
-            return assessed == declared
-                    ? ArtifactTypeAssessment.AssessmentState.MATCH
-                    : ArtifactTypeAssessment.AssessmentState.POSSIBLE_MISMATCH;
+            ArtifactType assessed, ArtifactType declared, ChoiceAnswer answer) {
+        var probability = answer.probabilities().get(answer.selected());
+        var runnerUp = answer.probabilities().values().stream()
+                .filter(value -> !value.equals(answer.probabilities().get(answer.selected())))
+                .max(Double::compare)
+                .orElse(0.0);
+        if (probability < properties.artifactTypeMatch()
+                || probability - runnerUp < properties.artifactTypeAmbiguityGap()) {
+            return ArtifactTypeAssessment.AssessmentState.AMBIGUOUS;
         }
-        return ArtifactTypeAssessment.AssessmentState.AMBIGUOUS;
+        return assessed == declared
+                ? ArtifactTypeAssessment.AssessmentState.MATCH
+                : ArtifactTypeAssessment.AssessmentState.POSSIBLE_MISMATCH;
     }
 
     private static List<String> bounded(List<String> sampleTexts) {

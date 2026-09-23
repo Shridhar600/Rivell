@@ -11,9 +11,13 @@ import java.util.Set;
 public class CandidateReviewCategorizer {
 
     private final SemanticPolicyProperties properties;
+    private final ConceptClassificationProperties conceptProperties;
 
-    public CandidateReviewCategorizer(SemanticPolicyProperties properties) {
+    public CandidateReviewCategorizer(
+            SemanticPolicyProperties properties,
+            ConceptClassificationProperties conceptProperties) {
         this.properties = properties;
+        this.conceptProperties = conceptProperties;
     }
 
     public Categorization categorize(KnowledgeCandidate candidate, ArtifactTypeAssessment assessment) {
@@ -21,6 +25,9 @@ public class CandidateReviewCategorizer {
         var category = ReviewCategory.ROUTINE;
 
         for (var signal : candidate.conflictSignals()) {
+            if (signal.conflictType() == ConflictType.DUPLICATE) {
+                reasons.add(ReviewReason.DUPLICATE_DETECTED);
+            }
             if (signal.conflictType() == ConflictType.CONTRADICTS_EXISTING
                     || signal.conflictType() == ConflictType.AUTHORITY_CONFLICT) {
                 reasons.add(ReviewReason.CONFLICT_DETECTED);
@@ -46,15 +53,12 @@ public class CandidateReviewCategorizer {
             }
         }
         var primary = candidate.legalConceptKey();
-        if (primary == null) {
+        var belowConceptThreshold = candidate.semanticFields().conceptProbabilities().values().stream()
+                .noneMatch(probability -> probability >= conceptProperties.conceptThreshold());
+        if (primary == null || belowConceptThreshold) {
             reasons.add(ReviewReason.LOW_CLASSIFICATION_CONFIDENCE);
         }
         var positions = candidate.effectivePositions();
-        if (candidate.semanticFields().conceptProbabilities().values().stream()
-                .noneMatch(probability -> probability >= properties.positionProposal())
-                && !positions.isEmpty()) {
-            reasons.add(ReviewReason.LOW_CLASSIFICATION_CONFIDENCE);
-        }
         if (positions.contains(PositionRole.PROHIBITED) || positions.contains(PositionRole.ESCALATION)) {
             reasons.add(ReviewReason.NEW_PROHIBITED_OR_ESCALATION_POSITION);
         }
@@ -70,6 +74,10 @@ public class CandidateReviewCategorizer {
             category = ReviewCategory.HIGH;
         } else if (!reasons.isEmpty()) {
             category = ReviewCategory.ELEVATED;
+        }
+        if (reasons.contains(ReviewReason.DUPLICATE_DETECTED)
+                || reasons.contains(ReviewReason.SEMANTIC_COMPILATION_UNAVAILABLE)) {
+            category = category == ReviewCategory.HIGH ? ReviewCategory.HIGH : ReviewCategory.ELEVATED;
         }
         return new Categorization(category, Set.copyOf(reasons));
     }

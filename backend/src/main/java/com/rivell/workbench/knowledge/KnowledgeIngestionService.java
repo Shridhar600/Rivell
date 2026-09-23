@@ -144,8 +144,24 @@ public class KnowledgeIngestionService {
                     .withIngestOutcome(
                             extraction.parserVersion(), outcomeStatus, outcomeWarnings);
         } catch (RuntimeException e) {
-            deleteQuietly(storageKey);
+            markFailedQuietly(artifactId, e);
             throw e;
+        }
+    }
+
+    /**
+     * After the staging transaction committed, the immutable bytes are the source of
+     * truth: compensation marks the artifact FAILED and retains the bytes rather than
+     * deleting stored legal sources. Only a pre-staging failure (bytes stored but the
+     * artifact row never committed) compensates by deleting the orphan file.
+     */
+    private void markFailedQuietly(UUID artifactId, RuntimeException cause) {
+        try {
+            transactionTemplate.executeWithoutResult(status -> repository.updateIngestOutcome(
+                    artifactId, null, IngestStatus.FAILED,
+                    List.of("The artifact could not be processed (" + cause.getClass().getSimpleName() + ")")));
+        } catch (RuntimeException compensationFailure) {
+            // compensation failed; reconciliation is deferred (M10-class work)
         }
     }
 

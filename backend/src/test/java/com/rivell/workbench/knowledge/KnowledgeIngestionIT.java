@@ -256,7 +256,7 @@ class KnowledgeIngestionIT {
                 .filter(candidate -> candidate.candidateType() == CandidateType.CLAUSE_VARIANT)
                 .findFirst().orElseThrow();
         reviewService.approve(approved.id(), null);
-        publicationService.publish(List.of(approved.id()), null);
+        publicationService.publish(List.of(approved.id()), null, null);
 
         var second = ingest("fixtures/clause-library.docx", "library2.docx",
                 ArtifactType.CLAUSE_LIBRARY, null);

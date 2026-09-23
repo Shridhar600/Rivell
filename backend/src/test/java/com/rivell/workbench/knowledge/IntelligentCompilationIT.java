@@ -210,6 +210,9 @@ class IntelligentCompilationIT {
     KnowledgeQueryService queryService;
 
     @Autowired
+    KnowledgePublicationService publicationService;
+
+    @Autowired
     MutableIdentity identityProvider;
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -319,6 +322,91 @@ assertThat(confidential.interpretations())
                 .isEqualTo(ArtifactTypeAssessment.AssessmentState.POSSIBLE_MISMATCH);
         assertThat(artifact.assessment().warnings())
                 .contains("HUMAN_DECLARED_TYPE_DIFFERS_FROM_MACHINE_ASSESSMENT");
+    }
+
+    @Autowired
+    CandidateReviewService reviewService;
+
+    @Autowired
+    org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+
+    @Test
+    void conflictingPublishedPositionProducesHighRiskReviewCategory() {
+        var first = ingest("fixtures/m4-clause-library.docx", "m4-conflict-a.docx",
+                ArtifactType.CLAUSE_LIBRARY);
+        var preferred = queryService.getCandidates(first.id()).stream()
+                .filter(candidate -> candidate.effectiveVariantRole() == PositionRole.PREFERRED)
+                .filter(candidate -> candidate.legalConceptKey() != null)
+                .findFirst().orElseThrow();
+        reviewService.approve(preferred.id(), null);
+        publicationService.publish(java.util.List.of(preferred.id()), null, "v1");
+
+        fakeProvider.script(
+                Map.ofEntries(
+                        Map.entry("concept_confidentiality", 0.9),
+                        Map.entry("contradicts", 0.95),
+                        Map.entry("supersedes", 0.02)),
+                Map.of("variant_role", "FALLBACK"));
+        var second = ingest("fixtures/m4-clause-library.docx", "m4-conflict-b.docx",
+                ArtifactType.CLAUSE_LIBRARY);
+        var fallback = queryService.getCandidates(second.id()).stream()
+                .filter(candidate -> candidate.effectiveVariantRole() == PositionRole.FALLBACK)
+                .findFirst().orElseThrow();
+
+        assertThat(fallback.conflictSignals())
+                .anyMatch(signal -> signal.conflictType() == ConflictType.CONTRADICTS_EXISTING);
+        assertThat(fallback.reviewCategory()).isEqualTo(ReviewCategory.HIGH);
+        assertThat(fallback.reviewReasons()).contains(ReviewReason.CONFLICT_DETECTED);
+        assertThat(fallback.reviewCategory()).isNotEqualTo(ReviewCategory.ROUTINE);
+    }
+
+    @Test
+    void bulkApprovalApprovesOnlyServerDeterminedEligibleCandidates() {
+        var artifact = ingest("fixtures/m4-clause-library.docx", "m4-bulk.docx",
+                ArtifactType.CLAUSE_LIBRARY);
+        var candidates = queryService.getCandidates(artifact.id());
+        // scripted defaults: variant roles below the prohibited/escalation cues -> some ROUTINE
+        var routine = candidates.stream()
+                .filter(candidate -> candidate.reviewCategory() == ReviewCategory.ROUTINE)
+                .findFirst().orElseThrow();
+        var elevatedId = candidates.stream()
+                .filter(candidate -> candidate.reviewCategory() == ReviewCategory.ELEVATED)
+                .findFirst()
+                .map(c -> c.id())
+                .orElseGet(java.util.UUID::randomUUID);
+
+        var result = reviewService.bulkApprove(java.util.List.of(routine.id(), elevatedId));
+
+        assertThat(result.approvedIds()).containsExactly(routine.id());
+        assertThat(result.skipped()).containsKey(elevatedId);
+        assertThat(queryService.getCandidate(routine.id()).reviewStatus())
+                .isEqualTo(ReviewStatus.APPROVED);
+    }
+
+    @Test
+    void humanScopeAndSemanticCorrectionsPersist() {
+        var artifact = ingest("fixtures/m4-clause-library.docx", "m4-edit.docx",
+                ArtifactType.CLAUSE_LIBRARY);
+        var candidate = queryService.getCandidates(artifact.id()).stream()
+                .filter(c -> c.candidateType() == CandidateType.CLAUSE_VARIANT)
+                .findFirst().orElseThrow();
+
+        var edited = reviewService.edit(
+                candidate.id(), null, null,
+                new ApplicabilityScope("MSA_PACK", Set.of("MSA"), "Customer", "Supplier paper",
+                        "UK", java.time.LocalDate.of(2027, 1, 1), null),
+                new SemanticFields(java.util.Set.of(PositionRole.PREFERRED), null, null, null, Map.of()),
+                "human correction");
+
+        var reloaded = queryService.getCandidate(candidate.id());
+        assertThat(reloaded.reviewStatus()).isEqualTo(ReviewStatus.EDITED);
+        assertThat(reloaded.scope().jurisdiction()).isEqualTo("UK");
+        assertThat(reloaded.scope().contractPackKey()).isEqualTo("MSA_PACK");
+        assertThat(reloaded.editedSemanticFields()).isNotNull();
+        assertThat(reloaded.effectiveVariantRole()).isEqualTo(PositionRole.PREFERRED);
+        assertThat(reloaded.scope()).isEqualTo(edited.scope());
+        // machine proposal preserved beside human correction
+        assertThat(reloaded.semanticFields().variantRole()).isNotNull();
     }
 
     private KnowledgeArtifact ingest(

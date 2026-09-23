@@ -48,8 +48,16 @@ pnpm-debug.log*
 *.sw?
 .DS_Store
 
-# Local variant files (*.env.local, *.local config)
+# Local variant files (*.env.local, *.local
+
+# Python bytecode
+__pycache__/
+*.pyc config)
 *.local
+
+# Python bytecode
+__pycache__/
+*.pyc
 
 # Generated OpenAPI handshake artifact
 /openapi.json
