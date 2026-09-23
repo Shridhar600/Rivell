@@ -16,11 +16,16 @@ import {
   UNIT_KIND_LABELS,
 } from '../../lib/knowledgeLabels'
 import { compareKnowledgePosition, nodeSpanLabel } from '../../lib/knowledgeTree'
+import { conceptLabel } from '../../lib/semantics'
 import type { ExtractionUnit } from '../../api/knowledge'
 import { ErrorState } from '../ErrorState'
 import { CandidateEditForm } from './CandidateEditForm'
 import { ConflictSignalList } from './ConflictSignalList'
 import { ReviewAttentionSection } from './ReviewAttention'
+import {
+  InterpretationProvenance,
+  SemanticFieldReview,
+} from './SemanticFieldReview'
 
 function SourceNodeView({
   node,
@@ -168,18 +173,17 @@ export function CandidateReviewPanel({
       <ReviewAttentionSection candidate={candidate} />
 
       <section aria-labelledby="candidate-extracted-heading">
-        <h4 id="candidate-extracted-heading">Extracted</h4>
+        <h4 id="candidate-extracted-heading">Interpretation</h4>
         <dl className="data-list">
           <div className="data-list__row">
-            <dt>Legal concept</dt>
+            <dt>Normalized legal concept</dt>
             <dd>
-              {candidate.legalConceptKey ?? (
-                <span className="meta">
-                  Not classified (deterministic extraction only)
-                </span>
+              {conceptLabel(candidate.legalConceptKey) ?? (
+                <span className="meta">Not confidently classified</span>
               )}
             </dd>
           </div>
+          <SemanticFieldReview candidate={candidate} />
           {!hasPayload && contentText ? (
             <div className="data-list__row">
               <dt>Content</dt>
@@ -215,6 +219,8 @@ export function CandidateReviewPanel({
             ) : null}
           </div>
         ) : null}
+
+        <InterpretationProvenance candidate={candidate} />
       </section>
 
       <section aria-labelledby="candidate-source-heading">

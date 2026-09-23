@@ -386,6 +386,76 @@ describe('candidate review workspace', () => {
     expect(within(panel).getByText(/not a legal-risk rating/i)).toBeInTheDocument()
   })
 
+
+  it('shows semantic interpretation with machine proposal and verification', async () => {
+    stubKnowledgeApi({
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Liability cap',
+          legalConceptKey: 'LIMITATION_OF_LIABILITY',
+          positions: ['PREFERRED'],
+          escalationTrigger: 'Anything above 2x requires GC approval.',
+          interpretations: [
+            {
+              field: 'positions',
+              proposedValue: 'FALLBACK,PREFERRED',
+              kind: 'BOUNDED_CLASSIFICATION',
+              specId: 'playbook-position',
+              specVersion: 1,
+              supportingSourceNodes: 2,
+              verification: 'NOT_VERIFIED',
+            },
+            {
+              field: 'escalationTrigger',
+              proposedValue: 'Anything above 2x requires GC approval.',
+              kind: 'GENERATIVE_EXTRACTION',
+              specId: 'escalation-trigger-extraction',
+              specVersion: 1,
+              supportingSourceNodes: 3,
+              verification: 'DISPUTED',
+            },
+          ],
+        }),
+      ],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    expect(
+      within(panel).getByText('Limitation of liability'),
+    ).toBeInTheDocument()
+    expect(within(panel).getByText('Preferred')).toBeInTheDocument()
+    expect(
+      within(panel).getByText(/Rivell proposed: Fallback, Preferred/),
+    ).toBeInTheDocument()
+    expect(
+      within(panel).getByText('Anything above 2x requires GC approval.'),
+    ).toBeInTheDocument()
+    expect(
+      within(panel).getByText('Source support disputed'),
+    ).toBeInTheDocument()
+    expect(within(panel).getByText(/supported by 2 source regions/i)).toBeInTheDocument()
+    expect(
+      within(panel).getByText(/positions: classified from the source text/i),
+    ).toBeInTheDocument()
+    expect(panel.textContent).not.toMatch(/0\.9|spec v|specVersion/i)
+  })
+
+  it('shows an unclassified concept honestly', async () => {
+    stubKnowledgeApi({
+      candidates: [candidate({ id: 'c1', rawLabel: 'Misc note', legalConceptKey: null })],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Misc note/i })
+    expect(
+      within(panel).getByText(/not confidently classified/i),
+    ).toBeInTheDocument()
+  })
+
   it('edits a candidate column value and preserves the machine proposal', async () => {
     const state: ApiState = { candidates: baseCandidates() }
     const { requests } = stubKnowledgeApi(state)

@@ -836,3 +836,23 @@ a {
   gap: 2px;
   font-size: 0.875rem;
 }
+
+.semantic-value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.semantic-value__effective {
+  font-weight: 500;
+}
+
+.interpretation-provenance {
+  margin-top: var(--space-2);
+}
+
+.interpretation-provenance h5 {
+  margin: 0 0 var(--space-1);
+  font-size: 0.875rem;
+}
