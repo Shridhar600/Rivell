@@ -73,6 +73,9 @@ public class SemanticCompilationService {
             try {
                 enriched = interpret(candidate, artifact, unit);
             } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
+                org.slf4j.LoggerFactory.getLogger(SemanticCompilationService.class)
+                        .warn("Semantic interpretation degraded for candidate {} ({} {})",
+                        candidate.id(), e.getClass().getSimpleName(), e.getMessage());
                 semanticAvailable = false;
                 enriched = candidate;
             }
@@ -181,17 +184,22 @@ public class SemanticCompilationService {
                     java.util.UUID.randomUUID(), List.of(), VerificationState.VERIFIED, null));
             return;
         }
-        var extracted = generativeFieldExtractor.extractEscalationTrigger(state);
-        if (extracted.isPresent()) {
-            var verified = extracted.get();
-            fields.put("escalationTrigger", new FieldInterpretation(
-                    "escalationTrigger", InterpretationKind.GENERATIVE_EXTRACTION, verified.value(),
-                    M4ReasoningSpecs.ESCALATION_TRIGGER_SPEC, M4ReasoningSpecs.escalationTrigger().version(),
-                    verified.generationExecutionId(), List.of(), verified.verification(),
-                    verified.verificationExecutionId()));
-            if (verified.verification() == VerificationState.VERIFIED) {
-                builder.escalationTrigger(verified.value());
+        try {
+            var extracted = generativeFieldExtractor.extractEscalationTrigger(state);
+            if (extracted.isPresent()) {
+                var verified = extracted.get();
+                fields.put("escalationTrigger", new FieldInterpretation(
+                        "escalationTrigger", InterpretationKind.GENERATIVE_EXTRACTION, verified.value(),
+                        M4ReasoningSpecs.ESCALATION_TRIGGER_SPEC, M4ReasoningSpecs.escalationTrigger().version(),
+                        verified.generationExecutionId(), List.of(), verified.verification(),
+                        verified.verificationExecutionId()));
+                if (verified.verification() == VerificationState.VERIFIED) {
+                    builder.escalationTrigger(verified.value());
+                }
             }
+        } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
+            org.slf4j.LoggerFactory.getLogger(SemanticCompilationService.class)
+                    .warn("Escalation trigger extraction skipped ({})", e.getClass().getSimpleName());
         }
     }
 
