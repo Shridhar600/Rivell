@@ -33,15 +33,21 @@ class KnowledgeServicesConfiguration {
     }
 
     @Bean
+    CandidateReviewCategorizer candidateReviewCategorizer(SemanticPolicyProperties properties) {
+        return new CandidateReviewCategorizer(properties);
+    }
+
+    @Bean
     SemanticCompilationService semanticCompilationService(
             com.rivell.workbench.intelligence.SemanticDecisionService decisionService,
             SemanticPolicyProperties policyProperties,
             ConceptClassificationProperties conceptProperties,
             DuplicateConflictDetector conflictDetector,
-            GenerativeFieldExtractor generativeFieldExtractor) {
+            GenerativeFieldExtractor generativeFieldExtractor,
+            CandidateReviewCategorizer categorizer) {
         return new SemanticCompilationService(
                 decisionService, policyProperties, conceptProperties, conflictDetector,
-                generativeFieldExtractor);
+                generativeFieldExtractor, categorizer);
     }
 
     @Bean

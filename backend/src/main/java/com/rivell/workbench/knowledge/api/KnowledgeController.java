@@ -306,6 +306,20 @@ class KnowledgeController {
         return ApiResult.ok(UnitConceptClassificationView.from(conceptClassifier.classify(artifactId, unitId)));
     }
 
+    @Operation(summary = "Approve multiple eligible pending candidates; eligibility is determined by the server")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "No candidates supplied",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "A candidate does not exist in this organization",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/candidates/bulk-approve")
+    ApiResult<BulkApprovalView> bulkApprove(@RequestBody BulkApproveRequest request) {
+        var result = reviewService.bulkApprove(request.candidateIds());
+        return ApiResult.ok(new BulkApprovalView(result.approvedIds(), result.skipped()));
+    }
+
     @Operation(summary = "Download the original uploaded knowledge source")
     @ApiResponse(
             responseCode = "200", description = "Original document bytes",

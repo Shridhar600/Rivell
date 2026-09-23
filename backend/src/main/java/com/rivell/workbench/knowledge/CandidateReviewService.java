@@ -1,6 +1,9 @@
 package com.rivell.workbench.knowledge;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -114,6 +117,42 @@ public class CandidateReviewService {
                 updated.editedPayload(), updated.reviewNote(), updated.reviewedAt(),
                 updated.updatedAt());
         return updated;
+    }
+
+    /**
+     * Human bulk approval restricted to server-determined eligible candidates:
+     * ROUTINE review category, no conflict/supersession/mismatch/verification signals.
+     * Eligibility is never derived from the request; ineligible ids are reported.
+     */
+    public BulkApprovalResult bulkApprove(java.util.List<UUID> candidateIds) {
+        if (candidateIds == null || candidateIds.isEmpty()) {
+            throw new IllegalArgumentException("Bulk approval requires at least one candidate");
+        }
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.KNOWLEDGE_REVIEW)) {
+            throw new UnauthorizedKnowledgeAccessException(identity.userId());
+        }
+        var approved = new ArrayList<UUID>();
+        var skipped = new LinkedHashMap<UUID, String>();
+        for (var candidateId : new java.util.LinkedHashSet<>(candidateIds)) {
+            var candidate = repository.findCandidate(candidateId, identity.organizationId())
+                    .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
+            if (candidate.reviewStatus() != ReviewStatus.PENDING) {
+                skipped.put(candidateId, "not pending");
+                continue;
+            }
+            if (candidate.reviewCategory() == null
+                    || candidate.reviewCategory() != ReviewCategory.ROUTINE) {
+                skipped.put(candidateId, "review-risk category "
+                        + (candidate.reviewCategory() == null ? "UNSET" : candidate.reviewCategory()));
+                continue;
+            }
+            approved.add(approve(candidateId, null).id());
+        }
+        return new BulkApprovalResult(List.copyOf(approved), java.util.Map.copyOf(skipped));
+    }
+
+    public record BulkApprovalResult(java.util.List<UUID> approvedIds, java.util.Map<UUID, String> skipped) {
     }
 
 }

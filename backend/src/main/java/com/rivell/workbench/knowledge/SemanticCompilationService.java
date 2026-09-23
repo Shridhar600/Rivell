@@ -28,18 +28,21 @@ public class SemanticCompilationService {
     private final ConceptClassificationProperties conceptProperties;
     private final DuplicateConflictDetector conflictDetector;
     private final GenerativeFieldExtractor generativeFieldExtractor;
+    private final CandidateReviewCategorizer categorizer;
 
     public SemanticCompilationService(
             SemanticDecisionService decisionService,
             SemanticPolicyProperties properties,
             ConceptClassificationProperties conceptProperties,
             DuplicateConflictDetector conflictDetector,
-            GenerativeFieldExtractor generativeFieldExtractor) {
+            GenerativeFieldExtractor generativeFieldExtractor,
+            CandidateReviewCategorizer categorizer) {
         this.decisionService = decisionService;
         this.properties = properties;
         this.conceptProperties = conceptProperties;
         this.conflictDetector = conflictDetector;
         this.generativeFieldExtractor = generativeFieldExtractor;
+        this.categorizer = categorizer;
     }
 
     public record SemanticCompilation(
@@ -74,7 +77,10 @@ public class SemanticCompilationService {
                 enriched = candidate;
             }
             var signals = conflictDetector.inspect(enriched, publishedCandidates);
-            compiled.add(enriched.withConflictSignals(signals));
+            var withSignals = enriched.withConflictSignals(signals);
+            var categorization = categorizer.categorize(withSignals, assessment);
+            compiled.add(withSignals.withReviewOutcome(
+                    categorization.category(), categorization.reasons()));
         }
         return new SemanticCompilation(semanticAvailable, assessment, compiled);
     }
