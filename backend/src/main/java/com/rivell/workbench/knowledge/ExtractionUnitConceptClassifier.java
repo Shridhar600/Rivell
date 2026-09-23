@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.intelligence.DecisionExecution;
 import com.rivell.workbench.intelligence.DecisionSpec;
 import com.rivell.workbench.intelligence.SemanticDecisionService;

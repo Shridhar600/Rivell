@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.DecisionExecution;
 import com.rivell.workbench.intelligence.ProviderProtocolException;

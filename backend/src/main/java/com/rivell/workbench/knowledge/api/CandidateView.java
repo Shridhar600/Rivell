@@ -9,7 +9,7 @@ import java.util.UUID;
 
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.ConflictType;
-import com.rivell.workbench.knowledge.LegalConcept;
+import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.knowledge.PositionRole;
 import com.rivell.workbench.knowledge.ReviewCategory;
 import com.rivell.workbench.knowledge.ReviewReason;

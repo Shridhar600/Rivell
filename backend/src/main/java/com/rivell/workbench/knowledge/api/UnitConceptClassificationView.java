@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.rivell.workbench.knowledge.LegalConcept;
+import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.knowledge.UnitConceptClassification;
 
 /**

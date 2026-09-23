@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import com.rivell.workbench.contracts.LegalConcept;
+
 /**
  * Machine-proposed semantic fields of a knowledge candidate (M4). The machine proposal is
  * retained even after human correction; effective values prefer the human edit. Fields are

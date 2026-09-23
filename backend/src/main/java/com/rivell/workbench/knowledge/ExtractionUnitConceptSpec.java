@@ -3,6 +3,7 @@ package com.rivell.workbench.knowledge;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.intelligence.DecisionSpec;
 import com.rivell.workbench.intelligence.QuestionPack;
 import com.rivell.workbench.intelligence.YesNoQuestion;

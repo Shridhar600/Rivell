@@ -73,6 +73,18 @@ class ArchitectureTest {
     }
 
     @Test
+    void contractModuleDoesNotDependOnKnowledge() {
+        var classes = new ClassFileImporter()
+                .withImportOption(new ImportOption.DoNotIncludeTests())
+                .importPackages("com.rivell.workbench");
+
+        noClasses()
+                .that().resideInAnyPackage("..contracts..")
+                .should().dependOnClassesThat().resideInAnyPackage("..knowledge..")
+                .check(classes);
+    }
+
+    @Test
     void providerAdapterInternalsStayInsideIntelligence() {
         var classes = new ClassFileImporter()
                 .withImportOption(new ImportOption.DoNotIncludeTests())
