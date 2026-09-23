@@ -50,3 +50,6 @@ pnpm-debug.log*
 
 # Local variant files (*.env.local, *.local config)
 *.local
+
+# Generated OpenAPI handshake artifact
+/openapi.json

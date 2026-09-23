@@ -3,6 +3,7 @@ package com.rivell.workbench.contracts;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.time.Instant;
 
 public record SourceArtifact(
         UUID id,
@@ -12,7 +13,7 @@ public record SourceArtifact(
         long sizeBytes,
         String sha256,
         String storageKey,
-        java.time.Instant createdAt) {
+        Instant createdAt) {
 
     private static final Pattern SHA256_HEX = Pattern.compile("^[0-9a-f]{64}$");
 

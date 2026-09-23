@@ -65,7 +65,7 @@ class DocxStructuralParserTest {
         assertThat(nodes.get(6).sourceSpan().bodyIndex()).isEqualTo(5);
 
         assertThat(nodes).allSatisfy(node -> {
-            assertThat(node.contractVersionId()).isEqualTo(VERSION_ID);
+            assertThat(node.ownerAggregateId()).isEqualTo(VERSION_ID);
             assertThat(node.sourceSpan().partPath()).isEqualTo("word/document.xml");
             assertThat(node.sourceSpan().hasNonNegativeIndices()).isTrue();
         });

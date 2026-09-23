@@ -56,8 +56,8 @@ class SystemApiIT {
     void exposesSystemStatusSeparatelyFromDependencyHealth() throws Exception {
         mockMvc.perform(get("/api/system/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.service").value("rivell-backend"))
-                .andExpect(jsonPath("$.status").value("ready"));
+                .andExpect(jsonPath("$.data.service").value("rivell-backend"))
+                .andExpect(jsonPath("$.data.status").value("ready"));
 
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(status().isOk())
@@ -79,9 +79,21 @@ class SystemApiIT {
                         "/api/contracts",
                         "/api/contracts/{id}",
                         "/api/contracts/{id}/versions/{versionNumber}/structure",
-                        "/api/contracts/{id}/versions/{versionNumber}/original");
+                        "/api/contracts/{id}/versions/{versionNumber}/original",
+                        "/api/knowledge/artifacts",
+                        "/api/knowledge/artifacts/{id}",
+                        "/api/knowledge/artifacts/{id}/structure",
+                        "/api/knowledge/artifacts/{id}/units",
+                        "/api/knowledge/artifacts/{id}/candidates",
+                        "/api/knowledge/artifacts/{id}/original",
+                        "/api/knowledge/candidates/{id}",
+                        "/api/knowledge/candidates/{id}/approve",
+                        "/api/knowledge/candidates/{id}/edit",
+                        "/api/knowledge/candidates/{id}/reject",
+                        "/api/knowledge/publications",
+                        "/api/knowledge/publications/{id}");
         assertThat(openApi.at("/paths/~1api~1system~1status/get/responses/200/content/application~1json/schema/$ref")
-                .asText()).endsWith("/SystemStatusResponse");
+                .asText()).endsWith("SystemStatusResponse");
 
         var output = Path.of("target/openapi/openapi.json");
         Files.createDirectories(output.getParent());

@@ -20,6 +20,7 @@ import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
+import java.time.Instant;
 
 @Repository
 class JdbcContractRepository implements ContractRepository {
@@ -195,7 +196,7 @@ class JdbcContractRepository implements ContractRepository {
     @Override
     @Transactional
     public void insertContract(
-            UUID contractId, UUID organizationId, String title, java.time.Instant createdAt) {
+            UUID contractId, UUID organizationId, String title, Instant createdAt) {
         jdbcClient.sql("""
                 insert into contract (id, organization_id, title, created_at)
                 values (:contractId, :organizationId, :title, :createdAt)
@@ -212,7 +213,7 @@ class JdbcContractRepository implements ContractRepository {
     public void insertVersion(
             UUID versionId, UUID contractId, UUID sourceArtifactId, int versionNumber,
             com.rivell.workbench.contracts.ContractRole role, String parserVersion,
-            ParseStatus parseStatus, List<String> parseWarnings, java.time.Instant createdAt) {
+            ParseStatus parseStatus, List<String> parseWarnings, Instant createdAt) {
         jdbcClient.sql("""
                 insert into contract_version
                   (id, contract_id, version_number, source_artifact_id, organization_id, role,

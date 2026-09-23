@@ -5,6 +5,7 @@ import java.util.UUID;
 import com.rivell.workbench.contracts.ParseStatus;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.List;
 
 @Schema(description = "Result of a contract upload and initial parse")
 public record IngestResponse(
@@ -12,7 +13,7 @@ public record IngestResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID contractVersionId,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int versionNumber,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, implementation = ParseStatus.class) ParseStatus parseStatus,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) java.util.List<String> parseWarnings,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<String> parseWarnings,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String filename,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, minLength = 64, maxLength = 64) String sha256,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int nodeCount) {

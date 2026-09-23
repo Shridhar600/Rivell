@@ -6,7 +6,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
@@ -17,6 +16,10 @@ import com.rivell.workbench.foundation.StorageKey;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
+import java.io.ByteArrayInputStream;
+import java.util.Set;
+import java.util.HexFormat;
+import java.util.Optional;
 
 /**
  * Contract ingestion: store immutable source, parse, persist canonical structure.
@@ -71,7 +74,7 @@ public class ContractIngestionService {
         var artifactId = UUID.randomUUID();
         var storageKey = new StorageKey(
                 identity.organizationId() + "/contracts/" + artifactId + ".docx");
-        documentStorage.store(storageKey, new java.io.ByteArrayInputStream(bytes));
+        documentStorage.store(storageKey, new ByteArrayInputStream(bytes));
 
         UUID contractId;
         UUID versionId;
@@ -94,7 +97,7 @@ public class ContractIngestionService {
             versionId = staged.versionId();
 
             ParseResult parseResult;
-            try (var parsedSource = new java.io.ByteArrayInputStream(bytes)) {
+            try (var parsedSource = new ByteArrayInputStream(bytes)) {
                 parseResult = documentStructureParser.parse(parsedSource, versionId);
             }
 
@@ -133,7 +136,7 @@ public class ContractIngestionService {
         return buffer;
     }
 
-    private java.util.Optional<String> parsedTitle(java.util.List<DocumentNode> nodes) {
+    private Optional<String> parsedTitle(List<DocumentNode> nodes) {
         return nodes.stream()
                 .filter(node -> node.nodeType() == DocumentNodeType.TITLE)
                 .map(DocumentNode::text)
@@ -153,28 +156,14 @@ public class ContractIngestionService {
     }
 
     static String sanitizeFilename(String filename) {
-        if (filename == null || filename.isBlank()) {
-            throw new IllegalArgumentException("Filename must not be blank");
-        }
-        var base = filename.trim();
-        var slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
-        if (slash >= 0) {
-            base = base.substring(slash + 1);
-        }
-        var cleaned = base.replaceAll("[\\p{Cntrl}]", "");
-        if (cleaned.isBlank()) {
-            throw new IllegalArgumentException("Filename must not be blank");
-        }
-        if (!cleaned.toLowerCase(Locale.ROOT).endsWith(".docx")) {
-            throw new IllegalArgumentException("Only .docx files are supported");
-        }
-        return cleaned;
+        return com.rivell.workbench.foundation.FilenameSanitizer.sanitize(
+                filename, Set.of(".docx"));
     }
 
     private String sha256Hex(byte[] bytes) {
         try {
             var digest = MessageDigest.getInstance("SHA-256");
-            return java.util.HexFormat.of().formatHex(digest.digest(bytes));
+            return HexFormat.of().formatHex(digest.digest(bytes));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is not available", e);
         }

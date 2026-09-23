@@ -5,5 +5,5 @@ import java.util.UUID;
 
 public interface DocumentStructureParser {
 
-    ParseResult parse(InputStream source, UUID contractVersionId);
+    ParseResult parse(InputStream source, UUID ownerAggregateId);
 }

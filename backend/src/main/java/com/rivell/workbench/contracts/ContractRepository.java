@@ -2,6 +2,8 @@ package com.rivell.workbench.contracts;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
+import java.time.Instant;
 
 /**
  * Persistence boundary for the contracts module. Implementations live in platform.
@@ -30,7 +32,7 @@ public interface ContractRepository {
             String storageKey);
 
     void insertContract(
-            UUID contractId, UUID organizationId, String title, java.time.Instant createdAt);
+            UUID contractId, UUID organizationId, String title, Instant createdAt);
 
     void insertVersion(
             UUID versionId,
@@ -40,13 +42,13 @@ public interface ContractRepository {
             ContractRole role,
             String parserVersion,
             ParseStatus parseStatus,
-            java.util.List<String> parseWarnings,
-            java.time.Instant createdAt);
+            List<String> parseWarnings,
+            Instant createdAt);
 
     void updateVersionParseOutcome(
-            UUID versionId, String parserVersion, ParseStatus status, java.util.List<String> warnings);
+            UUID versionId, String parserVersion, ParseStatus status, List<String> warnings);
 
     void updateContractTitle(UUID contractId, String title);
 
-    void insertNodes(UUID contractVersionId, java.util.List<DocumentNode> nodes);
+    void insertNodes(UUID contractVersionId, List<DocumentNode> nodes);
 }
