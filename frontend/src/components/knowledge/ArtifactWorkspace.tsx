@@ -2,6 +2,7 @@ import { useArtifactQuery, useKnowledgeStructureQuery } from '../../api/knowledg
 import { useHeadingFocus } from '../../lib/useHeadingFocus'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
+import { ArtifactAssessmentPanel } from './ArtifactAssessmentPanel'
 import { ArtifactHeader } from './ArtifactHeader'
 import { ArtifactManifest } from './ArtifactManifest'
 import { CandidateReviewWorkspace } from './CandidateReviewWorkspace'
@@ -54,12 +55,15 @@ export function ArtifactWorkspace({ artifactId }: { artifactId: string }) {
   return (
     <section aria-labelledby="artifact-heading" className="workspace">
       <ArtifactHeader artifact={artifact} headingRef={headingRef} />
+      <ArtifactAssessmentPanel artifact={artifact} />
       <IngestionNotice
         status={artifact.ingestStatus}
         warnings={artifact.parseWarnings}
       />
       <ArtifactManifest artifact={artifact} />
-      {extracted ? <CandidateReviewWorkspace artifact={artifact} /> : null}
+      {extracted ? (
+        <CandidateReviewWorkspace key={artifact.id} artifact={artifact} />
+      ) : null}
       {extracted ? <SourceStructureSection artifactId={artifactId} /> : null}
       {extracted ? (
         <details className="disclosure">

@@ -92,7 +92,3 @@ export function resolveCandidateSource(
 
   return { unit, nodes: sourceNodes }
 }
-
-export function reviewStatusTone(status: ReviewStatus): string {
-  return `badge--${status.toLowerCase()}`
-}

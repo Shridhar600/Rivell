@@ -11,9 +11,11 @@ import {
   approvedCandidates,
   type ReviewStatusFilter,
 } from '../../lib/candidates'
+import { isBulkEligible } from '../../lib/semantics'
 import { EmptyState } from '../EmptyState'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
+import { BulkReviewToolbar } from './BulkReviewToolbar'
 import { CandidateQueue } from './CandidateQueue'
 import { CandidateReviewPanel } from './CandidateReviewPanel'
 import { PublicationDialog } from './PublicationDialog'
@@ -31,7 +33,13 @@ export function CandidateReviewWorkspace({
   const [statusFilter, setStatusFilter] = useState<ReviewStatusFilter>('ALL')
   const [conflictsOnly, setConflictsOnly] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
+  const [supersessionChoices, setSupersessionChoices] = useState<
+    Record<string, string>
+  >({})
+  const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
   const panelRef = useRef<HTMLDivElement>(null)
+  const panelHeadingRef = useRef<HTMLHeadingElement>(null)
+  const skipPanelFocus = useRef(true)
 
   const selectedCandidateId = selectedId
   const publishedSelected = candidatesQuery.data?.find(
@@ -42,12 +50,53 @@ export function CandidateReviewWorkspace({
   )
 
   useEffect(() => {
-    if (!selectedId) return
+    if (!selectedId) {
+      skipPanelFocus.current = false
+      return
+    }
+    const heading = panelHeadingRef.current
+    if (heading && !skipPanelFocus.current && typeof heading.focus === 'function') {
+      heading.focus({ preventScroll: true })
+    }
+    skipPanelFocus.current = false
     const element = panelRef.current
     if (element && typeof element.scrollIntoView === 'function') {
       element.scrollIntoView({ block: 'nearest' })
     }
   }, [selectedId])
+
+  function setSupersessionChoice(candidateId: string, peerId: string | null) {
+    setSupersessionChoices((previous) => {
+      const next = { ...previous }
+      if (peerId === null) {
+        delete next[candidateId]
+      } else {
+        next[candidateId] = peerId
+      }
+      return next
+    })
+  }
+
+  function toggleBulkSelection(candidateId: string) {
+    setSelectedForBulk((previous) => {
+      const next = new Set(previous)
+      if (next.has(candidateId)) {
+        next.delete(candidateId)
+      } else {
+        next.add(candidateId)
+      }
+      return next
+    })
+  }
+
+  function toggleAllEligible() {
+    setSelectedForBulk((previous) => {
+      const eligible = candidatesQuery.data?.filter(isBulkEligible) ?? []
+      const allSelected =
+        eligible.length > 0 && eligible.every((candidate) => previous.has(candidate.id))
+      return allSelected ? new Set() : new Set(eligible.map((candidate) => candidate.id))
+    })
+  }
 
   function selectCandidate(candidateId: string) {
     if (candidateId === selectedId) return
@@ -95,6 +144,13 @@ export function CandidateReviewWorkspace({
 
   return (
     <section className="review-workspace" aria-label="Candidate review">
+      <BulkReviewToolbar
+        candidates={candidates}
+        selectedIds={selectedForBulk}
+        onToggleAll={toggleAllEligible}
+        onClear={() => setSelectedForBulk(new Set())}
+        artifactId={artifact.id}
+      />
       <CandidateQueue
         candidates={candidates}
         selectedId={selectedId}
@@ -113,17 +169,24 @@ export function CandidateReviewWorkspace({
             Publish approved ({approved.length})
           </button>
         }
+        selectedForBulk={selectedForBulk}
+        onToggleBulk={toggleBulkSelection}
       />
       <div className="review-workspace__panel" ref={panelRef}>
         {selected ? (
           <CandidateReviewPanel
             key={selected.id}
+            headingRef={panelHeadingRef}
             candidate={selected}
             artifact={artifact}
             units={unitsQuery.data ?? []}
             nodes={structureQuery.data ?? []}
             sourceContextPending={sourceContextPending}
             publishedIn={publishedIn}
+            supersessionChoice={supersessionChoices[selected.id] ?? null}
+            onSupersessionChange={(peerId) =>
+              setSupersessionChoice(selected.id, peerId)
+            }
           />
         ) : selectedId ? (
           <p className="state" role="status">
@@ -140,6 +203,10 @@ export function CandidateReviewWorkspace({
         <PublicationDialog
           artifact={artifact}
           approved={approved}
+          supersessionChoices={supersessionChoices}
+          onClearSupersession={(candidateId) =>
+            setSupersessionChoice(candidateId, null)
+          }
           onClose={() => setPublishOpen(false)}
         />
       ) : null}

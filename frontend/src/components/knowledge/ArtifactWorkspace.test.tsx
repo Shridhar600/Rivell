@@ -41,6 +41,7 @@ const artifactDetail = {
   ingestStatus: 'EXTRACTED',
   parserVersion: 'rivell-docx-parser-2',
   parseWarnings: [],
+  artifactAssessment: null,
   createdAt: '2026-09-23T05:17:29.604991Z',
 }
 
@@ -313,6 +314,83 @@ describe('ArtifactWorkspace', () => {
     expect(screen.getByText('Extraction units')).toBeInTheDocument()
     const unit = await screen.findByText('Heading section · 2 source nodes')
     expect(unit).toBeInTheDocument()
+  })
+
+
+  it('shows a possible artifact-type mismatch without offering a type change', async () => {
+    stubArtifact({
+      artifact: () =>
+        ok({
+          ...artifactDetail,
+          artifactAssessment: {
+            assessedType: 'CLAUSE_LIBRARY',
+            probability: 0.82,
+            state: 'POSSIBLE_MISMATCH',
+            specId: 'artifact-type-assessment',
+            specVersion: 1,
+            warnings: ['HUMAN_DECLARED_TYPE_DIFFERS_FROM_MACHINE_ASSESSMENT'],
+          },
+        }),
+    })
+
+    renderArtifact()
+
+    expect(
+      await screen.findByText(/may not match the declared artifact type/i),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText(/Contract playbook/).length).toBeGreaterThan(0)
+    expect(screen.getByText('Clause library')).toBeInTheDocument()
+    expect(screen.getByText(/remains authoritative/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/declared artifact type differs from Rivell's assessment/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).toBeNull()
+  })
+
+  it('shows an ambiguous assessment', async () => {
+    stubArtifact({
+      artifact: () =>
+        ok({
+          ...artifactDetail,
+          artifactAssessment: {
+            assessedType: 'PLAYBOOK',
+            probability: 0.55,
+            state: 'AMBIGUOUS',
+            specId: 'artifact-type-assessment',
+            specVersion: 1,
+            warnings: [],
+          },
+        }),
+    })
+
+    renderArtifact()
+
+    expect(
+      await screen.findByText(/artifact type assessment is ambiguous/i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows agreement when the assessment matches', async () => {
+    stubArtifact({
+      artifact: () =>
+        ok({
+          ...artifactDetail,
+          artifactAssessment: {
+            assessedType: 'PLAYBOOK',
+            probability: 1,
+            state: 'MATCH',
+            specId: 'artifact-type-assessment',
+            specVersion: 1,
+            warnings: [],
+          },
+        }),
+    })
+
+    renderArtifact()
+
+    expect(
+      await screen.findByText(/classification agrees with the declared artifact type/i),
+    ).toBeInTheDocument()
   })
 
   it('renders spreadsheet structure as sheet tables with merged regions', async () => {

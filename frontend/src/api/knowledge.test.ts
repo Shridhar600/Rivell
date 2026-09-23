@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   fetchArtifacts,
   fetchCandidates,
+  parseArtifactAssessment,
   parseArtifactDetail,
+  parseBulkApprovalResult,
   parseCandidate,
   parseExtractionUnit,
   parseKnowledgeNode,
@@ -57,6 +59,7 @@ const artifactDetail = {
   ingestStatus: 'EXTRACTED',
   parserVersion: 'rivell-docx-parser-2',
   parseWarnings: [],
+  artifactAssessment: null,
   createdAt: '2026-09-23T05:17:29.604991Z',
 }
 
@@ -74,6 +77,22 @@ const candidate = {
     Fallback: '2x annual fees',
   },
   legalConceptKey: null,
+  classifiedConcepts: { LIMITATION_OF_LIABILITY: 0.91 },
+  positions: ['FALLBACK', 'PREFERRED'],
+  variantRole: null,
+  escalationTrigger: null,
+  requiresApproval: false,
+  interpretations: [
+    {
+      field: 'positions',
+      proposedValue: 'FALLBACK,PREFERRED',
+      kind: 'BOUNDED_CLASSIFICATION',
+      specId: 'playbook-position',
+      specVersion: 1,
+      supportingSourceNodes: 2,
+      verification: 'NOT_VERIFIED',
+    },
+  ],
   editedContentText: null,
   editedPayloadColumns: {},
   supersedingCandidateId: null,
@@ -84,6 +103,8 @@ const candidate = {
   jurisdiction: null,
   effectiveFrom: null,
   effectiveTo: null,
+  reviewCategory: 'ROUTINE',
+  reviewReasons: [],
   conflictSignals: [
     {
       conflictType: 'DUPLICATE',
@@ -224,6 +245,60 @@ describe('knowledge parsers', () => {
       firstColumn: 0,
       lastColumn: 2,
     })
+  })
+
+  it('parses M4 semantic fields, interpretations and review attention', () => {
+    const parsed = parseCandidate(candidate)
+
+    expect(parsed.classifiedConcepts).toEqual({ LIMITATION_OF_LIABILITY: 0.91 })
+    expect(parsed.positions).toEqual(['FALLBACK', 'PREFERRED'])
+    expect(parsed.requiresApproval).toBe(false)
+    expect(parsed.reviewCategory).toBe('ROUTINE')
+    expect(parsed.interpretations[0].proposedValue).toBe('FALLBACK,PREFERRED')
+    expect(parsed.interpretations[0].supportingSourceNodes).toBe(2)
+    expect(parsed.interpretations[0].verification).toBe('NOT_VERIFIED')
+  })
+
+  it('rejects unknown review categories at the boundary', () => {
+    expect(() =>
+      parseCandidate({ ...candidate, reviewCategory: 'CRITICAL' }),
+    ).toThrow(/malformed candidate response/i)
+  })
+
+  it('parses an artifact assessment and tolerates its absence', () => {
+    const assessment = parseArtifactAssessment({
+      assessedType: 'CLAUSE_LIBRARY',
+      probability: 0.82,
+      state: 'POSSIBLE_MISMATCH',
+      specId: 'artifact-type-assessment',
+      specVersion: 1,
+      warnings: ['Declared PLAYBOOK but content resembles CLAUSE_LIBRARY'],
+    })
+    expect(assessment.state).toBe('POSSIBLE_MISMATCH')
+    expect(assessment.assessedType).toBe('CLAUSE_LIBRARY')
+
+    const detail = parseArtifactDetail({
+      ...artifactDetail,
+      artifactAssessment: {
+        assessedType: 'PLAYBOOK',
+        probability: 1.0,
+        state: 'MATCH',
+        specId: 'artifact-type-assessment',
+        specVersion: 1,
+        warnings: [],
+      },
+    })
+    expect(detail.artifactAssessment?.state).toBe('MATCH')
+    expect(parseArtifactDetail(artifactDetail).artifactAssessment).toBeNull()
+  })
+
+  it('parses bulk approval outcomes', () => {
+    const result = parseBulkApprovalResult({
+      approvedIds: ['c1', 'c2'],
+      skipped: { c3: 'not ROUTINE' },
+    })
+    expect(result.approvedIds).toEqual(['c1', 'c2'])
+    expect(result.skipped.c3).toBe('not ROUTINE')
   })
 
   it('parses extraction units and publications', () => {

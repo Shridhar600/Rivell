@@ -13,9 +13,13 @@ import {
   readArray,
   readArrayValue,
   readEnum,
+  readEnumArray,
+  readNullableBoolean,
+  readNullableEnum,
   readNullableNumber,
   readNullableString,
   readNumber,
+  readNumberMap,
   readString,
   readStringArray,
   readStringMap,
@@ -31,6 +35,15 @@ type SchemaConflictType = NonNullable<
   components['schemas']['ConflictSignalView']['conflictType']
 >
 type SchemaPublicationAction = NonNullable<components['schemas']['ItemView']['action']>
+type SchemaPositionRole = NonNullable<SchemaCandidate['positions']>[number]
+type SchemaReviewCategory = NonNullable<SchemaCandidate['reviewCategory']>
+type SchemaReviewReason = NonNullable<SchemaCandidate['reviewReasons']>[number]
+type SchemaVerification = NonNullable<
+  components['schemas']['InterpretationView']['verification']
+>
+type SchemaAssessmentState = NonNullable<
+  components['schemas']['ArtifactAssessmentView']['state']
+>
 
 export const ARTIFACT_TYPES = [
   'PLAYBOOK',
@@ -82,6 +95,48 @@ export const CONFLICT_TYPES = [
 
 export const PUBLICATION_ACTIONS = ['ADD', 'SUPERSEDE'] as const satisfies readonly SchemaPublicationAction[]
 
+export const POSITION_ROLES = [
+  'PREFERRED',
+  'FALLBACK',
+  'PROHIBITED',
+  'ESCALATION',
+  'COMMENTARY',
+  'UNSPECIFIED',
+] as const satisfies readonly SchemaPositionRole[]
+
+export const REVIEW_CATEGORIES = [
+  'ROUTINE',
+  'ELEVATED',
+  'HIGH',
+] as const satisfies readonly SchemaReviewCategory[]
+
+export const REVIEW_REASONS = [
+  'DUPLICATE_DETECTED',
+  'CONFLICT_DETECTED',
+  'SUPERSESSION_PROPOSED',
+  'ARTIFACT_TYPE_MISMATCH',
+  'VERIFICATION_DISPUTED',
+  'UNVERIFIED_GENERATIVE_FIELD',
+  'LOW_CLASSIFICATION_CONFIDENCE',
+  'NEW_PROHIBITED_OR_ESCALATION_POSITION',
+  'SCOPE_NARROWING_PROPOSED',
+  'SEMANTIC_ANALYSIS_UNAVAILABLE',
+  'SEMANTIC_COMPILATION_UNAVAILABLE',
+] as const satisfies readonly SchemaReviewReason[]
+
+export const VERIFICATION_STATES = [
+  'NOT_VERIFIED',
+  'VERIFIED',
+  'UNCERTAIN',
+  'DISPUTED',
+] as const satisfies readonly SchemaVerification[]
+
+export const ASSESSMENT_STATES = [
+  'MATCH',
+  'POSSIBLE_MISMATCH',
+  'AMBIGUOUS',
+] as const satisfies readonly SchemaAssessmentState[]
+
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number]
 export type IngestStatus = (typeof INGEST_STATUSES)[number]
 export type CandidateType = (typeof CANDIDATE_TYPES)[number]
@@ -89,6 +144,11 @@ export type ReviewStatus = (typeof REVIEW_STATUSES)[number]
 export type UnitKind = (typeof UNIT_KINDS)[number]
 export type ConflictType = (typeof CONFLICT_TYPES)[number]
 export type PublicationAction = (typeof PUBLICATION_ACTIONS)[number]
+export type PositionRole = (typeof POSITION_ROLES)[number]
+export type ReviewCategory = (typeof REVIEW_CATEGORIES)[number]
+export type ReviewReason = (typeof REVIEW_REASONS)[number]
+export type VerificationState = (typeof VERIFICATION_STATES)[number]
+export type AssessmentState = (typeof ASSESSMENT_STATES)[number]
 
 export interface ArtifactSummary {
   id: string
@@ -99,6 +159,14 @@ export interface ArtifactSummary {
   sha256: string
   ingestStatus: IngestStatus
   createdAt: string
+}
+
+export interface ArtifactAssessment {
+  assessedType: string
+  state: AssessmentState
+  specId: string
+  specVersion: number
+  warnings: string[]
 }
 
 export interface ArtifactDetail extends ArtifactSummary {
@@ -114,6 +182,7 @@ export interface ArtifactDetail extends ArtifactSummary {
   manifestNote: string | null
   parserVersion: string | null
   parseWarnings: string[]
+  artifactAssessment: ArtifactAssessment | null
 }
 
 export interface MergedRegion {
@@ -161,6 +230,16 @@ export interface ConflictSignal {
   publishedCandidateId: string | null
 }
 
+export interface Interpretation {
+  field: string
+  proposedValue: string
+  kind: string
+  specId: string
+  specVersion: number
+  supportingSourceNodes: number
+  verification: VerificationState
+}
+
 export interface Candidate {
   id: string
   artifactId: string
@@ -171,6 +250,12 @@ export interface Candidate {
   contentText: string | null
   payloadColumns: Record<string, string>
   legalConceptKey: string | null
+  classifiedConcepts: Record<string, number>
+  positions: PositionRole[]
+  variantRole: PositionRole | null
+  escalationTrigger: string | null
+  requiresApproval: boolean | null
+  interpretations: Interpretation[]
   editedContentText: string | null
   editedPayloadColumns: Record<string, string>
   supersedingCandidateId: string | null
@@ -182,6 +267,8 @@ export interface Candidate {
   effectiveFrom: string | null
   effectiveTo: string | null
   conflictSignals: ConflictSignal[]
+  reviewCategory: ReviewCategory | null
+  reviewReasons: string[]
   reviewNote: string | null
   reviewedAt: string | null
   createdAt: string
@@ -249,6 +336,7 @@ export function parseArtifactDetail(
   what = 'knowledge source',
 ): ArtifactDetail {
   const record = asRecord(value, what)
+  const assessment = record.artifactAssessment
   return {
     ...parseArtifactSummary(record, what),
     storageKey: readString(record, 'storageKey', what),
@@ -263,6 +351,24 @@ export function parseArtifactDetail(
     manifestNote: readNullableString(record, 'manifestNote', what),
     parserVersion: readNullableString(record, 'parserVersion', what),
     parseWarnings: readStringArray(record, 'parseWarnings', what),
+    artifactAssessment:
+      assessment === null || assessment === undefined
+        ? null
+        : parseArtifactAssessment(assessment, what),
+  }
+}
+
+export function parseArtifactAssessment(
+  value: unknown,
+  what = 'artifact assessment',
+): ArtifactAssessment {
+  const record = asRecord(value, what)
+  return {
+    assessedType: readString(record, 'assessedType', what),
+    state: readEnum(record, 'state', what, ASSESSMENT_STATES),
+    specId: readString(record, 'specId', what),
+    specVersion: readNumber(record, 'specVersion', what),
+    warnings: readStringArray(record, 'warnings', what),
   }
 }
 
@@ -328,6 +434,22 @@ export function parseConflictSignal(
   }
 }
 
+export function parseInterpretation(
+  value: unknown,
+  what = 'interpretation',
+): Interpretation {
+  const record = asRecord(value, what)
+  return {
+    field: readString(record, 'field', what),
+    proposedValue: readString(record, 'proposedValue', what),
+    kind: readString(record, 'kind', what),
+    specId: readString(record, 'specId', what),
+    specVersion: readNumber(record, 'specVersion', what),
+    supportingSourceNodes: readNumber(record, 'supportingSourceNodes', what),
+    verification: readEnum(record, 'verification', what, VERIFICATION_STATES),
+  }
+}
+
 export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
   const record = asRecord(value, what)
   return {
@@ -340,6 +462,12 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     contentText: readNullableString(record, 'contentText', what),
     payloadColumns: readStringMap(record, 'payloadColumns', what),
     legalConceptKey: readNullableString(record, 'legalConceptKey', what),
+    classifiedConcepts: readNumberMap(record, 'classifiedConcepts', what),
+    positions: readEnumArray(record, 'positions', what, POSITION_ROLES),
+    variantRole: readNullableEnum(record, 'variantRole', what, POSITION_ROLES),
+    escalationTrigger: readNullableString(record, 'escalationTrigger', what),
+    requiresApproval: readNullableBoolean(record, 'requiresApproval', what),
+    interpretations: readArray(record, 'interpretations', what, parseInterpretation),
     editedContentText: readNullableString(record, 'editedContentText', what),
     editedPayloadColumns: readStringMap(record, 'editedPayloadColumns', what),
     supersedingCandidateId: readNullableString(record, 'supersedingCandidateId', what),
@@ -351,6 +479,8 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     effectiveFrom: readNullableString(record, 'effectiveFrom', what),
     effectiveTo: readNullableString(record, 'effectiveTo', what),
     conflictSignals: readArray(record, 'conflictSignals', what, parseConflictSignal),
+    reviewCategory: readNullableEnum(record, 'reviewCategory', what, REVIEW_CATEGORIES),
+    reviewReasons: readStringArray(record, 'reviewReasons', what),
     reviewNote: readNullableString(record, 'reviewNote', what),
     reviewedAt: readNullableString(record, 'reviewedAt', what),
     createdAt: readString(record, 'createdAt', what),
@@ -571,18 +701,43 @@ async function approveCandidate(candidateId: string, note?: string): Promise<Can
   return parseApiResult(data, parseCandidate, 'candidate')
 }
 
+export interface ScopeEditInput {
+  contractPackKey?: string
+  declaredContractTypes: string[]
+  partyPerspective?: string
+  paperSource?: string
+  jurisdiction?: string
+  effectiveFrom?: string
+  effectiveTo?: string
+}
+
+export interface SemanticFieldsEditInput {
+  positions?: PositionRole[]
+  requiresApproval?: boolean
+  escalationTrigger?: string
+  variantRole?: PositionRole
+}
+
 export interface EditCandidateInput {
   candidateId: string
   contentText?: string
   payloadColumns?: Record<string, string>
+  scope?: ScopeEditInput
+  semanticFields?: SemanticFieldsEditInput
   note?: string
 }
 
+type EditRequestBody = NonNullable<
+  paths['/api/knowledge/candidates/{id}/edit']['post']['requestBody']
+>['content']['application/json']
+
 async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
   const client = createApiClient()
-  const body: { contentText?: string; payloadColumns?: Record<string, string>; note?: string } = {}
+  const body: EditRequestBody = {}
   if (input.contentText !== undefined) body.contentText = input.contentText
   if (input.payloadColumns !== undefined) body.payloadColumns = input.payloadColumns
+  if (input.scope !== undefined) body.scope = input.scope
+  if (input.semanticFields !== undefined) body.semanticFields = input.semanticFields
   if (input.note !== undefined && input.note.trim().length > 0) body.note = input.note
 
   const { data, error } = await client.POST('/api/knowledge/candidates/{id}/edit', {
@@ -609,11 +764,54 @@ async function rejectCandidate(candidateId: string, note?: string): Promise<Cand
   return parseApiResult(data, parseCandidate, 'candidate')
 }
 
-async function publishKnowledge(candidateIds: string[], note?: string): Promise<Publication> {
+export interface BulkApprovalResult {
+  approvedIds: string[]
+  skipped: Record<string, string>
+}
+
+export function parseBulkApprovalResult(
+  value: unknown,
+  what = 'bulk approval',
+): BulkApprovalResult {
+  const record = asRecord(value, what)
+  return {
+    approvedIds: readStringArray(record, 'approvedIds', what),
+    skipped: readStringMap(record, 'skipped', what),
+  }
+}
+
+async function bulkApproveCandidates(
+  candidateIds: string[],
+): Promise<BulkApprovalResult> {
   const client = createApiClient()
-  const { data, error } = await client.POST('/api/knowledge/publications', {
-    body: note && note.trim().length > 0 ? { candidateIds, note } : { candidateIds },
-  })
+  const { data, error } = await client.POST(
+    '/api/knowledge/candidates/bulk-approve',
+    { body: { candidateIds } },
+  )
+
+  if (!data) {
+    throw new Error(errorMessage(error, 'Bulk approval failed'))
+  }
+  return parseApiResult(data, parseBulkApprovalResult, 'bulk approval')
+}
+
+async function publishKnowledge(
+  candidateIds: string[],
+  supersededCandidates: Record<string, string> | undefined,
+  note?: string,
+): Promise<Publication> {
+  const client = createApiClient()
+  const body: {
+    candidateIds: string[]
+    supersededCandidates?: Record<string, string>
+    note?: string
+  } = { candidateIds }
+  if (supersededCandidates && Object.keys(supersededCandidates).length > 0) {
+    body.supersededCandidates = supersededCandidates
+  }
+  if (note && note.trim().length > 0) body.note = note
+
+  const { data, error } = await client.POST('/api/knowledge/publications', { body })
 
   if (!data) {
     throw new Error(errorMessage(error, 'Publication failed'))
@@ -768,8 +966,36 @@ export function useRejectCandidate(): UseMutationResult<
   })
 }
 
+export interface BulkApproveVariables {
+  candidateIds: string[]
+  artifactId: string
+}
+
+export function useBulkApproveCandidates(): UseMutationResult<
+  BulkApprovalResult,
+  Error,
+  BulkApproveVariables
+> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ candidateIds }: BulkApproveVariables) =>
+      bulkApproveCandidates(candidateIds),
+    onSuccess: (_result, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: knowledgeKeys.candidates(variables.artifactId),
+      })
+      for (const candidateId of variables.candidateIds) {
+        void queryClient.invalidateQueries({
+          queryKey: knowledgeKeys.candidate(candidateId),
+        })
+      }
+    },
+  })
+}
+
 export interface PublishKnowledgeVariables {
   candidateIds: string[]
+  supersededCandidates?: Record<string, string>
   note?: string
   artifactIds: string[]
 }
@@ -781,8 +1007,8 @@ export function usePublishKnowledge(): UseMutationResult<
 > {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ candidateIds, note }: PublishKnowledgeVariables) =>
-      publishKnowledge(candidateIds, note),
+    mutationFn: ({ candidateIds, supersededCandidates, note }: PublishKnowledgeVariables) =>
+      publishKnowledge(candidateIds, supersededCandidates, note),
     onSuccess: (publication, variables) => {
       void queryClient.invalidateQueries({ queryKey: knowledgeKeys.publications })
       void queryClient.invalidateQueries({

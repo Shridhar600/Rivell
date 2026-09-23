@@ -10,6 +10,8 @@ import {
   CANDIDATE_TYPE_LABELS,
   REVIEW_STATUS_LABELS,
 } from '../../lib/knowledgeLabels'
+import { hasSupersessionProposal, isBulkEligible } from '../../lib/semantics'
+import { ReviewAttentionBadge } from './ReviewAttention'
 
 export function CandidateQueue({
   candidates,
@@ -20,6 +22,8 @@ export function CandidateQueue({
   conflictsOnly,
   onConflictsOnlyChange,
   publishAction,
+  selectedForBulk,
+  onToggleBulk,
 }: {
   candidates: Candidate[]
   selectedId: string | null
@@ -29,6 +33,8 @@ export function CandidateQueue({
   conflictsOnly: boolean
   onConflictsOnlyChange: (value: boolean) => void
   publishAction?: ReactNode
+  selectedForBulk: Set<string>
+  onToggleBulk: (id: string) => void
 }) {
   const counts = countByReviewStatus(candidates)
   const filtered = filterCandidates(candidates, { status: statusFilter, conflictsOnly })
@@ -85,7 +91,17 @@ export function CandidateQueue({
       ) : (
         <ul className="candidate-list">
           {filtered.map((candidate) => (
-            <li key={candidate.id}>
+            <li key={candidate.id} className="candidate-list__row">
+              {isBulkEligible(candidate) ? (
+                <label className="checkbox candidate-list__select">
+                  <input
+                    type="checkbox"
+                    checked={selectedForBulk.has(candidate.id)}
+                    aria-label={`Select ${candidate.rawLabel} for bulk approval`}
+                    onChange={() => onToggleBulk(candidate.id)}
+                  />
+                </label>
+              ) : null}
               <button
                 type="button"
                 className={
@@ -101,12 +117,16 @@ export function CandidateQueue({
                   {CANDIDATE_TYPE_LABELS[candidate.candidateType]}
                 </span>
                 <span className="candidate-list__badges">
+                  <ReviewAttentionBadge candidate={candidate} />
                   <span
                     className={`badge badge--${candidate.reviewStatus.toLowerCase()}`}
                   >
                     {REVIEW_STATUS_LABELS[candidate.reviewStatus]}
                   </span>
-                  {hasConflicts(candidate) ? (
+                  {hasSupersessionProposal(candidate) ? (
+                    <span className="badge badge--conflict">Supersession proposed</span>
+                  ) : null}
+                  {hasConflicts(candidate) && !hasSupersessionProposal(candidate) ? (
                     <span className="badge badge--conflict">Conflict</span>
                   ) : null}
                 </span>

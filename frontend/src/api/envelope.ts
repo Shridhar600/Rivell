@@ -78,6 +78,41 @@ export function readStringMap(
   return Object.fromEntries(entries) as Record<string, string>
 }
 
+export function readNumberMap(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): Record<string, number> {
+  const value = source[key]
+  if (value === null || value === undefined) return {}
+  if (typeof value !== 'object' || Array.isArray(value)) throw malformed(what)
+  const entries = Object.entries(value)
+  if (
+    entries.some(
+      ([, entry]) => typeof entry !== 'number' || !Number.isFinite(entry),
+    )
+  ) {
+    throw malformed(what)
+  }
+  return Object.fromEntries(entries) as Record<string, number>
+}
+
+export function readEnumArray<T extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+  values: readonly T[],
+): T[] {
+  const value = source[key]
+  if (!Array.isArray(value)) throw malformed(what)
+  return value.map((entry) => {
+    if (typeof entry !== 'string' || !(values as readonly string[]).includes(entry)) {
+      throw malformed(what)
+    }
+    return entry as T
+  })
+}
+
 export function readEnum<T extends string>(
   source: Record<string, unknown>,
   key: string,
@@ -89,6 +124,31 @@ export function readEnum<T extends string>(
     throw malformed(what)
   }
   return value as T
+}
+
+export function readNullableEnum<T extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+  values: readonly T[],
+): T | null {
+  const value = source[key]
+  if (value === null) return null
+  if (typeof value !== 'string' || !(values as readonly string[]).includes(value)) {
+    throw malformed(what)
+  }
+  return value as T
+}
+
+export function readNullableBoolean(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): boolean | null {
+  const value = source[key]
+  if (value === null) return null
+  if (typeof value !== 'boolean') throw malformed(what)
+  return value
 }
 
 export function readArrayValue<T>(

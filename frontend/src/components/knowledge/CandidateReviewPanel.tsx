@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type RefObject } from 'react'
 import { Link } from 'react-router'
 import {
   originalArtifactUrl,
@@ -9,17 +9,32 @@ import {
   type KnowledgeNode,
   type Publication,
 } from '../../api/knowledge'
-import { isEdited, isReviewable, resolveCandidateSource } from '../../lib/candidates'
+import {
+  effectiveContentText,
+  effectivePayloadColumns,
+  isReviewable,
+  resolveCandidateSource,
+} from '../../lib/candidates'
 import {
   CANDIDATE_TYPE_LABELS,
   REVIEW_STATUS_LABELS,
   UNIT_KIND_LABELS,
 } from '../../lib/knowledgeLabels'
 import { compareKnowledgePosition, nodeSpanLabel } from '../../lib/knowledgeTree'
+import {
+  conceptLabel,
+  interpretationFor,
+  scopeDifferences,
+} from '../../lib/semantics'
 import type { ExtractionUnit } from '../../api/knowledge'
 import { ErrorState } from '../ErrorState'
 import { CandidateEditForm } from './CandidateEditForm'
-import { ConflictSignalList } from './ConflictSignalList'
+import { ConflictComparison } from './ConflictComparison'
+import { ReviewAttentionSection } from './ReviewAttention'
+import {
+  InterpretationProvenance,
+  SemanticFieldReview,
+} from './SemanticFieldReview'
 
 function SourceNodeView({
   node,
@@ -97,18 +112,24 @@ function ScopeRow({
 
 export function CandidateReviewPanel({
   candidate,
+  headingRef,
   artifact,
   units,
   nodes,
   sourceContextPending,
   publishedIn,
+  supersessionChoice,
+  onSupersessionChange,
 }: {
   candidate: Candidate
+  headingRef: RefObject<HTMLHeadingElement | null>
   artifact: ArtifactDetail
   units: ExtractionUnit[]
   nodes: KnowledgeNode[]
   sourceContextPending: boolean
   publishedIn?: Publication | null
+  supersessionChoice: string | null
+  onSupersessionChange: (peerId: string | null) => void
 }) {
   const approve = useApproveCandidate()
   const reject = useRejectCandidate()
@@ -122,10 +143,20 @@ export function CandidateReviewPanel({
     units,
     nodes,
   )
+  const scopeInterpretation = interpretationFor(candidate, 'scope')
   const reviewable = isReviewable(candidate)
-  const contentText = candidate.contentText
-  const edited = isEdited(candidate)
+  const effectiveText = effectiveContentText(candidate)
+  const machineText = candidate.contentText
+  const textDiverged = machineText !== null && machineText !== effectiveText
+  const effectiveColumns = effectivePayloadColumns(candidate)
+  const divergingColumns = Object.keys(candidate.payloadColumns).filter(
+    (column) => candidate.payloadColumns[column] !== effectiveColumns[column],
+  )
   const hasPayload = Object.keys(candidate.payloadColumns).length > 0
+  const scopeDiffs = scopeDifferences(candidate, artifact)
+  const narrowingApplied =
+    scopeInterpretation !== null &&
+    scopeInterpretation.proposedValue === (candidate.jurisdiction ?? '')
 
   function handleReject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -141,20 +172,20 @@ export function CandidateReviewPanel({
   }
 
   function payloadEntries(): Array<[string, string, boolean]> {
-    const entries: Array<[string, string, boolean]> = []
-    for (const [column, value] of Object.entries(candidate.payloadColumns)) {
-      entries.push([column, value, false])
-    }
-    for (const [column, value] of Object.entries(candidate.editedPayloadColumns)) {
-      entries.push([column, value, true])
-    }
-    return entries
+    return Object.entries(effectiveColumns).map(([column, value]) => [
+      column,
+      value,
+      candidate.editedPayloadColumns[column] !== undefined &&
+        candidate.editedPayloadColumns[column] !== candidate.payloadColumns[column],
+    ])
   }
 
   return (
     <article className="review-panel" aria-labelledby="candidate-heading">
       <header className="review-panel__header">
-        <h3 id="candidate-heading">{candidate.rawLabel}</h3>
+        <h3 id="candidate-heading" tabIndex={-1} ref={headingRef}>
+          {candidate.rawLabel}
+        </h3>
         <p className="meta">
           {CANDIDATE_TYPE_LABELS[candidate.candidateType]} ·{' '}
           <span className={`badge badge--${candidate.reviewStatus.toLowerCase()}`}>
@@ -164,27 +195,28 @@ export function CandidateReviewPanel({
         </p>
       </header>
 
+      <ReviewAttentionSection candidate={candidate} />
+
       <section aria-labelledby="candidate-extracted-heading">
-        <h4 id="candidate-extracted-heading">Extracted</h4>
+        <h4 id="candidate-extracted-heading">Interpretation</h4>
         <dl className="data-list">
           <div className="data-list__row">
-            <dt>Legal concept</dt>
+            <dt>Normalized legal concept</dt>
             <dd>
-              {candidate.legalConceptKey ?? (
-                <span className="meta">
-                  Not classified (deterministic extraction only)
-                </span>
+              {conceptLabel(candidate.legalConceptKey) ?? (
+                <span className="meta">Not confidently classified</span>
               )}
             </dd>
           </div>
-          {!hasPayload && contentText ? (
+          <SemanticFieldReview candidate={candidate} />
+          {effectiveText && (!hasPayload || textDiverged) ? (
             <div className="data-list__row">
-              <dt>Content</dt>
-              <dd className="extracted-content">{contentText}</dd>
+              <dt>{hasPayload ? 'Extracted text' : 'Content'}</dt>
+              <dd className="extracted-content">{effectiveText}</dd>
             </div>
           ) : null}
           {payloadEntries().map(([column, value, editedValue]) => (
-            <div className="data-list__row" key={`${column}:${editedValue}`}>
+            <div className="data-list__row" key={column}>
               <dt>
                 {column}
                 {editedValue ? <span className="meta"> (edited)</span> : null}
@@ -194,24 +226,26 @@ export function CandidateReviewPanel({
           ))}
         </dl>
 
-        {edited ? (
+        {textDiverged || divergingColumns.length > 0 ? (
           <div className="machine-proposal">
             <h5>Machine proposal (preserved)</h5>
-            {candidate.contentText ? (
-              <p className="extracted-content">{candidate.contentText}</p>
+            {textDiverged && machineText ? (
+              <p className="extracted-content">{machineText}</p>
             ) : null}
-            {hasPayload ? (
+            {divergingColumns.length > 0 ? (
               <dl className="data-list">
-                {Object.entries(candidate.payloadColumns).map(([column, value]) => (
+                {divergingColumns.map((column) => (
                   <div className="data-list__row" key={column}>
                     <dt>{column}</dt>
-                    <dd>{value}</dd>
+                    <dd>{candidate.payloadColumns[column]}</dd>
                   </div>
                 ))}
               </dl>
             ) : null}
           </div>
         ) : null}
+
+        <InterpretationProvenance candidate={candidate} />
       </section>
 
       <section aria-labelledby="candidate-source-heading">
@@ -268,12 +302,36 @@ export function CandidateReviewPanel({
           />
           <ScopeRow label="Effective to" value={candidate.effectiveTo} />
         </dl>
+        {scopeDiffs.length > 0 ? (
+          <p className="meta">
+            Adjusted from the artifact manifest:{' '}
+            {scopeDiffs
+              .map(
+                (difference) =>
+                  `${difference.label} (manifest: ${difference.manifestValue ?? 'not set'})`,
+              )
+              .join('; ')}
+            .
+          </p>
+        ) : null}
+        {scopeInterpretation && !narrowingApplied ? (
+          <p className="meta">
+            Rivell suggests narrowing jurisdiction to{' '}
+            {scopeInterpretation.proposedValue} based on the source. The manifest
+            scope stays effective until a human applies it.
+          </p>
+        ) : null}
       </section>
 
-      {candidate.conflictSignals.length > 0 ? (
+      {candidate.conflictSignals.length > 0 ||
+      candidate.supersedingCandidateId ? (
         <section aria-labelledby="candidate-analysis-heading">
-          <h4 id="candidate-analysis-heading">System analysis</h4>
-          <ConflictSignalList signals={candidate.conflictSignals} />
+          <h4 id="candidate-analysis-heading">Published knowledge comparison</h4>
+          <ConflictComparison
+            candidate={candidate}
+            supersessionChoice={supersessionChoice}
+            onSupersessionChange={onSupersessionChange}
+          />
         </section>
       ) : null}
 
@@ -378,6 +436,7 @@ export function CandidateReviewPanel({
             {editOpen ? (
               <CandidateEditForm
                 candidate={candidate}
+                artifact={artifact}
                 onCancel={() => setEditOpen(false)}
               />
             ) : null}
