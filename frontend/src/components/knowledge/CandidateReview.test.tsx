@@ -379,7 +379,7 @@ describe('candidate review workspace', () => {
     expect(within(panel).getAllByText('1x annual fees').length).toBeGreaterThan(0)
     expect(within(panel).getByText(/Table · unit 2/)).toBeInTheDocument()
     expect(
-      within(panel).getByText(/matches published candidate/i),
+      within(panel).getByText(/possible duplicate/i),
     ).toBeInTheDocument()
     expect(
       within(panel).getByText(/extraction unit 2 \(table\)/i),
@@ -702,16 +702,53 @@ describe('candidate review workspace', () => {
 
     const panel = await screen.findByRole('article', { name: /Liability cap/i })
     expect(
-      within(panel).getByText(/signals are advisory in this milestone/i),
+      within(panel).getByText(/signals are advisory/i),
     ).toBeInTheDocument()
+    expect(panel.textContent).not.toMatch(/p=0\./)
 
     await userEvent.click(
-      within(panel).getByRole('button', { name: /compare with published candidate/i }),
+      within(panel).getByRole('button', { name: /compare with published knowledge/i }),
     )
 
     expect(
       await within(panel).findByText(/published knowledge: Liability cap/i),
     ).toBeInTheDocument()
+  })
+
+
+  it('requires an explicit human choice to replace published knowledge', async () => {
+    stubKnowledgeApi({
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'New liability rule',
+          legalConceptKey: 'LIMITATION_OF_LIABILITY',
+          positions: ['FALLBACK'],
+          conflictSignals: [
+            {
+              conflictType: 'SUPERSEDES_EXISTING',
+              message: 'Appears intended to replace a published position (p=0.93)',
+              publishedCandidateId: 'p1',
+            },
+          ],
+        }),
+      ],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /New liability rule/i })
+    expect(
+      within(panel).getByText(/possible supersession/i),
+    ).toBeInTheDocument()
+
+    const replacement = within(panel).getByRole('checkbox', {
+      name: /replace this published knowledge when publishing/i,
+    })
+    expect(replacement).not.toBeChecked()
+
+    await userEvent.click(replacement)
+    expect(replacement).toBeChecked()
   })
 
   it('keeps review actions available when the source context fails', async () => {

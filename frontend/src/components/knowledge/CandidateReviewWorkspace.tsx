@@ -31,6 +31,9 @@ export function CandidateReviewWorkspace({
   const [statusFilter, setStatusFilter] = useState<ReviewStatusFilter>('ALL')
   const [conflictsOnly, setConflictsOnly] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
+  const [supersessionChoices, setSupersessionChoices] = useState<
+    Record<string, string>
+  >({})
   const panelRef = useRef<HTMLDivElement>(null)
 
   const selectedCandidateId = selectedId
@@ -48,6 +51,18 @@ export function CandidateReviewWorkspace({
       element.scrollIntoView({ block: 'nearest' })
     }
   }, [selectedId])
+
+  function setSupersessionChoice(candidateId: string, peerId: string | null) {
+    setSupersessionChoices((previous) => {
+      const next = { ...previous }
+      if (peerId === null) {
+        delete next[candidateId]
+      } else {
+        next[candidateId] = peerId
+      }
+      return next
+    })
+  }
 
   function selectCandidate(candidateId: string) {
     if (candidateId === selectedId) return
@@ -124,6 +139,10 @@ export function CandidateReviewWorkspace({
             nodes={structureQuery.data ?? []}
             sourceContextPending={sourceContextPending}
             publishedIn={publishedIn}
+            supersessionChoice={supersessionChoices[selected.id] ?? null}
+            onSupersessionChange={(peerId) =>
+              setSupersessionChoice(selected.id, peerId)
+            }
           />
         ) : selectedId ? (
           <p className="state" role="status">

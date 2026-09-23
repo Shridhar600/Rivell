@@ -24,7 +24,7 @@ import {
 import type { ExtractionUnit } from '../../api/knowledge'
 import { ErrorState } from '../ErrorState'
 import { CandidateEditForm } from './CandidateEditForm'
-import { ConflictSignalList } from './ConflictSignalList'
+import { ConflictComparison } from './ConflictComparison'
 import { ReviewAttentionSection } from './ReviewAttention'
 import {
   InterpretationProvenance,
@@ -112,6 +112,8 @@ export function CandidateReviewPanel({
   nodes,
   sourceContextPending,
   publishedIn,
+  supersessionChoice,
+  onSupersessionChange,
 }: {
   candidate: Candidate
   artifact: ArtifactDetail
@@ -119,6 +121,8 @@ export function CandidateReviewPanel({
   nodes: KnowledgeNode[]
   sourceContextPending: boolean
   publishedIn?: Publication | null
+  supersessionChoice: string | null
+  onSupersessionChange: (peerId: string | null) => void
 }) {
   const approve = useApproveCandidate()
   const reject = useRejectCandidate()
@@ -303,10 +307,15 @@ export function CandidateReviewPanel({
         ) : null}
       </section>
 
-      {candidate.conflictSignals.length > 0 ? (
+      {candidate.conflictSignals.length > 0 ||
+      candidate.supersedingCandidateId ? (
         <section aria-labelledby="candidate-analysis-heading">
-          <h4 id="candidate-analysis-heading">System analysis</h4>
-          <ConflictSignalList signals={candidate.conflictSignals} />
+          <h4 id="candidate-analysis-heading">Published knowledge comparison</h4>
+          <ConflictComparison
+            candidate={candidate}
+            supersessionChoice={supersessionChoice}
+            onSupersessionChange={onSupersessionChange}
+          />
         </section>
       ) : null}
 
