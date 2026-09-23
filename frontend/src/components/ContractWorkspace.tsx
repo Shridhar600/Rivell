@@ -1,20 +1,24 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import {
   originalDocumentUrl,
   useContractQuery,
   useContractStructureQuery,
 } from '../api/contracts'
+import { useSemanticsQuery } from '../api/semantics'
 import { isParseFailed, isParsing } from '../lib/parseStatus'
+import { ClauseSemanticSummary } from './contract/ClauseSemanticSummary'
 import { DocumentViewer } from './DocumentViewer'
 import { EmptyState } from './EmptyState'
 import { ErrorState } from './ErrorState'
 import { LoadingState } from './LoadingState'
 import { ParseNotice } from './ParseNotice'
+import { SemanticWorkspace } from './contract/SemanticWorkspace'
 
 export function ContractWorkspace({ contractId }: { contractId: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedId = searchParams.get('node')
+  const view = searchParams.get('view') === 'semantics' ? 'semantics' : 'document'
   const headingRef = useRef<HTMLHeadingElement>(null)
 
   const contractQuery = useContractQuery(contractId)
@@ -24,6 +28,10 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
     contract?.latestVersion.versionNumber,
   )
   const structure = structureQuery.data
+  const semanticsQuery = useSemanticsQuery(
+    contractId,
+    contract?.latestVersion.versionNumber,
+  )
 
   const loadedContractId = contract?.id
 
@@ -47,6 +55,64 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
       return next
     })
   }
+
+  const openClauseSemantics = (clauseId: string) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('view', 'semantics')
+    next.set('section', 'clauses')
+    next.set('clause', clauseId)
+    setSearchParams(next)
+  }
+
+  const selectedClause =
+    semanticsQuery.data?.clauses.find((clause) => clause.headingNodeId === selectedId) ??
+    null
+
+  const selectedRegionExtra = selectedClause ? (
+    <ClauseSemanticSummary
+      clause={selectedClause}
+      onOpen={() => openClauseSemantics(selectedClause.id)}
+    />
+  ) : null
+
+  const viewLink = (target: 'document' | 'semantics') => {
+    const next = new URLSearchParams(searchParams)
+    next.set('view', target)
+    return { search: next.toString() }
+  }
+
+  const viewNav = (
+    <nav className="view-nav" aria-label="Contract views">
+      <ul className="view-nav__list">
+        <li>
+          <Link
+            to={viewLink('document')}
+            className={
+              view === 'document'
+                ? 'view-nav__link view-nav__link--active'
+                : 'view-nav__link'
+            }
+            aria-current={view === 'document' ? 'location' : undefined}
+          >
+            Document
+          </Link>
+        </li>
+        <li>
+          <Link
+            to={viewLink('semantics')}
+            className={
+              view === 'semantics'
+                ? 'view-nav__link view-nav__link--active'
+                : 'view-nav__link'
+            }
+            aria-current={view === 'semantics' ? 'location' : undefined}
+          >
+            Semantic analysis
+          </Link>
+        </li>
+      </ul>
+    </nav>
+  )
 
   if (contractQuery.isPending) {
     return <LoadingState label="Loading contract…" />
@@ -97,7 +163,20 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
 
   let body: ReactNode
 
-  if (structureQuery.isPending) {
+  if (view === 'semantics') {
+    body =
+      parseStatus === 'FAILED' ? (
+        <EmptyState
+          title="Semantic analysis is unavailable"
+          message="The document could not be parsed, so Rivell cannot analyse it. The original file remains available to view or download."
+        />
+      ) : (
+        <SemanticWorkspace
+          contractId={contractId}
+          versionNumber={latest.versionNumber}
+        />
+      )
+  } else if (structureQuery.isPending) {
     body = <LoadingState label="Loading document structure…" />
   } else if (structureQuery.isError || !structure) {
     body = (
@@ -120,6 +199,7 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
             structure={structure}
             selectedId={selectedId}
             onSelect={selectNode}
+            selectedRegionExtra={selectedRegionExtra}
           />
         ) : null}
       </>
@@ -142,6 +222,7 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
           structure={structure}
           selectedId={selectedId}
           onSelect={selectNode}
+          selectedRegionExtra={selectedRegionExtra}
         />
       </>
     )
@@ -153,6 +234,7 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
         Contract workspace
       </span>
       {header}
+      {viewNav}
       {body}
     </section>
   )
