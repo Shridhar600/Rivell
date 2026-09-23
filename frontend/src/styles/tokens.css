@@ -856,3 +856,14 @@ a {
   margin: 0 0 var(--space-1);
   font-size: 0.875rem;
 }
+
+.field__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

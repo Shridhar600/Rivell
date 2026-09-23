@@ -247,6 +247,21 @@ function stubKnowledgeApi(state: ApiState) {
       const body = (await request.clone().json()) as {
         contentText?: string
         payloadColumns?: Record<string, string>
+        scope?: {
+          contractPackKey?: string
+          declaredContractTypes?: string[]
+          partyPerspective?: string
+          paperSource?: string
+          jurisdiction?: string
+          effectiveFrom?: string
+          effectiveTo?: string
+        }
+        semanticFields?: {
+          positions?: Candidate['positions']
+          requiresApproval?: boolean
+          escalationTrigger?: string
+          variantRole?: Candidate['variantRole']
+        }
         note?: string
       }
       state.candidates = state.candidates.map((entry) =>
@@ -257,6 +272,33 @@ function stubKnowledgeApi(state: ApiState) {
               editedContentText: body.contentText ?? entry.editedContentText,
               editedPayloadColumns:
                 body.payloadColumns ?? entry.editedPayloadColumns,
+              contractPackKey: body.scope
+                ? (body.scope.contractPackKey ?? null)
+                : entry.contractPackKey,
+              declaredContractTypes: body.scope
+                ? (body.scope.declaredContractTypes ?? [])
+                : entry.declaredContractTypes,
+              partyPerspective: body.scope
+                ? (body.scope.partyPerspective ?? null)
+                : entry.partyPerspective,
+              paperSource: body.scope
+                ? (body.scope.paperSource ?? null)
+                : entry.paperSource,
+              jurisdiction: body.scope
+                ? (body.scope.jurisdiction ?? null)
+                : entry.jurisdiction,
+              effectiveFrom: body.scope
+                ? (body.scope.effectiveFrom ?? null)
+                : entry.effectiveFrom,
+              effectiveTo: body.scope
+                ? (body.scope.effectiveTo ?? null)
+                : entry.effectiveTo,
+              positions: body.semanticFields?.positions ?? entry.positions,
+              requiresApproval:
+                body.semanticFields?.requiresApproval ?? entry.requiresApproval,
+              escalationTrigger:
+                body.semanticFields?.escalationTrigger ?? entry.escalationTrigger,
+              variantRole: body.semanticFields?.variantRole ?? entry.variantRole,
               reviewNote: body.note ?? null,
               updatedAt: '2026-09-23T06:00:00Z',
             }
@@ -465,7 +507,7 @@ describe('candidate review workspace', () => {
     const panel = await screen.findByRole('article', { name: /Liability cap/i })
     await userEvent.click(within(panel).getByRole('button', { name: 'Edit' }))
 
-    const preferred = screen.getByLabelText('Preferred')
+    const preferred = screen.getByLabelText('Preferred', { selector: 'textarea' })
     expect(preferred).toHaveValue('1x annual fees')
     await userEvent.clear(preferred)
     await userEvent.type(preferred, '1.5x annual fees')
@@ -493,6 +535,108 @@ describe('candidate review workspace', () => {
     ).toBeInTheDocument()
     expect(
       within(editedPanel).getByText(/must be approved before they can be published/i),
+    ).toBeInTheDocument()
+  })
+
+
+  it('edits applicability scope and shows the manifest comparison', async () => {
+    const state: ApiState = {
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Liability cap',
+          jurisdiction: 'US',
+          interpretations: [
+            {
+              field: 'scope',
+              proposedValue: 'UK',
+              kind: 'BOUNDED_CLASSIFICATION',
+              specId: 'scope-narrowing',
+              specVersion: 1,
+              supportingSourceNodes: 1,
+              verification: 'NOT_VERIFIED',
+            },
+          ],
+        }),
+      ],
+    }
+    const { requests } = stubKnowledgeApi(state)
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    expect(
+      within(panel).getByText(/Rivell suggests narrowing jurisdiction to UK/i),
+    ).toBeInTheDocument()
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Edit' }))
+    const jurisdiction = screen.getByLabelText('Jurisdiction')
+    await userEvent.clear(jurisdiction)
+    await userEvent.type(jurisdiction, 'UK')
+    await userEvent.click(screen.getByRole('button', { name: /save edit/i }))
+
+    await waitFor(() => {
+      expect(state.candidates[0].jurisdiction).toBe('UK')
+    })
+    const editRequest = requests.find((request) => request.url.endsWith('/edit'))!
+    const body = (await editRequest.clone().json()) as {
+      scope?: { jurisdiction?: string; declaredContractTypes?: string[] }
+    }
+    expect(body.scope?.jurisdiction).toBe('UK')
+    expect(body.scope?.declaredContractTypes).toEqual([])
+
+    const editedPanel = await screen.findByRole('article', { name: /Liability cap/i })
+    expect(within(editedPanel).getByText('UK')).toBeInTheDocument()
+    expect(
+      within(editedPanel).getByText(/adjusted from the artifact manifest/i),
+    ).toBeInTheDocument()
+  })
+
+  it('edits a negotiation position and keeps the machine proposal visible', async () => {
+    const state: ApiState = {
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Liability cap',
+          positions: ['PREFERRED'],
+          interpretations: [
+            {
+              field: 'positions',
+              proposedValue: 'FALLBACK,PREFERRED',
+              kind: 'BOUNDED_CLASSIFICATION',
+              specId: 'playbook-position',
+              specVersion: 1,
+              supportingSourceNodes: 2,
+              verification: 'NOT_VERIFIED',
+            },
+          ],
+        }),
+      ],
+    }
+    const { requests } = stubKnowledgeApi(state)
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Edit' }))
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Preferred' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Fallback' }))
+    await userEvent.click(screen.getByRole('button', { name: /save edit/i }))
+
+    await waitFor(() => {
+      expect(state.candidates[0].positions).toEqual(['FALLBACK'])
+    })
+    const editRequest = requests.find((request) => request.url.endsWith('/edit'))!
+    const body = (await editRequest.clone().json()) as {
+      semanticFields?: { positions?: string[] }
+    }
+    expect(body.semanticFields?.positions).toEqual(['FALLBACK'])
+
+    const editedPanel = await screen.findByRole('article', { name: /Liability cap/i })
+    expect(within(editedPanel).getByText('Fallback')).toBeInTheDocument()
+    expect(
+      within(editedPanel).getByText(/Rivell proposed: Fallback, Preferred/),
     ).toBeInTheDocument()
   })
 

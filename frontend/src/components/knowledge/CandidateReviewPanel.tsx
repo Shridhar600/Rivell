@@ -16,7 +16,11 @@ import {
   UNIT_KIND_LABELS,
 } from '../../lib/knowledgeLabels'
 import { compareKnowledgePosition, nodeSpanLabel } from '../../lib/knowledgeTree'
-import { conceptLabel } from '../../lib/semantics'
+import {
+  conceptLabel,
+  interpretationFor,
+  scopeDifferences,
+} from '../../lib/semantics'
 import type { ExtractionUnit } from '../../api/knowledge'
 import { ErrorState } from '../ErrorState'
 import { CandidateEditForm } from './CandidateEditForm'
@@ -128,6 +132,7 @@ export function CandidateReviewPanel({
     units,
     nodes,
   )
+  const scopeInterpretation = interpretationFor(candidate, 'scope')
   const reviewable = isReviewable(candidate)
   const contentText = candidate.contentText
   const edited = isEdited(candidate)
@@ -277,6 +282,25 @@ export function CandidateReviewPanel({
           />
           <ScopeRow label="Effective to" value={candidate.effectiveTo} />
         </dl>
+        {scopeDifferences(candidate, artifact).length > 0 ? (
+          <p className="meta">
+            Adjusted from the artifact manifest:{' '}
+            {scopeDifferences(candidate, artifact)
+              .map(
+                (difference) =>
+                  `${difference.label} (manifest: ${difference.manifestValue ?? 'not set'})`,
+              )
+              .join('; ')}
+            .
+          </p>
+        ) : null}
+        {scopeInterpretation ? (
+          <p className="meta">
+            Rivell suggests narrowing jurisdiction to{' '}
+            {scopeInterpretation.proposedValue} based on the source. The manifest
+            scope stays effective until a human applies it.
+          </p>
+        ) : null}
       </section>
 
       {candidate.conflictSignals.length > 0 ? (
@@ -387,6 +411,7 @@ export function CandidateReviewPanel({
             {editOpen ? (
               <CandidateEditForm
                 candidate={candidate}
+                artifact={artifact}
                 onCancel={() => setEditOpen(false)}
               />
             ) : null}

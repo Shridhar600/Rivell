@@ -198,3 +198,128 @@ export function formatPositions(positions: PositionRole[]): string {
   if (positions.length === 0) return 'None'
   return positions.map((role) => POSITION_LABELS[role]).join(', ')
 }
+
+export interface ScopeDraft {
+  contractPackKey: string
+  declaredContractTypes: string
+  partyPerspective: string
+  paperSource: string
+  jurisdiction: string
+  effectiveFrom: string
+  effectiveTo: string
+}
+
+export function scopeDraftFrom(candidate: Candidate): ScopeDraft {
+  return {
+    contractPackKey: candidate.contractPackKey ?? '',
+    declaredContractTypes: candidate.declaredContractTypes.join(', '),
+    partyPerspective: candidate.partyPerspective ?? '',
+    paperSource: candidate.paperSource ?? '',
+    jurisdiction: candidate.jurisdiction ?? '',
+    effectiveFrom: candidate.effectiveFrom ?? '',
+    effectiveTo: candidate.effectiveTo ?? '',
+  }
+}
+
+export function splitContractTypes(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+}
+
+export function scopeInputFrom(draft: ScopeDraft): {
+  contractPackKey?: string
+  declaredContractTypes: string[]
+  partyPerspective?: string
+  paperSource?: string
+  jurisdiction?: string
+  effectiveFrom?: string
+  effectiveTo?: string
+} {
+  const optional = (value: string) => {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : undefined
+  }
+  return {
+    contractPackKey: optional(draft.contractPackKey),
+    declaredContractTypes: splitContractTypes(draft.declaredContractTypes),
+    partyPerspective: optional(draft.partyPerspective),
+    paperSource: optional(draft.paperSource),
+    jurisdiction: optional(draft.jurisdiction),
+    effectiveFrom: optional(draft.effectiveFrom),
+    effectiveTo: optional(draft.effectiveTo),
+  }
+}
+
+export function scopeDraftChanged(draft: ScopeDraft, candidate: Candidate): boolean {
+  const current = scopeDraftFrom(candidate)
+  return (Object.keys(current) as Array<keyof ScopeDraft>).some(
+    (key) => normalizeDraftValue(draft[key]) !== normalizeDraftValue(current[key]),
+  )
+}
+
+function normalizeDraftValue(value: string): string {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .join(',')
+    .toLowerCase()
+}
+
+export interface SemanticDraft {
+  positions: PositionRole[]
+  requiresApproval: 'unset' | 'true' | 'false'
+  escalationTrigger: string
+  variantRole: PositionRole
+}
+
+export function semanticDraftFrom(candidate: Candidate): SemanticDraft {
+  return {
+    positions: [...candidate.positions],
+    requiresApproval:
+      candidate.requiresApproval === null
+        ? 'unset'
+        : candidate.requiresApproval
+          ? 'true'
+          : 'false',
+    escalationTrigger: candidate.escalationTrigger ?? '',
+    variantRole: candidate.variantRole ?? 'UNSPECIFIED',
+  }
+}
+
+export interface SemanticFieldsInput {
+  positions?: PositionRole[]
+  requiresApproval?: boolean
+  escalationTrigger?: string
+  variantRole?: PositionRole
+}
+
+export function semanticInputFrom(
+  draft: SemanticDraft,
+  candidate: Candidate,
+): SemanticFieldsInput | undefined {
+  const input: SemanticFieldsInput = {}
+  const isPlaybook = candidate.candidateType === 'PLAYBOOK_RULE'
+  const isClause = candidate.candidateType === 'CLAUSE_VARIANT'
+
+  if (isPlaybook && !samePositionSet(draft.positions, candidate.positions)) {
+    if (draft.positions.length > 0) input.positions = draft.positions
+  }
+  if (isPlaybook && draft.requiresApproval !== 'unset') {
+    const value = draft.requiresApproval === 'true'
+    if (value !== candidate.requiresApproval) input.requiresApproval = value
+  }
+  if (isPlaybook) {
+    const trimmed = draft.escalationTrigger.trim()
+    if (trimmed.length > 0 && trimmed !== candidate.escalationTrigger) {
+      input.escalationTrigger = trimmed
+    }
+  }
+  if (isClause && draft.variantRole !== candidate.variantRole) {
+    input.variantRole = draft.variantRole
+  }
+
+  return Object.keys(input).length > 0 ? input : undefined
+}
