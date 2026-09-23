@@ -13,6 +13,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+function ok(body: unknown): Response {
+  return jsonResponse({ data: body, status: 200, timestamp: '2026-09-23T05:00:00Z' })
+}
+
 const ingest = {
   contractId: 'c9',
   contractVersionId: 'v9',
@@ -72,7 +76,7 @@ describe('NewReviewForm', () => {
   it('uploads a docx and navigates to the contract workspace', async () => {
     const fetchMock = vi.fn(
       (_input: RequestInfo | URL, _init?: RequestInit) =>
-        Promise.resolve(jsonResponse(ingest)),
+        Promise.resolve(ok(ingest)),
     )
     vi.stubGlobal('fetch', fetchMock)
 
@@ -177,12 +181,12 @@ describe('NewReviewForm', () => {
               ),
             )
           }
-          return Promise.resolve(jsonResponse(ingest))
+          return Promise.resolve(ok(ingest))
         }
 
         if (url.includes('/structure')) {
           return Promise.resolve(
-            jsonResponse({
+            ok({
               contractId: 'c9',
               versionNumber: 1,
               parserVersion: 'rivell-docx-parser-2',
@@ -196,7 +200,7 @@ describe('NewReviewForm', () => {
 
         if (url.includes('/api/contracts/c9')) {
           return Promise.resolve(
-            jsonResponse({
+            ok({
               id: 'c9',
               title: 'Uploaded contract',
               latestVersion: {
@@ -212,9 +216,7 @@ describe('NewReviewForm', () => {
           )
         }
 
-        return Promise.resolve(
-          jsonResponse({ service: 'rivell-backend', status: 'ready' }),
-        )
+        return Promise.resolve(ok({ service: 'rivell-backend', status: 'ready' }))
       }),
     )
 

@@ -1,21 +1,21 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { createApiClient } from './client'
-import type { paths } from './schema'
+import {
+  asRecord,
+  errorMessage,
+  parseApiResult,
+  readString,
+} from './envelope'
+import type { components } from './schema'
 
-export type SystemStatus =
-  paths['/api/system/status']['get']['responses'][200]['content']['application/json']
+export type SystemStatus = components['schemas']['SystemStatusResponse']
 
-function errorMessage(error: unknown): string {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof error.message === 'string' &&
-    error.message.length > 0
-  ) {
-    return error.message
+function parseSystemStatus(value: unknown, what: string): SystemStatus {
+  const record = asRecord(value, what)
+  return {
+    service: readString(record, 'service', what),
+    status: readString(record, 'status', what),
   }
-  return 'System status unavailable'
 }
 
 export async function fetchSystemStatus(): Promise<SystemStatus> {
@@ -23,10 +23,10 @@ export async function fetchSystemStatus(): Promise<SystemStatus> {
   const { data, error } = await client.GET('/api/system/status')
 
   if (!data) {
-    throw new Error(errorMessage(error))
+    throw new Error(errorMessage(error, 'System status unavailable'))
   }
 
-  return data
+  return parseApiResult(data, parseSystemStatus, 'system status')
 }
 
 export function useSystemStatusQuery(): UseQueryResult<SystemStatus, Error> {

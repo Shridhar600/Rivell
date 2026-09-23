@@ -5,6 +5,18 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query'
 import { apiBaseUrl, createApiClient } from './client'
+import {
+  asRecord,
+  errorMessage,
+  parseApiResult,
+  readArray,
+  readEnum,
+  readNullableNumber,
+  readNullableString,
+  readNumber,
+  readString,
+  readStringArray,
+} from './envelope'
 import type { components } from './schema'
 
 export type IngestResponse = components['schemas']['IngestResponse']
@@ -14,77 +26,10 @@ export type DocumentNode = components['schemas']['NodeView']
 export type SourceSpan = components['schemas']['SourceSpanView']
 export type ParseStatus = IngestResponse['parseStatus']
 
+const PARSE_STATUSES: readonly ParseStatus[] = ['PARSING', 'OK', 'FAILED']
+
 export function isParseStatus(value: unknown): value is ParseStatus {
-  return value === 'PARSING' || value === 'OK' || value === 'FAILED'
-}
-
-function malformed(what: string): Error {
-  return new Error(`Malformed ${what} response from the server`)
-}
-
-function asRecord(value: unknown, what: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw malformed(what)
-  }
-  return value as Record<string, unknown>
-}
-
-function readString(source: Record<string, unknown>, key: string, what: string): string {
-  const value = source[key]
-  if (typeof value !== 'string' || value.length === 0) throw malformed(what)
-  return value
-}
-
-function readNumber(source: Record<string, unknown>, key: string, what: string): number {
-  const value = source[key]
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw malformed(what)
-  return value
-}
-
-function readNullableString(
-  source: Record<string, unknown>,
-  key: string,
-  what: string,
-): string | null {
-  const value = source[key]
-  if (value === null) return null
-  if (typeof value !== 'string') throw malformed(what)
-  return value
-}
-
-function readNullableNumber(
-  source: Record<string, unknown>,
-  key: string,
-  what: string,
-): number | null {
-  const value = source[key]
-  if (value === null) return null
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw malformed(what)
-  return value
-}
-
-function readStringArray(
-  source: Record<string, unknown>,
-  key: string,
-  what: string,
-): string[] {
-  const value = source[key]
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-    throw malformed(what)
-  }
-  return value as string[]
-}
-
-function readParseStatus(source: Record<string, unknown>, what: string): ParseStatus {
-  const value = source.parseStatus
-  if (!isParseStatus(value)) throw malformed(what)
-  return value
-}
-
-function readNodeType(source: Record<string, unknown>, what: string): DocumentNode['nodeType'] {
-  const value = source.nodeType
-  if (typeof value !== 'string' || value.length === 0) throw malformed(what)
-  return value as DocumentNode['nodeType']
+  return typeof value === 'string' && (PARSE_STATUSES as readonly string[]).includes(value)
 }
 
 function parseSourceSpan(value: unknown, what: string): SourceSpan {
@@ -106,7 +51,7 @@ function parseNode(value: unknown, what: string): DocumentNode {
   return {
     id: readString(node, 'id', what),
     parentId: readNullableString(node, 'parentId', what),
-    nodeType: readNodeType(node, what),
+    nodeType: readString(node, 'nodeType', what) as DocumentNode['nodeType'],
     ordinal: readNumber(node, 'ordinal', what),
     text: readNullableString(node, 'text', what),
     headingLevel: readNullableNumber(node, 'headingLevel', what),
@@ -116,14 +61,13 @@ function parseNode(value: unknown, what: string): DocumentNode {
   }
 }
 
-export function parseIngestResponse(value: unknown): IngestResponse {
-  const what = 'upload'
+export function parseIngestResponse(value: unknown, what = 'upload'): IngestResponse {
   const response = asRecord(value, what)
   return {
     contractId: readString(response, 'contractId', what),
     contractVersionId: readString(response, 'contractVersionId', what),
     versionNumber: readNumber(response, 'versionNumber', what),
-    parseStatus: readParseStatus(response, what),
+    parseStatus: readEnum(response, 'parseStatus', what, PARSE_STATUSES),
     parseWarnings: readStringArray(response, 'parseWarnings', what),
     filename: readString(response, 'filename', what),
     sha256: readString(response, 'sha256', what),
@@ -131,8 +75,7 @@ export function parseIngestResponse(value: unknown): IngestResponse {
   }
 }
 
-export function parseContractSummary(value: unknown): ContractSummary {
-  const what = 'contract'
+export function parseContractSummary(value: unknown, what = 'contract'): ContractSummary {
   const response = asRecord(value, what)
   const latest = asRecord(response.latestVersion, what)
   return {
@@ -140,7 +83,7 @@ export function parseContractSummary(value: unknown): ContractSummary {
     title: readNullableString(response, 'title', what),
     latestVersion: {
       versionNumber: readNumber(latest, 'versionNumber', what),
-      parseStatus: readParseStatus(latest, what),
+      parseStatus: readEnum(latest, 'parseStatus', what, PARSE_STATUSES),
       parseWarnings: readStringArray(latest, 'parseWarnings', what),
       parserVersion: readNullableString(latest, 'parserVersion', what),
       sha256: readString(latest, 'sha256', what),
@@ -150,36 +93,23 @@ export function parseContractSummary(value: unknown): ContractSummary {
   }
 }
 
-export function parseStructureResponse(value: unknown): StructureResponse {
-  const what = 'structure'
+export function parseStructureResponse(
+  value: unknown,
+  what = 'structure',
+): StructureResponse {
   const response = asRecord(value, what)
-  const nodes = response.nodes
-  if (!Array.isArray(nodes)) throw malformed(what)
   return {
     contractId: readString(response, 'contractId', what),
     versionNumber: readNumber(response, 'versionNumber', what),
     parserVersion: readNullableString(response, 'parserVersion', what),
-    parseStatus: readParseStatus(response, what),
+    parseStatus: readEnum(response, 'parseStatus', what, PARSE_STATUSES),
     parseWarnings: readStringArray(response, 'parseWarnings', what),
     nodeCount: readNumber(response, 'nodeCount', what),
-    nodes: nodes.map((node) => parseNode(node, what)),
+    nodes: readArray(response, 'nodes', what, parseNode),
   }
 }
 
-function errorMessage(error: unknown, fallback: string): string {
-  if (typeof error === 'object' && error !== null) {
-    const record = error as Record<string, unknown>
-    for (const key of ['detail', 'title', 'message'] as const) {
-      const value = record[key]
-      if (typeof value === 'string' && value.trim().length > 0) return value
-    }
-  }
-  return fallback
-}
-
-export async function fetchContract(
-  contractId: string,
-): Promise<ContractSummary> {
+export async function fetchContract(contractId: string): Promise<ContractSummary> {
   const client = createApiClient()
   const { data, error } = await client.GET('/api/contracts/{id}', {
     params: { path: { id: contractId } },
@@ -188,7 +118,7 @@ export async function fetchContract(
   if (!data) {
     throw new Error(errorMessage(error, 'Contract unavailable'))
   }
-  return parseContractSummary(data)
+  return parseApiResult(data, parseContractSummary, 'contract')
 }
 
 export async function fetchContractStructure(
@@ -204,7 +134,7 @@ export async function fetchContractStructure(
   if (!data) {
     throw new Error(errorMessage(error, 'Structure unavailable'))
   }
-  return parseStructureResponse(data)
+  return parseApiResult(data, parseStructureResponse, 'structure')
 }
 
 export function createUploadFormData(file: File): FormData {
@@ -223,7 +153,7 @@ export async function uploadContract(file: File): Promise<IngestResponse> {
   if (!data) {
     throw new Error(errorMessage(error, 'Upload failed'))
   }
-  return parseIngestResponse(data)
+  return parseApiResult(data, parseIngestResponse, 'upload')
 }
 
 export function useContractQuery(

@@ -5,6 +5,10 @@ type SystemStatusResponse = components['schemas']['SystemStatusResponse']
 type IngestResponse = components['schemas']['IngestResponse']
 type ErrorResponse = components['schemas']['ErrorResponse']
 type NodeView = components['schemas']['NodeView']
+type CandidateView = components['schemas']['CandidateView']
+type KnowledgeNodeView = components['schemas']['KnowledgeStructureNodeView']
+type PublicationView = components['schemas']['PublicationView']
+type ApiResultCandidateView = components['schemas']['ApiResultCandidateView']
 
 const node: NodeView = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -28,18 +32,20 @@ const node: NodeView = {
 }
 
 describe('generated OpenAPI client workflow', () => {
-  it('exposes typed system status path from generated schema', () => {
+  it('exposes the enveloped system status path from the generated schema', () => {
     type StatusGet = paths['/api/system/status']['get']
     type SuccessBody =
       StatusGet['responses'][200]['content']['application/json']
 
     const ok: SuccessBody = {
-      service: 'rivell-backend',
-      status: 'ready',
+      data: { service: 'rivell-backend', status: 'ready' },
+      status: 200,
+      timestamp: '2026-09-23T05:00:00Z',
     }
 
-    const typed: SystemStatusResponse = ok
+    const typed: SystemStatusResponse = ok.data ?? {}
     expect(typed.status).toBe('ready')
+    expect(ok.status).toBe(200)
     expect('/api/system/status' satisfies keyof paths).toBe(
       '/api/system/status',
     )
@@ -57,6 +63,115 @@ describe('generated OpenAPI client workflow', () => {
 
     expect(node.nodeType).toBe('PARAGRAPH')
     expect(node.parentId).toBeNull()
+  })
+
+  it('exposes M2 knowledge paths from generated schema', () => {
+    expect('/api/knowledge/artifacts' satisfies keyof paths).toBe(
+      '/api/knowledge/artifacts',
+    )
+    expect('/api/knowledge/artifacts/{id}' satisfies keyof paths).toBe(
+      '/api/knowledge/artifacts/{id}',
+    )
+    expect(
+      '/api/knowledge/artifacts/{id}/structure' satisfies keyof paths,
+    ).toBe('/api/knowledge/artifacts/{id}/structure')
+    expect('/api/knowledge/artifacts/{id}/units' satisfies keyof paths).toBe(
+      '/api/knowledge/artifacts/{id}/units',
+    )
+    expect('/api/knowledge/artifacts/{id}/candidates' satisfies keyof paths).toBe(
+      '/api/knowledge/artifacts/{id}/candidates',
+    )
+    expect('/api/knowledge/artifacts/{id}/original' satisfies keyof paths).toBe(
+      '/api/knowledge/artifacts/{id}/original',
+    )
+    expect('/api/knowledge/candidates/{id}' satisfies keyof paths).toBe(
+      '/api/knowledge/candidates/{id}',
+    )
+    expect('/api/knowledge/candidates/{id}/approve' satisfies keyof paths).toBe(
+      '/api/knowledge/candidates/{id}/approve',
+    )
+    expect('/api/knowledge/candidates/{id}/edit' satisfies keyof paths).toBe(
+      '/api/knowledge/candidates/{id}/edit',
+    )
+    expect('/api/knowledge/candidates/{id}/reject' satisfies keyof paths).toBe(
+      '/api/knowledge/candidates/{id}/reject',
+    )
+    expect('/api/knowledge/publications' satisfies keyof paths).toBe(
+      '/api/knowledge/publications',
+    )
+    expect('/api/knowledge/publications/{id}' satisfies keyof paths).toBe(
+      '/api/knowledge/publications/{id}',
+    )
+  })
+
+  it('types M2 upload manifest query parameters', () => {
+    type UploadQuery =
+      paths['/api/knowledge/artifacts']['post']['parameters']['query']
+
+    const query: UploadQuery = {
+      artifactType: 'PLAYBOOK',
+      declaredContractTypes: 'MSA,NDA',
+      contractPackKey: 'MSA',
+      effectiveFrom: '2026-01-01',
+    }
+
+    expect(query.artifactType).toBe('PLAYBOOK')
+    // @ts-expect-error artifactType is a required manifest query parameter
+    const missing: UploadQuery = { contractPackKey: 'MSA' }
+    expect(missing).toBeDefined()
+  })
+
+  it('types M2 candidate review status and conflict enums', () => {
+    const candidate: CandidateView = {
+      candidateType: 'PLAYBOOK_RULE',
+      reviewStatus: 'PENDING',
+      payloadColumns: { Clause: 'Liability cap' },
+      conflictSignals: [
+        {
+          conflictType: 'DUPLICATE',
+          message: 'Matches published candidate',
+          publishedCandidateId: '22222222-2222-2222-2222-222222222222',
+        },
+      ],
+    }
+
+    expect(candidate.reviewStatus).toBe('PENDING')
+
+    const approved: CandidateView['reviewStatus'] = 'APPROVED'
+    const published: CandidateView['reviewStatus'] = 'PUBLISHED'
+    // @ts-expect-error review status is a closed enum in the contract
+    const archived: CandidateView['reviewStatus'] = 'ARCHIVED'
+    expect([approved, published, archived]).toEqual(['APPROVED', 'PUBLISHED', 'ARCHIVED'])
+
+    const envelope: ApiResultCandidateView = {
+      data: candidate,
+      status: 200,
+      timestamp: '2026-09-23T05:00:00Z',
+    }
+    expect(envelope.data?.reviewStatus).toBe('PENDING')
+  })
+
+  it('types M2 structure node and publication shapes', () => {
+    const xlsx: KnowledgeNodeView = {
+      nodeType: 'SPREADSHEET_CELL',
+      text: 'Clause',
+      sheetName: 'Positions',
+      rowIndex: 0,
+      columnIndex: 0,
+      mergedRegion: { firstRow: 0, lastRow: 0, firstColumn: 0, lastColumn: 2 },
+    }
+    expect(xlsx.mergedRegion?.lastColumn).toBe(2)
+
+    const publication: PublicationView = {
+      publicationNumber: 1,
+      items: [
+        {
+          candidateId: '11111111-1111-1111-1111-111111111111',
+          action: 'ADD',
+        },
+      ],
+    }
+    expect(publication.items?.[0].action).toBe('ADD')
   })
 
   it('types corrected required, nullable, enum and error contract fields', () => {

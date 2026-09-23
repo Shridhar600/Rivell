@@ -19,6 +19,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+function ok(body: unknown): Response {
+  return jsonResponse({ data: body, status: 200, timestamp: '2026-09-23T05:00:00Z' })
+}
+
 const readyBody = { service: 'rivell-backend', status: 'ready' }
 
 afterEach(() => {
@@ -41,7 +45,7 @@ describe('SystemStatusPanel', () => {
 
     renderPanel()
     expect(screen.getByRole('status')).toHaveTextContent(/loading/i)
-    resolveFetch(jsonResponse(readyBody))
+    resolveFetch(ok(readyBody))
     await waitFor(() =>
       expect(screen.getByText(/system ready/i)).toBeInTheDocument(),
     )
@@ -50,7 +54,7 @@ describe('SystemStatusPanel', () => {
   it('shows success status from the API', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(() => Promise.resolve(jsonResponse(readyBody))),
+      vi.fn(() => Promise.resolve(ok(readyBody))),
     )
 
     renderPanel()
@@ -64,7 +68,7 @@ describe('SystemStatusPanel', () => {
       .mockResolvedValueOnce(
         jsonResponse({ message: 'boom' }, 500),
       )
-      .mockResolvedValueOnce(jsonResponse(readyBody))
+      .mockResolvedValueOnce(ok(readyBody))
     vi.stubGlobal('fetch', fetchMock)
 
     renderPanel()
