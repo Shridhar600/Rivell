@@ -29,5 +29,19 @@ public record KnowledgeArtifactDetailResponse(
         IngestStatus ingestStatus,
         String parserVersion,
         List<String> parseWarnings,
+        ArtifactAssessmentView artifactAssessment,
         Instant createdAt) {
+
+    /**
+     * Advisory machine assessment of the artifact class; the human declaration in
+     * artifactType stays authoritative. Null when semantic compilation was unavailable.
+     */
+    public record ArtifactAssessmentView(
+            String assessedType,
+            double probability,
+            String state,
+            String specId,
+            int specVersion,
+            List<String> warnings) {
+    }
 }

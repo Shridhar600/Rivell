@@ -380,7 +380,19 @@ class KnowledgeController {
                 artifact.manifest().effectiveTo(),
                 artifact.manifest().note(),
                 artifact.ingestStatus(), artifact.parserVersion(), artifact.parseWarnings(),
+                toAssessmentView(artifact.assessment()),
                 artifact.createdAt());
+    }
+
+    private static KnowledgeArtifactDetailResponse.ArtifactAssessmentView toAssessmentView(
+            com.rivell.workbench.knowledge.ArtifactTypeAssessment assessment) {
+        if (assessment == null) {
+            return null;
+        }
+        return new KnowledgeArtifactDetailResponse.ArtifactAssessmentView(
+                assessment.assessedType().name(), assessment.probability(),
+                assessment.state().name(), assessment.specId(), assessment.specVersion(),
+                assessment.warnings());
     }
 
     private static CandidateView toCandidateView(com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
@@ -388,7 +400,21 @@ class KnowledgeController {
                 candidate.id(), candidate.artifactId(), candidate.extractionUnitId(),
                 candidate.candidateType(), candidate.reviewStatus(), candidate.rawLabel(),
                 candidate.contentText(), candidate.payload().columns(),
-                candidate.legalConceptKey(), candidate.editedContentText(),
+                candidate.legalConceptKey(),
+                candidate.semanticFields().conceptProbabilities(),
+                candidate.effectivePositions(),
+                candidate.effectiveVariantRole(),
+                candidate.effectiveEscalationTrigger(),
+                candidate.effectiveRequiresApproval(),
+                candidate.interpretations().stream()
+                        .map(interpretation -> new CandidateView.InterpretationView(
+                                interpretation.field(), interpretation.proposedValue(),
+                                interpretation.kind().name(), interpretation.specId(),
+                                interpretation.specVersion(),
+                                interpretation.sourceNodeIds().size(),
+                                interpretation.verification()))
+                        .toList(),
+                candidate.editedContentText(),
                 candidate.editedPayload() == null ? null : candidate.editedPayload().columns(),
                 candidate.supersedingCandidateId(),
                 candidate.scope().contractPackKey(),
@@ -403,6 +429,7 @@ class KnowledgeController {
                                 signal.conflictType(), signal.message(),
                                 signal.publishedCandidateId()))
                         .toList(),
+                candidate.reviewCategory(), candidate.reviewReasons(),
                 candidate.reviewNote(), candidate.reviewedAt(),
                 candidate.createdAt(), candidate.updatedAt());
     }
