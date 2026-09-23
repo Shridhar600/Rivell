@@ -683,10 +683,13 @@ export function useCandidateQuery(
   })
 }
 
-export function usePublicationsQuery(): UseQueryResult<Publication[], Error> {
+export function usePublicationsQuery(
+  enabled = true,
+): UseQueryResult<Publication[], Error> {
   return useQuery({
     queryKey: knowledgeKeys.publications,
     queryFn: fetchPublications,
+    enabled,
   })
 }
 

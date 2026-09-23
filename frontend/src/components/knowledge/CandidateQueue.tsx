@@ -46,6 +46,11 @@ export function CandidateQueue({
         {counts.REJECTED > 0 ? ` · ${counts.REJECTED} rejected` : ''}
         {counts.PUBLISHED > 0 ? ` · ${counts.PUBLISHED} published` : ''}
       </p>
+      {publishAction && counts.APPROVED === 0 ? (
+        <p className="meta">
+          Approve candidates to publish a new knowledge version.
+        </p>
+      ) : null}
 
       <div className="queue__filters">
         <div className="field">

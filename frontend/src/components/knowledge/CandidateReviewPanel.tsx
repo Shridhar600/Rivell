@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import {
   originalArtifactUrl,
   useApproveCandidate,
@@ -6,6 +7,7 @@ import {
   type ArtifactDetail,
   type Candidate,
   type KnowledgeNode,
+  type Publication,
 } from '../../api/knowledge'
 import { isEdited, isReviewable, resolveCandidateSource } from '../../lib/candidates'
 import {
@@ -99,12 +101,14 @@ export function CandidateReviewPanel({
   units,
   nodes,
   sourceContextPending,
+  publishedIn,
 }: {
   candidate: Candidate
   artifact: ArtifactDetail
   units: ExtractionUnit[]
   nodes: KnowledgeNode[]
   sourceContextPending: boolean
+  publishedIn?: Publication | null
 }) {
   const approve = useApproveCandidate()
   const reject = useRejectCandidate()
@@ -303,7 +307,17 @@ export function CandidateReviewPanel({
           candidate.reviewStatus === 'PUBLISHED' ? (
             <p className="state state--success" role="status">
               Published knowledge is immutable. This candidate is part of a
-              published version.
+              published version
+              {publishedIn ? (
+                <>
+                  {' — '}
+                  <Link to={`/knowledge/publications/${publishedIn.id}`}>
+                    publication v{publishedIn.publicationNumber}
+                  </Link>
+                </>
+              ) : (
+                '.'
+              )}
             </p>
           ) : (
             <p className="state" role="status">

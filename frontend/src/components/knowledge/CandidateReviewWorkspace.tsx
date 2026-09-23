@@ -4,14 +4,19 @@ import {
   useCandidatesQuery,
   useExtractionUnitsQuery,
   useKnowledgeStructureQuery,
+  usePublicationsQuery,
   type ArtifactDetail,
 } from '../../api/knowledge'
-import type { ReviewStatusFilter } from '../../lib/candidates'
+import {
+  approvedCandidates,
+  type ReviewStatusFilter,
+} from '../../lib/candidates'
 import { EmptyState } from '../EmptyState'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
 import { CandidateQueue } from './CandidateQueue'
 import { CandidateReviewPanel } from './CandidateReviewPanel'
+import { PublicationDialog } from './PublicationDialog'
 
 export function CandidateReviewWorkspace({
   artifact,
@@ -25,7 +30,16 @@ export function CandidateReviewWorkspace({
   const structureQuery = useKnowledgeStructureQuery(artifact.id)
   const [statusFilter, setStatusFilter] = useState<ReviewStatusFilter>('ALL')
   const [conflictsOnly, setConflictsOnly] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+
+  const selectedCandidateId = selectedId
+  const publishedSelected = candidatesQuery.data?.find(
+    (candidate) => candidate.id === selectedCandidateId,
+  )
+  const publicationsQuery = usePublicationsQuery(
+    publishedSelected?.reviewStatus === 'PUBLISHED',
+  )
 
   useEffect(() => {
     if (!selectedId) return
@@ -71,6 +85,13 @@ export function CandidateReviewWorkspace({
   const selected =
     candidates.find((candidate) => candidate.id === selectedId) ?? null
   const sourceContextPending = unitsQuery.isPending || structureQuery.isPending
+  const approved = approvedCandidates(candidates)
+  const publishedIn =
+    selected && selected.reviewStatus === 'PUBLISHED'
+      ? (publicationsQuery.data?.find((publication) =>
+          publication.items.some((item) => item.candidateId === selected.id),
+        ) ?? null)
+      : null
 
   return (
     <section className="review-workspace" aria-label="Candidate review">
@@ -82,6 +103,16 @@ export function CandidateReviewWorkspace({
         onStatusFilterChange={setStatusFilter}
         conflictsOnly={conflictsOnly}
         onConflictsOnlyChange={setConflictsOnly}
+        publishAction={
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={approved.length === 0}
+            onClick={() => setPublishOpen(true)}
+          >
+            Publish approved ({approved.length})
+          </button>
+        }
       />
       <div className="review-workspace__panel" ref={panelRef}>
         {selected ? (
@@ -92,6 +123,7 @@ export function CandidateReviewWorkspace({
             units={unitsQuery.data ?? []}
             nodes={structureQuery.data ?? []}
             sourceContextPending={sourceContextPending}
+            publishedIn={publishedIn}
           />
         ) : selectedId ? (
           <p className="state" role="status">
@@ -104,6 +136,13 @@ export function CandidateReviewWorkspace({
           />
         )}
       </div>
+      {publishOpen ? (
+        <PublicationDialog
+          artifact={artifact}
+          approved={approved}
+          onClose={() => setPublishOpen(false)}
+        />
+      ) : null}
     </section>
   )
 }
