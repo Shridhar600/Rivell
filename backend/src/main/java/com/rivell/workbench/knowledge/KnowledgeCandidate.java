@@ -3,12 +3,15 @@ package com.rivell.workbench.knowledge;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * A typed, provenance-backed candidate knowledge object produced by the deterministic
- * compiler. Candidates never carry organizational authority; only explicit review and
- * publication promote them (Architecture Decision #6.4).
+ * compiler and refined by bounded semantic intelligence. Candidates never carry
+ * organizational authority; only explicit review and publication promote them
+ * (Architecture Decision #6.4). Machine semantic proposals and human corrections are
+ * both retained: RAW + INTERPRETED + HUMAN CORRECTION, never raw overwritten.
  */
 public record KnowledgeCandidate(
         UUID id,
@@ -21,11 +24,16 @@ public record KnowledgeCandidate(
         String contentText,
         CandidatePayload payload,
         String legalConceptKey,
+        SemanticFields semanticFields,
+        SemanticFields editedSemanticFields,
+        List<FieldInterpretation> interpretations,
         String editedContentText,
         CandidatePayload editedPayload,
         UUID supersedingCandidateId,
         ApplicabilityScope scope,
         List<ConflictSignal> conflictSignals,
+        ReviewCategory reviewCategory,
+        Set<ReviewReason> reviewReasons,
         String reviewNote,
         Instant reviewedAt,
         Instant createdAt,
@@ -43,7 +51,10 @@ public record KnowledgeCandidate(
         }
         Objects.requireNonNull(payload, "payload");
         Objects.requireNonNull(scope, "scope");
+        semanticFields = semanticFields == null ? SemanticFields.EMPTY : semanticFields;
+        interpretations = interpretations == null ? List.of() : List.copyOf(interpretations);
         conflictSignals = conflictSignals == null ? List.of() : List.copyOf(conflictSignals);
+        reviewReasons = reviewReasons == null ? Set.of() : Set.copyOf(reviewReasons);
         Objects.requireNonNull(createdAt, "createdAt");
         Objects.requireNonNull(updatedAt, "updatedAt");
     }
@@ -51,7 +62,19 @@ public record KnowledgeCandidate(
     public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
+                semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope, signals,
+                reviewCategory, reviewReasons, reviewNote, reviewedAt, createdAt, updatedAt);
+    }
+
+    public KnowledgeCandidate withSemanticOutcome(
+            SemanticFields fields, List<FieldInterpretation> fieldInterpretations,
+            String conceptKey) {
+        return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
+                candidateType, reviewStatus, rawLabel, contentText, payload, conceptKey,
+                fields, editedSemanticFields, fieldInterpretations,
+                editedContentText, editedPayload, supersedingCandidateId, scope,
+                conflictSignals, reviewCategory, reviewReasons,
                 reviewNote, reviewedAt, createdAt, updatedAt);
     }
 
@@ -61,5 +84,29 @@ public record KnowledgeCandidate(
 
     public String effectiveContentText() {
         return editedContentText != null ? editedContentText : contentText;
+    }
+
+    public Set<PositionRole> effectivePositions() {
+        return editedSemanticFields != null && !editedSemanticFields.positions().isEmpty()
+                ? editedSemanticFields.positions()
+                : semanticFields.positions();
+    }
+
+    public PositionRole effectiveVariantRole() {
+        return editedSemanticFields != null && editedSemanticFields.variantRole() != null
+                ? editedSemanticFields.variantRole()
+                : semanticFields.effectiveVariantRole();
+    }
+
+    public String effectiveEscalationTrigger() {
+        return editedSemanticFields != null && editedSemanticFields.escalationTrigger() != null
+                ? editedSemanticFields.escalationTrigger()
+                : semanticFields.escalationTrigger();
+    }
+
+    public Boolean effectiveRequiresApproval() {
+        return editedSemanticFields != null && editedSemanticFields.requiresApproval() != null
+                ? editedSemanticFields.requiresApproval()
+                : semanticFields.requiresApproval();
     }
 }

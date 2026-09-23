@@ -218,6 +218,20 @@ class KnowledgeController {
                 id, request.contentText(),
                 request.payloadColumns() == null ? null : new com.rivell.workbench.knowledge.CandidatePayload(
                         request.payloadColumns()),
+                request.scope() == null ? null : new com.rivell.workbench.knowledge.ApplicabilityScope(
+                        request.scope().contractPackKey(),
+                        request.scope().declaredContractTypes(),
+                        request.scope().partyPerspective(),
+                        request.scope().paperSource(),
+                        request.scope().jurisdiction(),
+                        request.scope().effectiveFrom(),
+                        request.scope().effectiveTo()),
+                request.semanticFields() == null ? null : new com.rivell.workbench.knowledge.SemanticFields(
+                        request.semanticFields().positions(),
+                        request.semanticFields().requiresApproval(),
+                        request.semanticFields().escalationTrigger(),
+                        request.semanticFields().variantRole(),
+                        java.util.Map.of()),
                 request.note())));
     }
 

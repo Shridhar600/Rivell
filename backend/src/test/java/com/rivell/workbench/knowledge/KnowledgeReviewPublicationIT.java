@@ -127,7 +127,7 @@ class KnowledgeReviewPublicationIT {
         var artifact = ingestClauseLibrary();
         var candidate = firstVariant(artifact);
 
-        var edited = reviewService.edit(candidate.id(), "Human edited liability language.", null, null);
+        var edited = reviewService.edit(candidate.id(), "Human edited liability language.", null, null, null, null);
         assertThat(edited.reviewStatus()).isEqualTo(ReviewStatus.EDITED);
         assertThat(edited.editedContentText()).isEqualTo("Human edited liability language.");
         assertThat(edited.contentText())
@@ -159,7 +159,7 @@ class KnowledgeReviewPublicationIT {
 
         assertThatThrownBy(() -> reviewService.approve(candidate.id(), null))
                 .isInstanceOf(InvalidCandidateReviewStateException.class);
-        assertThatThrownBy(() -> reviewService.edit(candidate.id(), "mutate", null, null))
+        assertThatThrownBy(() -> reviewService.edit(candidate.id(), "mutate", null, null, null, null))
                 .isInstanceOf(InvalidCandidateReviewStateException.class);
         assertThatThrownBy(() -> reviewService.reject(candidate.id(), null))
                 .isInstanceOf(InvalidCandidateReviewStateException.class);

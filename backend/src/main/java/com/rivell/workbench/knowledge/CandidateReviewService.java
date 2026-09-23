@@ -40,31 +40,42 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.APPROVED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.editedContentText(),
+                    candidate.legalConceptKey(), candidate.semanticFields(),
+                    candidate.editedSemanticFields(), candidate.interpretations(),
+                    candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
-                    candidate.conflictSignals(), Texts.normalize(note), Instant.now(),
+                    candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
+                    Texts.normalize(note), Instant.now(),
                     candidate.createdAt(), Instant.now());
         });
     }
 
-    public KnowledgeCandidate edit(UUID candidateId, String contentText, CandidatePayload payload, String note) {
-        Objects.requireNonNull(this);
+    public KnowledgeCandidate edit(
+            UUID candidateId, String contentText, CandidatePayload payload,
+            ApplicabilityScope scope, SemanticFields semanticFields, String note) {
         return transition(candidateId, "edited", candidate -> {
             if (candidate.isPublished()) {
                 throw new InvalidCandidateReviewStateException(candidate, "edited");
             }
-            if ((contentText == null || contentText.isBlank()) && payload == null) {
-                throw new IllegalArgumentException("An edit must change content or payload");
+            var editedSemantic = semanticFields == null ? SemanticFields.EMPTY : semanticFields;
+            var semanticChanged = !editedSemantic.equals(SemanticFields.EMPTY);
+            var scopeChanged = scope != null;
+            if ((contentText == null || contentText.isBlank()) && payload == null
+                    && !semanticChanged && !scopeChanged) {
+                throw new IllegalArgumentException("An edit must change content, payload, scope, or semantic fields");
             }
             return new KnowledgeCandidate(
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(),
+                    candidate.legalConceptKey(), candidate.semanticFields(),
+                    !editedSemantic.equals(SemanticFields.EMPTY) ? editedSemantic : candidate.editedSemanticFields(),
+                    candidate.interpretations(),
                     contentText != null ? contentText : candidate.editedContentText(),
                     payload != null ? payload : candidate.editedPayload(),
-                    candidate.supersedingCandidateId(), candidate.scope(),
-                    candidate.conflictSignals(), Texts.normalize(note), Instant.now(),
+                    candidate.supersedingCandidateId(), scope != null ? scope : candidate.scope(),
+                    candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
+                    Texts.normalize(note), Instant.now(),
                     candidate.createdAt(), Instant.now());
         });
     }
@@ -78,9 +89,12 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.REJECTED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.editedContentText(),
+                    candidate.legalConceptKey(), candidate.semanticFields(),
+                    candidate.editedSemanticFields(), candidate.interpretations(),
+                    candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
-                    candidate.conflictSignals(), Texts.normalize(note), Instant.now(),
+                    candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
+                    Texts.normalize(note), Instant.now(),
                     candidate.createdAt(), Instant.now());
         });
     }

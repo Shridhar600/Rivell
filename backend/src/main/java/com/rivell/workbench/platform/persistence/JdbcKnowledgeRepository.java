@@ -28,6 +28,7 @@ import com.rivell.workbench.knowledge.CandidatePayload;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.ConflictSignal;
 import com.rivell.workbench.knowledge.ConflictType;
+import com.rivell.workbench.knowledge.FieldInterpretation;
 import com.rivell.workbench.knowledge.ExtractionUnit;
 import com.rivell.workbench.knowledge.ExtractionUnitKind;
 import com.rivell.workbench.knowledge.IngestStatus;
@@ -41,7 +42,10 @@ import com.rivell.workbench.knowledge.KnowledgeSourceNode;
 import com.rivell.workbench.knowledge.MergedCellRegion;
 import com.rivell.workbench.knowledge.PublicationAction;
 import com.rivell.workbench.knowledge.PublicationItem;
+import com.rivell.workbench.knowledge.ReviewCategory;
+import com.rivell.workbench.knowledge.ReviewReason;
 import com.rivell.workbench.knowledge.ReviewStatus;
+import com.rivell.workbench.knowledge.SemanticFields;
 import java.util.LinkedHashMap;
 
 @Repository
@@ -225,18 +229,23 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                             insert into knowledge_candidate
                             (id, artifact_id, organization_id, extraction_unit_id, candidate_type,
                              review_status, raw_label, content_text, payload, legal_concept_key,
+                             semantic_fields, edited_semantic_fields, interpretations,
                              edited_content_text, edited_payload, superseding_candidate_id,
                              contract_pack_key, declared_contract_types, party_perspective,
                              paper_source, jurisdiction, effective_from, effective_to,
-                             conflict_signals, review_note, reviewed_at, created_at, updated_at)
+                             conflict_signals, review_category, review_reasons,
+                             review_note, reviewed_at, created_at, updated_at)
                             values (:id, :artifactId,
                                     (select organization_id from knowledge_artifact where id = :artifactId),
                                     :extractionUnitId, :candidateType, :reviewStatus, :rawLabel,
                                     :contentText, :payload::jsonb, :legalConceptKey,
+                                    :semanticFields::jsonb, :editedSemanticFields::jsonb,
+                                    :interpretations::jsonb,
                                     :editedContentText, :editedPayload::jsonb, :supersedingCandidateId,
                                     :contractPackKey, :declaredContractTypes::jsonb,
                                     :partyPerspective, :paperSource, :jurisdiction, :effectiveFrom,
-                                    :effectiveTo, :conflictSignals::jsonb, :reviewNote, :reviewedAt,
+                                    :effectiveTo, :conflictSignals::jsonb, :reviewCategory,
+                                    :reviewReasons::jsonb, :reviewNote, :reviewedAt,
                                     :createdAt, :updatedAt)
                             """)
                     .param("id", candidate.id())
@@ -259,6 +268,13 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("effectiveFrom", candidate.scope().effectiveFrom())
                     .param("effectiveTo", candidate.scope().effectiveTo())
                     .param("conflictSignals", writeConflictSignals(candidate.conflictSignals()))
+                    .param("semanticFields", writeSemanticFields(candidate.semanticFields()))
+                    .param("editedSemanticFields", candidate.editedSemanticFields() == null
+                            ? null : writeSemanticFields(candidate.editedSemanticFields()))
+                    .param("interpretations", writeInterpretations(candidate.interpretations()))
+                    .param("reviewCategory", candidate.reviewCategory() == null
+                            ? null : candidate.reviewCategory().name())
+                    .param("reviewReasons", writeReviewReasons(candidate.reviewReasons()))
                     .param("reviewNote", candidate.reviewNote())
                     .param("reviewedAt", toTimestamp(candidate.reviewedAt()))
                     .param("createdAt", Timestamp.from(candidate.createdAt()))
@@ -567,11 +583,16 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("content_text"),
                 readPayload(rs.getString("payload")),
                 rs.getString("legal_concept_key"),
+                readSemanticFields(rs.getString("semantic_fields")),
+                readSemanticFields(rs.getString("edited_semantic_fields")),
+                readInterpretations(rs.getString("interpretations")),
                 rs.getString("edited_content_text"),
                 readPayload(rs.getString("edited_payload")),
                 uuid(rs, "superseding_candidate_id"),
                 scope,
                 readConflictSignals(rs.getString("conflict_signals")),
+                readReviewCategory(rs.getString("review_category")),
+                readReviewReasons(rs.getString("review_reasons")),
                 rs.getString("review_note"),
                 instant(rs, "reviewed_at"),
                 instant(rs, "created_at"),
@@ -743,6 +764,72 @@ private String writeUuidList(List<UUID> values) {
         } catch (IOException e) {
             throw new IllegalStateException("Could not read merged region", e);
         }
+    }
+
+    private String writeSemanticFields(SemanticFields fields) {
+        try {
+            return objectMapper.writeValueAsString(fields);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize semantic fields", e);
+        }
+    }
+
+    private SemanticFields readSemanticFields(String json) {
+        if (json == null || json.isBlank()) {
+            return SemanticFields.EMPTY;
+        }
+        try {
+            return objectMapper.readValue(json, SemanticFields.class);
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not read semantic fields", e);
+        }
+    }
+
+    private String writeInterpretations(List<FieldInterpretation> interpretations) {
+        try {
+            return objectMapper.writeValueAsString(interpretations);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize interpretations", e);
+        }
+    }
+
+    private List<FieldInterpretation> readInterpretations(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, FieldInterpretation.class));
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not read interpretations", e);
+        }
+    }
+
+    private String writeReviewReasons(java.util.Set<ReviewReason> reasons) {
+        try {
+            return objectMapper.writeValueAsString(reasons.stream().map(Enum::name).toList());
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize review reasons", e);
+        }
+    }
+
+    private java.util.Set<ReviewReason> readReviewReasons(String json) {
+        if (json == null || json.isBlank()) {
+            return java.util.Set.of();
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            java.util.List<String> names = (java.util.List<String>) objectMapper.readValue(json,
+                    objectMapper.getTypeFactory().constructCollectionType(java.util.List.class, String.class));
+            return names.stream().map(ReviewReason::valueOf)
+                    .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not read review reasons", e);
+        }
+    }
+
+    private ReviewCategory readReviewCategory(String value) {
+        return value == null ? null : ReviewCategory.valueOf(value);
     }
 
     private record PublicationRow(UUID id, long number, String note, Instant createdAt) {
