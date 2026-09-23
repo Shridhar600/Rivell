@@ -32,6 +32,8 @@ public interface KnowledgeRepository {
 
     List<ExtractionUnit> loadUnits(UUID artifactId, UUID organizationId);
 
+    Optional<ExtractionUnit> findUnit(UUID unitId, UUID organizationId);
+
     List<KnowledgeCandidate> loadCandidates(UUID artifactId, UUID organizationId);
 
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);

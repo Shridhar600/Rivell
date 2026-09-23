@@ -32,6 +32,7 @@ import com.rivell.workbench.foundation.Texts;
 import com.rivell.workbench.knowledge.ArtifactManifest;
 import com.rivell.workbench.knowledge.ArtifactType;
 import com.rivell.workbench.knowledge.CandidateReviewService;
+import com.rivell.workbench.knowledge.ExtractionUnitConceptClassifier;
 import com.rivell.workbench.knowledge.KnowledgeArtifact;
 import com.rivell.workbench.knowledge.KnowledgeIngestionService;
 import com.rivell.workbench.knowledge.KnowledgePublicationService;
@@ -62,6 +63,7 @@ class KnowledgeController {
     private final KnowledgeQueryService queryService;
     private final CandidateReviewService reviewService;
     private final KnowledgePublicationService publicationService;
+    private final ExtractionUnitConceptClassifier conceptClassifier;
     private final com.rivell.workbench.foundation.DocumentStorage documentStorage;
 
     KnowledgeController(
@@ -69,11 +71,13 @@ class KnowledgeController {
             KnowledgeQueryService queryService,
             CandidateReviewService reviewService,
             KnowledgePublicationService publicationService,
+            ExtractionUnitConceptClassifier conceptClassifier,
             com.rivell.workbench.foundation.DocumentStorage documentStorage) {
         this.ingestionService = ingestionService;
         this.queryService = queryService;
         this.reviewService = reviewService;
         this.publicationService = publicationService;
+        this.conceptClassifier = conceptClassifier;
         this.documentStorage = documentStorage;
     }
 
@@ -270,6 +274,22 @@ class KnowledgeController {
     @GetMapping("/publications/{id}")
     ApiResult<PublicationView> getPublication(@PathVariable UUID id) {
         return ApiResult.ok(toPublicationView(queryService.getPublication(id)));
+    }
+
+    @Operation(summary = "Propose the bounded legal concepts an extraction unit expresses")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "The unit has no text to classify",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Unit does not exist in this organization",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "503", description = "Semantic classification is not available",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/artifacts/{artifactId}/units/{unitId}/classification")
+    ApiResult<UnitConceptClassificationView> classifyUnit(
+            @PathVariable UUID artifactId, @PathVariable UUID unitId) {
+        return ApiResult.ok(UnitConceptClassificationView.from(conceptClassifier.classify(unitId)));
     }
 
     @Operation(summary = "Download the original uploaded knowledge source")

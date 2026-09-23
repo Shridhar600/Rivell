@@ -8,12 +8,19 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.rivell.workbench.foundation.DocumentStorage;
+import com.rivell.workbench.intelligence.DecisionSpec;
+import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(KnowledgeUploadProperties.class)
+@EnableConfigurationProperties({KnowledgeUploadProperties.class, ConceptClassificationProperties.class})
 class KnowledgeServicesConfiguration {
+
+    @Bean
+    DecisionSpec extractionUnitConceptSpec() {
+        return ExtractionUnitConceptSpec.spec();
+    }
 
     @Bean
     DuplicateConflictDetector duplicateConflictDetector() {
@@ -66,5 +73,18 @@ class KnowledgeServicesConfiguration {
             AuthorizationService authorizationService) {
         return new KnowledgePublicationService(
                 knowledgeRepository, transactionTemplate, identityProvider, authorizationService);
+    }
+
+    @Bean
+    ExtractionUnitConceptClassifier extractionUnitConceptClassifier(
+            KnowledgeRepository knowledgeRepository,
+            SemanticDecisionService semanticDecisionService,
+            DecisionSpec extractionUnitConceptSpec,
+            ConceptClassificationProperties properties,
+            IdentityProvider identityProvider,
+            AuthorizationService authorizationService) {
+        return new ExtractionUnitConceptClassifier(
+                knowledgeRepository, semanticDecisionService, extractionUnitConceptSpec,
+                properties, identityProvider, authorizationService);
     }
 }

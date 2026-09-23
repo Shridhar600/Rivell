@@ -13,10 +13,12 @@ import com.rivell.workbench.contracts.ContractNotFoundException;
 import com.rivell.workbench.contracts.ContractVersionNotFoundException;
 import com.rivell.workbench.contracts.UnauthorizedContractAccessException;
 import com.rivell.workbench.contracts.UploadLimitExceededException;
+import com.rivell.workbench.knowledge.ConceptClassificationUnavailableException;
 import com.rivell.workbench.knowledge.InvalidCandidateReviewStateException;
 import com.rivell.workbench.knowledge.InvalidPublicationException;
 import com.rivell.workbench.knowledge.KnowledgeArtifactNotFoundException;
 import com.rivell.workbench.knowledge.KnowledgeCandidateNotFoundException;
+import com.rivell.workbench.knowledge.KnowledgeUnitNotFoundException;
 import com.rivell.workbench.knowledge.KnowledgeUploadLimitExceededException;
 import com.rivell.workbench.knowledge.UnauthorizedKnowledgeAccessException;
 import com.rivell.workbench.foundation.ErrorResponse;
@@ -38,6 +40,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({ContractNotFoundException.class, ContractVersionNotFoundException.class,
             KnowledgeArtifactNotFoundException.class, KnowledgeCandidateNotFoundException.class,
+            KnowledgeUnitNotFoundException.class,
             NoSuchElementException.class})
     ResponseEntity<ErrorResponse> notFound(RuntimeException e) {
         return error(HttpStatus.NOT_FOUND, "404", "Not found",
@@ -65,6 +68,12 @@ public class GlobalExceptionHandler {
     ResponseEntity<ErrorResponse> storageUnavailable(IOException e) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "500", "Document storage unavailable",
                 "The original document could not be stored or read.");
+    }
+
+    @ExceptionHandler(ConceptClassificationUnavailableException.class)
+    ResponseEntity<ErrorResponse> semanticServiceUnavailable(RuntimeException e) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "503", "Semantic service unavailable",
+                "The semantic classification is not available right now.");
     }
 
     private ResponseEntity<ErrorResponse> error(HttpStatus status, String code, String title, String detail) {

@@ -86,6 +86,7 @@ class SystemApiIT {
                         "/api/knowledge/artifacts/{id}/units",
                         "/api/knowledge/artifacts/{id}/candidates",
                         "/api/knowledge/artifacts/{id}/original",
+                        "/api/knowledge/artifacts/{artifactId}/units/{unitId}/classification",
                         "/api/knowledge/candidates/{id}",
                         "/api/knowledge/candidates/{id}/approve",
                         "/api/knowledge/candidates/{id}/edit",

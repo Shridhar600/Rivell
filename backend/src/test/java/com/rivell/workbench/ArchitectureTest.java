@@ -71,4 +71,16 @@ class ArchitectureTest {
                 .should().dependOnClassesThat().resideInAnyPackage("org.springframework.jdbc..")
                 .check(classes);
     }
+
+    @Test
+    void providerAdapterInternalsStayInsideIntelligence() {
+        var classes = new ClassFileImporter()
+                .withImportOption(new ImportOption.DoNotIncludeTests())
+                .importPackages("com.rivell.workbench");
+
+        noClasses()
+                .that().resideOutsidePackages("..intelligence..")
+                .should().dependOnClassesThat().resideInAnyPackage("..intelligence.provider..")
+                .check(classes);
+    }
 }
