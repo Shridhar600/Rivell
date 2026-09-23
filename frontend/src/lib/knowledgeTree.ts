@@ -40,7 +40,10 @@ export interface SheetView {
   rows: SheetRowView[]
 }
 
-function comparePosition(a: KnowledgeNode, b: KnowledgeNode): number {
+export function compareKnowledgePosition(
+  a: KnowledgeNode,
+  b: KnowledgeNode,
+): number {
   const rowDiff = (a.rowIndex ?? 0) - (b.rowIndex ?? 0)
   if (rowDiff !== 0) return rowDiff
   const columnDiff = (a.columnIndex ?? 0) - (b.columnIndex ?? 0)
@@ -67,14 +70,24 @@ export function buildSheetViews(nodes: KnowledgeNode[]): SheetView[] {
       sheet,
       rows: [...(childrenOf.get(sheet.id) ?? [])]
         .filter((node) => node.nodeType === 'SPREADSHEET_ROW')
-        .sort(comparePosition)
+        .sort(compareKnowledgePosition)
         .map((row) => ({
           row,
           cells: [...(childrenOf.get(row.id) ?? [])]
             .filter((node) => node.nodeType === 'SPREADSHEET_CELL')
-            .sort(comparePosition),
+            .sort(compareKnowledgePosition),
         })),
     }))
+}
+
+export function nodeSpanLabel(node: KnowledgeNode): string {
+  const parts = [node.partPath]
+  if (node.bodyIndex !== null) parts.push(`body[${node.bodyIndex}]`)
+  if (node.paragraphIndex !== null) parts.push(`paragraph[${node.paragraphIndex}]`)
+  if (node.tableIndex !== null) parts.push(`table[${node.tableIndex}]`)
+  if (node.rowIndex !== null) parts.push(`row[${node.rowIndex}]`)
+  if (node.columnIndex !== null) parts.push(`column[${node.columnIndex}]`)
+  return parts.join(' · ')
 }
 
 export function mergedRegionLabel(region: {

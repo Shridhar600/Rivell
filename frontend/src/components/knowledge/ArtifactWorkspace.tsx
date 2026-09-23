@@ -1,12 +1,10 @@
-import {
-  useArtifactQuery,
-  useKnowledgeStructureQuery,
-} from '../../api/knowledge'
+import { useArtifactQuery, useKnowledgeStructureQuery } from '../../api/knowledge'
 import { useHeadingFocus } from '../../lib/useHeadingFocus'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
 import { ArtifactHeader } from './ArtifactHeader'
 import { ArtifactManifest } from './ArtifactManifest'
+import { CandidateReviewWorkspace } from './CandidateReviewWorkspace'
 import { ExtractionUnitsPanel } from './ExtractionUnitsPanel'
 import { IngestionNotice } from './IngestionNotice'
 import { SourceStructureView } from './SourceStructureView'
@@ -61,6 +59,7 @@ export function ArtifactWorkspace({ artifactId }: { artifactId: string }) {
         warnings={artifact.parseWarnings}
       />
       <ArtifactManifest artifact={artifact} />
+      {extracted ? <CandidateReviewWorkspace artifact={artifact} /> : null}
       {extracted ? <SourceStructureSection artifactId={artifactId} /> : null}
       {extracted ? (
         <details className="disclosure">
