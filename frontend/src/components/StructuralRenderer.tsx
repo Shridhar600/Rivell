@@ -102,19 +102,23 @@ export function StructuralRenderer({
   nodes,
   selectedId,
   onSelect,
+  selectable = true,
+  label = 'Contract structure',
 }: {
   nodes: StructureNode[]
   selectedId: string | null
   onSelect: (id: string) => void
+  selectable?: boolean
+  label?: string
 }) {
   const tree = buildDocumentTree(nodes)
-  const selectable = flattenDocumentNodes(nodes).filter(
+  const selectableNodes = flattenDocumentNodes(nodes).filter(
     (node) => node.nodeType !== 'BODY',
   )
   const activeId =
-    selectedId && selectable.some((node) => node.id === selectedId)
+    selectedId && selectableNodes.some((node) => node.id === selectedId)
       ? selectedId
-      : (selectable[0]?.id ?? null)
+      : (selectableNodes[0]?.id ?? null)
 
   const nodeElementFrom = (target: EventTarget | null) =>
     target instanceof Element
@@ -130,7 +134,7 @@ export function StructuralRenderer({
     const nodeId = nodeElementFrom(event.target)?.dataset.nodeId
     if (!nodeId) return
 
-    const index = selectable.findIndex((node) => node.id === nodeId)
+    const index = selectableNodes.findIndex((node) => node.id === nodeId)
     if (index === -1) return
 
     if (event.key === 'Enter' || event.key === ' ') {
@@ -142,7 +146,7 @@ export function StructuralRenderer({
     let nextIndex: number
     switch (event.key) {
       case 'ArrowDown':
-        nextIndex = Math.min(index + 1, selectable.length - 1)
+        nextIndex = Math.min(index + 1, selectableNodes.length - 1)
         break
       case 'ArrowUp':
         nextIndex = Math.max(index - 1, 0)
@@ -151,7 +155,7 @@ export function StructuralRenderer({
         nextIndex = 0
         break
       case 'End':
-        nextIndex = selectable.length - 1
+        nextIndex = selectableNodes.length - 1
         break
       default:
         return
@@ -159,27 +163,29 @@ export function StructuralRenderer({
 
     if (nextIndex === index) return
     event.preventDefault()
-    document.getElementById(`node-${selectable[nextIndex].id}`)?.focus()
+    document.getElementById(`node-${selectableNodes[nextIndex].id}`)?.focus()
   }
 
   return (
     <article
       className="doc-renderer"
-      aria-label="Contract structure"
-      aria-describedby="doc-renderer-hint"
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
+      aria-label={label}
+      aria-describedby={selectable ? 'doc-renderer-hint' : undefined}
+      onClick={selectable ? handleClick : undefined}
+      onKeyDown={selectable ? handleKeyDown : undefined}
     >
-      <p id="doc-renderer-hint" className="visually-hidden">
-        Click a region, or move with the arrow keys and press Enter, to view
-        its source mapping.
-      </p>
+      {selectable ? (
+        <p id="doc-renderer-hint" className="visually-hidden">
+          Click a region, or move with the arrow keys and press Enter, to view
+          its source mapping.
+        </p>
+      ) : null}
       {tree.map((treeNode) => (
         <NodeView
           key={treeNode.id}
           treeNode={treeNode}
           selectedId={selectedId}
-          activeId={activeId}
+          activeId={selectable ? activeId : null}
         />
       ))}
     </article>

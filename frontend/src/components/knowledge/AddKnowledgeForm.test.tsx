@@ -58,6 +58,17 @@ function addForm() {
   return screen.getByRole('form', { name: /add knowledge/i })
 }
 
+function knowledgeResponse(url: string): Response {
+  if (
+    url.includes('/structure') ||
+    url.includes('/units') ||
+    url.includes('/candidates')
+  ) {
+    return ok([])
+  }
+  return ok(artifactDetail)
+}
+
 function docxFile(name = 'playbook.docx') {
   return new File(['docx-bytes'], name, {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -128,7 +139,7 @@ describe('AddKnowledgeForm', () => {
       vi.fn((input: RequestInfo | URL) => {
         const request = input as Request
         requests.push(request)
-        return Promise.resolve(ok(artifactDetail))
+        return Promise.resolve(knowledgeResponse(request.url))
       }),
     )
 
@@ -153,6 +164,9 @@ describe('AddKnowledgeForm', () => {
     await vi.waitFor(() => {
       expect(router.state.location.pathname).toBe('/knowledge/artifacts/a1')
     })
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'playbook.docx' }),
+    ).toBeInTheDocument()
 
     const uploadRequest = requests.find((request) => request.method === 'POST')
     const url = new URL(uploadRequest!.url)
@@ -165,12 +179,16 @@ describe('AddKnowledgeForm', () => {
   })
 
   it('shows the upload error and retries with the same file', async () => {
-    let attempts = 0
+    let uploadAttempts = 0
     vi.stubGlobal(
       'fetch',
-      vi.fn(() => {
-        attempts += 1
-        if (attempts === 1) {
+      vi.fn((input: RequestInfo | URL) => {
+        const request = input as Request
+        if (request.method !== 'POST') {
+          return Promise.resolve(knowledgeResponse(request.url))
+        }
+        uploadAttempts += 1
+        if (uploadAttempts === 1) {
           return Promise.resolve(
             jsonResponse(
               {
@@ -205,6 +223,9 @@ describe('AddKnowledgeForm', () => {
     await vi.waitFor(() => {
       expect(router.state.location.pathname).toBe('/knowledge/artifacts/a1')
     })
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'playbook.docx' }),
+    ).toBeInTheDocument()
   })
 
   it('shows the artifact type description for the selection', async () => {
