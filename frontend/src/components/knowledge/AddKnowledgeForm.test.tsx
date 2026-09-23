@@ -41,6 +41,7 @@ const artifactDetail = {
   ingestStatus: 'EXTRACTED',
   parserVersion: 'rivell-docx-parser-2',
   parseWarnings: [],
+  artifactAssessment: null,
   createdAt: '2026-09-23T05:17:29.604991Z',
 }
 

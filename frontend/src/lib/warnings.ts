@@ -7,6 +7,10 @@ export const DOCUMENT_WARNING_LABELS: Record<string, string> = {
     'Footnotes contain content that is not represented.',
   UNSUPPORTED_NESTED_TABLE:
     'A nested table could not be fully represented.',
+  HUMAN_DECLARED_TYPE_DIFFERS_FROM_MACHINE_ASSESSMENT:
+    "The declared artifact type differs from Rivell's assessment.",
+  SEMANTIC_COMPILATION_UNAVAILABLE:
+    'Semantic compilation was unavailable; candidates are deterministic extraction only.',
 }
 
 export function warningLabel(warning: string): string {

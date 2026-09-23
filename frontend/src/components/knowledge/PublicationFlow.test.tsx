@@ -41,6 +41,7 @@ const artifactDetail = {
   ingestStatus: 'EXTRACTED',
   parserVersion: 'rivell-docx-parser-2',
   parseWarnings: [],
+  artifactAssessment: null,
   createdAt: '2026-09-23T05:17:29.604991Z',
 }
 
@@ -65,6 +66,14 @@ function candidate(partial: Partial<Candidate> & { id: string }): Candidate {
     effectiveFrom: null,
     effectiveTo: null,
     conflictSignals: [],
+    classifiedConcepts: {},
+    positions: [],
+    variantRole: null,
+    escalationTrigger: null,
+    requiresApproval: null,
+    interpretations: [],
+    reviewCategory: null,
+    reviewReasons: [],
     reviewNote: null,
     reviewedAt: null,
     createdAt: '2026-09-23T05:00:00Z',

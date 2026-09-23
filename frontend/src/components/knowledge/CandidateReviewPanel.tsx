@@ -20,6 +20,7 @@ import type { ExtractionUnit } from '../../api/knowledge'
 import { ErrorState } from '../ErrorState'
 import { CandidateEditForm } from './CandidateEditForm'
 import { ConflictSignalList } from './ConflictSignalList'
+import { ReviewAttentionSection } from './ReviewAttention'
 
 function SourceNodeView({
   node,
@@ -163,6 +164,8 @@ export function CandidateReviewPanel({
           {candidate.reviewedAt ? ` · reviewed` : ''}
         </p>
       </header>
+
+      <ReviewAttentionSection candidate={candidate} />
 
       <section aria-labelledby="candidate-extracted-heading">
         <h4 id="candidate-extracted-heading">Extracted</h4>

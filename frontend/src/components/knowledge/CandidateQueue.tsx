@@ -10,6 +10,8 @@ import {
   CANDIDATE_TYPE_LABELS,
   REVIEW_STATUS_LABELS,
 } from '../../lib/knowledgeLabels'
+import { hasSupersessionProposal } from '../../lib/semantics'
+import { ReviewAttentionBadge } from './ReviewAttention'
 
 export function CandidateQueue({
   candidates,
@@ -101,12 +103,16 @@ export function CandidateQueue({
                   {CANDIDATE_TYPE_LABELS[candidate.candidateType]}
                 </span>
                 <span className="candidate-list__badges">
+                  <ReviewAttentionBadge candidate={candidate} />
                   <span
                     className={`badge badge--${candidate.reviewStatus.toLowerCase()}`}
                   >
                     {REVIEW_STATUS_LABELS[candidate.reviewStatus]}
                   </span>
-                  {hasConflicts(candidate) ? (
+                  {hasSupersessionProposal(candidate) ? (
+                    <span className="badge badge--conflict">Supersession proposed</span>
+                  ) : null}
+                  {hasConflicts(candidate) && !hasSupersessionProposal(candidate) ? (
                     <span className="badge badge--conflict">Conflict</span>
                   ) : null}
                 </span>

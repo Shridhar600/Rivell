@@ -41,6 +41,7 @@ const artifactDetail = {
   ingestStatus: 'EXTRACTED',
   parserVersion: 'rivell-docx-parser-2',
   parseWarnings: [],
+  artifactAssessment: null,
   createdAt: '2026-09-23T05:17:29.604991Z',
 }
 
@@ -149,6 +150,14 @@ function candidate(partial: Partial<Candidate> & { id: string }): Candidate {
     effectiveFrom: null,
     effectiveTo: null,
     conflictSignals: [],
+    classifiedConcepts: {},
+    positions: [],
+    variantRole: null,
+    escalationTrigger: null,
+    requiresApproval: null,
+    interpretations: [],
+    reviewCategory: null,
+    reviewReasons: [],
     reviewNote: null,
     reviewedAt: null,
     createdAt: '2026-09-23T05:00:00Z',
@@ -344,6 +353,37 @@ describe('candidate review workspace', () => {
       expect(screen.getByText(/2 approved/)).toBeInTheDocument(),
     )
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
+  })
+
+
+  it('shows review attention and reasons without implying legal risk', async () => {
+    stubKnowledgeApi({
+      candidates: [
+        candidate({
+          id: 'c1',
+          rawLabel: 'Liability cap',
+          reviewCategory: 'HIGH',
+          reviewReasons: ['VERIFICATION_DISPUTED', 'CONFLICT_DETECTED'],
+        }),
+      ],
+    })
+
+    renderArtifact('/knowledge/artifacts/a1?candidate=c1')
+
+    await screen.findByRole('region', { name: 'Candidates' })
+    expect(
+      within(queue()).getByText(/high review attention/i),
+    ).toBeInTheDocument()
+
+    const panel = await screen.findByRole('article', { name: /Liability cap/i })
+    expect(within(panel).getByText(/high review attention/i)).toBeInTheDocument()
+    expect(
+      within(panel).getByText(/not sufficiently supported by the source/i),
+    ).toBeInTheDocument()
+    expect(
+      within(panel).getByText(/may contradict published knowledge/i),
+    ).toBeInTheDocument()
+    expect(within(panel).getByText(/not a legal-risk rating/i)).toBeInTheDocument()
   })
 
   it('edits a candidate column value and preserves the machine proposal', async () => {
