@@ -302,6 +302,12 @@ export interface components {
             candidateIds?: string[];
             note?: string;
         };
+        /** @description Error returned by contract API failures */
+        ErrorResponse: {
+            code: string;
+            title: string;
+            detail: string;
+        };
         ApiResultPublicationView: {
             data?: components["schemas"]["PublicationView"];
             /** Format: int32 */
@@ -396,6 +402,13 @@ export interface components {
             };
             note?: string;
         };
+        ApiResultKnowledgeArtifactDetailResponse: {
+            data?: components["schemas"]["KnowledgeArtifactDetailResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
         KnowledgeArtifactDetailResponse: {
             /** Format: uuid */
             id?: string;
@@ -425,11 +438,12 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
-        /** @description Error returned by contract API failures */
-        ErrorResponse: {
-            code: string;
-            title: string;
-            detail: string;
+        ApiResultIngestResponse: {
+            data?: components["schemas"]["IngestResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
         };
         /** @description Result of a contract upload and initial parse */
         IngestResponse: {
@@ -486,13 +500,6 @@ export interface components {
             ingestStatus?: "RECEIVED" | "EXTRACTING" | "EXTRACTED" | "FAILED";
             /** Format: date-time */
             createdAt?: string;
-        };
-        ApiResultKnowledgeArtifactDetailResponse: {
-            data?: components["schemas"]["KnowledgeArtifactDetailResponse"];
-            /** Format: int32 */
-            status?: number;
-            /** Format: date-time */
-            timestamp?: string;
         };
         ApiResultListExtractionUnitView: {
             data?: components["schemas"]["ExtractionUnitView"][];
@@ -572,6 +579,13 @@ export interface components {
             /** Format: date-time */
             timestamp?: string;
         };
+        ApiResultContractSummaryResponse: {
+            data?: components["schemas"]["ContractSummaryResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
         /** @description Contract with its latest version state */
         ContractSummaryResponse: {
             /** Format: uuid */
@@ -591,6 +605,13 @@ export interface components {
             filename: string;
             /** Format: int32 */
             nodeCount: number;
+        };
+        ApiResultContractStructureResponse: {
+            data?: components["schemas"]["ContractStructureResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
         };
         /** @description Canonical structure of a contract version */
         ContractStructureResponse: {
@@ -692,6 +713,33 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResultPublicationView"];
                 };
             };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid state for this operation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     reject: {
@@ -716,6 +764,24 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResultCandidateView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid state for this operation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -744,6 +810,33 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResultCandidateView"];
                 };
             };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid state for this operation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     approve: {
@@ -768,6 +861,24 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResultCandidateView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid state for this operation */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -819,13 +930,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Processed; inspect ingestStatus for the outcome */
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["KnowledgeArtifactDetailResponse"];
+                    "*/*": components["schemas"]["ApiResultKnowledgeArtifactDetailResponse"];
                 };
             };
             /** @description Invalid upload or manifest */
@@ -873,13 +984,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Processed; inspect parseStatus for the outcome */
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["IngestResponse"];
+                    "*/*": components["schemas"]["ApiResultIngestResponse"];
                 };
             };
             /** @description Invalid upload */
@@ -942,6 +1053,15 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResultPublicationView"];
                 };
             };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     getCandidate: {
@@ -962,6 +1082,15 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResultCandidateView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -986,6 +1115,15 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResultKnowledgeArtifactDetailResponse"];
                 };
             };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     getUnits: {
@@ -1008,6 +1146,15 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResultListExtractionUnitView"];
                 };
             };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     getStructure: {
@@ -1028,6 +1175,15 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResultListKnowledgeStructureNodeView"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };
@@ -1085,6 +1241,15 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResultListCandidateView"];
                 };
             };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     getContract: {
@@ -1098,13 +1263,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Contract found */
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ContractSummaryResponse"];
+                    "*/*": components["schemas"]["ApiResultContractSummaryResponse"];
                 };
             };
             /** @description Contract does not exist in this organization */
@@ -1130,13 +1295,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Structure found */
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["ContractStructureResponse"];
+                    "*/*": components["schemas"]["ApiResultContractStructureResponse"];
                 };
             };
             /** @description Contract or version does not exist in this organization */

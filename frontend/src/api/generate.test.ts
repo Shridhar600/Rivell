@@ -121,6 +121,36 @@ describe('generated OpenAPI client workflow', () => {
     expect(missing).toBeDefined()
   })
 
+  it('documents the ApiResult envelope on upload responses', () => {
+    type KnowledgeUpload =
+      paths['/api/knowledge/artifacts']['post']['responses'][200]['content']['*/*']
+    type ContractUpload =
+      paths['/api/contracts']['post']['responses'][200]['content']['*/*']
+
+    const knowledgeUpload: KnowledgeUpload = {
+      data: { id: '11111111-1111-1111-1111-111111111111' },
+      status: 200,
+      timestamp: '2026-09-23T05:00:00Z',
+    }
+    const contractUpload: ContractUpload = {
+      data: {
+        contractId: '11111111-1111-1111-1111-111111111111',
+        contractVersionId: '22222222-2222-2222-2222-222222222222',
+        versionNumber: 1,
+        parseStatus: 'OK',
+        parseWarnings: [],
+        filename: 'msa.docx',
+        sha256: 'a'.repeat(64),
+        nodeCount: 1,
+      },
+      status: 200,
+      timestamp: '2026-09-23T05:00:00Z',
+    }
+
+    expect(knowledgeUpload.data?.id).toBeDefined()
+    expect(contractUpload.data?.filename).toBe('msa.docx')
+  })
+
   it('types M2 candidate review status and conflict enums', () => {
     const candidate: CandidateView = {
       candidateType: 'PLAYBOOK_RULE',

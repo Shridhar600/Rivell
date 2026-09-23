@@ -135,7 +135,7 @@ describe('fetchContract', () => {
     await expect(fetchContract('c1')).rejects.toThrow(/malformed contract response/i)
   })
 
-  it('requires the runtime ApiResult envelope even where OpenAPI shows the inner DTO', async () => {
+  it('requires the runtime ApiResult envelope for contract reads', async () => {
     stubFetch(() => jsonResponse(summary))
 
     await expect(fetchContract('c1')).rejects.toThrow(/malformed contract response/i)

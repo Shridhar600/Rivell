@@ -307,7 +307,7 @@ describe('uploadKnowledge', () => {
     ).rejects.toThrow(/only .docx, \.xlsx files are supported/i)
   })
 
-  it('requires the runtime envelope on upload even though OpenAPI shows the inner DTO', async () => {
+  it('requires the runtime ApiResult envelope on upload', async () => {
     stubFetch(() => jsonResponse(artifactDetail))
 
     const file = new File(['bytes'], 'knowledge-playbook.docx')
