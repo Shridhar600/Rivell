@@ -13,6 +13,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,49 +63,54 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
 
 
     private final JdbcClient jdbcClient;
+    private final NamedParameterJdbcTemplate namedTemplate;
     private final ObjectMapper objectMapper;
 
-    JdbcContractSemanticsRepository(JdbcClient jdbcClient, ObjectMapper objectMapper) {
+    JdbcContractSemanticsRepository(
+            JdbcClient jdbcClient, NamedParameterJdbcTemplate namedTemplate,
+            ObjectMapper objectMapper) {
         this.jdbcClient = jdbcClient;
+        this.namedTemplate = namedTemplate;
         this.objectMapper = objectMapper;
     }
 
     @Override
     @Transactional
-    public void insertSemanticsRow(ContractSemantics semantics) {
-        jdbcClient.sql("""
-                insert into contract_semantics
-                  (id, contract_version_id, organization_id, enrichment_status, pipeline_version,
-                   review_profile, quality, warnings, observations, created_at)
-                values (:id, :versionId, :organizationId, :status, :pipelineVersion,
-                        cast(:profile as jsonb), cast(:quality as jsonb), cast(:warnings as jsonb),
-                        cast(:observations as jsonb), :createdAt)
-                """)
-                .param("id", semantics.id())
-                .param("versionId", semantics.contractVersionId())
-                .param("organizationId", semantics.organizationId())
-                .param("status", semantics.enrichmentStatus().name())
-                .param("pipelineVersion", semantics.pipelineVersion())
-                .param("profile", toJson(reviewProfile(semantics.reviewProfile())))
-                .param("quality", toJson(quality(semantics.quality())))
-                .param("warnings", toJson(List.of()))
-                .param("observations", toJson(observations(semantics.observations())))
-                .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
-                .update();
-    }
-
-    @Override
-    @Transactional
-    public boolean updateStatus(UUID contractVersionId, UUID organizationId, EnrichmentStatus status) {
-        return jdbcClient.sql("""
+    public boolean beginEnrichment(
+            UUID contractVersionId, UUID organizationId, ReviewProfile profile) {
+        var claimed = jdbcClient.sql("""
                 update contract_semantics
-                set enrichment_status = :status
-                where contract_version_id = :contractVersionId and organization_id = :organizationId
+                set enrichment_status = 'ENRICHING', review_profile = cast(:profile as jsonb),
+                    updated_at = now()
+                where contract_version_id = :versionId and organization_id = :organizationId
+                  and (enrichment_status <> 'ENRICHING'
+                       or updated_at < now() - interval '10 minutes')
                 """)
-                .param("contractVersionId", contractVersionId)
+                .param("versionId", contractVersionId)
                 .param("organizationId", organizationId)
-                .param("status", status.name())
-                .update() == 1;
+                .param("profile", toJson(reviewProfile(profile)))
+                .update();
+        if (claimed == 1) {
+            return true;
+        }
+        var existing = jdbcClient.sql("""
+                select id from contract_semantics
+                where contract_version_id = :versionId and organization_id = :organizationId
+                """)
+                .param("versionId", contractVersionId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> rs.getString("id"))
+                .optional();
+        if (existing.isPresent()) {
+            return false;
+        }
+        writeHeader(new com.rivell.workbench.contracts.ContractSemantics(
+                UUID.randomUUID(), contractVersionId, organizationId,
+                com.rivell.workbench.contracts.EnrichmentStatus.ENRICHING,
+                com.rivell.workbench.contracts.ContractSemantics.PIPELINE_VERSION,
+                profile, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                com.rivell.workbench.contracts.QualityReasons.NONE, null, List.of()));
+        return true;
     }
 
     @Override
@@ -118,71 +125,128 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 .optional();
     }
 
+    private void writeHeader(ContractSemantics semantics) {
+        var existing = jdbcClient.sql("""
+                select id from contract_semantics
+                where contract_version_id = :versionId and organization_id = :organizationId
+                """)
+                .param("versionId", semantics.contractVersionId())
+                .param("organizationId", semantics.organizationId())
+                .query((rs, rowNum) -> UUID.fromString(rs.getString("id")))
+                .optional();
+        if (existing.isPresent()) {
+            jdbcClient.sql("""
+                    update contract_semantics
+                    set enrichment_status = :status, pipeline_version = :pipelineVersion,
+                        review_profile = cast(:profile as jsonb), quality = cast(:quality as jsonb),
+                        warnings = cast(:warnings as jsonb),
+                        observations = cast(:observations as jsonb), updated_at = now()
+                    where contract_version_id = :versionId and organization_id = :organizationId
+                    """)
+                    .param("status", semantics.enrichmentStatus().name())
+                    .param("pipelineVersion", semantics.pipelineVersion())
+                    .param("profile", toJson(reviewProfile(semantics.reviewProfile())))
+                    .param("quality", toJson(quality(semantics.quality())))
+                    .param("warnings", toJson(semantics.warnings()))
+                    .param("observations", toJson(observations(semantics.observations())))
+                    .param("versionId", semantics.contractVersionId())
+                    .param("organizationId", semantics.organizationId())
+                    .update();
+        } else {
+            jdbcClient.sql("""
+                    insert into contract_semantics
+                      (id, contract_version_id, organization_id, enrichment_status,
+                       pipeline_version, review_profile, quality, warnings, observations,
+                       created_at, updated_at)
+                    values (:id, :versionId, :organizationId, :status, :pipelineVersion,
+                            cast(:profile as jsonb), cast(:quality as jsonb),
+                            cast(:warnings as jsonb), cast(:observations as jsonb),
+                            :createdAt, now())
+                    """)
+                    .param("id", semantics.id())
+                    .param("versionId", semantics.contractVersionId())
+                    .param("organizationId", semantics.organizationId())
+                    .param("status", semantics.enrichmentStatus().name())
+                    .param("pipelineVersion", semantics.pipelineVersion())
+                    .param("profile", toJson(reviewProfile(semantics.reviewProfile())))
+                    .param("quality", toJson(quality(semantics.quality())))
+                    .param("warnings", toJson(semantics.warnings()))
+                    .param("observations", toJson(observations(semantics.observations())))
+                    .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
+                    .update();
+        }
+    }
+
     @Override
     @Transactional
     public void replaceSemantics(ContractSemantics semantics) {
-        jdbcClient.sql("""
-                insert into contract_semantics
-                  (id, contract_version_id, organization_id, enrichment_status, pipeline_version,
-                   review_profile, quality, warnings, observations, created_at)
-                values (:id, :versionId, :organizationId, :status, :pipelineVersion,
-                        cast(:profile as jsonb), cast(:quality as jsonb), cast(:warnings as jsonb),
-                        cast(:observations as jsonb), :createdAt)
-                on conflict (contract_version_id) do update set
-                  enrichment_status = excluded.enrichment_status,
-                  pipeline_version = excluded.pipeline_version,
-                  review_profile = excluded.review_profile,
-                  quality = excluded.quality,
-                  warnings = excluded.warnings,
-                  observations = excluded.observations
+        writeHeader(semantics);
+        var headerId = jdbcClient.sql("""
+                select id from contract_semantics
+                where contract_version_id = :versionId and organization_id = :organizationId
                 """)
-                .param("id", semantics.id())
                 .param("versionId", semantics.contractVersionId())
                 .param("organizationId", semantics.organizationId())
-                .param("status", semantics.enrichmentStatus().name())
-                .param("pipelineVersion", semantics.pipelineVersion())
-                .param("profile", toJson(reviewProfile(semantics.reviewProfile())))
-                .param("quality", toJson(quality(semantics.quality())))
-                .param("warnings", toJson(List.of()))
-                .param("observations", toJson(observations(semantics.observations())))
-                .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
-                .update();
+                .query((rs, rowNum) -> UUID.fromString(rs.getString("id")))
+                .single();
+        var machine = semantics.withHeaderId(headerId);
 
         jdbcClient.sql("delete from contract_metadata_fact where semantics_id = :id")
-                .param("id", semantics.id()).update();
+                .param("id", headerId).update();
         jdbcClient.sql("delete from contract_party where semantics_id = :id")
-                .param("id", semantics.id()).update();
+                .param("id", headerId).update();
         jdbcClient.sql("delete from contract_defined_term where semantics_id = :id")
-                .param("id", semantics.id()).update();
+                .param("id", headerId).update();
         jdbcClient.sql("delete from contract_reference where semantics_id = :id")
-                .param("id", semantics.id()).update();
+                .param("id", headerId).update();
         jdbcClient.sql("delete from contract_clause_semantics where semantics_id = :id")
-                .param("id", semantics.id()).update();
+                .param("id", headerId).update();
         jdbcClient.sql("delete from contract_relationship where semantics_id = :id")
-                .param("id", semantics.id()).update();
+                .param("id", headerId).update();
 
-        for (var fact : semantics.metadata()) {
-            jdbcClient.sql("""
+        if (!semantics.metadata().isEmpty()) {
+            var rows = semantics.metadata().stream()
+                    .map(fact -> new MapSqlParameterSource()
+                            .addValue("id", fact.id())
+                            .addValue("semanticsId", headerId)
+                            .addValue("versionId", machine.contractVersionId())
+                            .addValue("organizationId", machine.organizationId())
+                            .addValue("field", fact.field().name())
+                            .addValue("value", fact.value())
+                            .addValue("interpretation", toJson(interpretation(fact.interpretation())))
+                            .addValue("correctedValue", fact.correctedValue())
+                            .addValue("correctedBy", fact.correctedBy())
+                            .addValue("createdAt", OffsetDateTime.now(ZoneOffset.UTC)))
+                    .toArray(MapSqlParameterSource[]::new);
+            namedTemplate.batchUpdate("""
                     insert into contract_metadata_fact
                       (id, semantics_id, contract_version_id, organization_id, field, value,
                        interpretation, corrected_value, corrected_by, created_at)
                     values (:id, :semanticsId, :versionId, :organizationId, :field, :value,
                             cast(:interpretation as jsonb), :correctedValue, :correctedBy, :createdAt)
-                    """)
-                    .param("id", fact.id())
-                    .param("semanticsId", semantics.id())
-                    .param("versionId", semantics.contractVersionId())
-                    .param("organizationId", semantics.organizationId())
-                    .param("field", fact.field().name())
-                    .param("value", fact.value())
-                    .param("interpretation", toJson(interpretation(fact.interpretation())))
-                    .param("correctedValue", fact.correctedValue())
-                    .param("correctedBy", fact.correctedBy())
-                    .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
-                    .update();
+                    """, rows);
         }
-        for (var party : semantics.parties()) {
-            jdbcClient.sql("""
+        if (!semantics.parties().isEmpty()) {
+            var rows = semantics.parties().stream()
+                    .map(party -> new MapSqlParameterSource()
+                            .addValue("id", party.id())
+                            .addValue("semanticsId", headerId)
+                            .addValue("versionId", machine.contractVersionId())
+                            .addValue("organizationId", machine.organizationId())
+                            .addValue("rawName", party.rawName())
+                            .addValue("normalizedName", party.normalizedName())
+                            .addValue("aliases", toJson(party.aliases()))
+                            .addValue("interpretations",
+                                    toJson(interpretations(party.interpretations())))
+                            .addValue("machineRoles", toJson(names(party.machineRoles())))
+                            .addValue("correctionRoles",
+                                    party.correction().corrected()
+                                            ? toJson(names(party.correction().roles())) : null)
+                            .addValue("correctionId", party.correction().correctionId())
+                            .addValue("correctedBy", party.correctedBy())
+                            .addValue("createdAt", OffsetDateTime.now(ZoneOffset.UTC)))
+                    .toArray(MapSqlParameterSource[]::new);
+            namedTemplate.batchUpdate("""
                     insert into contract_party
                       (id, semantics_id, contract_version_id, organization_id, raw_name,
                        normalized_name, aliases, interpretations, machine_roles,
@@ -191,70 +255,77 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                             :normalizedName, cast(:aliases as jsonb), cast(:interpretations as jsonb),
                             cast(:machineRoles as jsonb), cast(:correctionRoles as jsonb),
                             :correctionId, :correctedBy, :createdAt)
-                    """)
-                    .param("id", party.id())
-                    .param("semanticsId", semantics.id())
-                    .param("versionId", semantics.contractVersionId())
-                    .param("organizationId", semantics.organizationId())
-                    .param("rawName", party.rawName())
-                    .param("normalizedName", party.normalizedName())
-                    .param("aliases", toJson(party.aliases()))
-                    .param("interpretations", toJson(interpretations(party.interpretations())))
-                    .param("machineRoles", toJson(names(party.machineRoles())))
-                    .param("correctionRoles",
-                            party.correction().corrected()
-                                    ? toJson(names(party.correction().roles())) : null)
-                    .param("correctionId", party.correction().correctionId())
-                    .param("correctedBy", party.correctedBy())
-                    .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
-                    .update();
+                    """, rows);
         }
-        for (var term : semantics.definedTerms()) {
-            jdbcClient.sql("""
+        if (!semantics.definedTerms().isEmpty()) {
+            var rows = semantics.definedTerms().stream()
+                    .map(term -> new MapSqlParameterSource()
+                            .addValue("id", term.id())
+                            .addValue("semanticsId", headerId)
+                            .addValue("versionId", machine.contractVersionId())
+                            .addValue("organizationId", machine.organizationId())
+                            .addValue("term", term.term())
+                            .addValue("definition", term.definition())
+                            .addValue("definingNodeId", term.definingNodeId())
+                            .addValue("sourceNodeIds", toJson(uuids(term.sourceNodeIds())))
+                            .addValue("referenceNodeIds", toJson(uuids(term.referenceNodeIds())))
+                            .addValue("duplicate", term.duplicate())
+                            .addValue("createdAt", OffsetDateTime.now(ZoneOffset.UTC)))
+                    .toArray(MapSqlParameterSource[]::new);
+            namedTemplate.batchUpdate("""
                     insert into contract_defined_term
                       (id, semantics_id, contract_version_id, organization_id, term, definition,
                        defining_node_id, source_node_ids, reference_node_ids, duplicate, created_at)
                     values (:id, :semanticsId, :versionId, :organizationId, :term, :definition,
                             :definingNodeId, cast(:sourceNodeIds as jsonb),
                             cast(:referenceNodeIds as jsonb), :duplicate, :createdAt)
-                    """)
-                    .param("id", term.id())
-                    .param("semanticsId", semantics.id())
-                    .param("versionId", semantics.contractVersionId())
-                    .param("organizationId", semantics.organizationId())
-                    .param("term", term.term())
-                    .param("definition", term.definition())
-                    .param("definingNodeId", term.definingNodeId())
-                    .param("sourceNodeIds", toJson(uuids(term.sourceNodeIds())))
-                    .param("referenceNodeIds", toJson(uuids(term.referenceNodeIds())))
-                    .param("duplicate", term.duplicate())
-                    .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
-                    .update();
+                    """, rows);
         }
-        for (var reference : semantics.references()) {
-            jdbcClient.sql("""
+        if (!semantics.references().isEmpty()) {
+            var rows = semantics.references().stream()
+                    .map(reference -> new MapSqlParameterSource()
+                            .addValue("id", reference.id())
+                            .addValue("semanticsId", headerId)
+                            .addValue("versionId", machine.contractVersionId())
+                            .addValue("organizationId", machine.organizationId())
+                            .addValue("sourceNodeId", reference.sourceNodeId())
+                            .addValue("referenceText", reference.referenceText())
+                            .addValue("kind", reference.kind().name())
+                            .addValue("status", reference.status().name())
+                            .addValue("targetNodeId", reference.targetNodeId())
+                            .addValue("candidates", toJson(uuids(reference.candidateNodeIds())))
+                            .addValue("createdAt", OffsetDateTime.now(ZoneOffset.UTC)))
+                    .toArray(MapSqlParameterSource[]::new);
+            namedTemplate.batchUpdate("""
                     insert into contract_reference
                       (id, semantics_id, contract_version_id, organization_id, source_node_id,
                        reference_text, kind, status, target_node_id, candidate_node_ids, created_at)
                     values (:id, :semanticsId, :versionId, :organizationId, :sourceNodeId,
                             :referenceText, :kind, :status, :targetNodeId,
                             cast(:candidates as jsonb), :createdAt)
-                    """)
-                    .param("id", reference.id())
-                    .param("semanticsId", semantics.id())
-                    .param("versionId", semantics.contractVersionId())
-                    .param("organizationId", semantics.organizationId())
-                    .param("sourceNodeId", reference.sourceNodeId())
-                    .param("referenceText", reference.referenceText())
-                    .param("kind", reference.kind().name())
-                    .param("status", reference.status().name())
-                    .param("targetNodeId", reference.targetNodeId())
-                    .param("candidates", toJson(uuids(reference.candidateNodeIds())))
-                    .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
-                    .update();
+                    """, rows);
         }
-        for (var clause : semantics.clauses()) {
-            jdbcClient.sql("""
+        if (!semantics.clauses().isEmpty()) {
+            var rows = semantics.clauses().stream()
+                    .map(clause -> new MapSqlParameterSource()
+                            .addValue("id", clause.id())
+                            .addValue("semanticsId", headerId)
+                            .addValue("versionId", machine.contractVersionId())
+                            .addValue("organizationId", machine.organizationId())
+                            .addValue("headingNodeId", clause.headingNodeId())
+                            .addValue("textNodeIds", toJson(uuids(clause.textNodeIds())))
+                            .addValue("contentText", clause.contentText())
+                            .addValue("classification", toJson(classification(clause.classification())))
+                            .addValue("facts", toJson(facts(clause.facts())))
+                            .addValue("interpretations",
+                                    toJson(interpretations(clause.interpretations())))
+                            .addValue("correction",
+                                    clause.correction().corrected()
+                                            ? toJson(factCorrection(clause.correction())) : null)
+                            .addValue("correctedBy", clause.correctedBy())
+                            .addValue("createdAt", OffsetDateTime.now(ZoneOffset.UTC)))
+                    .toArray(MapSqlParameterSource[]::new);
+            namedTemplate.batchUpdate("""
                     insert into contract_clause_semantics
                       (id, semantics_id, contract_version_id, organization_id, heading_node_id,
                        text_node_ids, content_text, classification, facts, interpretations,
@@ -263,26 +334,28 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                             cast(:textNodeIds as jsonb), :contentText, cast(:classification as jsonb),
                             cast(:facts as jsonb), cast(:interpretations as jsonb),
                             cast(:correction as jsonb), :correctedBy, :createdAt)
-                    """)
-                    .param("id", clause.id())
-                    .param("semanticsId", semantics.id())
-                    .param("versionId", semantics.contractVersionId())
-                    .param("organizationId", semantics.organizationId())
-                    .param("headingNodeId", clause.headingNodeId())
-                    .param("textNodeIds", toJson(uuids(clause.textNodeIds())))
-                    .param("contentText", clause.contentText())
-                    .param("classification", toJson(classification(clause.classification())))
-                    .param("facts", toJson(facts(clause.facts())))
-                    .param("interpretations", toJson(interpretations(clause.interpretations())))
-                    .param("correction",
-                            clause.correction().corrected()
-                                    ? toJson(factCorrection(clause.correction())) : null)
-                    .param("correctedBy", clause.correctedBy())
-                    .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
-                    .update();
+                    """, rows);
         }
-        for (var relationship : semantics.relationships()) {
-            jdbcClient.sql("""
+        if (!semantics.relationships().isEmpty()) {
+            var rows = semantics.relationships().stream()
+                    .map(relationship -> new MapSqlParameterSource()
+                            .addValue("id", relationship.id())
+                            .addValue("semanticsId", headerId)
+                            .addValue("versionId", machine.contractVersionId())
+                            .addValue("organizationId", machine.organizationId())
+                            .addValue("sourceRegionId", relationship.sourceRegionNodeId())
+                            .addValue("targetRegionId", relationship.targetRegionNodeId())
+                            .addValue("type", relationship.type().name())
+                            .addValue("detector", relationship.detector().name())
+                            .addValue("basis", relationship.basis())
+                            .addValue("probability", relationship.probability())
+                            .addValue("executionId", relationship.executionId())
+                            .addValue("verification", relationship.verification().name())
+                            .addValue("verificationExecutionId",
+                                    relationship.verificationExecutionId())
+                            .addValue("createdAt", OffsetDateTime.now(ZoneOffset.UTC)))
+                    .toArray(MapSqlParameterSource[]::new);
+            namedTemplate.batchUpdate("""
                     insert into contract_relationship
                       (id, semantics_id, contract_version_id, organization_id,
                        source_region_node_id, target_region_node_id, type, detector, basis,
@@ -290,22 +363,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     values (:id, :semanticsId, :versionId, :organizationId, :sourceRegionId,
                             :targetRegionId, :type, :detector, :basis, :probability, :executionId,
                             :verification, :verificationExecutionId, :createdAt)
-                    """)
-                    .param("id", relationship.id())
-                    .param("semanticsId", semantics.id())
-                    .param("versionId", semantics.contractVersionId())
-                    .param("organizationId", semantics.organizationId())
-                    .param("sourceRegionId", relationship.sourceRegionNodeId())
-                    .param("targetRegionId", relationship.targetRegionNodeId())
-                    .param("type", relationship.type().name())
-                    .param("detector", relationship.detector().name())
-                    .param("basis", relationship.basis())
-                    .param("probability", relationship.probability())
-                    .param("executionId", relationship.executionId())
-                    .param("verification", relationship.verification().name())
-                    .param("verificationExecutionId", relationship.verificationExecutionId())
-                    .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
-                    .update();
+                    """, rows);
         }
     }
 
@@ -314,7 +372,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
     public Optional<ContractSemantics> find(UUID contractVersionId, UUID organizationId) {
         var header = jdbcClient.sql("""
                 select id, enrichment_status, pipeline_version, review_profile, quality,
-                       observations
+                       observations, warnings
                 from contract_semantics
                 where contract_version_id = :versionId and organization_id = :organizationId
                 """)
@@ -326,7 +384,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                         rs.getString("pipeline_version"),
                         parseProfile(rs.getString("review_profile")),
                         parseQuality(rs.getString("quality")),
-                        parseObservations(rs.getString("observations"))))
+                        parseObservations(rs.getString("observations")),
+                        readStrings(rs.getString("warnings"))))
                 .optional();
         if (header.isEmpty()) {
             return Optional.empty();
@@ -430,7 +489,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                         rs.getString("content_text"),
                         parseClassification(rs.getString("classification")),
                         parseFacts(rs.getString("facts")),
-                        parseInterpretations(rs.getString("interpretations")),
+                        validatedInterpretations(rs.getString("interpretations"), knownNodeIds),
                         parseFactCorrection(rs.getString("correction")),
                         optionalUuid(rs, "corrected_by")))
                 .list().stream()
@@ -471,7 +530,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         return Optional.of(new ContractSemantics(semanticsId, versionId, organizationId,
                 headerValue.status(), headerValue.pipelineVersion(), headerValue.profile(),
                 metadata, parties, definedTerms, references, clauses, relationships,
-                headerValue.quality(), headerValue.observations()));
+                headerValue.quality(), headerValue.observations(), headerValue.warnings()));
     }
 
     @Override
@@ -511,7 +570,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
 
     private record SemanticsHeader(
             UUID id, EnrichmentStatus status, String pipelineVersion,
-            ReviewProfile profile, QualityReasons quality, Observations observations) {
+            ReviewProfile profile, QualityReasons quality, Observations observations,
+            List<String> warnings) {
     }
 
     private record MetadataRow(
@@ -630,6 +690,17 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     interpretation.verificationExecutionId().toString());
         }
         return payload;
+    }
+
+    private List<Interpretation> validatedInterpretations(String json, Set<UUID> knownNodes) {
+        return parseInterpretations(json).stream()
+                .map(interpretation -> new Interpretation(
+                        interpretation.field(), interpretation.kind(),
+                        interpretation.proposedValue(), interpretation.specId(),
+                        interpretation.specVersion(), interpretation.executionId(),
+                        filterKnown(interpretation.sourceNodeIds(), knownNodes),
+                        interpretation.verification(), interpretation.verificationExecutionId()))
+                .toList();
     }
 
     private List<Interpretation> parseInterpretations(String json) {
@@ -908,13 +979,26 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
     }
 
     private UUID optionalUuid(JsonNode node) {
-        return node == null || node.isNull() || node.asText().isBlank()
-                ? null : UUID.fromString(node.asText());
+        if (node == null || node.isNull() || node.asText().isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(node.asText());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private static UUID optionalUuid(java.sql.ResultSet rs, String column) throws SQLException {
         var value = rs.getString(column);
-        return value == null || value.isBlank() ? null : UUID.fromString(value);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private EnrichmentStatus parseStatus(String value) {

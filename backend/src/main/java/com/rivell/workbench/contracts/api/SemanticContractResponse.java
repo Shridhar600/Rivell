@@ -78,7 +78,8 @@ public record SemanticContractResponse(
             String primaryConcept,
             List<String> secondaryConcepts,
             String correctedPrimaryConcept,
-            List<FactView> facts,
+            List<FactView> machineFacts,
+            List<FactView> effectiveFacts,
             List<InterpretationSummary> interpretations,
             boolean corrected) {
     }

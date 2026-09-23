@@ -15,6 +15,7 @@ CREATE TABLE contract_semantics (
     warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
     observations JSONB,
     created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (id, organization_id),
     UNIQUE (contract_version_id)
 );
@@ -23,6 +24,10 @@ ALTER TABLE contract_semantics
     ADD CONSTRAINT fk_contract_semantics_version_org
     FOREIGN KEY (contract_version_id, organization_id)
     REFERENCES contract_version (id, organization_id);
+
+ALTER TABLE contract_semantics
+    ADD CONSTRAINT uq_contract_semantics_id_version_org
+    UNIQUE (id, contract_version_id, organization_id);
 
 CREATE TABLE contract_metadata_fact (
     id UUID PRIMARY KEY,
@@ -132,3 +137,29 @@ CREATE INDEX idx_contract_clause_version ON contract_clause_semantics (contract_
 CREATE INDEX idx_contract_reference_source ON contract_reference (source_node_id);
 CREATE INDEX idx_contract_relationship_source ON contract_relationship (source_region_node_id);
 CREATE INDEX idx_contract_relationship_target ON contract_relationship (target_region_node_id);
+
+-- Child rows are structurally bound to their semantics row and organization.
+ALTER TABLE contract_metadata_fact
+    ADD CONSTRAINT fk_contract_metadata_semantics_org
+    FOREIGN KEY (semantics_id, contract_version_id, organization_id)
+    REFERENCES contract_semantics (id, contract_version_id, organization_id);
+ALTER TABLE contract_party
+    ADD CONSTRAINT fk_contract_party_semantics_org
+    FOREIGN KEY (semantics_id, contract_version_id, organization_id)
+    REFERENCES contract_semantics (id, contract_version_id, organization_id);
+ALTER TABLE contract_defined_term
+    ADD CONSTRAINT fk_contract_defined_term_semantics_org
+    FOREIGN KEY (semantics_id, contract_version_id, organization_id)
+    REFERENCES contract_semantics (id, contract_version_id, organization_id);
+ALTER TABLE contract_reference
+    ADD CONSTRAINT fk_contract_reference_semantics_org
+    FOREIGN KEY (semantics_id, contract_version_id, organization_id)
+    REFERENCES contract_semantics (id, contract_version_id, organization_id);
+ALTER TABLE contract_clause_semantics
+    ADD CONSTRAINT fk_contract_clause_semantics_org
+    FOREIGN KEY (semantics_id, contract_version_id, organization_id)
+    REFERENCES contract_semantics (id, contract_version_id, organization_id);
+ALTER TABLE contract_relationship
+    ADD CONSTRAINT fk_contract_relationship_semantics_org
+    FOREIGN KEY (semantics_id, contract_version_id, organization_id)
+    REFERENCES contract_semantics (id, contract_version_id, organization_id);

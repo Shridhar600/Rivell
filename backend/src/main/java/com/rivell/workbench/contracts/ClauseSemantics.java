@@ -1,5 +1,6 @@
 package com.rivell.workbench.contracts;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -42,6 +43,29 @@ public record ClauseSemantics(
 
     public List<LegalConcept> secondaryConcepts() {
         return classification.secondaryConcepts();
+    }
+
+    /**
+     * Effective fact view: human-corrected values replace the machine proposal per
+     * field; uncorrected fields keep the machine value. Machine history is never
+     * erased (correction layering per AD #5.18).
+     */
+    public List<LegalFact> effectiveFacts() {
+        if (!factCorrected()) {
+            return facts;
+        }
+        var effective = new ArrayList<LegalFact>();
+        for (var fact : facts) {
+            var values = new java.util.LinkedHashMap<String, String>(fact.values());
+            var schema = FactSchema.byId(fact.factSchema());
+            for (var entry : correction.factValues().entrySet()) {
+                if (schema.fields().contains(entry.getKey())) {
+                    values.put(entry.getKey(), entry.getValue());
+                }
+            }
+            effective.add(new LegalFact(fact.factSchema(), fact.schemaVersion(), values));
+        }
+        return effective;
     }
 
     public boolean factCorrected() {

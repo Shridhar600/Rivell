@@ -65,29 +65,81 @@ class ContractSemanticsSchemaIT {
         var versionId = stagedVersion(organizationId);
 
         var semantics = new ContractSemantics(UUID.randomUUID(), versionId, UUID.randomUUID(),
-                EnrichmentStatus.ENRICHING, "rivell-contract-enrichment-1",
+                EnrichmentStatus.ENRICHING, ContractSemantics.PIPELINE_VERSION,
                 ReviewProfile.minimal(ContractType.NDA), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), QualityReasons.NONE, null);
+                List.of(), List.of(), List.of(), QualityReasons.NONE, null, List.of());
 
-        assertThatThrownBy(() -> semanticsRepository.insertSemanticsRow(semantics))
+        assertThatThrownBy(() -> semanticsRepository.replaceSemantics(semantics))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
     @Test
-    void upsertKeepsOneSemanticRowPerVersion() {
+    void beginEnrichmentIsAtomicAndRecoversStaleRuns() {
         var organizationId = UUID.randomUUID();
         var versionId = stagedVersion(organizationId);
 
-        insertSimple(organizationId, versionId, EnrichmentStatus.ENRICHING);
-        insertSimple(organizationId, versionId, EnrichmentStatus.READY);
+        assertThat(semanticsRepository.beginEnrichment(versionId, organizationId,
+                ReviewProfile.minimal(ContractType.NDA))).isTrue();
+        assertThat(semanticsRepository.beginEnrichment(versionId, organizationId,
+                ReviewProfile.minimal(ContractType.NDA))).isFalse();
 
-        var rowCount = jdbcClient.sql(
-                        "select count(*) from contract_semantics where contract_version_id = :versionId")
+        // a run abandoned >10 minutes ago is recoverable
+        jdbcClient.sql("""
+                update contract_semantics set updated_at = now() - interval '11 minutes'
+                where contract_version_id = :versionId
+                """)
+                .param("versionId", versionId).update();
+        assertThat(semanticsRepository.beginEnrichment(versionId, organizationId,
+                ReviewProfile.minimal(ContractType.NDA))).isTrue();
+    }
+
+    @Test
+    void replaceKeepsStableHeaderIdAndFullyReplacesChildren() {
+        var organizationId = UUID.randomUUID();
+        var versionId = stagedVersion(organizationId);
+        var headingId = insertNode(versionId, null, "HEADING", "Limitation of Liability", "6");
+
+        transactionTemplate.executeWithoutResult(status -> {
+            semanticsRepository.beginEnrichment(versionId, organizationId,
+                    ReviewProfile.minimal(ContractType.MSA));
+            semanticsRepository.replaceSemantics(semantics(
+                    UUID.randomUUID(), organizationId, versionId, headingId,
+                    EnrichmentStatus.READY, "v1", "old-machine-value"));
+        });
+        var headerAfterFirstRun = jdbcClient.sql(
+                        "select id from contract_semantics where contract_version_id = :versionId")
+                .param("versionId", versionId)
+                .query((rs, rowNum) -> UUID.fromString(rs.getString("id")))
+                .single();
+        var clauseCount = jdbcClient.sql(
+                        "select count(*) from contract_clause_semantics where contract_version_id = :versionId")
                 .param("versionId", versionId)
                 .query(Integer.class).single();
-        assertThat(rowCount).isEqualTo(1);
-        assertThat(semanticsRepository.findStatus(versionId, organizationId))
-                .contains(EnrichmentStatus.READY);
+        assertThat(clauseCount).isEqualTo(1);
+
+        transactionTemplate.executeWithoutResult(status ->
+                semanticsRepository.replaceSemantics(semantics(
+                        UUID.randomUUID(), organizationId, versionId, headingId,
+                        EnrichmentStatus.READY, "rivell-contract-enrichment-2",
+                        "new-machine-value")));
+
+        var headerAfterSecondRun = jdbcClient.sql(
+                        "select id from contract_semantics where contract_version_id = :versionId")
+                .param("versionId", versionId)
+                .query((rs, rowNum) -> UUID.fromString(rs.getString("id")))
+                .single();
+        assertThat(headerAfterSecondRun).isEqualTo(headerAfterFirstRun);
+
+        var clauseCountAfterRerun = jdbcClient.sql(
+                        "select count(*) from contract_clause_semantics where contract_version_id = :versionId")
+                .param("versionId", versionId)
+                .query(Integer.class).single();
+        assertThat(clauseCountAfterRerun).isEqualTo(1);
+
+        var reloaded = semanticsRepository.find(versionId, organizationId).orElseThrow();
+        assertThat(reloaded.id()).isEqualTo(headerAfterFirstRun);
+        assertThat(reloaded.clauses().get(0).contentText()).isEqualTo("new-machine-value");
+        assertThat(reloaded.enrichmentStatus()).isEqualTo(EnrichmentStatus.READY);
     }
 
     @Test
@@ -95,7 +147,9 @@ class ContractSemanticsSchemaIT {
         var organizationId = UUID.randomUUID();
         var versionId = stagedVersion(organizationId);
         var headingId = insertNode(versionId, null, "HEADING", "Limitation of Liability", "6");
-        var textId = insertNode(versionId, headingId, "PARAGRAPH", "Supplier liability shall not exceed three times the Fees paid in the twelve months immediately preceding the claim.", null);
+        var textId = insertNode(versionId, headingId, "PARAGRAPH",
+                "Supplier liability shall not exceed three times the Fees paid in the twelve months immediately preceding the claim.",
+                null);
         var targetHeadingId = insertNode(versionId, null, "HEADING", "Indemnification", "7");
 
         var machineInterpretation = new Interpretation("primaryConcept",
@@ -112,7 +166,8 @@ class ContractSemanticsSchemaIT {
                 "2026-01-01", Interpretation.deterministic("effectiveDate", "2026-01-01",
                         List.of(textId)), null, null);
         var definedTerm = new DefinedTerm(UUID.randomUUID(), versionId, "Fees",
-                "the fees set out in Schedule A", headingId, List.of(textId), List.of(textId), false);
+                "the fees set out in Schedule A", headingId, List.of(textId), List.of(textId),
+                false);
         var reference = new ContractReference(UUID.randomUUID(), versionId, textId,
                 "Section 7", ReferenceKind.SECTION, ReferenceStatus.RESOLVED,
                 targetHeadingId, List.of());
@@ -131,18 +186,15 @@ class ContractSemanticsSchemaIT {
                 RelationshipDetector.SEMANTIC, "explicit carve-out language", 0.86,
                 machineInterpretation.executionId(), VerificationState.NOT_VERIFIED, null);
         var semantics = new ContractSemantics(UUID.randomUUID(), versionId, organizationId,
-                EnrichmentStatus.ENRICHING, "rivell-contract-enrichment-1",
+                EnrichmentStatus.READY, ContractSemantics.PIPELINE_VERSION,
                 new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER, PaperSource.OUR_PAPER,
                         Jurisdiction.US),
                 List.of(metadata), List.of(party), List.of(definedTerm), List.of(reference),
                 List.of(clause), List.of(relationship), QualityReasons.NONE,
-                new Observations(3, 2, 10, 0, 2, false, false));
+                new Observations(3, 2, 10, 0, 2, false, false), List.of());
 
-        transactionTemplate.executeWithoutResult(status -> {
-            semanticsRepository.insertSemanticsRow(semantics);
-            semanticsRepository.replaceSemantics(
-                    readyCopy(semantics));
-        });
+        transactionTemplate.executeWithoutResult(status ->
+                semanticsRepository.replaceSemantics(semantics));
 
         var loaded = semanticsRepository.find(versionId, organizationId).orElseThrow();
         assertThat(loaded.enrichmentStatus()).isEqualTo(EnrichmentStatus.READY);
@@ -168,14 +220,6 @@ class ContractSemanticsSchemaIT {
         assertThat(loaded.relationships().get(0).type()).isEqualTo(RelationshipType.CARVES_OUT);
     }
 
-    private ContractSemantics readyCopy(ContractSemantics semantics) {
-        return new ContractSemantics(semantics.id(), semantics.contractVersionId(),
-                semantics.organizationId(), EnrichmentStatus.READY, semantics.pipelineVersion(),
-                semantics.reviewProfile(), semantics.metadata(), semantics.parties(),
-                semantics.definedTerms(), semantics.references(), semantics.clauses(),
-                semantics.relationships(), semantics.quality(), semantics.observations());
-    }
-
     @Test
     void partyCorrectionPersistsWithoutErasingMachineRoles() {
         var organizationId = UUID.randomUUID();
@@ -189,12 +233,13 @@ class ContractSemanticsSchemaIT {
         var party = new ContractParty(UUID.randomUUID(), versionId, "Acme Corp", "acme corp",
                 List.of(), List.of(), List.of(PartyRole.PARTY_A), PartyCorrection.NONE, null);
         var semantics = new ContractSemantics(UUID.randomUUID(), versionId, organizationId,
-                EnrichmentStatus.READY, "rivell-contract-enrichment-1",
+                EnrichmentStatus.READY, ContractSemantics.PIPELINE_VERSION,
                 ReviewProfile.minimal(ContractType.NDA), List.of(), List.of(party),
                 List.of(), List.of(), List.of(clause), List.of(), QualityReasons.NONE,
-                null);
+                null, List.of());
 
-        transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(semantics));
+        transactionTemplate.executeWithoutResult(status ->
+                semanticsRepository.replaceSemantics(semantics));
         var loadedParty = semanticsRepository.find(versionId, organizationId).orElseThrow()
                 .parties().get(0);
 
@@ -214,22 +259,35 @@ class ContractSemanticsSchemaIT {
     void statusGuardsRejectForeignVersion() {
         var organizationId = UUID.randomUUID();
         var versionId = stagedVersion(organizationId);
-        insertSimple(organizationId, versionId, EnrichmentStatus.ENRICHING);
 
-        assertThat(semanticsRepository.findStatus(versionId, organizationId))
-                .contains(EnrichmentStatus.ENRICHING);
-        assertThat(semanticsRepository.findStatus(versionId, UUID.randomUUID())).isEmpty();
-        assertThat(semanticsRepository.updateStatus(versionId, UUID.randomUUID(),
-                EnrichmentStatus.READY)).isFalse();
-    }
-
-    private void insertSimple(UUID organizationId, UUID versionId, EnrichmentStatus status) {
-        transactionTemplate.executeWithoutResult(tx -> semanticsRepository.replaceSemantics(
+        transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(
                 new ContractSemantics(UUID.randomUUID(), versionId, organizationId,
-                        status, "rivell-contract-enrichment-1",
+                        EnrichmentStatus.READY, ContractSemantics.PIPELINE_VERSION,
                         ReviewProfile.minimal(ContractType.NDA),
                         List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                        QualityReasons.NONE, null)));
+                        QualityReasons.NONE, null, List.of())));
+
+        assertThat(semanticsRepository.findStatus(versionId, organizationId))
+                .contains(EnrichmentStatus.READY);
+        assertThat(semanticsRepository.findStatus(versionId, UUID.randomUUID())).isEmpty();
+        assertThat(semanticsRepository.find(versionId, UUID.randomUUID())).isEmpty();
+        assertThat(semanticsRepository.updatePartyCorrection(UUID.randomUUID(),
+                UUID.randomUUID(), PartyCorrection.of(List.of(PartyRole.PARTY_B)),
+                UUID.randomUUID())).isFalse();
+    }
+
+    private ContractSemantics semantics(
+            UUID id, UUID organizationId, UUID versionId, UUID headingId,
+            EnrichmentStatus status, String pipelineVersion, String contentText) {
+        var clause = new ClauseSemantics(UUID.randomUUID(), versionId, headingId,
+                List.of(), contentText,
+                new ConceptClassification(List.of(LegalConcept.LIMITATION_OF_LIABILITY),
+                        List.of(), Map.of(LegalConcept.LIMITATION_OF_LIABILITY, 0.9)),
+                List.of(), List.of(), FactCorrection.NONE, null);
+        return new ContractSemantics(UUID.randomUUID(), versionId, organizationId, status,
+                pipelineVersion, ReviewProfile.minimal(ContractType.MSA),
+                List.of(), List.of(), List.of(), List.of(), List.of(clause), List.of(),
+                QualityReasons.NONE, null, List.of());
     }
 
     private UUID stagedVersion(UUID organizationId) {

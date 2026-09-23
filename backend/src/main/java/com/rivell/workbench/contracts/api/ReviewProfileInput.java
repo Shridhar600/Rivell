@@ -21,7 +21,7 @@ public record ReviewProfileInput(
 
     public ReviewProfileInput {
         if (contractType == null) {
-            contractType = ContractType.OTHER;
+            throw new IllegalArgumentException("contractType is required");
         }
     }
 

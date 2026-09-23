@@ -16,15 +16,17 @@ public record ContractSemantics(
         UUID organizationId,
         EnrichmentStatus enrichmentStatus,
         String pipelineVersion,
-        ReviewProfile reviewProfile,
-        List<MetadataFact> metadata,
+        ReviewProfile reviewProfile,        List<MetadataFact> metadata,
         List<ContractParty> parties,
         List<DefinedTerm> definedTerms,
         List<ContractReference> references,
         List<ClauseSemantics> clauses,
         List<SemanticRelationship> relationships,
         QualityReasons quality,
-        Observations observations) {
+        Observations observations,
+        List<String> warnings) {
+
+    public static final String PIPELINE_VERSION = "rivell-contract-enrichment-1";
 
     public ContractSemantics {
         Objects.requireNonNull(id, "id");
@@ -42,6 +44,15 @@ public record ContractSemantics(
         clauses = clauses == null ? List.of() : List.copyOf(clauses);
         relationships = relationships == null ? List.of() : List.copyOf(relationships);
         Objects.requireNonNull(quality, "quality");
+        warnings = warnings == null ? List.of() : List.copyOf(warnings);
+    }
+
+    /** The persisted header id is stable per version; children must key to it. */
+    public ContractSemantics withHeaderId(UUID stableId) {
+        return new ContractSemantics(stableId, contractVersionId, organizationId,
+                enrichmentStatus, pipelineVersion, reviewProfile, metadata, parties,
+                definedTerms, references, clauses, relationships, quality, observations,
+                warnings);
     }
 }
 

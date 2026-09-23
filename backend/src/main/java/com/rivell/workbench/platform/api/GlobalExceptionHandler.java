@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.rivell.workbench.contracts.ContractNotFoundException;
 import com.rivell.workbench.contracts.ContractVersionNotFoundException;
+import com.rivell.workbench.contracts.EnrichmentFailedException;
 import com.rivell.workbench.contracts.EnrichmentInProgressException;
 import com.rivell.workbench.contracts.InvalidCorrectionException;
 import com.rivell.workbench.contracts.SemanticsNotFoundException;
@@ -63,7 +64,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({InvalidCandidateReviewStateException.class, InvalidPublicationException.class,
-            EnrichmentInProgressException.class})
+            EnrichmentInProgressException.class, EnrichmentFailedException.class})
     ResponseEntity<ErrorResponse> invalidState(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }

@@ -103,7 +103,8 @@ public final class ContractSemanticEnricher {
             } else if (classification.primaryConcept().isEmpty()) {
                 quality.add(ReviewQualityNote.NO_PRIMARY_CONCEPT);
             }
-            var factOutcome = extractFacts(region, classification, counters, quality);
+            var factOutcome = extractFacts(region, classification, counters, quality,
+                    properties.maxGenerativeExtractions() - counters.generativeUsed);
             clauses.add(new ClauseSemantics(UUID.randomUUID(), versionId,
                     region.headingNodeId(), region.textNodeIds(), region.contentText(),
                     classification, factOutcome.facts(), factOutcome.interpretations(),
@@ -114,6 +115,8 @@ public final class ContractSemanticEnricher {
 
         var relationships = analyzeRelationships(clauses, references, clausesByHeading,
                 counters, quality);
+
+        metadata.addAll(governingLawFallback(metadata, clauses, counters));
 
         composeQuality(quality, definedTerms, references, parties, clauses);
         if (counters.providerDegraded) {
@@ -135,7 +138,9 @@ public final class ContractSemanticEnricher {
         int decisionExecutions;
         int questions;
         int generative;
+        int generativeUsed;
         int deterministicFacts;
+        int verificationExecutions;
         boolean providerDegraded;
         boolean budgetExhausted;
     }
@@ -147,7 +152,8 @@ public final class ContractSemanticEnricher {
     private ConceptOutcome classifyConcepts(ContractRegionSegmenter.Region region)
             throws SemanticDecisionException {
         var execution = decisionService.evaluate(M5SemanticSpecs.clauseConcepts(),
-                new M5SemanticStates.ClauseState(region.headingText(), region.contentText()));
+                new M5SemanticStates.ClauseState(region.headingText(),
+                        sample(region.contentText())));
         var members = new ArrayList<LegalConcept>();
         var probabilities = new LinkedHashMap<LegalConcept, Double>();
         for (var concept : LegalConcept.values()) {
@@ -176,7 +182,7 @@ public final class ContractSemanticEnricher {
         var execution = decisionService.evaluate(
                 M5SemanticSpecs.primaryConcept(members),
                 new M5SemanticStates.PrimaryConceptState(region.headingText(),
-                        region.contentText(), namesOf(members)));
+                        sample(region.contentText()), namesOf(members)));
         counters.decisionExecutions++;
         counters.questions += 1;
         if (!(execution.answers().get("primary_concept") instanceof ChoiceAnswer answer)) {
@@ -196,7 +202,8 @@ public final class ContractSemanticEnricher {
 
     private LegalFactOutcome extractFacts(
             ContractRegionSegmenter.Region region, ConceptClassification classification,
-            ExecutionCounters counters, LinkedHashSet<ReviewQualityNote> quality) {
+            ExecutionCounters counters, LinkedHashSet<ReviewQualityNote> quality,
+            int remainingGenerativeBudget) {
         var facts = new LinkedHashMap<String, LegalFact>();
         var interpretations = new LinkedHashMap<String, Interpretation>();
         for (var concept : classification.concepts()) {
@@ -204,25 +211,36 @@ public final class ContractSemanticEnricher {
                     && concept != LegalConcept.TERM_TERMINATION) {
                 continue;
             }
+            var generativeAllowed = remainingGenerativeBudget > 0;
             var factResult = factExtractor.extract(concept, region.headingText(),
-                    region.contentText(), List.of(region.headingNodeId()));
+                    sample(region.contentText()), List.of(region.headingNodeId()),
+                    generativeAllowed);
             for (var fact : factResult.facts()) {
                 facts.putIfAbsent(fact.factSchema(), fact);
                 counters.deterministicFacts++;
             }
             for (var entry : factResult.interpretations().entrySet()) {
                 interpretations.putIfAbsent(entry.getKey(), entry.getValue());
-                if (entry.getValue().kind() == InterpretationKind.GENERATIVE_EXTRACTION) {
-                    if (entry.getValue().proposedValue().equals("UNAVAILABLE")) {
-                        counters.providerDegraded = true;
-                    } else {
-                        counters.generative++;
-                    }
+                var interpretation = entry.getValue();
+                if (interpretation.kind() == InterpretationKind.GENERATIVE_EXTRACTION
+                        && !"UNAVAILABLE".equals(interpretation.proposedValue())) {
+                    counters.generative++;
+                    counters.generativeUsed++;
+                }
+                if (interpretation.verificationExecutionId() != null) {
+                    counters.verificationExecutions++;
                 }
             }
         }
         return new LegalFactOutcome(List.copyOf(facts.values()),
                 List.copyOf(interpretations.values()));
+    }
+
+    private static final int PROMPT_TEXT_LIMIT = 800;
+
+    private String sample(String text) {
+        return text == null || text.length() <= PROMPT_TEXT_LIMIT ? text
+                : text.substring(0, PROMPT_TEXT_LIMIT);
     }
 
     private record LegalFactOutcome(
@@ -252,7 +270,7 @@ public final class ContractSemanticEnricher {
                                 profile.contractType().name(),
                                 profile.ourSideRole() == null ? null
                                         : profile.ourSideRole().name(),
-                                excerptOf(preambleText, party.rawName())));
+                                sample(excerptOf(preambleText, party.rawName()))));
                 counters.decisionExecutions++;
                 counters.questions += roles.size();
                 var machineRoles = new ArrayList<PartyRole>();
@@ -303,6 +321,21 @@ public final class ContractSemanticEnricher {
             }
             pairs.add(new RegionPair(sourceRegion, targetRegion));
         }
+        // Carve-out cue lane: exception language in a clause narrows its same-concept
+        // neighbor (budget-bounded; deterministic narrowing before any model call).
+        for (int i = 1; i < clauses.size(); i++) {
+            var source = clauses.get(i);
+            if (!hasCarveOutCue(source.contentText())) {
+                continue;
+            }
+            var target = clauses.get(i - 1);
+            var sharedConcept = source.classification().concepts().stream()
+                    .filter(target.classification().concepts()::contains)
+                    .findFirst();
+            if (sharedConcept.isPresent()) {
+                pairs.add(new RegionPair(source.headingNodeId(), target.headingNodeId()));
+            }
+        }
 
         var relationships = new ArrayList<SemanticRelationship>();
         var budget = properties.maxRelationshipPairs();
@@ -321,8 +354,8 @@ public final class ContractSemanticEnricher {
                 var execution = decisionService.evaluate(
                         M5SemanticSpecs.relationships(M5SemanticSpecs.relationshipTypes()),
                         new M5SemanticStates.RelationshipState(
-                                headingOf(sourceClause.get()), sourceClause.get().contentText(),
-                                headingOf(targetClause.get()), targetClause.get().contentText()));
+                                headingOf(sourceClause.get()), sample(sourceClause.get().contentText()),
+                                headingOf(targetClause.get()), sample(targetClause.get().contentText())));
                 counters.decisionExecutions++;
                 counters.questions += M5SemanticSpecs.relationshipTypes().size();
                 for (var type : M5SemanticSpecs.relationshipTypes()) {
@@ -348,6 +381,17 @@ public final class ContractSemanticEnricher {
     private record RegionPair(UUID source, UUID target) {
     }
 
+    private String normalizeTerm(String term) {
+        return term.toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", " ").strip();
+    }
+
+    private boolean hasCarveOutCue(String text) {
+        var lower = text.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("carve") || lower.contains("notwithstanding")
+                || lower.contains("except as") || lower.contains("do not apply")
+                || lower.contains("does not apply");
+    }
+
     private void composeQuality(
             LinkedHashSet<ReviewQualityNote> quality, List<DefinedTerm> definedTerms,
             List<ContractReference> references, List<ContractParty> parties,
@@ -358,7 +402,13 @@ public final class ContractSemanticEnricher {
                 quality.add(ReviewQualityNote.UNRESOLVED_REFERENCES);
             }
         }
+        var definitionTextByTerm = new HashMap<String, String>();
         for (var term : definedTerms) {
+            var key = normalizeTerm(term.term());
+            var prior = definitionTextByTerm.putIfAbsent(key, term.definition());
+            if (prior != null && !prior.equals(term.definition())) {
+                quality.add(ReviewQualityNote.AMBIGUOUS_DEFINITIONS);
+            }
             if (term.duplicate()) {
                 quality.add(ReviewQualityNote.DUPLICATE_DEFINED_TERM);
             }
@@ -379,6 +429,51 @@ public final class ContractSemanticEnricher {
                 quality.add(ReviewQualityNote.UNVERIFIED_FACTS);
             }
         }
+    }
+
+    private List<MetadataFact> governingLawFallback(
+            List<MetadataFact> metadata, List<ClauseSemantics> clauses,
+            ExecutionCounters counters) {
+        var declared = metadata.stream()
+                .anyMatch(fact -> fact.field() == MetadataField.GOVERNING_LAW);
+        if (declared) {
+            return List.of();
+        }
+        for (var clause : clauses) {
+            if (!clause.classification().concepts().contains(LegalConcept.GOVERNING_LAW)) {
+                continue;
+            }
+            try {
+                var execution = decisionService.evaluate(M5SemanticSpecs.governingLaw(),
+                        new M5SemanticStates.ClauseState(headingOf(clause),
+                                sample(clause.contentText())));
+                counters.decisionExecutions++;
+                counters.questions += 1;
+                if (execution.answers().get("governing_law")
+                        instanceof com.rivell.workbench.intelligence.ChoiceAnswer answer
+                        && answer.probabilities().getOrDefault(answer.selected(), 0.0)
+                                >= properties.conceptThreshold()
+                        && !"UNSPECIFIED".equals(answer.selected())) {
+                    return List.of(new MetadataFact(UUID.randomUUID(),
+                            clause.contractVersionId(), MetadataField.GOVERNING_LAW,
+                            answer.selected(),
+                            new Interpretation("governingLaw",
+                                    InterpretationKind.BOUNDED_CLASSIFICATION,
+                                    answer.selected(),
+                                    M5SemanticSpecs.GOVERNING_LAW_SPEC,
+                                    M5SemanticSpecs.governingLaw().version(),
+                                    execution.metadata().executionId(),
+                                    List.of(clause.headingNodeId()),
+                                    VerificationState.NOT_VERIFIED, null),
+                            null, null));
+                }
+                return List.of();
+            } catch (SemanticDecisionException e) {
+                counters.providerDegraded = true;
+                return List.of();
+            }
+        }
+        return List.of();
     }
 
     private MetadataFact contractTypeFact(UUID versionId, ReviewProfile profile) {

@@ -1,7 +1,6 @@
 package com.rivell.workbench.knowledge;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 import com.rivell.workbench.intelligence.SemanticDecisionException;
@@ -75,14 +74,8 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
                 .filter(published0 -> compatiblePaperSource(published0, candidate))
                 .filter(published0 -> compatibleJurisdiction(published0, candidate))
                 .filter(published0 -> effectivePeriodsOverlap(published0, candidate))
-                .sorted(Comparator.comparing(KnowledgeCandidate::createdAt)
-                        .thenComparing(candidateId()))
                 .limit(MAX_PEERS)
                 .toList();
-    }
-
-    private Comparator<KnowledgeCandidate> candidateId() {
-        return Comparator.comparing(candidate -> candidate.id().toString());
     }
 
     private boolean isExactDuplicate(KnowledgeCandidate candidate, KnowledgeCandidate peer) {

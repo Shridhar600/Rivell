@@ -2,6 +2,7 @@ package com.rivell.workbench.contracts;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -26,6 +27,10 @@ public final class ContractRegionSegmenter {
 
     public List<Region> segment(List<DocumentNode> nodes) {
         var bodyId = bodyIdOf(nodes);
+        var byId = new java.util.HashMap<UUID, DocumentNode>();
+        for (var node : nodes) {
+            byId.put(node.id(), node);
+        }
         var top = nodes.stream()
                 .filter(node -> node.nodeType() != DocumentNodeType.BODY)
                 .filter(node -> node.parentId() != null && node.parentId().equals(bodyId))
@@ -69,13 +74,22 @@ public final class ContractRegionSegmenter {
                         preambleTexts.add(node.text() == null ? "" : node.text());
                     }
                 }
-                case TABLE, TABLE_ROW, TABLE_CELL -> {
+                case TABLE -> {
+                    var tableText = tableText(node, byId);
                     if (currentHeading != null) {
                         currentTexts.add(node.id());
+                        if (currentText.length() > 0) {
+                            currentText.append('\n');
+                        }
+                        if (!tableText.isBlank()) {
+                            currentText.append(tableText.strip());
+                        }
                     } else {
                         preambleNodes.add(node.id());
+                        preambleTexts.add(tableText);
                     }
                 }
+                case TABLE_ROW, TABLE_CELL -> { /* reached via their TABLE ancestor */ }
                 default -> { /* unsupported structures produce parser warnings upstream */ }
             }
         }
@@ -90,6 +104,25 @@ public final class ContractRegionSegmenter {
                             .toList())));
         }
         return regions;
+    }
+
+    private String tableText(DocumentNode table, Map<UUID, DocumentNode> byId) {
+        var text = new StringBuilder();
+        for (var node : byId.values()) {
+            if (node.nodeType() == DocumentNodeType.TABLE_CELL
+                    && node.parentId() != null
+                    && byId.containsKey(node.parentId())
+                    && byId.get(node.parentId()).parentId() != null
+                    && byId.get(node.parentId()).parentId().equals(table.id())) {
+                if (node.text() != null && !node.text().isBlank()) {
+                    if (text.length() > 0) {
+                        text.append('\n');
+                    }
+                    text.append(node.text().strip());
+                }
+            }
+        }
+        return text.toString();
     }
 
     private void closeCurrent(

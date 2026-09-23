@@ -170,7 +170,10 @@ class ContractSemanticsController {
                                 reference.candidateNodeIds().size())).toList(),
                 semantics.clauses().stream().map(this::toClauseView).toList(),
                 semantics.relationships().stream().map(this::toRelationshipView).toList(),
-                semantics.quality().notes().stream().map(Enum::name).toList(),
+                semantics.quality().notes().stream()
+                        .filter(note -> note != com.rivell.workbench.contracts.ReviewQualityNote.NONE)
+                        .map(Enum::name)
+                        .toList(),
                 semantics.observations() == null ? null : new SemanticContractResponse.ObservationsView(
                         semantics.observations().regionCount(),
                         semantics.observations().decisionExecutionCount(),
@@ -214,6 +217,10 @@ class ContractSemanticsController {
                 correction != null && correction.corrected() && correction.primaryConcept() != null
                         ? correction.primaryConcept() : null,
                 clause.facts().stream()
+                        .map(fact -> new SemanticContractResponse.FactView(
+                                fact.factSchema(), fact.schemaVersion(), fact.values()))
+                        .toList(),
+                clause.effectiveFacts().stream()
                         .map(fact -> new SemanticContractResponse.FactView(
                                 fact.factSchema(), fact.schemaVersion(), fact.values()))
                         .toList(),

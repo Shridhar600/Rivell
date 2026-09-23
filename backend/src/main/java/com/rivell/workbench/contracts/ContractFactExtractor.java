@@ -38,15 +38,18 @@ public final class ContractFactExtractor {
     }
 
     public FactResult extract(LegalConcept concept, String heading, String text,
-            List<UUID> provenance) {
+            List<UUID> provenance, boolean generativeAllowed) {
         return switch (concept) {
-            case LIMITATION_OF_LIABILITY -> liabilityFacts(heading, text, provenance);
-            case TERM_TERMINATION -> terminationFacts(heading, text, provenance);
+            case LIMITATION_OF_LIABILITY -> liabilityFacts(heading, text, provenance,
+                    generativeAllowed);
+            case TERM_TERMINATION -> terminationFacts(heading, text, provenance,
+                    generativeAllowed);
             default -> new FactResult(List.of(), Map.of());
         };
     }
 
-    private FactResult liabilityFacts(String heading, String text, List<UUID> provenance) {
+    private FactResult liabilityFacts(
+            String heading, String text, List<UUID> provenance, boolean generativeAllowed) {
         var values = new LinkedHashMap<String, String>();
         var interpretations = new LinkedHashMap<String, Interpretation>();
 
@@ -55,7 +58,7 @@ public final class ContractFactExtractor {
             values.put("liabilityCapMultiple", cap.get());
             interpretations.put("liabilityCapMultiple", Interpretation.deterministic(
                     "liabilityCapMultiple", cap.get(), provenance));
-        } else {
+        } else if (generativeAllowed) {
             var extracted = generativeCap(heading, text, provenance);
             extracted.interpretations().forEach(interpretations::putIfAbsent);
             if (verificationUsable(extracted)) {
@@ -100,7 +103,8 @@ public final class ContractFactExtractor {
         return new FactResult(List.of(fact), interpretations);
     }
 
-    private FactResult terminationFacts(String heading, String text, List<UUID> provenance) {
+    private FactResult terminationFacts(
+            String heading, String text, List<UUID> provenance, boolean generativeAllowed) {
         var values = new LinkedHashMap<String, String>();
         var interpretations = new LinkedHashMap<String, Interpretation>();
 
@@ -112,7 +116,7 @@ public final class ContractFactExtractor {
             values.put("noticePeriodDays", notice.get());
             interpretations.put("noticePeriodDays", Interpretation.deterministic(
                     "noticePeriodDays", notice.get(), provenance));
-        } else {
+        } else if (generativeAllowed) {
             var extracted = generativeNoticeDays(heading, text, provenance);
             extracted.interpretations().forEach(interpretations::putIfAbsent);
             if (verificationUsable(extracted)) {
@@ -200,11 +204,18 @@ public final class ContractFactExtractor {
      * is used only when verification confirms it; otherwise the interpretation
      * records the proposal honestly (UNCERTAIN/DISPUTED) without an effective value.
      */
+    private static final int PROMPT_TEXT_LIMIT = 800;
+
+    private String sample(String text) {
+        return text == null || text.length() <= PROMPT_TEXT_LIMIT ? text
+                : text.substring(0, PROMPT_TEXT_LIMIT);
+    }
+
     private Extracted generativeCap(String heading, String text, List<UUID> provenance) {
         try {
             var execution = reasoningService.generate(
                     M5ReasoningSpecs.liabilityCap(),
-                    new M5SemanticStates.ClauseState(heading, text));
+                    new M5SemanticStates.ClauseState(heading, sample(text)));
             var multiple = execution.fields().get("liabilityCapMultiple");
             var basis = execution.fields().get("capBasis");
             new LegalFact(FactSchema.LIABILITY_FACTS.id(),
@@ -228,7 +239,7 @@ public final class ContractFactExtractor {
                     : Map.<String, String>of();
             return new Extracted(values,
                     Map.of("liabilityCapMultiple", interpretation));
-        } catch (SemanticDecisionException e) {
+        } catch (SemanticDecisionException | IllegalArgumentException e) {
             var interpretation = new Interpretation(
                     "liabilityCapMultiple", InterpretationKind.GENERATIVE_EXTRACTION,
                     "UNAVAILABLE", M5ReasoningSpecs.LIABILITY_CAP_SPEC,
@@ -242,7 +253,7 @@ public final class ContractFactExtractor {
         try {
             var execution = reasoningService.generate(
                     M5ReasoningSpecs.terminationNotice(),
-                    new M5SemanticStates.ClauseState(heading, text));
+                    new M5SemanticStates.ClauseState(heading, sample(text)));
             var days = execution.fields().get("noticePeriodDays");
             new LegalFact(FactSchema.TERMINATION_FACTS.id(),
                     FactSchema.TERMINATION_FACTS.version(),
@@ -262,7 +273,7 @@ public final class ContractFactExtractor {
                     ? new LinkedHashMap<String, String>(Map.of("noticePeriodDays", days))
                     : Map.<String, String>of();
             return new Extracted(values, Map.of("noticePeriodDays", interpretation));
-        } catch (SemanticDecisionException e) {
+        } catch (SemanticDecisionException | IllegalArgumentException e) {
             var interpretation = new Interpretation(
                     "noticePeriodDays", InterpretationKind.GENERATIVE_EXTRACTION,
                     "UNAVAILABLE", M5ReasoningSpecs.TERMINATION_NOTICE_SPEC,

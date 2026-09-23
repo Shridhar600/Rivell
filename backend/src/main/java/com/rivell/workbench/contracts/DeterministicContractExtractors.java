@@ -26,7 +26,8 @@ public final class DeterministicContractExtractors {
     private static final String ENTITY_SUFFIX = "Inc|LLC|Ltd|GmbH|Corp|Corporation|Company|Limited";
     private static final Pattern CAPITALIZED_RUN = Pattern.compile(
             "([A-Z][A-Za-z0-9&.,'’\\-]*(?:[ ]+[A-Z][A-Za-z0-9&.,'’\\-]*)*)");
-    private static final Pattern ROLE_LABEL_PATTERN = Pattern.compile("\\(\\s*\"([^\"]{2,60})\"\\s*\\)");
+    private static final Pattern ROLE_LABEL_PATTERN = Pattern.compile(
+            "\\(\\s*(?:the\\s+)?\"([^\"]{2,60})\"\\s*\\)");
     private static final Pattern REFERENCE_PATTERN = Pattern.compile(
             "\\b(Sections?|Clauses?|Articles?|Schedules?|Exhibits?|Annex(?:es)?)\\s+"
                     + "([0-9]+(?:\\.[0-9]+)*|[A-Z0-9]+)");
@@ -182,7 +183,10 @@ public final class DeterministicContractExtractors {
             var name = entityMatcher.group(1).strip()
                     .replaceAll("[,;:]+$", "")
                     .strip();
-            if (endsWithSuffix(name) && seen.add(normalize(name))) {
+            if (!isLikelyEntityName(name) || precededByArticle(text, entityMatcher.start())) {
+                continue;
+            }
+            if (seen.add(normalize(name))) {
                 entities.add(new MatchedEntity(entityMatcher.start(), name));
             }
         }
@@ -207,6 +211,37 @@ public final class DeterministicContractExtractors {
             }
         }
 
+        var aliasesByEntity = new HashMap<MatchedEntity, List<String>>();
+        var aliasMatcher = Pattern.compile(
+                "(?:may(?: each)? be referred to as|referred to as) (?:a |an )?\"([^\"]{2,40})\"")
+                .matcher(text);
+        while (aliasMatcher.find()) {
+            var alias = aliasMatcher.group(1).strip();
+            if (alias.matches("(?i)part(y|ies)")) {
+                continue;
+            }
+            MatchedEntity owner = null;
+            var ownerIndex = -1;
+            for (var entity : entities) {
+                var lastIndex = text.lastIndexOf(entity.name(), aliasMatcher.start());
+                if (lastIndex >= 0 && lastIndex > ownerIndex) {
+                    ownerIndex = lastIndex;
+                    owner = entity;
+                }
+            }
+            if (owner == null) {
+                for (var entity : entities) {
+                    if (entity.start() < aliasMatcher.start()) {
+                        owner = entity;
+                    }
+                }
+            }
+            if (owner != null) {
+                aliasesByEntity.computeIfAbsent(owner, ignored -> new ArrayList<>())
+                        .add(alias);
+            }
+        }
+
         var parties = new ArrayList<ContractParty>();
         var docOrder = new int[] {0};
         for (var entity : entities) {
@@ -220,7 +255,7 @@ public final class DeterministicContractExtractors {
             var machineRole = declared.orElseGet(() -> order == 0
                     ? PartyRole.PARTY_A : PartyRole.PARTY_B);
             parties.add(new ContractParty(UUID.randomUUID(), versionId, entity.name(),
-                    normalize(entity.name()), List.of(),
+                    normalize(entity.name()), aliasesByEntity.getOrDefault(entity, List.of()),
                     List.of(Interpretation.deterministic("roles",
                             machineRole.name(), List.of(nodeId))),
                     List.of(machineRole), PartyCorrection.NONE, null));
@@ -228,8 +263,24 @@ public final class DeterministicContractExtractors {
         return parties;
     }
 
-    private boolean endsWithSuffix(String name) {
-        return name.matches(".*\\b(?:" + ENTITY_SUFFIX + ")\\.?$");
+    private boolean precededByArticle(String text, int start) {
+        if (start == 0) {
+            return false;
+        }
+        var before = text.substring(Math.max(0, start - 4), start)
+                .toLowerCase(java.util.Locale.ROOT);
+        return before.matches(".*\\b(a|an|the)\\s?");
+    }
+
+    private boolean isLikelyEntityName(String name) {
+        if (!name.matches(".*\\b(?:" + ENTITY_SUFFIX + ")\\.?$")) {
+            return false;
+        }
+        var suffixWord = name.substring(name.lastIndexOf(' ') + 1);
+        if (name.equals(suffixWord)) {
+            return false;
+        }
+        return name.indexOf(' ') > 0;
     }
 
     private List<UUID> candidatesFor(

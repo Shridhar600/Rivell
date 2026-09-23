@@ -15,11 +15,12 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
 
 /**
- * M5 enrichment lifecycle: org-scoped trigger, staging transaction (ENRICHING),
- * semantic stages with no open transaction, outcome transaction (READY/FAILED).
- * Code owns all transitions; model calls never own control flow. Re-enrichment
- * replaces the machine layer and re-applies stored human corrections by stable
- * keys (party normalized name, clause heading node id, metadata field).
+ * M5 enrichment lifecycle: org-scoped trigger, atomic ENRICHING claim, semantic
+ * stages with no open transaction, outcome transaction (READY/FAILED). Code owns
+ * all transitions; model calls never own control flow. Re-enrichment replaces the
+ * machine layer and re-applies stored human corrections by stable keys (party
+ * normalized name, clause heading node id, metadata field) — corrections are read
+ * BEFORE any write so no run can lose them.
  */
 public class ContractEnrichmentService {
 
@@ -52,38 +53,31 @@ public class ContractEnrichmentService {
         requireEnrichPermission();
         var summary = queryService.getVersionSummary(contractId, versionNumber);
         var organizationId = currentOrganizationId();
+        var versionId = summary.versionId();
 
-        var existingStatus = semanticsRepository.findStatus(summary.versionId(), organizationId);
-        if (existingStatus.isPresent() && existingStatus.get() == EnrichmentStatus.ENRICHING) {
+        var prior = semanticsRepository.find(versionId, organizationId);
+        if (!semanticsRepository.beginEnrichment(versionId, organizationId, profile)) {
             throw new EnrichmentInProgressException(contractId, versionNumber);
         }
 
-        var stagedId = UUID.randomUUID();
-        transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(
-                new ContractSemantics(stagedId, summary.versionId(), organizationId,
-                        EnrichmentStatus.ENRICHING, "rivell-contract-enrichment-1", profile,
-                        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                        QualityReasons.NONE, null)));
-
         try {
-            var structure = contractRepository.loadStructure(summary.versionId());
+            var structure = contractRepository.loadStructure(versionId);
             if (structure.nodes().isEmpty()) {
                 throw new IllegalStateException("Contract version has no parsed structure");
             }
             var result = enricher.enrich(structure.nodes(), profile, structure.parseWarnings());
-            var merged = mergeCorrections(summary.versionId(), organizationId, stagedId, result);
-            transactionTemplate.executeWithoutResult(status ->
-                    semanticsRepository.replaceSemantics(ready(merged, summary.versionId(),
-                            organizationId, profile)));
+            var merged = mergeCorrections(prior, result);
+            transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(
+                    ready(merged, versionId, organizationId, profile)));
             return getSemantics(contractId, versionNumber);
         } catch (RuntimeException e) {
-            persistFailed(stagedId, summary.versionId(), organizationId, profile);
+            persistFailed(versionId, organizationId, profile, e);
             throw e;
         }
     }
 
     public ContractSemantics getSemantics(UUID contractId, int versionNumber) {
-        requireEnrichPermission();
+        requireReadPermission();
         var summary = queryService.getVersionSummary(contractId, versionNumber);
         return semanticsRepository
                 .find(summary.versionId(), currentOrganizationId())
@@ -99,9 +93,13 @@ public class ContractEnrichmentService {
         if (semantics.parties().stream().noneMatch(party -> party.id().equals(partyId))) {
             throw new SemanticsNotFoundException(contractId, versionNumber);
         }
-        transactionTemplate.executeWithoutResult(status ->
-                semanticsRepository.updatePartyCorrection(partyId, organizationId,
-                        PartyCorrection.of(roles), currentIdentityId()));
+        transactionTemplate.executeWithoutResult(status -> {
+            var updated = semanticsRepository.updatePartyCorrection(partyId, organizationId,
+                    PartyCorrection.of(roles), currentIdentityId());
+            if (!updated) {
+                throw new SemanticsNotFoundException(contractId, versionNumber);
+            }
+        });
         return getSemantics(contractId, versionNumber);
     }
 
@@ -116,9 +114,13 @@ public class ContractEnrichmentService {
                 .findFirst()
                 .orElseThrow(() -> new SemanticsNotFoundException(contractId, versionNumber));
         validateCorrection(clause, correction);
-        transactionTemplate.executeWithoutResult(status ->
-                semanticsRepository.updateClauseCorrection(clauseId, organizationId,
-                        correction, currentIdentityId()));
+        transactionTemplate.executeWithoutResult(status -> {
+            var updated = semanticsRepository.updateClauseCorrection(clauseId, organizationId,
+                    correction, currentIdentityId());
+            if (!updated) {
+                throw new SemanticsNotFoundException(contractId, versionNumber);
+            }
+        });
         return getSemantics(contractId, versionNumber);
     }
 
@@ -126,10 +128,10 @@ public class ContractEnrichmentService {
             MergedResult merged, UUID versionId, UUID organizationId, ReviewProfile profile) {
         return new ContractSemantics(
                 merged.id(), versionId, organizationId, EnrichmentStatus.READY,
-                "rivell-contract-enrichment-1", profile,
+                ContractSemantics.PIPELINE_VERSION, profile,
                 merged.metadata(), merged.parties(), merged.definedTerms(),
                 merged.references(), merged.clauses(), merged.relationships(),
-                merged.quality(), merged.observations());
+                merged.quality(), merged.observations(), List.of());
     }
 
     private record MergedResult(
@@ -145,11 +147,10 @@ public class ContractEnrichmentService {
     }
 
     private MergedResult mergeCorrections(
-            UUID versionId, UUID organizationId, UUID stagedId,
+            java.util.Optional<ContractSemantics> prior,
             ContractSemanticEnricher.Result result) {
-        var prior = semanticsRepository.find(versionId, organizationId);
         if (prior.isEmpty()) {
-            return new MergedResult(stagedId, result.metadata(), result.parties(),
+            return new MergedResult(UUID.randomUUID(), result.metadata(), result.parties(),
                     result.definedTerms(), result.references(), result.clauses(),
                     result.relationships(), result.quality(), result.observations());
         }
@@ -195,21 +196,25 @@ public class ContractEnrichmentService {
                 })
                 .toList();
 
-        var correctionsByField = new HashMap<MetadataField, String>();
+        var correctionsByField = new LinkedHashMap<MetadataField, MetadataFact>();
         for (var fact : existing.metadata()) {
             if (fact.corrected()) {
-                correctionsByField.put(fact.field(), fact.correctedValue());
+                correctionsByField.put(fact.field(), fact);
             }
         }
         var mergedMetadata = result.metadata().stream()
-                .map(fact -> correctionsByField.containsKey(fact.field())
-                        ? new MetadataFact(fact.id(), versionId, fact.field(), fact.value(),
-                                fact.interpretation(), correctionsByField.get(fact.field()),
-                                null)
-                        : fact)
+                .map(fact -> {
+                    var corrected = correctionsByField.get(fact.field());
+                    if (corrected == null) {
+                        return fact;
+                    }
+                    return new MetadataFact(fact.id(), fact.contractVersionId(), fact.field(),
+                            fact.value(), fact.interpretation(), corrected.correctedValue(),
+                            corrected.correctedBy());
+                })
                 .toList();
 
-        return new MergedResult(stagedId, mergedMetadata, mergedParties,
+        return new MergedResult(existing.id(), mergedMetadata, mergedParties,
                 result.definedTerms(), result.references(), mergedClauses,
                 result.relationships(), result.quality(), result.observations());
     }
@@ -241,17 +246,16 @@ public class ContractEnrichmentService {
             } catch (IllegalArgumentException e) {
                 throw new InvalidCorrectionException(clause.id(), "Unknown concept");
             }
-            if (!clause.classification().concepts().contains(concept)) {
-                throw new InvalidCorrectionException(clause.id(),
-                        "Corrected concept must be one of the classified concepts");
-            }
         }
         if (correction.factValues() != null && !correction.factValues().isEmpty()) {
-            if (clause.facts().isEmpty()) {
-                throw new InvalidCorrectionException(clause.id(),
-                        "The clause carries no typed facts to correct");
-            }
-            var schemaId = clause.facts().get(0).factSchema();
+            var schemaId = clause.facts().stream()
+                    .map(LegalFact::factSchema)
+                    .filter(schema -> correction.factValues().keySet().stream()
+                            .anyMatch(field -> FactSchema.byId(schema).fields().contains(field)))
+                    .findFirst()
+                    .orElseThrow(() -> new InvalidCorrectionException(clause.id(),
+                            "Corrected fields do not belong to the clause's fact schemas"));
+            var schema = FactSchema.byId(schemaId);
             var merged = new LinkedHashMap<String, String>();
             for (var fact : clause.facts()) {
                 if (fact.factSchema().equals(schemaId)) {
@@ -259,7 +263,7 @@ public class ContractEnrichmentService {
                 }
             }
             merged.putAll(correction.factValues());
-            new LegalFact(schemaId, 1, merged);
+            new LegalFact(schemaId, schema.version(), merged);
         }
     }
 
@@ -267,25 +271,40 @@ public class ContractEnrichmentService {
             UUID contractId, int versionNumber) {
         var semantics = semanticsRepository.find(versionId, organizationId)
                 .orElseThrow(() -> new SemanticsNotFoundException(contractId, versionNumber));
-        if (semantics.enrichmentStatus() != EnrichmentStatus.READY) {
+        if (semantics.enrichmentStatus() == EnrichmentStatus.ENRICHING) {
             throw new EnrichmentInProgressException(contractId, versionNumber);
+        }
+        if (semantics.enrichmentStatus() == EnrichmentStatus.FAILED) {
+            throw new EnrichmentFailedException(contractId, versionNumber);
         }
         return semantics;
     }
 
     private void persistFailed(
-            UUID semanticsId, UUID versionId, UUID organizationId, ReviewProfile profile) {
-        transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(
-                new ContractSemantics(semanticsId, versionId, organizationId,
-                        EnrichmentStatus.FAILED, "rivell-contract-enrichment-1", profile,
-                        List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                        QualityReasons.of(List.of(ReviewQualityNote.PROVIDER_DEGRADATION)),
-                        null)));
+            UUID versionId, UUID organizationId, ReviewProfile profile, RuntimeException cause) {
+        var reason = List.of("Enrichment failed (" + cause.getClass().getSimpleName() + ")");
+        transactionTemplate.executeWithoutResult(status -> {
+            var existing = semanticsRepository.find(versionId, organizationId);
+            var semanticsId = existing.map(ContractSemantics::id).orElseGet(UUID::randomUUID);
+            semanticsRepository.replaceSemantics(new ContractSemantics(
+                    semanticsId, versionId, organizationId, EnrichmentStatus.FAILED,
+                    ContractSemantics.PIPELINE_VERSION, profile,
+                    List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                    QualityReasons.of(List.of(ReviewQualityNote.PROVIDER_DEGRADATION)),
+                    null, reason));
+        });
     }
 
     private void requireEnrichPermission() {
         var identity = identityProvider.currentIdentity();
         if (!authorizationService.isAuthorized(identity, Permissions.CONTRACT_ENRICH)) {
+            throw new UnauthorizedContractAccessException(identity.userId());
+        }
+    }
+
+    private void requireReadPermission() {
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.CONTRACT_READ)) {
             throw new UnauthorizedContractAccessException(identity.userId());
         }
     }

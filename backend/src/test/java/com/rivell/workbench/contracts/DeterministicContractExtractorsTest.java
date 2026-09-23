@@ -165,6 +165,71 @@ class DeterministicContractExtractorsTest {
     }
 
     @Test
+    void theRoleConventionIsRecognizedAndDescriptionsAreNotParties() {
+        var nodes = List.of(
+                bodyNode(),
+                paragraph("This Agreement is entered into by and between ACME Inc, "
+                        + "a Delaware Corporation (the \"Disclosing Party\"), and Beta LLC "
+                        + "(the \"Receiving Party\").", 1));
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var parties = new DeterministicContractExtractors().parties(VERSION_ID, regions, nodes);
+
+        assertThat(parties).hasSize(2);
+        assertThat(parties.get(0).rawName()).isEqualTo("ACME Inc");
+        assertThat(parties.get(0).machineRoles()).containsExactly(PartyRole.DISCLOSING_PARTY);
+        assertThat(parties.get(1).rawName()).isEqualTo("Beta LLC");
+        assertThat(parties.get(1).machineRoles()).containsExactly(PartyRole.RECEIVING_PARTY);
+    }
+
+    @Test
+    void partyAliasesFromReferredToAsPhrasesAreCaptured() {
+        var nodes = List.of(
+                bodyNode(),
+                paragraph("This Agreement is entered into by and between Helios Systems Inc. "
+                        + "(\"Disclosing Party\") and Vertex Analytics Ltd. "
+                        + "(\"Receiving Party\"). Helios Systems Inc. may be referred to as "
+                        + "\"Helios\".", 1));
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var parties = new DeterministicContractExtractors().parties(VERSION_ID, regions, nodes);
+
+        var helios = parties.stream()
+                .filter(party -> party.rawName().startsWith("Helios"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(helios.aliases()).contains("Helios");
+    }
+
+    @Test
+    void scheduleTableTextReachesRegionContent() {
+        var table = new java.util.ArrayList<DocumentNode>();
+        var tableId = UUID.randomUUID();
+        table.add(new DocumentNode(tableId, VERSION_ID, BODY_ID, DocumentNodeType.TABLE, 2,
+                null, null, null, SourceSpan.ofTable("word/document.xml", 3, 0), null));
+        table.add(new DocumentNode(UUID.randomUUID(), VERSION_ID, tableId,
+                DocumentNodeType.TABLE_ROW, 0, null, null, null,
+                SourceSpan.ofRow("word/document.xml", 3, 0, 0), null));
+        var cell = new DocumentNode(UUID.randomUUID(), VERSION_ID, table.get(1).id(),
+                DocumentNodeType.TABLE_CELL, 0, "24x7 managed hosting for the platform",
+                null, null,
+                SourceSpan.ofCell("word/document.xml", 3, 0, 0, 0), null);
+        table.add(new DocumentNode(table.get(1).id(), VERSION_ID, tableId,
+                DocumentNodeType.TABLE_ROW, 0, null, null, null,
+                SourceSpan.ofRow("word/document.xml", 3, 0, 0), null));
+        table.add(cell);
+        var nodes = List.of(
+                bodyNode(),
+                heading("Schedule A — Services", "8", 2),
+                table.get(0), table.get(1), cell);
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var regionsList = regions;
+        assertThat(regionsList).hasSize(1);
+        assertThat(regionsList.get(0).contentText()).contains("managed hosting");
+    }
+
+    @Test
     void brokenSectionReferenceStaysBroken() {
         var nodes = List.of(
                 bodyNode(),

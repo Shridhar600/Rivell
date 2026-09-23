@@ -70,7 +70,9 @@ public class ContractEnrichmentIT {
         @Bean
         @Primary
         ModelPolicy fakeModelPolicy() {
-            return asset -> new ModelBinding("fake", "fake-model-latest");
+            return asset -> asset instanceof com.rivell.workbench.intelligence.ReasoningSpec
+                    ? new ModelBinding("fake", "fake-gen-model")
+                    : new ModelBinding("fake", "fake-model-latest");
         }
 
         @Bean
