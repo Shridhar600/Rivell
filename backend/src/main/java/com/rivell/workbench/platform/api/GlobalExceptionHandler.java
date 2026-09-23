@@ -11,6 +11,9 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.rivell.workbench.contracts.ContractNotFoundException;
 import com.rivell.workbench.contracts.ContractVersionNotFoundException;
+import com.rivell.workbench.contracts.EnrichmentInProgressException;
+import com.rivell.workbench.contracts.InvalidCorrectionException;
+import com.rivell.workbench.contracts.SemanticsNotFoundException;
 import com.rivell.workbench.contracts.UnauthorizedContractAccessException;
 import com.rivell.workbench.contracts.UploadLimitExceededException;
 import com.rivell.workbench.knowledge.ConceptClassificationUnavailableException;
@@ -40,7 +43,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({ContractNotFoundException.class, ContractVersionNotFoundException.class,
             KnowledgeArtifactNotFoundException.class, KnowledgeCandidateNotFoundException.class,
-            KnowledgeUnitNotFoundException.class,
+            KnowledgeUnitNotFoundException.class, SemanticsNotFoundException.class,
             NoSuchElementException.class})
     ResponseEntity<ErrorResponse> notFound(RuntimeException e) {
         return error(HttpStatus.NOT_FOUND, "404", "Not found",
@@ -59,9 +62,15 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.FORBIDDEN, "403", "Forbidden", "Not authorized for this operation.");
     }
 
-    @ExceptionHandler({InvalidCandidateReviewStateException.class, InvalidPublicationException.class})
+    @ExceptionHandler({InvalidCandidateReviewStateException.class, InvalidPublicationException.class,
+            EnrichmentInProgressException.class})
     ResponseEntity<ErrorResponse> invalidState(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
+    }
+
+    @ExceptionHandler(InvalidCorrectionException.class)
+    ResponseEntity<ErrorResponse> invalidCorrection(RuntimeException e) {
+        return error(HttpStatus.BAD_REQUEST, "400", "Invalid correction", e.getMessage());
     }
 
     @ExceptionHandler(IOException.class)

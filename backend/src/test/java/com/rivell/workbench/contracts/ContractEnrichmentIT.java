@@ -43,7 +43,7 @@ import com.rivell.workbench.organization.UserIdentity;
 
 @SpringBootTest
 @Testcontainers
-class ContractEnrichmentIT {
+public class ContractEnrichmentIT {
 
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName
             .parse("pgvector/pgvector:0.8.6-pg17-trixie")
@@ -86,7 +86,7 @@ class ContractEnrichmentIT {
         }
     }
 
-    static final class M5FakeGenerativeProvider implements GenerativeReasoningProvider {
+    public static final class M5FakeGenerativeProvider implements GenerativeReasoningProvider {
 
         @Override
         public String id() {
@@ -141,7 +141,7 @@ class ContractEnrichmentIT {
      * Deterministic cue-based answers: every judgment follows the source text so the
      * fake behaves like expected labels without inventing fixture-specific magic.
      */
-    static final class CueScriptedProvider implements SemanticDecisionProvider {
+    public static final class CueScriptedProvider implements SemanticDecisionProvider {
 
         @Override
         public String id() {
@@ -282,20 +282,20 @@ class ContractEnrichmentIT {
         }
     }
 
-    static final class MutableIdentity implements IdentityProvider {
+    public static final class MutableIdentity implements IdentityProvider {
 
         private volatile UserIdentity current = new UserIdentity(
                 ORG_A, ORG_A, java.util.Set.of("ADMIN"));
 
-        MutableIdentity() {
+        public MutableIdentity() {
         }
 
-        void switchTo(UUID organizationId) {
+        public void switchTo(UUID organizationId) {
             current = new UserIdentity(current.userId(), organizationId,
                     java.util.Set.of("ADMIN"));
         }
 
-        void reset() {
+        public void reset() {
             current = new UserIdentity(current.userId(), ORG_A, java.util.Set.of("ADMIN"));
         }
 
