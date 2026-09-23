@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentStructureParser;
+import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.knowledge.IngestStatus;
 import com.rivell.workbench.knowledge.KnowledgeNodeType;
 import com.rivell.workbench.knowledge.KnowledgeSourceNode;
@@ -40,7 +41,10 @@ public class DocxKnowledgeExtractor implements KnowledgeStructureExtractor {
         var nodes = result.nodes().stream()
                 .map(node -> toKnowledgeNode(artifactId, node))
                 .toList();
-        return new StructureExtraction(result.parserVersion(), IngestStatus.EXTRACTED, result.warnings(), nodes);
+        var status = result.status() == ParseStatus.FAILED
+                ? IngestStatus.FAILED
+                : IngestStatus.EXTRACTED;
+        return new StructureExtraction(result.parserVersion(), status, result.warnings(), nodes);
     }
 
     private static KnowledgeSourceNode toKnowledgeNode(UUID artifactId, DocumentNode node) {

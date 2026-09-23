@@ -205,6 +205,23 @@ class KnowledgeIngestionIT {
     }
 
     @Test
+    void persistsFailedIngestStatusForInvalidDocxBytes() throws Exception {
+        var artifact = ingest("fixtures/invalid-bytes.docx", "broken.docx",
+                ArtifactType.PLAYBOOK, null);
+
+        assertThat(artifact.ingestStatus()).isEqualTo(IngestStatus.FAILED);
+        assertThat(artifact.parserVersion()).isEqualTo("rivell-docx-parser-2");
+        assertThat(artifact.parseWarnings()).isNotEmpty();
+        assertThat(queryService.getUnits(artifact.id())).isEmpty();
+        assertThat(queryService.getCandidates(artifact.id())).isEmpty();
+        assertThat(queryService.getStructure(artifact.id())).isEmpty();
+
+        var status = jdbcClient.sql("select ingest_status from knowledge_artifact where id = :id")
+                .param("id", artifact.id()).query(String.class).single();
+        assertThat(status).isEqualTo("FAILED");
+    }
+
+    @Test
     void storesExactOriginalBytes() throws Exception {
         byte[] original;
         try (InputStream stream = getClass().getClassLoader()

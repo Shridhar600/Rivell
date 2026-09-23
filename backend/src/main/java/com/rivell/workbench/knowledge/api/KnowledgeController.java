@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -39,6 +41,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 
 /**
@@ -75,17 +78,15 @@ class KnowledgeController {
     }
 
     @Operation(summary = "Upload a legal knowledge source with its human-declared manifest")
+    @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "200", description = "Processed; inspect ingestStatus for the outcome",
-                    content = @Content(schema = @Schema(implementation = KnowledgeArtifactDetailResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            @ApiResponse(
                     responseCode = "400", description = "Invalid upload or manifest",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            @ApiResponse(
                     responseCode = "413", description = "Upload exceeds the configured size limit",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            @ApiResponse(
                     responseCode = "415", description = "Unsupported knowledge source type",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
@@ -131,12 +132,18 @@ class KnowledgeController {
     }
 
     @Operation(summary = "Get a knowledge artifact with its manifest and ingestion state")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
     @GetMapping("/artifacts/{id}")
     ApiResult<KnowledgeArtifactDetailResponse> getArtifact(@PathVariable UUID id) {
         return ApiResult.ok(toDetail(queryService.getArtifact(id)));
     }
 
     @Operation(summary = "Get the deterministic structural parse of a knowledge source")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
     @GetMapping("/artifacts/{id}/structure")
     ApiResult<List<KnowledgeStructureNodeView>> getStructure(@PathVariable UUID id) {
         return ApiResult.ok(queryService.getStructure(id).stream()
@@ -145,6 +152,9 @@ class KnowledgeController {
     }
 
     @Operation(summary = "Get the extraction units of a knowledge artifact")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
     @GetMapping("/artifacts/{id}/units")
     ApiResult<List<ExtractionUnitView>> getUnits(@PathVariable UUID id) {
         return ApiResult.ok(queryService.getUnits(id).stream()
@@ -155,6 +165,9 @@ class KnowledgeController {
     }
 
     @Operation(summary = "Get the compiled knowledge candidates of a knowledge artifact")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
     @GetMapping("/artifacts/{id}/candidates")
     ApiResult<List<CandidateView>> getCandidates(@PathVariable UUID id) {
         return ApiResult.ok(queryService.getCandidates(id).stream()
@@ -163,12 +176,21 @@ class KnowledgeController {
     }
 
     @Operation(summary = "Get one knowledge candidate")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
     @GetMapping("/candidates/{id}")
     ApiResult<CandidateView> getCandidate(@PathVariable UUID id) {
         return ApiResult.ok(toCandidateView(queryService.getCandidate(id)));
     }
 
     @Operation(summary = "Approve a candidate for publication")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Invalid state for this operation",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
     @PostMapping("/candidates/{id}/approve")
     ApiResult<CandidateView> approve(
             @PathVariable UUID id, @RequestBody(required = false) ReviewDecisionRequest request) {
@@ -177,6 +199,14 @@ class KnowledgeController {
     }
 
     @Operation(summary = "Edit a candidate's content or payload; the original is preserved")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Invalid request",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Invalid state for this operation",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
     @PostMapping("/candidates/{id}/edit")
     ApiResult<CandidateView> edit(
             @PathVariable UUID id, @RequestBody ReviewEditRequest request) {
@@ -188,6 +218,12 @@ class KnowledgeController {
     }
 
     @Operation(summary = "Reject a candidate")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Invalid state for this operation",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
     @PostMapping("/candidates/{id}/reject")
     ApiResult<CandidateView> reject(@PathVariable UUID id, @RequestBody(required = false) ReviewDecisionRequest request) {
         return ApiResult.ok(toCandidateView(
@@ -195,6 +231,14 @@ class KnowledgeController {
     }
 
     @Operation(summary = "Publish approved candidates as a new versioned knowledge snapshot")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Invalid request",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Invalid state for this operation",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
     @PostMapping("/publications")
     ApiResult<PublicationView> publish(@RequestBody PublishRequest request) {
         var publication = publicationService.publish(request.candidateIds(), request.note());
@@ -220,17 +264,20 @@ class KnowledgeController {
     }
 
     @Operation(summary = "Get one published knowledge version")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
     @GetMapping("/publications/{id}")
     ApiResult<PublicationView> getPublication(@PathVariable UUID id) {
         return ApiResult.ok(toPublicationView(queryService.getPublication(id)));
     }
 
     @Operation(summary = "Download the original uploaded knowledge source")
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+    @ApiResponse(
             responseCode = "200", description = "Original document bytes",
             headers = @Header(name = "Content-Disposition",
                     description = "attachment with the sanitized original filename (RFC 6266/5987)"))
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+    @ApiResponse(
             responseCode = "404", description = "Artifact does not exist in this organization",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping("/artifacts/{id}/original")

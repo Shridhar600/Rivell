@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.transaction.support.TransactionTemplate;
+
 import com.rivell.workbench.foundation.Texts;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
@@ -17,18 +19,23 @@ import com.rivell.workbench.organization.Permissions;
  * immutable organizational knowledge snapshot (Architecture Decision #6.10/#7.19).
  * Only APPROVED candidates may publish; each candidate publishes at most once; declared
  * supersession of a published candidate is recorded explicitly in the snapshot.
+ * The publication record, its items, and the candidates' PUBLISHED transitions commit
+ * as one atomic unit, so an interrupted publication persists nothing.
  */
 public class KnowledgePublicationService {
 
     private final KnowledgeRepository repository;
+    private final TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
 
     public KnowledgePublicationService(
             KnowledgeRepository repository,
+            TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         this.repository = repository;
+        this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
     }
@@ -82,13 +89,15 @@ public class KnowledgePublicationService {
         var publication = new KnowledgePublication(
                 publicationId, organizationId, publicationNumber,
                 Texts.normalize(note), items, now);
-        repository.insertPublication(publication);
-        for (var candidate : candidates) {
-            repository.updateReviewState(
-                    candidate.id(), ReviewStatus.PUBLISHED, candidate.editedContentText(),
-                    candidate.editedPayload(), candidate.reviewNote(), candidate.reviewedAt(),
-                    now);
-        }
+        transactionTemplate.executeWithoutResult(status -> {
+            repository.insertPublication(publication);
+            for (var candidate : candidates) {
+                repository.updateReviewState(
+                        candidate.id(), ReviewStatus.PUBLISHED, candidate.editedContentText(),
+                        candidate.editedPayload(), candidate.reviewNote(), candidate.reviewedAt(),
+                        now);
+            }
+        });
         return publication;
     }
 

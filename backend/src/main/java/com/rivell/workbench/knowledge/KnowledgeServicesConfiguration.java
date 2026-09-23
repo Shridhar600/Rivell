@@ -61,8 +61,10 @@ class KnowledgeServicesConfiguration {
     @Bean
     KnowledgePublicationService knowledgePublicationService(
             KnowledgeRepository knowledgeRepository,
+            TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
-        return new KnowledgePublicationService(knowledgeRepository, identityProvider, authorizationService);
+        return new KnowledgePublicationService(
+                knowledgeRepository, transactionTemplate, identityProvider, authorizationService);
     }
 }

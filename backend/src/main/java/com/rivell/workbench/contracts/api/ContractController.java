@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -55,9 +57,8 @@ class ContractController {
     }
 
     @Operation(summary = "Upload and parse a DOCX contract")
+    @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Processed; inspect parseStatus for the outcome",
-                    content = @Content(schema = @Schema(implementation = IngestResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid upload",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "413", description = "Upload exceeds the configured size limit",
@@ -81,9 +82,8 @@ class ContractController {
     }
 
     @Operation(summary = "Get a contract with its latest version state")
+    @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Contract found",
-                    content = @Content(schema = @Schema(implementation = ContractSummaryResponse.class))),
             @ApiResponse(responseCode = "404", description = "Contract does not exist in this organization",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
@@ -105,9 +105,8 @@ class ContractController {
     }
 
     @Operation(summary = "Get the canonical structure of a contract version")
+    @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Structure found",
-                    content = @Content(schema = @Schema(implementation = ContractStructureResponse.class))),
             @ApiResponse(responseCode = "404", description = "Contract or version does not exist in this organization",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })

@@ -56,6 +56,34 @@ class KnowledgeReviewPublicationIT {
         }
     }
 
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FailingRepositoryConfiguration {
+
+        @Bean
+        @Primary
+        KnowledgeRepository failingKnowledgeRepository(KnowledgeRepository delegate) {
+            return (KnowledgeRepository) java.lang.reflect.Proxy.newProxyInstance(
+                    KnowledgeRepository.class.getClassLoader(),
+                    new Class<?>[] {KnowledgeRepository.class},
+                    (proxy, method, args) -> {
+                        if ("updateReviewState".equals(method.getName())
+                                && FailingKnowledgeRepository.armed) {
+                            throw new IllegalStateException("simulated persistence failure");
+                        }
+                        try {
+                            return method.invoke(delegate, args);
+                        } catch (java.lang.reflect.InvocationTargetException e) {
+                            throw e.getCause();
+                        }
+                    });
+        }
+    }
+
+    static final class FailingKnowledgeRepository {
+
+        static volatile boolean armed;
+    }
+
     static final class MutableIdentityProvider implements IdentityProvider {
 
         volatile UserIdentity current = new UserIdentity(
@@ -195,6 +223,26 @@ class KnowledgeReviewPublicationIT {
         } finally {
             identityProvider.use(ownerIdentity);
         }
+    }
+
+    @Test
+    void failedPublicationPersistsNothing() throws Exception {
+        var artifact = ingestClauseLibrary();
+        var candidate = firstVariant(artifact);
+        reviewService.approve(candidate.id(), null);
+        var publicationsBefore = queryService.listPublications().size();
+
+        FailingKnowledgeRepository.armed = true;
+        try {
+            assertThatThrownBy(() -> publicationService.publish(List.of(candidate.id()), "v1"))
+                    .isInstanceOf(IllegalStateException.class);
+        } finally {
+            FailingKnowledgeRepository.armed = false;
+        }
+
+        assertThat(queryService.listPublications()).hasSize(publicationsBefore);
+        assertThat(queryService.getCandidate(candidate.id()).reviewStatus())
+                .isEqualTo(ReviewStatus.APPROVED);
     }
 
     private KnowledgeArtifact ingestClauseLibrary() {
