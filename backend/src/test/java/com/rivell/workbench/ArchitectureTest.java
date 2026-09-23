@@ -79,7 +79,8 @@ class ArchitectureTest {
                 .importPackages("com.rivell.workbench");
 
         noClasses()
-                .that().resideOutsidePackages("..intelligence..")
+                .that().resideInAnyPackage("com.rivell.workbench..")
+                .and().resideOutsideOfPackage("com.rivell.workbench.intelligence..")
                 .should().dependOnClassesThat().resideInAnyPackage("..intelligence.provider..")
                 .check(classes);
     }
