@@ -1,7 +1,6 @@
 import type {
   ArtifactType,
   CandidateType,
-  ConflictType,
   IngestStatus,
   ReviewStatus,
   UnitKind,
@@ -55,16 +54,6 @@ export const UNIT_KIND_LABELS: Record<UnitKind, string> = {
   HEADING_SECTION: 'Heading section',
   TABLE: 'Table',
   SPREADSHEET_ROW: 'Spreadsheet row',
-}
-
-export const CONFLICT_TYPE_LABELS: Record<ConflictType, string> = {
-  DUPLICATE: 'Duplicate',
-  CONTRADICTS_EXISTING: 'Contradicts published knowledge',
-  SUPERSEDES_EXISTING: 'Supersedes published knowledge',
-  OVERLAPPING_EFFECTIVE_PERIOD: 'Overlapping effective period',
-  JURISDICTION_MISMATCH: 'Jurisdiction mismatch',
-  AUTHORITY_CONFLICT: 'Authority conflict',
-  UNKNOWN: 'Unclassified conflict',
 }
 
 export const PUBLICATION_ACTION_LABELS = {

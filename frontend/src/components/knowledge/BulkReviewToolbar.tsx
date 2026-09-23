@@ -29,11 +29,12 @@ export function BulkReviewToolbar({
   )
   const allSelected = eligible.length > 0 && selectedEligible.length === eligible.length
 
+  const labelById = new Map(
+    candidates.map((candidate) => [candidate.id, candidate.rawLabel]),
+  )
+
   function labelFor(candidateId: string): string {
-    return (
-      candidates.find((candidate) => candidate.id === candidateId)?.rawLabel ??
-      candidateId
-    )
+    return labelById.get(candidateId) ?? candidateId
   }
 
   function approveSelected() {

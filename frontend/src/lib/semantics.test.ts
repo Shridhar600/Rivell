@@ -11,7 +11,7 @@ import {
   reviewReasonLabel,
   scopeDifferences,
   variantRoleDiverge,
-  verificationLabel,
+  VERIFICATION_LABELS,
 } from './semantics'
 
 function candidate(partial: Partial<Candidate> = {}): Candidate {
@@ -89,9 +89,9 @@ describe('semantic display helpers', () => {
   })
 
   it('labels verification states', () => {
-    expect(verificationLabel('VERIFIED')).toMatch(/supported by source/i)
-    expect(verificationLabel('DISPUTED')).toMatch(/disputed/i)
-    expect(verificationLabel('NOT_VERIFIED')).toMatch(/not independently verified/i)
+    expect(VERIFICATION_LABELS.VERIFIED).toMatch(/supported by source/i)
+    expect(VERIFICATION_LABELS.DISPUTED).toMatch(/disputed/i)
+    expect(VERIFICATION_LABELS.NOT_VERIFIED).toMatch(/not independently verified/i)
   })
 
   it('finds an interpretation by field', () => {

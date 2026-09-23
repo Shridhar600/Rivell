@@ -7,7 +7,11 @@ import {
   type Candidate,
 } from '../../api/knowledge'
 import { CANDIDATE_TYPE_LABELS } from '../../lib/knowledgeLabels'
-import { conceptLabel, REVIEW_CATEGORY_LABELS } from '../../lib/semantics'
+import {
+  conceptLabel,
+  hasSupersessionProposal,
+  REVIEW_CATEGORY_LABELS,
+} from '../../lib/semantics'
 import { ErrorState } from '../ErrorState'
 
 function PeerLabel({ candidateId }: { candidateId: string }) {
@@ -22,11 +26,13 @@ export function PublicationDialog({
   artifact,
   approved,
   supersessionChoices,
+  onClearSupersession,
   onClose,
 }: {
   artifact: ArtifactDetail
   approved: Candidate[]
   supersessionChoices: Record<string, string>
+  onClearSupersession: (candidateId: string) => void
   onClose: () => void
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -55,7 +61,10 @@ export function PublicationDialog({
   }
 
   const supersessions = approved
-    .filter((candidate) => supersessionChoices[candidate.id])
+    .filter(
+      (candidate) =>
+        supersessionChoices[candidate.id] && hasSupersessionProposal(candidate),
+    )
     .map((candidate) => ({
       candidate,
       supersededId: supersessionChoices[candidate.id],
@@ -140,7 +149,14 @@ export function PublicationDialog({
             <ul className="dialog__list">
               {supersessions.map(({ candidate, supersededId }) => (
                 <li key={candidate.id}>
-                  {candidate.rawLabel} replaces <PeerLabel candidateId={supersededId} />
+                  {candidate.rawLabel} replaces <PeerLabel candidateId={supersededId} />{' '}
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => onClearSupersession(candidate.id)}
+                  >
+                    Remove replacement
+                  </button>
                 </li>
               ))}
             </ul>

@@ -347,7 +347,7 @@ describe('ArtifactWorkspace', () => {
     expect(screen.queryByRole('combobox')).toBeNull()
   })
 
-  it('shows an ambiguous assessment and agreement for a match', async () => {
+  it('shows an ambiguous assessment', async () => {
     stubArtifact({
       artifact: () =>
         ok({
@@ -362,11 +362,15 @@ describe('ArtifactWorkspace', () => {
           },
         }),
     })
-    renderArtifact('/knowledge/artifacts/a1')
+
+    renderArtifact()
+
     expect(
       await screen.findByText(/artifact type assessment is ambiguous/i),
     ).toBeInTheDocument()
+  })
 
+  it('shows agreement when the assessment matches', async () => {
     stubArtifact({
       artifact: () =>
         ok({
@@ -381,7 +385,9 @@ describe('ArtifactWorkspace', () => {
           },
         }),
     })
-    renderArtifact('/knowledge/artifacts/a1')
+
+    renderArtifact()
+
     expect(
       await screen.findByText(/classification agrees with the declared artifact type/i),
     ).toBeInTheDocument()

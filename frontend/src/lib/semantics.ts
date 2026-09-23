@@ -96,10 +96,6 @@ export function reviewReasonLabel(code: string): string {
   return REVIEW_REASON_LABELS[code as ReviewReason] ?? code
 }
 
-export function verificationLabel(state: VerificationState): string {
-  return VERIFICATION_LABELS[state]
-}
-
 export function interpretationFor(
   candidate: Candidate,
   field: string,

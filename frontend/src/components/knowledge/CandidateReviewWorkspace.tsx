@@ -204,6 +204,9 @@ export function CandidateReviewWorkspace({
           artifact={artifact}
           approved={approved}
           supersessionChoices={supersessionChoices}
+          onClearSupersession={(candidateId) =>
+            setSupersessionChoice(candidateId, null)
+          }
           onClose={() => setPublishOpen(false)}
         />
       ) : null}

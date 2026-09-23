@@ -1,6 +1,7 @@
 import type { Candidate } from '../../api/knowledge'
 import {
   REVIEW_CATEGORY_DESCRIPTIONS,
+  REVIEW_CATEGORY_EXPLANATION,
   REVIEW_CATEGORY_LABELS,
   reviewReasonLabel,
 } from '../../lib/semantics'
@@ -28,9 +29,8 @@ export function ReviewAttentionSection({ candidate }: { candidate: Candidate }) 
       <h4 id="candidate-attention-heading">Review attention</h4>
       <p className="meta">
         {REVIEW_CATEGORY_LABELS[candidate.reviewCategory]} —{' '}
-        {REVIEW_CATEGORY_DESCRIPTIONS[candidate.reviewCategory]} Review attention
-        describes how much human scrutiny is suggested before publication; it is
-        not a legal-risk rating.
+        {REVIEW_CATEGORY_DESCRIPTIONS[candidate.reviewCategory]}{' '}
+        {REVIEW_CATEGORY_EXPLANATION}
       </p>
       {candidate.reviewReasons.length > 0 ? (
         <ul className="reason-list">

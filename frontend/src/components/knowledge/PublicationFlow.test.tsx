@@ -320,6 +320,69 @@ describe('knowledge publication', () => {
     closeSpy.mockRestore()
   })
 
+
+  it('lets the human remove a chosen replacement in the dialog', async () => {
+    const superseding = candidate({
+      id: 'c1',
+      rawLabel: 'New liability rule',
+      reviewStatus: 'APPROVED',
+      conflictSignals: [
+        {
+          conflictType: 'SUPERSEDES_EXISTING',
+          message: 'Appears intended to replace a published position (p=0.93)',
+          publishedCandidateId: 'old1',
+        },
+      ],
+    })
+    const old = candidate({
+      id: 'old1',
+      rawLabel: 'Old liability rule',
+      reviewStatus: 'PUBLISHED',
+    })
+    const state: ApiState = { candidates: [superseding, old], publications: [] }
+    const { requests } = stubKnowledgeApi(state)
+
+    renderRoute('/knowledge/artifacts/a1?candidate=c1')
+
+    const panel = await screen.findByRole('article', { name: /New liability rule/i })
+    await userEvent.click(
+      within(panel).getByRole('checkbox', {
+        name: /replace this published knowledge when publishing/i,
+      }),
+    )
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /publish approved \(1\)/i }),
+    )
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).getByRole('heading', { name: /replacing published knowledge/i }),
+    ).toBeInTheDocument()
+
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: /remove replacement/i }),
+    )
+    expect(
+      within(dialog).queryByRole('heading', { name: /replacing published knowledge/i }),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: /publish version/i }),
+    )
+    await screen.findByRole('heading', {
+      level: 1,
+      name: /knowledge publication v9/i,
+    })
+
+    const publishRequest = requests.find(
+      (request) => request.method === 'POST' && request.url.endsWith('/publications'),
+    )!
+    const body = (await publishRequest.clone().json()) as {
+      supersededCandidates?: Record<string, string>
+    }
+    expect(body.supersededCandidates).toBeUndefined()
+  })
+
   it('keeps publishing disabled until a candidate is approved', async () => {
     stubKnowledgeApi({ candidates: [pendingOne], publications: [] })
 
