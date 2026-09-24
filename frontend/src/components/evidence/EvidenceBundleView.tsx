@@ -12,13 +12,15 @@ import { PrecedentCard } from './PrecedentCard'
 export function EvidenceBundleView({
   bundle,
   regionLabels,
+  clauseHeadings,
   onNavigateToNode,
   onOpenClauseSemantics,
 }: {
   bundle: EvidenceBundle
   regionLabels: Map<string, string>
+  clauseHeadings: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
-  onOpenClauseSemantics?: (clauseId: string) => void
+  onOpenClauseSemantics?: (headingNodeId: string) => void
 }) {
   const lanes = evidenceLanesFor(bundle.items, bundle.sufficiency)
   const precedentCount = bundle.items.filter(
@@ -38,6 +40,7 @@ export function EvidenceBundleView({
           <CurrentContractCard
             item={item}
             regionLabels={regionLabels}
+            clauseHeadings={clauseHeadings}
             onNavigateToNode={onNavigateToNode}
             onOpenClauseSemantics={onOpenClauseSemantics}
           />

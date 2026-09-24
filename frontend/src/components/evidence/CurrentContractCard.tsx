@@ -5,28 +5,34 @@ import {
   factSchemaLabel,
 } from '../../lib/contractSemantics'
 import { authorityLabel } from '../../lib/evidence'
+import { SourceRegionLinks } from '../contract/SourceRegionLinks'
 import { EvidenceItemSource } from './EvidenceItemSource'
 import { EvidenceText } from './EvidenceText'
 
 export function CurrentContractCard({
   item,
   regionLabels,
+  clauseHeadings,
   onNavigateToNode,
   onOpenClauseSemantics,
 }: {
   item: EvidenceItem
   regionLabels: Map<string, string>
+  clauseHeadings: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
-  onOpenClauseSemantics?: (clauseId: string) => void
+  onOpenClauseSemantics?: (headingNodeId: string) => void
 }) {
   const headingId = `evidence-${item.evidenceId}`
   const primaryNodeId = item.provenanceNodeIds[0] ?? null
   const regionLabel = primaryNodeId ? (regionLabels.get(primaryNodeId) ?? null) : null
   const heading =
     regionLabel ?? (item.legalConcept ? conceptLabel(item.legalConcept) : 'Contract evidence')
+  const clauseHeading = item.sourceClauseId
+    ? (clauseHeadings.get(item.sourceClauseId) ?? null)
+    : null
 
   return (
-    <article className="evidence-card evidence-card--contract" aria-labelledby={headingId}>
+    <article className="evidence-card" aria-labelledby={headingId}>
       <header className="evidence-card__header">
         <h3 id={headingId}>{heading}</h3>
         <span className="badge badge--muted">{authorityLabel(item.authorityClass)}</span>
@@ -50,20 +56,17 @@ export function CurrentContractCard({
         </div>
       ) : null}
       <div className="evidence-card__actions">
-        {primaryNodeId ? (
+        <SourceRegionLinks
+          nodeIds={item.provenanceNodeIds}
+          labelByNodeId={regionLabels}
+          onNavigateToNode={onNavigateToNode}
+          prefix="View in document:"
+        />
+        {onOpenClauseSemantics && clauseHeading ? (
           <button
             type="button"
             className="link-button"
-            onClick={() => onNavigateToNode(primaryNodeId)}
-          >
-            {`View ${regionLabel ?? 'source region'} in document`}
-          </button>
-        ) : null}
-        {onOpenClauseSemantics && item.sourceClauseId ? (
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => onOpenClauseSemantics(item.sourceClauseId as string)}
+            onClick={() => onOpenClauseSemantics(clauseHeading)}
           >
             Open clause semantics
           </button>

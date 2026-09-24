@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { useContractQuery, useContractStructureQuery } from '../../api/contracts'
+import {
+  originalDocumentUrl,
+  useContractQuery,
+  useContractStructureQuery,
+} from '../../api/contracts'
 import {
   isConflictError,
   isForbiddenError,
@@ -14,6 +18,7 @@ import {
   conceptLabel,
   effectivePrimaryConcept,
 } from '../../lib/contractSemantics'
+import { staleClassificationNote } from '../../lib/evidence'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
 import { EvidenceBundleView } from './EvidenceBundleView'
@@ -87,14 +92,15 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
     navigate(`/reviews/${contractId}?${next.toString()}`)
   }
 
-  const openClauseSemantics = (clauseId: string) => {
-    const clause = clauses.find((entry) => entry.id === clauseId)
+  const openClauseSemantics = (headingNodeId: string) => {
     const next = new URLSearchParams()
     next.set('view', 'semantics')
     next.set('section', 'clauses')
-    if (clause) next.set('clause', clause.headingNodeId)
+    next.set('clause', headingNodeId)
     navigate(`/reviews/${contractId}?${next.toString()}`)
   }
+
+  const clauseHeadings = new Map(clauses.map((clause) => [clause.id, clause.headingNodeId]))
 
   const selectClause = (headingNodeId: string) => {
     setSearchParams((previous) => {
@@ -112,11 +118,11 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
     return `/reviews/${contractId}?${next.toString()}`
   })()
 
-  const staleConcept =
-    bundle !== undefined &&
-    bundle.request.legalConcept !== null &&
-    effectiveConcept !== null &&
-    bundle.request.legalConcept !== effectiveConcept
+  const staleNote = bundle
+    ? staleClassificationNote(bundle.request.legalConcept, effectiveConcept)
+    : null
+  const buildError =
+    build.isError && build.variables?.clauseId === selectedClauseId ? build.error : null
 
   const header = (
     <header className="workspace__header">
@@ -129,6 +135,14 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
         </p>
       </div>
       <div className="workspace__actions">
+        <a
+          href={originalDocumentUrl(contractId, latest.versionNumber)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="button"
+        >
+          View Original
+        </a>
         <Link className="button" to={`/reviews/${contractId}?view=semantics`}>
           Back to contract
         </Link>
@@ -196,6 +210,12 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
               <dt>Legal concept</dt>
               <dd>{effectiveConcept ? conceptLabel(effectiveConcept) : 'No primary concept'}</dd>
             </div>
+            {bundle ? (
+              <div className="data-list__row">
+                <dt>Effective on</dt>
+                <dd>{bundle.request.effectiveOn}</dd>
+              </div>
+            ) : null}
           </dl>
           {selectedClause && !effectiveConcept ? (
             <p className="state state--warning">
@@ -215,10 +235,10 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
               {bundle ? 'Rebuild evidence' : 'Build evidence'}
             </button>
           </div>
-          {build.isError ? (
+          {buildError ? (
             <div role="alert" className="state state--error">
-              <p>{buildErrorMessage(build.error)}</p>
-              {isConflictError(build.error) ? (
+              <p>{buildErrorMessage(buildError)}</p>
+              {isConflictError(buildError) ? (
                 <Link className="link-inline" to={semanticAnalysisLink}>
                   Open semantic analysis
                 </Link>
@@ -230,15 +250,7 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
               {`Knowledge state: publication v${bundle.request.knowledgePinPublicationNumber}`}
             </p>
           ) : null}
-          {staleConcept && bundle ? (
-            <p className="state state--warning">
-              {`This evidence was built with the classification ${conceptLabel(
-                bundle.request.legalConcept as string,
-              )}. The contract's current classification is ${conceptLabel(
-                effectiveConcept as string,
-              )} — rebuild to refresh the evidence.`}
-            </p>
-          ) : null}
+          {staleNote ? <p className="state state--warning">{staleNote}</p> : null}
         </section>
 
         {bundle ? (
@@ -246,6 +258,7 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
             <EvidenceBundleView
               bundle={bundle}
               regionLabels={regionLabels}
+              clauseHeadings={clauseHeadings}
               onNavigateToNode={navigateToNode}
               onOpenClauseSemantics={openClauseSemantics}
             />

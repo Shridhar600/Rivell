@@ -9,7 +9,7 @@ export function PolicyEvidenceCard({ item }: { item: EvidenceItem }) {
   const positions = item.policyFacts ? policyPositionLabels(item.policyFacts.positions) : []
 
   return (
-    <article className="evidence-card evidence-card--policy" aria-labelledby={headingId}>
+    <article className="evidence-card" aria-labelledby={headingId}>
       <header className="evidence-card__header">
         <h3 id={headingId}>
           {item.legalConcept ? conceptLabel(item.legalConcept) : 'Policy rule'}

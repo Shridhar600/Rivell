@@ -1613,6 +1613,10 @@ a {
   white-space: pre-wrap;
 }
 
+article.evidence-card--precedent {
+  background: var(--color-bg);
+}
+
 blockquote.evidence-card__text {
   padding-left: var(--space-3);
   border-left: 2px solid var(--color-border);

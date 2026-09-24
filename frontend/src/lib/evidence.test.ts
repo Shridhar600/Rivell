@@ -10,6 +10,7 @@ import {
   policyCompatibilityLabel,
   retrievalReasonLabel,
   sourceTypeLabel,
+  staleClassificationNote,
   sufficiencyPresentation,
   traceRequestEntries,
   traceStageLabel,
@@ -165,6 +166,15 @@ describe('sufficiencyPresentation', () => {
 
   it('states that precedent does not establish policy', () => {
     expect(POLICY_MISSING_PRECEDENT_NOTE).toMatch(/does not establish/i)
+  })
+
+  it('describes a changed classification after the build', () => {
+    expect(staleClassificationNote(null, 'TERM_TERMINATION')).toBeNull()
+    expect(staleClassificationNote('TERM_TERMINATION', 'TERM_TERMINATION')).toBeNull()
+    expect(staleClassificationNote('TERM_TERMINATION', 'CONFIDENTIALITY')).toBe(
+      "This evidence was built with the classification Term and termination. The contract's current classification is Confidentiality — rebuild to refresh the evidence.",
+    )
+    expect(staleClassificationNote('TERM_TERMINATION', null)).toMatch(/is not set/)
   })
 })
 

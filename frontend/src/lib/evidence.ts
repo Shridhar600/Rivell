@@ -193,6 +193,17 @@ export function sufficiencyPresentation(state: EvidenceSufficiency): Sufficiency
 export const POLICY_MISSING_PRECEDENT_NOTE =
   'Historical precedent does not establish organizational policy.'
 
+export function staleClassificationNote(
+  builtConcept: string | null,
+  currentConcept: string | null,
+): string | null {
+  if (builtConcept === null || builtConcept === currentConcept) return null
+  const current = currentConcept === null ? 'not set' : conceptLabel(currentConcept)
+  return `This evidence was built with the classification ${conceptLabel(
+    builtConcept,
+  )}. The contract's current classification is ${current} — rebuild to refresh the evidence.`
+}
+
 const DEGRADATION_MESSAGES: Record<string, string> = {
   VECTOR_LANE_UNAVAILABLE: 'Vector evidence was unavailable for this retrieval.',
   VECTOR_LANE_UNCONFIGURED: 'Vector evidence is not configured in this environment.',
@@ -327,18 +338,19 @@ function displayValue(key: string, value: string): string {
 }
 
 function scalarEntry(
-  key: string,
+  entryKey: string,
+  valueKey: string,
   value: string | number | boolean,
 ): TraceRequestEntry {
   if (typeof value === 'string') {
     return {
-      key,
-      label: entryLabel(key),
-      value: displayValue(key, value),
+      key: entryKey,
+      label: entryLabel(valueKey),
+      value: displayValue(valueKey, value),
       long: value.length > 200,
     }
   }
-  return { key, label: entryLabel(key), value: String(value), long: false }
+  return { key: entryKey, label: entryLabel(valueKey), value: String(value), long: false }
 }
 
 export function traceRequestEntries(request: Record<string, unknown>): TraceRequestEntry[] {
@@ -346,7 +358,7 @@ export function traceRequestEntries(request: Record<string, unknown>): TraceRequ
   for (const [key, value] of Object.entries(request)) {
     if (value === null || value === undefined) continue
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      entries.push(scalarEntry(key, value))
+      entries.push(scalarEntry(key, key, value))
       continue
     }
     if (typeof value === 'object' && !Array.isArray(value)) {
@@ -356,7 +368,7 @@ export function traceRequestEntries(request: Record<string, unknown>): TraceRequ
           typeof nestedValue === 'number' ||
           typeof nestedValue === 'boolean'
         ) {
-          entries.push(scalarEntry(nestedKey, nestedValue))
+          entries.push(scalarEntry(`${key}.${nestedKey}`, nestedKey, nestedValue))
         }
       }
     }

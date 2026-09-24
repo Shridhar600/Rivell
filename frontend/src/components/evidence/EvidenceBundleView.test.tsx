@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { EvidenceBundleView } from './EvidenceBundleView'
 import {
   fixtureBundle,
+  fixtureClauseHeadings,
   fixtureCompatiblePrecedent,
   fixtureIncompatiblePrecedent,
   fixturePolicyItem,
@@ -22,6 +23,7 @@ function renderBundle(
       <EvidenceBundleView
         bundle={fixtureBundle(overrides)}
         regionLabels={fixtureRegionLabels}
+        clauseHeadings={fixtureClauseHeadings}
         onNavigateToNode={onNavigateToNode}
         onOpenClauseSemantics={onOpenClauseSemantics}
         {...props}
@@ -172,17 +174,24 @@ describe('current-contract navigation', () => {
     const { onNavigateToNode, onOpenClauseSemantics } = renderBundle()
 
     const contractLane = screen.getByRole('region', { name: 'Current contract' })
+    expect(
+      within(contractLane).getAllByText('View in document:').length,
+    ).toBeGreaterThan(0)
+    expect(
+      within(contractLane).getByRole('button', { name: '6.2 Cap' }),
+    ).toBeInTheDocument()
+
     await userEvent.click(
-      within(contractLane).getByRole('button', { name: /View 6. Limitation of Liability in document/ }),
+      within(contractLane).getByRole('button', { name: '6. Limitation of Liability' }),
     )
     expect(onNavigateToNode).toHaveBeenCalledWith('node-6')
 
     await userEvent.click(
       within(contractLane).getAllByRole('button', { name: 'Open clause semantics' })[0],
     )
-    expect(onOpenClauseSemantics).toHaveBeenCalledWith('cl-6')
+    expect(onOpenClauseSemantics).toHaveBeenCalledWith('node-6')
 
-    expect(within(contractLane).getByText('3. Fees')).toBeInTheDocument()
+    expect(within(contractLane).getAllByText('3. Fees').length).toBeGreaterThan(0)
     expect(
       within(contractLane).getByText(/Semantic relationship: depends on/),
     ).toBeInTheDocument()

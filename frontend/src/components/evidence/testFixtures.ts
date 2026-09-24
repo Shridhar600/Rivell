@@ -153,6 +153,11 @@ export function fixtureBundle(overrides: Partial<EvidenceBundle> = {}): Evidence
   }
 }
 
+export const fixtureClauseHeadings = new Map<string, string>([
+  ['cl-6', 'node-6'],
+  ['cl-3', 'node-3'],
+])
+
 export const fixtureRegionLabels = new Map<string, string>([
   ['node-1', '1. Definitions'],
   ['node-3', '3. Fees'],

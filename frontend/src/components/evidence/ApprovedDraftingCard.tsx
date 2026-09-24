@@ -8,7 +8,7 @@ export function ApprovedDraftingCard({ item }: { item: EvidenceItem }) {
   const headingId = `evidence-${item.evidenceId}`
 
   return (
-    <article className="evidence-card evidence-card--drafting" aria-labelledby={headingId}>
+    <article className="evidence-card" aria-labelledby={headingId}>
       <header className="evidence-card__header">
         <h3 id={headingId}>
           {item.legalConcept ? conceptLabel(item.legalConcept) : 'Approved wording'}

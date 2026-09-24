@@ -8,6 +8,17 @@ import { appRoutes } from '../../app/router'
 import { stubContractApi } from '../contract/testFixtures'
 import { fixtureBundle, fixtureTrace } from './testFixtures'
 
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function envelope(data: unknown) {
+  return { data, status: 200, timestamp: '2026-09-24T05:00:00Z' }
+}
+
 function renderRoute(initialEntry: string) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [initialEntry] })
   const result = render(
@@ -62,6 +73,8 @@ describe('evidence inspector lifecycle', () => {
     expect(post.body).toEqual({ contractId: 'c1', versionNumber: 1, clauseId: 'cl6' })
     expect(await screen.findByRole('region', { name: 'Policy' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Rebuild evidence' })).toBeInTheDocument()
+    expect(screen.getByText('Effective on')).toBeInTheDocument()
+    expect(screen.getByText('2026-09-24')).toBeInTheDocument()
   })
 
   it('rebuilds only on an explicit request', async () => {
@@ -100,6 +113,66 @@ describe('evidence inspector lifecycle', () => {
       screen.getByRole('link', { name: /semantic analysis/i }),
     ).toHaveAttribute('href', '/reviews/c1?view=semantics&section=clauses&clause=node-6')
     expect(evidenceRequests(api)).toHaveLength(1)
+  })
+
+  it('clears a build error when the clause changes and restores it when returning', async () => {
+    const api = stubContractApi({ evidenceStatus: 409 })
+    renderRoute('/reviews/c1/evidence?clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Master Services Agreement' })
+    await buildEvidence()
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+
+    await userEvent.selectOptions(await screen.findByLabelText('Clause'), 'node-5')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(evidenceRequests(api)).toHaveLength(1)
+
+    await userEvent.selectOptions(screen.getByLabelText('Clause'), 'node-6')
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+
+  it('replaces the displayed bundle on rebuild and announces the new state', async () => {
+    let builds = 0
+    const api = stubContractApi({
+      evidenceResponse: () => {
+        builds += 1
+        return jsonResponse(
+          envelope(
+            builds === 1
+              ? fixtureBundle()
+              : fixtureBundle({
+                  sufficiency: 'PARTIAL',
+                  degradationWarnings: ['INDEX_INCOMPLETE'],
+                }),
+          ),
+        )
+      },
+      trace: fixtureTrace,
+    })
+    renderRoute('/reviews/c1/evidence?clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Master Services Agreement' })
+    await buildEvidence()
+    expect(await screen.findByText('Evidence complete')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Rebuild evidence' }))
+    expect(await screen.findByText('Evidence partially complete')).toBeInTheDocument()
+    expect(
+      screen.getByText('Some precedent index entries are not currently searchable.'),
+    ).toBeInTheDocument()
+    expect(evidenceRequests(api)).toHaveLength(2)
+  })
+
+  it('exposes named controls and the original document', async () => {
+    stubContractApi({ evidenceBundle: fixtureBundle(), trace: fixtureTrace })
+    renderRoute('/reviews/c1/evidence?clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Master Services Agreement' })
+    expect(await screen.findByRole('combobox', { name: 'Clause' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Build evidence' })).toBeEnabled()
+    expect(screen.getByRole('link', { name: 'Back to contract' })).toBeInTheDocument()
+    const original = screen.getByRole('link', { name: 'View Original' })
+    expect(original.getAttribute('href')).toContain('/versions/1/original')
   })
 
   it('requires semantic analysis before evidence can be built', async () => {
@@ -165,6 +238,11 @@ describe('pinned and stale context', () => {
   it('shows the pinned knowledge state and does not rebuild on render', async () => {
     const pinned = fixtureBundle({
       request: { ...fixtureBundle().request, knowledgePinPublicationNumber: 1 },
+      items: fixtureBundle().items.map((item) => ({
+        ...item,
+        publicationId: item.publicationId === null ? null : 'pub-1',
+        publicationNumber: item.publicationNumber === null ? null : 1,
+      })),
     })
     const api = stubContractApi({ evidenceBundle: pinned, trace: fixtureTrace })
     renderRoute('/reviews/c1/evidence?clause=node-6')
@@ -174,6 +252,7 @@ describe('pinned and stale context', () => {
     await waitFor(() => expect(evidenceRequests(api)).toHaveLength(1))
 
     expect(await screen.findByText('Knowledge state: publication v1')).toBeInTheDocument()
+    expect(screen.getAllByText('Published in v1').length).toBeGreaterThan(0)
     expect(evidenceRequests(api)).toHaveLength(1)
   })
 
