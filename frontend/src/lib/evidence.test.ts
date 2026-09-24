@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { EvidenceItem, EvidenceSufficiency } from '../api/retrieval'
 import {
   POLICY_MISSING_PRECEDENT_NOTE,
+  applicabilityDimensions,
+  applicabilityNote,
   authorityLabel,
+  contractPackLabel,
   degradationMessage,
   evidenceLanesFor,
   evidenceTextCollapsible,
@@ -21,6 +24,7 @@ import {
 function item(partial: Partial<EvidenceItem> & { authorityClass: EvidenceItem['authorityClass'] }): EvidenceItem {
   return {
     evidenceId: 'e',
+    applicabilityScope: null,
     sourceType: 'PUBLISHED_PLAYBOOK_RULE',
     sourceArtifactId: null,
     sourceCandidateId: null,
@@ -129,6 +133,76 @@ describe('authority and positions helpers', () => {
     expect(
       evidenceTextCollapsible(item({ authorityClass: 'POLICY', text: 'x'.repeat(700) })),
     ).toBe(true)
+  })
+})
+
+describe('applicability scope presentation', () => {
+  it('renders only populated dimensions with product labels', () => {
+    const scope = {
+      contractPackKey: 'MSA_PACK',
+      declaredContractTypes: ['MSA'],
+      partyPerspective: 'CUSTOMER',
+      paperSource: 'THIRD_PARTY',
+      jurisdiction: 'US',
+      effectiveFrom: '2026-01-01',
+      effectiveTo: '2026-12-31',
+    }
+
+    expect(
+      applicabilityDimensions(scope).map((d) => `${d.label}: ${d.value}`),
+    ).toEqual([
+      'Contract types: MSA',
+      'Contract pack: MSA pack',
+      'Perspective: Customer',
+      'Paper source: Third-party paper',
+      'Jurisdiction: United States',
+      'Effective period: 2026-01-01 – 2026-12-31',
+    ])
+    expect(applicabilityNote(scope)).toBeNull()
+  })
+
+  it('omits unconstrained dimensions and states the wildcard semantics', () => {
+    const scope = {
+      contractPackKey: 'MSA_PACK',
+      declaredContractTypes: [],
+      partyPerspective: null,
+      paperSource: null,
+      jurisdiction: null,
+      effectiveFrom: null,
+      effectiveTo: null,
+    }
+
+    expect(applicabilityDimensions(scope)).toEqual([
+      { key: 'pack', label: 'Contract pack', value: 'MSA pack' },
+    ])
+    expect(applicabilityNote(scope)).toBe(
+      'Unlisted dimensions are not constrained by this source.',
+    )
+
+    const empty = { ...scope, contractPackKey: null }
+    expect(applicabilityDimensions(empty)).toEqual([])
+    expect(applicabilityNote(empty)).toBeNull()
+  })
+
+  it('keeps unknown codes honest and handles single effective bounds', () => {
+    expect(contractPackLabel('NDA_PACK')).toBe('NDA pack')
+    expect(contractPackLabel('CUSTOMER_MSA')).toBe('CUSTOMER_MSA')
+
+    const partial = {
+      contractPackKey: null,
+      declaredContractTypes: ['SERVICES_AGREEMENT'],
+      partyPerspective: 'LICENSOR',
+      paperSource: null,
+      jurisdiction: 'DE',
+      effectiveFrom: null,
+      effectiveTo: '2025-06-30',
+    }
+    expect(applicabilityDimensions(partial)).toEqual([
+      { key: 'contractTypes', label: 'Contract types', value: 'Services agreement' },
+      { key: 'perspective', label: 'Perspective', value: 'Licensor' },
+      { key: 'jurisdiction', label: 'Jurisdiction', value: 'DE' },
+      { key: 'effective', label: 'Effective until', value: '2025-06-30' },
+    ])
   })
 })
 

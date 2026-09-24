@@ -1,4 +1,5 @@
 import type {
+  ApplicabilityScope,
   AuthorityClass,
   EvidenceItem,
   EvidenceSufficiency,
@@ -192,6 +193,84 @@ export function sufficiencyPresentation(state: EvidenceSufficiency): Sufficiency
 
 export const POLICY_MISSING_PRECEDENT_NOTE =
   'Historical precedent does not establish organizational policy.'
+
+type ApplicabilityDimension = { key: string; label: string; value: string }
+
+const SCOPE_DIMENSION_COUNT = 6
+
+export function contractPackLabel(key: string): string {
+  if (key.endsWith('_PACK')) return `${key.slice(0, -'_PACK'.length)} pack`
+  return key
+}
+
+export function applicabilityDimensions(
+  scope: ApplicabilityScope,
+): ApplicabilityDimension[] {
+  const dimensions: ApplicabilityDimension[] = []
+  if (scope.declaredContractTypes.length > 0) {
+    dimensions.push({
+      key: 'contractTypes',
+      label: 'Contract types',
+      value: scope.declaredContractTypes
+        .map((type) => CONTRACT_TYPE_LABELS[type] ?? humanizeCode(type))
+        .join(', '),
+    })
+  }
+  if (scope.contractPackKey) {
+    dimensions.push({
+      key: 'pack',
+      label: 'Contract pack',
+      value: contractPackLabel(scope.contractPackKey),
+    })
+  }
+  if (scope.partyPerspective) {
+    dimensions.push({
+      key: 'perspective',
+      label: 'Perspective',
+      value: roleLabel(scope.partyPerspective),
+    })
+  }
+  if (scope.paperSource) {
+    dimensions.push({
+      key: 'paperSource',
+      label: 'Paper source',
+      value: PAPER_SOURCE_LABELS[scope.paperSource] ?? humanizeCode(scope.paperSource),
+    })
+  }
+  if (scope.jurisdiction) {
+    dimensions.push({
+      key: 'jurisdiction',
+      label: 'Jurisdiction',
+      value: JURISDICTION_LABELS[scope.jurisdiction] ?? scope.jurisdiction,
+    })
+  }
+  if (scope.effectiveFrom && scope.effectiveTo) {
+    dimensions.push({
+      key: 'effective',
+      label: 'Effective period',
+      value: `${scope.effectiveFrom} – ${scope.effectiveTo}`,
+    })
+  } else if (scope.effectiveFrom) {
+    dimensions.push({
+      key: 'effective',
+      label: 'Effective from',
+      value: scope.effectiveFrom,
+    })
+  } else if (scope.effectiveTo) {
+    dimensions.push({
+      key: 'effective',
+      label: 'Effective until',
+      value: scope.effectiveTo,
+    })
+  }
+  return dimensions
+}
+
+export function applicabilityNote(scope: ApplicabilityScope): string | null {
+  const present = applicabilityDimensions(scope).length
+  if (present === 0 || present >= SCOPE_DIMENSION_COUNT) return null
+  return 'Unlisted dimensions are not constrained by this source.'
+}
 
 export function laneEmptyState(
   lane: EvidenceLane,

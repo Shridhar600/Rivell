@@ -1,8 +1,29 @@
-import type { EvidenceBundle, EvidenceItem, RetrievalTrace } from '../../api/retrieval'
+import type {
+  ApplicabilityScope,
+  EvidenceBundle,
+  EvidenceItem,
+  RetrievalTrace,
+} from '../../api/retrieval'
+
+export function fixtureApplicabilityScope(
+  overrides: Partial<ApplicabilityScope> = {},
+): ApplicabilityScope {
+  return {
+    contractPackKey: null,
+    declaredContractTypes: [],
+    partyPerspective: null,
+    paperSource: null,
+    jurisdiction: null,
+    effectiveFrom: null,
+    effectiveTo: null,
+    ...overrides,
+  }
+}
 
 function item(partial: Partial<EvidenceItem> & { evidenceId: string }): EvidenceItem {
   return {
     authorityClass: 'POLICY',
+    applicabilityScope: null,
     sourceType: 'PUBLISHED_PLAYBOOK_RULE',
     sourceArtifactId: null,
     sourceCandidateId: null,
@@ -29,6 +50,14 @@ export const fixturePolicyItem = item({
   sourceType: 'PUBLISHED_PLAYBOOK_RULE',
   sourceArtifactId: 'a-playbook',
   sourceCandidateId: 'k-rule',
+  applicabilityScope: fixtureApplicabilityScope({
+    contractPackKey: 'MSA_PACK',
+    declaredContractTypes: ['MSA'],
+    partyPerspective: 'CUSTOMER',
+    paperSource: 'COUNTERPARTY_PAPER',
+    jurisdiction: 'UK',
+    effectiveFrom: '2026-01-01',
+  }),
   text: 'Liability must be capped at fees paid in the preceding 12 months.',
   policyFacts: {
     positions: ['FALLBACK', 'PREFERRED'],
@@ -46,6 +75,7 @@ export const fixtureDraftingItem = item({
   sourceType: 'PUBLISHED_CLAUSE_VARIANT',
   sourceArtifactId: 'a-clauses',
   sourceCandidateId: 'k-variant',
+  applicabilityScope: fixtureApplicabilityScope({ contractPackKey: 'MSA_PACK' }),
   text: 'The aggregate liability of each party shall not exceed the fees paid in the twelve months preceding the claim.',
   policyCompatibility: 'NOT_ASSESSED',
   publicationId: 'pub-2',
@@ -98,6 +128,12 @@ export const fixtureCompatiblePrecedent = item({
   sourceType: 'PUBLISHED_PRECEDENT',
   sourceArtifactId: 'a-precedent-1',
   sourceCandidateId: 'k-precedent-1',
+  applicabilityScope: fixtureApplicabilityScope({
+    declaredContractTypes: ['MSA'],
+    partyPerspective: 'CUSTOMER',
+    paperSource: 'THIRD_PARTY',
+    jurisdiction: 'US',
+  }),
   text: `The aggregate liability of either party under this Agreement is limited to ${'the fees paid during the preceding twelve months '.repeat(3)}and excludes consequential damages.`,
   retrievalReason: 'FUSION',
   laneInfo: { lexicalRank: 2, vectorRank: 1, fusedRank: 1, fusedScore: 0.0328 },

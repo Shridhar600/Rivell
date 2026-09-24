@@ -466,6 +466,17 @@ export interface components {
             /** Format: date-time */
             timestamp?: string;
         };
+        ApplicabilityScopeResponse: {
+            contractPackKey?: string;
+            declaredContractTypes?: string[];
+            partyPerspective?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveTo?: string;
+        };
         EvidenceBundleResponse: {
             /** Format: uuid */
             bundleId?: string;
@@ -502,6 +513,7 @@ export interface components {
             publicationId?: string;
             /** Format: int64 */
             publicationNumber?: number;
+            applicabilityScope?: components["schemas"]["ApplicabilityScopeResponse"];
         };
         EvidenceRequestSummary: {
             purpose?: string;

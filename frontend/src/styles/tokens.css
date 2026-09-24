@@ -1617,6 +1617,28 @@ a {
   white-space: pre-wrap;
 }
 
+.applicability {
+  margin-top: var(--space-2);
+}
+
+.applicability__label {
+  margin: 0 0 var(--space-1);
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.applicability .data-list {
+  margin: 0;
+}
+
+.applicability__note {
+  margin: var(--space-1) 0 0;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
 article.evidence-card--precedent {
   background: var(--color-bg);
 }

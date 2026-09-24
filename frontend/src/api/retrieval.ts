@@ -71,6 +71,16 @@ const COMPATIBILITY_STATES: readonly string[] = [
   'NOT_ASSESSED',
 ]
 
+export type ApplicabilityScope = {
+  contractPackKey: string | null
+  declaredContractTypes: string[]
+  partyPerspective: string | null
+  paperSource: string | null
+  jurisdiction: string | null
+  effectiveFrom: string | null
+  effectiveTo: string | null
+}
+
 export type PolicyFacts = {
   positions: string[]
   requiresApproval: boolean | null
@@ -99,6 +109,7 @@ export type SemanticAssessment = {
 export type EvidenceItem = {
   evidenceId: string
   authorityClass: AuthorityClass
+  applicabilityScope: ApplicabilityScope | null
   sourceType: string
   sourceArtifactId: string | null
   sourceCandidateId: string | null
@@ -163,6 +174,27 @@ export type RetrievalTrace = {
   knowledgePinPublicationNumber: number | null
 }
 
+function parseApplicabilityScope(
+  value: unknown,
+  what: string,
+): ApplicabilityScope | null {
+  if (value === null || value === undefined) return null
+  const scope = asRecord(value, what)
+  const rawTypes = scope.declaredContractTypes
+  return {
+    contractPackKey: readOptionalNullableString(scope, 'contractPackKey', what),
+    declaredContractTypes:
+      rawTypes === null || rawTypes === undefined
+        ? []
+        : readStringArray(scope, 'declaredContractTypes', what),
+    partyPerspective: readOptionalNullableString(scope, 'partyPerspective', what),
+    paperSource: readOptionalNullableString(scope, 'paperSource', what),
+    jurisdiction: readOptionalNullableString(scope, 'jurisdiction', what),
+    effectiveFrom: readOptionalNullableString(scope, 'effectiveFrom', what),
+    effectiveTo: readOptionalNullableString(scope, 'effectiveTo', what),
+  }
+}
+
 function parsePolicyFacts(value: unknown, what: string): PolicyFacts | null {
   if (value === null || value === undefined) return null
   const facts = asRecord(value, what)
@@ -215,6 +247,7 @@ function parseEvidenceItem(value: unknown, what: string): EvidenceItem {
       rawAuthority && AUTHORITY_CLASSES.includes(rawAuthority)
         ? (rawAuthority as AuthorityClass)
         : 'UNKNOWN',
+    applicabilityScope: parseApplicabilityScope(item.applicabilityScope, what),
     sourceType: readOptionalNullableString(item, 'sourceType', what) ?? 'UNKNOWN',
     sourceArtifactId: readOptionalNullableString(item, 'sourceArtifactId', what),
     sourceCandidateId: readOptionalNullableString(item, 'sourceCandidateId', what),

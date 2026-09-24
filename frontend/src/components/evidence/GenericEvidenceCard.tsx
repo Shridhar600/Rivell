@@ -1,6 +1,7 @@
 import type { EvidenceItem } from '../../api/retrieval'
 import { conceptLabel } from '../../lib/contractSemantics'
 import { authorityLabel, sourceTypeLabel } from '../../lib/evidence'
+import { ApplicabilityScopeSummary } from './ApplicabilityScopeSummary'
 import { EvidenceItemSource } from './EvidenceItemSource'
 import { EvidenceText } from './EvidenceText'
 
@@ -17,6 +18,7 @@ export function GenericEvidenceCard({ item }: { item: EvidenceItem }) {
         <h3 id={headingId}>{heading}</h3>
         <span className="badge badge--muted">{authorityLabel(item.authorityClass)}</span>
       </header>
+      <ApplicabilityScopeSummary scope={item.applicabilityScope} />
       <EvidenceText item={item} label={heading} />
       <EvidenceItemSource item={item} />
     </article>

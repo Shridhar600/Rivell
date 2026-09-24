@@ -48,6 +48,15 @@ afterEach(() => {
 const policyItem = {
   evidenceId: 'e-policy',
   authorityClass: 'POLICY',
+  applicabilityScope: {
+    contractPackKey: 'MSA_PACK',
+    declaredContractTypes: ['MSA'],
+    partyPerspective: 'CUSTOMER',
+    paperSource: null,
+    jurisdiction: null,
+    effectiveFrom: null,
+    effectiveTo: null,
+  },
   sourceType: 'PUBLISHED_PLAYBOOK_RULE',
   sourceArtifactId: 'a-playbook',
   sourceCandidateId: 'k-rule',
@@ -223,7 +232,18 @@ describe('parseEvidenceBundle', () => {
     expect(precedent.semanticAssessment?.judgments.sameLegalIssue).toBe(true)
     expect(precedent.policyCompatibility).toBe('COMPATIBLE')
 
+    expect(policy.applicabilityScope).toEqual({
+      contractPackKey: 'MSA_PACK',
+      declaredContractTypes: ['MSA'],
+      partyPerspective: 'CUSTOMER',
+      paperSource: null,
+      jurisdiction: null,
+      effectiveFrom: null,
+      effectiveTo: null,
+    })
+
     const contract = bundle.items[2]
+    expect(contract.applicabilityScope).toBeNull()
     expect(contract.sourceClauseId).toBe('cl-6')
     expect(contract.contractFacts[0].values.liabilityCapMultiple).toBe('3')
     expect(contract.provenanceNodeIds).toEqual(['node-6', 'node-7'])

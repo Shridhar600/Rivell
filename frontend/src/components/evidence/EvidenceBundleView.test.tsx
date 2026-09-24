@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { EvidenceBundleView } from './EvidenceBundleView'
 import {
+  fixtureApplicabilityScope,
   fixtureBundle,
   fixtureClauseHeadings,
   fixtureCompatiblePrecedent,
@@ -127,6 +128,93 @@ describe('authority lanes', () => {
 
     const policyLane = screen.getByRole('region', { name: 'Policy' })
     expect(within(policyLane).getByText('Preferred, Fallback')).toBeInTheDocument()
+  })
+})
+
+describe('applicability scope', () => {
+  it('shows where and when policy evidence applies', () => {
+    renderBundle()
+
+    const policyLane = screen.getByRole('region', { name: 'Policy' })
+    expect(within(policyLane).getByText('Applicability')).toBeInTheDocument()
+    expect(within(policyLane).getByText('Contract types')).toBeInTheDocument()
+    expect(within(policyLane).getByText('MSA')).toBeInTheDocument()
+    expect(within(policyLane).getByText('MSA pack')).toBeInTheDocument()
+    expect(within(policyLane).getByText('Customer')).toBeInTheDocument()
+    expect(within(policyLane).getByText('Counterparty paper')).toBeInTheDocument()
+    expect(within(policyLane).getByText('United Kingdom')).toBeInTheDocument()
+    expect(within(policyLane).getByText('Effective from')).toBeInTheDocument()
+    expect(within(policyLane).getByText('2026-01-01')).toBeInTheDocument()
+
+    expect(within(policyLane).getByText('Published in v2')).toBeInTheDocument()
+    expect(
+      within(policyLane).getByText(/Liability must be capped at fees paid/),
+    ).toBeInTheDocument()
+  })
+
+  it('shows precedent applicability without raising its authority', () => {
+    renderBundle()
+
+    const precedentLane = screen.getByRole('region', { name: 'Precedents' })
+    expect(within(precedentLane).getByText('Third-party paper')).toBeInTheDocument()
+    expect(within(precedentLane).getByText('United States')).toBeInTheDocument()
+    expect(within(precedentLane).getAllByText('Precedent').length).toBe(2)
+    expect(
+      within(precedentLane).getByText('Compatible with current published policy'),
+    ).toBeInTheDocument()
+    expect(precedentLane.className).toContain('evidence-lane--historical')
+  })
+
+  it('renders only constrained dimensions without placeholders', () => {
+    renderBundle()
+
+    const draftingLane = screen.getByRole('region', { name: 'Approved drafting' })
+    expect(within(draftingLane).getByText('Contract pack')).toBeInTheDocument()
+    expect(within(draftingLane).getByText('MSA pack')).toBeInTheDocument()
+    expect(
+      within(draftingLane).getByText(
+        'Unlisted dimensions are not constrained by this source.',
+      ),
+    ).toBeInTheDocument()
+    expect(within(draftingLane).queryByText('Paper source')).not.toBeInTheDocument()
+    expect(within(draftingLane).queryByText('Not specified')).not.toBeInTheDocument()
+    expect(within(draftingLane).queryByText('—')).not.toBeInTheDocument()
+
+    const precedentLane = screen.getByRole('region', { name: 'Precedents' })
+    expect(within(precedentLane).getAllByText('Applicability').length).toBe(1)
+  })
+
+  it('does not fabricate organizational applicability for contract evidence', () => {
+    renderBundle()
+
+    const contractLane = screen.getByRole('region', { name: 'Current contract' })
+    expect(within(contractLane).queryByText('Applicability')).not.toBeInTheDocument()
+    expect(within(contractLane).queryByText(/unavailable/i)).not.toBeInTheDocument()
+  })
+
+  it('renders each item scope carried by its own publication', () => {
+    const older = {
+      ...fixtureCompatiblePrecedent,
+      evidenceId: 'e-precedent-old',
+      publicationId: 'pub-1',
+      publicationNumber: 1,
+      applicabilityScope: fixtureApplicabilityScope({ jurisdiction: 'UK' }),
+    }
+    const newer = {
+      ...fixtureCompatiblePrecedent,
+      evidenceId: 'e-precedent-new',
+      publicationId: 'pub-2',
+      publicationNumber: 2,
+      applicabilityScope: fixtureApplicabilityScope({ jurisdiction: 'US' }),
+    }
+    renderBundle({ items: [older, newer] })
+
+    const precedentLane = screen.getByRole('region', { name: 'Precedents' })
+    expect(within(precedentLane).getAllByText('Jurisdiction').length).toBe(2)
+    expect(within(precedentLane).getByText('United Kingdom')).toBeInTheDocument()
+    expect(within(precedentLane).getByText('United States')).toBeInTheDocument()
+    expect(within(precedentLane).getByText('Published in v1')).toBeInTheDocument()
+    expect(within(precedentLane).getByText('Published in v2')).toBeInTheDocument()
   })
 })
 
