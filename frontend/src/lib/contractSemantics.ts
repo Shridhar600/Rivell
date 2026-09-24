@@ -101,8 +101,8 @@ const QUALITY_NOTE_LABELS: Record<string, string> = {
   AMBIGUOUS_DEFINITIONS: 'Some definitions could not be matched to a single meaning',
   UNRESOLVED_REFERENCES: 'Some cross-references could not be resolved',
   AMBIGUOUS_PARTY_ROLES: 'Some party roles could not be determined confidently',
-  UNCLASSIFIED_REGIONS: 'Some clauses could not be classified',
-  NO_PRIMARY_CONCEPT: 'Some classified clauses have no primary concept',
+  UNCLASSIFIED_REGIONS: 'Some contract regions could not be classified',
+  NO_PRIMARY_CONCEPT: 'Some classified regions have no primary concept',
   UNVERIFIED_FACTS: 'Some extracted facts could not be verified',
   UNSUPPORTED_FACT_SHAPE: 'Some extracted facts use an unsupported shape',
   PROVIDER_DEGRADATION: 'Some analysis could not be completed automatically',
@@ -469,6 +469,16 @@ export function resolveRegionLabel(
   nodes: RegionLabelNode[],
 ): string | null {
   return buildRegionLabelMap(clauses, nodes).get(nodeId) ?? null
+}
+
+const REGION_KIND_LABELS: Record<string, string> = {
+  CLAUSE: 'Clause',
+  SCHEDULE: 'Schedule',
+  SIGNATURE_BLOCK: 'Signature block',
+}
+
+export function regionKindLabel(value: string): string {
+  return REGION_KIND_LABELS[value] ?? humanizeCode(value)
 }
 
 export function profileKey(profile: ReviewProfile | null): string {

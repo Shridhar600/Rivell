@@ -1,6 +1,15 @@
 import type { SemanticDefinedTerm } from '../../api/semantics'
+import { SourceRegionLinks } from './SourceRegionLinks'
 
-export function DefinitionsPanel({ terms }: { terms: SemanticDefinedTerm[] }) {
+export function DefinitionsPanel({
+  terms,
+  labelByNodeId,
+  onNavigateToNode,
+}: {
+  terms: SemanticDefinedTerm[]
+  labelByNodeId: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
+}) {
   return (
     <section aria-labelledby="definitions-heading">
       <h2 id="definitions-heading" tabIndex={-1} data-section-heading>
@@ -22,11 +31,29 @@ export function DefinitionsPanel({ terms }: { terms: SemanticDefinedTerm[] }) {
               </div>
               <p className="term-card__definition">{term.definition}</p>
               <p className="provenance-note">
-                {term.referenceCount === 0
-                  ? 'No references found in the contract text'
-                  : term.referenceCount === 1
-                    ? 'Used once in the contract text'
-                    : `Used ${term.referenceCount} times in the contract text`}
+                <SourceRegionLinks
+                  nodeIds={[term.definingNodeId]}
+                  labelByNodeId={labelByNodeId}
+                  onNavigateToNode={onNavigateToNode}
+                  prefix="Defined in: "
+                  emptyLabel="Defining region not available"
+                />
+              </p>
+              <p className="provenance-note">
+                {term.referenceNodeIds.length === 0 ? (
+                  'No references found in the contract text'
+                ) : (
+                  <SourceRegionLinks
+                    nodeIds={term.referenceNodeIds}
+                    labelByNodeId={labelByNodeId}
+                    onNavigateToNode={onNavigateToNode}
+                    prefix={
+                      term.referenceNodeIds.length === 1
+                        ? 'Used in: '
+                        : `Used in ${term.referenceNodeIds.length} regions: `
+                    }
+                  />
+                )}
               </p>
             </li>
           ))}

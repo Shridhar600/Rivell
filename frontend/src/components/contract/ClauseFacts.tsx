@@ -14,6 +14,7 @@ import {
   interpretationKindDescription,
 } from '../../lib/contractSemantics'
 import { CorrectionFailure } from './CorrectionFailure'
+import { SourceRegionLinks } from './SourceRegionLinks'
 import { VerificationBadge } from './VerificationBadge'
 
 function FactCard({
@@ -23,8 +24,9 @@ function FactCard({
   clauseId,
   contractId,
   versionNumber,
-  hasConceptCorrection,
   onRefresh,
+  labelByNodeId,
+  onNavigateToNode,
 }: {
   fact: SemanticFact
   machineFact: SemanticFact | null
@@ -32,8 +34,9 @@ function FactCard({
   clauseId: string
   contractId: string
   versionNumber: number
-  hasConceptCorrection: boolean
   onRefresh: () => void
+  labelByNodeId: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
 }) {
   const rows = describeFact(fact)
   const machineRows = new Map(
@@ -77,18 +80,24 @@ function FactCard({
                           verification={interpretation.verification}
                         />
                         {` · ${interpretationKindDescription(interpretation.kind)} · `}
-                        {interpretation.sourceNodeCount === 1
-                          ? '1 source region'
-                          : `${interpretation.sourceNodeCount} source regions`}
+                        <SourceRegionLinks
+                          nodeIds={interpretation.sourceNodeIds}
+                          labelByNodeId={labelByNodeId}
+                          onNavigateToNode={onNavigateToNode}
+                          emptyLabel="no source region recorded"
+                        />
                       </>
                     ) : null}
                   </span>
                 ) : interpretation ? (
                   <span className="fact-list__provenance">
                     {interpretationKindDescription(interpretation.kind)} ·{' '}
-                    {interpretation.sourceNodeCount === 1
-                      ? '1 source region'
-                      : `${interpretation.sourceNodeCount} source regions`}
+                    <SourceRegionLinks
+                      nodeIds={interpretation.sourceNodeIds}
+                      labelByNodeId={labelByNodeId}
+                      onNavigateToNode={onNavigateToNode}
+                      emptyLabel="no source region recorded"
+                    />
                   </span>
                 ) : null}
               </dd>
@@ -101,7 +110,6 @@ function FactCard({
         clauseId={clauseId}
         contractId={contractId}
         versionNumber={versionNumber}
-        replacesConceptCorrection={hasConceptCorrection}
         onRefresh={onRefresh}
       />
     </div>
@@ -113,14 +121,12 @@ function FactEditor({
   clauseId,
   contractId,
   versionNumber,
-  replacesConceptCorrection,
   onRefresh,
 }: {
   fact: SemanticFact
   clauseId: string
   contractId: string
   versionNumber: number
-  replacesConceptCorrection: boolean
   onRefresh: () => void
 }) {
   const fields = factEditorFields(fact.factSchema)
@@ -243,11 +249,6 @@ function FactEditor({
             )
           })}
         </div>
-        {replacesConceptCorrection ? (
-          <p className="correction__warning" role="status">
-            Saving fact values replaces the classification correction on this clause.
-          </p>
-        ) : null}
         {error ? (
           <p role="alert" className="correction__error">
             {error}
@@ -274,11 +275,15 @@ export function ClauseFacts({
   contractId,
   versionNumber,
   onRefresh,
+  labelByNodeId,
+  onNavigateToNode,
 }: {
   clause: SemanticClause
   contractId: string
   versionNumber: number
   onRefresh: () => void
+  labelByNodeId: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
 }) {
   const machineBySchema = new Map(
     clause.machineFacts.map((fact) => [fact.factSchema, fact]),
@@ -307,8 +312,9 @@ export function ClauseFacts({
             clauseId={clause.id}
             contractId={contractId}
             versionNumber={versionNumber}
-            hasConceptCorrection={clause.correctedPrimaryConcept !== null}
             onRefresh={onRefresh}
+            labelByNodeId={labelByNodeId}
+            onNavigateToNode={onNavigateToNode}
           />
         ))
       )}
@@ -323,6 +329,12 @@ export function ClauseFacts({
                   {interpretation.proposedValue}
                 </span>
                 <VerificationBadge verification={interpretation.verification} />
+                <SourceRegionLinks
+                  nodeIds={interpretation.sourceNodeIds}
+                  labelByNodeId={labelByNodeId}
+                  onNavigateToNode={onNavigateToNode}
+                  emptyLabel="no source region recorded"
+                />
               </li>
             ))}
           </ul>

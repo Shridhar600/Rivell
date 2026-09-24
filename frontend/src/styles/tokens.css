@@ -1427,14 +1427,26 @@ a {
   color: var(--color-muted);
 }
 
-.correction__warning {
-  margin: var(--space-1) 0;
-  color: var(--color-warning);
-}
-
 .clause-concept-machine,
 .clause-summary__machine {
   margin: var(--space-1) 0;
   color: var(--color-muted);
   font-size: 0.875rem;
+}
+
+.source-links__prefix {
+  color: var(--color-muted);
+}
+
+.source-links__unknown {
+  color: var(--color-muted);
+}
+
+.clause-list__group {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: 0.875rem;
+}
+
+.clause-list__group:first-child {
+  margin-top: 0;
 }

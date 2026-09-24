@@ -86,6 +86,11 @@ export function SemanticWorkspace({
         (a, b) => orderOf(a.headingNodeId) - orderOf(b.headingNodeId),
       )
     : []
+  const orderedStructuralRegions = semantics
+    ? [...semantics.structuralRegions].sort(
+        (a, b) => orderOf(a.headingNodeId) - orderOf(b.headingNodeId),
+      )
+    : []
   const orderedRelationships = semantics
     ? [...semantics.relationships].sort(
         (a, b) =>
@@ -93,7 +98,10 @@ export function SemanticWorkspace({
           orderOf(a.targetRegionNodeId) - orderOf(b.targetRegionNodeId),
       )
     : []
-  const labelByNodeId = buildRegionLabelMap(orderedClauses, nodes)
+  const labelByNodeId = buildRegionLabelMap(
+    [...orderedClauses, ...orderedStructuralRegions],
+    nodes,
+  )
 
   const navigateToNode = (nodeId: string) => {
     const next = new URLSearchParams(searchParams)
@@ -194,11 +202,19 @@ export function SemanticWorkspace({
           contractId={contractId}
           versionNumber={versionNumber}
           onRefresh={() => void semanticsQuery.refetch()}
+          labelByNodeId={labelByNodeId}
+          onNavigateToNode={navigateToNode}
         />
       )
       break
     case 'definitions':
-      content = <DefinitionsPanel terms={semantics.definedTerms} />
+      content = (
+        <DefinitionsPanel
+          terms={semantics.definedTerms}
+          labelByNodeId={labelByNodeId}
+          onNavigateToNode={navigateToNode}
+        />
+      )
       break
     case 'references':
       content = (
@@ -213,12 +229,14 @@ export function SemanticWorkspace({
       content = (
         <ClausesPanel
           clauses={orderedClauses}
+          structuralRegions={orderedStructuralRegions}
           selectedClauseKey={clauseKey}
           onSelectClause={selectClause}
           contractId={contractId}
           versionNumber={versionNumber}
           onNavigateToNode={navigateToNode}
           onRefresh={() => void semanticsQuery.refetch()}
+          labelByNodeId={labelByNodeId}
         />
       )
       break
@@ -237,6 +255,8 @@ export function SemanticWorkspace({
           semantics={semantics}
           contractId={contractId}
           versionNumber={versionNumber}
+          labelByNodeId={labelByNodeId}
+          onNavigateToNode={navigateToNode}
         />
       )
   }

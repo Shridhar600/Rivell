@@ -49,7 +49,7 @@ const readyContract = {
       value: 'Master Services Agreement',
       correctedValue: null,
       corrected: false,
-      sourceNodeCount: 1,
+      sourceNodeIds: ['node-title'],
     },
   ],
   parties: [
@@ -60,7 +60,7 @@ const readyContract = {
       machineRoles: ['CUSTOMER'],
       effectiveRoles: ['CUSTOMER', 'PARTY_A'],
       corrected: true,
-      sourceNodeCount: 1,
+      sourceNodeIds: ['node-preamble'],
     },
   ],
   definedTerms: [
@@ -68,7 +68,8 @@ const readyContract = {
       id: 't1',
       term: 'Services',
       definition: 'the managed cloud services described in Schedule A.',
-      referenceCount: 4,
+      definingNodeId: 'node-1',
+      referenceNodeIds: ['node-2', 'node-3'],
       duplicate: false,
     },
   ],
@@ -78,22 +79,25 @@ const readyContract = {
       referenceText: 'Section 6.3',
       kind: 'SECTION',
       status: 'RESOLVED',
+      sourceNodeId: 'node-5',
       targetNodeId: 'node-63',
-      candidateCount: 1,
+      candidateNodeIds: ['node-63'],
     },
     {
       id: 'r2',
       referenceText: 'Section 99',
       kind: 'SECTION',
       status: 'BROKEN',
+      sourceNodeId: 'node-6',
       targetNodeId: null,
-      candidateCount: 0,
+      candidateNodeIds: [],
     },
   ],
   clauses: [
     {
       id: 'cl1',
       headingNodeId: 'node-6',
+      regionKind: 'CLAUSE',
       heading: '6. Limitation of Liability',
       contentText: '6. Limitation of Liability\n6.1 Subject to Section 6.3…',
       primaryConcept: 'LIMITATION_OF_LIABILITY',
@@ -104,6 +108,7 @@ const readyContract = {
           factSchema: 'liability-facts',
           schemaVersion: 1,
           values: { liabilityCapMultiple: '3', capBasis: 'PRECEDING_12_MONTH_FEES' },
+          sourceNodeIds: ['node-6'],
         },
       ],
       effectiveFacts: [
@@ -111,6 +116,7 @@ const readyContract = {
           factSchema: 'liability-facts',
           schemaVersion: 1,
           values: { liabilityCapMultiple: '3', capBasis: 'PRECEDING_12_MONTH_FEES' },
+          sourceNodeIds: ['node-6'],
         },
       ],
       interpretations: [
@@ -119,7 +125,7 @@ const readyContract = {
           kind: 'DETERMINISTIC',
           proposedValue: '3',
           specId: 'contract-facts-liability',
-          sourceNodeCount: 1,
+          sourceNodeIds: ['node-6'],
           verification: 'VERIFIED',
         },
       ],
@@ -136,6 +142,21 @@ const readyContract = {
       basis: 'narrowed pair analysis',
       probability: 0.91,
       verification: 'NOT_VERIFIED',
+    },
+  ],
+  structuralRegions: [
+    {
+      id: 'sr1',
+      headingNodeId: 'node-9',
+      regionKind: 'SCHEDULE',
+      heading: 'Schedule A — Services',
+      primaryConcept: null,
+      secondaryConcepts: [],
+      correctedPrimaryConcept: null,
+      machineFacts: [],
+      effectiveFacts: [],
+      interpretations: [],
+      corrected: false,
     },
   ],
   quality: ['UNCLASSIFIED_REGIONS', 'PROVIDER_DEGRADATION'],
@@ -166,7 +187,7 @@ describe('parseSemanticContract', () => {
       value: 'Master Services Agreement',
       correctedValue: null,
       corrected: false,
-      sourceNodeCount: 1,
+      sourceNodeIds: ['node-title'],
     })
     expect(parsed.parties[0]).toMatchObject({
       machineRoles: ['CUSTOMER'],
@@ -175,18 +196,23 @@ describe('parseSemanticContract', () => {
     })
     expect(parsed.definedTerms[0]).toMatchObject({
       term: 'Services',
-      referenceCount: 4,
+      definingNodeId: 'node-1',
+      referenceNodeIds: ['node-2', 'node-3'],
       duplicate: false,
     })
     expect(parsed.references[1]).toMatchObject({
       status: 'BROKEN',
+      sourceNodeId: 'node-6',
       targetNodeId: null,
-      candidateCount: 0,
+      candidateNodeIds: [],
     })
     expect(parsed.clauses[0].machineFacts[0].values).toEqual({
       liabilityCapMultiple: '3',
       capBasis: 'PRECEDING_12_MONTH_FEES',
     })
+    expect(parsed.clauses[0].machineFacts[0].sourceNodeIds).toEqual(['node-6'])
+    expect(parsed.clauses[0].regionKind).toBe('CLAUSE')
+    expect(parsed.structuralRegions[0].regionKind).toBe('SCHEDULE')
     expect(parsed.clauses[0].interpretations[0].verification).toBe('VERIFIED')
     expect(parsed.relationships[0]).toMatchObject({
       type: 'DEPENDS_ON',
@@ -215,6 +241,7 @@ describe('parseSemanticContract', () => {
       references: [],
       clauses: [],
       relationships: [],
+      structuralRegions: [],
       quality: ['PROVIDER_DEGRADATION'],
       observations: null,
     })
@@ -238,6 +265,7 @@ describe('parseSemanticContract', () => {
               factSchema: 'privacy-facts',
               schemaVersion: 2,
               values: { retentionDays: '30' },
+              sourceNodeIds: [],
             },
           ],
           interpretations: [

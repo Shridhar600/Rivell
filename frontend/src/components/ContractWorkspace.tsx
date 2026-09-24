@@ -84,6 +84,9 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
 
   const selectedClause =
     semanticsQuery.data?.clauses.find((clause) => clause.headingNodeId === selectedId) ??
+    semanticsQuery.data?.structuralRegions.find(
+      (region) => region.headingNodeId === selectedId,
+    ) ??
     null
 
   const selectedRegionExtra = selectedClause ? (

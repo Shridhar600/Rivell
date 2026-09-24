@@ -84,6 +84,7 @@ describe('fact presentation', () => {
   const liability: SemanticFact = {
     factSchema: 'liability-facts',
     schemaVersion: 1,
+    sourceNodeIds: [],
     values: {
       liabilityCapMultiple: '3',
       capBasis: 'PRECEDING_12_MONTH_FEES',
@@ -119,6 +120,7 @@ describe('fact presentation', () => {
     const rows = describeFact({
       factSchema: 'termination-facts',
       schemaVersion: 1,
+    sourceNodeIds: [],
       values: {
         noticePeriodDays: '60',
         availableTo: 'ANY_PARTY',
@@ -139,6 +141,7 @@ describe('fact presentation', () => {
     const rows = describeFact({
       factSchema: 'privacy-facts',
       schemaVersion: 1,
+    sourceNodeIds: [],
       values: { retentionDays: '30' },
     })
 
@@ -171,6 +174,7 @@ describe('machine vs effective facts', () => {
         {
           factSchema: 'termination-facts',
           schemaVersion: 1,
+    sourceNodeIds: [],
           values: { noticePeriodDays: '30', availableTo: 'ANY_PARTY' },
         },
       ],
@@ -178,6 +182,7 @@ describe('machine vs effective facts', () => {
         {
           factSchema: 'termination-facts',
           schemaVersion: 1,
+    sourceNodeIds: [],
           values: { noticePeriodDays: '60', availableTo: 'ANY_PARTY' },
         },
       ],
@@ -200,6 +205,7 @@ describe('machine vs effective facts', () => {
           {
             factSchema: 'liability-facts',
             schemaVersion: 1,
+    sourceNodeIds: [],
             values: { liabilityCapMultiple: '3' },
           },
         ],
@@ -207,6 +213,7 @@ describe('machine vs effective facts', () => {
           {
             factSchema: 'liability-facts',
             schemaVersion: 1,
+    sourceNodeIds: [],
             values: { liabilityCapMultiple: '3' },
           },
         ],

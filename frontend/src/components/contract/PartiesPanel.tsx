@@ -3,6 +3,7 @@ import type { PartyRole, SemanticParty } from '../../api/semantics'
 import { useCorrectPartyRole } from '../../api/semantics'
 import { PARTY_ROLES, roleLabel } from '../../lib/contractSemantics'
 import { CorrectionFailure } from './CorrectionFailure'
+import { SourceRegionLinks } from './SourceRegionLinks'
 
 function RoleChips({ roles }: { roles: string[] }) {
   if (roles.length === 0) {
@@ -103,11 +104,15 @@ export function PartiesPanel({
   contractId,
   versionNumber,
   onRefresh,
+  labelByNodeId,
+  onNavigateToNode,
 }: {
   parties: SemanticParty[]
   contractId: string
   versionNumber: number
   onRefresh: () => void
+  labelByNodeId: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
 }) {
   return (
     <section aria-labelledby="parties-heading">
@@ -144,11 +149,13 @@ export function PartiesPanel({
                 </div>
               </div>
               <p className="provenance-note">
-                {party.sourceNodeCount === 0
-                  ? 'No source regions recorded'
-                  : party.sourceNodeCount === 1
-                    ? 'Supported by 1 source region'
-                    : `Supported by ${party.sourceNodeCount} source regions`}
+                <SourceRegionLinks
+                  nodeIds={party.sourceNodeIds}
+                  labelByNodeId={labelByNodeId}
+                  onNavigateToNode={onNavigateToNode}
+                  prefix="Supported by: "
+                  emptyLabel="No source regions recorded"
+                />
               </p>
               <PartyRoleEditor
                 party={party}

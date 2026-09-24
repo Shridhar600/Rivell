@@ -174,6 +174,94 @@ describe('semantic analysis lifecycle', () => {
   })
 
 
+
+  it('navigates from a definition to its defining region', async () => {
+    stubContractApi()
+    const { router } = renderRoute('/reviews/c1?view=semantics&section=definitions')
+
+    await screen.findByRole('heading', { name: 'Defined terms' })
+    const services = screen.getByText('Services').closest('li') as HTMLElement
+
+    await userEvent.click(
+      within(services).getByRole('button', { name: '1. Definitions' }),
+    )
+    expect(router.state.location.search).toContain('view=document')
+    expect(router.state.location.search).toContain('node=node-1')
+    await waitFor(() => {
+      expect(document.querySelector('[data-node-id="node-1"]')).toHaveFocus()
+    })
+  })
+
+  it('navigates from a definition to a usage region', async () => {
+    stubContractApi()
+    const { router } = renderRoute('/reviews/c1?view=semantics&section=definitions')
+
+    await screen.findByRole('heading', { name: 'Defined terms' })
+    const services = screen.getByText('Services').closest('li') as HTMLElement
+
+    await userEvent.click(
+      within(services).getByRole('button', { name: '5. Termination' }),
+    )
+    expect(router.state.location.search).toContain('node=node-5')
+  })
+
+  it('shows a reference occurrence and its resolved target, both navigable', async () => {
+    stubContractApi()
+    const { router } = renderRoute(
+      '/reviews/c1?view=semantics&section=references',
+    )
+
+    await screen.findByRole('heading', { name: 'Cross-references' })
+    const row = screen.getByText('Section 6.3').closest('li') as HTMLElement
+
+    await userEvent.click(
+      within(row).getByRole('button', { name: '5. Termination' }),
+    )
+    expect(router.state.location.search).toContain('node=node-5')
+  })
+
+  it('shows ambiguous candidates without implying a resolved target', async () => {
+    stubContractApi()
+    renderRoute('/reviews/c1?view=semantics&section=references')
+
+    await screen.findByRole('heading', { name: 'Cross-references' })
+    const row = screen.getByText('Section 5').closest('li') as HTMLElement
+
+    expect(within(row).getByText('Possible targets:')).toBeInTheDocument()
+    expect(
+      within(row).queryByText(/Resolved target/),
+    ).not.toBeInTheDocument()
+    expect(
+      within(row).getByRole('button', { name: '5. Termination' }),
+    ).toBeInTheDocument()
+  })
+
+  it('navigates from metadata provenance to the source region', async () => {
+    stubContractApi()
+    const { router } = renderRoute('/reviews/c1?view=semantics')
+
+    await screen.findByRole('heading', { name: 'Overview' })
+    const metadata = document.querySelector('.metadata-list') as HTMLElement
+    await userEvent.click(
+      within(metadata).getByRole('button', { name: '6. Limitation of Liability' }),
+    )
+    expect(router.state.location.search).toContain('node=node-6')
+  })
+
+  it('navigates from party provenance to the source region', async () => {
+    stubContractApi()
+    const { router } = renderRoute('/reviews/c1?view=semantics&section=parties')
+
+    await screen.findByRole('heading', { name: 'Parties' })
+    const party = (await screen.findByText('Northwind Customer Group LLC')).closest(
+      'li',
+    ) as HTMLElement
+    await userEvent.click(
+      within(party).getByRole('button', { name: '1. Definitions' }),
+    )
+    expect(router.state.location.search).toContain('node=node-1')
+  })
+
   it('renders corrected metadata values and correction-only records', async () => {
     stubContractApi({
       semantics: fixtureSemantics({
@@ -183,14 +271,14 @@ describe('semantic analysis lifecycle', () => {
             value: 'Draft Agreement',
             correctedValue: 'Master Services Agreement',
             corrected: true,
-            sourceNodeCount: 1,
+            sourceNodeIds: ['title'],
           },
           {
             field: 'TERM',
             value: '12 months',
             correctedValue: null,
             corrected: true,
-            sourceNodeCount: 1,
+            sourceNodeIds: [],
           },
         ],
       }),
@@ -200,7 +288,9 @@ describe('semantic analysis lifecycle', () => {
     await screen.findByRole('heading', { name: 'Overview' })
     const metadata = document.querySelector('.metadata-list') as HTMLElement
     expect(
-      within(metadata).getByText('Master Services Agreement'),
+      within(metadata).getByText('Master Services Agreement', {
+        selector: '.metadata-list__value',
+      }),
     ).toBeInTheDocument()
     expect(within(metadata).getByText('Corrected')).toBeInTheDocument()
     expect(within(metadata).getByText('Correction recorded')).toBeInTheDocument()
@@ -281,6 +371,7 @@ describe('semantic analysis lifecycle', () => {
           {
             id: 'cl6',
             headingNodeId: 'node-6',
+            regionKind: 'CLAUSE',
             heading: '6. Limitation of Liability',
             primaryConcept: 'LIMITATION_OF_LIABILITY',
             secondaryConcepts: [],
@@ -293,6 +384,7 @@ describe('semantic analysis lifecycle', () => {
           {
             id: 'cl1',
             headingNodeId: 'node-1',
+            regionKind: 'CLAUSE',
             heading: '1. Definitions',
             primaryConcept: null,
             secondaryConcepts: [],
@@ -369,8 +461,14 @@ describe('semantic overview', () => {
     expect(within(profile).getByText('United Kingdom')).toBeInTheDocument()
 
     const metadata = document.querySelector('.metadata-list') as HTMLElement
-    expect(within(metadata).getByText('Master Services Agreement')).toBeInTheDocument()
-    expect(within(metadata).getAllByText('Source: 1 region').length).toBeGreaterThan(0)
+    expect(
+      within(metadata).getByText('Master Services Agreement', {
+        selector: '.metadata-list__value',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      within(metadata).getByRole('button', { name: '6. Limitation of Liability' }),
+    ).toBeInTheDocument()
 
     const coverage = document.querySelector('.coverage-list') as HTMLElement
     expect(within(coverage).getByText('Parties').nextElementSibling).toHaveTextContent('2')
@@ -381,7 +479,9 @@ describe('semantic overview', () => {
     expect(
       screen.getByText('Some analysis could not be completed automatically'),
     ).toBeInTheDocument()
-    expect(screen.getByText('Some clauses could not be classified')).toBeInTheDocument()
+    expect(
+      screen.getByText('Some contract regions could not be classified'),
+    ).toBeInTheDocument()
   })
 
   it('never renders probabilities, provider plumbing or telemetry counters', async () => {
@@ -423,8 +523,21 @@ describe('semantic sections', () => {
     renderRoute('/reviews/c1?view=semantics&section=definitions')
 
     await screen.findByRole('heading', { name: 'Defined terms' })
-    expect(screen.getByText('Services')).toBeInTheDocument()
-    expect(screen.getByText('Used 4 times in the contract text')).toBeInTheDocument()
+    const services = screen.getByText('Services').closest('li') as HTMLElement
+    expect(within(services).getByText(/Defined in:/)).toBeInTheDocument()
+    expect(
+      within(services).getByRole('button', { name: '1. Definitions' }),
+    ).toBeInTheDocument()
+    expect(within(services).getByText(/Used in 2 regions:/)).toBeInTheDocument()
+    expect(
+      within(services).getByRole('button', { name: '5. Termination' }),
+    ).toBeInTheDocument()
+    expect(
+      within(services).getByRole('button', { name: '6. Limitation of Liability' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('No references found in the contract text'),
+    ).toBeInTheDocument()
     expect(screen.getByText('Defined more than once')).toBeInTheDocument()
   })
 
@@ -439,10 +552,12 @@ describe('semantic sections', () => {
     expect(
       screen.getByText('No matching section was found in this document'),
     ).toBeInTheDocument()
+    expect(screen.getAllByText(/Occurrence:/).length).toBeGreaterThan(0)
 
+    const resolvedRow = screen.getByText('Section 6.3').closest('li') as HTMLElement
     await userEvent.click(
-      screen.getByRole('button', {
-        name: 'Go to 6.3 The exclusions in Section 6.2 do not apply to breaches…',
+      within(resolvedRow).getByRole('button', {
+        name: '6.3 The exclusions in Section 6.2 do not apply to breaches…',
       }),
     )
 

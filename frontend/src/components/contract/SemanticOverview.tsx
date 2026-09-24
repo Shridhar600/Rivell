@@ -7,6 +7,7 @@ import {
   roleLabel,
 } from '../../lib/contractSemantics'
 import { QualityNotes } from './QualityNotes'
+import { SourceRegionLinks } from './SourceRegionLinks'
 import { ReRunAnalysis } from './ReRunAnalysis'
 
 function ProfileSummary({ semantics }: { semantics: SemanticContract }) {
@@ -41,7 +42,15 @@ function ProfileSummary({ semantics }: { semantics: SemanticContract }) {
   )
 }
 
-function MetadataList({ semantics }: { semantics: SemanticContract }) {
+function MetadataList({
+  semantics,
+  labelByNodeId,
+  onNavigateToNode,
+}: {
+  semantics: SemanticContract
+  labelByNodeId: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
+}) {
   if (semantics.metadata.length === 0) {
     return (
       <p className="semantic-empty">
@@ -67,11 +76,14 @@ function MetadataList({ semantics }: { semantics: SemanticContract }) {
             {fact.corrected && fact.correctedValue === null ? (
               <span className="metadata-list__source">Correction recorded</span>
             ) : null}
-            {fact.sourceNodeCount > 0 ? (
+            {fact.sourceNodeIds.length > 0 ? (
               <span className="metadata-list__source">
-                {fact.sourceNodeCount === 1
-                  ? 'Source: 1 region'
-                  : `Source: ${fact.sourceNodeCount} regions`}
+                <SourceRegionLinks
+                  nodeIds={fact.sourceNodeIds}
+                  labelByNodeId={labelByNodeId}
+                  onNavigateToNode={onNavigateToNode}
+                  prefix="Source: "
+                />
               </span>
             ) : null}
           </dd>
@@ -86,9 +98,12 @@ function Coverage({ semantics }: { semantics: SemanticContract }) {
     ['Parties', semantics.parties.length],
     ['Defined terms', semantics.definedTerms.length],
     ['Cross-references', semantics.references.length],
-    ['Clause regions', semantics.clauses.length],
-    ['Relationships', semantics.relationships.length],
+    ['Clauses', semantics.clauses.length],
   ]
+  if (semantics.structuralRegions.length > 0) {
+    rows.push(['Schedules and other regions', semantics.structuralRegions.length])
+  }
+  rows.push(['Relationships', semantics.relationships.length])
   return (
     <dl className="data-list coverage-list">
       {rows.map(([label, count]) => (
@@ -105,10 +120,14 @@ export function SemanticOverview({
   semantics,
   contractId,
   versionNumber,
+  labelByNodeId,
+  onNavigateToNode,
 }: {
   semantics: SemanticContract
   contractId: string
   versionNumber: number
+  labelByNodeId: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
 }) {
   return (
     <section aria-labelledby="semantic-overview-heading">
@@ -127,7 +146,11 @@ export function SemanticOverview({
         </div>
         <div className="panel">
           <h3>Detected metadata</h3>
-          <MetadataList semantics={semantics} />
+          <MetadataList
+            semantics={semantics}
+            labelByNodeId={labelByNodeId}
+            onNavigateToNode={onNavigateToNode}
+          />
         </div>
         <div className="panel">
           <h3>Detected semantics</h3>

@@ -5,8 +5,8 @@ import {
   TAXONOMY_CONCEPTS,
   conceptLabel,
   effectivePrimaryConcept,
-  factDivergence,
   machinePrimaryConcept,
+  regionKindLabel,
 } from '../../lib/contractSemantics'
 import { ClauseFacts } from './ClauseFacts'
 import { CorrectionFailure } from './CorrectionFailure'
@@ -35,8 +35,6 @@ function ConceptEditor({
   onRefresh: () => void
 }) {
   const correct = useCorrectClauseConcept(contractId, versionNumber)
-  const replacesFactCorrection =
-    factDivergence(clause.machineFacts, clause.effectiveFacts).length > 0
   const effective = effectivePrimaryConcept(clause) ?? ''
   const [serverConcept, setServerConcept] = useState(effective)
   const [selected, setSelected] = useState(effective)
@@ -80,12 +78,6 @@ function ConceptEditor({
           This corrects what the clause is about. It is not an approval or rejection of
           the clause.
         </p>
-        {replacesFactCorrection ? (
-          <p className="correction__warning" role="status">
-            Saving a classification correction replaces the fact-value correction on
-            this clause.
-          </p>
-        ) : null}
         {error ? (
           <p role="alert" className="correction__error">
             {error}
@@ -113,12 +105,14 @@ function ClauseDetail({
   versionNumber,
   onNavigateToNode,
   onRefresh,
+  labelByNodeId,
 }: {
   clause: SemanticClause
   contractId: string
   versionNumber: number
   onNavigateToNode: (nodeId: string) => void
   onRefresh: () => void
+  labelByNodeId: Map<string, string>
 }) {
   return (
     <div className="clause-detail">
@@ -126,6 +120,9 @@ function ClauseDetail({
         <h3 tabIndex={-1} data-clause-heading>
           {clause.heading}
         </h3>
+        {clause.regionKind !== 'CLAUSE' ? (
+          <span className="badge">{regionKindLabel(clause.regionKind)}</span>
+        ) : null}
         {clause.corrected ? (
           <span className="badge badge--edited">Corrected</span>
         ) : null}
@@ -175,6 +172,8 @@ function ClauseDetail({
         contractId={contractId}
         versionNumber={versionNumber}
         onRefresh={onRefresh}
+        labelByNodeId={labelByNodeId}
+        onNavigateToNode={onNavigateToNode}
       />
     </div>
   )
@@ -182,36 +181,47 @@ function ClauseDetail({
 
 export function ClausesPanel({
   clauses,
+  structuralRegions,
   selectedClauseKey,
   onSelectClause,
   contractId,
   versionNumber,
   onNavigateToNode,
   onRefresh,
+  labelByNodeId,
 }: {
   clauses: SemanticClause[]
+  structuralRegions: SemanticClause[]
   selectedClauseKey: string | null
   onSelectClause: (clauseKey: string | null) => void
   contractId: string
   versionNumber: number
   onNavigateToNode: (nodeId: string) => void
   onRefresh: () => void
+  labelByNodeId: Map<string, string>
 }) {
   const selected =
-    clauses.find((clause) => clause.headingNodeId === selectedClauseKey) ?? null
+    clauses.find((clause) => clause.headingNodeId === selectedClauseKey) ??
+    structuralRegions.find(
+      (region) => region.headingNodeId === selectedClauseKey,
+    ) ??
+    null
 
   return (
     <section aria-labelledby="clauses-heading">
       <h2 id="clauses-heading" tabIndex={-1} data-section-heading>
         Clause semantics
       </h2>
-      {clauses.length === 0 ? (
+      {clauses.length === 0 && structuralRegions.length === 0 ? (
         <p className="semantic-empty">
           No clause regions were identified in this contract version.
         </p>
       ) : (
         <div className="clause-workspace">
           <div className="clause-list" role="list">
+            {clauses.length > 0 ? (
+              <h3 className="clause-list__group">Clauses</h3>
+            ) : null}
             {clauses.map((clause) => (
               <div role="listitem" key={clause.id}>
                 <button
@@ -243,6 +253,44 @@ export function ClausesPanel({
                 </button>
               </div>
             ))}
+            {structuralRegions.length > 0 ? (
+              <>
+                <h3 className="clause-list__group">
+                  Schedules and other regions
+                </h3>
+                {structuralRegions.map((region) => (
+                  <div role="listitem" key={region.id}>
+                    <button
+                      type="button"
+                      className={
+                        region.headingNodeId === selectedClauseKey
+                          ? 'clause-list__button clause-list__button--selected'
+                          : 'clause-list__button'
+                      }
+                      aria-current={
+                        region.headingNodeId === selectedClauseKey
+                          ? 'true'
+                          : undefined
+                      }
+                      onClick={() => onSelectClause(region.headingNodeId)}
+                    >
+                      <span className="clause-list__heading">{region.heading}</span>
+                      <span className="clause-list__meta">
+                        {regionKindLabel(region.regionKind)}
+                        {effectivePrimaryConcept(region)
+                          ? ` · ${conceptLabel(effectivePrimaryConcept(region) as string)}`
+                          : ''}
+                        {region.effectiveFacts.length > 0
+                          ? ` · ${region.effectiveFacts.length} fact${
+                              region.effectiveFacts.length === 1 ? '' : 's'
+                            }`
+                          : ''}
+                      </span>
+                    </button>
+                  </div>
+                ))}
+              </>
+            ) : null}
           </div>
           <div className="clause-workspace__detail">
             {selected ? (
@@ -253,6 +301,7 @@ export function ClausesPanel({
                 versionNumber={versionNumber}
                 onNavigateToNode={onNavigateToNode}
                 onRefresh={onRefresh}
+                labelByNodeId={labelByNodeId}
               />
             ) : selectedClauseKey ? (
               <div className="state state--warning" role="status">

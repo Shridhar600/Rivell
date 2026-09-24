@@ -51,7 +51,7 @@ export type SemanticMetadataFact = {
   value: string
   correctedValue: string | null
   corrected: boolean
-  sourceNodeCount: number
+  sourceNodeIds: string[]
 }
 
 export type SemanticParty = {
@@ -61,14 +61,15 @@ export type SemanticParty = {
   machineRoles: string[]
   effectiveRoles: string[]
   corrected: boolean
-  sourceNodeCount: number
+  sourceNodeIds: string[]
 }
 
 export type SemanticDefinedTerm = {
   id: string
   term: string
   definition: string
-  referenceCount: number
+  definingNodeId: string
+  referenceNodeIds: string[]
   duplicate: boolean
 }
 
@@ -77,14 +78,16 @@ export type SemanticReference = {
   referenceText: string
   kind: string
   status: string
+  sourceNodeId: string | null
   targetNodeId: string | null
-  candidateCount: number
+  candidateNodeIds: string[]
 }
 
 export type SemanticFact = {
   factSchema: string
   schemaVersion: number
   values: Record<string, string>
+  sourceNodeIds: string[]
 }
 
 export type SemanticInterpretation = {
@@ -92,13 +95,14 @@ export type SemanticInterpretation = {
   kind: string
   proposedValue: string
   specId: string
-  sourceNodeCount: number
+  sourceNodeIds: string[]
   verification: string
 }
 
 export type SemanticClause = {
   id: string
   headingNodeId: string
+  regionKind: string
   heading: string
   primaryConcept: string | null
   secondaryConcepts: string[]
@@ -140,6 +144,7 @@ export type SemanticContract = {
   definedTerms: SemanticDefinedTerm[]
   references: SemanticReference[]
   clauses: SemanticClause[]
+  structuralRegions: SemanticClause[]
   relationships: SemanticRelationship[]
   quality: string[]
   observations: SemanticObservations | null
@@ -162,7 +167,7 @@ function parseMetadataFact(value: unknown, what: string): SemanticMetadataFact {
     value: readString(fact, 'value', what),
     correctedValue: readOptionalNullableString(fact, 'correctedValue', what),
     corrected: readOptionalBoolean(fact, 'corrected', what),
-    sourceNodeCount: readOptionalNumber(fact, 'sourceNodeCount', what),
+    sourceNodeIds: readStringArray(fact, 'sourceNodeIds', what),
   }
 }
 
@@ -175,7 +180,7 @@ function parseParty(value: unknown, what: string): SemanticParty {
     machineRoles: readStringArray(party, 'machineRoles', what),
     effectiveRoles: readStringArray(party, 'effectiveRoles', what),
     corrected: readOptionalBoolean(party, 'corrected', what),
-    sourceNodeCount: readOptionalNumber(party, 'sourceNodeCount', what),
+    sourceNodeIds: readStringArray(party, 'sourceNodeIds', what),
   }
 }
 
@@ -185,7 +190,8 @@ function parseDefinedTerm(value: unknown, what: string): SemanticDefinedTerm {
     id: readString(term, 'id', what),
     term: readString(term, 'term', what),
     definition: readString(term, 'definition', what),
-    referenceCount: readOptionalNumber(term, 'referenceCount', what),
+    definingNodeId: readString(term, 'definingNodeId', what),
+    referenceNodeIds: readStringArray(term, 'referenceNodeIds', what),
     duplicate: readOptionalBoolean(term, 'duplicate', what),
   }
 }
@@ -197,8 +203,9 @@ function parseReference(value: unknown, what: string): SemanticReference {
     referenceText: readString(reference, 'referenceText', what),
     kind: readString(reference, 'kind', what),
     status: readString(reference, 'status', what),
+    sourceNodeId: readOptionalNullableString(reference, 'sourceNodeId', what),
     targetNodeId: readOptionalNullableString(reference, 'targetNodeId', what),
-    candidateCount: readOptionalNumber(reference, 'candidateCount', what),
+    candidateNodeIds: readStringArray(reference, 'candidateNodeIds', what),
   }
 }
 
@@ -208,6 +215,7 @@ function parseFact(value: unknown, what: string): SemanticFact {
     factSchema: readString(fact, 'factSchema', what),
     schemaVersion: readOptionalNumber(fact, 'schemaVersion', what),
     values: readStringMap(fact, 'values', what),
+    sourceNodeIds: readStringArray(fact, 'sourceNodeIds', what),
   }
 }
 
@@ -218,7 +226,7 @@ function parseInterpretation(value: unknown, what: string): SemanticInterpretati
     kind: readString(interpretation, 'kind', what),
     proposedValue: readString(interpretation, 'proposedValue', what),
     specId: readOptionalNullableString(interpretation, 'specId', what) ?? '',
-    sourceNodeCount: readOptionalNumber(interpretation, 'sourceNodeCount', what),
+    sourceNodeIds: readStringArray(interpretation, 'sourceNodeIds', what),
     verification: readString(interpretation, 'verification', what),
   }
 }
@@ -228,6 +236,7 @@ function parseClause(value: unknown, what: string): SemanticClause {
   return {
     id: readString(clause, 'id', what),
     headingNodeId: readString(clause, 'headingNodeId', what),
+    regionKind: readOptionalNullableString(clause, 'regionKind', what) ?? 'CLAUSE',
     heading: readString(clause, 'heading', what),
     primaryConcept: readOptionalNullableString(clause, 'primaryConcept', what),
     secondaryConcepts: readStringArray(clause, 'secondaryConcepts', what),
@@ -303,13 +312,14 @@ export function parseSemanticContract(
     definedTerms: readArray(response, 'definedTerms', what, parseDefinedTerm),
     references: readArray(response, 'references', what, parseReference),
     clauses: readArray(response, 'clauses', what, parseClause),
+    structuralRegions: readArray(response, 'structuralRegions', what, parseClause),
     relationships: readArray(response, 'relationships', what, parseRelationship),
     quality: readStringArray(response, 'quality', what),
     observations: parseObservations(response.observations, what),
   }
 }
 
-export class SemanticApiError extends Error {
+class SemanticApiError extends Error {
   readonly status: number
 
   constructor(message: string, status: number) {

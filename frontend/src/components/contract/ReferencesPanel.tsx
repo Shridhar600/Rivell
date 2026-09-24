@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
 import type { SemanticReference } from '../../api/semantics'
 import { referenceKindLabel, referenceStatusLabel } from '../../lib/contractSemantics'
+import { SourceRegionLinks } from './SourceRegionLinks'
 
 function statusOrder(reference: SemanticReference): number {
   switch (reference.status) {
@@ -26,29 +26,29 @@ function ReferenceRow({
   labelByNodeId: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
 }) {
-  const targetLabel = reference.targetNodeId
-    ? labelByNodeId.get(reference.targetNodeId) ?? null
-    : null
-
-  let resolution: ReactNode
+  let resolution
   if (reference.status === 'RESOLVED' && reference.targetNodeId) {
     resolution = (
-      <button
-        type="button"
-        className="link-button"
-        onClick={() => onNavigateToNode(reference.targetNodeId as string)}
-      >
-        Go to {targetLabel ?? 'referenced region'}
-      </button>
+      <SourceRegionLinks
+        nodeIds={[reference.targetNodeId]}
+        labelByNodeId={labelByNodeId}
+        onNavigateToNode={onNavigateToNode}
+        prefix="Resolved target: "
+        emptyLabel="Resolved target is not part of this document version"
+      />
     )
   } else if (reference.status === 'AMBIGUOUS') {
-    resolution = (
-      <span className="reference-note">
-        {reference.candidateCount === 1
-          ? 'Matches more than one possible target'
-          : `Matches ${reference.candidateCount} possible targets`}
-      </span>
-    )
+    resolution =
+      reference.candidateNodeIds.length > 0 ? (
+        <SourceRegionLinks
+          nodeIds={reference.candidateNodeIds}
+          labelByNodeId={labelByNodeId}
+          onNavigateToNode={onNavigateToNode}
+          prefix="Possible targets: "
+        />
+      ) : (
+        <span className="reference-note">Matches more than one possible target</span>
+      )
   } else if (reference.status === 'BROKEN') {
     resolution = (
       <span className="reference-note reference-note--warning">
@@ -72,7 +72,16 @@ function ReferenceRow({
           {referenceStatusLabel(reference.status)}
         </span>
       </div>
-      <div className="reference-row__resolution">{resolution}</div>
+      <div className="reference-row__resolution">
+        <SourceRegionLinks
+          nodeIds={reference.sourceNodeId ? [reference.sourceNodeId] : []}
+          labelByNodeId={labelByNodeId}
+          onNavigateToNode={onNavigateToNode}
+          prefix="Occurrence: "
+          emptyLabel="Occurrence region not available"
+        />
+        {resolution}
+      </div>
     </li>
   )
 }
@@ -86,9 +95,7 @@ export function ReferencesPanel({
   labelByNodeId: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
 }) {
-  const sorted = [...references].sort(
-    (a, b) => statusOrder(a) - statusOrder(b),
-  )
+  const sorted = [...references].sort((a, b) => statusOrder(a) - statusOrder(b))
 
   return (
     <section aria-labelledby="references-heading">
@@ -102,7 +109,7 @@ export function ReferencesPanel({
       ) : (
         <>
           <p className="section-note">
-            References between parts of this contract and where they point.
+            Where each reference appears, and where it points.
           </p>
           <ul className="reference-list">
             {sorted.map((reference) => (
