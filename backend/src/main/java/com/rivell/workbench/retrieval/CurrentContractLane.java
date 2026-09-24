@@ -97,13 +97,13 @@ public class CurrentContractLane {
 
     private List<ClauseSemantics> siblingClauses(
             ContractSemantics semantics, ClauseSemantics subject) {
-        var concept = subject.primaryConcept();
+        var concept = subject.effectivePrimaryConcept();
         if (concept.isEmpty()) {
             return List.of();
         }
         return semantics.clauses().stream()
                 .filter(clause -> !clause.id().equals(subject.id()))
-                .filter(clause -> clause.primaryConcept().equals(concept))
+                .filter(clause -> clause.effectivePrimaryConcept().equals(concept))
                 .toList();
     }
 
@@ -149,7 +149,7 @@ public class CurrentContractLane {
                 null,
                 semantics.contractVersionId(),
                 subject.id(),
-                subject.primaryConcept().orElse(null),
+                subject.effectivePrimaryConcept().orElse(null),
                 null,
                 subject.contentText(),
                 null,
@@ -173,7 +173,7 @@ public class CurrentContractLane {
                 null,
                 semantics.contractVersionId(),
                 related.id(),
-                related.primaryConcept().orElse(null),
+                related.effectivePrimaryConcept().orElse(null),
                 null,
                 related.contentText(),
                 null,

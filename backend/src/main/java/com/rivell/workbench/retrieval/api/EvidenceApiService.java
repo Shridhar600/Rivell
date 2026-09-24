@@ -45,7 +45,7 @@ public class EvidenceApiService {
                 .filter(clause -> clause.id().equals(request.clauseId()))
                 .findFirst()
                 .orElseThrow(() -> new ClauseNotFoundException(request.clauseId()));
-        var concept = subject.primaryConcept()
+        var concept = subject.effectivePrimaryConcept()
                 .orElseThrow(() -> new ClauseNotClassifiedException(request.clauseId()));
         var domainRequest = EvidenceRequest.forClauseReview(
                 identity.organizationId(),

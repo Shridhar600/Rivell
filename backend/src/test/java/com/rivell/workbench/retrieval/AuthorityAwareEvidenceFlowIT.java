@@ -468,6 +468,42 @@ class AuthorityAwareEvidenceFlowIT {
     }
 
     @Test
+    void absentPackDoesNotFabricateOneAndDoesNotExcludeApplicableEvidence() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var clauseId = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow().id();
+
+        // the request-side ReviewProfile carries NO pack (it has no pack field at
+        // all — retrieval must not derive one from the contract type). The NDA-pack
+        // rule declares contract type NDA, so through its remaining dimensions it
+        // still applies: an absent pack must neither be fabricated nor exclude
+        // otherwise-applicable knowledge.
+        var request = EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
+                new com.rivell.workbench.contracts.ReviewProfile(
+                        com.rivell.workbench.contracts.ContractType.NDA,
+                        com.rivell.workbench.contracts.PartyRole.CUSTOMER,
+                        com.rivell.workbench.contracts.PaperSource.THIRD_PARTY,
+                        com.rivell.workbench.contracts.Jurisdiction.US),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
+        var bundle = evidenceService.build(request);
+
+        assertThat(bundle.policyItems()).hasSize(1);
+        var ndaRule = bundle.policyItems().get(0);
+        // the pack on the item is the knowledge side's own declaration (provenance),
+        // not something retrieval invented from the contract type
+        assertThat(ndaRule.applicabilityScope().contractPackKey())
+                .isEqualToIgnoringCase("NDA_PACK");
+        // and the MSA-pack knowledge never leaks into this NDA-context request
+        assertThat(bundle.policyItems().size()).isEqualTo(1);
+    }
+
+    @Test
     void unindexedPrecedentCandidatesAreHonestlyDegradedNotSilentlyAbsent() {
         var organizationId = identityProvider.currentIdentity().organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);

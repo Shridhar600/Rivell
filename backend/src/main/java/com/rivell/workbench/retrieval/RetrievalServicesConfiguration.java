@@ -49,6 +49,16 @@ class RetrievalServicesConfiguration {
     }
 
     @Bean
+    RetrievalIndexReconciliationService retrievalIndexReconciliationService(
+            KnowledgeQueryService knowledgeQueries,
+            EvidenceIndexService evidenceIndexService,
+            RetrievalRepository retrievalRepository,
+            RetrievalProperties properties) {
+        return new RetrievalIndexReconciliationService(knowledgeQueries, evidenceIndexService,
+                retrievalRepository, properties);
+    }
+
+    @Bean
     EvidenceService evidenceService(
             StructuredPolicyResolver resolver,
             PrecedentLane precedentLane,

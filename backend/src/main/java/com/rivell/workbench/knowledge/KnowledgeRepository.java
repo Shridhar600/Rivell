@@ -58,6 +58,9 @@ public interface KnowledgeRepository {
 
     List<PublishedCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query);
 
+    /** System-level read (background flows): orgs that have published knowledge. */
+    List<UUID> organizationsWithPublishedKnowledge();
+
     /** Latest publication number for the org, 0 when nothing is published. */
     long maxPublicationNumber(UUID organizationId);
 

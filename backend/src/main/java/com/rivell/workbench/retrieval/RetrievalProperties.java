@@ -14,13 +14,21 @@ public record RetrievalProperties(
         int lexicalLimit,
         int vectorLimit,
         int fusionLimit,
-        int rerankBudget) {
+        int rerankBudget,
+        String reconciliationCron,
+        int reconciliationBatchSize) {
 
     private static final String INDEX_VERSION = "rivell-evidence-index-1";
 
     public RetrievalProperties {
         if (indexVersion == null || indexVersion.isBlank()) {
             indexVersion = INDEX_VERSION;
+        }
+        if (reconciliationCron == null) {
+            reconciliationCron = "";
+        }
+        if (reconciliationBatchSize < 1) {
+            reconciliationBatchSize = 100;
         }
         if (lexicalLimit < 1) {
             lexicalLimit = 10;

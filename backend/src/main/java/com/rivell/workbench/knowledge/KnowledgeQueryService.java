@@ -93,6 +93,26 @@ public class KnowledgeQueryService {
         return repository.maxPublicationNumber(organizationId());
     }
 
+    /**
+     * System-level read for background flows (e.g. retrieval index reconciliation):
+     * explicit organization, no caller-identity requirement. Never expose through
+     * product APIs without an authorization check.
+     */
+    public List<PublishedCandidate> listPublishedCandidatesForOrganization(
+            PublishedKnowledgeQuery query) {
+        return repository.findPublishedCandidatesAsOf(query);
+    }
+
+    /** System-level read: organizations that have published knowledge. */
+    public List<UUID> organizationsWithPublishedKnowledge() {
+        return repository.organizationsWithPublishedKnowledge();
+    }
+
+    /** System-level read: latest publication number for the explicit org. */
+    public long maxPublicationNumberForOrganization(UUID organizationId) {
+        return repository.maxPublicationNumber(organizationId);
+    }
+
     /** Whether a publication with the given number exists in the caller's organization. */
     public boolean publicationNumberExists(long publicationNumber) {
         requireRead();

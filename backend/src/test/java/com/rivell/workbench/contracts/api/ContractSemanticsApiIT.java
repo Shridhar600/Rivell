@@ -175,6 +175,70 @@ class ContractSemanticsApiIT {
     }
 
     @Test
+    void conceptCorrectionHonorsNullAndBlankSemantics() throws Exception {
+        var contractId = uploadFixture("m5-msa-services.docx");
+        mockMvc.perform(post(
+                        "/api/contracts/{id}/versions/1/enrichment", contractId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"contractType": "MSA", "ourSideRole": "CUSTOMER",
+                                 "paperSource": "COUNTERPARTY_PAPER", "jurisdiction": "US"}
+                                """))
+                .andExpect(status().isOk());
+        var semanticsJson = mockMvc.perform(get(
+                        "/api/contracts/{id}/versions/1/semantics", contractId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        UUID liabilityClauseId = null;
+        for (var clause : new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(semanticsJson).get("data").get("clauses")) {
+            if (clause.has("primaryConcept")
+                    && clause.get("primaryConcept").asText().equals("LIMITATION_OF_LIABILITY")) {
+                liabilityClauseId = UUID.fromString(clause.get("id").asText());
+            }
+        }
+        assertThat(liabilityClauseId).isNotNull();
+
+        // a valid correction: correctedPrimaryConcept reflects the human decision;
+        // the machine proposal stays visible (machine history never erased)
+        mockMvc.perform(post(
+                        "/api/contracts/{id}/versions/1/semantics/clauses/{clauseId}/concepts",
+                        contractId, liabilityClauseId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"primary": "INDEMNIFICATION"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.clauses[?(@.id=='" + liabilityClauseId
+                        + "')].correctedPrimaryConcept").value("INDEMNIFICATION"))
+                .andExpect(jsonPath("$.data.clauses[?(@.id=='" + liabilityClauseId
+                        + "')].primaryConcept").value("LIMITATION_OF_LIABILITY"));
+
+        // blank clears the concept correction: no active human correction remains
+        mockMvc.perform(post(
+                        "/api/contracts/{id}/versions/1/semantics/clauses/{clauseId}/concepts",
+                        contractId, liabilityClauseId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"primary": ""}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.clauses[?(@.id=='" + liabilityClauseId
+                        + "')].corrected").value(false))
+                .andExpect(jsonPath("$.data.clauses[?(@.id=='" + liabilityClauseId
+                        + "')].primaryConcept").value("LIMITATION_OF_LIABILITY"));
+
+        // null means 'no concept change' — never a server error, state untouched
+        mockMvc.perform(post(
+                        "/api/contracts/{id}/versions/1/semantics/clauses/{clauseId}/concepts",
+                        contractId, liabilityClauseId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"primary": null}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.clauses[?(@.id=='" + liabilityClauseId
+                        + "')].corrected").value(false));
+    }
+
+    @Test
     void foreignOrganizationCannotTouchSemanticState() throws Exception {
         var contractId = uploadFixture("m5-nda-counterparty.docx");
 

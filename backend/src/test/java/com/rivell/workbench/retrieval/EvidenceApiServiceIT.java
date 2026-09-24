@@ -147,6 +147,9 @@ class EvidenceApiServiceIT {
     EvidenceApiService evidenceApiService;
 
     @Autowired
+    com.rivell.workbench.contracts.ContractEnrichmentService enrichmentService;
+
+    @Autowired
     com.rivell.workbench.contracts.ContractIngestionService contractIngestionService;
 
     @Autowired
@@ -193,6 +196,37 @@ class EvidenceApiServiceIT {
                 "recommendation", "redline"}) {
             assertThat(responseJson.toLowerCase()).doesNotContain(banned);
         }
+    }
+
+    @Test
+    void evidenceResolvesTheHumanCorrectedConceptNotTheMachineProposal() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var liabilityClauseId = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get()
+                                == com.rivell.workbench.contracts.LegalConcept
+                                        .LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow().id();
+        // human correction: the clause is actually a confidentiality clause
+        enrichmentService.correctClause(corpus.contract().contractId(), 1, liabilityClauseId,
+                com.rivell.workbench.contracts.FactCorrection.ofPrimary(
+                        com.rivell.workbench.contracts.LegalConcept.CONFIDENTIALITY));
+
+        // the corrected concept drives applicability: no CONFIDENTIALITY policy is
+        // published in the corpus → POLICY_MISSING is honest, and the discovery lanes
+        // surface the corpus's confidentiality-tagged drafting/precedents instead of
+        // the LOL evidence the machine concept would wrongly resolve
+        var response = evidenceApiService.build(new RetrievalRequests.EvidenceBuildRequest(
+                corpus.contract().contractId(), 1, liabilityClauseId));
+        assertThat(response.request().legalConcept()).isEqualTo("CONFIDENTIALITY");
+        assertThat(response.sufficiency()).isEqualTo("POLICY_MISSING");
+        // knowledge-side items must follow the corrected concept; current-contract
+        // items legitimately carry their own clause concepts
+        assertThat(response.items())
+                .filteredOn(item -> item.publicationId() != null)
+                .noneSatisfy(item -> assertThat(item.legalConcept())
+                        .isEqualTo("LIMITATION_OF_LIABILITY"));
     }
 
     @Test

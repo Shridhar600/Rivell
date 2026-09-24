@@ -67,7 +67,7 @@ public class EvidenceIndexService {
     }
 
     /** One batched provider call per publication; failures degrade to lexical-only. */
-    private void embedBatch(UUID organizationId, java.util.Map<UUID, String> texts) {
+    void embedBatch(UUID organizationId, java.util.Map<UUID, String> texts) {
         if (texts.isEmpty() || !embeddingService.isConfigured()) {
             return;
         }
@@ -106,7 +106,7 @@ public class EvidenceIndexService {
         }
     }
 
-    private KnowledgeCandidate indexCandidate(
+    KnowledgeCandidate indexCandidate(
             UUID organizationId, UUID candidateId, long publicationNumber) {
         var candidate = knowledgeQueries.getCandidateForOrganization(organizationId, candidateId)
                 .orElseThrow(() -> new com.rivell.workbench.knowledge

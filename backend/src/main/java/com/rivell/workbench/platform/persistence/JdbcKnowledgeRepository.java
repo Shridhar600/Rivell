@@ -555,6 +555,16 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<UUID> organizationsWithPublishedKnowledge() {
+        return jdbcClient.sql("""
+                        select distinct organization_id from knowledge_publication
+                        order by organization_id
+                        """)
+                .query((rs, rowNum) -> rs.getObject("organization_id", UUID.class))
+                .list();
+    }
+
+    @Override
     public long maxPublicationNumber(UUID organizationId) {
         var max = jdbcClient.sql("""
                         select coalesce(max(publication_number), 0)

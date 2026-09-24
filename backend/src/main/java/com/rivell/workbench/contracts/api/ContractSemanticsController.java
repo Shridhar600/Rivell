@@ -122,9 +122,23 @@ class ContractSemanticsController {
             @PathVariable int versionNumber,
             @PathVariable UUID clauseId,
             @RequestBody CorrectionRequests.ConceptCorrection request) {
+        // documented correction semantics: null = no concept change, blank = clear
+        // the correction; unknown names are rejected by the domain as 400
+        if (request.primary() == null) {
+            return ApiResult.ok(toResponse(id, versionNumber,
+                    enrichmentService.getSemantics(id, versionNumber)));
+        }
+        var primary = request.primary();
+        if (primary.isBlank()) {
+            return ApiResult.ok(toResponse(id, versionNumber, enrichmentService.correctClause(
+                    id, versionNumber, clauseId,
+                    new com.rivell.workbench.contracts.FactCorrection("",
+                            java.util.Map.of(), UUID.randomUUID()))));
+        }
         var semantics = enrichmentService.correctClause(id, versionNumber, clauseId,
                 com.rivell.workbench.contracts.FactCorrection.ofPrimary(
-                        com.rivell.workbench.contracts.LegalConcept.valueOf(request.primary())));
+                        com.rivell.workbench.contracts.LegalConcept.valueOf(
+                                request.primary())));
         return ApiResult.ok(toResponse(id, versionNumber, semantics));
     }
 
