@@ -336,9 +336,13 @@ assertThat(confidential.interpretations())
     void conflictingPublishedPositionProducesHighRiskReviewCategory() {
         var first = ingest("fixtures/m4-clause-library.docx", "m4-conflict-a.docx",
                 ArtifactType.CLAUSE_LIBRARY);
+        // deterministic pair selection: same-role candidates break created_at ties by
+        // random UUID, so the published peer and the new candidate are pinned by label
         var preferred = queryService.getCandidates(first.id()).stream()
                 .filter(candidate -> candidate.effectiveVariantRole() == PositionRole.PREFERRED)
-                .filter(candidate -> candidate.legalConceptKey() != null)
+                .filter(candidate -> candidate.rawLabel() != null
+                        && candidate.rawLabel().contains("Preferred"))
+                .filter(candidate -> candidate.rawLabel().contains("Limitation"))
                 .findFirst().orElseThrow();
         reviewService.approve(preferred.id(), null);
         publicationService.publish(java.util.List.of(preferred.id()), null, "v1");
@@ -351,8 +355,13 @@ assertThat(confidential.interpretations())
                 Map.of("variant_role", "FALLBACK"));
         var second = ingest("fixtures/m4-clause-library.docx", "m4-conflict-b.docx",
                 ArtifactType.CLAUSE_LIBRARY);
+        // deterministic selection: the peer pair must share the published concept;
+        // ordering among same-role candidates is not a contract (created_at ties
+        // break by random UUID), so select by published-concept match instead
         var fallback = queryService.getCandidates(second.id()).stream()
                 .filter(candidate -> candidate.effectiveVariantRole() == PositionRole.FALLBACK)
+                .filter(candidate -> candidate.rawLabel() != null
+                        && candidate.rawLabel().contains("Fallback"))
                 .findFirst().orElseThrow();
 
         assertThat(fallback.conflictSignals())

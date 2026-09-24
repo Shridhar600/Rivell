@@ -360,10 +360,12 @@ public class ContractEnrichmentIT {
         assertThat(conceptLabels).contains(LegalConcept.GOVERNING_LAW);
         assertThat(conceptLabels).contains(LegalConcept.TERM_TERMINATION);
 
+        // signature blocks are structural regions now: the NDA's real clauses all
+        // classify, so the only remaining quality note (if any) is honest state
         assertThat(semantics.quality().notes())
-                .contains(ReviewQualityNote.UNCLASSIFIED_REGIONS)
                 .doesNotContain(ReviewQualityNote.PROVIDER_DEGRADATION,
-                        ReviewQualityNote.UNVERIFIED_FACTS);
+                        ReviewQualityNote.UNVERIFIED_FACTS,
+                        ReviewQualityNote.AMBIGUOUS_PARTY_ROLES);
         assertThat(semantics.observations().decisionExecutionCount()).isPositive();
     }
 
