@@ -181,6 +181,10 @@ class AuthorityAwareEvidenceFlowIT {
         assertThat(policy.legalConcept()).isEqualTo(LegalConcept.LIMITATION_OF_LIABILITY);
         assertThat(policy.text()).contains("The total liability of Supplier shall not exceed");
         assertThat(policy.policyFacts()).isNotNull();
+        // provenance: the publication that made the rule visible at the pinned state
+        assertThat(policy.publicationNumber())
+                .isEqualTo(corpus.publishedAt().get(M6EvidenceCorpus.Fixture.POLICY_MAIN));
+        assertThat(policy.publicationId()).isNotNull();
 
         // approved drafting preserves exact wording (preferred + fallback variants)
         assertThat(bundle.approvedDraftingItems()).isNotEmpty();
@@ -201,6 +205,24 @@ class AuthorityAwareEvidenceFlowIT {
         assertThat(bundle.currentContractItems().size()).isGreaterThan(1);
         assertThat(bundle.currentContractItems()).anySatisfy(item ->
                 assertThat(item.retrievalReason()).startsWith("SEMANTIC_RELATIONSHIP:"));
+        // every current-contract item carries a lane reason; anchored to source nodes
+        assertThat(bundle.currentContractItems()).allSatisfy(item ->
+                assertThat(item.retrievalReason()).isNotBlank());
+        // defined terms referenced by the subject text surface as defined-term evidence
+        var subjectClause = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.id().equals(request.clauseId()))
+                .findFirst().orElseThrow();
+        var subjectTextNodes = new java.util.HashSet<>(subjectClause.textNodeIds());
+        var referencedTerms = corpus.semantics().definedTerms().stream()
+                .filter(term -> term.referenceNodeIds().stream()
+                        .anyMatch(subjectTextNodes::contains))
+                .toList();
+        var definedTermItems = bundle.currentContractItems().stream()
+                .filter(item -> "CURRENT_CONTRACT_DEFINED_TERM".equals(item.sourceType()))
+                .toList();
+        assertThat(definedTermItems).hasSize(referencedTerms.size());
+        assertThat(definedTermItems).allSatisfy(item ->
+                assertThat(item.retrievalReason()).isEqualTo("DEFINED_TERM"));
 
         // deterministic sufficiency for the complete structured state
         assertThat(bundle.sufficiency()).isEqualTo(EvidenceSufficiency.SUFFICIENT);
@@ -443,6 +465,24 @@ class AuthorityAwareEvidenceFlowIT {
         assertThat(orgBBundle.policyItems()).isEmpty();
         assertThat(orgBBundle.precedentItems()).isEmpty();
         assertThat(orgBBundle.sufficiency()).isEqualTo(EvidenceSufficiency.POLICY_MISSING);
+    }
+
+    @Test
+    void unindexedPrecedentCandidatesAreHonestlyDegradedNotSilentlyAbsent() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        // simulate an indexing failure: the derived index lost all rows for this org
+        jdbcClient.sql("delete from retrieval_evidence_index where organization_id = ?")
+                .param(organizationId)
+                .update();
+
+        var bundle = evidenceService.build(subjectRequest(corpus));
+
+        // the truth side still resolves policy; discovery honestly reports the gap
+        assertThat(bundle.policyItems()).hasSize(1);
+        assertThat(bundle.degradationWarnings()).contains("INDEX_INCOMPLETE");
+        assertThat(bundle.sufficiency()).isEqualTo(EvidenceSufficiency.PARTIAL);
+        assertThat(bundle.precedentItems()).isEmpty();
     }
 
     @Test

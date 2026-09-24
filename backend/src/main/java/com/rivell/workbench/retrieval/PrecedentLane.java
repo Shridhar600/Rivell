@@ -61,13 +61,24 @@ public class PrecedentLane {
             return Outcome.empty();
         }
         var byId = new LinkedHashMap<UUID, KnowledgeCandidate>();
-        for (var candidate : resolution.candidates()) {
-            byId.put(candidate.id(), candidate);
+        var publicationById = new LinkedHashMap<UUID,
+                com.rivell.workbench.knowledge.PublishedCandidate>();
+        for (var match : resolution.published()) {
+            byId.put(match.candidate().id(), match.candidate());
+            publicationById.put(match.candidate().id(), match);
         }
         var ids = List.copyOf(byId.keySet());
         var degradation = new ArrayList<String>();
         if (resolution.truncated()) {
             degradation.add("STRUCTURED_LANE_TRUNCATED");
+        }
+        // honesty: a pin-visible precedent without an index row is invisible to both
+        // discovery lanes — record it rather than silently treating it as absent
+        var unindexed = new ArrayList<>(ids);
+        unindexed.removeAll(repository.findIndexedIds(
+                request.organizationId(), ids, properties.indexVersion()));
+        if (!unindexed.isEmpty()) {
+            degradation.add("INDEX_INCOMPLETE");
         }
 
         var lexicalHits = repository.findLexicalCandidates(
@@ -102,7 +113,8 @@ public class PrecedentLane {
 
         var items = new ArrayList<EvidenceItem>();
         for (var candidateId : reranked) {
-            items.add(item(byId.get(candidateId), rankOf(lexicalHits, candidateId),
+            items.add(item(byId.get(candidateId), publicationById.get(candidateId),
+                    rankOf(lexicalHits, candidateId),
                     rankOf(vectorHits, candidateId), fusedHit(fused, candidateId),
                     compatibilities.getOrDefault(candidateId, PolicyCompatibility.NOT_ASSESSED),
                     relevanceExecutions.get(candidateId)));
@@ -220,6 +232,7 @@ public class PrecedentLane {
 
     private EvidenceItem item(
             KnowledgeCandidate candidate,
+            com.rivell.workbench.knowledge.PublishedCandidate published,
             Integer lexicalRank,
             Integer vectorRank,
             RankFusion.FusedHit fused,
@@ -250,8 +263,8 @@ public class PrecedentLane {
                         : semanticAssessment(relevanceExecution, judgments(relevanceExecution)),
                 compatibility,
                 provenance,
-                null,
-                null);
+                published == null ? null : published.publicationId(),
+                published == null ? null : published.publicationNumber());
     }
 
     private Map<String, Boolean> judgments(

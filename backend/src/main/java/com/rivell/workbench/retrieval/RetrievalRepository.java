@@ -17,6 +17,10 @@ public interface RetrievalRepository {
     java.util.Set<UUID> findEmbeddingReadyIds(
             UUID organizationId, List<UUID> candidateIds, String indexVersion);
 
+    /** Candidate ids among the given set that have an index row at all (any readiness). */
+    java.util.Set<UUID> findIndexedIds(
+            UUID organizationId, List<UUID> candidateIds, String indexVersion);
+
     void persistEmbedding(UUID organizationId, UUID candidateId, String contentHash,
             String indexVersion, String embeddingModel, int embeddingDims,
             String vectorLiteral);

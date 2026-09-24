@@ -51,11 +51,93 @@ public class CurrentContractLane {
             return new Outcome(List.of(), "CONTRACT_CONTEXT_INCOMPLETE");
         }
         var items = new ArrayList<EvidenceItem>();
+        var seenClauses = new java.util.LinkedHashSet<UUID>();
         items.add(subjectItem(semantics, subject));
+        seenClauses.add(subject.id());
         for (var related : relatedClauses(semantics, subject)) {
-            items.add(relatedItem(semantics, subject, related.clause(), related.type()));
+            if (seenClauses.add(related.clause().id())) {
+                items.add(relatedItem(semantics, subject, related.clause(),
+                        "SEMANTIC_RELATIONSHIP:" + related.type().name()));
+            }
+        }
+        for (var reference : resolvedReferencesFrom(semantics, subject)) {
+            if (seenClauses.add(reference.clause().id())) {
+                items.add(relatedItem(semantics, subject, reference.clause(),
+                        "RESOLVED_REFERENCE"));
+            }
+        }
+        for (var sibling : siblingClauses(semantics, subject)) {
+            if (seenClauses.add(sibling.id())) {
+                items.add(relatedItem(semantics, subject, sibling, "SIBLING_CONCEPT"));
+            }
+        }
+        for (var term : definedTermsReferencedBy(semantics, subject)) {
+            items.add(definedTermItem(semantics, term));
         }
         return new Outcome(List.copyOf(items), null);
+    }
+
+    private List<RelatedClause> resolvedReferencesFrom(
+            ContractSemantics semantics, ClauseSemantics subject) {
+        var resolved = new ArrayList<RelatedClause>();
+        var subjectTextNodes = new java.util.HashSet<>(subject.textNodeIds());
+        for (var reference : semantics.references()) {
+            if (reference.status() != com.rivell.workbench.contracts.ReferenceStatus.RESOLVED
+                    || reference.targetNodeId() == null) {
+                continue;
+            }
+            if (!subjectTextNodes.contains(reference.sourceNodeId())) {
+                continue;
+            }
+            clauseByHeading(semantics, reference.targetNodeId())
+                    .ifPresent(clause -> resolved.add(new RelatedClause(clause, null)));
+        }
+        return resolved;
+    }
+
+    private List<ClauseSemantics> siblingClauses(
+            ContractSemantics semantics, ClauseSemantics subject) {
+        var concept = subject.primaryConcept();
+        if (concept.isEmpty()) {
+            return List.of();
+        }
+        return semantics.clauses().stream()
+                .filter(clause -> !clause.id().equals(subject.id()))
+                .filter(clause -> clause.primaryConcept().equals(concept))
+                .toList();
+    }
+
+    private List<com.rivell.workbench.contracts.DefinedTerm> definedTermsReferencedBy(
+            ContractSemantics semantics, ClauseSemantics subject) {
+        var subjectTextNodes = new java.util.HashSet<>(subject.textNodeIds());
+        return semantics.definedTerms().stream()
+                .filter(term -> term.referenceNodeIds().stream()
+                        .anyMatch(subjectTextNodes::contains))
+                .toList();
+    }
+
+    private EvidenceItem definedTermItem(
+            ContractSemantics semantics, com.rivell.workbench.contracts.DefinedTerm term) {
+        return new EvidenceItem(
+                UUID.randomUUID(),
+                AuthorityClass.CURRENT_CONTRACT,
+                "CURRENT_CONTRACT_DEFINED_TERM",
+                null,
+                null,
+                semantics.contractVersionId(),
+                null,
+                null,
+                null,
+                term.term() + " means " + term.definition(),
+                null,
+                null,
+                "DEFINED_TERM",
+                LaneInfo.NONE,
+                null,
+                null,
+                term.sourceNodeIds().stream().map(UUID::toString).toList(),
+                null,
+                null);
     }
 
     private EvidenceItem subjectItem(ContractSemantics semantics, ClauseSemantics subject) {
@@ -82,7 +164,7 @@ public class CurrentContractLane {
     }
 
     private EvidenceItem relatedItem(ContractSemantics semantics, ClauseSemantics subject,
-            ClauseSemantics related, RelationshipType type) {
+            ClauseSemantics related, String reason) {
         return new EvidenceItem(
                 UUID.randomUUID(),
                 AuthorityClass.CURRENT_CONTRACT,
@@ -96,7 +178,7 @@ public class CurrentContractLane {
                 related.contentText(),
                 null,
                 related.effectiveFacts(),
-                "SEMANTIC_RELATIONSHIP:" + type.name(),
+                reason,
                 LaneInfo.NONE,
                 null,
                 null,

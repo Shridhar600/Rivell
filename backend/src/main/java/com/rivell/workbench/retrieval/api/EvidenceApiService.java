@@ -96,7 +96,10 @@ public class EvidenceApiService {
                     item.policyCompatibility() == null
                             ? null
                             : item.policyCompatibility().name(),
-                    item.provenanceNodeIds()));
+                    item.provenanceNodeIds(),
+                    item.publicationId(),
+                    item.publicationNumber() == null ? null
+                            : item.publicationNumber().longValue()));
         }
         return new RetrievalResponses.EvidenceBundleResponse(
                 bundle.id(),

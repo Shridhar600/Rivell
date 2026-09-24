@@ -87,6 +87,18 @@ public class KnowledgeQueryService {
         return repository.listPublications(organizationId());
     }
 
+    /** Latest publication number for the caller's organization, 0 when none. */
+    public long maxPublicationNumber() {
+        requireRead();
+        return repository.maxPublicationNumber(organizationId());
+    }
+
+    /** Whether a publication with the given number exists in the caller's organization. */
+    public boolean publicationNumberExists(long publicationNumber) {
+        requireRead();
+        return repository.publicationNumberExists(organizationId(), publicationNumber);
+    }
+
     public KnowledgePublication getPublication(UUID publicationId) {
         requireRead();
         var publication = repository.findPublication(publicationId, organizationId())
@@ -100,7 +112,7 @@ public class KnowledgeQueryService {
      * explicitly because retrieval planning is a server-side flow; the caller must
      * still be authorized for knowledge reads.
      */
-    public List<KnowledgeCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query) {
+    public List<PublishedCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query) {
         requireRead();
         var identity = identityProvider.currentIdentity();
         if (!query.organizationId().equals(identity.organizationId())) {

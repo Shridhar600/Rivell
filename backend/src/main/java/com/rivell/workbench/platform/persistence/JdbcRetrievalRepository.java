@@ -52,6 +52,25 @@ class JdbcRetrievalRepository implements RetrievalRepository {
     }
 
     @Override
+    public java.util.Set<UUID> findIndexedIds(
+            UUID organizationId, List<UUID> candidateIds, String indexVersion) {
+        if (candidateIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return java.util.Set.copyOf(jdbcClient.sql("""
+                        select candidate_id from retrieval_evidence_index
+                        where organization_id = :organizationId
+                          and candidate_id = any(:candidateIds)
+                          and index_version = :indexVersion
+                        """)
+                .param("organizationId", organizationId)
+                .param("candidateIds", candidateIds.toArray(UUID[]::new))
+                .param("indexVersion", indexVersion)
+                .query((rs, ignored) -> rs.getObject("candidate_id", UUID.class))
+                .list());
+    }
+
+    @Override
     public void upsertIndexRow(EvidenceIndexRow row) {        jdbcClient.sql("""
                         insert into retrieval_evidence_index
                         (id, organization_id, candidate_id, artifact_id, candidate_type,

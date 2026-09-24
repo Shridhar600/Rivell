@@ -25,16 +25,22 @@ public class StructuredPolicyResolver {
     }
 
     public record Resolution(
-            List<KnowledgeCandidate> candidates,
+            List<com.rivell.workbench.knowledge.PublishedCandidate> published,
             long asOfPublication,
             boolean truncated) {
 
+        public List<KnowledgeCandidate> candidates() {
+            return published.stream()
+                    .map(com.rivell.workbench.knowledge.PublishedCandidate::candidate)
+                    .toList();
+        }
+
         public boolean ambiguous() {
-            return candidates.size() > 1 || truncated;
+            return published.size() > 1 || truncated;
         }
 
         public boolean missing() {
-            return candidates.isEmpty();
+            return published.isEmpty();
         }
     }
 

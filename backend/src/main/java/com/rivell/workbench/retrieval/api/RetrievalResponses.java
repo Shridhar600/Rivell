@@ -56,7 +56,9 @@ public final class RetrievalResponses {
             LaneInfoResponse laneInfo,
             SemanticAssessmentResponse semanticAssessment,
             String policyCompatibility,
-            List<String> provenanceNodeIds) {
+            List<String> provenanceNodeIds,
+            UUID publicationId,
+            Long publicationNumber) {
     }
 
     @Schema(name = "PolicyFactsResponse")

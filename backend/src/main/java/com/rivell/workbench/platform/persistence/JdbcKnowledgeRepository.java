@@ -433,7 +433,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
-    public List<KnowledgeCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query) {
+    public List<com.rivell.workbench.knowledge.PublishedCandidate> findPublishedCandidatesAsOf(
+            PublishedKnowledgeQuery query) {
         var conditions = new ArrayList<String>();
         var params = new HashMap<String, Object>();
         conditions.add("c.organization_id = :organizationId");
@@ -480,17 +481,6 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             params.put("effectiveOn", java.sql.Date.valueOf(query.effectiveOn()));
         }
         conditions.add("""
-                exists (
-                    select 1 from knowledge_publication_item add_item
-                    join knowledge_publication ap
-                         on ap.id = add_item.publication_id
-                        and ap.organization_id = c.organization_id
-                    where add_item.organization_id = c.organization_id
-                      and add_item.action = 'ADD'
-                      and add_item.candidate_id = c.id
-                      and ap.publication_number <= :asOf)
-                """);
-        conditions.add("""
                 not exists (
                     select 1 from knowledge_publication_item sup_item
                     join knowledge_publication sp
@@ -502,7 +492,20 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                       and sp.publication_number <= :asOf)
                 """);
         params.put("asOf", query.asOfPublicationNumber());
-        var sql = "select c.* from knowledge_candidate c where "
+        // a candidate has at most one ADD publication (DB-enforced), so this join
+        // cannot fan out; it both constrains pin visibility and exposes the
+        // publication identity for provenance
+        var from = " from knowledge_candidate c"
+                + " join knowledge_publication_item add_item"
+                + " on add_item.candidate_id = c.id"
+                + " and add_item.action = 'ADD'"
+                + " and add_item.organization_id = c.organization_id"
+                + " join knowledge_publication pp"
+                + " on pp.id = add_item.publication_id"
+                + " and pp.organization_id = c.organization_id"
+                + " and pp.publication_number <= :asOf ";
+        var sql = "select c.*, pp.id as publication_id, pp.publication_number as publication_number"
+                + from + " where "
                 + String.join(" and ", conditions)
                 + " order by c.created_at desc, c.id desc limit :limit";
         var statement = jdbcClient.sql(sql);
@@ -511,7 +514,10 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         }
         return statement
                 .param("limit", query.limit() + 1)
-                .query(this::mapCandidate)
+                .query((rs, rowNum) -> new com.rivell.workbench.knowledge.PublishedCandidate(
+                        mapCandidate(rs, rowNum),
+                        rs.getObject("publication_id", UUID.class),
+                        rs.getLong("publication_number")))
                 .list();
     }
 
@@ -546,6 +552,34 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("createdAt", Timestamp.from(publication.createdAt()))
                     .update();
         }
+    }
+
+    @Override
+    public long maxPublicationNumber(UUID organizationId) {
+        var max = jdbcClient.sql("""
+                        select coalesce(max(publication_number), 0)
+                        from knowledge_publication
+                        where organization_id = :organizationId
+                        """)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> rs.getLong(1))
+                .optional()
+                .orElse(0L);
+        return max;
+    }
+
+    @Override
+    public boolean publicationNumberExists(UUID organizationId, long publicationNumber) {
+        return jdbcClient.sql("""
+                        select 1 from knowledge_publication
+                        where organization_id = :organizationId
+                          and publication_number = :publicationNumber
+                        """)
+                .param("organizationId", organizationId)
+                .param("publicationNumber", publicationNumber)
+                .query((rs, rowNum) -> true)
+                .optional()
+                .isPresent();
     }
 
     @Override

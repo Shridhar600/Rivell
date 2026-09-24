@@ -209,16 +209,13 @@ public class EvidenceService {
     private long resolveAsOf(EvidenceRequest request) {
         if (request.knowledgePin().pinned()) {
             var pin = request.knowledgePin().publicationNumber();
-            var known = knowledgeQueries.listPublications().stream()
-                    .anyMatch(publication -> publication.publicationNumber() == pin);
-            if (!known) {
+            if (!knowledgeQueries.publicationNumberExists(pin)) {
                 throw new IllegalArgumentException(
                         "Pinned knowledge publication does not exist: " + pin);
             }
             return pin;
         }
-        var publications = knowledgeQueries.listPublications();
-        return publications.isEmpty() ? 0L : publications.get(0).publicationNumber();
+        return knowledgeQueries.maxPublicationNumber();
     }
 
     private EvidenceSufficiency sufficiency(
@@ -263,21 +260,22 @@ public class EvidenceService {
 
     private List<EvidenceItem> items(StructuredPolicyResolver.Resolution resolution,
             AuthorityClass authority, String sourceType) {
-        var candidates = new java.util.ArrayList<>(resolution.candidates());
+        var matches = new java.util.ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>(
+                resolution.published());
         if (authority == AuthorityClass.APPROVED_DRAFTING) {
-            candidates.sort(java.util.Comparator.comparingInt(
+            matches.sort(java.util.Comparator.comparingInt(
                     EvidenceService::variantRoleOrder));
         }
         var items = new java.util.ArrayList<EvidenceItem>();
-        for (var candidate : candidates) {
-            items.add(item(candidate, authority, sourceType));
+        for (var match : matches) {
+            items.add(item(match, authority, sourceType));
         }
         return List.copyOf(items);
     }
 
     private static int variantRoleOrder(
-            com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
-        return switch (candidate.effectiveVariantRole()) {
+            com.rivell.workbench.knowledge.PublishedCandidate match) {
+        return switch (match.candidate().effectiveVariantRole()) {
             case PREFERRED -> 0;
             case FALLBACK -> 1;
             default -> 2;
@@ -285,8 +283,9 @@ public class EvidenceService {
     }
 
     private EvidenceItem item(
-            com.rivell.workbench.knowledge.KnowledgeCandidate candidate,
+            com.rivell.workbench.knowledge.PublishedCandidate match,
             AuthorityClass authority, String sourceType) {
+        var candidate = match.candidate();
         return new EvidenceItem(
                 UUID.randomUUID(),
                 authority,
@@ -306,8 +305,8 @@ public class EvidenceService {
                 null,
                 PolicyCompatibility.NOT_ASSESSED,
                 provenance(candidate),
-                null,
-                null);
+                match.publicationId(),
+                match.publicationNumber());
     }
 
     private EvidenceItem.PolicyFacts policyFacts(
