@@ -62,6 +62,11 @@ public class KnowledgeQueryService {
                 .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
     }
 
+    public java.util.Optional<ExtractionUnit> findUnit(UUID unitId) {
+        requireRead();
+        return repository.findUnit(unitId, organizationId());
+    }
+
     public KnowledgeSource getSource(UUID artifactId) {
         requireRead();
         return repository.findSource(artifactId, organizationId())
@@ -78,6 +83,21 @@ public class KnowledgeQueryService {
         var publication = repository.findPublication(publicationId, organizationId())
                 .orElseThrow(() -> new KnowledgeArtifactNotFoundException(publicationId));
         return publication;
+    }
+
+    /**
+     * Bounded, supersession-aware published-knowledge lookup for retrieval
+     * (Architecture Decision #8.1, DW-010). The query carries the organization id
+     * explicitly because retrieval planning is a server-side flow; the caller must
+     * still be authorized for knowledge reads.
+     */
+    public List<KnowledgeCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query) {
+        requireRead();
+        var identity = identityProvider.currentIdentity();
+        if (!query.organizationId().equals(identity.organizationId())) {
+            throw new UnauthorizedKnowledgeAccessException(identity.userId());
+        }
+        return repository.findPublishedCandidatesAsOf(query);
     }
 
     private void assertArtifactExists(UUID artifactId) {

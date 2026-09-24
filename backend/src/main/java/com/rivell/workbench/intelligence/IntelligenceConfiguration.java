@@ -27,7 +27,8 @@ import com.rivell.workbench.intelligence.provider.JevProvider;
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({IntelligenceProperties.class, JevProperties.class,
-        com.rivell.workbench.intelligence.provider.GenerativeProperties.class})
+        com.rivell.workbench.intelligence.provider.GenerativeProperties.class,
+        com.rivell.workbench.intelligence.provider.EmbeddingProperties.class})
 class IntelligenceConfiguration {
 
     @Bean
@@ -94,6 +95,60 @@ class IntelligenceConfiguration {
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
                 .build();
         return new com.rivell.workbench.intelligence.provider.OpenAiCompatibleGenerativeProvider(
+                (path, payload) -> restClient.post()
+                        .uri(path)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(payload)
+                        .retrieve()
+                        .body(String.class),
+                objectMapper, properties);
+    }
+
+    @Bean
+    EmbeddingProviderRegistry embeddingProviderRegistry(
+            List<EmbeddingProvider> providers) {
+        var byId = providers.stream()
+                .collect(Collectors.toMap(EmbeddingProvider::id, Function.identity()));
+        return providerId -> Optional.ofNullable(byId.get(providerId));
+    }
+
+    @Bean
+    EmbeddingService embeddingService(
+            EmbeddingProviderRegistry embeddingProviderRegistry,
+            com.rivell.workbench.intelligence.provider.EmbeddingProperties embeddingProperties,
+            Clock clock) {
+        return new EmbeddingService(embeddingProviderRegistry, embeddingProperties, clock);
+    }
+
+    @Bean
+    EmbeddingProvider openAiCompatibleEmbeddingProvider(
+            com.rivell.workbench.intelligence.provider.EmbeddingProperties properties,
+            ObjectMapper objectMapper) {
+        if (!properties.isConfigured()) {
+            return new EmbeddingProvider() {
+                @Override
+                public String id() {
+                    return "openai-compatible";
+                }
+
+                @Override
+                public EmbeddingBatch embed(EmbeddingRequest request) {
+                    throw new NoProviderConfiguredException(
+                            "Embedding provider has no API key configured");
+                }
+            };
+        }
+        var httpClient = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(properties.connectTimeout())
+                .build();
+        var requestFactory = new org.springframework.http.client.JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(properties.readTimeout());
+        var restClient = RestClient.builder()
+                .baseUrl(properties.baseUrl())
+                .requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
+                .build();
+        return new com.rivell.workbench.intelligence.provider.OpenAiCompatibleEmbeddingProvider(
                 (path, payload) -> restClient.post()
                         .uri(path)
                         .contentType(MediaType.APPLICATION_JSON)

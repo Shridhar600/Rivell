@@ -56,6 +56,8 @@ public interface KnowledgeRepository {
 
     List<KnowledgeCandidate> findPublishedCandidates(UUID organizationId);
 
+    List<KnowledgeCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query);
+
     void insertPublication(KnowledgePublication publication);
 
     List<KnowledgePublication> listPublications(UUID organizationId);

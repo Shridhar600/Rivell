@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -43,6 +44,7 @@ import com.rivell.workbench.knowledge.KnowledgeSourceNode;
 import com.rivell.workbench.knowledge.MergedCellRegion;
 import com.rivell.workbench.knowledge.PublicationAction;
 import com.rivell.workbench.knowledge.PublicationItem;
+import com.rivell.workbench.knowledge.PublishedKnowledgeQuery;
 import com.rivell.workbench.knowledge.ReviewCategory;
 import com.rivell.workbench.knowledge.ReviewReason;
 import com.rivell.workbench.knowledge.ReviewStatus;
@@ -429,6 +431,90 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .query(this::mapCandidate)
                 .list();
     }
+
+    @Override
+    public List<KnowledgeCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query) {
+        var conditions = new ArrayList<String>();
+        var params = new HashMap<String, Object>();
+        conditions.add("c.organization_id = :organizationId");
+        params.put("organizationId", query.organizationId());
+        conditions.add("c.review_status = 'PUBLISHED'");
+        if (!query.candidateTypes().isEmpty()) {
+            conditions.add("c.candidate_type = any(:candidateTypes)");
+            params.put("candidateTypes",
+                    query.candidateTypes().stream().map(Enum::name).toArray(String[]::new));
+        }
+        if (query.legalConceptKey() != null) {
+            conditions.add("c.legal_concept_key = :legalConceptKey");
+            params.put("legalConceptKey", query.legalConceptKey());
+        }
+        if (query.contractPackKey() != null) {
+            conditions.add("(c.contract_pack_key is null or regexp_replace(lower(c.contract_pack_key), '[^a-z0-9]', '', 'g')"
+                    + " = regexp_replace(lower(:contractPackKey), '[^a-z0-9]', '', 'g'))");
+            params.put("contractPackKey", query.contractPackKey());
+        }
+        if (query.contractType() != null) {
+            conditions.add("(c.declared_contract_types = '[]'::jsonb"
+                    + " or exists (select 1 from jsonb_array_elements_text(c.declared_contract_types)"
+                    + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = regexp_replace(lower(:contractType), '[^a-z0-9]', '', 'g')))");
+            params.put("contractType", query.contractType());
+        }
+        if (query.partyPerspective() != null) {
+            conditions.add("(c.party_perspective is null or regexp_replace(lower(c.party_perspective), '[^a-z0-9]', '', 'g')"
+                    + " = regexp_replace(lower(:partyPerspective), '[^a-z0-9]', '', 'g'))");
+            params.put("partyPerspective", query.partyPerspective());
+        }
+        if (query.paperSource() != null) {
+            conditions.add("(c.paper_source is null or regexp_replace(lower(c.paper_source), '[^a-z0-9]', '', 'g')"
+                    + " = regexp_replace(lower(:paperSource), '[^a-z0-9]', '', 'g'))");
+            params.put("paperSource", query.paperSource());
+        }
+        if (query.jurisdiction() != null) {
+            conditions.add("(c.jurisdiction is null or regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g')"
+                    + " = regexp_replace(lower(:jurisdiction), '[^a-z0-9]', '', 'g'))");
+            params.put("jurisdiction", query.jurisdiction());
+        }
+        if (query.effectiveOn() != null) {
+            conditions.add("(c.effective_from is null or c.effective_from <= :effectiveOn)");
+            conditions.add("(c.effective_to is null or c.effective_to >= :effectiveOn)");
+            params.put("effectiveOn", java.sql.Date.valueOf(query.effectiveOn()));
+        }
+        conditions.add("""
+                exists (
+                    select 1 from knowledge_publication_item add_item
+                    join knowledge_publication ap
+                         on ap.id = add_item.publication_id
+                        and ap.organization_id = c.organization_id
+                    where add_item.organization_id = c.organization_id
+                      and add_item.action = 'ADD'
+                      and add_item.candidate_id = c.id
+                      and ap.publication_number <= :asOf)
+                """);
+        conditions.add("""
+                not exists (
+                    select 1 from knowledge_publication_item sup_item
+                    join knowledge_publication sp
+                         on sp.id = sup_item.publication_id
+                        and sp.organization_id = c.organization_id
+                    where sup_item.organization_id = c.organization_id
+                      and sup_item.action = 'SUPERSEDE'
+                      and sup_item.superseded_candidate_id = c.id
+                      and sp.publication_number <= :asOf)
+                """);
+        params.put("asOf", query.asOfPublicationNumber());
+        var sql = "select c.* from knowledge_candidate c where "
+                + String.join(" and ", conditions)
+                + " order by c.created_at, c.id limit :limit";
+        var statement = jdbcClient.sql(sql);
+        for (var entry : params.entrySet()) {
+            statement = statement.param(entry.getKey(), entry.getValue());
+        }
+        return statement
+                .param("limit", query.limit())
+                .query(this::mapCandidate)
+                .list();
+    }
+
 
     @Override
     @Transactional

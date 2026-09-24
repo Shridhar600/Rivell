@@ -28,16 +28,19 @@ public class KnowledgePublicationService {
     private final TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     public KnowledgePublicationService(
             KnowledgeRepository repository,
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            org.springframework.context.ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
         this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+        this.eventPublisher = eventPublisher;
     }
 
     public KnowledgePublication publish(
@@ -112,6 +115,16 @@ public class KnowledgePublicationService {
                         now);
             }
         });
+        var superseded = new java.util.LinkedHashMap<UUID, UUID>();
+        for (var item : items) {
+            if (item.action() == PublicationAction.SUPERSEDE && item.supersededCandidateId() != null) {
+                superseded.put(item.candidateId(), item.supersededCandidateId());
+            }
+        }
+        eventPublisher.publishEvent(new KnowledgePublishedEvent(
+                organizationId, publicationId, publicationNumber,
+                candidates.stream().map(KnowledgeCandidate::id).toList(),
+                java.util.Collections.unmodifiableMap(superseded)));
         return publication;
     }
 

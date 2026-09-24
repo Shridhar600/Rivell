@@ -50,10 +50,21 @@ final class OpenAiCompatibleDtos {
             record Message(String role, String content, String refusal) {
             }
         }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record Usage(@JsonProperty("prompt_tokens") Integer promptTokens,
+            @JsonProperty("completion_tokens") Integer completionTokens) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record EmbeddingResponse(
+            String model,
+            List<EmbeddingItem> data,
+            Usage usage) {
 
         @JsonIgnoreProperties(ignoreUnknown = true)
-        record Usage(@JsonProperty("prompt_tokens") Integer promptTokens,
-                @JsonProperty("completion_tokens") Integer completionTokens) {
+        record EmbeddingItem(Integer index, List<Double> embedding) {
         }
     }
 }
