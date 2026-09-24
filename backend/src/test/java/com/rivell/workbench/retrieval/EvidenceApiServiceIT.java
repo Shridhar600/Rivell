@@ -2,18 +2,25 @@ package com.rivell.workbench.retrieval;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.ByteArrayInputStream;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -31,6 +38,7 @@ import com.rivell.workbench.retrieval.api.RetrievalResponses;
  * MSA, with honest degradation warnings and no provider internals in the response.
  */
 @SpringBootTest
+@AutoConfigureMockMvc
 @Testcontainers
 class EvidenceApiServiceIT {
 
@@ -138,6 +146,12 @@ class EvidenceApiServiceIT {
     @Autowired
     EvidenceApiService evidenceApiService;
 
+    @Autowired
+    com.rivell.workbench.contracts.ContractIngestionService contractIngestionService;
+
+    @Autowired
+    MockMvc mockMvc;
+
     @BeforeEach
     void freshOrganization() {
         identityProvider.use(new UserIdentity(
@@ -192,5 +206,70 @@ class EvidenceApiServiceIT {
                 new RetrievalRequests.EvidenceBuildRequest(
                         corpus.contract().contractId(), 1, UUID.randomUUID())))
                 .isInstanceOf(ClauseNotFoundException.class);
+    }
+
+    @Test
+    void errorResponsesMatchTheDocumentedStatuses() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var contractId = corpus.contract().contractId();
+
+        mockMvc.perform(post("/api/retrieval/evidence")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contractId\":\"" + contractId
+                                + "\",\"versionNumber\":1,\"clauseId\":\""
+                                + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(post("/api/retrieval/evidence")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contractId\":\"" + UUID.randomUUID()
+                                + "\",\"versionNumber\":1,\"clauseId\":\""
+                                + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(get("/api/retrieval/traces/" + UUID.randomUUID()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void ingestedButNeverEnrichedContractIsNotFound() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var bytes = getClass().getResourceAsStream("/fixtures/m5-msa-services.docx")
+                .readAllBytes();
+        var ingested = contractIngestionService.ingest(
+                "m6-unenriched-" + UUID.randomUUID() + ".docx",
+                com.rivell.workbench.contracts.ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(bytes));
+        org.assertj.core.api.Assertions.assertThat(
+                        corpus.contract().contractId()).isNotEqualTo(ingested.contractId());
+
+        mockMvc.perform(post("/api/retrieval/evidence")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contractId\":\"" + ingested.contractId()
+                                + "\",\"versionNumber\":1,\"clauseId\":\""
+                                + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void crossOrganizationTraceIsNotFound() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var clauseId = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get()
+                                == com.rivell.workbench.contracts.LegalConcept
+                                        .LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow().id();
+        var response = evidenceApiService.build(new RetrievalRequests.EvidenceBuildRequest(
+                corpus.contract().contractId(), 1, clauseId));
+
+        identityProvider.use(new com.rivell.workbench.organization.UserIdentity(
+                UUID.randomUUID(), UUID.randomUUID(), java.util.Set.of("ADMIN")));
+
+        mockMvc.perform(get("/api/retrieval/traces/" + response.traceId()))
+                .andExpect(status().isNotFound());
     }
 }
