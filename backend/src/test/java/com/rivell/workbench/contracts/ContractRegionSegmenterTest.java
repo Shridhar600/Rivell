@@ -93,6 +93,33 @@ class ContractRegionSegmenterTest {
     }
 
     @Test
+    void signatureHeadingsAndSchedulesAreNotClauses() {
+        var nodes = List.of(
+                BODY_NODE,
+                paragraph("IN WITNESS WHEREOF, the Parties have executed this Agreement.", 0),
+                heading("2. Services", "2", 1),
+                paragraph("2.1 Supplier shall provide the Services.", 2),
+                heading("Schedule A — Services", "8", 3),
+                heading("Northwind Customer Group LLC", "8", 4),
+                paragraph("By: Dana Whitfield, VP Procurement", 5));
+
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var byHeading = regions.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        region -> region.headingText() == null ? "preamble" : region.headingText(),
+                        region -> region,
+                        (a, b) -> a));
+        assertThat(byHeading.get("2. Services").kind())
+                .isEqualTo(ContractRegionSegmenter.SemanticRegionKind.CLAUSE);
+        assertThat(byHeading.get("Schedule A — Services").kind())
+                .isEqualTo(ContractRegionSegmenter.SemanticRegionKind.SCHEDULE);
+        assertThat(byHeading.get("Northwind Customer Group LLC").kind())
+                .isEqualTo(ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK);
+        assertThat(byHeading.get("preamble").kind()).isNull();
+    }
+
+    @Test
     void bodyNodeIdsAreKeptOutOfText() {
         var nodes = List.of(
                 BODY_NODE,

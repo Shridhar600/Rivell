@@ -172,7 +172,7 @@ class ContractSemanticsSchemaIT {
                 "Section 7", ReferenceKind.SECTION, ReferenceStatus.RESOLVED,
                 targetHeadingId, List.of());
         var clause = new ClauseSemantics(UUID.randomUUID(), versionId, headingId,
-                List.of(textId),
+                ContractRegionSegmenter.SemanticRegionKind.CLAUSE,                List.of(textId),
                 "Supplier liability shall not exceed three times the Fees paid in the twelve months immediately preceding the claim.",
                 new ConceptClassification(List.of(LegalConcept.LIMITATION_OF_LIABILITY),
                         List.of(), Map.of(LegalConcept.LIMITATION_OF_LIABILITY, 0.93)),
@@ -226,7 +226,7 @@ class ContractSemanticsSchemaIT {
         var versionId = stagedVersion(organizationId);
         var headingId = insertNode(versionId, null, "HEADING", "Confidentiality", "2");
         var clause = new ClauseSemantics(UUID.randomUUID(), versionId, headingId,
-                List.of(), "Confidential information must be protected.",
+                ContractRegionSegmenter.SemanticRegionKind.CLAUSE,                List.of(), "Confidential information must be protected.",
                 new ConceptClassification(List.of(LegalConcept.CONFIDENTIALITY), List.of(),
                         Map.of(LegalConcept.CONFIDENTIALITY, 0.9)),
                 List.of(), List.of(), FactCorrection.NONE, null);
@@ -280,7 +280,7 @@ class ContractSemanticsSchemaIT {
             UUID id, UUID organizationId, UUID versionId, UUID headingId,
             EnrichmentStatus status, String pipelineVersion, String contentText) {
         var clause = new ClauseSemantics(UUID.randomUUID(), versionId, headingId,
-                List.of(), contentText,
+                ContractRegionSegmenter.SemanticRegionKind.CLAUSE,                List.of(), contentText,
                 new ConceptClassification(List.of(LegalConcept.LIMITATION_OF_LIABILITY),
                         List.of(), Map.of(LegalConcept.LIMITATION_OF_LIABILITY, 0.9)),
                 List.of(), List.of(), FactCorrection.NONE, null);

@@ -24,6 +24,7 @@ public record SemanticContractResponse(
         List<DefinedTermView> definedTerms,
         List<ReferenceView> references,
         List<ClauseView> clauses,
+        List<ClauseView> structuralRegions,
         List<RelationshipView> relationships,
         List<String> quality,
         ObservationsView observations) {
@@ -75,6 +76,7 @@ public record SemanticContractResponse(
     public record ClauseView(
             UUID id,
             UUID headingNodeId,
+            String regionKind,
             String heading,
             String contentText,
             String primaryConcept,

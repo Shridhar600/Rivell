@@ -13,12 +13,24 @@ import java.util.UUID;
  */
 public final class ContractRegionSegmenter {
 
+    /**
+     * A DocumentNode is not automatically a legal clause (AD #5.3): the segmenter
+     * classifies each region structurally. Signature blocks and schedules are kept in
+     * the semantics but are never presented as clauses.
+     */
+    public enum SemanticRegionKind {
+        CLAUSE,
+        SIGNATURE_BLOCK,
+        SCHEDULE
+    }
+
     public record Region(
             UUID headingNodeId,
             String headingText,
             String numberingLabel,
             List<UUID> textNodeIds,
-            String contentText) {
+            String contentText,
+            SemanticRegionKind kind) {
 
         public boolean isPreamble() {
             return headingText == null;
@@ -101,7 +113,8 @@ public final class ContractRegionSegmenter {
                     String.join("\n", preambleTexts.stream()
                             .filter(text -> text != null && !text.isBlank())
                             .map(String::strip)
-                            .toList())));
+                            .toList()),
+                    null));
         }
         return regions;
     }
@@ -133,7 +146,23 @@ public final class ContractRegionSegmenter {
         }
         regions.add(new Region(
                 heading.id(), heading.text(), heading.numberingLabel(),
-                List.copyOf(textNodes), text.toString()));
+                List.copyOf(textNodes), text.toString(), regionKind(heading, text)));
+    }
+
+    private SemanticRegionKind regionKind(DocumentNode heading, StringBuilder text) {
+        var headingText = heading.text() == null ? "" : heading.text().strip();
+        var body = text.toString().toUpperCase(java.util.Locale.ROOT);
+        if (headingText.toUpperCase(java.util.Locale.ROOT)
+                .matches("(?:SCHEDULE|EXHIBIT|ANNEX)\\b.*")) {
+            return SemanticRegionKind.SCHEDULE;
+        }
+        if (body.contains("IN WITNESS WHEREOF")) {
+            return SemanticRegionKind.SIGNATURE_BLOCK;
+        }
+        if (headingText.matches(".*\\b(?:Inc|LLC|Ltd|GmbH|Corp|Corporation|Company|Limited)\\.?\\s*$")) {
+            return SemanticRegionKind.SIGNATURE_BLOCK;
+        }
+        return SemanticRegionKind.CLAUSE;
     }
 
     private UUID bodyIdOf(List<DocumentNode> nodes) {

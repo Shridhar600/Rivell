@@ -73,6 +73,9 @@ public final class ContractSemanticEnricher {
             if (region.isPreamble()) {
                 continue;
             }
+            if (region.kind() == ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK) {
+                continue;
+            }
             if (regionBudget-- <= 0) {
                 quality.add(ReviewQualityNote.BUDGET_EXHAUSTED);
                 counters.budgetExhausted = true;
@@ -92,7 +95,8 @@ public final class ContractSemanticEnricher {
         }
 
         for (var region : regions) {
-            if (region.isPreamble()) {
+            if (region.isPreamble()
+                    || region.kind() == ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK) {
                 continue;
             }
             clausesByHeading.put(region.headingNodeId(), region);
@@ -106,9 +110,9 @@ public final class ContractSemanticEnricher {
             var factOutcome = extractFacts(region, classification, counters, quality,
                     properties.maxGenerativeExtractions() - counters.generativeUsed);
             clauses.add(new ClauseSemantics(UUID.randomUUID(), versionId,
-                    region.headingNodeId(), region.textNodeIds(), region.contentText(),
-                    classification, factOutcome.facts(), factOutcome.interpretations(),
-                    FactCorrection.NONE, null));
+                    region.headingNodeId(), region.kind(), region.textNodeIds(),
+                    region.contentText(), classification, factOutcome.facts(),
+                    factOutcome.interpretations(), FactCorrection.NONE, null));
         }
 
         parties = classifyPartyRoles(parties, regions, profile, counters, quality);

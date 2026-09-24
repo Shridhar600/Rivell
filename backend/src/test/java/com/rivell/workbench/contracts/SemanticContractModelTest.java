@@ -74,6 +74,7 @@ class SemanticContractModelTest {
                 "capBasis", "PRECEDING_12_MONTH_FEES",
                 "consequentialDamagesExcluded", "true"));
         var clause = new ClauseSemantics(UUID.randomUUID(), VERSION_ID, NODE_ID,
+                ContractRegionSegmenter.SemanticRegionKind.CLAUSE,
                 List.of(UUID.randomUUID()), "Supplier liability shall not exceed three times fees...",
                 new ConceptClassification(List.of(LegalConcept.LIMITATION_OF_LIABILITY),
                         List.of(LegalConcept.INDEMNIFICATION),

@@ -12,6 +12,7 @@ import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.EnrichmentStatus;
+import com.rivell.workbench.contracts.ContractRegionSegmenter;
 import com.rivell.workbench.contracts.FactSchema;
 import com.rivell.workbench.contracts.Interpretation;
 import com.rivell.workbench.contracts.LegalFact;
@@ -171,7 +172,16 @@ class ContractSemanticsController {
                                 reference.status().name(), reference.sourceNodeId(),
                                 reference.targetNodeId(),
                                 reference.candidateNodeIds())).toList(),
-                semantics.clauses().stream().map(this::toClauseView).toList(),
+                semantics.clauses().stream()
+                        .filter(clause -> clause.regionKind()
+                                == ContractRegionSegmenter.SemanticRegionKind.CLAUSE)
+                        .map(this::toClauseView)
+                        .toList(),
+                semantics.clauses().stream()
+                        .filter(clause -> clause.regionKind()
+                                != ContractRegionSegmenter.SemanticRegionKind.CLAUSE)
+                        .map(this::toClauseView)
+                        .toList(),
                 semantics.relationships().stream().map(this::toRelationshipView).toList(),
                 semantics.quality().notes().stream()
                         .filter(note -> note != com.rivell.workbench.contracts.ReviewQualityNote.NONE)
@@ -213,6 +223,7 @@ class ContractSemanticsController {
         return new SemanticContractResponse.ClauseView(
                 clause.id(),
                 clause.headingNodeId(),
+                clause.regionKind().name(),
                 heading,
                 clause.contentText(),
                 nameOf(clause.primaryConcept().orElse(null)),

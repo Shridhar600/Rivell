@@ -14,6 +14,7 @@ public record ClauseSemantics(
         UUID id,
         UUID contractVersionId,
         UUID headingNodeId,
+        ContractRegionSegmenter.SemanticRegionKind regionKind,
         List<UUID> textNodeIds,
         String contentText,
         ConceptClassification classification,
@@ -74,12 +75,12 @@ public record ClauseSemantics(
     }
 
     public ClauseSemantics withClassification(ConceptClassification classification) {
-        return new ClauseSemantics(id, contractVersionId, headingNodeId, textNodeIds,
+        return new ClauseSemantics(id, contractVersionId, headingNodeId, regionKind, textNodeIds,
                 contentText, classification, facts, interpretations, correction, correctedBy);
     }
 
     public ClauseSemantics withCorrection(FactCorrection correction, UUID correctedBy) {
-        return new ClauseSemantics(id, contractVersionId, headingNodeId, textNodeIds,
+        return new ClauseSemantics(id, contractVersionId, headingNodeId, regionKind, textNodeIds,
                 contentText, classification, facts, interpretations, correction, correctedBy);
     }
 }

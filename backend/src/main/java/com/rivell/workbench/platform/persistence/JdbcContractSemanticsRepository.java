@@ -26,6 +26,7 @@ import com.rivell.workbench.contracts.ConceptClassification;
 import com.rivell.workbench.contracts.ContractParty;
 import com.rivell.workbench.contracts.ContractReference;
 import com.rivell.workbench.contracts.ContractSemantics;
+import com.rivell.workbench.contracts.ContractRegionSegmenter;
 import com.rivell.workbench.contracts.ContractSemanticsRepository;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.EnrichmentStatus;
@@ -313,6 +314,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                             .addValue("versionId", machine.contractVersionId())
                             .addValue("organizationId", machine.organizationId())
                             .addValue("headingNodeId", clause.headingNodeId())
+                            .addValue("regionKind", clause.regionKind().name())
                             .addValue("textNodeIds", toJson(uuids(clause.textNodeIds())))
                             .addValue("contentText", clause.contentText())
                             .addValue("classification", toJson(classification(clause.classification())))
@@ -328,12 +330,13 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
             namedTemplate.batchUpdate("""
                     insert into contract_clause_semantics
                       (id, semantics_id, contract_version_id, organization_id, heading_node_id,
-                       text_node_ids, content_text, classification, facts, interpretations,
-                       correction, corrected_by, created_at)
+                       region_kind, text_node_ids, content_text, classification, facts,
+                       interpretations, correction, corrected_by, created_at)
                     values (:id, :semanticsId, :versionId, :organizationId, :headingNodeId,
-                            cast(:textNodeIds as jsonb), :contentText, cast(:classification as jsonb),
-                            cast(:facts as jsonb), cast(:interpretations as jsonb),
-                            cast(:correction as jsonb), :correctedBy, :createdAt)
+                            :regionKind, cast(:textNodeIds as jsonb), :contentText,
+                            cast(:classification as jsonb), cast(:facts as jsonb),
+                            cast(:interpretations as jsonb), cast(:correction as jsonb),
+                            :correctedBy, :createdAt)
                     """, rows);
         }
         if (!semantics.relationships().isEmpty()) {
@@ -477,14 +480,16 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 .toList();
 
         var clauses = jdbcClient.sql("""
-                        select id, heading_node_id, text_node_ids, content_text, classification,
-                               facts, interpretations, correction, corrected_by
+                        select id, heading_node_id, region_kind, text_node_ids, content_text,
+                               classification, facts, interpretations, correction, corrected_by
                         from contract_clause_semantics where semantics_id = :id
                         """)
                 .param("id", semanticsId)
                 .query((rs, rowNum) -> new ClauseSemantics(
                         UUID.fromString(rs.getString("id")), versionId,
                         UUID.fromString(rs.getString("heading_node_id")),
+                        parseEnum(ContractRegionSegmenter.SemanticRegionKind.class,
+                                rs.getString("region_kind")),
                         filterKnown(readUuids(rs.getString("text_node_ids")), knownNodeIds),
                         rs.getString("content_text"),
                         parseClassification(rs.getString("classification")),
@@ -494,6 +499,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                         optionalUuid(rs, "corrected_by")))
                 .list().stream()
                 .filter(clause -> knownNodeIds.contains(clause.headingNodeId()))
+                .filter(clause -> clause.regionKind() != null)
                 .toList();
 
         var relationshipRows = jdbcClient.sql("""

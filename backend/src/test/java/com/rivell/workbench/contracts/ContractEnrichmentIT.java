@@ -585,6 +585,29 @@ public class ContractEnrichmentIT {
     }
 
     @Test
+    void signatureBlocksAreNotClauses() throws Exception {
+        var bytes = fixtureBytes("m5-msa-services.docx");
+        var ingested = ingestionService.ingest("m5-msa-services.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+
+        assertThat(semantics.clauses()).allSatisfy(clause ->
+                assertThat(clause.regionKind())
+                        .isNotEqualTo(ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK));
+        var kinds = semantics.clauses().stream()
+                .map(ClauseSemantics::regionKind)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(kinds).isEqualTo(java.util.Set.of(
+                ContractRegionSegmenter.SemanticRegionKind.CLAUSE,
+                ContractRegionSegmenter.SemanticRegionKind.SCHEDULE));
+        // the honest unclassified signal now comes only from real clauses/schedules
+        assertThat(semantics.quality().notes())
+                .doesNotContain(ReviewQualityNote.PROVIDER_DEGRADATION);
+    }
+
+    @Test
     void provenanceAnchorsResolveAgainstCanonicalStructure() throws Exception {
         var bytes = fixtureBytes("m5-msa-services.docx");
         var ingested = ingestionService.ingest("m5-msa-services.docx",
