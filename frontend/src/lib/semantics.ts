@@ -8,8 +8,10 @@ import type {
   ReviewReason,
   ScopeEditInput,
   SemanticFieldsEditInput,
-  VerificationState,
 } from '../api/knowledge'
+import { CONCEPT_LABELS, humanizeCode } from './domainLabels'
+
+export { CONCEPT_LABELS, VERIFICATION_LABELS, humanizeCode } from './domainLabels'
 
 export const POSITION_LABELS: Record<PositionRole, string> = {
   PREFERRED: 'Preferred',
@@ -58,38 +60,15 @@ export const REVIEW_REASON_LABELS: Record<ReviewReason, string> = {
     'Semantic compilation was unavailable; this candidate is deterministic extraction only.',
 }
 
-export const VERIFICATION_LABELS: Record<VerificationState, string> = {
-  VERIFIED: 'Supported by source',
-  UNCERTAIN: 'Verification uncertain',
-  DISPUTED: 'Source support disputed',
-  NOT_VERIFIED: 'Not independently verified',
-}
-
 export const ASSESSMENT_STATE_LABELS: Record<AssessmentState, string> = {
   MATCH: 'Matches declared type',
   POSSIBLE_MISMATCH: 'Possible mismatch',
   AMBIGUOUS: 'Ambiguous',
 }
 
-export const CONCEPT_LABELS: Record<string, string> = {
-  CONFIDENTIALITY: 'Confidentiality',
-  TERM_TERMINATION: 'Term and termination',
-  LIMITATION_OF_LIABILITY: 'Limitation of liability',
-  INDEMNIFICATION: 'Indemnification',
-  GOVERNING_LAW: 'Governing law',
-}
-
 export function conceptLabel(key: string | null): string | null {
   if (key === null || key.trim().length === 0) return null
   return CONCEPT_LABELS[key] ?? humanizeCode(key)
-}
-
-export function humanizeCode(code: string): string {
-  const lower = code
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replaceAll('_', ' ')
-    .toLowerCase()
-  return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
 export function reviewReasonLabel(code: string): string {

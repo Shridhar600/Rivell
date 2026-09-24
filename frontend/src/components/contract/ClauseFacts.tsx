@@ -1,0 +1,345 @@
+import { useState, type FormEvent } from 'react'
+import type {
+  SemanticClause,
+  SemanticFact,
+  SemanticInterpretation,
+} from '../../api/semantics'
+import { useCorrectClauseFacts } from '../../api/semantics'
+import {
+  describeFact,
+  factDivergence,
+  factEditorFields,
+  factSchemaLabel,
+  humanizeCode,
+  interpretationKindDescription,
+} from '../../lib/contractSemantics'
+import { CorrectionFailure } from './CorrectionFailure'
+import { SourceRegionLinks } from './SourceRegionLinks'
+import { VerificationBadge } from './VerificationBadge'
+
+function FactCard({
+  fact,
+  machineFact,
+  interpretations,
+  clauseId,
+  contractId,
+  versionNumber,
+  onRefresh,
+  labelByNodeId,
+  onNavigateToNode,
+}: {
+  fact: SemanticFact
+  machineFact: SemanticFact | null
+  interpretations: SemanticInterpretation[]
+  clauseId: string
+  contractId: string
+  versionNumber: number
+  onRefresh: () => void
+  labelByNodeId: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
+}) {
+  const rows = describeFact(fact)
+  const machineRows = new Map(
+    (machineFact ? describeFact(machineFact) : []).map((row) => [row.field, row.value]),
+  )
+  const divergences = factDivergence(machineFact ? [machineFact] : [], [fact])
+  const divergenceByField = new Map(
+    divergences.map((divergence) => [divergence.field, divergence]),
+  )
+  const interpretationsByField = new Map(
+    interpretations
+      .filter((interpretation) => interpretation.field in fact.values)
+      .map((interpretation) => [interpretation.field, interpretation]),
+  )
+
+  return (
+    <div className="fact-card">
+      <h5>{factSchemaLabel(fact.factSchema)}</h5>
+      <dl className="data-list fact-list">
+        {rows.map((row) => {
+          const divergence = divergenceByField.get(row.field)
+          const interpretation = interpretationsByField.get(row.field)
+          return (
+            <div className="data-list__row" key={row.field}>
+              <dt>{row.label}</dt>
+              <dd>
+                <span className="fact-list__value">{row.value}</span>
+                {divergence ? (
+                  <span className="badge badge--edited">Corrected</span>
+                ) : interpretation ? (
+                  <VerificationBadge verification={interpretation.verification} />
+                ) : null}
+                {divergence ? (
+                  <span className="fact-list__machine">
+                    Rivell originally interpreted:{' '}
+                    {machineRows.get(row.field) ?? divergence.machineValue}
+                    {interpretation ? (
+                      <>
+                        {' '}
+                        <VerificationBadge
+                          verification={interpretation.verification}
+                        />
+                        {` · ${interpretationKindDescription(interpretation.kind)} · `}
+                        <SourceRegionLinks
+                          nodeIds={interpretation.sourceNodeIds}
+                          labelByNodeId={labelByNodeId}
+                          onNavigateToNode={onNavigateToNode}
+                          emptyLabel="no source region recorded"
+                        />
+                      </>
+                    ) : null}
+                  </span>
+                ) : interpretation ? (
+                  <span className="fact-list__provenance">
+                    {interpretationKindDescription(interpretation.kind)} ·{' '}
+                    <SourceRegionLinks
+                      nodeIds={interpretation.sourceNodeIds}
+                      labelByNodeId={labelByNodeId}
+                      onNavigateToNode={onNavigateToNode}
+                      emptyLabel="no source region recorded"
+                    />
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+          )
+        })}
+      </dl>
+      <FactEditor
+        fact={fact}
+        clauseId={clauseId}
+        contractId={contractId}
+        versionNumber={versionNumber}
+        onRefresh={onRefresh}
+      />
+    </div>
+  )
+}
+
+function FactEditor({
+  fact,
+  clauseId,
+  contractId,
+  versionNumber,
+  onRefresh,
+}: {
+  fact: SemanticFact
+  clauseId: string
+  contractId: string
+  versionNumber: number
+  onRefresh: () => void
+}) {
+  const fields = factEditorFields(fact.factSchema)
+  const correct = useCorrectClauseFacts(contractId, versionNumber)
+  const [serverValues, setServerValues] = useState(fact.values)
+  const [draft, setDraft] = useState<Record<string, string>>(() => ({
+    ...fact.values,
+  }))
+  const [error, setError] = useState<string | null>(null)
+
+  if (serverValues !== fact.values) {
+    setServerValues(fact.values)
+    setDraft({ ...fact.values })
+  }
+
+  if (!fields) return null
+
+  const changed = Object.fromEntries(
+    Object.entries(draft).filter(([field, value]) => fact.values[field] !== value),
+  )
+  const hasChanges = Object.keys(changed).length > 0
+
+  const validate = (): string | null => {
+    for (const field of fields) {
+      const value = draft[field.field]
+      if (value === undefined) continue
+      if (value.trim() === '') {
+        return `${field.label} is required.`
+      }
+      if (field.kind === 'decimal') {
+        const number = Number(value)
+        if (!Number.isFinite(number) || number <= 0) {
+          return `${field.label} must be a number greater than zero.`
+        }
+      }
+      if (field.kind === 'integer') {
+        const number = Number(value)
+        if (!Number.isInteger(number) || number < 0) {
+          return `${field.label} must be a whole number of zero or more.`
+        }
+      }
+    }
+    return null
+  }
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    setError(null)
+    correct.mutate({ clauseId, values: changed })
+  }
+
+  return (
+    <details className="correction">
+      <summary>Correct fact values</summary>
+      <form onSubmit={handleSubmit} aria-busy={correct.isPending}>
+        <div className="fact-editor">
+          {fields.map((field) => {
+            const inputId = `fact-${clauseId}-${fact.factSchema}-${field.field}`
+            return (
+              <div className="profile-form__field" key={field.field}>
+                <label htmlFor={inputId}>{field.label}</label>
+                {field.kind === 'boolean' ? (
+                  <select
+                    id={inputId}
+                    value={draft[field.field] ?? 'false'}
+                    onChange={(event) =>
+                      setDraft((previous) => ({
+                        ...previous,
+                        [field.field]: event.target.value,
+                      }))
+                    }
+                    disabled={correct.isPending}
+                  >
+                    <option value="true">
+                      {field.booleanLabels?.whenTrue ?? 'Yes'}
+                    </option>
+                    <option value="false">
+                      {field.booleanLabels?.whenFalse ?? 'No'}
+                    </option>
+                  </select>
+                ) : field.kind === 'enum' ? (
+                  <select
+                    id={inputId}
+                    value={draft[field.field] ?? ''}
+                    onChange={(event) =>
+                      setDraft((previous) => ({
+                        ...previous,
+                        [field.field]: event.target.value,
+                      }))
+                    }
+                    disabled={correct.isPending}
+                  >
+                    {(field.options ?? []).map((option) => (
+                      <option key={option} value={option}>
+                        {field.optionLabels?.[option] ?? humanizeCode(option)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id={inputId}
+                    type="number"
+                    step={field.kind === 'decimal' ? '0.1' : '1'}
+                    value={draft[field.field] ?? ''}
+                    onChange={(event) =>
+                      setDraft((previous) => ({
+                        ...previous,
+                        [field.field]: event.target.value,
+                      }))
+                    }
+                    disabled={correct.isPending}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {error ? (
+          <p role="alert" className="correction__error">
+            {error}
+          </p>
+        ) : null}
+        <button type="submit" disabled={correct.isPending || !hasChanges}>
+          {correct.isPending ? 'Saving…' : 'Save fact values'}
+        </button>
+      </form>
+      {correct.isError ? (
+        <CorrectionFailure error={correct.error} onRefresh={onRefresh} />
+      ) : null}
+      {correct.isSuccess && !correct.isPending ? (
+        <p role="status" className="correction__status">
+          Fact values updated. Rivell&apos;s original interpretation is kept above.
+        </p>
+      ) : null}
+    </details>
+  )
+}
+
+export function ClauseFacts({
+  clause,
+  contractId,
+  versionNumber,
+  onRefresh,
+  labelByNodeId,
+  onNavigateToNode,
+}: {
+  clause: SemanticClause
+  contractId: string
+  versionNumber: number
+  onRefresh: () => void
+  labelByNodeId: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
+}) {
+  const machineBySchema = new Map(
+    clause.machineFacts.map((fact) => [fact.factSchema, fact]),
+  )
+  const coveredFields = new Set(
+    clause.effectiveFacts.flatMap((fact) => Object.keys(fact.values)),
+  )
+  const leftoverInterpretations = clause.interpretations.filter(
+    (interpretation) => !coveredFields.has(interpretation.field),
+  )
+
+  return (
+    <div className="clause-facts">
+      <h4>Extracted facts</h4>
+      {clause.effectiveFacts.length === 0 ? (
+        <p className="semantic-empty">
+          No typed facts were extracted for this clause.
+        </p>
+      ) : (
+        clause.effectiveFacts.map((fact) => (
+          <FactCard
+            key={fact.factSchema}
+            fact={fact}
+            machineFact={machineBySchema.get(fact.factSchema) ?? null}
+            interpretations={clause.interpretations}
+            clauseId={clause.id}
+            contractId={contractId}
+            versionNumber={versionNumber}
+            onRefresh={onRefresh}
+            labelByNodeId={labelByNodeId}
+            onNavigateToNode={onNavigateToNode}
+          />
+        ))
+      )}
+      {leftoverInterpretations.length > 0 ? (
+        <div className="interpretation-list">
+          <h4>Other interpreted fields</h4>
+          <ul>
+            {leftoverInterpretations.map((interpretation) => (
+              <li key={`${interpretation.field}-${interpretation.proposedValue}`}>
+                <span>{humanizeCode(interpretation.field)}</span>
+                <span className="interpretation-list__value">
+                  {interpretation.proposedValue}
+                </span>
+                <VerificationBadge verification={interpretation.verification} />
+                <SourceRegionLinks
+                  nodeIds={interpretation.sourceNodeIds}
+                  labelByNodeId={labelByNodeId}
+                  onNavigateToNode={onNavigateToNode}
+                  emptyLabel="no source region recorded"
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  )
+}

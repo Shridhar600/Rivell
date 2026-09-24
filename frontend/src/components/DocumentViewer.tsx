@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { StructureResponse } from '../api/contracts'
 import { buildOutlineItems } from '../lib/documentTree'
 import { OutlineTree } from './OutlineTree'
@@ -8,10 +9,12 @@ export function DocumentViewer({
   structure,
   selectedId,
   onSelect,
+  selectedRegionExtra,
 }: {
   structure: StructureResponse
   selectedId: string | null
   onSelect: (id: string) => void
+  selectedRegionExtra?: ReactNode
 }) {
   const selectedNode = structure.nodes.find((node) => node.id === selectedId)
 
@@ -37,6 +40,7 @@ export function DocumentViewer({
           label="Selected region"
           span={selectedNode?.sourceSpan ?? null}
         />
+        {selectedRegionExtra}
       </div>
     </div>
   )
