@@ -225,6 +225,7 @@ describe('labels', () => {
 describe('traceRequestEntries', () => {
   it('flattens the request echo into labelled scalar entries without raw dumps', () => {
     const entries = traceRequestEntries({
+      purpose: 'CLAUSE_REVIEW',
       legalConcept: 'LIMITATION_OF_LIABILITY',
       effectiveOn: '2026-09-24',
       knowledgePin: 2,
@@ -248,6 +249,11 @@ describe('traceRequestEntries', () => {
     expect(labels).toContain('Resolved publication')
     expect(entries.find((entry) => entry.label === 'Legal concept')?.value).toBe(
       'Limitation of liability',
+    )
+    expect(entries.find((entry) => entry.label === 'Purpose')?.value).toBe('Clause review')
+    expect(entries.find((entry) => entry.label === 'Our side')?.value).toBe('Customer')
+    expect(entries.find((entry) => entry.label === 'Paper source')?.value).toBe(
+      'Counterparty paper',
     )
     expect(entries.find((entry) => entry.label === 'Subject clause text')?.long).toBe(true)
     expect(JSON.stringify(entries)).not.toMatch(/nope/)

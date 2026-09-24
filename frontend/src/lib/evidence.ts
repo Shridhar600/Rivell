@@ -4,7 +4,14 @@ import type {
   EvidenceSufficiency,
   PolicyCompatibility,
 } from '../api/retrieval'
-import { conceptLabel, relationshipTypeVerb } from './contractSemantics'
+import {
+  CONTRACT_TYPE_LABELS,
+  JURISDICTION_LABELS,
+  PAPER_SOURCE_LABELS,
+  conceptLabel,
+  relationshipTypeVerb,
+  roleLabel,
+} from './contractSemantics'
 import { humanizeCode } from './domainLabels'
 import { POSITION_LABELS } from './semantics'
 
@@ -300,6 +307,25 @@ function entryLabel(key: string): string {
   return REQUEST_KEY_LABELS[key] ?? humanizeCode(key)
 }
 
+function displayValue(key: string, value: string): string {
+  switch (key) {
+    case 'legalConcept':
+      return conceptLabel(value)
+    case 'purpose':
+      return humanizeCode(value)
+    case 'contractType':
+      return CONTRACT_TYPE_LABELS[value] ?? value
+    case 'ourSideRole':
+      return roleLabel(value)
+    case 'paperSource':
+      return PAPER_SOURCE_LABELS[value] ?? value
+    case 'jurisdiction':
+      return JURISDICTION_LABELS[value] ?? value
+    default:
+      return value
+  }
+}
+
 function scalarEntry(
   key: string,
   value: string | number | boolean,
@@ -308,7 +334,7 @@ function scalarEntry(
     return {
       key,
       label: entryLabel(key),
-      value: key === 'legalConcept' ? conceptLabel(value) : value,
+      value: displayValue(key, value),
       long: value.length > 200,
     }
   }
