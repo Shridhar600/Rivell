@@ -20,9 +20,7 @@ export function EvidenceSufficiencyBanner({
       aria-labelledby="evidence-sufficiency-heading"
     >
       <h2 id="evidence-sufficiency-heading">Evidence sufficiency</h2>
-      <p className="sufficiency__state" role="status">
-        {presentation.label}
-      </p>
+      <p className="sufficiency__state">{presentation.label}</p>
       <p className="sufficiency__description">{presentation.description}</p>
     </section>
   )

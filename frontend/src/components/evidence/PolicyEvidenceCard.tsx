@@ -6,17 +6,16 @@ import { EvidenceText } from './EvidenceText'
 
 export function PolicyEvidenceCard({ item }: { item: EvidenceItem }) {
   const headingId = `evidence-${item.evidenceId}`
+  const heading = item.legalConcept ? conceptLabel(item.legalConcept) : 'Policy rule'
   const positions = item.policyFacts ? policyPositionLabels(item.policyFacts.positions) : []
 
   return (
     <article className="evidence-card" aria-labelledby={headingId}>
       <header className="evidence-card__header">
-        <h3 id={headingId}>
-          {item.legalConcept ? conceptLabel(item.legalConcept) : 'Policy rule'}
-        </h3>
+        <h3 id={headingId}>{heading}</h3>
         <span className="badge badge--muted">{authorityLabel(item.authorityClass)}</span>
       </header>
-      <EvidenceText item={item} />
+      <EvidenceText item={item} label={heading} />
       {item.policyFacts ? (
         <dl className="data-list evidence-card__facts">
           {positions.length > 0 ? (

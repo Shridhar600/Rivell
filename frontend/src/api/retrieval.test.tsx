@@ -7,6 +7,7 @@ import {
   fetchRetrievalTrace,
   isConflictError,
   isForbiddenError,
+  isMalformedError,
   isNotFoundError,
   parseEvidenceBundle,
   parseRetrievalTrace,
@@ -145,7 +146,7 @@ const trace = {
     legalConcept: 'LIMITATION_OF_LIABILITY',
     effectiveOn: '2026-09-24',
     reviewProfile: { contractType: 'MSA', ourSideRole: 'CUSTOMER' },
-    subjectClauseText: '6. Limitation of Liability…',
+    clauseText: '6. Limitation of Liability…',
   },
   stages: {
     structured: {
@@ -175,7 +176,7 @@ const trace = {
     { candidateId: 'k-other', stage: 'rerank', reason: 'different legal issue' },
   ],
   degradation: ['INDEX_INCOMPLETE'],
-  stageTimings: { structured: 12, precedent: 240, total: 300 },
+  stageTimings: { structured: 12, precedent: 240, totalMs: 300 },
   modelVersions: {
     'spec:m6-precedent-relevance-1': '1',
     embedding: 'openai-compatible:embeddinggemma:768',
@@ -276,7 +277,7 @@ describe('parseRetrievalTrace', () => {
     expect(parsed.rejectedEvidence).toEqual([
       { candidateId: 'k-other', stage: 'rerank', reason: 'different legal issue' },
     ])
-    expect(parsed.stageTimings.total).toBe(300)
+    expect(parsed.stageTimings.totalMs).toBe(300)
     expect(parsed.modelVersions.embedding).toBe('openai-compatible:embeddinggemma:768')
     expect(parsed.request).toEqual(trace.request)
   })
@@ -334,6 +335,19 @@ describe('buildEvidence', () => {
     }).catch((error: unknown) => error)
     expect(isForbiddenError(forbidden)).toBe(true)
   })
+
+  it('flags malformed 200 responses as contract mismatches', async () => {
+    stubFetch(() => jsonResponse(envelope({ nonsense: true })))
+
+    const error = await buildEvidence({
+      contractId: 'c-1',
+      versionNumber: 1,
+      clauseId: 'cl-6',
+    }).catch((caught: unknown) => caught)
+
+    expect(isMalformedError(error)).toBe(true)
+    expect(isConflictError(error)).toBe(false)
+  })
 })
 
 describe('fetchRetrievalTrace', () => {
@@ -383,6 +397,33 @@ describe('bundle cache behaviour', () => {
     await waitFor(() => expect(result.current.data?.bundleId).toBe('b-1'))
     expect(withoutSelection.result.current.data).toBeUndefined()
     expect(requests).toHaveLength(0)
+  })
+
+  it('keeps only the newest build when requests overlap', async () => {
+    let call = 0
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => {
+      const index = call
+      call += 1
+      await new Promise((resolve) => setTimeout(resolve, index === 0 ? 60 : 0))
+      return jsonResponse(
+        envelope({ ...hybridBundle, bundleId: index === 0 ? 'b-first' : 'b-second' }),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { queryClient, wrapper } = createWrapper()
+    const build = renderHook(() => useBuildEvidence('c-1', 1), { wrapper })
+
+    await act(async () => {
+      const mutate = build.result.current.mutateAsync
+      await Promise.all([
+        mutate({ clauseId: 'cl-6' }),
+        mutate({ clauseId: 'cl-6' }),
+      ])
+    })
+
+    expect(
+      queryClient.getQueryData(retrievalKeys.bundle('c-1', 1, 'cl-6')),
+    ).toMatchObject({ bundleId: 'b-second' })
   })
 
   it('writes a built bundle under the requested clause id and reads it back', async () => {

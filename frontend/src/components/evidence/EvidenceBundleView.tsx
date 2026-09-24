@@ -1,5 +1,9 @@
 import type { EvidenceBundle, EvidenceItem } from '../../api/retrieval'
-import { POLICY_MISSING_PRECEDENT_NOTE, evidenceLanesFor } from '../../lib/evidence'
+import {
+  POLICY_MISSING_PRECEDENT_NOTE,
+  evidenceLanesFor,
+  laneEmptyState,
+} from '../../lib/evidence'
 import { ApprovedDraftingCard } from './ApprovedDraftingCard'
 import { CurrentContractCard } from './CurrentContractCard'
 import { EvidenceLane } from './EvidenceLane'
@@ -59,6 +63,7 @@ export function EvidenceBundleView({
           key={lane.authority}
           lane={lane}
           count={items.length}
+          emptyState={laneEmptyState(lane, bundle.sufficiency)}
           emptyNote={
             lane.authority === 'POLICY' &&
             bundle.sufficiency === 'POLICY_MISSING' &&

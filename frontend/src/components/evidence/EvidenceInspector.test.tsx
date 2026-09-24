@@ -175,6 +175,99 @@ describe('evidence inspector lifecycle', () => {
     expect(original.getAttribute('href')).toContain('/versions/1/original')
   })
 
+  it('explains an unmatched clause link instead of silently selecting another clause', async () => {
+    const api = stubContractApi({ evidenceBundle: fixtureBundle(), trace: fixtureTrace })
+    renderRoute('/reviews/c1/evidence?clause=unknown-node')
+
+    await screen.findByRole('heading', { name: 'Master Services Agreement' })
+    expect(
+      await screen.findByText(/not part of the current semantic analysis/i),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Unknown clause' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Build evidence' })).toBeDisabled()
+    expect(evidenceRequests(api)).toHaveLength(0)
+  })
+
+  it('shows a pending build state and announces the result', async () => {
+    stubContractApi({
+      evidenceResponse: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        return jsonResponse(envelope(fixtureBundle()))
+      },
+      trace: fixtureTrace,
+    })
+    renderRoute('/reviews/c1/evidence?clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Master Services Agreement' })
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Build evidence' }),
+    )
+    const pending = await screen.findByRole('button', { name: 'Building evidence…' })
+    expect(pending).toBeDisabled()
+
+    expect(await screen.findByText('Evidence complete')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Evidence built. Evidence complete',
+      )
+    })
+    expect(screen.getByRole('button', { name: 'Rebuild evidence' })).toBeInTheDocument()
+  })
+
+  it('maps a missing clause to a not-found state without server detail', async () => {
+    stubContractApi({ evidenceStatus: 404 })
+    renderRoute('/reviews/c1/evidence?clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Master Services Agreement' })
+    await buildEvidence()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not be found/i)
+    expect(screen.queryByText('server detail text')).not.toBeInTheDocument()
+  })
+
+  it('recovers when the trace request fails', async () => {
+    let attempts = 0
+    stubContractApi({
+      evidenceBundle: fixtureBundle(),
+      traceResponse: () => {
+        attempts += 1
+        return attempts === 1
+          ? jsonResponse({ code: '500', title: 'Error', detail: 'server detail text' }, 500)
+          : jsonResponse(envelope(fixtureTrace))
+      },
+    })
+    renderRoute('/reviews/c1/evidence?clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Master Services Agreement' })
+    await buildEvidence()
+    await waitFor(() => expect(evidenceRequests.length).toBeGreaterThan(0))
+
+    await userEvent.click(screen.getByText('Retrieval details'))
+    expect(
+      await screen.findByText('Retrieval details could not be loaded.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('server detail text')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Rank fusion')).toBeInTheDocument()
+  })
+
+  it('gives each exact-text disclosure a distinct accessible name', async () => {
+    stubContractApi({ evidenceBundle: fixtureBundle(), trace: fixtureTrace })
+    renderRoute('/reviews/c1/evidence?clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Master Services Agreement' })
+    await buildEvidence()
+    await screen.findByRole('region', { name: 'Precedents' })
+
+    const names = screen
+      .getAllByText('Show exact text')
+      .map((summary) => summary.closest('summary')?.getAttribute('aria-label'))
+    expect(names.length).toBeGreaterThan(1)
+    expect(names.every((name) => name?.startsWith('Show exact text:'))).toBe(true)
+    expect(new Set(names).size).toBe(names.length)
+  })
+
   it('requires semantic analysis before evidence can be built', async () => {
     stubContractApi({ semantics: null })
     renderRoute('/reviews/c1/evidence')

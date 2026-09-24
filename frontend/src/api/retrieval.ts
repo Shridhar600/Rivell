@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import { createApiClient } from './client'
@@ -353,6 +354,14 @@ export function isForbiddenError(error: unknown): boolean {
   return error instanceof RetrievalApiError && error.status === 403
 }
 
+export function isMalformedError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    !(error instanceof RetrievalApiError) &&
+    error.message.startsWith('Malformed')
+  )
+}
+
 export const retrievalKeys = {
   bundle: (contractId: string, versionNumber: number, clauseId: string) =>
     ['retrieval', 'bundle', contractId, versionNumber, clauseId] as const,
@@ -386,11 +395,17 @@ export async function buildEvidence(input: EvidenceBuildInput): Promise<Evidence
 export function useBuildEvidence(
   contractId: string,
   versionNumber: number,
-): UseMutationResult<EvidenceBundle, Error, { clauseId: string }> {
+): UseMutationResult<{ bundle: EvidenceBundle; requestId: number }, Error, { clauseId: string }> {
   const queryClient = useQueryClient()
+  const latestRequest = useRef(0)
   return useMutation({
-    mutationFn: ({ clauseId }) => buildEvidence({ contractId, versionNumber, clauseId }),
-    onSuccess: (bundle, variables) => {
+    mutationFn: async ({ clauseId }) => {
+      const requestId = ++latestRequest.current
+      const bundle = await buildEvidence({ contractId, versionNumber, clauseId })
+      return { bundle, requestId }
+    },
+    onSuccess: ({ bundle, requestId }, variables) => {
+      if (requestId !== latestRequest.current) return
       queryClient.setQueryData(
         retrievalKeys.bundle(contractId, versionNumber, variables.clauseId),
         bundle,
@@ -432,5 +447,6 @@ export function useRetrievalTraceQuery(
     queryKey: retrievalKeys.trace(traceId ?? ''),
     queryFn: traceId ? () => fetchRetrievalTrace(traceId) : skipToken,
     enabled: enabled && traceId !== null,
+    retry: false,
   })
 }

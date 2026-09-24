@@ -17,7 +17,7 @@ export function GenericEvidenceCard({ item }: { item: EvidenceItem }) {
         <h3 id={headingId}>{heading}</h3>
         <span className="badge badge--muted">{authorityLabel(item.authorityClass)}</span>
       </header>
-      <EvidenceText item={item} />
+      <EvidenceText item={item} label={heading} />
       <EvidenceItemSource item={item} />
     </article>
   )

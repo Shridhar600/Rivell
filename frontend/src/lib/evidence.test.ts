@@ -6,6 +6,7 @@ import {
   degradationMessage,
   evidenceLanesFor,
   evidenceTextCollapsible,
+  laneEmptyState,
   policyPositionLabels,
   policyCompatibilityLabel,
   retrievalReasonLabel,
@@ -164,6 +165,21 @@ describe('sufficiencyPresentation', () => {
     )
   })
 
+  it('qualifies empty-lane copy under degraded or unknown states', () => {
+    const policyLane = evidenceLanesFor([], 'POLICY_MISSING')[0].lane
+    expect(laneEmptyState(policyLane, 'POLICY_MISSING')).toMatch(/no published policy/i)
+    expect(laneEmptyState(policyLane, 'PARTIAL')).toMatch(/was not resolved/i)
+    expect(laneEmptyState(policyLane, 'UNKNOWN')).toMatch(/was not resolved/i)
+
+    const precedentLane = evidenceLanesFor([], 'PARTIAL').find(
+      (group) => group.lane.authority === 'PRECEDENT',
+    )!.lane
+    expect(laneEmptyState(precedentLane, 'PARTIAL')).toMatch(/incomplete/i)
+    expect(laneEmptyState(precedentLane, 'PRECEDENT_WEAK')).toMatch(
+      /no comparable precedent/i,
+    )
+  })
+
   it('states that precedent does not establish policy', () => {
     expect(POLICY_MISSING_PRECEDENT_NOTE).toMatch(/does not establish/i)
   })
@@ -247,6 +263,7 @@ describe('traceRequestEntries', () => {
         jurisdiction: 'UK',
       },
       clauseText: 'x'.repeat(500),
+      providerPayload: { apiKey: 'nope2' },
       nested: { provider: { secret: 'nope' } },
     })
 

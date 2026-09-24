@@ -37,7 +37,7 @@ export function CurrentContractCard({
         <h3 id={headingId}>{heading}</h3>
         <span className="badge badge--muted">{authorityLabel(item.authorityClass)}</span>
       </header>
-      <EvidenceText item={item} />
+      <EvidenceText item={item} label={heading} />
       {item.contractFacts.length > 0 ? (
         <div className="evidence-card__facts">
           {item.contractFacts.map((fact) => (

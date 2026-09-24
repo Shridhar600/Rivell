@@ -419,10 +419,10 @@ export type StubOptions = {
   conceptCorrectionResponse?: (body: unknown) => Response
   factCorrectionResponse?: (body: unknown) => Response
   evidenceBundle?: unknown
-  evidenceResponse?: (body: unknown) => Response
+  evidenceResponse?: (body: unknown) => Response | Promise<Response>
   evidenceStatus?: number
   trace?: unknown
-  traceResponse?: () => Response
+  traceResponse?: () => Response | Promise<Response>
   traceStatus?: number
 }
 
@@ -525,7 +525,7 @@ export function stubContractApi(options: StubOptions = {}) {
     }
 
     if (method === 'POST' && url.includes('/api/retrieval/evidence')) {
-      if (options.evidenceResponse) return options.evidenceResponse(body)
+      if (options.evidenceResponse) return await options.evidenceResponse(body)
       if (options.evidenceStatus && options.evidenceStatus !== 200) {
         return jsonResponse(
           {
@@ -539,7 +539,7 @@ export function stubContractApi(options: StubOptions = {}) {
       return jsonResponse(envelope(options.evidenceBundle ?? null))
     }
     if (method === 'GET' && url.includes('/api/retrieval/traces/')) {
-      if (options.traceResponse) return options.traceResponse()
+      if (options.traceResponse) return await options.traceResponse()
       if (options.traceStatus && options.traceStatus !== 200) {
         return jsonResponse(
           { code: String(options.traceStatus), title: 'Error', detail: 'server detail text' },

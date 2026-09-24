@@ -193,6 +193,23 @@ export function sufficiencyPresentation(state: EvidenceSufficiency): Sufficiency
 export const POLICY_MISSING_PRECEDENT_NOTE =
   'Historical precedent does not establish organizational policy.'
 
+export function laneEmptyState(
+  lane: EvidenceLane,
+  sufficiency: EvidenceSufficiency,
+): string {
+  if (lane.authority === 'POLICY') {
+    return sufficiency === 'POLICY_MISSING'
+      ? 'No published policy applies to this concept and profile.'
+      : 'Policy evidence was not resolved for this retrieval.'
+  }
+  if (lane.authority === 'PRECEDENT') {
+    return sufficiency === 'PARTIAL'
+      ? 'Precedent retrieval was incomplete; no comparable precedent was returned.'
+      : 'No comparable precedent was found for this concept.'
+  }
+  return lane.emptyState
+}
+
 export function staleClassificationNote(
   builtConcept: string | null,
   currentConcept: string | null,
@@ -298,6 +315,29 @@ type TraceRequestEntry = {
   long: boolean
 }
 
+const TRACE_REQUEST_KEYS = new Set([
+  'purpose',
+  'legalConcept',
+  'effectiveOn',
+  'knowledgePin',
+  'resolvedAsOfPublication',
+  'contractId',
+  'versionNumber',
+  'clauseId',
+  'clauseText',
+  'contractType',
+  'ourSideRole',
+  'paperSource',
+  'jurisdiction',
+])
+
+const TRACE_PROFILE_KEYS = new Set([
+  'contractType',
+  'ourSideRole',
+  'paperSource',
+  'jurisdiction',
+])
+
 const REQUEST_KEY_LABELS: Record<string, string> = {
   purpose: 'Purpose',
   legalConcept: 'Legal concept',
@@ -357,20 +397,22 @@ export function traceRequestEntries(request: Record<string, unknown>): TraceRequ
   const entries: TraceRequestEntry[] = []
   for (const [key, value] of Object.entries(request)) {
     if (value === null || value === undefined) continue
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      entries.push(scalarEntry(key, key, value))
-      continue
-    }
-    if (typeof value === 'object' && !Array.isArray(value)) {
+    if (key === 'reviewProfile' && typeof value === 'object' && !Array.isArray(value)) {
       for (const [nestedKey, nestedValue] of Object.entries(value)) {
         if (
-          typeof nestedValue === 'string' ||
-          typeof nestedValue === 'number' ||
-          typeof nestedValue === 'boolean'
+          TRACE_PROFILE_KEYS.has(nestedKey) &&
+          (typeof nestedValue === 'string' ||
+            typeof nestedValue === 'number' ||
+            typeof nestedValue === 'boolean')
         ) {
-          entries.push(scalarEntry(`${key}.${nestedKey}`, nestedKey, nestedValue))
+          entries.push(scalarEntry(`reviewProfile.${nestedKey}`, nestedKey, nestedValue))
         }
       }
+      continue
+    }
+    if (!TRACE_REQUEST_KEYS.has(key)) continue
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      entries.push(scalarEntry(key, key, value))
     }
   }
   return entries

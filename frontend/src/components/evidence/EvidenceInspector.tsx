@@ -18,7 +18,8 @@ import {
   conceptLabel,
   effectivePrimaryConcept,
 } from '../../lib/contractSemantics'
-import { staleClassificationNote } from '../../lib/evidence'
+import { humanizeCode } from '../../lib/domainLabels'
+import { staleClassificationNote, sufficiencyPresentation } from '../../lib/evidence'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
 import { EvidenceBundleView } from './EvidenceBundleView'
@@ -123,6 +124,12 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
     : null
   const buildError =
     build.isError && build.variables?.clauseId === selectedClauseId ? build.error : null
+  const unmatchedSelection = selectedKey !== null && selectedClause === null
+  const announcement = build.isPending
+    ? 'Building evidence…'
+    : bundle
+      ? `Evidence built. ${sufficiencyPresentation(bundle.sufficiency).label}`
+      : ''
 
   const header = (
     <header className="workspace__header">
@@ -163,13 +170,23 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
       />
     )
   } else if (!semanticsReady) {
+    const analysisState = semantics?.enrichmentStatus
+    const heading =
+      analysisState === 'ENRICHING'
+        ? 'Semantic analysis in progress'
+        : analysisState === 'FAILED'
+          ? 'Semantic analysis failed'
+          : 'Semantic analysis required'
+    const message =
+      analysisState === 'ENRICHING'
+        ? 'Semantic analysis is running for this contract. Evidence can be built once it is ready.'
+        : analysisState === 'FAILED'
+          ? 'Semantic analysis failed for this contract. Review the failure in semantic analysis, then try again.'
+          : "Evidence is built from the contract's semantic analysis. Run semantic analysis for this contract first."
     body = (
       <section className="state state--warning" aria-labelledby="evidence-ready-heading">
-        <h2 id="evidence-ready-heading">Semantic analysis required</h2>
-        <p>
-          Evidence is built from the contract&apos;s semantic analysis. Run semantic
-          analysis for this contract first.
-        </p>
+        <h2 id="evidence-ready-heading">{heading}</h2>
+        <p>{message}</p>
         <Link className="button" to={`/reviews/${contractId}?view=semantics`}>
           Open semantic analysis
         </Link>
@@ -194,6 +211,11 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
               <option value="" disabled>
                 Select a clause
               </option>
+              {unmatchedSelection ? (
+                <option value={selectedKey ?? ''} disabled>
+                  Unknown clause
+                </option>
+              ) : null}
               {clauses.map((clause) => (
                 <option key={clause.headingNodeId} value={clause.headingNodeId}>
                   {clause.heading}
@@ -204,13 +226,13 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
           <dl className="data-list">
             <div className="data-list__row">
               <dt>Purpose</dt>
-              <dd>Clause review</dd>
+              <dd>{bundle ? humanizeCode(bundle.request.purpose) : 'Clause review'}</dd>
             </div>
             <div className="data-list__row">
               <dt>Legal concept</dt>
               <dd>{effectiveConcept ? conceptLabel(effectiveConcept) : 'No primary concept'}</dd>
             </div>
-            {bundle ? (
+            {bundle && bundle.request.effectiveOn ? (
               <div className="data-list__row">
                 <dt>Effective on</dt>
                 <dd>{bundle.request.effectiveOn}</dd>
@@ -223,16 +245,30 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
               semantic analysis before building evidence.
             </p>
           ) : null}
+          {unmatchedSelection ? (
+            <p className="state state--warning">
+              This clause link is not part of the current semantic analysis for this
+              version.{' '}
+              <Link to={`/reviews/${contractId}?view=semantics&section=clauses`}>
+                Open semantic analysis
+              </Link>
+            </p>
+          ) : null}
           <div className="evidence-request__actions">
             <button
               type="button"
               className="button button--primary"
               disabled={!canBuild || build.isPending}
+              aria-busy={build.isPending}
               onClick={() => {
                 if (selectedClauseId) build.mutate({ clauseId: selectedClauseId })
               }}
             >
-              {bundle ? 'Rebuild evidence' : 'Build evidence'}
+              {build.isPending
+                ? 'Building evidence…'
+                : bundle
+                  ? 'Rebuild evidence'
+                  : 'Build evidence'}
             </button>
           </div>
           {buildError ? (
@@ -275,6 +311,9 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
         Evidence inspection
       </span>
       {header}
+      <p className="visually-hidden" role="status">
+        {announcement}
+      </p>
       {body}
     </section>
   )
