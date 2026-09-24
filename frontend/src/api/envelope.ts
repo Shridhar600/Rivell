@@ -122,6 +122,21 @@ export function readStringMap(
   return Object.fromEntries(entries) as Record<string, string>
 }
 
+export function readBooleanMap(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): Record<string, boolean> {
+  const value = source[key]
+  if (value === null || value === undefined) return {}
+  if (typeof value !== 'object' || Array.isArray(value)) throw malformed(what)
+  const entries = Object.entries(value)
+  if (entries.some(([, entry]) => typeof entry !== 'boolean')) {
+    throw malformed(what)
+  }
+  return Object.fromEntries(entries) as Record<string, boolean>
+}
+
 export function readNumberMap(
   source: Record<string, unknown>,
   key: string,
