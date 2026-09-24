@@ -21,6 +21,9 @@ import com.rivell.workbench.knowledge.KnowledgeQueryService;
  */
 public class EvidenceIndexService {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(EvidenceIndexService.class);
+
     private static final Set<CandidateType> INDEXABLE_TYPES =
             Set.of(CandidateType.PRECEDENT, CandidateType.REFERENCE);
 
@@ -46,23 +49,50 @@ public class EvidenceIndexService {
         if (!properties.indexingEnabled()) {
             return;
         }
-        for (var superseded : event.supersededCandidates().entrySet()) {
-            repository.markSuperseded(
-                    event.organizationId(), superseded.getValue(), event.publicationNumber());
-        }
+        var embeddings = new java.util.LinkedHashMap<UUID, String>();
         for (var candidateId : event.candidateIds()) {
             try {
-                indexCandidate(event.organizationId(), candidateId, event.publicationNumber());
+                var candidate = indexCandidate(
+                        event.organizationId(), candidateId, event.publicationNumber());
+                if (candidate != null) {
+                    embeddings.put(candidateId, candidate.effectiveContentText());
+                }
             } catch (RuntimeException e) {
                 // one broken candidate must not block the rest of the index batch
+                log.warn("Evidence indexing failed for candidate {} in publication {}: {}",
+                        candidateId, event.publicationNumber(), e.toString());
             }
+        }
+        embedBatch(event.organizationId(), embeddings);
+    }
+
+    /** One batched provider call per publication; failures degrade to lexical-only. */
+    private void embedBatch(UUID organizationId, java.util.Map<UUID, String> texts) {
+        if (texts.isEmpty() || !embeddingService.isConfigured()) {
+            return;
+        }
+        try {
+            var execution = embeddingService.embed(List.copyOf(texts.values()));
+            var candidates = List.copyOf(texts.keySet());
+            for (int i = 0; i < candidates.size(); i++) {
+                var vector = execution.vectors().get(i);
+                ensureVectorIndex(vector.length);
+                repository.persistEmbedding(organizationId, candidates.get(i),
+                        sha256Hex(texts.get(candidates.get(i))), properties.indexVersion(),
+                        embeddingService.modelIdentity(), vector.length,
+                        VectorLiterals.of(vector));
+            }
+        } catch (SemanticDecisionException e) {
+            // honest degradation: lexical stays searchable, vector stays not-ready
+            log.warn("Embedding generation degraded for organization {}", organizationId);
         }
     }
 
-    private void indexCandidate(UUID organizationId, UUID candidateId, long publicationNumber) {
+    private KnowledgeCandidate indexCandidate(
+            UUID organizationId, UUID candidateId, long publicationNumber) {
         var candidate = knowledgeQueries.getCandidate(candidateId);
         if (!candidate.isPublished() || !INDEXABLE_TYPES.contains(candidate.candidateType())) {
-            return;
+            return null;
         }
         var text = candidate.effectiveContentText();
         var contentHash = sha256Hex(text);
@@ -71,7 +101,7 @@ public class EvidenceIndexService {
                 UUID.randomUUID(), organizationId, candidateId, candidate.artifactId(),
                 candidate.candidateType().name(), candidate.legalConceptKey(),
                 contentHash, properties.indexVersion(), "english", text,
-                null, null, false, publicationNumber, null,
+                null, null, false, publicationNumber,
                 scope.contractPackKey(),
                 List.copyOf(scope.declaredContractTypes()),
                 scope.partyPerspective(),
@@ -79,23 +109,7 @@ public class EvidenceIndexService {
                 scope.jurisdiction(),
                 scope.effectiveFrom(),
                 scope.effectiveTo()));
-        embed(organizationId, candidateId, contentHash, text);
-    }
-
-    private void embed(UUID organizationId, UUID candidateId, String contentHash, String text) {
-        if (!embeddingService.isConfigured()) {
-            return;
-        }
-        try {
-            var execution = embeddingService.embed(List.of(text));
-            var vector = execution.vectors().get(0);
-            ensureVectorIndex(organizationId, vector.length);
-            repository.persistEmbedding(organizationId, candidateId, contentHash,
-                    properties.indexVersion(), embeddingService.modelIdentity(),
-                    vector.length, VectorLiterals.of(vector));
-        } catch (SemanticDecisionException e) {
-            // honest degradation: lexical stays searchable, vector stays not-ready
-        }
+        return candidate;
     }
 
     /**
@@ -103,13 +117,15 @@ public class EvidenceIndexService {
      * (created on demand, idempotent DDL — the real provider dimension is unknown
      * at migration time, Architecture Decision #8 / research conclusions).
      */
-    private void ensureVectorIndex(UUID organizationId, int dims) {
+    private void ensureVectorIndex(int dims) {
         var model = embeddingService.modelIdentity();
-        var indexName = "idx_retrieval_vector_" + Integer.toUnsignedString(model.hashCode());
+        var indexName = "idx_retrieval_vector_"
+                + sha256Hex(model + ":" + dims).substring(0, 16);
         try {
             repository.createVectorIndexIfAbsent(indexName, model, dims);
         } catch (RuntimeException e) {
             // index creation is an optimization; a failure must not break indexing
+            log.warn("Vector index creation skipped for {}", model);
         }
     }
 

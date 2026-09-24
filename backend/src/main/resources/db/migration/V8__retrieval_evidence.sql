@@ -28,7 +28,6 @@ CREATE TABLE retrieval_evidence_index (
     -- retrieval sees a row iff publication_number <= pin AND
     -- (superseded_at_publication IS NULL OR superseded_at_publication > pin).
     publication_number BIGINT NOT NULL CHECK (publication_number >= 1),
-    superseded_at_publication BIGINT,
     -- scope metadata denormalized from the published candidate at index time
     contract_pack_key TEXT,
     declared_contract_types JSONB NOT NULL DEFAULT '[]'::jsonb,

@@ -55,8 +55,11 @@ class RetrievalServicesConfiguration {
             CurrentContractLane currentContractLane,
             RetrievalRepository retrievalRepository,
             KnowledgeQueryService knowledgeQueries,
+            EmbeddingService embeddingService,
+            com.rivell.workbench.organization.IdentityProvider identityProvider,
             Clock clock) {
         return new EvidenceService(resolver, precedentLane, currentContractLane,
-                retrievalRepository, knowledgeQueries, clock);
+                retrievalRepository, knowledgeQueries, embeddingService, identityProvider,
+                clock);
     }
 }

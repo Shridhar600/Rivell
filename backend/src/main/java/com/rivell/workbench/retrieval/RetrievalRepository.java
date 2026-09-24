@@ -17,23 +17,19 @@ public interface RetrievalRepository {
             String indexVersion, String embeddingModel, int embeddingDims,
             String vectorLiteral);
 
-    void markSuperseded(UUID organizationId, UUID candidateId, long supersededAtPublication);
-
-    Optional<EvidenceIndexRow> findIndexRow(UUID organizationId, UUID candidateId,
-            String contentHash, String indexVersion);
-
     void insertTrace(RetrievalTrace trace);
 
     Optional<RetrievalTrace> findTrace(UUID organizationId, UUID traceId);
 
     /** Lexical candidates among narrowed ids: FTS match + deterministic rank order. */
     List<CandidateHit> findLexicalCandidates(
-            UUID organizationId, List<UUID> candidateIds, String lexicalQuery, int limit);
+            UUID organizationId, List<UUID> candidateIds, String lexicalQuery, int limit,
+            String indexVersion);
 
     /** Vector candidates among narrowed ids, restricted to one embedding model identity. */
     List<CandidateHit> findVectorCandidates(
             UUID organizationId, List<UUID> candidateIds, String embeddingModel,
-            int embeddingDims, String queryVectorLiteral, int limit);
+            int embeddingDims, String queryVectorLiteral, int limit, String indexVersion);
 
     /** One lexical-lane hit with its rank (1-based, deterministic order). */
     record CandidateHit(UUID candidateId, double score, int rank) {
@@ -56,7 +52,6 @@ public interface RetrievalRepository {
             Integer embeddingDims,
             boolean embeddingIndexReady,
             long publicationNumber,
-            Long supersededAtPublication,
             String contractPackKey,
             List<String> declaredContractTypes,
             String partyPerspective,

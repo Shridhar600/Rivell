@@ -165,7 +165,7 @@ class AuthorityAwareEvidenceFlowIT {
     }
 
     @Test
-    void structuredOnlyResolvesApplicablePolicyAndApprovedDraftingWithoutEmbeddingsOrJev() {
+    void policyAndApprovedDraftingResolveThroughStructuredLookupOnly() {
         var organizationId = identityProvider.currentIdentity().organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
 
@@ -383,6 +383,66 @@ class AuthorityAwareEvidenceFlowIT {
 
         assertThat(bundle.policyItems()).hasSize(2);
         assertThat(bundle.sufficiency()).isEqualTo(EvidenceSufficiency.AMBIGUOUS_POLICY);
+    }
+
+    @Test
+    void scopeDimensionsIsolateAuthoritativeEvidence() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        // additional out-of-scope fixtures in the same org: UK policy, UK library,
+        // and a UK-manifested precedent of the same concept
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_UK,
+                M6EvidenceCorpus.ukManifest(), null);
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.LIBRARY_UK,
+                M6EvidenceCorpus.ukManifest(), null);
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.PRECEDENT_LEXICAL,
+                M6EvidenceCorpus.ukManifest(), null);
+
+        var bundle = evidenceService.build(subjectRequest(corpus));
+        var jurisdictionUS = M6EvidenceCorpus.msaProfile().jurisdiction().name();
+
+        assertThat(bundle.policyItems()).hasSize(1);
+        assertThat(bundle.approvedDraftingItems())
+                .allSatisfy(item -> assertThat(item.applicabilityScope().jurisdiction())
+                        .isEqualToIgnoringCase("US"));
+        assertThat(bundle.precedentItems())
+                .allSatisfy(item -> assertThat(item.applicabilityScope().jurisdiction())
+                        .isEqualToIgnoringCase("US"));
+        assertThat(bundle.sufficiency()).isEqualTo(EvidenceSufficiency.SUFFICIENT);
+    }
+
+    @Test
+    void tenantIsolationBlocksCrossOrganizationEvidence() {
+        var organizationA = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationA);
+
+        // identity switch: organization B must not read organization A evidence
+        identityProvider.use(new UserIdentity(UUID.randomUUID(), UUID.randomUUID(),
+                java.util.Set.of("ADMIN")));
+        var organizationB = identityProvider.currentIdentity().organizationId();
+
+        var request = EvidenceRequest.forClauseReview(
+                organizationA, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1,
+                corpus.semantics().clauses().stream()
+                        .filter(clause -> clause.primaryConcept().isPresent()
+                                && clause.primaryConcept().get()
+                                        == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .findFirst().orElseThrow().id(),
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> evidenceService.build(request))
+                .isInstanceOf(UnauthorizedEvidenceAccessException.class);
+
+        // org B sees none of org A's knowledge or index state
+        var orgBBundle = evidenceService.build(EvidenceRequest.forClauseReview(
+                organizationB, LegalConcept.LIMITATION_OF_LIABILITY,
+                UUID.randomUUID(), 1, UUID.randomUUID(),
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST));
+        assertThat(orgBBundle.policyItems()).isEmpty();
+        assertThat(orgBBundle.precedentItems()).isEmpty();
+        assertThat(orgBBundle.sufficiency()).isEqualTo(EvidenceSufficiency.POLICY_MISSING);
     }
 
     @Test

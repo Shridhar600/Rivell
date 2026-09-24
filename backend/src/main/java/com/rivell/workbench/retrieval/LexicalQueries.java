@@ -9,15 +9,21 @@ import java.util.List;
  */
 public final class LexicalQueries {
 
+    private static final int MAX_TERMS = 32;
+
     private LexicalQueries() {
     }
 
+    /** OR-joined term form: deduped, single characters dropped, bounded term count. */
     public static String orTerms(String clauseText) {
-        var terms = new ArrayList<String>();
+        var terms = new java.util.LinkedHashSet<String>();
         for (var token : clauseText.split("\\s+")) {
-            var cleaned = token.replaceAll("[^A-Za-z0-9]", "");
-            if (!cleaned.isEmpty()) {
+            var cleaned = token.replaceAll("[^A-Za-z0-9]", "").toLowerCase(java.util.Locale.ROOT);
+            if (cleaned.length() > 1) {
                 terms.add(cleaned);
+            }
+            if (terms.size() >= MAX_TERMS) {
+                break;
             }
         }
         return String.join(" OR ", terms);

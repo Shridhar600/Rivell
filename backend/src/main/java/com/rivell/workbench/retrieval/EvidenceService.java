@@ -26,6 +26,8 @@ public class EvidenceService {
     private final CurrentContractLane currentContractLane;
     private final RetrievalRepository repository;
     private final com.rivell.workbench.knowledge.KnowledgeQueryService knowledgeQueries;
+    private final com.rivell.workbench.intelligence.EmbeddingService embeddingService;
+    private final com.rivell.workbench.organization.IdentityProvider identityProvider;
     private final Clock clock;
 
     public EvidenceService(
@@ -34,16 +36,24 @@ public class EvidenceService {
             CurrentContractLane currentContractLane,
             RetrievalRepository repository,
             com.rivell.workbench.knowledge.KnowledgeQueryService knowledgeQueries,
+            com.rivell.workbench.intelligence.EmbeddingService embeddingService,
+            com.rivell.workbench.organization.IdentityProvider identityProvider,
             Clock clock) {
         this.resolver = resolver;
         this.precedentLane = precedentLane;
         this.currentContractLane = currentContractLane;
         this.repository = repository;
         this.knowledgeQueries = knowledgeQueries;
+        this.embeddingService = embeddingService;
+        this.identityProvider = identityProvider;
         this.clock = clock;
     }
 
     public EvidenceBundle build(EvidenceRequest request) {
+        var identity = identityProvider.currentIdentity();
+        if (!identity.organizationId().equals(request.organizationId())) {
+            throw new UnauthorizedEvidenceAccessException(identity.userId());
+        }
         var startedAt = clock.instant();
         var asOfPublication = resolveAsOf(request);
         var policyResolution = resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE),
@@ -100,8 +110,13 @@ public class EvidenceService {
         if (current.degradation() != null) {
             degradation.add(current.degradation());
         }
-        var modelVersions = new LinkedHashMap<String, String>(Map.of(
-                "indexVersion", "rivell-evidence-index-1"));
+        var modelVersions = new LinkedHashMap<String, String>();
+        for (var version : precedent.modelVersions()) {
+            modelVersions.put(version, version);
+        }
+        if (!embeddingService.modelIdentity().isBlank()) {
+            modelVersions.put("embeddings", embeddingService.modelIdentity());
+        }
         var traceId = java.util.UUID.randomUUID();
         var selected = new java.util.ArrayList<java.util.UUID>();
         for (var item : bundle.items()) {
@@ -183,7 +198,18 @@ public class EvidenceService {
         if (drafting.missing()) {
             return EvidenceSufficiency.DRAFTING_MISSING;
         }
+        // degraded discovery never silently claims full sufficiency
+        if (!precedent.degradation().isEmpty()) {
+            return EvidenceSufficiency.PARTIAL;
+        }
         if (precedent.items().isEmpty()) {
+            return EvidenceSufficiency.PRECEDENT_WEAK;
+        }
+        var policyResolved = policy.candidates().size() == 1;
+        if (policyResolved && precedent.items().stream()
+                .noneMatch(item -> item.policyCompatibility()
+                        == PolicyCompatibility.COMPATIBLE)) {
+            // precedent lane ran; every candidate conflicts with applicable policy
             return EvidenceSufficiency.PRECEDENT_WEAK;
         }
         return EvidenceSufficiency.SUFFICIENT;

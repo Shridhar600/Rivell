@@ -37,14 +37,14 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                         insert into retrieval_evidence_index
                         (id, organization_id, candidate_id, artifact_id, candidate_type,
                          legal_concept_key, content_hash, index_version, lexical_tsvector,
-                         lexical_config, publication_number, superseded_at_publication,
+                         lexical_config, publication_number,
                          contract_pack_key, declared_contract_types, party_perspective,
                          paper_source, jurisdiction, effective_from, effective_to,
                          indexed_at, updated_at)
                         values (:id, :organizationId, :candidateId, :artifactId, :candidateType,
                          :legalConceptKey, :contentHash, :indexVersion,
                          to_tsvector(cast(:lexicalConfig as regconfig), coalesce(:lexicalText, '')),
-                         :lexicalConfig, :publicationNumber, :supersededAtPublication,
+                         :lexicalConfig, :publicationNumber,
                          :contractPackKey, cast(:declaredContractTypes as jsonb),
                          :partyPerspective, :paperSource, :jurisdiction,
                          :effectiveFrom, :effectiveTo, :indexedAt, :updatedAt)
@@ -61,7 +61,6 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 .param("lexicalConfig", row.lexicalConfig())
                 .param("lexicalText", row.lexicalText())
                 .param("publicationNumber", row.publicationNumber())
-                .param("supersededAtPublication", row.supersededAtPublication())
                 .param("contractPackKey", row.contractPackKey())
                 .param("declaredContractTypes", json(row.declaredContractTypes()))
                 .param("partyPerspective", row.partyPerspective())
@@ -109,42 +108,6 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 + predicate)
                 .update();
     }
-
-    @Override
-    public void markSuperseded(UUID organizationId, UUID candidateId, long supersededAtPublication) {
-        jdbcClient.sql("""
-                        update retrieval_evidence_index
-                        set superseded_at_publication = :supersededAt,
-                            updated_at = :updatedAt
-                        where organization_id = :organizationId
-                          and candidate_id = :candidateId
-                          and superseded_at_publication is null
-                        """)
-                .param("supersededAt", supersededAtPublication)
-                .param("updatedAt", Timestamp.from(Instant.now()))
-                .param("organizationId", organizationId)
-                .param("candidateId", candidateId)
-                .update();
-    }
-
-    @Override
-    public Optional<EvidenceIndexRow> findIndexRow(UUID organizationId, UUID candidateId,
-            String contentHash, String indexVersion) {
-        return jdbcClient.sql("""
-                        select * from retrieval_evidence_index
-                        where organization_id = :organizationId
-                          and candidate_id = :candidateId
-                          and content_hash = :contentHash
-                          and index_version = :indexVersion
-                        """)
-                .param("organizationId", organizationId)
-                .param("candidateId", candidateId)
-                .param("contentHash", contentHash)
-                .param("indexVersion", indexVersion)
-                .query((rs, ignored) -> mapRow(rs))
-                .optional();
-    }
-
     @Override
     public void insertTrace(RetrievalTrace trace) {
         jdbcClient.sql("""
@@ -171,10 +134,7 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 .param("degradation", json(trace.degradation()))
                 .param("stageTimings", json(trace.stageTimings()))
                 .param("modelVersions", json(trace.modelVersions()))
-                .param("knowledgePin", json(Map.of(
-                        "publicationNumber",
-                        java.util.Objects.requireNonNullElse(
-                                trace.knowledgePin().publicationNumber(), -1))))
+                .param("knowledgePin", json(pin(trace.knowledgePin())))
                 .param("createdAt", Timestamp.from(trace.createdAt()))
                 .update();
     }
@@ -193,7 +153,8 @@ class JdbcRetrievalRepository implements RetrievalRepository {
 
     @Override
     public List<CandidateHit> findLexicalCandidates(
-            UUID organizationId, List<UUID> candidateIds, String lexicalQuery, int limit) {
+            UUID organizationId, List<UUID> candidateIds, String lexicalQuery, int limit,
+            String indexVersion) {
         if (candidateIds.isEmpty()) {
             return List.of();
         }
@@ -223,7 +184,7 @@ class JdbcRetrievalRepository implements RetrievalRepository {
     @Override
     public List<CandidateHit> findVectorCandidates(
             UUID organizationId, List<UUID> candidateIds, String embeddingModel,
-            int embeddingDims, String queryVectorLiteral, int limit) {
+            int embeddingDims, String queryVectorLiteral, int limit, String indexVersion) {
         if (candidateIds.isEmpty()) {
             return List.of();
         }
@@ -234,15 +195,19 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                         from retrieval_evidence_index
                         where organization_id = :organizationId
                           and candidate_id = any(:candidateIds)
+                          and index_version = :indexVersion
                           and embedding_model = :embeddingModel
+                          and embedding_dims = :embeddingDims
                           and embedding_index_ready
-                        order by %s
+                        order by %s, candidate_id
                         limit :limit
                         """.formatted(distance, distance))
                 .param("organizationId", organizationId)
                 .param("candidateIds", candidateIds.toArray(UUID[]::new))
                 .param("embeddingModel", embeddingModel)
+                .param("embeddingDims", embeddingDims)
                 .param("queryVector", queryVectorLiteral)
+                .param("indexVersion", indexVersion)
                 .param("limit", limit)
                 .query((rs, ignored) -> Map.entry(
                         rs.getObject("candidate_id", UUID.class), rs.getDouble("distance")))
@@ -274,8 +239,6 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 (Integer) rs.getObject("embedding_dims"),
                 rs.getBoolean("embedding_index_ready"),
                 rs.getLong("publication_number"),
-                rs.getObject("superseded_at_publication") == null
-                        ? null : rs.getLong("superseded_at_publication"),
                 rs.getString("contract_pack_key"),
                 stringsFromJson(rs.getString("declared_contract_types")),
                 rs.getString("party_perspective"),
@@ -419,6 +382,15 @@ class JdbcRetrievalRepository implements RetrievalRepository {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private Map<String, Object> pin(KnowledgePin knowledgePin) {
+        var values = new LinkedHashMap<String, Object>();
+        values.put("pinned", knowledgePin.pinned());
+        if (knowledgePin.pinned()) {
+            values.put("publicationNumber", knowledgePin.publicationNumber());
+        }
+        return values;
     }
 
     private String json(Object value) {

@@ -69,13 +69,13 @@ public class PrecedentLane {
 
         var lexicalHits = repository.findLexicalCandidates(
                 request.organizationId(), ids,
-                LexicalQueries.orTerms(request.clauseText()), properties.lexicalLimit());
+                LexicalQueries.orTerms(request.clauseText()), properties.lexicalLimit(),
+                properties.indexVersion());
         var vectorHits = vectorHits(request, ids, degradation);
-        var fused = bounded(
-                RankFusion.fuse(Map.of(
-                        "lexical", lanesOf(lexicalHits),
-                        "vector", lanesOf(vectorHits))),
-                properties.fusionLimit());
+        var lanes = new java.util.LinkedHashMap<String, List<RankFusion.LaneHit>>();
+        lanes.put("lexical", lanesOf(lexicalHits));
+        lanes.put("vector", lanesOf(vectorHits));
+        var fused = bounded(RankFusion.fuse(lanes), properties.fusionLimit());
 
         var stages = new ArrayList<RetrievalTrace.StageSummary>();
         stages.add(stage("structured", byId.size(), idStrings(ids), null));
@@ -130,11 +130,14 @@ public class PrecedentLane {
                         new M6SemanticStates.PolicyCompatibilityState(
                                 effectiveText(byId.get(candidateId)), policyContext.policyTexts()));
                 var answer = execution.answers().get(M6SemanticSpecs.COMPATIBLE_WITH_POLICY);
-                assessed.put(candidateId,
-                        answer instanceof com.rivell.workbench.intelligence.YesNoAnswer yesNo
-                                && yesNo.probability() >= 0.5
-                                ? PolicyCompatibility.COMPATIBLE
-                                : PolicyCompatibility.INCOMPATIBLE);
+                if (!(answer instanceof com.rivell.workbench.intelligence.YesNoAnswer yesNo)) {
+                    assessed.put(candidateId, PolicyCompatibility.UNKNOWN);
+                    degradation.add("COMPATIBILITY_UNAVAILABLE");
+                    continue;
+                }
+                assessed.put(candidateId, yesNo.probability() >= 0.5
+                        ? PolicyCompatibility.COMPATIBLE
+                        : PolicyCompatibility.INCOMPATIBLE);
                 assessedIds.add(candidateId);
             } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
                 assessed.put(candidateId, PolicyCompatibility.NOT_ASSESSED);
@@ -198,7 +201,8 @@ public class PrecedentLane {
             var vector = query.vectors().get(0);
             return repository.findVectorCandidates(
                     request.organizationId(), ids, embeddingService.modelIdentity(),
-                    vector.length, VectorLiterals.of(vector), properties.vectorLimit());
+                    vector.length, VectorLiterals.of(vector), properties.vectorLimit(),
+                    properties.indexVersion());
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
             degradation.add("VECTOR_LANE_UNAVAILABLE");
             return List.of();
@@ -229,11 +233,13 @@ public class PrecedentLane {
                 effectiveText(candidate),
                 null,
                 List.of(),
-                "HYBRID_FUSION",
+                retrievalReason(lexicalRank, vectorRank),
                 new LaneInfo(lexicalRank, vectorRank,
                         fused == null ? null : fused.fusedRank(),
                         fused == null ? null : fused.score()),
-                semanticAssessment(relevanceExecution, judgments(relevanceExecution)),
+                relevanceExecution == null
+                        ? null
+                        : semanticAssessment(relevanceExecution, judgments(relevanceExecution)),
                 compatibility,
                 provenance,
                 null,
@@ -259,6 +265,13 @@ public class PrecedentLane {
         var metadata = execution.metadata();
         return new EvidenceItem.SemanticAssessment(
                 judgments, metadata.specId(), metadata.specVersion(), metadata.executionId());
+    }
+
+    private String retrievalReason(Integer lexicalRank, Integer vectorRank) {
+        if (lexicalRank != null && vectorRank != null) {
+            return "FUSION";
+        }
+        return lexicalRank != null ? "LEXICAL" : "VECTOR";
     }
 
     private LegalConcept conceptOf(KnowledgeCandidate candidate) {
