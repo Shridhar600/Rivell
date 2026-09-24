@@ -508,6 +508,24 @@ class AuthorityAwareEvidenceFlowIT {
                 .allSatisfy(item -> assertThat(item.applicabilityScope()).isNull());
         // and the MSA-pack knowledge never leaks into this NDA-context request
         assertThat(bundle.policyItems().size()).isEqualTo(1);
+
+        // explicit pack selection (pre-M7 decision): a request that explicitly
+        // selects MSA_PACK must NOT see the NDA_PACK-declared rule — pack is a
+        // hard applicability dimension when explicitly declared
+        var msaPackRequest = EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
+                new com.rivell.workbench.contracts.ReviewProfile(
+                        com.rivell.workbench.contracts.ContractType.NDA,
+                        com.rivell.workbench.contracts.PartyRole.CUSTOMER,
+                        com.rivell.workbench.contracts.PaperSource.THIRD_PARTY,
+                        com.rivell.workbench.contracts.Jurisdiction.US,
+                        "MSA_PACK"),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
+        var msaBundle = evidenceService.build(msaPackRequest);
+        assertThat(msaBundle.policyItems()).isEmpty();
+        assertThat(msaBundle.sufficiency()).isEqualTo(EvidenceSufficiency.POLICY_MISSING);
     }
 
     @Test

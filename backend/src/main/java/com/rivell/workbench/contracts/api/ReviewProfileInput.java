@@ -17,7 +17,8 @@ public record ReviewProfileInput(
         ContractType contractType,
         PartyRole ourSideRole,
         PaperSource paperSource,
-        Jurisdiction jurisdiction) {
+        Jurisdiction jurisdiction,
+        String contractPackKey) {
 
     public ReviewProfileInput {
         if (contractType == null) {
@@ -28,6 +29,8 @@ public record ReviewProfileInput(
     public com.rivell.workbench.contracts.ReviewProfile toProfile() {
         return new com.rivell.workbench.contracts.ReviewProfile(
                 contractType, ourSideRole, paperSource,
-                jurisdiction == null ? Jurisdiction.UNSPECIFIED : jurisdiction);
+                jurisdiction == null ? Jurisdiction.UNSPECIFIED : jurisdiction,
+                contractPackKey == null || contractPackKey.isBlank()
+                        ? null : contractPackKey.strip());
     }
 }
