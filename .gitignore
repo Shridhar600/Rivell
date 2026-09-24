@@ -64,3 +64,6 @@ __pycache__/
 
 # Runtime scratch (documents, smoke output)
 var/
+
+# Local agent scratch (never committed)
+.tmp-*/

@@ -20,7 +20,6 @@ export function EvidenceItemSource({ item }: { item: EvidenceItem }) {
           <Link
             to={`/knowledge/artifacts/${item.sourceArtifactId}`}
             aria-label={`Open source artifact: ${sourceLabel}`}
-            className="link-inline"
           >
             {sourceLabel}
           </Link>
@@ -34,7 +33,6 @@ export function EvidenceItemSource({ item }: { item: EvidenceItem }) {
               <Link
                 to={`/knowledge/publications/${item.publicationId}`}
                 aria-label={`Open publication v${item.publicationNumber}`}
-                className="link-inline"
               >
                 {`Published in v${item.publicationNumber}`}
               </Link>
@@ -44,7 +42,7 @@ export function EvidenceItemSource({ item }: { item: EvidenceItem }) {
           </>
         ) : null}
         {' · '}
-        <span className="evidence-source__reason">
+        <span>
           {`Why: ${retrievalReasonLabel(item.retrievalReason)}`}
         </span>
       </p>

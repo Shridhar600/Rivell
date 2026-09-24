@@ -68,7 +68,7 @@ export function EvidenceBundleView({
           }
         >
           {items.map((item) => (
-            <li key={item.evidenceId} className="evidence-list__item">
+            <li key={item.evidenceId}>
               {renderCard(item)}
             </li>
           ))}

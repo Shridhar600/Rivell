@@ -239,7 +239,7 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
             <div role="alert" className="state state--error">
               <p>{buildErrorMessage(buildError)}</p>
               {isConflictError(buildError) ? (
-                <Link className="link-inline" to={semanticAnalysisLink}>
+                <Link to={semanticAnalysisLink}>
                   Open semantic analysis
                 </Link>
               ) : null}

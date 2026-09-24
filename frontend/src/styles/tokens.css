@@ -370,6 +370,10 @@ a {
   white-space: nowrap;
 }
 
+.badge--muted {
+  color: var(--color-muted);
+}
+
 .badge--extracted,
 .badge--approved,
 .badge--published,

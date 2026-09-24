@@ -76,7 +76,7 @@ export type PolicyFacts = {
   escalationTrigger: string | null
 }
 
-export type EvidenceContractFact = {
+type EvidenceContractFact = {
   factSchema: string
   schemaVersion: number
   values: Record<string, string>
@@ -135,7 +135,7 @@ export type EvidenceBundle = {
   degradationWarnings: string[]
 }
 
-export type RetrievalStage = {
+type RetrievalStage = {
   stage: string
   candidateCount: number
   candidateIds: string[]
@@ -331,7 +331,7 @@ export function parseRetrievalTrace(value: unknown, what = 'retrieval trace'): R
   }
 }
 
-export class RetrievalApiError extends Error {
+class RetrievalApiError extends Error {
   readonly status: number
 
   constructor(message: string, status: number) {
@@ -359,7 +359,7 @@ export const retrievalKeys = {
   trace: (traceId: string) => ['retrieval', 'trace', traceId] as const,
 }
 
-export type EvidenceBuildInput = {
+type EvidenceBuildInput = {
   contractId: string
   versionNumber: number
   clauseId: string

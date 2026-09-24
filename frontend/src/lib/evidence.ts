@@ -15,7 +15,7 @@ import {
 import { humanizeCode } from './domainLabels'
 import { POSITION_LABELS } from './semantics'
 
-export type LaneProminence = 'authoritative' | 'subject' | 'historical' | 'optional'
+type LaneProminence = 'authoritative' | 'subject' | 'historical' | 'optional'
 
 export type EvidenceLane = {
   authority: AuthorityClass
@@ -25,7 +25,7 @@ export type EvidenceLane = {
   prominence: LaneProminence
 }
 
-export const EVIDENCE_LANES: readonly EvidenceLane[] = [
+const EVIDENCE_LANES: readonly EvidenceLane[] = [
   {
     authority: 'POLICY',
     label: 'Policy',
@@ -85,7 +85,7 @@ const OTHER_LANE: EvidenceLane = {
   prominence: 'optional',
 }
 
-export type EvidenceLaneGroup = { lane: EvidenceLane; items: EvidenceItem[] }
+type EvidenceLaneGroup = { lane: EvidenceLane; items: EvidenceItem[] }
 
 function laneAlwaysVisible(lane: EvidenceLane, sufficiency: EvidenceSufficiency): boolean {
   if (
@@ -133,7 +133,7 @@ export function evidenceTextCollapsible(item: EvidenceItem): boolean {
   return item.text.length > 600
 }
 
-export type SufficiencyPresentation = {
+type SufficiencyPresentation = {
   state: EvidenceSufficiency
   label: string
   description: string
@@ -291,7 +291,7 @@ export function traceTimingLabel(key: string): string {
   return TRACE_TIMING_LABELS[key] ?? humanizeCode(key)
 }
 
-export type TraceRequestEntry = {
+type TraceRequestEntry = {
   key: string
   label: string
   value: string
