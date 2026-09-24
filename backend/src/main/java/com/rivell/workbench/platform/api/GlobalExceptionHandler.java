@@ -25,6 +25,11 @@ import com.rivell.workbench.knowledge.KnowledgeCandidateNotFoundException;
 import com.rivell.workbench.knowledge.KnowledgeUnitNotFoundException;
 import com.rivell.workbench.knowledge.KnowledgeUploadLimitExceededException;
 import com.rivell.workbench.knowledge.UnauthorizedKnowledgeAccessException;
+import com.rivell.workbench.retrieval.ClauseNotFoundException;
+import com.rivell.workbench.retrieval.ClauseNotClassifiedException;
+import com.rivell.workbench.retrieval.EnrichmentNotReadyException;
+import com.rivell.workbench.retrieval.TraceNotFoundException;
+import com.rivell.workbench.retrieval.UnauthorizedEvidenceAccessException;
 import com.rivell.workbench.foundation.ErrorResponse;
 
 /**
@@ -45,6 +50,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({ContractNotFoundException.class, ContractVersionNotFoundException.class,
             KnowledgeArtifactNotFoundException.class, KnowledgeCandidateNotFoundException.class,
             KnowledgeUnitNotFoundException.class, SemanticsNotFoundException.class,
+            ClauseNotFoundException.class, TraceNotFoundException.class,
             NoSuchElementException.class})
     ResponseEntity<ErrorResponse> notFound(RuntimeException e) {
         return error(HttpStatus.NOT_FOUND, "404", "Not found",
@@ -58,13 +64,15 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({UnauthorizedContractAccessException.class,
-            UnauthorizedKnowledgeAccessException.class})
+            UnauthorizedKnowledgeAccessException.class,
+            UnauthorizedEvidenceAccessException.class})
     ResponseEntity<ErrorResponse> forbidden(RuntimeException e) {
         return error(HttpStatus.FORBIDDEN, "403", "Forbidden", "Not authorized for this operation.");
     }
 
     @ExceptionHandler({InvalidCandidateReviewStateException.class, InvalidPublicationException.class,
-            EnrichmentInProgressException.class, EnrichmentFailedException.class})
+            EnrichmentInProgressException.class, EnrichmentFailedException.class,
+            EnrichmentNotReadyException.class, ClauseNotClassifiedException.class})
     ResponseEntity<ErrorResponse> invalidState(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }

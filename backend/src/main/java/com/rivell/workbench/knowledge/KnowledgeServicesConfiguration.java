@@ -104,9 +104,11 @@ class KnowledgeServicesConfiguration {
             KnowledgeRepository knowledgeRepository,
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            org.springframework.context.ApplicationEventPublisher eventPublisher) {
         return new KnowledgePublicationService(
-                knowledgeRepository, transactionTemplate, identityProvider, authorizationService);
+                knowledgeRepository, transactionTemplate, identityProvider,
+                authorizationService, eventPublisher);
     }
 
     @Bean
