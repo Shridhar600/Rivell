@@ -40,7 +40,7 @@ public record SemanticContractResponse(
             String value,
             String correctedValue,
             boolean corrected,
-            int sourceNodeCount) {
+            List<UUID> sourceNodeIds) {
     }
 
     public record PartyView(
@@ -50,14 +50,15 @@ public record SemanticContractResponse(
             List<String> machineRoles,
             List<String> effectiveRoles,
             boolean corrected,
-            int sourceNodeCount) {
+            List<UUID> sourceNodeIds) {
     }
 
     public record DefinedTermView(
             UUID id,
             String term,
             String definition,
-            int referenceCount,
+            UUID definingNodeId,
+            List<UUID> referenceNodeIds,
             boolean duplicate) {
     }
 
@@ -66,8 +67,9 @@ public record SemanticContractResponse(
             String referenceText,
             String kind,
             String status,
+            UUID sourceNodeId,
             UUID targetNodeId,
-            int candidateCount) {
+            List<UUID> candidateNodeIds) {
     }
 
     public record ClauseView(
@@ -84,7 +86,11 @@ public record SemanticContractResponse(
             boolean corrected) {
     }
 
-    public record FactView(String factSchema, int schemaVersion, Map<String, String> values) {
+    public record FactView(
+            String factSchema,
+            int schemaVersion,
+            Map<String, String> values,
+            List<UUID> sourceNodeIds) {
     }
 
     public record InterpretationSummary(
@@ -92,7 +98,7 @@ public record SemanticContractResponse(
             String kind,
             String proposedValue,
             String specId,
-            int sourceNodeCount,
+            List<UUID> sourceNodeIds,
             String verification) {
     }
 

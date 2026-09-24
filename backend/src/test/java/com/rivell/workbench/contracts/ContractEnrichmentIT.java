@@ -585,6 +585,65 @@ public class ContractEnrichmentIT {
     }
 
     @Test
+    void provenanceAnchorsResolveAgainstCanonicalStructure() throws Exception {
+        var bytes = fixtureBytes("m5-msa-services.docx");
+        var ingested = ingestionService.ingest("m5-msa-services.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        var structure = queryService.getStructure(ingested.contractId(), 1);
+        var knownNodeIds = structure.nodes().stream()
+                .map(DocumentNode::id)
+                .collect(java.util.stream.Collectors.toSet());
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+
+        // defined term → defining node + reference nodes, all canonical
+        for (var term : semantics.definedTerms()) {
+            assertThat(knownNodeIds).contains(term.definingNodeId());
+            assertThat(knownNodeIds).containsAll(term.referenceNodeIds());
+        }
+        var fees = semantics.definedTerms().stream()
+                .filter(term -> term.term().equals("Fees"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(fees.referenceNodeIds()).isNotEmpty();
+
+        // cross-reference → source node + resolved target node, both canonical
+        var resolved = semantics.references().stream()
+                .filter(ContractReference::resolved)
+                .findFirst()
+                .orElseThrow();
+        assertThat(knownNodeIds).contains(resolved.sourceNodeId(), resolved.targetNodeId());
+
+        // typed fact → supporting source nodes (exact clause region anchors)
+        var liability = semantics.clauses().stream()
+                .filter(clause -> clause.primaryConcept()
+                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .orElse(false))
+                .findFirst()
+                .orElseThrow();
+        var capFact = liability.facts().stream()
+                .filter(fact -> fact.factSchema().equals("liability-facts"))
+                .findFirst()
+                .orElseThrow();
+        var capInterpretation = liability.interpretations().stream()
+                .filter(interpretation ->
+                        interpretation.field().equals("liabilityCapMultiple"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(capInterpretation.sourceNodeIds()).isNotEmpty();
+        assertThat(knownNodeIds).containsAll(capInterpretation.sourceNodeIds());
+        assertThat(knownNodeIds).contains(liability.headingNodeId());
+
+        // party provenance is canonical too
+        for (var party : semantics.parties()) {
+            assertThat(knownNodeIds).containsAll(party.interpretations().stream()
+                    .flatMap(interpretation -> interpretation.sourceNodeIds().stream())
+                    .toList());
+        }
+    }
+
+    @Test
     void crossOrganizationSemanticStateIsInvisible() throws Exception {
         var bytes = fixtureBytes("m5-nda-counterparty.docx");
         var ingested = ingestionService.ingest("m5-nda-counterparty.docx",

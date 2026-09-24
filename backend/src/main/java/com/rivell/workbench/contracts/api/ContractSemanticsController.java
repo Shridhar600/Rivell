@@ -12,7 +12,9 @@ import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.EnrichmentStatus;
+import com.rivell.workbench.contracts.FactSchema;
 import com.rivell.workbench.contracts.Interpretation;
+import com.rivell.workbench.contracts.LegalFact;
 import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.contracts.MetadataFact;
 import com.rivell.workbench.contracts.PaperSource;
@@ -161,13 +163,14 @@ class ContractSemanticsController {
                 semantics.parties().stream().map(this::toPartyView).toList(),
                 semantics.definedTerms().stream().map(term ->
                         new SemanticContractResponse.DefinedTermView(term.id(), term.term(),
-                                term.definition(), term.referenceNodeIds().size(),
-                                term.duplicate())).toList(),
+                                term.definition(), term.definingNodeId(),
+                                term.referenceNodeIds(), term.duplicate())).toList(),
                 semantics.references().stream().map(reference ->
                         new SemanticContractResponse.ReferenceView(reference.id(),
                                 reference.referenceText(), reference.kind().name(),
-                                reference.status().name(), reference.targetNodeId(),
-                                reference.candidateNodeIds().size())).toList(),
+                                reference.status().name(), reference.sourceNodeId(),
+                                reference.targetNodeId(),
+                                reference.candidateNodeIds())).toList(),
                 semantics.clauses().stream().map(this::toClauseView).toList(),
                 semantics.relationships().stream().map(this::toRelationshipView).toList(),
                 semantics.quality().notes().stream()
@@ -187,19 +190,19 @@ class ContractSemanticsController {
     private SemanticContractResponse.MetadataFactView toMetadataView(MetadataFact fact) {
         return new SemanticContractResponse.MetadataFactView(
                 fact.field().name(), fact.value(), fact.correctedValue(), fact.corrected(),
-                fact.interpretation().sourceNodeIds().size());
+                fact.interpretation().sourceNodeIds());
     }
 
     private SemanticContractResponse.PartyView toPartyView(ContractParty party) {
         var provenance = party.interpretations().stream()
                 .flatMap(interpretation -> interpretation.sourceNodeIds().stream())
                 .distinct()
-                .count();
+                .toList();
         return new SemanticContractResponse.PartyView(
                 party.id(), party.rawName(), party.aliases(),
                 party.machineRoles().stream().map(Enum::name).toList(),
                 party.effectiveRoles().stream().map(Enum::name).toList(),
-                party.roleCorrected(), (int) provenance);
+                party.roleCorrected(), provenance);
     }
 
     private SemanticContractResponse.ClauseView toClauseView(ClauseSemantics clause) {
@@ -217,21 +220,35 @@ class ContractSemanticsController {
                 correction != null && correction.corrected() && correction.primaryConcept() != null
                         ? correction.primaryConcept() : null,
                 clause.facts().stream()
-                        .map(fact -> new SemanticContractResponse.FactView(
-                                fact.factSchema(), fact.schemaVersion(), fact.values()))
+                        .map(fact -> factView(fact, clause.interpretations()))
                         .toList(),
                 clause.effectiveFacts().stream()
-                        .map(fact -> new SemanticContractResponse.FactView(
-                                fact.factSchema(), fact.schemaVersion(), fact.values()))
+                        .map(fact -> factView(fact, clause.interpretations()))
                         .toList(),
                 clause.interpretations().stream()
                         .map(interpretation -> new SemanticContractResponse.InterpretationSummary(
                                 interpretation.field(), interpretation.kind().name(),
                                 interpretation.proposedValue(), interpretation.specId(),
-                                interpretation.sourceNodeIds().size(),
+                                interpretation.sourceNodeIds(),
                                 interpretation.verification().name()))
                         .toList(),
                 clause.correction().corrected());
+    }
+
+    /**
+     * Fact provenance: the union of supporting nodes of the interpretations that carry
+     * this schema's fields. Multiplicity preserved; absent provenance stays absent.
+     */
+    private SemanticContractResponse.FactView factView(
+            LegalFact fact, List<Interpretation> interpretations) {
+        var schema = FactSchema.byId(fact.factSchema());
+        var anchors = interpretations.stream()
+                .filter(interpretation -> schema.fields().contains(interpretation.field()))
+                .flatMap(interpretation -> interpretation.sourceNodeIds().stream())
+                .distinct()
+                .toList();
+        return new SemanticContractResponse.FactView(
+                fact.factSchema(), fact.schemaVersion(), fact.values(), anchors);
     }
 
     private SemanticContractResponse.RelationshipView toRelationshipView(
