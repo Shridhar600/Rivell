@@ -713,6 +713,7 @@ export interface components {
             id?: string;
             /** Format: uuid */
             headingNodeId?: string;
+            regionKind?: string;
             heading?: string;
             contentText?: string;
             primaryConcept?: string;
@@ -728,8 +729,9 @@ export interface components {
             id?: string;
             term?: string;
             definition?: string;
-            /** Format: int32 */
-            referenceCount?: number;
+            /** Format: uuid */
+            definingNodeId?: string;
+            referenceNodeIds?: string[];
             duplicate?: boolean;
         };
         FactView: {
@@ -739,14 +741,14 @@ export interface components {
             values?: {
                 [key: string]: string;
             };
+            sourceNodeIds?: string[];
         };
         InterpretationSummary: {
             field?: string;
             kind?: string;
             proposedValue?: string;
             specId?: string;
-            /** Format: int32 */
-            sourceNodeCount?: number;
+            sourceNodeIds?: string[];
             verification?: string;
         };
         MetadataFactView: {
@@ -754,8 +756,7 @@ export interface components {
             value?: string;
             correctedValue?: string;
             corrected?: boolean;
-            /** Format: int32 */
-            sourceNodeCount?: number;
+            sourceNodeIds?: string[];
         };
         ObservationsView: {
             /** Format: int32 */
@@ -779,8 +780,7 @@ export interface components {
             machineRoles?: string[];
             effectiveRoles?: string[];
             corrected?: boolean;
-            /** Format: int32 */
-            sourceNodeCount?: number;
+            sourceNodeIds?: string[];
         };
         ReferenceView: {
             /** Format: uuid */
@@ -789,9 +789,10 @@ export interface components {
             kind?: string;
             status?: string;
             /** Format: uuid */
+            sourceNodeId?: string;
+            /** Format: uuid */
             targetNodeId?: string;
-            /** Format: int32 */
-            candidateCount?: number;
+            candidateNodeIds?: string[];
         };
         RelationshipView: {
             /** Format: uuid */
@@ -826,6 +827,7 @@ export interface components {
             definedTerms?: components["schemas"]["DefinedTermView"][];
             references?: components["schemas"]["ReferenceView"][];
             clauses?: components["schemas"]["ClauseView"][];
+            structuralRegions?: components["schemas"]["ClauseView"][];
             relationships?: components["schemas"]["RelationshipView"][];
             quality?: string[];
             observations?: components["schemas"]["ObservationsView"];
