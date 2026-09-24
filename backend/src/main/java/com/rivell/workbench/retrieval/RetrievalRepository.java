@@ -13,8 +13,9 @@ public interface RetrievalRepository {
 
     void upsertIndexRow(EvidenceIndexRow row);
 
-    void persistEmbedding(UUID candidateId, String contentHash, String indexVersion,
-            String embeddingModel, int embeddingDims, String vectorLiteral);
+    void persistEmbedding(UUID organizationId, UUID candidateId, String contentHash,
+            String indexVersion, String embeddingModel, int embeddingDims,
+            String vectorLiteral);
 
     void markSuperseded(UUID organizationId, UUID candidateId, long supersededAtPublication);
 
@@ -40,6 +41,8 @@ public interface RetrievalRepository {
     /** One lexical-lane hit with its rank (1-based, deterministic order). */
     record CandidateHit(UUID candidateId, double score, int rank) {
     }
+
+
 
     record EvidenceIndexRow(
             UUID id,
@@ -83,4 +86,7 @@ public interface RetrievalRepository {
             LocalDate effectiveOn,
             int limit) {
     }
+
+    /** Idempotent per-model partial HNSW index over the dimensionless vector column. */
+    void createVectorIndexIfAbsent(String indexName, String embeddingModel, int dims);
 }

@@ -34,6 +34,10 @@ public class EmbeddingService {
         if (inputs == null || inputs.isEmpty()) {
             throw new IllegalArgumentException("Embedding requires at least one input");
         }
+        if (!isConfigured() || properties.model() == null || properties.model().isBlank()) {
+            throw new NoProviderConfiguredException(
+                    "Embedding provider is not fully configured (key/model)");
+        }
         var provider = providerRegistry.find(properties.provider())
                 .orElseThrow(() -> new NoProviderConfiguredException(
                         "No embedding provider configured with id " + properties.provider()));

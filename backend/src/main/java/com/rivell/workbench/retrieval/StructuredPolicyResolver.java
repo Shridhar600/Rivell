@@ -24,10 +24,13 @@ public class StructuredPolicyResolver {
         this.knowledgeQueries = knowledgeQueryService;
     }
 
-    public record Resolution(List<KnowledgeCandidate> candidates, long asOfPublication) {
+    public record Resolution(
+            List<KnowledgeCandidate> candidates,
+            long asOfPublication,
+            boolean truncated) {
 
         public boolean ambiguous() {
-            return candidates.size() > 1;
+            return candidates.size() > 1 || truncated;
         }
 
         public boolean missing() {
@@ -44,6 +47,9 @@ public class StructuredPolicyResolver {
     public Resolution resolve(
             EvidenceRequest request, Set<CandidateType> candidateTypes,
             long asOfPublicationNumber) {
+        if (asOfPublicationNumber < 1) {
+            return new Resolution(List.of(), asOfPublicationNumber, false);
+        }
         var profile = request.reviewProfile();
         var query = PublishedKnowledgeQuery.unpublishedNever(
                 request.organizationId(),
@@ -57,7 +63,8 @@ public class StructuredPolicyResolver {
                 profile.jurisdiction() == Jurisdiction.UNSPECIFIED
                         ? null : profile.jurisdiction().name(),
                 request.effectiveOn());
-        return new Resolution(knowledgeQueries.findPublishedCandidatesAsOf(query),
-                asOfPublicationNumber);
+        var candidates = knowledgeQueries.findPublishedCandidatesAsOf(query);
+        return new Resolution(candidates, asOfPublicationNumber,
+                candidates.size() >= query.limit());
     }
 }

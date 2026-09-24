@@ -105,25 +105,31 @@ public class CurrentContractLane {
                 null);
     }
 
+    /**
+     * Semantic relationships reference canonical region (heading) node ids
+     * (AD #5.13), while clause ids are fresh per interpretation — resolve through
+     * the heading node id.
+     */
     private List<RelatedClause> relatedClauses(ContractSemantics semantics, ClauseSemantics subject) {
         var related = new ArrayList<RelatedClause>();
         for (var relationship : semantics.relationships()) {
             var type = relationship.type();
-            if (relationship.sourceRegionNodeId().equals(subject.id())) {
-                clauseOf(semantics, relationship.targetRegionNodeId())
+            if (relationship.sourceRegionNodeId().equals(subject.headingNodeId())) {
+                clauseByHeading(semantics, relationship.targetRegionNodeId())
                         .ifPresent(clause -> related.add(new RelatedClause(clause, type)));
             }
-            if (relationship.targetRegionNodeId().equals(subject.id())) {
-                clauseOf(semantics, relationship.sourceRegionNodeId())
+            if (relationship.targetRegionNodeId().equals(subject.headingNodeId())) {
+                clauseByHeading(semantics, relationship.sourceRegionNodeId())
                         .ifPresent(clause -> related.add(new RelatedClause(clause, type)));
             }
         }
         return related;
     }
 
-    private java.util.Optional<ClauseSemantics> clauseOf(ContractSemantics semantics, UUID clauseId) {
+    private java.util.Optional<ClauseSemantics> clauseByHeading(
+            ContractSemantics semantics, UUID headingNodeId) {
         return semantics.clauses().stream()
-                .filter(clause -> clause.id().equals(clauseId))
+                .filter(clause -> clause.headingNodeId().equals(headingNodeId))
                 .findFirst();
     }
 

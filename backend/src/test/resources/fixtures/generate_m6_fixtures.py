@@ -117,7 +117,7 @@ precedent_lexical_body = agreement(
 precedent_paraphrase_body = agreement(
     'Subscription Agreement (Executed 2026-01-15)',
     'Between Helios Systems Inc. and Cobalt Retail Group, governed by the laws '
-    'of England and Wales.',
+    'of the State of Delaware.',
     [
         ('Liability',
          "Supplier's overall exposure for damages is capped at one year of the "

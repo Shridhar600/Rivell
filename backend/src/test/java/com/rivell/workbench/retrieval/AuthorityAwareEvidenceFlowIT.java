@@ -45,7 +45,7 @@ class AuthorityAwareEvidenceFlowIT {
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("rivell.storage.local.root",
                 () -> "target/test-documents/" + UUID.randomUUID());
-        registry.add("rivell.retrieval.indexing.enabled", () -> "true");
+        registry.add("rivell.retrieval.indexing-enabled", () -> "true");
     }
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -122,6 +122,9 @@ class AuthorityAwareEvidenceFlowIT {
     @Autowired
     EvidenceService evidenceService;
 
+    @Autowired
+    org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
+
     @BeforeEach
     void freshOrganization() {
         identityProvider.use(new UserIdentity(
@@ -175,5 +178,90 @@ class AuthorityAwareEvidenceFlowIT {
         var subject = bundle.currentContractItems().get(0);
         assertThat(subject.sourceClauseId()).isEqualTo(request.clauseId());
         assertThat(subject.contractFacts()).isNotEmpty();
+        System.out.println("REL-DEBUG subject heading=" + corpus.semantics().clauses().stream()
+                .filter(c -> c.id().equals(request.clauseId())).findFirst().orElseThrow().headingNodeId());
+        System.out.println("REL-DEBUG relationshipCount=" + corpus.semantics().relationships().size());
+        corpus.semantics().relationships().forEach(relationship -> System.out.println(
+                "REL-DEBUG type=" + relationship.type()
+                        + " source=" + relationship.sourceRegionNodeId()
+                        + " target=" + relationship.targetRegionNodeId()));
+        System.out.println("REL-DEBUG referenceCount=" + corpus.semantics().references().size()
+                + " resolved=" + corpus.semantics().references().stream()
+                        .filter(com.rivell.workbench.contracts.ContractReference::resolved).count());
+        // semantic relationships of the subject clause surface as related-clause evidence
+        assertThat(bundle.currentContractItems().size()).isGreaterThan(1);
+        assertThat(bundle.currentContractItems()).anySatisfy(item ->
+                assertThat(item.retrievalReason()).startsWith("SEMANTIC_RELATIONSHIP:"));
+
+        // deterministic sufficiency for the complete structured state
+        assertThat(bundle.sufficiency()).isEqualTo(EvidenceSufficiency.SUFFICIENT);
+        assertThat(bundle.traceId()).isNotNull();
+
+        // the approved-but-unpublished and rejected candidates never surface
+        assertThat(bundle.items())
+                .noneSatisfy(item -> assertThat(item.sourceCandidateId())
+                        .isIn(corpus.approvedNotPublished().stream()
+                                .map(candidate -> candidate.id())
+                                .toList()))
+                .noneSatisfy(item -> assertThat(item.sourceCandidateId())
+                        .isIn(corpus.rejected().stream()
+                                .map(candidate -> candidate.id())
+                                .toList()));
+    }
+
+    @Test
+    void publicationIndexesPrecedentEvidenceIntoTheRetrievalIndex() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+
+        var indexedRows = jdbcClient.sql(
+                        "select count(*) from retrieval_evidence_index where organization_id = ?")
+                .param(organizationId)
+                .query(Integer.class)
+                .list().get(0);
+        assertThat(indexedRows).isGreaterThan(0);
+
+        // embedding generation is unconfigured in this test environment: rows stay
+        // lexically searchable while the vector lane is honestly not-ready
+        var vectorReady = jdbcClient.sql(
+                        "select count(*) from retrieval_evidence_index"
+                                + " where organization_id = ? and embedding_index_ready")
+                .param(organizationId)
+                .query(Integer.class)
+                .list().get(0);
+        assertThat(vectorReady).isEqualTo(0);
+    }
+
+    @Test
+    void snapshotIsolationKeepsPinnedKnowledgeStableAcrossPublications() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var clauseId = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow().id();
+
+        var latestRequest = EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
+                LocalDate.of(2026, 9, 24), KnowledgePin.at(corpus.latestPublicationNumber()));
+        var latestBundle = evidenceService.build(latestRequest);
+        assertThat(latestBundle.policyItems()).hasSize(1);
+        assertThat(latestBundle.policyItems().get(0).text())
+                .doesNotContain("2025 policy standard");
+
+        var pinnedRequest = EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
+                LocalDate.of(2026, 9, 24), KnowledgePin.at(1));
+        var pinnedBundle = evidenceService.build(pinnedRequest);
+        // at pin 1 the current policy does not exist yet; the superseded 2025 rule is
+        // the applicable policy and the library (published later) is honestly missing
+        assertThat(pinnedBundle.policyItems()).hasSize(1);
+        assertThat(pinnedBundle.policyItems().get(0).text())
+                .contains("2025 policy standard");
+        assertThat(pinnedBundle.sufficiency()).isEqualTo(EvidenceSufficiency.DRAFTING_MISSING);
     }
 }

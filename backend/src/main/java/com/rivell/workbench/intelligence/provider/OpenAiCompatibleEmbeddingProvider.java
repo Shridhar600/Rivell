@@ -95,7 +95,7 @@ public final class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvide
             if (response.model() == null || response.model().isBlank()) {
                 throw new ProviderProtocolException("Embedding response has no resolved model");
             }
-            if (!resolvedModel.isEmpty() && !resolvedModel.equals(response.model())) {
+            if (resolvedModel != null && !resolvedModel.equals(response.model())) {
                 throw new ProviderProtocolException(
                         "Embedding batches resolved to inconsistent models");
             }

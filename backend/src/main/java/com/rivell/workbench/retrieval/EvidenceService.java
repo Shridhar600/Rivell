@@ -59,19 +59,105 @@ public class EvidenceService {
         var currentOutcome = currentContractLane.gather(request);
         var sufficiency = sufficiency(policyResolution, draftingResolution,
                 precedentOutcome, currentOutcome, asOfPublication);
-        return new EvidenceBundle(UUID.randomUUID(), request,
-                items(policyResolution, AuthorityClass.POLICY, "PUBLISHED_PLAYBOOK_RULE"),
-                items(draftingResolution, AuthorityClass.APPROVED_DRAFTING,
-                        "PUBLISHED_CLAUSE_VARIANT"),
+        var policyItems = items(policyResolution, AuthorityClass.POLICY,
+                "PUBLISHED_PLAYBOOK_RULE");
+        var draftingItems = items(draftingResolution, AuthorityClass.APPROVED_DRAFTING,
+                "PUBLISHED_CLAUSE_VARIANT");
+        var bundle = new EvidenceBundle(UUID.randomUUID(), request,
+                policyItems, draftingItems,
                 precedentOutcome.items(), currentOutcome.items(), List.of(),
                 sufficiency, null);
+        var traceId = persistTrace(request, asOfPublication, policyResolution,
+                draftingResolution, precedentOutcome, currentOutcome, bundle,
+                startedAt);
+        return new EvidenceBundle(bundle.id(), request, bundle.policyItems(),
+                bundle.approvedDraftingItems(), bundle.precedentItems(),
+                bundle.currentContractItems(), bundle.externalReferenceItems(),
+                bundle.sufficiency(), traceId);
+    }
+
+    private java.util.UUID persistTrace(
+            EvidenceRequest request,
+            long asOfPublication,
+            StructuredPolicyResolver.Resolution policy,
+            StructuredPolicyResolver.Resolution drafting,
+            PrecedentLane.Outcome precedent,
+            CurrentContractLane.Outcome current,
+            EvidenceBundle bundle,
+            Instant startedAt) {
+        var stages = new LinkedHashMap<String, RetrievalTrace.StageSummary>();
+        stages.put("policy", stage("policy", policy.candidates().size(), ids(policy)));
+        stages.put("drafting", stage("drafting", drafting.candidates().size(), ids(drafting)));
+        for (var stage : precedent.stages()) {
+            stages.put(stage.stage(), stage);
+        }
+        stages.put("currentContract", new RetrievalTrace.StageSummary(
+                "currentContract", current.items().size(),
+                current.items().stream().map(item -> item.evidenceId().toString()).toList(),
+                List.of()));
+        var degradation = new java.util.LinkedHashSet<String>();
+        degradation.addAll(precedent.degradation());
+        if (current.degradation() != null) {
+            degradation.add(current.degradation());
+        }
+        var modelVersions = new LinkedHashMap<String, String>(Map.of(
+                "indexVersion", "rivell-evidence-index-1"));
+        var traceId = java.util.UUID.randomUUID();
+        var selected = new java.util.ArrayList<java.util.UUID>();
+        for (var item : bundle.items()) {
+            selected.add(item.evidenceId());
+        }
+        repository.insertTrace(new RetrievalTrace(
+                traceId, request.organizationId(), request.contractId(),
+                request.versionNumber(), request.clauseId(),
+                request.purpose().name(),
+                requestOf(request, asOfPublication),
+                stages,
+                selected,
+                precedent.rejected(),
+                List.copyOf(degradation),
+                Map.of("totalMs", java.time.Duration.between(startedAt, clock.instant())
+                        .toMillis()),
+                modelVersions,
+                request.knowledgePin(),
+                clock.instant()));
+        return traceId;
+    }
+
+    private Map<String, Object> requestOf(EvidenceRequest request, long asOfPublication) {
+        var map = new LinkedHashMap<String, Object>();
+        map.put("purpose", request.purpose().name());
+        map.put("legalConcept", request.legalConcept().name());
+        map.put("effectiveOn", request.effectiveOn().toString());
+        map.put("knowledgePin", request.knowledgePin().publicationNumber());
+        map.put("resolvedAsOfPublication", asOfPublication);
+        return map;
+    }
+
+    private List<String> ids(StructuredPolicyResolver.Resolution resolution) {
+        return resolution.candidates().stream()
+                .map(candidate -> candidate.id().toString())
+                .toList();
+    }
+
+    private RetrievalTrace.StageSummary stage(
+            String name, int count, List<String> ids) {
+        return new RetrievalTrace.StageSummary(name, count, ids, List.of());
     }
 
     private long resolveAsOf(EvidenceRequest request) {
         if (request.knowledgePin().pinned()) {
-            return request.knowledgePin().publicationNumber();
+            var pin = request.knowledgePin().publicationNumber();
+            var known = knowledgeQueries.listPublications().stream()
+                    .anyMatch(publication -> publication.publicationNumber() == pin);
+            if (!known) {
+                throw new IllegalArgumentException(
+                        "Pinned knowledge publication does not exist: " + pin);
+            }
+            return pin;
         }
-        return 0L;
+        var publications = knowledgeQueries.listPublications();
+        return publications.isEmpty() ? 0L : publications.get(0).publicationNumber();
     }
 
     private EvidenceSufficiency sufficiency(
@@ -80,9 +166,6 @@ public class EvidenceService {
             PrecedentLane.Outcome precedent,
             CurrentContractLane.Outcome current,
             long asOfPublication) {
-        if (current.degradation() != null) {
-            return EvidenceSufficiency.CONTRACT_CONTEXT_INCOMPLETE;
-        }
         if (asOfPublication == 0L || policy.missing()) {
             return EvidenceSufficiency.POLICY_MISSING;
         }
@@ -93,6 +176,9 @@ public class EvidenceService {
                 .anyMatch(candidate -> !candidate.conflictSignals().isEmpty());
         if (conflicts) {
             return EvidenceSufficiency.SOURCE_CONFLICT;
+        }
+        if (current.degradation() != null) {
+            return EvidenceSufficiency.CONTRACT_CONTEXT_INCOMPLETE;
         }
         if (drafting.missing()) {
             return EvidenceSufficiency.DRAFTING_MISSING;
@@ -105,11 +191,25 @@ public class EvidenceService {
 
     private List<EvidenceItem> items(StructuredPolicyResolver.Resolution resolution,
             AuthorityClass authority, String sourceType) {
+        var candidates = new java.util.ArrayList<>(resolution.candidates());
+        if (authority == AuthorityClass.APPROVED_DRAFTING) {
+            candidates.sort(java.util.Comparator.comparingInt(
+                    EvidenceService::variantRoleOrder));
+        }
         var items = new java.util.ArrayList<EvidenceItem>();
-        for (var candidate : resolution.candidates()) {
+        for (var candidate : candidates) {
             items.add(item(candidate, authority, sourceType));
         }
         return List.copyOf(items);
+    }
+
+    private static int variantRoleOrder(
+            com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
+        return switch (candidate.effectiveVariantRole()) {
+            case PREFERRED -> 0;
+            case FALLBACK -> 1;
+            default -> 2;
+        };
     }
 
     private EvidenceItem item(

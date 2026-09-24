@@ -40,7 +40,8 @@ public class EvidenceIndexService {
         this.properties = properties;
     }
 
-    @org.springframework.modulith.ApplicationModuleListener
+    @org.springframework.transaction.event.TransactionalEventListener(
+            phase = org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT)
     public void onKnowledgePublished(com.rivell.workbench.knowledge.KnowledgePublishedEvent event) {
         if (!properties.indexingEnabled()) {
             return;
@@ -50,7 +51,11 @@ public class EvidenceIndexService {
                     event.organizationId(), superseded.getValue(), event.publicationNumber());
         }
         for (var candidateId : event.candidateIds()) {
-            indexCandidate(event.organizationId(), candidateId, event.publicationNumber());
+            try {
+                indexCandidate(event.organizationId(), candidateId, event.publicationNumber());
+            } catch (RuntimeException e) {
+                // one broken candidate must not block the rest of the index batch
+            }
         }
     }
 
@@ -84,11 +89,27 @@ public class EvidenceIndexService {
         try {
             var execution = embeddingService.embed(List.of(text));
             var vector = execution.vectors().get(0);
-            repository.persistEmbedding(candidateId, contentHash, properties.indexVersion(),
-                    embeddingService.modelIdentity(), vector.length,
-                    VectorLiterals.of(vector));
+            ensureVectorIndex(organizationId, vector.length);
+            repository.persistEmbedding(organizationId, candidateId, contentHash,
+                    properties.indexVersion(), embeddingService.modelIdentity(),
+                    vector.length, VectorLiterals.of(vector));
         } catch (SemanticDecisionException e) {
             // honest degradation: lexical stays searchable, vector stays not-ready
+        }
+    }
+
+    /**
+     * Per-model partial HNSW index over the dimensionless embedding column
+     * (created on demand, idempotent DDL — the real provider dimension is unknown
+     * at migration time, Architecture Decision #8 / research conclusions).
+     */
+    private void ensureVectorIndex(UUID organizationId, int dims) {
+        var model = embeddingService.modelIdentity();
+        var indexName = "idx_retrieval_vector_" + Integer.toUnsignedString(model.hashCode());
+        try {
+            repository.createVectorIndexIfAbsent(indexName, model, dims);
+        } catch (RuntimeException e) {
+            // index creation is an optimization; a failure must not break indexing
         }
     }
 

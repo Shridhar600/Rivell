@@ -103,6 +103,12 @@ public class KnowledgePublicationService {
         var publication = new KnowledgePublication(
                 publicationId, organizationId, publicationNumber,
                 Texts.normalize(note), items, now);
+        var superseded = new java.util.LinkedHashMap<UUID, UUID>();
+        for (var item : items) {
+            if (item.action() == PublicationAction.SUPERSEDE && item.supersededCandidateId() != null) {
+                superseded.put(item.candidateId(), item.supersededCandidateId());
+            }
+        }
         transactionTemplate.executeWithoutResult(status -> {
             repository.insertPublication(publication);
             for (var candidate : candidates) {
@@ -114,17 +120,12 @@ public class KnowledgePublicationService {
                         candidate.reviewNote(), candidate.reviewedAt(),
                         now);
             }
+            // published inside the transaction: AFTER_COMMIT listeners fire post-commit
+            eventPublisher.publishEvent(new KnowledgePublishedEvent(
+                    organizationId, publicationId, publicationNumber,
+                    candidates.stream().map(KnowledgeCandidate::id).toList(),
+                    java.util.Collections.unmodifiableMap(superseded)));
         });
-        var superseded = new java.util.LinkedHashMap<UUID, UUID>();
-        for (var item : items) {
-            if (item.action() == PublicationAction.SUPERSEDE && item.supersededCandidateId() != null) {
-                superseded.put(item.candidateId(), item.supersededCandidateId());
-            }
-        }
-        eventPublisher.publishEvent(new KnowledgePublishedEvent(
-                organizationId, publicationId, publicationNumber,
-                candidates.stream().map(KnowledgeCandidate::id).toList(),
-                java.util.Collections.unmodifiableMap(superseded)));
         return publication;
     }
 

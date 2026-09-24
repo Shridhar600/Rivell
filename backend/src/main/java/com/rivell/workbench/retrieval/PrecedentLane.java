@@ -76,7 +76,7 @@ public class PrecedentLane {
                 candidate.id(),
                 null,
                 null,
-                conceptOf(candidate, request),
+                conceptOf(candidate),
                 candidate.scope(),
                 effectiveText(candidate),
                 null,
@@ -90,9 +90,9 @@ public class PrecedentLane {
                 null);
     }
 
-    private LegalConcept conceptOf(KnowledgeCandidate candidate, EvidenceRequest request) {
+    private LegalConcept conceptOf(KnowledgeCandidate candidate) {
         if (candidate.legalConceptKey() == null) {
-            return request.legalConcept();
+            return null;
         }
         return LegalConcept.valueOf(candidate.legalConceptKey());
     }

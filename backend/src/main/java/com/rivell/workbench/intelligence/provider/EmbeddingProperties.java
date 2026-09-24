@@ -17,7 +17,6 @@ public record EmbeddingProperties(
         String apiKey,
         String model,
         Integer dimensions,
-        int batchSize,
         int maxInputsPerBatch,
         Duration connectTimeout,
         Duration readTimeout) {

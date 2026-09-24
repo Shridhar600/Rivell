@@ -43,7 +43,7 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                          indexed_at, updated_at)
                         values (:id, :organizationId, :candidateId, :artifactId, :candidateType,
                          :legalConceptKey, :contentHash, :indexVersion,
-                         to_tsvector(:lexicalConfig, coalesce(:lexicalText, '')),
+                         to_tsvector(cast(:lexicalConfig as regconfig), coalesce(:lexicalText, '')),
                          :lexicalConfig, :publicationNumber, :supersededAtPublication,
                          :contractPackKey, cast(:declaredContractTypes as jsonb),
                          :partyPerspective, :paperSource, :jurisdiction,
@@ -75,8 +75,8 @@ class JdbcRetrievalRepository implements RetrievalRepository {
     }
 
     @Override
-    public void persistEmbedding(UUID candidateId, String contentHash, String indexVersion,
-            String embeddingModel, int embeddingDims, String vectorLiteral) {
+    public void persistEmbedding(UUID organizationId, UUID candidateId, String contentHash,
+            String indexVersion, String embeddingModel, int embeddingDims, String vectorLiteral) {
         jdbcClient.sql("""
                         update retrieval_evidence_index
                         set embedding = cast(:embedding as vector),
@@ -84,10 +84,12 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                             embedding_dims = :embeddingDims,
                             embedding_index_ready = true,
                             updated_at = :updatedAt
-                        where candidate_id = :candidateId
+                        where organization_id = :organizationId
+                          and candidate_id = :candidateId
                           and content_hash = :contentHash
                           and index_version = :indexVersion
                         """)
+                .param("organizationId", organizationId)
                 .param("candidateId", candidateId)
                 .param("contentHash", contentHash)
                 .param("indexVersion", indexVersion)
@@ -95,6 +97,16 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 .param("embeddingDims", embeddingDims)
                 .param("embedding", vectorLiteral)
                 .param("updatedAt", Timestamp.from(Instant.now()))
+                .update();
+    }
+
+    @Override
+    public void createVectorIndexIfAbsent(String indexName, String embeddingModel, int dims) {
+        var expression = "(embedding::vector(" + dims + ")) vector_cosine_ops";
+        var predicate = "embedding_model = '" + embeddingModel.replace("'", "''") + "'";
+        jdbcClient.sql("create index if not exists " + indexName
+                + " on retrieval_evidence_index using hnsw (" + expression + ") where "
+                + predicate)
                 .update();
     }
 
@@ -160,7 +172,9 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 .param("stageTimings", json(trace.stageTimings()))
                 .param("modelVersions", json(trace.modelVersions()))
                 .param("knowledgePin", json(Map.of(
-                        "publicationNumber", trace.knowledgePin().publicationNumber())))
+                        "publicationNumber",
+                        java.util.Objects.requireNonNullElse(
+                                trace.knowledgePin().publicationNumber(), -1))))
                 .param("createdAt", Timestamp.from(trace.createdAt()))
                 .update();
     }
@@ -376,11 +390,13 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 var stage = field.getValue();
                 var ids = new ArrayList<String>();
                 stage.path("candidateIds").forEach(id -> ids.add(id.asText()));
+                var ranks = new ArrayList<Integer>();
+                stage.path("candidateRanks").forEach(rank -> ranks.add(rank.asInt()));
                 stages.put(field.getKey(), new RetrievalTrace.StageSummary(
                         field.getKey(),
                         stage.path("candidateCount").asInt(0),
                         List.copyOf(ids),
-                        List.of()));
+                        List.copyOf(ranks)));
             });
             return stages;
         } catch (JsonProcessingException e) {

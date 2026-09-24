@@ -148,6 +148,12 @@ public final class CorpusScriptedProvider implements SemanticDecisionProvider {
                     return value;
                 }
             }
+            for (var key : List.of("source", "target")) {
+                if (payload.get(key) instanceof Map<?, ?> side
+                        && side.get("text") instanceof String value) {
+                    return value;
+                }
+            }
         }
         return "";
     }

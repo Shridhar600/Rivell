@@ -132,7 +132,7 @@ public final class M6EvidenceCorpus {
         var publishedAt = new LinkedHashMap<Fixture, Long>();
 
         publish(published, publishedAt, Fixture.POLICY_SUPERSEDED,
-                policyManifest(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31)), null);
+                policyManifest(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31)), null);
         publish(published, publishedAt, Fixture.PRECEDENT_RELEVANT, MSA_US_CUSTOMER, null);
 
         var supersededId = conceptCandidate(published.get(Fixture.POLICY_SUPERSEDED)).id();
@@ -144,7 +144,7 @@ public final class M6EvidenceCorpus {
         publish(published, publishedAt, Fixture.POLICY_FUTURE, futureManifest(), null);
         publish(published, publishedAt, Fixture.LIBRARY_MAIN, MSA_US_CUSTOMER, null);
         publish(published, publishedAt, Fixture.PRECEDENT_LEXICAL, MSA_US_CUSTOMER, null);
-        publish(published, publishedAt, Fixture.PRECEDENT_PARAPHRASE, ukManifest(), null);
+        publish(published, publishedAt, Fixture.PRECEDENT_PARAPHRASE, MSA_US_CUSTOMER, null);
         publish(published, publishedAt, Fixture.PRECEDENT_INCOMPATIBLE, MSA_US_CUSTOMER, null);
         publish(published, publishedAt, Fixture.PRECEDENT_GOVERNING_LAW, MSA_US_CUSTOMER, null);
 
@@ -163,10 +163,16 @@ public final class M6EvidenceCorpus {
             throw new IllegalStateException("MSA corpus fixture did not enrich READY");
         }
 
+        // never-visible fixtures: one approved-but-unpublished candidate and one rejected
+        var notPublished = ingestAndApprove(Fixture.POLICY_FUTURE, futureManifest());
+        var rejectedSource = ingest(Fixture.PRECEDENT_GOVERNING_LAW, MSA_US_CUSTOMER);
+        var rejectedCandidate = candidates(rejectedSource, true).get(0);
+        review.reject(rejectedCandidate.id(), "not acceptable as corpus evidence");
+
         var latest = publishedAt.get(Fixture.PRECEDENT_GOVERNING_LAW);
         return new Corpus(organizationId, java.util.Collections.unmodifiableMap(published),
-                java.util.Collections.unmodifiableMap(publishedAt), List.of(), List.of(),
-                contract, semantics, latest);
+                java.util.Collections.unmodifiableMap(publishedAt), notPublished,
+                List.of(rejectedCandidate), contract, semantics, latest);
     }
 
     /**
@@ -267,6 +273,10 @@ public final class M6EvidenceCorpus {
     public static ArtifactManifest policyManifest(LocalDate from, LocalDate to) {
         return new ArtifactManifest(Set.of("MSA"), "MSA_PACK", "Customer",
                 "Third-Party", "US", "en", from, to, null);
+    }
+
+    public static ArtifactManifest msaManifest2026() {
+        return policyManifest(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
     }
 
     public static ArtifactManifest ndaManifest() {

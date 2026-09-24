@@ -72,7 +72,7 @@ CREATE TABLE retrieval_trace (
 
 CREATE INDEX idx_retrieval_trace_org ON retrieval_trace (organization_id, created_at);
 CREATE INDEX idx_retrieval_trace_contract ON retrieval_trace
-    (contract_id, version_number, clause_id);
+    (organization_id, contract_id, version_number, clause_id);
 
 -- Bounded published-knowledge access for retrieval (DW-010): replaces broad
 -- published-candidate hydration with a targeted, indexed lookup.
