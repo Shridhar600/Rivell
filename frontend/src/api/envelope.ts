@@ -73,6 +73,17 @@ export function readOptionalNullableNumber(
   return value
 }
 
+export function readOptionalNullableBoolean(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): boolean | null {
+  const value = source[key]
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'boolean') throw malformed(what)
+  return value
+}
+
 export function readOptionalBoolean(
   source: Record<string, unknown>,
   key: string,

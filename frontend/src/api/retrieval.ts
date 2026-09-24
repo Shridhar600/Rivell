@@ -10,7 +10,7 @@ import {
   readBooleanMap,
   readNumber,
   readNumberMap,
-  readOptionalBoolean,
+  readOptionalNullableBoolean,
   readOptionalNullableNumber,
   readOptionalNullableString,
   readOptionalNumber,
@@ -72,7 +72,7 @@ const COMPATIBILITY_STATES: readonly string[] = [
 
 export type PolicyFacts = {
   positions: string[]
-  requiresApproval: boolean
+  requiresApproval: boolean | null
   escalationTrigger: string | null
 }
 
@@ -167,7 +167,7 @@ function parsePolicyFacts(value: unknown, what: string): PolicyFacts | null {
   const facts = asRecord(value, what)
   return {
     positions: readStringArray(facts, 'positions', what),
-    requiresApproval: readOptionalBoolean(facts, 'requiresApproval', what),
+    requiresApproval: readOptionalNullableBoolean(facts, 'requiresApproval', what),
     escalationTrigger: readOptionalNullableString(facts, 'escalationTrigger', what),
   }
 }

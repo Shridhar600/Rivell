@@ -6,6 +6,7 @@ import type {
 } from '../api/retrieval'
 import { conceptLabel, relationshipTypeVerb } from './contractSemantics'
 import { humanizeCode } from './domainLabels'
+import { POSITION_LABELS } from './semantics'
 
 export type LaneProminence = 'authoritative' | 'subject' | 'historical' | 'optional'
 
@@ -56,6 +57,19 @@ export const EVIDENCE_LANES: readonly EvidenceLane[] = [
   },
 ]
 
+const AUTHORITY_LABELS: Record<AuthorityClass, string> = {
+  POLICY: 'Policy',
+  APPROVED_DRAFTING: 'Approved drafting',
+  PRECEDENT: 'Precedent',
+  CURRENT_CONTRACT: 'Current contract',
+  EXTERNAL_REFERENCE: 'External reference',
+  UNKNOWN: 'Other evidence',
+}
+
+export function authorityLabel(authority: AuthorityClass): string {
+  return AUTHORITY_LABELS[authority] ?? AUTHORITY_LABELS.UNKNOWN
+}
+
 const OTHER_LANE: EvidenceLane = {
   authority: 'UNKNOWN',
   label: 'Other evidence',
@@ -93,6 +107,23 @@ export function evidenceLanesFor(
     groups.push({ lane: OTHER_LANE, items: otherItems })
   }
   return groups
+}
+
+export function policyPositionLabels(positions: string[]): string[] {
+  const order = Object.keys(POSITION_LABELS)
+  const rank = (position: string) => {
+    const index = order.indexOf(position)
+    return index === -1 ? order.length : index
+  }
+  return [...positions]
+    .sort((a, b) => rank(a) - rank(b))
+    .map((position) => POSITION_LABELS[position as keyof typeof POSITION_LABELS] ?? humanizeCode(position))
+}
+
+export function evidenceTextCollapsible(item: EvidenceItem): boolean {
+  if (item.authorityClass === 'PRECEDENT') return true
+  if (item.authorityClass === 'CURRENT_CONTRACT') return item.text.length > 280
+  return item.text.length > 600
 }
 
 export type SufficiencyPresentation = {

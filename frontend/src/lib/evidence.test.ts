@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { EvidenceItem, EvidenceSufficiency } from '../api/retrieval'
 import {
   POLICY_MISSING_PRECEDENT_NOTE,
+  authorityLabel,
   degradationMessage,
   evidenceLanesFor,
+  evidenceTextCollapsible,
+  policyPositionLabels,
   policyCompatibilityLabel,
   retrievalReasonLabel,
   sourceTypeLabel,
@@ -88,6 +91,42 @@ describe('evidenceLanesFor', () => {
     expect(authorities).toContain('UNKNOWN')
     expect(authorities.indexOf('UNKNOWN')).toBe(authorities.length - 1)
     expect(withExternal.at(-1)?.lane.label).toMatch(/other evidence/i)
+  })
+})
+
+describe('authority and positions helpers', () => {
+  it('labels authority classes and orders policy positions canonically', () => {
+    expect(authorityLabel('POLICY')).toBe('Policy')
+    expect(authorityLabel('PRECEDENT')).toBe('Precedent')
+    expect(authorityLabel('UNKNOWN')).toBe('Other evidence')
+    expect(policyPositionLabels(['FALLBACK', 'PREFERRED'])).toEqual([
+      'Preferred',
+      'Fallback',
+    ])
+    expect(policyPositionLabels(['UNKNOWN_ROLE', 'PREFERRED'])).toEqual([
+      'Preferred',
+      'Unknown role',
+    ])
+  })
+
+  it('collapses precedent and long contract text, keeps authoritative wording visible', () => {
+    expect(evidenceTextCollapsible(item({ authorityClass: 'PRECEDENT', text: 'short' }))).toBe(
+      true,
+    )
+    expect(
+      evidenceTextCollapsible(item({ authorityClass: 'CURRENT_CONTRACT', text: 'short' })),
+    ).toBe(false)
+    expect(
+      evidenceTextCollapsible(
+        item({ authorityClass: 'CURRENT_CONTRACT', text: 'x'.repeat(400) }),
+      ),
+    ).toBe(true)
+    expect(evidenceTextCollapsible(item({ authorityClass: 'POLICY', text: 'short' }))).toBe(
+      false,
+    )
+    expect(
+      evidenceTextCollapsible(item({ authorityClass: 'POLICY', text: 'x'.repeat(700) })),
+    ).toBe(true)
   })
 })
 
