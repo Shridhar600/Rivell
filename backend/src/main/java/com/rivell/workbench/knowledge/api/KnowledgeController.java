@@ -188,6 +188,22 @@ class KnowledgeController {
         return ApiResult.ok(toCandidateView(queryService.getCandidate(id)));
     }
 
+    /** Human LegalConcept correction before publication (DW-017): set or clear. */
+    @Operation(summary = "Correct or clear a candidate's LegalConcept (machine proposal preserved)")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Unknown LegalConcept or no-op request",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Candidate already published",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
+    @PostMapping("/candidates/{id}/concept")
+    ApiResult<CandidateView> correctConcept(
+            @PathVariable UUID id, @RequestBody ConceptCorrectionRequest request) {
+        return ApiResult.ok(toCandidateView(reviewService.correctConcept(id, request.primary())));
+    }
+
     @Operation(summary = "Approve a candidate for publication")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
@@ -402,6 +418,8 @@ class KnowledgeController {
                 candidate.candidateType(), candidate.reviewStatus(), candidate.rawLabel(),
                 candidate.contentText(), candidate.payload().columns(),
                 candidate.legalConceptKey(),
+                candidate.conceptCorrection(),
+                candidate.effectiveConceptKey(),
                 candidate.semanticFields().conceptProbabilities(),
                 candidate.effectivePositions(),
                 candidate.effectiveVariantRole(),

@@ -377,6 +377,26 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
 
     @Override
     @Transactional
+    public boolean updateConceptCorrection(UUID candidateId, UUID organizationId,
+            String conceptCorrection, UUID correctedBy, java.time.Instant updatedAt) {
+        return jdbcClient.sql("""
+                        update knowledge_candidate
+                        set concept_correction = :conceptCorrection,
+                            concept_corrected_by = :correctedBy,
+                            updated_at = :updatedAt
+                        where id = :id and organization_id = :organizationId
+                          and review_status in ('PENDING', 'EDITED', 'APPROVED')
+                        """)
+                .param("conceptCorrection", conceptCorrection)
+                .param("correctedBy", correctedBy)
+                .param("updatedAt", Timestamp.from(updatedAt))
+                .param("id", candidateId)
+                .param("organizationId", organizationId)
+                .update() == 1;
+    }
+
+    @Override
+    @Transactional
     public void updateReviewState(
             UUID candidateId, UUID organizationId, ReviewStatus expectedStatus,
             ReviewStatus reviewStatus, String editedContentText,
@@ -446,7 +466,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     query.candidateTypes().stream().map(Enum::name).toArray(String[]::new));
         }
         if (query.legalConceptKey() != null) {
-            conditions.add("c.legal_concept_key = :legalConceptKey");
+            conditions.add("c.effective_concept_key = :legalConceptKey");
             params.put("legalConceptKey", query.legalConceptKey());
         }
         if (query.contractPackKey() != null) {
@@ -753,6 +773,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("content_text"),
                 readPayload(rs.getString("payload")),
                 rs.getString("legal_concept_key"),
+                rs.getString("concept_correction"),
                 readSemanticFields(rs.getString("semantic_fields")),
                 readSemanticFields(rs.getString("edited_semantic_fields")),
                 readInterpretations(rs.getString("interpretations")),

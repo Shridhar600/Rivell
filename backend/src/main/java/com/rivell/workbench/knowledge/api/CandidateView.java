@@ -32,6 +32,8 @@ public record CandidateView(
         String contentText,
         Map<String, String> payloadColumns,
         String legalConceptKey,
+        String conceptCorrection,
+        String effectiveConceptKey,
         Map<LegalConcept, Double> classifiedConcepts,
         Set<PositionRole> positions,
         PositionRole variantRole,

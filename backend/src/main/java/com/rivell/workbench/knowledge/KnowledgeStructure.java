@@ -128,7 +128,7 @@ final class KnowledgeStructure {
                 candidates.add(new KnowledgeCandidate(
                         UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                         candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                        rawLabel, contentText, new CandidatePayload(columns), null,
+                        rawLabel, contentText, new CandidatePayload(columns), null, null,
                         SemanticFields.EMPTY, null, List.of(),
                         null, null, null, scope, List.of(), null, null,
                         null, null, now, now));
@@ -183,7 +183,7 @@ final class KnowledgeStructure {
             return List.of(new KnowledgeCandidate(
                     UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                     candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                    rawLabel, contentText, new CandidatePayload(columns), null,
+                    rawLabel, contentText, new CandidatePayload(columns), null, null,
                     SemanticFields.EMPTY, null, List.of(),
                     null, null, null, scope, List.of(), null, null,
                     null, null, now, now));
@@ -204,7 +204,7 @@ final class KnowledgeStructure {
         return new KnowledgeCandidate(
                 UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                 candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                rawLabel, contentText, CandidatePayload.EMPTY, null,
+                rawLabel, contentText, CandidatePayload.EMPTY, null, null,
                 SemanticFields.EMPTY, null, List.of(),
                 null, null, null, scope, List.of(), null, null,
                 null, null, now, now);

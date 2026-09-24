@@ -40,6 +40,10 @@ public interface KnowledgeRepository {
 
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);
 
+    /** Human LegalConcept correction (DW-017); pre-publication only. */
+    boolean updateConceptCorrection(UUID candidateId, UUID organizationId,
+            String conceptCorrection, UUID correctedBy, java.time.Instant updatedAt);
+
     void updateReviewState(
             UUID candidateId,
             UUID organizationId,

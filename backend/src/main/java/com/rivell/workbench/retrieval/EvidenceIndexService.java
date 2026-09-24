@@ -119,7 +119,7 @@ public class EvidenceIndexService {
         var scope = candidate.scope();
         repository.upsertIndexRow(new RetrievalRepository.EvidenceIndexRow(
                 UUID.randomUUID(), organizationId, candidateId, candidate.artifactId(),
-                candidate.candidateType().name(), candidate.legalConceptKey(),
+                candidate.candidateType().name(), candidate.effectiveConceptKey(),
                 contentHash, properties.indexVersion(), "english", text,
                 null, null, false, publicationNumber,
                 scope.contractPackKey(),

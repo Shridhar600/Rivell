@@ -294,8 +294,8 @@ public class EvidenceService {
                 candidate.id(),
                 null,
                 null,
-                candidate.legalConceptKey() == null ? null
-                        : LegalConcept.valueOf(candidate.legalConceptKey()),
+                candidate.effectiveConceptKey() == null ? null
+                        : LegalConcept.valueOf(candidate.effectiveConceptKey()),
                 candidate.scope(),
                 candidate.effectiveContentText(),
                 authority == AuthorityClass.POLICY ? policyFacts(candidate) : null,

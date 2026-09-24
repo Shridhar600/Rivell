@@ -48,7 +48,8 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.APPROVED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.semanticFields(),
+                    candidate.legalConceptKey(), candidate.conceptCorrection(),
+                    candidate.semanticFields(),
                     candidate.editedSemanticFields(), candidate.interpretations(),
                     candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
@@ -76,7 +77,8 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.semanticFields(),
+                    candidate.legalConceptKey(), candidate.conceptCorrection(),
+                    candidate.semanticFields(),
                     !editedSemantic.equals(SemanticFields.EMPTY) ? editedSemantic : candidate.editedSemanticFields(),
                     candidate.interpretations(),
                     contentText != null ? contentText : candidate.editedContentText(),
@@ -97,7 +99,8 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.REJECTED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.semanticFields(),
+                    candidate.legalConceptKey(), candidate.conceptCorrection(),
+                    candidate.semanticFields(),
                     candidate.editedSemanticFields(), candidate.interpretations(),
                     candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
@@ -105,6 +108,42 @@ public class CandidateReviewService {
                     Texts.normalize(note), Instant.now(),
                     candidate.createdAt(), Instant.now());
         });
+    }
+
+    /**
+     * Human LegalConcept correction on a candidate before publication (DW-017):
+     * same layering proven in M5 contracts — the machine concept is preserved,
+     * a human correction (set key, or blank = clear to unclassified) defines the
+     * effective concept that publication and retrieval consume. Published
+     * candidates are immutable: correct the knowledge and republish instead.
+     */
+    public KnowledgeCandidate correctConcept(UUID candidateId, String primary) {
+        if (primary == null) {
+            throw new IllegalArgumentException(
+                    "A concept correction must set a LegalConcept name or an empty string to clear");
+        }
+        var normalized = primary.strip();
+        if (!normalized.isEmpty()) {
+            try {
+                com.rivell.workbench.contracts.LegalConcept.valueOf(normalized);
+            } catch (IllegalArgumentException e) {
+                throw new InvalidConceptCorrectionException(candidateId);
+            }
+        }
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.KNOWLEDGE_REVIEW)) {
+            throw new UnauthorizedKnowledgeAccessException(identity.userId());
+        }
+        var candidate = repository.findCandidate(candidateId, identity.organizationId())
+                .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
+        if (candidate.isPublished()) {
+            throw new InvalidCandidateReviewStateException(candidate, "concept-corrected");
+        }
+        var updated = candidate.withConceptCorrection(normalized.isEmpty()
+                ? "" : normalized);
+        repository.updateConceptCorrection(updated.id(), identity.organizationId(),
+                updated.conceptCorrection(), identity.userId(), Instant.now());
+        return updated;
     }
 
     private KnowledgeCandidate transition(

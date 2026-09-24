@@ -77,7 +77,8 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }
 
-    @ExceptionHandler(InvalidCorrectionException.class)
+    @ExceptionHandler({InvalidCorrectionException.class,
+            com.rivell.workbench.knowledge.InvalidConceptCorrectionException.class})
     ResponseEntity<ErrorResponse> invalidCorrection(RuntimeException e) {
         return error(HttpStatus.BAD_REQUEST, "400", "Invalid correction", e.getMessage());
     }

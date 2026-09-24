@@ -189,7 +189,7 @@ public class PrecedentLane {
                     request.clauseText(),
                     request.legalConcept().name(),
                     effectiveText(candidate),
-                    candidate.legalConceptKey());
+                    candidate.effectiveConceptKey());
             try {
                 var execution = decisionService.evaluate(M6SemanticSpecs.precedentRelevance(),
                         state);
@@ -296,10 +296,10 @@ public class PrecedentLane {
     }
 
     private LegalConcept conceptOf(KnowledgeCandidate candidate) {
-        if (candidate.legalConceptKey() == null) {
+        if (candidate.effectiveConceptKey() == null) {
             return null;
         }
-        return LegalConcept.valueOf(candidate.legalConceptKey());
+        return LegalConcept.valueOf(candidate.effectiveConceptKey());
     }
 
     private String effectiveText(KnowledgeCandidate candidate) {

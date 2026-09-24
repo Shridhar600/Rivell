@@ -94,6 +94,7 @@ class SystemApiIT {
                         "/api/knowledge/artifacts/{artifactId}/units/{unitId}/classification",
                         "/api/knowledge/candidates/bulk-approve",
                         "/api/knowledge/candidates/{id}",
+                        "/api/knowledge/candidates/{id}/concept",
                         "/api/knowledge/candidates/{id}/approve",
                         "/api/knowledge/candidates/{id}/edit",
                         "/api/knowledge/candidates/{id}/reject",
