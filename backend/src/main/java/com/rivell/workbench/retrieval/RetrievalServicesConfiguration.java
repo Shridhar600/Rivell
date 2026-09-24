@@ -57,9 +57,27 @@ class RetrievalServicesConfiguration {
             KnowledgeQueryService knowledgeQueries,
             EmbeddingService embeddingService,
             com.rivell.workbench.organization.IdentityProvider identityProvider,
+            com.rivell.workbench.organization.AuthorizationService authorizationService,
             Clock clock) {
         return new EvidenceService(resolver, precedentLane, currentContractLane,
                 retrievalRepository, knowledgeQueries, embeddingService, identityProvider,
-                clock);
+                authorizationService, clock);
+    }
+
+    @Bean
+    com.rivell.workbench.retrieval.api.EvidenceApiService evidenceApiService(
+            EvidenceService evidenceService,
+            com.rivell.workbench.organization.IdentityProvider identityProvider,
+            com.rivell.workbench.contracts.ContractEnrichmentService enrichmentService) {
+        return new com.rivell.workbench.retrieval.api.EvidenceApiService(
+                evidenceService, identityProvider, enrichmentService);
+    }
+
+    @Bean
+    com.rivell.workbench.retrieval.api.TraceApiService traceApiService(
+            RetrievalRepository retrievalRepository,
+            com.rivell.workbench.organization.IdentityProvider identityProvider) {
+        return new com.rivell.workbench.retrieval.api.TraceApiService(
+                retrievalRepository, identityProvider);
     }
 }

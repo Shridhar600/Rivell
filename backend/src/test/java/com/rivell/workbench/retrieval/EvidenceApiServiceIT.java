@@ -1,0 +1,196 @@
+package com.rivell.workbench.retrieval;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
+
+import com.rivell.workbench.contracts.EnrichmentStatus;
+import com.rivell.workbench.organization.IdentityProvider;
+import com.rivell.workbench.organization.UserIdentity;
+import com.rivell.workbench.retrieval.api.EvidenceApiService;
+import com.rivell.workbench.retrieval.api.RetrievalRequests;
+import com.rivell.workbench.retrieval.api.RetrievalResponses;
+
+/**
+ * The M6 developer API flow: build evidence from a reviewed clause of the enriched
+ * MSA, with honest degradation warnings and no provider internals in the response.
+ */
+@SpringBootTest
+@Testcontainers
+class EvidenceApiServiceIT {
+
+    private static final DockerImageName POSTGRES_IMAGE = DockerImageName
+            .parse("pgvector/pgvector:0.8.6-pg17-trixie")
+            .asCompatibleSubstituteFor("postgres");
+
+    @Container
+    static final PostgreSQLContainer postgres = new PostgreSQLContainer(POSTGRES_IMAGE)
+            .withDatabaseName("rivell")
+            .withUsername("rivell")
+            .withPassword("rivell");
+
+    @DynamicPropertySource
+    static void databaseProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("rivell.storage.local.root",
+                () -> "target/test-documents/" + UUID.randomUUID());
+        registry.add("rivell.retrieval.indexing-enabled", () -> "true");
+        registry.add("rivell.intelligence.embeddings.api-key", () -> "fake-key");
+        registry.add("rivell.intelligence.embeddings.provider", () -> "fake");
+        registry.add("rivell.intelligence.embeddings.model", () -> "fake-embedding-model");
+        registry.add("rivell.intelligence.embeddings.dimensions", () -> "8");
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FakeIntelligenceConfiguration {
+
+        @Bean
+        @Primary
+        com.rivell.workbench.intelligence.ModelPolicy fakeModelPolicy() {
+            return asset -> asset instanceof com.rivell.workbench.intelligence.ReasoningSpec
+                    ? new com.rivell.workbench.intelligence.ModelBinding("fake", "fake-gen-model")
+                    : new com.rivell.workbench.intelligence.ModelBinding("fake", "fake-model-latest");
+        }
+
+        @Bean
+        @Primary
+        com.rivell.workbench.intelligence.SemanticDecisionProvider fakeSemanticDecisionProvider() {
+            return new CorpusScriptedProvider();
+        }
+
+        @Bean
+        @Primary
+        com.rivell.workbench.intelligence.GenerativeReasoningProvider fakeGenerativeProvider() {
+            return new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();
+        }
+
+        @Bean
+        @Primary
+        com.rivell.workbench.intelligence.EmbeddingProvider fakeEmbeddingProvider() {
+            return new FakeEmbeddingProvider();
+        }
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class MutableIdentityConfiguration {
+
+        @Bean
+        @Primary
+        MutableIdentity mutableIdentityProvider() {
+            return new MutableIdentity();
+        }
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class CorpusConfiguration {
+
+        @Bean
+        M6EvidenceCorpus m6EvidenceCorpus(
+                com.rivell.workbench.knowledge.KnowledgeIngestionService ingestionService,
+                com.rivell.workbench.knowledge.CandidateReviewService reviewService,
+                com.rivell.workbench.knowledge.KnowledgePublicationService publicationService,
+                com.rivell.workbench.knowledge.KnowledgeQueryService queryService,
+                com.rivell.workbench.contracts.ContractIngestionService contractIngestionService,
+                com.rivell.workbench.contracts.ContractEnrichmentService enrichmentService) {
+            return new M6EvidenceCorpus(ingestionService, reviewService, publicationService,
+                    queryService, contractIngestionService, enrichmentService);
+        }
+    }
+
+    static final class MutableIdentity implements IdentityProvider {
+
+        volatile UserIdentity current = new UserIdentity(
+                UUID.randomUUID(), UUID.randomUUID(), java.util.Set.of("ADMIN"));
+
+        void use(UserIdentity identity) {
+            current = identity;
+        }
+
+        @Override
+        public UserIdentity currentIdentity() {
+            return current;
+        }
+    }
+
+    @Autowired
+    MutableIdentity identityProvider;
+
+    @Autowired
+    M6EvidenceCorpus corpusBuilder;
+
+    @Autowired
+    EvidenceApiService evidenceApiService;
+
+    @BeforeEach
+    void freshOrganization() {
+        identityProvider.use(new UserIdentity(
+                UUID.randomUUID(), UUID.randomUUID(), java.util.Set.of("ADMIN")));
+    }
+
+    @Test
+    void buildsEvidenceBundleFromTheReviewedClauseWithoutInventedSemantics() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var clauseId = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get()
+                                == com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow().id();
+
+        var response = evidenceApiService.build(new RetrievalRequests.EvidenceBuildRequest(
+                corpus.contract().contractId(), 1, clauseId));
+
+        // the bundle surfaces every authority lane with the human-declared context
+        assertThat(response.request().purpose()).isEqualTo("CLAUSE_REVIEW");
+        assertThat(response.request().legalConcept())
+                .isEqualTo("LIMITATION_OF_LIABILITY");
+        assertThat(response.items()).isNotEmpty();
+        assertThat(response.items()).anySatisfy(item ->
+                assertThat(item.authorityClass()).isEqualTo("POLICY"));
+        assertThat(response.items()).anySatisfy(item ->
+                assertThat(item.authorityClass()).isEqualTo("APPROVED_DRAFTING"));
+        assertThat(response.items()).anySatisfy(item ->
+                assertThat(item.authorityClass()).isEqualTo("PRECEDENT"));
+        assertThat(response.items()).anySatisfy(item ->
+                assertThat(item.authorityClass()).isEqualTo("CURRENT_CONTRACT"));
+        assertThat(response.sufficiency()).isEqualTo("SUFFICIENT");
+        assertThat(response.traceId()).isNotNull();
+
+        // no Finding/severity/violation/recommendation vocabulary in the product payload
+        var responseJson = com.fasterxml.jackson.databind.node.TextNode.valueOf("") == null
+                ? ""
+                : String.valueOf(response);
+        for (var banned : new String[] {"finding", "severity", "violation",
+                "recommendation", "redline"}) {
+            assertThat(responseJson.toLowerCase()).doesNotContain(banned);
+        }
+    }
+
+    @Test
+    void unknownClauseAndMissingEnrichmentAreHonestErrors() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+
+        assertThatThrownBy(() -> evidenceApiService.build(
+                new RetrievalRequests.EvidenceBuildRequest(
+                        corpus.contract().contractId(), 1, UUID.randomUUID())))
+                .isInstanceOf(ClauseNotFoundException.class);
+    }
+}

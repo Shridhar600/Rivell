@@ -11,6 +11,8 @@ public final class Permissions {
     public static final Permission KNOWLEDGE_REVIEW = new Permission("knowledge:review");
     public static final Permission KNOWLEDGE_PUBLISH = new Permission("knowledge:publish");
 
+    public static final Permission RETRIEVAL_READ = new Permission("retrieval:read");
+
     private Permissions() {
     }
 }

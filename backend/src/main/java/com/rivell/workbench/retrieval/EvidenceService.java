@@ -28,6 +28,7 @@ public class EvidenceService {
     private final com.rivell.workbench.knowledge.KnowledgeQueryService knowledgeQueries;
     private final com.rivell.workbench.intelligence.EmbeddingService embeddingService;
     private final com.rivell.workbench.organization.IdentityProvider identityProvider;
+    private final com.rivell.workbench.organization.AuthorizationService authorizationService;
     private final Clock clock;
 
     public EvidenceService(
@@ -38,6 +39,7 @@ public class EvidenceService {
             com.rivell.workbench.knowledge.KnowledgeQueryService knowledgeQueries,
             com.rivell.workbench.intelligence.EmbeddingService embeddingService,
             com.rivell.workbench.organization.IdentityProvider identityProvider,
+            com.rivell.workbench.organization.AuthorizationService authorizationService,
             Clock clock) {
         this.resolver = resolver;
         this.precedentLane = precedentLane;
@@ -46,12 +48,17 @@ public class EvidenceService {
         this.knowledgeQueries = knowledgeQueries;
         this.embeddingService = embeddingService;
         this.identityProvider = identityProvider;
+        this.authorizationService = authorizationService;
         this.clock = clock;
     }
 
     public EvidenceBundle build(EvidenceRequest request) {
         var identity = identityProvider.currentIdentity();
         if (!identity.organizationId().equals(request.organizationId())) {
+            throw new UnauthorizedEvidenceAccessException(identity.userId());
+        }
+        if (!authorizationService.isAuthorized(identity,
+                com.rivell.workbench.organization.Permissions.RETRIEVAL_READ)) {
             throw new UnauthorizedEvidenceAccessException(identity.userId());
         }
         var startedAt = clock.instant();
