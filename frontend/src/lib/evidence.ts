@@ -223,6 +223,7 @@ const TRACE_STAGE_LABELS: Record<string, string> = {
   fusion: 'Rank fusion',
   rerank: 'Semantic reranking',
   compatibility: 'Policy compatibility',
+  currentContract: 'Current contract',
 }
 
 export function traceStageLabel(key: string): string {
@@ -234,7 +235,7 @@ const TRACE_TIMING_LABELS: Record<string, string> = {
   structured: 'Structured lookup',
   precedent: 'Precedent retrieval',
   currentContract: 'Current contract',
-  total: 'Total',
+  totalMs: 'Total',
 }
 
 export function traceTimingLabel(key: string): string {
@@ -252,7 +253,8 @@ const REQUEST_KEY_LABELS: Record<string, string> = {
   purpose: 'Purpose',
   legalConcept: 'Legal concept',
   effectiveOn: 'Effective on',
-  knowledgePinPublicationNumber: 'Knowledge pin',
+  knowledgePin: 'Knowledge pin',
+  resolvedAsOfPublication: 'Resolved publication',
   contractId: 'Contract',
   versionNumber: 'Version',
   clauseId: 'Clause',
@@ -260,7 +262,7 @@ const REQUEST_KEY_LABELS: Record<string, string> = {
   ourSideRole: 'Our side',
   paperSource: 'Paper source',
   jurisdiction: 'Jurisdiction',
-  subjectClauseText: 'Subject clause text',
+  clauseText: 'Subject clause text',
 }
 
 function entryLabel(key: string): string {

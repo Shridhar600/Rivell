@@ -341,7 +341,7 @@ export class RetrievalApiError extends Error {
   }
 }
 
-export function isEnrichmentNotReadyError(error: unknown): boolean {
+export function isConflictError(error: unknown): boolean {
   return error instanceof RetrievalApiError && error.status === 409
 }
 
@@ -390,9 +390,9 @@ export function useBuildEvidence(
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ clauseId }) => buildEvidence({ contractId, versionNumber, clauseId }),
-    onSuccess: (bundle) => {
+    onSuccess: (bundle, variables) => {
       queryClient.setQueryData(
-        retrievalKeys.bundle(contractId, versionNumber, bundle.request.clauseId),
+        retrievalKeys.bundle(contractId, versionNumber, variables.clauseId),
         bundle,
       )
     },

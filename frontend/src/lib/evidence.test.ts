@@ -174,10 +174,11 @@ describe('labels', () => {
     expect(traceStageLabel('fusion')).toBe('Rank fusion')
     expect(traceStageLabel('rerank')).toBe('Semantic reranking')
     expect(traceStageLabel('policy')).toBe('Policy lookup')
+    expect(traceStageLabel('currentContract')).toBe('Current contract')
     expect(traceStageLabel('futureStage')).toBe('Future stage')
     expect(traceTimingLabel('pinResolution')).toBe('Knowledge pin resolution')
     expect(traceTimingLabel('currentContract')).toBe('Current contract')
-    expect(traceTimingLabel('total')).toBe('Total')
+    expect(traceTimingLabel('totalMs')).toBe('Total')
     expect(traceTimingLabel('futureTiming')).toBe('Future timing')
   })
 })
@@ -187,13 +188,15 @@ describe('traceRequestEntries', () => {
     const entries = traceRequestEntries({
       legalConcept: 'LIMITATION_OF_LIABILITY',
       effectiveOn: '2026-09-24',
+      knowledgePin: 2,
+      resolvedAsOfPublication: 2,
       reviewProfile: {
         contractType: 'MSA',
         ourSideRole: 'CUSTOMER',
         paperSource: 'COUNTERPARTY_PAPER',
         jurisdiction: 'UK',
       },
-      subjectClauseText: 'x'.repeat(500),
+      clauseText: 'x'.repeat(500),
       nested: { provider: { secret: 'nope' } },
     })
 
@@ -202,6 +205,8 @@ describe('traceRequestEntries', () => {
     expect(labels).toContain('Effective on')
     expect(labels).toContain('Contract type')
     expect(labels).toContain('Our side')
+    expect(labels).toContain('Knowledge pin')
+    expect(labels).toContain('Resolved publication')
     expect(entries.find((entry) => entry.label === 'Legal concept')?.value).toBe(
       'Limitation of liability',
     )

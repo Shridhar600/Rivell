@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
 import {
   buildEvidence,
   fetchRetrievalTrace,
-  isEnrichmentNotReadyError,
+  isConflictError,
   isForbiddenError,
   isNotFoundError,
   parseEvidenceBundle,
   parseRetrievalTrace,
   retrievalKeys,
+  useBuildEvidence,
+  useEvidenceBundle,
+  useRetrievalTraceQuery,
 } from './retrieval'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -57,7 +63,7 @@ const policyItem = {
   retrievalReason: 'STRUCTURED',
   laneInfo: { lexicalRank: null, vectorRank: null, fusedRank: null, fusedScore: null },
   semanticAssessment: null,
-  policyCompatibility: null,
+  policyCompatibility: 'NOT_ASSESSED',
   provenanceNodeIds: [],
   publicationId: 'pub-2',
   publicationNumber: 2,
@@ -127,7 +133,7 @@ const hybridBundle = {
     knowledgePinPublicationNumber: null,
   },
   items: [policyItem, precedentItem, contractItem],
-  sufficiency: 'SUFFICIENT',
+  sufficiency: 'PARTIAL',
   traceId: 't-1',
   degradationWarnings: ['INDEX_INCOMPLETE'],
 }
@@ -182,7 +188,7 @@ describe('parseEvidenceBundle', () => {
     const bundle = parseEvidenceBundle(hybridBundle)
 
     expect(bundle.bundleId).toBe('b-1')
-    expect(bundle.sufficiency).toBe('SUFFICIENT')
+    expect(bundle.sufficiency).toBe('PARTIAL')
     expect(bundle.traceId).toBe('t-1')
     expect(bundle.degradationWarnings).toEqual(['INDEX_INCOMPLETE'])
     expect(bundle.request).toEqual({
@@ -223,7 +229,7 @@ describe('parseEvidenceBundle', () => {
     expect(contract.publicationId).toBeNull()
   })
 
-  it('preserves unknown enum-like values instead of failing the page', () => {
+  it('tolerates unknown enum-like values without failing the page', () => {
     const bundle = parseEvidenceBundle({
       ...hybridBundle,
       sufficiency: 'FUTURE_STATE',
@@ -240,9 +246,9 @@ describe('parseEvidenceBundle', () => {
 
     expect(bundle.sufficiency).toBe('UNKNOWN')
     expect(bundle.items[0].authorityClass).toBe('UNKNOWN')
+    expect(bundle.items[0].policyCompatibility).toBe('UNKNOWN')
     expect(bundle.items[0].sourceType).toBe('FUTURE_SOURCE')
     expect(bundle.items[0].retrievalReason).toBe('FUTURE_REASON')
-    expect(bundle.items[0].policyCompatibility).toBe('UNKNOWN')
   })
 
   it('rejects malformed bundles', () => {
@@ -309,7 +315,7 @@ describe('buildEvidence', () => {
       versionNumber: 1,
       clauseId: 'cl-6',
     }).catch((error: unknown) => error)
-    expect(isEnrichmentNotReadyError(conflict)).toBe(true)
+    expect(isConflictError(conflict)).toBe(true)
     expect(isNotFoundError(conflict)).toBe(false)
 
     stubFetch(() => jsonResponse({ code: '404', title: 'Not found' }, 404))
@@ -339,6 +345,84 @@ describe('fetchRetrievalTrace', () => {
     expect(requests[0].method).toBe('GET')
     expect(requests[0].url).toContain('/api/retrieval/traces/t-1')
     expect(parsed.id).toBe('t-1')
+  })
+})
+
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  )
+  return { queryClient, wrapper }
+}
+
+describe('bundle cache behaviour', () => {
+  it('reads bundles from the cache without ever fetching', async () => {
+    const requests = stubFetch(() => jsonResponse(envelope(hybridBundle)))
+    const { queryClient, wrapper } = createWrapper()
+
+    const { result } = renderHook(() => useEvidenceBundle('c-1', 1, 'cl-6'), { wrapper })
+    const withoutSelection = renderHook(() => useEvidenceBundle('c-1', 1, null), { wrapper })
+
+    expect(result.current.data).toBeUndefined()
+    expect(withoutSelection.result.current.data).toBeUndefined()
+    expect(requests).toHaveLength(0)
+
+    act(() => {
+      queryClient.setQueryData(
+        retrievalKeys.bundle('c-1', 1, 'cl-6'),
+        parseEvidenceBundle(hybridBundle),
+      )
+    })
+
+    await waitFor(() => expect(result.current.data?.bundleId).toBe('b-1'))
+    expect(withoutSelection.result.current.data).toBeUndefined()
+    expect(requests).toHaveLength(0)
+  })
+
+  it('writes a built bundle under the requested clause id and reads it back', async () => {
+    const requests = stubFetch(() => jsonResponse(envelope(hybridBundle)))
+    const { queryClient, wrapper } = createWrapper()
+
+    const read = renderHook(() => useEvidenceBundle('c-1', 1, 'cl-6'), { wrapper })
+    const build = renderHook(() => useBuildEvidence('c-1', 1), { wrapper })
+
+    await act(async () => {
+      await build.result.current.mutateAsync({ clauseId: 'cl-6' })
+    })
+
+    expect(requests).toHaveLength(1)
+    expect(
+      queryClient.getQueryData(retrievalKeys.bundle('c-1', 1, 'cl-6')),
+    ).toMatchObject({ bundleId: 'b-1' })
+    await waitFor(() => expect(read.result.current.data?.bundleId).toBe('b-1'))
+  })
+})
+
+describe('trace query behaviour', () => {
+  it('fetches only when enabled and never without an id', async () => {
+    const requests = stubFetch(() => jsonResponse(envelope(trace)))
+    const { wrapper } = createWrapper()
+
+    const disabled = renderHook(() => useRetrievalTraceQuery('t-1', false), { wrapper })
+    const missing = renderHook(() => useRetrievalTraceQuery(null, true), { wrapper })
+
+    expect(requests).toHaveLength(0)
+    expect(disabled.result.current.fetchStatus).toBe('idle')
+    expect(disabled.result.current.data).toBeUndefined()
+    expect(missing.result.current.data).toBeUndefined()
+
+    const enabled = renderHook(() => useRetrievalTraceQuery('t-1', true), { wrapper })
+
+    await waitFor(() => expect(enabled.result.current.data?.id).toBe('t-1'))
+    expect(requests).toHaveLength(1)
+    expect(requests[0].url).toContain('/api/retrieval/traces/t-1')
+    expect(missing.result.current.data).toBeUndefined()
   })
 })
 
