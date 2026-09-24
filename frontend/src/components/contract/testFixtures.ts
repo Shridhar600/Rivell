@@ -418,6 +418,12 @@ export type StubOptions = {
   partyCorrectionResponse?: (body: unknown) => Response
   conceptCorrectionResponse?: (body: unknown) => Response
   factCorrectionResponse?: (body: unknown) => Response
+  evidenceBundle?: unknown
+  evidenceResponse?: (body: unknown) => Response | Promise<Response>
+  evidenceStatus?: number
+  trace?: unknown
+  traceResponse?: () => Response | Promise<Response>
+  traceStatus?: number
 }
 
 export function stubContractApi(options: StubOptions = {}) {
@@ -516,6 +522,31 @@ export function stubContractApi(options: StubOptions = {}) {
         }
         return jsonResponse(envelope(semantics))
       }
+    }
+
+    if (method === 'POST' && url.includes('/api/retrieval/evidence')) {
+      if (options.evidenceResponse) return await options.evidenceResponse(body)
+      if (options.evidenceStatus && options.evidenceStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.evidenceStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.evidenceStatus,
+        )
+      }
+      return jsonResponse(envelope(options.evidenceBundle ?? null))
+    }
+    if (method === 'GET' && url.includes('/api/retrieval/traces/')) {
+      if (options.traceResponse) return await options.traceResponse()
+      if (options.traceStatus && options.traceStatus !== 200) {
+        return jsonResponse(
+          { code: String(options.traceStatus), title: 'Error', detail: 'server detail text' },
+          options.traceStatus,
+        )
+      }
+      return jsonResponse(envelope(options.trace ?? null))
     }
 
     return jsonResponse({ message: 'not found' }, 404)

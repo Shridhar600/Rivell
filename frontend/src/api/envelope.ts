@@ -73,6 +73,17 @@ export function readOptionalNullableNumber(
   return value
 }
 
+export function readOptionalNullableBoolean(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): boolean | null {
+  const value = source[key]
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'boolean') throw malformed(what)
+  return value
+}
+
 export function readOptionalBoolean(
   source: Record<string, unknown>,
   key: string,
@@ -120,6 +131,21 @@ export function readStringMap(
     throw malformed(what)
   }
   return Object.fromEntries(entries) as Record<string, string>
+}
+
+export function readBooleanMap(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): Record<string, boolean> {
+  const value = source[key]
+  if (value === null || value === undefined) return {}
+  if (typeof value !== 'object' || Array.isArray(value)) throw malformed(what)
+  const entries = Object.entries(value)
+  if (entries.some(([, entry]) => typeof entry !== 'boolean')) {
+    throw malformed(what)
+  }
+  return Object.fromEntries(entries) as Record<string, boolean>
 }
 
 export function readNumberMap(

@@ -391,6 +391,21 @@ describe('clause semantics', () => {
       within(detail).getByRole('heading', { name: 'Schedule A — Services' }),
     ).toBeInTheDocument()
     expect(within(detail).getByText('Schedule')).toBeInTheDocument()
+    expect(
+      within(detail).queryByRole('link', { name: 'Inspect evidence' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers evidence inspection for clauses', async () => {
+    stubContractApi()
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const detail = document.querySelector('.clause-detail') as HTMLElement
+
+    expect(
+      within(detail).getByRole('link', { name: 'Inspect evidence' }),
+    ).toHaveAttribute('href', '/reviews/c1/evidence?clause=node-6')
   })
 
   it('rejects a blank numeric fact value before sending it', async () => {

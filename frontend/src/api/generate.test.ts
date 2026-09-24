@@ -66,6 +66,10 @@ describe('generated OpenAPI client workflow', () => {
   })
 
   it('exposes M2 knowledge paths from generated schema', () => {
+    expect('/api/retrieval/evidence' satisfies keyof paths).toBe('/api/retrieval/evidence')
+    expect('/api/retrieval/traces/{id}' satisfies keyof paths).toBe(
+      '/api/retrieval/traces/{id}',
+    )
     expect('/api/knowledge/artifacts' satisfies keyof paths).toBe(
       '/api/knowledge/artifacts',
     )

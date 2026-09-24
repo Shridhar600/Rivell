@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/retrieval/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Build one evidence bundle for a reviewed clause */
+        post: operations["build"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/publications": {
         parameters: {
             query?: never;
@@ -226,6 +243,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/retrieval/traces/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect one persisted retrieval trace */
+        get: operations["trace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/publications/{id}": {
         parameters: {
             query?: never;
@@ -417,6 +451,114 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        EvidenceBuildRequest: {
+            /** Format: uuid */
+            contractId: string;
+            /** Format: int32 */
+            versionNumber: number;
+            /** Format: uuid */
+            clauseId: string;
+        };
+        ApiResultEvidenceBundleResponse: {
+            data?: components["schemas"]["EvidenceBundleResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ApplicabilityScopeResponse: {
+            contractPackKey?: string;
+            declaredContractTypes?: string[];
+            partyPerspective?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+            /** Format: date */
+            effectiveFrom?: string;
+            /** Format: date */
+            effectiveTo?: string;
+        };
+        EvidenceBundleResponse: {
+            /** Format: uuid */
+            bundleId?: string;
+            request?: components["schemas"]["EvidenceRequestSummary"];
+            items?: components["schemas"]["EvidenceItemResponse"][];
+            sufficiency?: string;
+            /** Format: uuid */
+            traceId?: string;
+            degradationWarnings?: string[];
+        };
+        EvidenceItemResponse: {
+            /** Format: uuid */
+            evidenceId?: string;
+            authorityClass?: string;
+            sourceType?: string;
+            /** Format: uuid */
+            sourceArtifactId?: string;
+            /** Format: uuid */
+            sourceCandidateId?: string;
+            /** Format: uuid */
+            sourceContractVersionId?: string;
+            /** Format: uuid */
+            sourceClauseId?: string;
+            legalConcept?: string;
+            text?: string;
+            policyFacts?: components["schemas"]["PolicyFactsResponse"];
+            contractFacts?: components["schemas"]["LegalFact"][];
+            retrievalReason?: string;
+            laneInfo?: components["schemas"]["LaneInfoResponse"];
+            semanticAssessment?: components["schemas"]["SemanticAssessmentResponse"];
+            policyCompatibility?: string;
+            provenanceNodeIds?: string[];
+            /** Format: uuid */
+            publicationId?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
+            applicabilityScope?: components["schemas"]["ApplicabilityScopeResponse"];
+        };
+        EvidenceRequestSummary: {
+            purpose?: string;
+            legalConcept?: string;
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: int32 */
+            versionNumber?: number;
+            /** Format: uuid */
+            clauseId?: string;
+            effectiveOn?: string;
+            /** Format: int64 */
+            knowledgePinPublicationNumber?: number;
+        };
+        LaneInfoResponse: {
+            /** Format: int32 */
+            lexicalRank?: number;
+            /** Format: int32 */
+            vectorRank?: number;
+            /** Format: int32 */
+            fusedRank?: number;
+            /** Format: double */
+            fusedScore?: number;
+        };
+        LegalFact: {
+            factSchema?: string;
+            /** Format: int32 */
+            schemaVersion?: number;
+            values?: {
+                [key: string]: string;
+            };
+        };
+        PolicyFactsResponse: {
+            positions?: string[];
+            requiresApproval?: boolean;
+            escalationTrigger?: string;
+        };
+        SemanticAssessmentResponse: {
+            judgments?: {
+                [key: string]: boolean;
+            };
+            decisionSpecId?: string;
+            /** Format: int32 */
+            decisionSpecVersion?: number;
+        };
         PublishRequest: {
             candidateIds?: string[];
             supersededCandidates?: {
@@ -839,7 +981,7 @@ export interface components {
             };
         };
         ConceptCorrection: {
-            /** @description Corrected primary concept; must be one of the clause's classified concepts */
+            /** @description Corrected primary concept as a LegalConcept name; any known LegalConcept is accepted (unknown names are rejected) and becomes the effective primary even if previously unclassified. null leaves the current correction unchanged; blank clears the concept correction */
             primary: string;
         };
         ReviewProfileInput: {
@@ -865,6 +1007,49 @@ export interface components {
         SystemStatusResponse: {
             service?: string;
             status?: string;
+        };
+        ApiResultRetrievalTraceResponse: {
+            data?: components["schemas"]["RetrievalTraceResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        RejectedEvidenceResponse: {
+            /** Format: uuid */
+            candidateId?: string;
+            stage?: string;
+            reason?: string;
+        };
+        RetrievalTraceResponse: {
+            /** Format: uuid */
+            id?: string;
+            purpose?: string;
+            request?: {
+                [key: string]: unknown;
+            };
+            stages?: {
+                [key: string]: components["schemas"]["StageSummaryResponse"];
+            };
+            selectedEvidenceIds?: string[];
+            rejectedEvidence?: components["schemas"]["RejectedEvidenceResponse"][];
+            degradation?: string[];
+            stageTimings?: {
+                [key: string]: number;
+            };
+            modelVersions?: {
+                [key: string]: string;
+            };
+            /** Format: int64 */
+            knowledgePinPublicationNumber?: number;
+        };
+        StageSummaryResponse: {
+            stage?: string;
+            /** Format: int32 */
+            candidateCount?: number;
+            candidateIds?: string[];
+            candidateRanks?: number[];
+            executionIds?: string[];
         };
         ApiResultListPublicationView: {
             data?: components["schemas"]["PublicationView"][];
@@ -1065,6 +1250,57 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    build: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvidenceBuildRequest"];
+            };
+        };
+        responses: {
+            /** @description Bundle built */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultEvidenceBundleResponse"];
+                };
+            };
+            /** @description Malformed request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown contract or clause */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Enrichment not READY */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     listPublications: {
         parameters: {
             query?: never;
@@ -1725,6 +1961,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiResultSystemStatusResponse"];
+                };
+            };
+        };
+    };
+    trace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trace detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultRetrievalTraceResponse"];
+                };
+            };
+            /** @description Unknown trace */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };

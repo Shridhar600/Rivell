@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router'
 import { AppShell } from '../components/AppShell'
 import { ContractPage } from '../routes/ContractPage'
+import { EvidenceInspectorPage } from '../routes/EvidenceInspectorPage'
 import { KnowledgeArtifactPage } from '../routes/KnowledgeArtifactPage'
 import { KnowledgeNewPage } from '../routes/KnowledgeNewPage'
 import { KnowledgePage } from '../routes/KnowledgePage'
@@ -16,6 +17,7 @@ export const appRoutes = [
       { index: true, element: <Navigate to="/reviews" replace /> },
       { path: 'reviews', element: <ReviewsPage /> },
       { path: 'reviews/:contractId', element: <ContractPage /> },
+      { path: 'reviews/:contractId/evidence', element: <EvidenceInspectorPage /> },
       { path: 'knowledge', element: <KnowledgePage /> },
       { path: 'knowledge/new', element: <KnowledgeNewPage /> },
       { path: 'knowledge/artifacts/:artifactId', element: <KnowledgeArtifactPage /> },

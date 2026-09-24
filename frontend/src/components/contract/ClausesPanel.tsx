@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import type { SemanticClause } from '../../api/semantics'
 import { useCorrectClauseConcept } from '../../api/semantics'
 import {
@@ -133,6 +134,14 @@ function ClauseDetail({
         >
           View clause in document
         </button>
+        {clause.regionKind === 'CLAUSE' ? (
+          <Link
+            className="link-button"
+            to={`/reviews/${contractId}/evidence?clause=${clause.headingNodeId}`}
+          >
+            Inspect evidence
+          </Link>
+        ) : null}
       </div>
       <div className="clause-detail__concepts">
         <h4>Concepts</h4>
