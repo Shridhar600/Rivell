@@ -46,6 +46,10 @@ class AuthorityAwareEvidenceFlowIT {
         registry.add("rivell.storage.local.root",
                 () -> "target/test-documents/" + UUID.randomUUID());
         registry.add("rivell.retrieval.indexing-enabled", () -> "true");
+        registry.add("rivell.intelligence.embeddings.api-key", () -> "fake-key");
+        registry.add("rivell.intelligence.embeddings.provider", () -> "fake");
+        registry.add("rivell.intelligence.embeddings.model", () -> "fake-embedding-model");
+        registry.add("rivell.intelligence.embeddings.dimensions", () -> "8");
     }
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -89,6 +93,16 @@ class AuthorityAwareEvidenceFlowIT {
     }
 
     @TestConfiguration(proxyBeanMethods = false)
+    static class FakeEmbeddingConfiguration {
+
+        @Bean
+        @Primary
+        com.rivell.workbench.intelligence.EmbeddingProvider fakeEmbeddingProvider() {
+            return new FakeEmbeddingProvider();
+        }
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
     static class MutableIdentityConfiguration {
 
         @Bean
@@ -125,10 +139,29 @@ class AuthorityAwareEvidenceFlowIT {
     @Autowired
     org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
 
+    @Autowired
+    com.rivell.workbench.contracts.ContractIngestionService contractIngestionService;
+
+    @Autowired
+    com.rivell.workbench.contracts.ContractEnrichmentService enrichmentService;
+
     @BeforeEach
     void freshOrganization() {
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), UUID.randomUUID(), java.util.Set.of("ADMIN")));
+    }
+
+    private EvidenceRequest subjectRequest(M6EvidenceCorpus.Corpus corpus) {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var clauseId = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow().id();
+        return EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
+                LocalDate.of(2026, 9, 24), KnowledgePin.at(corpus.latestPublicationNumber()));
     }
 
     @Test
@@ -136,21 +169,7 @@ class AuthorityAwareEvidenceFlowIT {
         var organizationId = identityProvider.currentIdentity().organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
 
-        var request = EvidenceRequest.forClauseReview(
-                organizationId,
-                LegalConcept.LIMITATION_OF_LIABILITY,
-                corpus.contract().contractId(),
-                1,
-                corpus.semantics().clauses().stream()
-                        .filter(clause -> clause.primaryConcept()
-                                .isPresent()
-                                && clause.primaryConcept().get()
-                                        == LegalConcept.LIMITATION_OF_LIABILITY)
-                        .findFirst().orElseThrow().id(),
-                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
-                M6EvidenceCorpus.msaProfile(),
-                LocalDate.of(2026, 9, 24),
-                KnowledgePin.at(corpus.latestPublicationNumber()));
+        var request = subjectRequest(corpus);
 
         var bundle = evidenceService.build(request);
 
@@ -221,15 +240,149 @@ class AuthorityAwareEvidenceFlowIT {
                 .list().get(0);
         assertThat(indexedRows).isGreaterThan(0);
 
-        // embedding generation is unconfigured in this test environment: rows stay
-        // lexically searchable while the vector lane is honestly not-ready
+        // every indexed row carries the fake provider's embedding (deterministic
+        // geometry through real pgvector persistence)
         var vectorReady = jdbcClient.sql(
                         "select count(*) from retrieval_evidence_index"
                                 + " where organization_id = ? and embedding_index_ready")
                 .param(organizationId)
                 .query(Integer.class)
                 .list().get(0);
-        assertThat(vectorReady).isEqualTo(0);
+        assertThat(vectorReady).isEqualTo(indexedRows);
+    }
+
+    private com.rivell.workbench.contracts.ContractIngestionResult ingestAndEnrichMsa() {
+        try {
+            var bytes = getClass().getClassLoader()
+                    .getResourceAsStream("fixtures/m5-msa-services.docx").readAllBytes();
+            var ingested = contractIngestionService.ingest("m5-msa-services.docx",
+                    com.rivell.workbench.contracts.ContractIngestionService.DOCX_CONTENT_TYPE,
+                    new java.io.ByteArrayInputStream(bytes));
+            var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                    M6EvidenceCorpus.msaProfile());
+            if (semantics.enrichmentStatus()
+                    != com.rivell.workbench.contracts.EnrichmentStatus.READY) {
+                throw new IllegalStateException("MSA fixture did not enrich READY");
+            }
+            return ingested;
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private java.util.UUID contractClauseId(
+            com.rivell.workbench.contracts.ContractIngestionResult contract) {
+        var semantics = enrichmentService.getSemantics(contract.contractId(), 1);
+        return semantics.clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow().id();
+    }
+
+    @Test
+    void hybridPrecedentDiscoveryCombinesLexicalAndVectorLanesDeterministically() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var bundle = evidenceService.build(subjectRequest(corpus));
+
+        var precedents = bundle.precedentItems();
+        assertThat(precedents).isNotEmpty();
+
+        // the strongly relevant precedent tops the fusion: it is present in both
+        // lanes near the top, and the fusion is deterministic
+        var top = precedents.get(0);
+        assertThat(top.text()).contains("The total liability of Supplier shall not exceed");
+        assertThat(top.laneInfo().fusedRank()).isEqualTo(1);
+        assertThat(top.laneInfo().vectorRank()).isEqualTo(1);
+        assertThat(top.authorityClass()).isEqualTo(AuthorityClass.PRECEDENT);
+
+        // vector-strong: the paraphrase ranks high in the vector lane even though its
+        // lexical overlap is weak (only the shared actor word)
+        var paraphrase = precedents.stream()
+                .filter(item -> item.text().contains("overall exposure for damages"))
+                .findFirst().orElseThrow();
+        assertThat(paraphrase.laneInfo().vectorRank()).isNotNull();
+        assertThat(paraphrase.laneInfo().vectorRank())
+                .isLessThan(paraphrase.laneInfo().lexicalRank());
+
+        // lexical-first: the exact-terminology fixture tops the lexical lane even though
+        // its vector geometry is deliberately unrelated
+        var lexicalOnly = precedents.stream()
+                .filter(item -> item.text().contains("as measured at the time of the claim"))
+                .findFirst().orElseThrow();
+        assertThat(lexicalOnly.laneInfo().lexicalRank()).isEqualTo(1);
+        assertThat(lexicalOnly.laneInfo().vectorRank())
+                .isGreaterThan(paraphrase.laneInfo().vectorRank());
+
+        // bounded reranking executed through the versioned spec with honest judgments
+        assertThat(top.semanticAssessment()).isNotNull();
+        assertThat(top.semanticAssessment().decisionSpecId())
+                .isEqualTo("precedent-relevance");
+
+        // all precedent items carry canonical provenance anchors
+        for (var item : precedents) {
+            assertThat(item.provenanceNodeIds()).isNotEmpty();
+        }
+    }
+
+    @Test
+    void policyIncompatiblePrecedentStaysEvidenceAndIsFlaggedHonestly() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var bundle = evidenceService.build(subjectRequest(corpus));
+
+        var incompatible = bundle.precedentItems().stream()
+                .filter(item -> item.text().contains("uncapped and unlimited"))
+                .findFirst().orElseThrow();
+        // discovered by the lanes, flagged by compatibility — never promoted to policy
+        assertThat(incompatible.authorityClass()).isEqualTo(AuthorityClass.PRECEDENT);
+        assertThat(incompatible.policyCompatibility()).isEqualTo(PolicyCompatibility.INCOMPATIBLE);
+        // policy items still resolve only from the published playbook rule
+        assertThat(bundle.policyItems()).hasSize(1);
+        assertThat(bundle.policyItems().get(0).authorityClass()).isEqualTo(AuthorityClass.POLICY);
+    }
+
+    @Test
+    void missingPolicyKeepsPrecedentEvidenceWithoutPromotingItToPolicy() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        // fresh organization: publish only precedent knowledge, no playbook
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.PRECEDENT_RELEVANT,
+                M6EvidenceCorpus.MSA_US_CUSTOMER, null);
+        var contract = ingestAndEnrichMsa();
+        var request = EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                contract.contractId(), 1,
+                contractClauseId(contract), M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
+                M6EvidenceCorpus.msaProfile(), LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
+        var bundle = evidenceService.build(request);
+
+        assertThat(bundle.sufficiency()).isEqualTo(EvidenceSufficiency.POLICY_MISSING);
+        assertThat(bundle.policyItems()).isEmpty();
+        // precedent evidence still exists — it is evidence, never policy
+        assertThat(bundle.precedentItems()).isNotEmpty();
+        // compatibility is honestly NOT_ASSESSED without applicable policy
+        assertThat(bundle.precedentItems())
+                .allSatisfy(item -> assertThat(item.policyCompatibility())
+                        .isEqualTo(PolicyCompatibility.NOT_ASSESSED));
+    }
+
+    @Test
+    void ambiguousPolicyIsKeptAmbiguousWithoutSimilarityArbitration() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_AMBIGUOUS,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var contract = ingestAndEnrichMsa();
+        var request = EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                contract.contractId(), 1, contractClauseId(contract),
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
+        var bundle = evidenceService.build(request);
+
+        assertThat(bundle.policyItems()).hasSize(2);
+        assertThat(bundle.sufficiency()).isEqualTo(EvidenceSufficiency.AMBIGUOUS_POLICY);
     }
 
     @Test

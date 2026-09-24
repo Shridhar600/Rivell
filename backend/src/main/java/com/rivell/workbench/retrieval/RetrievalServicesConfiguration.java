@@ -25,8 +25,12 @@ class RetrievalServicesConfiguration {
     PrecedentLane precedentLane(
             StructuredPolicyResolver resolver,
             KnowledgeQueryService knowledgeQueries,
+            RetrievalRepository retrievalRepository,
+            EmbeddingService embeddingService,
+            SemanticDecisionService decisionService,
             RetrievalProperties properties) {
-        return new PrecedentLane(resolver, knowledgeQueries, properties);
+        return new PrecedentLane(resolver, knowledgeQueries, retrievalRepository,
+                embeddingService, decisionService, properties);
     }
 
     @Bean

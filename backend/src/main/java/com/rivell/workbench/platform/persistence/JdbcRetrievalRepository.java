@@ -192,65 +192,6 @@ class JdbcRetrievalRepository implements RetrievalRepository {
     }
 
     @Override
-    public List<EvidenceIndexRow> findHybridCandidates(HybridQuery query) {
-        var conditions = new ArrayList<String>();
-        var params = new LinkedHashMap<String, Object>();
-        conditions.add("organization_id = :organizationId");
-        params.put("organizationId", query.organizationId());
-        conditions.add("candidate_type = :candidateType");
-        params.put("candidateType", query.candidateType());
-        conditions.add("publication_number <= :asOf");
-        conditions.add("(superseded_at_publication is null or superseded_at_publication > :asOf)");
-        params.put("asOf", query.asOfPublicationNumber());
-        if (query.legalConceptKey() != null) {
-            conditions.add("legal_concept_key = :legalConceptKey");
-            params.put("legalConceptKey", query.legalConceptKey());
-        }
-        if (query.contractPackKey() != null) {
-            conditions.add("(contract_pack_key is null or regexp_replace(lower(contract_pack_key), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:contractPackKey), '[^a-z0-9]', '', 'g'))");
-            params.put("contractPackKey", query.contractPackKey());
-        }
-        if (query.contractType() != null) {
-            conditions.add("(declared_contract_types = '[]'::jsonb"
-                    + " or exists (select 1 from jsonb_array_elements_text(declared_contract_types)"
-                    + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = regexp_replace(lower(:contractType), '[^a-z0-9]', '', 'g')))");
-            params.put("contractType", query.contractType());
-        }
-        if (query.partyPerspective() != null) {
-            conditions.add("(party_perspective is null or regexp_replace(lower(party_perspective), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:partyPerspective), '[^a-z0-9]', '', 'g'))");
-            params.put("partyPerspective", query.partyPerspective());
-        }
-        if (query.paperSource() != null) {
-            conditions.add("(paper_source is null or regexp_replace(lower(paper_source), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:paperSource), '[^a-z0-9]', '', 'g'))");
-            params.put("paperSource", query.paperSource());
-        }
-        if (query.jurisdiction() != null) {
-            conditions.add("(jurisdiction is null or regexp_replace(lower(jurisdiction), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:jurisdiction), '[^a-z0-9]', '', 'g'))");
-            params.put("jurisdiction", query.jurisdiction());
-        }
-        if (query.effectiveOn() != null) {
-            conditions.add("(effective_from is null or effective_from <= :effectiveOn)");
-            conditions.add("(effective_to is null or effective_to >= :effectiveOn)");
-            params.put("effectiveOn", java.sql.Date.valueOf(query.effectiveOn()));
-        }
-        var sql = "select * from retrieval_evidence_index where "
-                + String.join(" and ", conditions)
-                + " order by publication_number, candidate_id limit :limit";
-        var statement = jdbcClient.sql(sql);
-        for (var entry : params.entrySet()) {
-            statement = statement.param(entry.getKey(), entry.getValue());
-        }
-        return statement
-                .param("limit", query.limit())
-                .query((rs, ignored) -> mapRow(rs))
-                .list();
-    }
-
-    @Override
     public List<CandidateHit> findLexicalCandidates(
             UUID organizationId, List<UUID> candidateIds, String lexicalQuery, int limit) {
         if (candidateIds.isEmpty()) {
@@ -259,13 +200,13 @@ class JdbcRetrievalRepository implements RetrievalRepository {
         var rows = jdbcClient.sql("""
                         select candidate_id,
                                ts_rank_cd(lexical_tsvector,
-                                          websearch_to_tsquery(lexical_config, :lexicalQuery))
+                                          websearch_to_tsquery(cast(lexical_config as regconfig), :lexicalQuery))
                                    as score
                         from retrieval_evidence_index
                         where organization_id = :organizationId
                           and candidate_id = any(:candidateIds)
                           and lexical_tsvector
-                              @@ websearch_to_tsquery(lexical_config, :lexicalQuery)
+                              @@ websearch_to_tsquery(cast(lexical_config as regconfig), :lexicalQuery)
                         order by score desc, candidate_id
                         limit :limit
                         """)
@@ -304,7 +245,7 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 .param("queryVector", queryVectorLiteral)
                 .param("limit", limit)
                 .query((rs, ignored) -> Map.entry(
-                        rs.getObject("candidate_id", UUID.class), rs.getDouble("score")))
+                        rs.getObject("candidate_id", UUID.class), rs.getDouble("distance")))
                 .list();
         return ranked(rows);
     }

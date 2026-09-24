@@ -45,9 +45,6 @@ CREATE TABLE retrieval_evidence_index (
 CREATE INDEX idx_retrieval_index_org ON retrieval_evidence_index (organization_id, candidate_id);
 CREATE INDEX idx_retrieval_index_lexical ON retrieval_evidence_index
     USING GIN (lexical_tsvector);
-CREATE INDEX idx_retrieval_index_visibility ON retrieval_evidence_index
-    (organization_id, candidate_type, publication_number)
-    WHERE superseded_at_publication IS NULL;
 CREATE INDEX idx_retrieval_index_embedding_model ON retrieval_evidence_index
     (organization_id, embedding_model)
     WHERE embedding_index_ready;

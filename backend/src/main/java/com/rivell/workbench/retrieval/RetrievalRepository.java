@@ -26,9 +26,6 @@ public interface RetrievalRepository {
 
     Optional<RetrievalTrace> findTrace(UUID organizationId, UUID traceId);
 
-    /** Bounded, scope-filtered index rows eligible for candidate generation. */
-    List<EvidenceIndexRow> findHybridCandidates(HybridQuery query);
-
     /** Lexical candidates among narrowed ids: FTS match + deterministic rank order. */
     List<CandidateHit> findLexicalCandidates(
             UUID organizationId, List<UUID> candidateIds, String lexicalQuery, int limit);
@@ -67,24 +64,6 @@ public interface RetrievalRepository {
             String jurisdiction,
             LocalDate effectiveFrom,
             LocalDate effectiveTo) {
-    }
-
-    /**
-     * Scope filter for hybrid candidate generation: every present dimension narrows;
-     * knowledge-side null dimensions are wildcards (Architecture Decision #8.1).
-     */
-    record HybridQuery(
-            UUID organizationId,
-            long asOfPublicationNumber,
-            String candidateType,
-            String legalConceptKey,
-            String contractPackKey,
-            String contractType,
-            String partyPerspective,
-            String paperSource,
-            String jurisdiction,
-            LocalDate effectiveOn,
-            int limit) {
     }
 
     /** Idempotent per-model partial HNSW index over the dimensionless vector column. */

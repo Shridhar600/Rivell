@@ -193,6 +193,15 @@ public final class M6EvidenceCorpus {
             KnowledgeCandidate rejected) {
     }
 
+    /** Publishes one fixture for ad-hoc scenario corpora (missing/ambiguous policy). */
+    public List<KnowledgeCandidate> publishAll(UUID organizationId, Fixture fixture,
+            ArtifactManifest manifest, UUID supersededId) {
+        var published = new LinkedHashMap<Fixture, List<KnowledgeCandidate>>();
+        var publishedAt = new LinkedHashMap<Fixture, Long>();
+        publish(published, publishedAt, fixture, manifest, supersededId);
+        return published.get(fixture);
+    }
+
     private void publish(
             Map<Fixture, List<KnowledgeCandidate>> published,
             Map<Fixture, Long> publishedAt,
