@@ -13,6 +13,10 @@ public interface RetrievalRepository {
 
     void upsertIndexRow(EvidenceIndexRow row);
 
+    /** Candidate ids among the given set whose current index row already has an embedding. */
+    java.util.Set<UUID> findEmbeddingReadyIds(
+            UUID organizationId, List<UUID> candidateIds, String indexVersion);
+
     void persistEmbedding(UUID organizationId, UUID candidateId, String contentHash,
             String indexVersion, String embeddingModel, int embeddingDims,
             String vectorLiteral);

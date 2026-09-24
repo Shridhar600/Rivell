@@ -23,10 +23,10 @@ CREATE TABLE retrieval_evidence_index (
     embedding_model TEXT,
     embedding_dims INTEGER CHECK (embedding_dims IS NULL OR embedding_dims > 0),
     embedding_index_ready BOOLEAN NOT NULL DEFAULT FALSE,
-    -- snapshot visibility: the publication that made the candidate searchable, and
-    -- the publication that superseded it (null while still current). A pinned
-    -- retrieval sees a row iff publication_number <= pin AND
-    -- (superseded_at_publication IS NULL OR superseded_at_publication > pin).
+    -- the publication that made the candidate searchable. Index rows are never
+    -- deleted; retrieval visibility (pin as-of + supersession chains) is resolved
+    -- by the knowledge-side as-of query that narrows candidate ids before the
+    -- index is consulted.
     publication_number BIGINT NOT NULL CHECK (publication_number >= 1),
     -- scope metadata denormalized from the published candidate at index time
     contract_pack_key TEXT,

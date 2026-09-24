@@ -55,7 +55,8 @@ public record RetrievalTrace(
             String stage,
             int candidateCount,
             List<String> candidateIds,
-            List<Integer> candidateRanks) {
+            List<Integer> candidateRanks,
+            List<String> executionIds) {
 
         public StageSummary {
             if (stage == null || stage.isBlank()) {
@@ -63,6 +64,7 @@ public record RetrievalTrace(
             }
             candidateIds = candidateIds == null ? List.of() : List.copyOf(candidateIds);
             candidateRanks = candidateRanks == null ? List.of() : List.copyOf(candidateRanks);
+            executionIds = executionIds == null ? List.of() : List.copyOf(executionIds);
         }
     }
 

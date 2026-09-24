@@ -197,16 +197,6 @@ class AuthorityAwareEvidenceFlowIT {
         var subject = bundle.currentContractItems().get(0);
         assertThat(subject.sourceClauseId()).isEqualTo(request.clauseId());
         assertThat(subject.contractFacts()).isNotEmpty();
-        System.out.println("REL-DEBUG subject heading=" + corpus.semantics().clauses().stream()
-                .filter(c -> c.id().equals(request.clauseId())).findFirst().orElseThrow().headingNodeId());
-        System.out.println("REL-DEBUG relationshipCount=" + corpus.semantics().relationships().size());
-        corpus.semantics().relationships().forEach(relationship -> System.out.println(
-                "REL-DEBUG type=" + relationship.type()
-                        + " source=" + relationship.sourceRegionNodeId()
-                        + " target=" + relationship.targetRegionNodeId()));
-        System.out.println("REL-DEBUG referenceCount=" + corpus.semantics().references().size()
-                + " resolved=" + corpus.semantics().references().stream()
-                        .filter(com.rivell.workbench.contracts.ContractReference::resolved).count());
         // semantic relationships of the subject clause surface as related-clause evidence
         assertThat(bundle.currentContractItems().size()).isGreaterThan(1);
         assertThat(bundle.currentContractItems()).anySatisfy(item ->
@@ -390,7 +380,9 @@ class AuthorityAwareEvidenceFlowIT {
         var organizationId = identityProvider.currentIdentity().organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         // additional out-of-scope fixtures in the same org: UK policy, UK library,
-        // and a UK-manifested precedent of the same concept
+        // and a UK-manifested precedent of the same concept. The request resolves
+        // the LATEST pin so these rows are pin-visible — exclusion must come from
+        // the jurisdiction scope filters, not from publication visibility.
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_UK,
                 M6EvidenceCorpus.ukManifest(), null);
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.LIBRARY_UK,
@@ -398,7 +390,15 @@ class AuthorityAwareEvidenceFlowIT {
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.PRECEDENT_LEXICAL,
                 M6EvidenceCorpus.ukManifest(), null);
 
-        var bundle = evidenceService.build(subjectRequest(corpus));
+        var clauseId = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow().id();
+        var bundle = evidenceService.build(EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST));
         var jurisdictionUS = M6EvidenceCorpus.msaProfile().jurisdiction().name();
 
         assertThat(bundle.policyItems()).hasSize(1);

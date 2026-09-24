@@ -62,18 +62,31 @@ public class EvidenceService {
             throw new UnauthorizedEvidenceAccessException(identity.userId());
         }
         var startedAt = clock.instant();
+        var stageStart = startedAt;
+        var stageTimings = new LinkedHashMap<String, Long>();
         var asOfPublication = resolveAsOf(request);
+        stageTimings.put("pinResolution",
+                java.time.Duration.between(stageStart, clock.instant()).toMillis());
+        stageStart = clock.instant();
         var policyResolution = resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE),
                 asOfPublication);
         var draftingResolution = resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT),
                 asOfPublication);
+        stageTimings.put("structured",
+                java.time.Duration.between(stageStart, clock.instant()).toMillis());
+        stageStart = clock.instant();
         var policyContext = new PolicyContext(
                 policyResolution.candidates().size() == 1,
                 policyResolution.candidates().stream()
                         .map(KnowledgeCandidate::effectiveContentText)
                         .toList());
         var precedentOutcome = precedentLane.gather(request, asOfPublication, policyContext);
+        stageTimings.put("precedent",
+                java.time.Duration.between(stageStart, clock.instant()).toMillis());
+        stageStart = clock.instant();
         var currentOutcome = currentContractLane.gather(request);
+        stageTimings.put("currentContract",
+                java.time.Duration.between(stageStart, clock.instant()).toMillis());
         var sufficiency = sufficiency(policyResolution, draftingResolution,
                 precedentOutcome, currentOutcome, asOfPublication);
         var policyItems = items(policyResolution, AuthorityClass.POLICY,
@@ -83,14 +96,24 @@ public class EvidenceService {
         var bundle = new EvidenceBundle(UUID.randomUUID(), request,
                 policyItems, draftingItems,
                 precedentOutcome.items(), currentOutcome.items(), List.of(),
-                sufficiency, null);
+                sufficiency, degradationOf(precedentOutcome, currentOutcome), null);
         var traceId = persistTrace(request, asOfPublication, policyResolution,
                 draftingResolution, precedentOutcome, currentOutcome, bundle,
-                startedAt);
+                startedAt, stageTimings);
         return new EvidenceBundle(bundle.id(), request, bundle.policyItems(),
                 bundle.approvedDraftingItems(), bundle.precedentItems(),
                 bundle.currentContractItems(), bundle.externalReferenceItems(),
-                bundle.sufficiency(), traceId);
+                bundle.sufficiency(), bundle.degradationWarnings(), traceId);
+    }
+
+    private List<String> degradationOf(
+            PrecedentLane.Outcome precedent, CurrentContractLane.Outcome current) {
+        var degradation = new java.util.LinkedHashSet<String>();
+        degradation.addAll(precedent.degradation());
+        if (current.degradation() != null) {
+            degradation.add(current.degradation());
+        }
+        return List.copyOf(degradation);
     }
 
     private java.util.UUID persistTrace(
@@ -101,7 +124,8 @@ public class EvidenceService {
             PrecedentLane.Outcome precedent,
             CurrentContractLane.Outcome current,
             EvidenceBundle bundle,
-            Instant startedAt) {
+            Instant startedAt,
+            Map<String, Long> stageTimings) {
         var stages = new LinkedHashMap<String, RetrievalTrace.StageSummary>();
         stages.put("policy", stage("policy", policy.candidates().size(), ids(policy)));
         stages.put("drafting", stage("drafting", drafting.candidates().size(), ids(drafting)));
@@ -111,7 +135,7 @@ public class EvidenceService {
         stages.put("currentContract", new RetrievalTrace.StageSummary(
                 "currentContract", current.items().size(),
                 current.items().stream().map(item -> item.evidenceId().toString()).toList(),
-                List.of()));
+                List.of(), List.of()));
         var degradation = new java.util.LinkedHashSet<String>();
         degradation.addAll(precedent.degradation());
         if (current.degradation() != null) {
@@ -121,7 +145,8 @@ public class EvidenceService {
         for (var version : precedent.modelVersions()) {
             modelVersions.put(version, version);
         }
-        if (!embeddingService.modelIdentity().isBlank()) {
+        if (embeddingService.isConfigured()
+                && !embeddingService.modelIdentity().isBlank()) {
             modelVersions.put("embeddings", embeddingService.modelIdentity());
         }
         var traceId = java.util.UUID.randomUUID();
@@ -129,6 +154,8 @@ public class EvidenceService {
         for (var item : bundle.items()) {
             selected.add(item.evidenceId());
         }
+        var timings = new LinkedHashMap<>(stageTimings);
+        timings.put("totalMs", java.time.Duration.between(startedAt, clock.instant()).toMillis());
         repository.insertTrace(new RetrievalTrace(
                 traceId, request.organizationId(), request.contractId(),
                 request.versionNumber(), request.clauseId(),
@@ -138,8 +165,7 @@ public class EvidenceService {
                 selected,
                 precedent.rejected(),
                 List.copyOf(degradation),
-                Map.of("totalMs", java.time.Duration.between(startedAt, clock.instant())
-                        .toMillis()),
+                timings,
                 modelVersions,
                 request.knowledgePin(),
                 clock.instant()));
@@ -153,6 +179,19 @@ public class EvidenceService {
         map.put("effectiveOn", request.effectiveOn().toString());
         map.put("knowledgePin", request.knowledgePin().publicationNumber());
         map.put("resolvedAsOfPublication", asOfPublication);
+        var profile = request.reviewProfile();
+        if (profile != null) {
+            map.put("reviewProfile", Map.of(
+                    "contractType", profile.contractType() == null ? ""
+                            : profile.contractType().name(),
+                    "ourSideRole", profile.ourSideRole() == null ? ""
+                            : profile.ourSideRole().name(),
+                    "paperSource", profile.paperSource() == null ? ""
+                            : profile.paperSource().name(),
+                    "jurisdiction", profile.jurisdiction() == null ? ""
+                            : profile.jurisdiction().name()));
+        }
+        map.put("clauseText", request.clauseText());
         return map;
     }
 
@@ -164,7 +203,7 @@ public class EvidenceService {
 
     private RetrievalTrace.StageSummary stage(
             String name, int count, List<String> ids) {
-        return new RetrievalTrace.StageSummary(name, count, ids, List.of());
+        return new RetrievalTrace.StageSummary(name, count, ids, List.of(), List.of());
     }
 
     private long resolveAsOf(EvidenceRequest request) {

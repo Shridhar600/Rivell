@@ -504,13 +504,13 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         params.put("asOf", query.asOfPublicationNumber());
         var sql = "select c.* from knowledge_candidate c where "
                 + String.join(" and ", conditions)
-                + " order by c.created_at, c.id limit :limit";
+                + " order by c.created_at desc, c.id desc limit :limit";
         var statement = jdbcClient.sql(sql);
         for (var entry : params.entrySet()) {
             statement = statement.param(entry.getKey(), entry.getValue());
         }
         return statement
-                .param("limit", query.limit())
+                .param("limit", query.limit() + 1)
                 .query(this::mapCandidate)
                 .list();
     }

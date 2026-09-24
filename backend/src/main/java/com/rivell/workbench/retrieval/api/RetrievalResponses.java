@@ -88,6 +88,7 @@ public final class RetrievalResponses {
             Map<String, Object> request,
             Map<String, StageSummaryResponse> stages,
             List<UUID> selectedEvidenceIds,
+            List<RejectedEvidenceResponse> rejectedEvidence,
             List<String> degradation,
             Map<String, Long> stageTimings,
             Map<String, String> modelVersions,
@@ -97,7 +98,16 @@ public final class RetrievalResponses {
         public record StageSummaryResponse(
                 String stage,
                 int candidateCount,
-                List<String> candidateIds) {
+                List<String> candidateIds,
+                List<Integer> candidateRanks,
+                List<String> executionIds) {
+        }
+
+        @Schema(name = "RejectedEvidenceResponse")
+        public record RejectedEvidenceResponse(
+                UUID candidateId,
+                String stage,
+                String reason) {
         }
     }
 }

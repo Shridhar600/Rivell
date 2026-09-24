@@ -46,8 +46,6 @@ class RetrievalController {
             @ApiResponse(responseCode = "404", description = "Unknown contract or clause",
                     content = @Content(schema = @Schema(ref = "ErrorResponse"))),
             @ApiResponse(responseCode = "409", description = "Enrichment not READY",
-                    content = @Content(schema = @Schema(ref = "ErrorResponse"))),
-            @ApiResponse(responseCode = "503", description = "Intelligence unavailable",
                     content = @Content(schema = @Schema(ref = "ErrorResponse")))})
     @PostMapping("/evidence")
     @ResponseStatus(HttpStatus.OK)

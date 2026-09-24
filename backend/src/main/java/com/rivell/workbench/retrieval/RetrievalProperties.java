@@ -11,7 +11,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record RetrievalProperties(
         boolean indexingEnabled,
         String indexVersion,
-        int knowledgeCandidateLimit,
         int lexicalLimit,
         int vectorLimit,
         int fusionLimit,
@@ -22,9 +21,6 @@ public record RetrievalProperties(
     public RetrievalProperties {
         if (indexVersion == null || indexVersion.isBlank()) {
             indexVersion = INDEX_VERSION;
-        }
-        if (knowledgeCandidateLimit < 1) {
-            knowledgeCandidateLimit = 50;
         }
         if (lexicalLimit < 1) {
             lexicalLimit = 10;

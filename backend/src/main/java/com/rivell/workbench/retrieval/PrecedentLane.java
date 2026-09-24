@@ -66,6 +66,9 @@ public class PrecedentLane {
         }
         var ids = List.copyOf(byId.keySet());
         var degradation = new ArrayList<String>();
+        if (resolution.truncated()) {
+            degradation.add("STRUCTURED_LANE_TRUNCATED");
+        }
 
         var lexicalHits = repository.findLexicalCandidates(
                 request.organizationId(), ids,
@@ -91,14 +94,15 @@ public class PrecedentLane {
                 com.rivell.workbench.intelligence.DecisionExecution>();
         var reranked = rerank(request, fused, byId, rejected, degradation, modelVersions,
                 relevanceExecutions);
-        stages.add(stage("rerank", reranked.size(), idStrings(reranked), null));
+        stages.add(stageWithExecutions("rerank", reranked.size(), idStrings(reranked),
+                executionStrings(reranked, relevanceExecutions)));
 
         var compatibilities = assessCompatibility(request, reranked, byId, policyContext,
                 degradation, modelVersions, stages);
 
         var items = new ArrayList<EvidenceItem>();
         for (var candidateId : reranked) {
-            items.add(item(byId.get(candidateId), request, rankOf(lexicalHits, candidateId),
+            items.add(item(byId.get(candidateId), rankOf(lexicalHits, candidateId),
                     rankOf(vectorHits, candidateId), fusedHit(fused, candidateId),
                     compatibilities.getOrDefault(candidateId, PolicyCompatibility.NOT_ASSESSED),
                     relevanceExecutions.get(candidateId)));
@@ -116,6 +120,7 @@ public class PrecedentLane {
             List<String> modelVersions,
             List<RetrievalTrace.StageSummary> stages) {
         var assessed = new LinkedHashMap<UUID, PolicyCompatibility>();
+        var compatibilityExecutions = new ArrayList<String>();
         if (!policyContext.policyResolved()) {
             for (var candidateId : reranked) {
                 assessed.put(candidateId, PolicyCompatibility.NOT_ASSESSED);
@@ -129,6 +134,7 @@ public class PrecedentLane {
                         M6SemanticSpecs.precedentPolicyCompatibility(),
                         new M6SemanticStates.PolicyCompatibilityState(
                                 effectiveText(byId.get(candidateId)), policyContext.policyTexts()));
+                compatibilityExecutions.add(execution.executionId().toString());
                 var answer = execution.answers().get(M6SemanticSpecs.COMPATIBLE_WITH_POLICY);
                 if (!(answer instanceof com.rivell.workbench.intelligence.YesNoAnswer yesNo)) {
                     assessed.put(candidateId, PolicyCompatibility.UNKNOWN);
@@ -144,7 +150,9 @@ public class PrecedentLane {
                 degradation.add("COMPATIBILITY_UNAVAILABLE");
             }
         }
-        stages.add(stage("compatibility", assessedIds.size(), idStrings(assessedIds), null));
+        stages.add(new RetrievalTrace.StageSummary(
+                "compatibility", assessedIds.size(), idStrings(assessedIds),
+                List.of(), List.copyOf(compatibilityExecutions)));
         modelVersions.add("spec:" + M6SemanticSpecs.PRECEDENT_POLICY_COMPATIBILITY_SPEC);
         return assessed;
     }
@@ -194,6 +202,7 @@ public class PrecedentLane {
     private List<RetrievalRepository.CandidateHit> vectorHits(
             EvidenceRequest request, List<UUID> ids, List<String> degradation) {
         if (!embeddingService.isConfigured()) {
+            degradation.add("VECTOR_LANE_UNCONFIGURED");
             return List.of();
         }
         try {
@@ -211,7 +220,6 @@ public class PrecedentLane {
 
     private EvidenceItem item(
             KnowledgeCandidate candidate,
-            EvidenceRequest request,
             Integer lexicalRank,
             Integer vectorRank,
             RankFusion.FusedHit fused,
@@ -325,7 +333,27 @@ public class PrecedentLane {
 
     private RetrievalTrace.StageSummary stage(
             String name, int count, List<String> ids, List<Integer> ranks) {
-        return new RetrievalTrace.StageSummary(name, count, ids, ranks == null ? List.of() : ranks);
+        return new RetrievalTrace.StageSummary(
+                name, count, ids, ranks == null ? List.of() : ranks, List.of());
+    }
+
+    private RetrievalTrace.StageSummary stageWithExecutions(
+            String name, int count, List<String> ids, List<String> executionIds) {
+        return new RetrievalTrace.StageSummary(
+                name, count, ids, List.of(), executionIds == null ? List.of() : executionIds);
+    }
+
+    private List<String> executionStrings(
+            List<UUID> candidateIds,
+            Map<UUID, com.rivell.workbench.intelligence.DecisionExecution> executions) {
+        var ids = new ArrayList<String>();
+        for (var candidateId : candidateIds) {
+            var execution = executions.get(candidateId);
+            if (execution != null) {
+                ids.add(execution.executionId().toString());
+            }
+        }
+        return ids;
     }
 
     private RetrievalTrace.StageSummary hitStage(
@@ -337,7 +365,7 @@ public class PrecedentLane {
             ranks.add(hit.rank());
         }
         return new RetrievalTrace.StageSummary(
-                name, hits.size(), List.copyOf(ids), List.copyOf(ranks));
+                name, hits.size(), List.copyOf(ids), List.copyOf(ranks), List.of());
     }
 
     private RetrievalTrace.StageSummary fusionStage(List<RankFusion.FusedHit> fused) {
@@ -348,6 +376,6 @@ public class PrecedentLane {
             ranks.add(hit.fusedRank());
         }
         return new RetrievalTrace.StageSummary(
-                "fusion", fused.size(), List.copyOf(ids), List.copyOf(ranks));
+                "fusion", fused.size(), List.copyOf(ids), List.copyOf(ranks), List.of());
     }
 }

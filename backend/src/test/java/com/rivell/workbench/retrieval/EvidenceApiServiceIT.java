@@ -188,9 +188,7 @@ class EvidenceApiServiceIT {
         assertThat(response.traceId()).isNotNull();
 
         // no Finding/severity/violation/recommendation vocabulary in the product payload
-        var responseJson = com.fasterxml.jackson.databind.node.TextNode.valueOf("") == null
-                ? ""
-                : String.valueOf(response);
+        var responseJson = String.valueOf(response);
         for (var banned : new String[] {"finding", "severity", "violation",
                 "recommendation", "redline"}) {
             assertThat(responseJson.toLowerCase()).doesNotContain(banned);

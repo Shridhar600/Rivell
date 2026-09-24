@@ -71,16 +71,34 @@ public class EvidenceIndexService {
         if (texts.isEmpty() || !embeddingService.isConfigured()) {
             return;
         }
+        var pendingIds = new java.util.ArrayList<>(texts.keySet());
+        pendingIds.removeAll(repository.findEmbeddingReadyIds(
+                organizationId, pendingIds, properties.indexVersion()));
+        if (pendingIds.isEmpty()) {
+            return;
+        }
+        var textsToEmbed = new java.util.LinkedHashMap<UUID, String>();
+        for (var candidateId : pendingIds) {
+            textsToEmbed.put(candidateId, texts.get(candidateId));
+        }
         try {
-            var execution = embeddingService.embed(List.copyOf(texts.values()));
-            var candidates = List.copyOf(texts.keySet());
+            var execution = embeddingService.embed(List.copyOf(textsToEmbed.values()));
+            var candidates = List.copyOf(textsToEmbed.keySet());
+            var model = embeddingService.modelIdentity();
             for (int i = 0; i < candidates.size(); i++) {
                 var vector = execution.vectors().get(i);
-                ensureVectorIndex(vector.length);
-                repository.persistEmbedding(organizationId, candidates.get(i),
-                        sha256Hex(texts.get(candidates.get(i))), properties.indexVersion(),
-                        embeddingService.modelIdentity(), vector.length,
-                        VectorLiterals.of(vector));
+                if (i == 0) {
+                    ensureVectorIndex(vector.length);
+                }
+                try {
+                    repository.persistEmbedding(organizationId, candidates.get(i),
+                            sha256Hex(textsToEmbed.get(candidates.get(i))),
+                            properties.indexVersion(), model, vector.length,
+                            VectorLiterals.of(vector));
+                } catch (RuntimeException e) {
+                    log.warn("Embedding persistence failed for candidate {}: {}",
+                            candidates.get(i), e.toString());
+                }
             }
         } catch (SemanticDecisionException e) {
             // honest degradation: lexical stays searchable, vector stays not-ready
@@ -90,7 +108,9 @@ public class EvidenceIndexService {
 
     private KnowledgeCandidate indexCandidate(
             UUID organizationId, UUID candidateId, long publicationNumber) {
-        var candidate = knowledgeQueries.getCandidate(candidateId);
+        var candidate = knowledgeQueries.getCandidateForOrganization(organizationId, candidateId)
+                .orElseThrow(() -> new com.rivell.workbench.knowledge
+                        .KnowledgeCandidateNotFoundException(candidateId));
         if (!candidate.isPublished() || !INDEXABLE_TYPES.contains(candidate.candidateType())) {
             return null;
         }

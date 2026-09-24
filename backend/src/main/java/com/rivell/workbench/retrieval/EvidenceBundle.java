@@ -19,6 +19,7 @@ public record EvidenceBundle(
         List<EvidenceItem> currentContractItems,
         List<EvidenceItem> externalReferenceItems,
         EvidenceSufficiency sufficiency,
+        List<String> degradationWarnings,
         UUID traceId) {
 
     public EvidenceBundle {
@@ -30,6 +31,7 @@ public record EvidenceBundle(
         currentContractItems = items(currentContractItems);
         externalReferenceItems = items(externalReferenceItems);
         Objects.requireNonNull(sufficiency, "sufficiency");
+        degradationWarnings = degradationWarnings == null ? List.of() : List.copyOf(degradationWarnings);
     }
 
     private static List<EvidenceItem> items(List<EvidenceItem> source) {

@@ -32,8 +32,27 @@ class JdbcRetrievalRepository implements RetrievalRepository {
     }
 
     @Override
-    public void upsertIndexRow(EvidenceIndexRow row) {
-        jdbcClient.sql("""
+    public java.util.Set<UUID> findEmbeddingReadyIds(
+            UUID organizationId, List<UUID> candidateIds, String indexVersion) {
+        if (candidateIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return java.util.Set.copyOf(jdbcClient.sql("""
+                        select candidate_id from retrieval_evidence_index
+                        where organization_id = :organizationId
+                          and candidate_id = any(:candidateIds)
+                          and index_version = :indexVersion
+                          and embedding_index_ready
+                        """)
+                .param("organizationId", organizationId)
+                .param("candidateIds", candidateIds.toArray(UUID[]::new))
+                .param("indexVersion", indexVersion)
+                .query((rs, ignored) -> rs.getObject("candidate_id", UUID.class))
+                .list());
+    }
+
+    @Override
+    public void upsertIndexRow(EvidenceIndexRow row) {        jdbcClient.sql("""
                         insert into retrieval_evidence_index
                         (id, organization_id, candidate_id, artifact_id, candidate_type,
                          legal_concept_key, content_hash, index_version, lexical_tsvector,
@@ -102,7 +121,8 @@ class JdbcRetrievalRepository implements RetrievalRepository {
     @Override
     public void createVectorIndexIfAbsent(String indexName, String embeddingModel, int dims) {
         var expression = "(embedding::vector(" + dims + ")) vector_cosine_ops";
-        var predicate = "embedding_model = '" + embeddingModel.replace("'", "''") + "'";
+        var predicate = "embedding_model = '" + embeddingModel.replace("'", "''")
+                + "' and embedding_dims = " + dims;
         jdbcClient.sql("create index if not exists " + indexName
                 + " on retrieval_evidence_index using hnsw (" + expression + ") where "
                 + predicate)
@@ -166,6 +186,7 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                         from retrieval_evidence_index
                         where organization_id = :organizationId
                           and candidate_id = any(:candidateIds)
+                          and index_version = :indexVersion
                           and lexical_tsvector
                               @@ websearch_to_tsquery(cast(lexical_config as regconfig), :lexicalQuery)
                         order by score desc, candidate_id
@@ -174,6 +195,7 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 .param("organizationId", organizationId)
                 .param("candidateIds", candidateIds.toArray(UUID[]::new))
                 .param("lexicalQuery", lexicalQuery)
+                .param("indexVersion", indexVersion)
                 .param("limit", limit)
                 .query((rs, ignored) -> Map.entry(
                         rs.getObject("candidate_id", UUID.class), rs.getDouble("score")))
@@ -221,31 +243,6 @@ class JdbcRetrievalRepository implements RetrievalRepository {
             hits.add(new CandidateHit(rows.get(i).getKey(), rows.get(i).getValue(), i + 1));
         }
         return List.copyOf(hits);
-    }
-
-    private EvidenceIndexRow mapRow(java.sql.ResultSet rs) throws java.sql.SQLException {
-        return new EvidenceIndexRow(
-                rs.getObject("id", UUID.class),
-                rs.getObject("organization_id", UUID.class),
-                rs.getObject("candidate_id", UUID.class),
-                rs.getObject("artifact_id", UUID.class),
-                rs.getString("candidate_type"),
-                rs.getString("legal_concept_key"),
-                rs.getString("content_hash"),
-                rs.getString("index_version"),
-                rs.getString("lexical_config"),
-                null,
-                rs.getString("embedding_model"),
-                (Integer) rs.getObject("embedding_dims"),
-                rs.getBoolean("embedding_index_ready"),
-                rs.getLong("publication_number"),
-                rs.getString("contract_pack_key"),
-                stringsFromJson(rs.getString("declared_contract_types")),
-                rs.getString("party_perspective"),
-                rs.getString("paper_source"),
-                rs.getString("jurisdiction"),
-                localDate(rs.getDate("effective_from")),
-                localDate(rs.getDate("effective_to")));
     }
 
     private RetrievalTrace mapTrace(java.sql.ResultSet rs) throws java.sql.SQLException {
@@ -296,11 +293,14 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                 stage.path("candidateIds").forEach(id -> ids.add(id.asText()));
                 var ranks = new ArrayList<Integer>();
                 stage.path("candidateRanks").forEach(rank -> ranks.add(rank.asInt()));
+                var executionIds = new ArrayList<String>();
+                stage.path("executionIds").forEach(id -> executionIds.add(id.asText()));
                 stages.put(field.getKey(), new RetrievalTrace.StageSummary(
                         field.getKey(),
                         stage.path("candidateCount").asInt(0),
                         List.copyOf(ids),
-                        List.copyOf(ranks)));
+                        List.copyOf(ranks),
+                        List.copyOf(executionIds)));
             });
             return stages;
         } catch (JsonProcessingException e) {

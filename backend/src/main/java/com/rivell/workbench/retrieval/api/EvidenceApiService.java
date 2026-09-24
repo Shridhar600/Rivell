@@ -111,6 +111,6 @@ public class EvidenceApiService {
                 List.copyOf(items),
                 bundle.sufficiency().name(),
                 bundle.traceId(),
-                List.of());
+                bundle.degradationWarnings());
     }
 }

@@ -188,6 +188,9 @@ class ProviderDegradationIT {
                 });
         // degradation is honest: partial, never silent full sufficiency
         assertThat(bundle.sufficiency()).isEqualTo(EvidenceSufficiency.PARTIAL);
+        // the bundle surfaces the same degradation flags the API contract promises
+        assertThat(bundle.degradationWarnings())
+                .contains("RERANK_UNAVAILABLE", "COMPATIBILITY_UNAVAILABLE");
         // the trace carries the degradation flags
         var trace = jdbcClient.sql(
                         "select degradation from retrieval_trace where id = ?")

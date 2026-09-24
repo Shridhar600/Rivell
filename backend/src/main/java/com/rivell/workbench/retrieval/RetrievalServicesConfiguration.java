@@ -76,8 +76,9 @@ class RetrievalServicesConfiguration {
     @Bean
     com.rivell.workbench.retrieval.api.TraceApiService traceApiService(
             RetrievalRepository retrievalRepository,
-            com.rivell.workbench.organization.IdentityProvider identityProvider) {
+            com.rivell.workbench.organization.IdentityProvider identityProvider,
+            com.rivell.workbench.organization.AuthorizationService authorizationService) {
         return new com.rivell.workbench.retrieval.api.TraceApiService(
-                retrievalRepository, identityProvider);
+                retrievalRepository, identityProvider, authorizationService);
     }
 }

@@ -64,7 +64,8 @@ public class StructuredPolicyResolver {
                         ? null : profile.jurisdiction().name(),
                 request.effectiveOn());
         var candidates = knowledgeQueries.findPublishedCandidatesAsOf(query);
-        return new Resolution(candidates, asOfPublicationNumber,
-                candidates.size() >= query.limit());
+        var truncated = candidates.size() > query.limit();
+        var bounded = truncated ? candidates.subList(0, query.limit()) : candidates;
+        return new Resolution(List.copyOf(bounded), asOfPublicationNumber, truncated);
     }
 }

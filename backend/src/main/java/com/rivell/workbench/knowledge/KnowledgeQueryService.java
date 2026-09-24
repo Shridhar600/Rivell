@@ -62,6 +62,15 @@ public class KnowledgeQueryService {
                 .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
     }
 
+    /**
+     * Explicit-organization read for system-triggered flows (e.g. post-commit
+     * indexing listeners) where the caller's identity context must not be assumed.
+     */
+    public java.util.Optional<KnowledgeCandidate> getCandidateForOrganization(
+            UUID organizationId, UUID candidateId) {
+        return repository.findCandidate(candidateId, organizationId);
+    }
+
     public java.util.Optional<ExtractionUnit> findUnit(UUID unitId) {
         requireRead();
         return repository.findUnit(unitId, organizationId());
