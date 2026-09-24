@@ -61,3 +61,6 @@ __pycache__/
 
 # Generated OpenAPI handshake artifact
 /openapi.json
+
+# Runtime scratch (documents, smoke output)
+var/
