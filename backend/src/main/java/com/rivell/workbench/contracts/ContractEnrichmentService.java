@@ -114,14 +114,41 @@ public class ContractEnrichmentService {
                 .findFirst()
                 .orElseThrow(() -> new SemanticsNotFoundException(contractId, versionNumber));
         validateCorrection(clause, correction);
+        var merged = mergeCorrectionPatch(clause.correction(), correction);
         transactionTemplate.executeWithoutResult(status -> {
             var updated = semanticsRepository.updateClauseCorrection(clauseId, organizationId,
-                    correction, currentIdentityId());
+                    merged, currentIdentityId());
             if (!updated) {
                 throw new SemanticsNotFoundException(contractId, versionNumber);
             }
         });
         return getSemantics(contractId, versionNumber);
+    }
+
+    /**
+     * Corrections are independent per semantic dimension (AD #5.18): a patch touches
+     * only the dimensions it carries. null primaryConcept = leave; blank = clear;
+     * null fact value = clear that field's correction. Unrelated corrections survive.
+     */
+    private FactCorrection mergeCorrectionPatch(FactCorrection current, FactCorrection patch) {
+        if (!patch.corrected()) {
+            throw new InvalidCorrectionException(null, "A correction must carry a change");
+        }
+        var primary = patch.primaryConcept() == null
+                ? current.primaryConcept()
+                : (patch.primaryConcept().isBlank() ? null : patch.primaryConcept());
+        var values = new LinkedHashMap<>(current.factValues());
+        for (var entry : patch.factValues().entrySet()) {
+            if (entry.getValue() == null) {
+                values.remove(entry.getKey());
+            } else {
+                values.put(entry.getKey(), entry.getValue());
+            }
+        }
+        if (primary == null && values.isEmpty()) {
+            return FactCorrection.NONE;
+        }
+        return new FactCorrection(primary, values, UUID.randomUUID());
     }
 
     private ContractSemantics ready(
@@ -239,18 +266,22 @@ public class ContractEnrichmentService {
     }
 
     private void validateCorrection(ClauseSemantics clause, FactCorrection correction) {
-        if (correction.primaryConcept() != null) {
-            LegalConcept concept;
+        if (correction.primaryConcept() != null && !correction.primaryConcept().isBlank()) {
             try {
-                concept = LegalConcept.valueOf(correction.primaryConcept());
+                LegalConcept.valueOf(correction.primaryConcept());
             } catch (IllegalArgumentException e) {
                 throw new InvalidCorrectionException(clause.id(), "Unknown concept");
             }
         }
-        if (correction.factValues() != null && !correction.factValues().isEmpty()) {
+        var changedValues = correction.factValues() == null ? Map.<String, String>of()
+                : correction.factValues().entrySet().stream()
+                        .filter(entry -> entry.getValue() != null)
+                        .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey,
+                                java.util.Map.Entry::getValue));
+        if (!changedValues.isEmpty()) {
             var schemaId = clause.facts().stream()
                     .map(LegalFact::factSchema)
-                    .filter(schema -> correction.factValues().keySet().stream()
+                    .filter(schema -> changedValues.keySet().stream()
                             .anyMatch(field -> FactSchema.byId(schema).fields().contains(field)))
                     .findFirst()
                     .orElseThrow(() -> new InvalidCorrectionException(clause.id(),
@@ -262,7 +293,7 @@ public class ContractEnrichmentService {
                     merged.putAll(fact.values());
                 }
             }
-            merged.putAll(correction.factValues());
+            merged.putAll(changedValues);
             new LegalFact(schemaId, schema.version(), merged);
         }
     }

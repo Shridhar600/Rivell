@@ -6,13 +6,23 @@ import java.util.UUID;
 /**
  * Human correction of one clause's semantic interpretation. Either a primary-concept
  * correction or a fact-values correction; the machine proposal is never erased.
+ * Patches are merge semantics: a null fact value clears that field's correction;
+ * null primaryConcept leaves the concept untouched, blank clears it.
  */
 public record FactCorrection(String primaryConcept, Map<String, String> factValues, UUID correctionId) {
 
     public static final FactCorrection NONE = new FactCorrection(null, Map.of(), null);
 
     public FactCorrection {
-        factValues = factValues == null ? Map.of() : Map.copyOf(factValues);
+        if (factValues == null) {
+            factValues = Map.of();
+        } else {
+            var copy = new java.util.LinkedHashMap<String, String>();
+            for (var entry : factValues.entrySet()) {
+                copy.put(entry.getKey(), entry.getValue());
+            }
+            factValues = java.util.Collections.unmodifiableMap(copy);
+        }
     }
 
     public static FactCorrection ofPrimary(LegalConcept concept) {

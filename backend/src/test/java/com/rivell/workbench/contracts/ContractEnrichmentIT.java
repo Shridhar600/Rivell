@@ -506,6 +506,85 @@ public class ContractEnrichmentIT {
     }
 
     @Test
+    void conceptAndFactCorrectionsCompose() throws Exception {
+        var bytes = fixtureBytes("m5-msa-services.docx");
+        var ingested = ingestionService.ingest("m5-msa-services.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+        var liability = semantics.clauses().stream()
+                .filter(clause -> clause.primaryConcept()
+                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .orElse(false))
+                .findFirst()
+                .orElseThrow();
+
+        var afterConcept = enrichmentService.correctClause(ingested.contractId(), 1,
+                liability.id(), FactCorrection.ofPrimary(LegalConcept.INDEMNIFICATION));
+        var afterFacts = enrichmentService.correctClause(ingested.contractId(), 1,
+                liability.id(), FactCorrection.ofFacts(Map.of("liabilityCapMultiple", "2")));
+
+        var reloaded = enrichmentService.getSemantics(ingested.contractId(), 1);
+        var corrected = reloaded.clauses().stream()
+                .filter(clause -> clause.id().equals(liability.id()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(corrected.correction().primaryConcept())
+                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+        assertThat(corrected.correction().factValues())
+                .containsEntry("liabilityCapMultiple", "2");
+        assertThat(corrected.conceptCorrected()).isTrue();
+        assertThat(corrected.factCorrected()).isTrue();
+
+        // a third correction (fact B) keeps concept + fact A
+        var afterThird = enrichmentService.correctClause(ingested.contractId(), 1,
+                liability.id(), FactCorrection.ofFacts(Map.of("capBasis", "ANNUAL_FEES")));
+        var reloadedThird = afterThird.clauses().stream()
+                .filter(clause -> clause.id().equals(liability.id()))
+                .findFirst()
+                .orElseThrow()
+                .correction();
+        assertThat(reloadedThird.primaryConcept())
+                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+        assertThat(reloadedThird.factValues())
+                .containsEntry("liabilityCapMultiple", "2")
+                .containsEntry("capBasis", "ANNUAL_FEES");
+
+        // clearing one fact field leaves the concept + other facts intact
+        var afterClear = enrichmentService.correctClause(ingested.contractId(), 1,
+                liability.id(), new FactCorrection(null,
+                        java.util.Collections.singletonMap("capBasis", null),
+                        UUID.randomUUID()));
+        var cleared = afterClear.clauses().stream()
+                .filter(clause -> clause.id().equals(liability.id()))
+                .findFirst()
+                .orElseThrow()
+                .correction();
+        assertThat(cleared.primaryConcept())
+                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+        assertThat(cleared.factValues())
+                .containsEntry("liabilityCapMultiple", "2")
+                .doesNotContainKey("capBasis");
+
+        // re-enrichment: machine layer refreshed, all corrections reapplied
+        var afterReEnrich = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+        var machineAgain = afterReEnrich.clauses().stream()
+                .filter(clause -> clause.headingNodeId().equals(liability.headingNodeId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(machineAgain.correction().primaryConcept())
+                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+        assertThat(machineAgain.correction().factValues())
+                .containsEntry("liabilityCapMultiple", "2");
+        assertThat(machineAgain.effectiveFacts().stream()
+                .findFirst().orElseThrow().values())
+                .containsEntry("liabilityCapMultiple", "2");
+    }
+
+    @Test
     void crossOrganizationSemanticStateIsInvisible() throws Exception {
         var bytes = fixtureBytes("m5-nda-counterparty.docx");
         var ingested = ingestionService.ingest("m5-nda-counterparty.docx",
