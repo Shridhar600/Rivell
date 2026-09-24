@@ -499,6 +499,13 @@ class AuthorityAwareEvidenceFlowIT {
         // not something retrieval invented from the contract type
         assertThat(ndaRule.applicabilityScope().contractPackKey())
                 .isEqualToIgnoringCase("NDA_PACK");
+        // G-M6-1 wildcard honesty: the NDA rule declares an unbounded effective
+        // period — exposed as honest nulls, never fabricated dates
+        assertThat(ndaRule.applicabilityScope().effectiveFrom()).isNull();
+        assertThat(ndaRule.applicabilityScope().effectiveTo()).isNull();
+        // contract-side evidence has no organizational knowledge scope — absent, not invented
+        assertThat(bundle.currentContractItems())
+                .allSatisfy(item -> assertThat(item.applicabilityScope()).isNull());
         // and the MSA-pack knowledge never leaks into this NDA-context request
         assertThat(bundle.policyItems().size()).isEqualTo(1);
     }
@@ -551,6 +558,16 @@ class AuthorityAwareEvidenceFlowIT {
         assertThat(pinnedBundle.policyItems()).hasSize(1);
         assertThat(pinnedBundle.policyItems().get(0).text())
                 .contains("2025 policy standard");
+        // G-M6-1 historical truth: the pinned item carries the scope/version of the
+        // source selected by the pin (publication 1), never a hydrated latest scope
+        assertThat(pinnedBundle.policyItems().get(0).publicationNumber()).isEqualTo(1);
+        assertThat(pinnedBundle.policyItems().get(0).applicabilityScope())
+                .isNotNull();
+        assertThat(pinnedBundle.policyItems().get(0).applicabilityScope().contractPackKey())
+                .isEqualToIgnoringCase("MSA_PACK");
+        // and the later publication's policy carries its own ADD publication provenance
+        assertThat(latestBundle.policyItems().get(0).publicationNumber())
+                .isEqualTo(corpus.publishedAt().get(M6EvidenceCorpus.Fixture.POLICY_MAIN));
         assertThat(pinnedBundle.sufficiency()).isEqualTo(EvidenceSufficiency.DRAFTING_MISSING);
     }
 }

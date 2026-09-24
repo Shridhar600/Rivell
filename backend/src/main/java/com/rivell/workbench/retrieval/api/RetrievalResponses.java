@@ -1,5 +1,6 @@
 package com.rivell.workbench.retrieval.api;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -58,7 +59,19 @@ public final class RetrievalResponses {
             String policyCompatibility,
             List<String> provenanceNodeIds,
             UUID publicationId,
-            Long publicationNumber) {
+            Long publicationNumber,
+            ApplicabilityScopeResponse applicabilityScope) {
+    }
+
+    @Schema(name = "ApplicabilityScopeResponse")
+    public record ApplicabilityScopeResponse(
+            String contractPackKey,
+            List<String> declaredContractTypes,
+            String partyPerspective,
+            String paperSource,
+            String jurisdiction,
+            LocalDate effectiveFrom,
+            LocalDate effectiveTo) {
     }
 
     @Schema(name = "PolicyFactsResponse")

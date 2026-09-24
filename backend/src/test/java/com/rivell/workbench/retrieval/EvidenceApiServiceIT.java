@@ -181,12 +181,33 @@ class EvidenceApiServiceIT {
         assertThat(response.items()).isNotEmpty();
         assertThat(response.items()).anySatisfy(item ->
                 assertThat(item.authorityClass()).isEqualTo("POLICY"));
-        assertThat(response.items()).anySatisfy(item ->
-                assertThat(item.authorityClass()).isEqualTo("APPROVED_DRAFTING"));
+        // G-M6-1: the item carries its own applicable scope (canonical Knowledge
+        // ApplicabilityScope semantics) — the published source scope, not recomputed
+        assertThat(response.items()).anySatisfy(item -> {
+            assertThat(item.authorityClass()).isEqualTo("POLICY");
+            assertThat(item.applicabilityScope()).isNotNull();
+            assertThat(item.applicabilityScope().contractPackKey())
+                    .isEqualToIgnoringCase("MSA_PACK");
+            assertThat(item.applicabilityScope().declaredContractTypes())
+                    .containsExactly("MSA");
+            assertThat(item.applicabilityScope().partyPerspective())
+                    .isEqualToIgnoringCase("Customer");
+            assertThat(item.applicabilityScope().jurisdiction())
+                    .isEqualToIgnoringCase("US");
+            assertThat(item.applicabilityScope().effectiveFrom())
+                    .isEqualTo(java.time.LocalDate.of(2026, 1, 1));
+            assertThat(item.applicabilityScope().effectiveTo())
+                    .isEqualTo(java.time.LocalDate.of(2026, 12, 31));
+        });
         assertThat(response.items()).anySatisfy(item ->
                 assertThat(item.authorityClass()).isEqualTo("PRECEDENT"));
-        assertThat(response.items()).anySatisfy(item ->
-                assertThat(item.authorityClass()).isEqualTo("CURRENT_CONTRACT"));
+        // precedent items carry the published precedent's scope as retrieved at the pin
+        assertThat(response.items()).anySatisfy(item -> {
+            assertThat(item.authorityClass()).isEqualTo("PRECEDENT");
+            assertThat(item.applicabilityScope()).isNotNull();
+            assertThat(item.applicabilityScope().jurisdiction())
+                    .isEqualToIgnoringCase("US");
+        });
         assertThat(response.sufficiency()).isEqualTo("SUFFICIENT");
         assertThat(response.traceId()).isNotNull();
 

@@ -99,7 +99,17 @@ public class EvidenceApiService {
                     item.provenanceNodeIds(),
                     item.publicationId(),
                     item.publicationNumber() == null ? null
-                            : item.publicationNumber().longValue()));
+                            : item.publicationNumber().longValue(),
+                    item.applicabilityScope() == null ? null
+                            : new RetrievalResponses.ApplicabilityScopeResponse(
+                                    item.applicabilityScope().contractPackKey(),
+                                    List.copyOf(item.applicabilityScope()
+                                            .declaredContractTypes()),
+                                    item.applicabilityScope().partyPerspective(),
+                                    item.applicabilityScope().paperSource(),
+                                    item.applicabilityScope().jurisdiction(),
+                                    item.applicabilityScope().effectiveFrom(),
+                                    item.applicabilityScope().effectiveTo())));
         }
         return new RetrievalResponses.EvidenceBundleResponse(
                 bundle.id(),
