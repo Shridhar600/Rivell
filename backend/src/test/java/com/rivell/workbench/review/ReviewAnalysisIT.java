@@ -280,7 +280,9 @@ class ReviewAnalysisIT {
                 .filter(execution -> execution.status() == CheckExecutionStatus.COMPLETED)
                 .findFirst().orElseThrow();
         jdbcClient.sql("""
-                update review_check_execution set status = 'RUNNING', completed_at = null
+                update review_check_execution
+                set status = 'RUNNING', started_at = now() - interval '11 minutes',
+                    completed_at = null
                 where id = :id
                 """).param("id", interrupted.id()).update();
         jdbcClient.sql("""
@@ -345,5 +347,98 @@ class ReviewAnalysisIT {
                 .isEmpty();
         assertThat(analysisRepository.findSignals(otherOrganization, UUID.randomUUID()))
                 .isEmpty();
+    }
+
+    @Test
+    void crashAfterRunCompletionFinishesTheReviewWithoutANewRun() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+        var first = analysisService.analyze(organizationId, review.id());
+
+        jdbcClient.sql("""
+                update review set status = 'ANALYZING', completed_at = null
+                where id = :id
+                """).param("id", review.id()).update();
+
+        var resumed = analysisService.analyze(organizationId, review.id());
+        assertThat(resumed.id()).isEqualTo(first.id());
+        assertThat(resumed.status()).isEqualTo(RunStatus.COMPLETED);
+        assertThat(reviewRepository.find(organizationId, review.id())
+                .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
+        assertThat(analysisRepository.findExecutions(organizationId, first.id()))
+                .hasSize(reviewRepository.findPlanChecks(organizationId, review.id()).size());
+    }
+
+    @Test
+    void freshClaimOnAnActivelyRunningCheckIsSkippedUntilTheLeaseExpires() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(corpus.contract().contractId(), 1, null);
+        var first = analysisService.analyze(organizationId, review.id());
+        var execution = analysisRepository.findExecutions(organizationId, first.id()).get(0);
+
+        jdbcClient.sql("""
+                update review_check_execution
+                set status = 'RUNNING', started_at = now(), completed_at = null
+                where id = :id
+                """).param("id", execution.id()).update();
+        jdbcClient.sql("""
+                update review_analysis_run set status = 'RUNNING', completed_at = null
+                where id = :id
+                """).param("id", first.id()).update();
+        jdbcClient.sql("""
+                update review set status = 'ANALYZING', completed_at = null
+                where id = :id
+                """).param("id", review.id()).update();
+
+        analysisService.analyze(organizationId, review.id());
+        assertThat(analysisRepository.findExecution(
+                organizationId, first.id(), execution.planCheckId()).orElseThrow().status())
+                .isEqualTo(CheckExecutionStatus.RUNNING);
+        assertThat(reviewRepository.find(organizationId, review.id())
+                .orElseThrow().status()).isEqualTo(ReviewStatus.ANALYZING);
+
+        jdbcClient.sql("""
+                update review_check_execution
+                set started_at = now() - interval '11 minutes' where id = :id
+                """).param("id", execution.id()).update();
+        analysisService.analyze(organizationId, review.id());
+        assertThat(reviewRepository.find(organizationId, review.id())
+                .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
+    }
+
+    @Test
+    void unrecoverableFailureMarksReviewAndRunFailed() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        jdbcClient.sql("delete from review_snapshot where review_id = :id")
+                .param("id", review.id()).update();
+
+        assertThatThrownBy(() -> analysisService.analyze(organizationId, review.id()))
+                .isInstanceOf(IllegalStateException.class);
+        var failed = reviewRepository.find(organizationId, review.id()).orElseThrow();
+        assertThat(failed.status()).isEqualTo(ReviewStatus.FAILED);
+        assertThat(failed.failureReason()).contains("IllegalStateException");
+    }
+
+    @Test
+    void analysisForAnotherIdentityOrganizationStillWorks() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        identityProvider.use(new UserIdentity(
+                UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
+
+        var run = analysisService.analyze(organizationId, review.id());
+        assertThat(run.status()).isEqualTo(RunStatus.COMPLETED);
+        assertThat(reviewRepository.find(organizationId, review.id())
+                .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
     }
 }

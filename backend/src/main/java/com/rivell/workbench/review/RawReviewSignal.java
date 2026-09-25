@@ -32,6 +32,8 @@ public record RawReviewSignal(
         UUID jevExecutionId,
         UUID generativeExecutionId,
         String verificationOutcome,
+        String resolvedModel,
+        com.rivell.workbench.intelligence.TokenUsage usage,
         Map<String, Object> quality,
         String dedupeKey,
         Instant createdAt) {

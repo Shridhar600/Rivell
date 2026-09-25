@@ -14,7 +14,8 @@ import com.rivell.workbench.review.SignalType;
 
 /**
  * Concept-presence check: absence of REQUIRED/EXPECTED concepts produces bounded
- * absence-subject signals; OPTIONAL absence creates nothing.
+ * absence-subject signals; OPTIONAL absence creates nothing. A concept counts as
+ * present when it appears as a primary or secondary effective concept.
  */
 public final class PresenceCheckExecutor implements ReviewCheckExecutor {
 
@@ -28,8 +29,8 @@ public final class PresenceCheckExecutor implements ReviewCheckExecutor {
         var check = context.check();
         var present = context.semantics().clauses().stream().anyMatch(clause ->
                 clause.effectivePrimaryConcept()
-                        .filter(concept -> concept == check.concept())
-                        .isPresent());
+                        .filter(concept -> concept == check.concept()).isPresent()
+                        || clause.secondaryConcepts().contains(check.concept()));
         if (present) {
             return CheckOutcome.completed(List.of(), Map.of("present", true));
         }
@@ -56,8 +57,8 @@ public final class PresenceCheckExecutor implements ReviewCheckExecutor {
                 context.runId(), check.id(), type, FindingSubjectKind.ABSENCE, null,
                 check.concept(), check.concept(), null, issueFamily,
                 new PresencePayload(check.expectation()),
-                List.of(), null, null, null, null, null,
+                List.of(), null, null, null, null, null, null, null,
                 Map.of("expectation", check.expectation().name()),
-                "PRESENCE:" + check.concept(), context.executedAt());
+                "PRESENCE:" + check.concept() + ":" + check.id(), context.executedAt());
     }
 }

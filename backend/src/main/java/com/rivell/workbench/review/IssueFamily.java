@@ -7,6 +7,7 @@ package com.rivell.workbench.review;
  */
 public enum IssueFamily {
     LIABILITY_CAP_DEVIATION,
+    LIABILITY_CAP_UNCERTAIN,
     MISSING_REQUIRED_PROVISION,
     EXPECTED_PROVISION_ABSENT,
     SURVIVAL_COVERAGE_GAP,

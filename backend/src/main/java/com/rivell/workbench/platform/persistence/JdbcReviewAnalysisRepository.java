@@ -84,25 +84,30 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
 
     @Override
     @Transactional
-    public void insertRun(ReviewAnalysisRun run) {
-        jdbcClient.sql("""
-                insert into review_analysis_run
-                  (id, organization_id, review_id, run_number, status, trigger,
-                   pipeline_version, started_at, completed_at, failure_reason)
-                values (:id, :organizationId, :reviewId, :runNumber, :status, :trigger,
-                   :pipelineVersion, :startedAt, :completedAt, :failureReason)
-                """)
-                .param("id", run.id())
-                .param("organizationId", run.organizationId())
-                .param("reviewId", run.reviewId())
-                .param("runNumber", run.runNumber())
-                .param("status", run.status().name())
-                .param("trigger", run.trigger().name())
-                .param("pipelineVersion", run.pipelineVersion())
-                .param("startedAt", timestamp(run.startedAt()))
-                .param("completedAt", run.completedAt() == null ? null : timestamp(run.completedAt()))
-                .param("failureReason", run.failureReason())
-                .update();
+    public boolean tryInsertRun(ReviewAnalysisRun run) {
+        try {
+            jdbcClient.sql("""
+                    insert into review_analysis_run
+                      (id, organization_id, review_id, run_number, status, trigger,
+                       pipeline_version, started_at, completed_at, failure_reason)
+                    values (:id, :organizationId, :reviewId, :runNumber, :status, :trigger,
+                       :pipelineVersion, :startedAt, :completedAt, :failureReason)
+                    """)
+                    .param("id", run.id())
+                    .param("organizationId", run.organizationId())
+                    .param("reviewId", run.reviewId())
+                    .param("runNumber", run.runNumber())
+                    .param("status", run.status().name())
+                    .param("trigger", run.trigger().name())
+                    .param("pipelineVersion", run.pipelineVersion())
+                    .param("startedAt", timestamp(run.startedAt()))
+                    .param("completedAt", run.completedAt() == null ? null : timestamp(run.completedAt()))
+                    .param("failureReason", run.failureReason())
+                    .update();
+            return true;
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            return false;
+        }
     }
 
     @Override
@@ -190,16 +195,32 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
 
     @Override
     @Transactional
-    public boolean updateExecution(
+    public boolean claimExecution(UUID organizationId, UUID executionId) {
+        return jdbcClient.sql("""
+                update review_check_execution
+                set status = 'RUNNING', started_at = now()
+                where id = :executionId and organization_id = :organizationId
+                  and (status = 'PENDING'
+                       or (status = 'RUNNING' and started_at < now() - interval '10 minutes'))
+                """)
+                .param("executionId", executionId)
+                .param("organizationId", organizationId)
+                .update() == 1;
+    }
+
+    @Override
+    @Transactional
+    public boolean completeExecution(
             UUID organizationId, UUID executionId, CheckExecutionStatus status,
             UUID evidenceTraceId, Map<String, Object> detail, int signalCount,
-            java.time.Instant startedAt, java.time.Instant completedAt) {
+            java.time.Instant completedAt) {
         return jdbcClient.sql("""
                 update review_check_execution
                 set status = :status, evidence_trace_id = :evidenceTraceId,
                     detail = cast(:detail as jsonb), signal_count = :signalCount,
-                    started_at = coalesce(started_at, :startedAt), completed_at = :completedAt
+                    completed_at = :completedAt
                 where id = :executionId and organization_id = :organizationId
+                  and status = 'RUNNING'
                 """)
                 .param("executionId", executionId)
                 .param("organizationId", organizationId)
@@ -207,8 +228,7 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 .param("evidenceTraceId", evidenceTraceId)
                 .param("detail", json(detail))
                 .param("signalCount", signalCount)
-                .param("startedAt", startedAt == null ? null : timestamp(startedAt))
-                .param("completedAt", completedAt == null ? null : timestamp(completedAt))
+                .param("completedAt", timestamp(completedAt))
                 .update() == 1;
     }
 
@@ -222,13 +242,14 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                        subject_kind, subject_heading_node_id, absence_concept, concept,
                        secondary_concept, issue_family, payload, evidence_item_ids,
                        decision_spec_id, decision_spec_version, jev_execution_id,
-                       generative_execution_id, verification_outcome, quality, dedupe_key,
-                       created_at)
+                       generative_execution_id, verification_outcome, resolved_model, usage,
+                       quality, dedupe_key, created_at)
                     values (:id, :organizationId, :reviewId, :runId, :planCheckId, :signalType,
                        :subjectKind, :subjectHeadingNodeId, :absenceConcept, :concept,
                        :secondaryConcept, :issueFamily, cast(:payload as jsonb),
                        cast(:evidenceItemIds as jsonb), :decisionSpecId, :decisionSpecVersion,
                        :jevExecutionId, :generativeExecutionId, :verificationOutcome,
+                       :resolvedModel, cast(:usage as jsonb),
                        cast(:quality as jsonb), :dedupeKey, :createdAt)
                     on conflict (run_id, dedupe_key) do nothing
                     """)
@@ -251,11 +272,27 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                     .param("jevExecutionId", signal.jevExecutionId())
                     .param("generativeExecutionId", signal.generativeExecutionId())
                     .param("verificationOutcome", signal.verificationOutcome())
+                    .param("resolvedModel", signal.resolvedModel())
+                    .param("usage", signal.usage() == null ? null : json(signal.usage()))
                     .param("quality", json(signal.quality()))
                     .param("dedupeKey", signal.dedupeKey())
                     .param("createdAt", timestamp(signal.createdAt()))
                     .update();
         }
+    }
+
+    @Override
+    @Transactional
+    public int deleteSignals(UUID organizationId, UUID runId, UUID planCheckId) {
+        return jdbcClient.sql("""
+                delete from raw_review_signal
+                where run_id = :runId and plan_check_id = :planCheckId
+                  and organization_id = :organizationId
+                """)
+                .param("runId", runId)
+                .param("planCheckId", planCheckId)
+                .param("organizationId", organizationId)
+                .update();
     }
 
     @Override
@@ -265,8 +302,8 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                        subject_kind, subject_heading_node_id, absence_concept, concept,
                        secondary_concept, issue_family, payload, evidence_item_ids,
                        decision_spec_id, decision_spec_version, jev_execution_id,
-                       generative_execution_id, verification_outcome, quality, dedupe_key,
-                       created_at
+                       generative_execution_id, verification_outcome, resolved_model, usage,
+                       quality, dedupe_key, created_at
                 from raw_review_signal
                 where run_id = :runId and organization_id = :organizationId
                 order by created_at, plan_check_id
@@ -293,6 +330,8 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                         rs.getObject("jev_execution_id", UUID.class),
                         rs.getObject("generative_execution_id", UUID.class),
                         rs.getString("verification_outcome"),
+                        rs.getString("resolved_model"),
+                        usage(rs.getString("usage")),
                         map(rs.getString("quality")),
                         rs.getString("dedupe_key"),
                         rs.getTimestamp("created_at").toInstant()))
@@ -382,10 +421,23 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 return objectMapper.treeToValue(node,
                         com.rivell.workbench.review.EscalationPayload.class);
             }
+            if ("DEVIATION_UNCERTAIN".equals(kind)) {
+                return objectMapper.treeToValue(node,
+                        com.rivell.workbench.review.DeviationUncertainPayload.class);
+            }
             throw new IllegalStateException(
                     "Unsupported signal payload kind '" + kind + "' for " + signalType);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Invalid signal payload JSON", e);
+        }
+    }
+
+    private com.rivell.workbench.intelligence.TokenUsage usage(String json) {
+        try {
+            return json == null ? null : objectMapper.readValue(json,
+                    com.rivell.workbench.intelligence.TokenUsage.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Invalid usage JSON", e);
         }
     }
 

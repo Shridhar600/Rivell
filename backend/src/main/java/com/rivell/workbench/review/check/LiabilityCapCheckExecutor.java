@@ -20,6 +20,7 @@ import com.rivell.workbench.retrieval.EvidenceSufficiency;
 import com.rivell.workbench.retrieval.KnowledgePin;
 import com.rivell.workbench.review.ApprovedDraftingPayload;
 import com.rivell.workbench.review.CheckMechanism;
+import com.rivell.workbench.review.DeviationUncertainPayload;
 import com.rivell.workbench.review.EscalationPayload;
 import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.IssueFamily;
@@ -33,9 +34,9 @@ import com.rivell.workbench.review.SignalType;
 
 /**
  * Limitation-of-liability clause check: authority-aware evidence against the frozen
- * pins, then a bounded Jev deviation classification. Policy missing/ambiguous is
- * preserved, never inferred; a bounded deviation with approved drafting never calls a
- * generative model.
+ * pins, then a bounded Jev deviation classification. Policy missing/ambiguous/conflicted
+ * is preserved, never inferred; a bounded deviation with approved drafting never calls a
+ * generative model; uncapped structures are classified, not silently skipped.
  */
 public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
 
@@ -63,43 +64,65 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
         if (clause == null) {
             return CheckOutcome.degraded("subject_clause_not_found");
         }
-        var facts = liabilityFacts(clause);
-        if (facts == null) {
-            return CheckOutcome.degraded("liability_facts_unavailable");
-        }
 
         var bundle = evidenceService.buildForOrganization(request(context, clause));
         var sufficiency = bundle.sufficiency();
+        var subjectEvidence = subjectContractIds(bundle, clause.id());
+        var detail = new LinkedHashMap<String, Object>();
+        detail.put("sufficiency", sufficiency.name());
+
         if (sufficiency == EvidenceSufficiency.POLICY_MISSING) {
             return CheckOutcome.completed(List.of(signal(context,
                     SignalType.POLICY_UNAVAILABLE, IssueFamily.POLICY_UNAVAILABLE,
                     new PolicyUnavailablePayload(sufficiency.name()),
-                    currentContractIds(bundle), null, null, null,
+                    subjectEvidence, null, null, null, null, null,
                     Map.of("sufficiency", sufficiency.name()))),
-                    Map.of("sufficiency", sufficiency.name()), bundle.traceId());
+                    detail, bundle.traceId());
         }
         if (sufficiency == EvidenceSufficiency.AMBIGUOUS_POLICY) {
-            var ambiguous = signal(context, SignalType.POLICY_AMBIGUOUS,
-                    IssueFamily.POLICY_AMBIGUOUS,
-                    new PolicyAmbiguousPayload(Math.max(2, bundle.policyItems().size())),
-                    policyIds(bundle), null, null, null,
-                    Map.of("sufficiency", sufficiency.name()));
-            return CheckOutcome.completed(List.of(ambiguous),
-                    Map.of("sufficiency", sufficiency.name()), bundle.traceId());
+            var ruleCount = bundle.policyItems().size();
+            if (ruleCount < 2) {
+                return CheckOutcome.degraded("ambiguity_without_multiple_rules");
+            }
+            detail.put("applicableRuleCount", ruleCount);
+            return CheckOutcome.completed(List.of(signal(context,
+                    SignalType.POLICY_AMBIGUOUS, IssueFamily.POLICY_AMBIGUOUS,
+                    new PolicyAmbiguousPayload(ruleCount), policyIds(bundle),
+                    null, null, null, null, null,
+                    Map.of("sufficiency", sufficiency.name()))),
+                    detail, bundle.traceId());
+        }
+        if (sufficiency == EvidenceSufficiency.SOURCE_CONFLICT
+                || sufficiency == EvidenceSufficiency.CONTRACT_CONTEXT_INCOMPLETE) {
+            detail.put("uncertaintyReason", sufficiency.name());
+            return CheckOutcome.completed(List.of(signal(context,
+                    SignalType.DEVIATION_UNCERTAIN, IssueFamily.LIABILITY_CAP_UNCERTAIN,
+                    new DeviationUncertainPayload(sufficiency.name()),
+                    union(policyIds(bundle), subjectEvidence),
+                    null, null, null, null, null,
+                    Map.of("sufficiency", sufficiency.name()))),
+                    detail, bundle.traceId());
         }
 
-        var capMultiple = facts.values().getOrDefault("liabilityCapMultiple", "");
-        var capBasis = facts.values().getOrDefault("capBasis", "");
+        var facts = liabilityFacts(clause);
+        var capMultiple = facts == null ? ""
+                : facts.values().getOrDefault("liabilityCapMultiple", "");
+        var capBasis = facts == null ? "" : facts.values().getOrDefault("capBasis", "");
         var escalationTrigger = escalationTrigger(bundle);
         var requiresApproval = bundle.policyItems().stream()
                 .map(EvidenceItem::policyFacts).filter(Objects::nonNull)
                 .anyMatch(policy -> Boolean.TRUE.equals(policy.requiresApproval()));
+        detail.put("factsAvailable", facts != null);
+        detail.put("escalationTrigger",
+                escalationTrigger == null ? "" : escalationTrigger);
+        detail.put("requiresApproval", requiresApproval);
+
         var state = new M7DecisionSpecs.LiabilityDeviationState(
                 M7DecisionSpecs.LIABILITY_DEVIATION_STATE_SCHEMA,
                 clause.contentText(), capMultiple, capBasis,
-                Boolean.parseBoolean(facts.values()
+                facts != null && Boolean.parseBoolean(facts.values()
                         .getOrDefault("consequentialDamagesExcluded", "false")),
-                preferredPosition(bundle), prohibitedPosition(bundle), escalationTrigger);
+                firstText(bundle.policyItems()), prohibitedPosition(bundle), escalationTrigger);
 
         var execution = decisionService.evaluate(M7DecisionSpecs.liabilityDeviation(), state);
         var answer = execution.answers().get(M7DecisionSpecs.DEVIATION_TYPE);
@@ -107,14 +130,21 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
             return CheckOutcome.degraded("deviation_answer_missing");
         }
         var selected = choice.selected();
-        var detail = new LinkedHashMap<String, Object>();
         detail.put("deviationType", selected);
-        detail.put("sufficiency", sufficiency.name());
         detail.put("policyItemCount", bundle.policyItems().size());
         detail.put("draftingItemCount", bundle.approvedDraftingItems().size());
 
         if (M7DecisionSpecs.NOT_COMPARABLE.equals(selected)) {
-            return CheckOutcome.degraded("policy_not_comparable");
+            detail.put("uncertaintyReason", "policy_not_comparable");
+            return CheckOutcome.completed(List.of(signal(context,
+                    SignalType.DEVIATION_UNCERTAIN, IssueFamily.LIABILITY_CAP_UNCERTAIN,
+                    new DeviationUncertainPayload("policy_not_comparable"),
+                    union(policyIds(bundle), subjectEvidence),
+                    M7DecisionSpecs.LIABILITY_DEVIATION_SPEC,
+                    M7DecisionSpecs.LIABILITY_DEVIATION_VERSION, execution.executionId(),
+                    execution.metadata().resolvedModel(), execution.metadata().usage(),
+                    Map.of("sufficiency", sufficiency.name()))),
+                    detail, bundle.traceId());
         }
         if (M7DecisionSpecs.NO_DEVIATION.equals(selected)) {
             return CheckOutcome.completed(List.of(), detail, bundle.traceId());
@@ -124,28 +154,33 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
             return CheckOutcome.degraded("unexpected_deviation_type:" + selected);
         }
 
+        var deviationEvidence = validateEvidence(bundle,
+                union(policyIds(bundle), subjectEvidence));
         var signals = new ArrayList<RawReviewSignal>();
         signals.add(signal(context, SignalType.POLICY_DEVIATION,
                 IssueFamily.LIABILITY_CAP_DEVIATION,
                 new LiabilityDeviationPayload(selected, capMultiple, capBasis),
-                union(policyIds(bundle), currentContractIds(bundle)),
-                M7DecisionSpecs.LIABILITY_DEVIATION_SPEC,
+                deviationEvidence, M7DecisionSpecs.LIABILITY_DEVIATION_SPEC,
                 M7DecisionSpecs.LIABILITY_DEVIATION_VERSION, execution.executionId(),
-                Map.of("sufficiency", sufficiency.name(), "deviationType", selected)));
+                execution.metadata().resolvedModel(), execution.metadata().usage(),
+                Map.of("sufficiency", sufficiency.name(), "deviationType", selected,
+                        "factsAvailable", facts != null)));
         var drafting = bundle.approvedDraftingItems().stream().findFirst().orElse(null);
         if (drafting != null) {
             signals.add(signal(context, SignalType.APPROVED_DRAFTING_AVAILABLE,
                     IssueFamily.LIABILITY_CAP_DEVIATION,
                     new ApprovedDraftingPayload(drafting.evidenceId(), drafting.text()),
-                    List.of(drafting.evidenceId()), null, null, null,
-                    Map.of("reviewRequired", false)));
+                    List.of(drafting.evidenceId()), null, null, null, null, null,
+                    Map.of("draftingAvailable", true)));
         }
         if (escalationTrigger != null || requiresApproval) {
             signals.add(signal(context, SignalType.ESCALATION_REQUIRED,
                     IssueFamily.LIABILITY_CAP_DEVIATION,
                     new EscalationPayload(escalationTrigger, requiresApproval),
-                    policyIds(bundle), null, null, null,
-                    Map.of("requiresApproval", requiresApproval)));
+                    policyIds(bundle), null, null, null, null, null,
+                    Map.of("requiresApproval", requiresApproval,
+                            "escalationTrigger", escalationTrigger == null
+                                    ? "" : escalationTrigger)));
         }
         return CheckOutcome.completed(signals, detail, bundle.traceId());
     }
@@ -179,15 +214,15 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                         : KnowledgePin.at(snapshot.knowledgePinNumber()));
     }
 
-    private static String preferredPosition(EvidenceBundle bundle) {
-        return bundle.policyItems().stream().map(EvidenceItem::text).findFirst().orElse("");
+    private static String firstText(List<EvidenceItem> items) {
+        return items.stream().map(EvidenceItem::text).findFirst().orElse("");
     }
 
     private static String prohibitedPosition(EvidenceBundle bundle) {
         return bundle.policyItems().stream()
                 .filter(item -> item.policyFacts() != null
-                        && item.policyFacts().positions().stream()
-                                .anyMatch(role -> role == com.rivell.workbench.knowledge.PositionRole.PROHIBITED))
+                        && item.policyFacts().positions().stream().anyMatch(role ->
+                                role == com.rivell.workbench.knowledge.PositionRole.PROHIBITED))
                 .map(EvidenceItem::text).findFirst().orElse(null);
     }
 
@@ -203,8 +238,10 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
         return bundle.policyItems().stream().map(EvidenceItem::evidenceId).toList();
     }
 
-    private static List<UUID> currentContractIds(EvidenceBundle bundle) {
-        return bundle.currentContractItems().stream().map(EvidenceItem::evidenceId).toList();
+    private static List<UUID> subjectContractIds(EvidenceBundle bundle, UUID clauseId) {
+        return bundle.currentContractItems().stream()
+                .filter(item -> clauseId.equals(item.sourceClauseId()))
+                .map(EvidenceItem::evidenceId).toList();
     }
 
     private static List<UUID> union(List<UUID> first, List<UUID> second) {
@@ -214,18 +251,26 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
         return List.copyOf(all);
     }
 
+    private static List<UUID> validateEvidence(EvidenceBundle bundle, List<UUID> ids) {
+        var available = bundle.items().stream().map(EvidenceItem::evidenceId).toList();
+        if (!available.containsAll(ids)) {
+            throw new IllegalStateException("evidence references not present in the bundle");
+        }
+        return ids;
+    }
+
     private static RawReviewSignal signal(
             ReviewCheckContext context, SignalType type, IssueFamily issueFamily,
             SignalPayload payload, List<UUID> evidenceItemIds, String specId,
-            Integer specVersion, UUID executionId, Map<String, Object> quality) {
+            Integer specVersion, UUID executionId, String resolvedModel,
+            com.rivell.workbench.intelligence.TokenUsage usage, Map<String, Object> quality) {
         var check = context.check();
         return new RawReviewSignal(
                 UUID.randomUUID(), check.organizationId(), check.reviewId(),
                 context.runId(), check.id(), type, FindingSubjectKind.CLAUSE,
                 check.subjectHeadingNodeId(), null, check.concept(),
                 check.secondaryConcept(), issueFamily, payload, evidenceItemIds,
-                specId, specVersion, executionId, null, null, quality,
-                type.name() + ":" + check.concept() + ":" + check.subjectHeadingNodeId(),
-                context.executedAt());
+                specId, specVersion, executionId, null, null, resolvedModel, usage,
+                quality, type.name() + ":" + check.id(), context.executedAt());
     }
 }

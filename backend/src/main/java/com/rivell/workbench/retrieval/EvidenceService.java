@@ -98,10 +98,10 @@ public class EvidenceService {
                 java.time.Duration.between(stageStart, clock.instant()).toMillis());
         var sufficiency = sufficiency(policyResolution, draftingResolution,
                 precedentOutcome, currentOutcome, asOfPublication);
-        var policyItems = items(policyResolution, AuthorityClass.POLICY,
-                "PUBLISHED_PLAYBOOK_RULE");
-        var draftingItems = items(draftingResolution, AuthorityClass.APPROVED_DRAFTING,
-                "PUBLISHED_CLAUSE_VARIANT");
+        var policyItems = items(policyResolution, request.organizationId(),
+                AuthorityClass.POLICY, "PUBLISHED_PLAYBOOK_RULE");
+        var draftingItems = items(draftingResolution, request.organizationId(),
+                AuthorityClass.APPROVED_DRAFTING, "PUBLISHED_CLAUSE_VARIANT");
         var bundle = new EvidenceBundle(UUID.randomUUID(), request,
                 policyItems, draftingItems,
                 precedentOutcome.items(), currentOutcome.items(), List.of(),
@@ -221,13 +221,14 @@ public class EvidenceService {
                 return 0L;
             }
             var pin = request.knowledgePin().publicationNumber();
-            if (!knowledgeQueries.publicationNumberExists(pin)) {
+            if (!knowledgeQueries.publicationNumberExistsForOrganization(
+                    request.organizationId(), pin)) {
                 throw new IllegalArgumentException(
                         "Pinned knowledge publication does not exist: " + pin);
             }
             return pin;
         }
-        return knowledgeQueries.maxPublicationNumber();
+        return knowledgeQueries.maxPublicationNumberForOrganization(request.organizationId());
     }
 
     private EvidenceSufficiency sufficiency(
@@ -271,7 +272,7 @@ public class EvidenceService {
     }
 
     private List<EvidenceItem> items(StructuredPolicyResolver.Resolution resolution,
-            AuthorityClass authority, String sourceType) {
+            UUID organizationId, AuthorityClass authority, String sourceType) {
         var matches = new java.util.ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>(
                 resolution.published());
         if (authority == AuthorityClass.APPROVED_DRAFTING) {
@@ -280,7 +281,7 @@ public class EvidenceService {
         }
         var items = new java.util.ArrayList<EvidenceItem>();
         for (var match : matches) {
-            items.add(item(match, authority, sourceType));
+            items.add(item(match, organizationId, authority, sourceType));
         }
         return List.copyOf(items);
     }
@@ -296,7 +297,7 @@ public class EvidenceService {
 
     private EvidenceItem item(
             com.rivell.workbench.knowledge.PublishedCandidate match,
-            AuthorityClass authority, String sourceType) {
+            UUID organizationId, AuthorityClass authority, String sourceType) {
         var candidate = match.candidate();
         return new EvidenceItem(
                 UUID.randomUUID(),
@@ -316,7 +317,7 @@ public class EvidenceService {
                 LaneInfo.NONE,
                 null,
                 PolicyCompatibility.NOT_ASSESSED,
-                provenance(candidate),
+                provenance(organizationId, candidate),
                 match.publicationId(),
                 match.publicationNumber());
     }
@@ -329,8 +330,10 @@ public class EvidenceService {
                 candidate.effectiveEscalationTrigger());
     }
 
-    private List<String> provenance(com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
-        return knowledgeQueries.findUnit(candidate.extractionUnitId())
+    private List<String> provenance(UUID organizationId,
+            com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
+        return knowledgeQueries.findUnitForOrganization(
+                        organizationId, candidate.extractionUnitId())
                 .map(com.rivell.workbench.knowledge.ExtractionUnit::sourceNodeIds)
                 .map(ids -> ids.stream().map(UUID::toString).toList())
                 .orElse(List.of());

@@ -42,4 +42,9 @@ write_docx('m7-msa-fallback.docx', msa(
     'Supplier\'s total aggregate liability arising out of or related to this '
     'Agreement shall not exceed two times the fees paid in the preceding 12 months.'))
 
+write_docx('m7-msa-uncapped.docx', msa(
+    'Master Services Agreement',
+    'The liability of Supplier under this Agreement is uncapped and unlimited, '
+    'however arising.'))
+
 print('m7 review fixtures written')

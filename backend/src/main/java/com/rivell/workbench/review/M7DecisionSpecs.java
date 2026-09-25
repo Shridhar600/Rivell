@@ -34,8 +34,9 @@ public final class M7DecisionSpecs {
                 "The clause contains a structure the policy prohibits, such as uncapped or "
                         + "unlimited liability.");
         options.put(NOT_COMPARABLE,
-                "The clause's limitation cannot be meaningfully compared with the policy "
-                        + "position.");
+                "The clause's limitation cannot be compared with the policy position "
+                        + "because its structure is indeterminate (for example a cap tied "
+                        + "to a non-fee basis or an unknown amount).");
         return new DecisionSpec(
                 LIABILITY_DEVIATION_SPEC,
                 LIABILITY_DEVIATION_VERSION,
@@ -45,9 +46,9 @@ public final class M7DecisionSpecs {
                 new QuestionPack(Map.<String, com.rivell.workbench.intelligence.SemanticQuestion>of(
                         DEVIATION_TYPE, new ChoiceQuestion(
                         "Choose the single best classification of the clause against the "
-                                + "policy. Use NOT_COMPARABLE when the clause's structure "
-                                + "cannot be compared (for example no monetary cap or a "
-                                + "non-fee basis).",
+                                + "policy rule text. Uncapped or unlimited liability is a "
+                                + "PROHIBITED_STRUCTURE. Use NOT_COMPARABLE only when the "
+                                + "clause's structure is genuinely indeterminate.",
                         options))));
     }
 

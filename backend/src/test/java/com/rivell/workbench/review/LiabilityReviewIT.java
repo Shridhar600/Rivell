@@ -166,11 +166,16 @@ class LiabilityReviewIT {
             var state = (M7DecisionSpecs.LiabilityDeviationState) request.state().payload();
             var text = state.clauseText() == null ? "" : state.clauseText().toLowerCase();
             var multiple = state.capMultiple() == null ? "" : state.capMultiple();
+            var preferred = state.preferredPosition() == null
+                    ? "" : state.preferredPosition().toLowerCase();
             String selected;
             if (text.contains("uncapped") || text.contains("unlimited")) {
                 selected = M7DecisionSpecs.PROHIBITED_STRUCTURE;
-            } else if (!multiple.isBlank()
-                    && new BigDecimal(multiple).compareTo(BigDecimal.ONE) > 0) {
+            } else if (preferred.isBlank()
+                    || !(preferred.contains("12 months") || preferred.contains("twelve (12)"))
+                    || multiple.isBlank()) {
+                selected = M7DecisionSpecs.NOT_COMPARABLE;
+            } else if (new BigDecimal(multiple).compareTo(BigDecimal.ONE) > 0) {
                 selected = M7DecisionSpecs.CAP_ABOVE_PREFERRED;
             } else {
                 selected = M7DecisionSpecs.NO_DEVIATION;
@@ -202,14 +207,24 @@ class LiabilityReviewIT {
 
         private final com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider base =
                 new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();
+        private final AtomicInteger calls = new AtomicInteger();
 
         @Override
         public String id() {
             return "fake";
         }
 
+        int calls() {
+            return calls.get();
+        }
+
+        void reset() {
+            calls.set(0);
+        }
+
         @Override
         public GenerationResult generate(GenerationRequest request) {
+            calls.incrementAndGet();
             if (request.spec().fields().containsKey("escalationTrigger")) {
                 if (request.state().payload() instanceof Map<?, ?> payload
                         && payload.get("text") instanceof String text) {
@@ -255,6 +270,9 @@ class LiabilityReviewIT {
     ReviewScriptedProvider scriptedProvider;
 
     @Autowired
+    ReviewGenerativeProvider generativeProvider;
+
+    @Autowired
     M6EvidenceCorpus corpusBuilder;
 
     @Autowired
@@ -268,6 +286,7 @@ class LiabilityReviewIT {
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
         scriptedProvider.reset();
+        generativeProvider.reset();
     }
 
     private UUID organizationId() {
@@ -313,9 +332,11 @@ class LiabilityReviewIT {
         var organizationId = organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var review = reviewService.create(corpus.contract().contractId(), 1, null);
+        generativeProvider.reset();
 
         var run = analysisService.analyze(organizationId, review.id());
 
+        assertThat(generativeProvider.calls()).isZero();
         var signals = analysisRepository.findSignals(organizationId, run.id());
         assertThat(signals).hasSize(3);
         assertThat(signals).allSatisfy(signal -> {
@@ -393,4 +414,31 @@ class LiabilityReviewIT {
 
     @Autowired
     ReviewRepository reviewRepository;
+
+    @Test
+    void uncappedClauseIsClassifiedProhibitedEvenWithoutExtractableFacts() throws Exception {
+        var organizationId = organizationId();
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.LIBRARY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var review = enrichedReview("m7-msa-uncapped.docx");
+        generativeProvider.reset();
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var signals = analysisRepository.findSignals(organizationId, run.id());
+        var deviation = signals.stream()
+                .filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
+                .findFirst().orElseThrow();
+        assertThat(((LiabilityDeviationPayload) deviation.payload()).deviationType())
+                .isEqualTo(M7DecisionSpecs.PROHIBITED_STRUCTURE);
+        assertThat(signals).extracting(RawReviewSignal::signalType)
+                .contains(SignalType.APPROVED_DRAFTING_AVAILABLE,
+                        SignalType.ESCALATION_REQUIRED);
+        var executions = analysisRepository.findExecutions(organizationId, run.id());
+        assertThat(executions.get(0).status()).isEqualTo(CheckExecutionStatus.COMPLETED);
+        assertThat(executions.get(0).detail().get("factsAvailable")).isEqualTo(false);
+        assertThat(generativeProvider.calls()).isZero();
+    }
 }

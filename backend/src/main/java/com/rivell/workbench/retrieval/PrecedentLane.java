@@ -113,7 +113,8 @@ public class PrecedentLane {
 
         var items = new ArrayList<EvidenceItem>();
         for (var candidateId : reranked) {
-            items.add(item(byId.get(candidateId), publicationById.get(candidateId),
+            items.add(item(request.organizationId(), byId.get(candidateId),
+                    publicationById.get(candidateId),
                     rankOf(lexicalHits, candidateId),
                     rankOf(vectorHits, candidateId), fusedHit(fused, candidateId),
                     compatibilities.getOrDefault(candidateId, PolicyCompatibility.NOT_ASSESSED),
@@ -231,6 +232,7 @@ public class PrecedentLane {
     }
 
     private EvidenceItem item(
+            java.util.UUID organizationId,
             KnowledgeCandidate candidate,
             com.rivell.workbench.knowledge.PublishedCandidate published,
             Integer lexicalRank,
@@ -238,7 +240,8 @@ public class PrecedentLane {
             RankFusion.FusedHit fused,
             PolicyCompatibility compatibility,
             com.rivell.workbench.intelligence.DecisionExecution relevanceExecution) {
-        var unit = knowledgeQueries.findUnit(candidate.extractionUnitId()).orElse(null);
+        var unit = knowledgeQueries.findUnitForOrganization(
+                organizationId, candidate.extractionUnitId()).orElse(null);
         var provenance = unit == null ? List.<String>of()
                 : unit.sourceNodeIds().stream().map(UUID::toString).toList();
         return new EvidenceItem(

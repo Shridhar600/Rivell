@@ -69,7 +69,9 @@ public class StructuredPolicyResolver {
                 profile.jurisdiction() == Jurisdiction.UNSPECIFIED
                         ? null : profile.jurisdiction().name(),
                 request.effectiveOn());
-        var candidates = knowledgeQueries.findPublishedCandidatesAsOf(query);
+        // system-level read: the request's organization is authoritative and the
+        // caller (EvidenceService) already enforced identity/authorization
+        var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
         var truncated = candidates.size() > query.limit();
         var bounded = truncated ? candidates.subList(0, query.limit()) : candidates;
         return new Resolution(List.copyOf(bounded), asOfPublicationNumber, truncated);

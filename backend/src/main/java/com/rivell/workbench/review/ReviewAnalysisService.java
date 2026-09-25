@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.springframework.transaction.support.TransactionTemplate;
+
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.intelligence.EmbeddingService;
@@ -15,9 +17,9 @@ import com.rivell.workbench.review.check.ReviewCheckContext;
 import com.rivell.workbench.review.check.ReviewCheckExecutors;
 
 /**
- * Deterministic machine-analysis orchestration: one run (generation) per attempt,
- * terminal checks are skipped on retry, signals are dedupe-keyed per run, and the
- * review completes even when checks degrade (uncertainty, not failure).
+ * Deterministic machine-analysis orchestration. One run (generation) per attempt with a
+ * lease-based check claim; terminal checks are skipped on retry; a check's signals and
+ * its terminal state commit atomically; review and run complete in one transaction.
  */
 public class ReviewAnalysisService {
 
@@ -27,6 +29,7 @@ public class ReviewAnalysisService {
     private final ContractEnrichmentService contractEnrichmentService;
     private final RetrievalProperties retrievalProperties;
     private final EmbeddingService embeddingService;
+    private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
     public ReviewAnalysisService(
@@ -36,6 +39,7 @@ public class ReviewAnalysisService {
             ContractEnrichmentService contractEnrichmentService,
             RetrievalProperties retrievalProperties,
             EmbeddingService embeddingService,
+            TransactionTemplate transactionTemplate,
             Clock clock) {
         this.reviewRepository = reviewRepository;
         this.analysisRepository = analysisRepository;
@@ -43,6 +47,7 @@ public class ReviewAnalysisService {
         this.contractEnrichmentService = contractEnrichmentService;
         this.retrievalProperties = retrievalProperties;
         this.embeddingService = embeddingService;
+        this.transactionTemplate = transactionTemplate;
         this.clock = clock;
     }
 
@@ -54,27 +59,37 @@ public class ReviewAnalysisService {
                     () -> new IllegalStateException(
                             "Terminal review has no analysis run: " + reviewId));
         }
-        var snapshot = reviewRepository.findSnapshot(organizationId, reviewId).orElseThrow(
-                () -> new IllegalStateException("Review snapshot missing: " + reviewId));
-        var run = analysisRepository.findRunningRun(organizationId, reviewId)
-                .orElseGet(() -> startRun(review));
-        if (review.status() == ReviewStatus.ANALYSIS_QUEUED) {
+        ReviewAnalysisRun acquiredRun = null;
+        try {
+            var snapshot = reviewRepository.findSnapshot(organizationId, reviewId).orElseThrow(
+                    () -> new IllegalStateException("Review snapshot missing: " + reviewId));
+            acquiredRun = resolveRun(organizationId, review, reviewId);
+            if (reviewRepository.find(organizationId, reviewId).orElseThrow().status()
+                    == ReviewStatus.COMPLETED) {
+                return acquiredRun;
+            }
             reviewRepository.markAnalyzing(organizationId, reviewId, clock.instant());
-        }
 
-        var semantics = contractEnrichmentService.getSemanticsForOrganization(
-                organizationId, snapshot.contractVersionId());
-        var environment = evaluateEnvironment(snapshot, semantics);
-        executePlannedChecks(review, snapshot, run, semantics, environment);
-
-        var checks = reviewRepository.findPlanChecks(organizationId, reviewId);
-        var executions = analysisRepository.findExecutions(organizationId, run.id());
-        if (executions.size() == checks.size()
-                && executions.stream().allMatch(execution -> execution.status().terminal())) {
-            analysisRepository.markRunCompleted(organizationId, run.id(), clock.instant());
-            reviewRepository.markCompleted(organizationId, reviewId, clock.instant());
+            var run = acquiredRun;
+            var semantics = contractEnrichmentService.getSemanticsForOrganization(
+                    organizationId, snapshot.contractVersionId());
+            var environment = evaluateEnvironment(snapshot, semantics);
+            executePlannedChecks(review, snapshot, run, semantics, environment);
+            completeIfDone(organizationId, reviewId, run);
+        } catch (RuntimeException e) {
+            var failedRun = acquiredRun;
+            transactionTemplate.executeWithoutResult(status -> {
+                if (failedRun != null) {
+                    analysisRepository.markRunFailed(organizationId, failedRun.id(),
+                            failureReason(e), clock.instant());
+                }
+                reviewRepository.markFailed(organizationId, reviewId,
+                        failureReason(e), clock.instant());
+            });
+            throw e;
         }
-        return analysisRepository.findLatestRun(organizationId, reviewId).orElse(run);
+        return analysisRepository.findLatestRun(organizationId, reviewId)
+                .orElse(acquiredRun);
     }
 
     public ReviewProgress progress(UUID organizationId, UUID reviewId) {
@@ -86,9 +101,10 @@ public class ReviewAnalysisService {
             return new ReviewProgress(review.status(), planned, planned, 0, 0, 0, 0, 0, 0);
         }
         var executions = analysisRepository.findExecutions(organizationId, latest.get().id());
+        var pending = Math.max(0, planned - (int) executions.stream()
+                .filter(execution -> execution.status().terminal()).count());
         return new ReviewProgress(
-                review.status(), planned,
-                count(executions, CheckExecutionStatus.PENDING),
+                review.status(), planned, pending,
                 count(executions, CheckExecutionStatus.RUNNING),
                 count(executions, CheckExecutionStatus.COMPLETED),
                 count(executions, CheckExecutionStatus.DEGRADED),
@@ -109,45 +125,75 @@ public class ReviewAnalysisService {
         return new AnalysisEnvironment(digestMatches, indexMatches, modelMatches);
     }
 
-    private ReviewAnalysisRun startRun(Review review) {
-        var runNumber = analysisRepository.maxRunNumber(
-                review.organizationId(), review.id()) + 1;
-        var run = ReviewAnalysisRun.running(UUID.randomUUID(), review.organizationId(),
-                review.id(), runNumber, RunTrigger.INITIAL, ReviewPipeline.VERSION,
-                clock.instant());
-        analysisRepository.insertRun(run);
-        return run;
+    private ReviewAnalysisRun resolveRun(
+            UUID organizationId, Review review, UUID reviewId) {
+        for (int attempt = 0; attempt < 2; attempt++) {
+            var running = analysisRepository.findRunningRun(organizationId, reviewId);
+            if (running.isPresent()) {
+                return running.get();
+            }
+            var latest = analysisRepository.findLatestRun(organizationId, reviewId);
+            if (latest.isPresent() && latest.get().status() == RunStatus.COMPLETED) {
+                reviewRepository.markCompleted(organizationId, reviewId, clock.instant());
+                return latest.get();
+            }
+            var next = latest.map(run -> run.runNumber() + 1).orElse(1);
+            var created = ReviewAnalysisRun.running(UUID.randomUUID(), organizationId,
+                    reviewId, next, RunTrigger.INITIAL, ReviewPipeline.VERSION,
+                    clock.instant());
+            if (analysisRepository.tryInsertRun(created)) {
+                return created;
+            }
+        }
+        return analysisRepository.findRunningRun(organizationId, reviewId)
+                .orElseGet(() -> analysisRepository.findLatestRun(organizationId, reviewId)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Unable to claim an analysis run for review " + reviewId)));
     }
 
     private void executePlannedChecks(
             Review review, ReviewSnapshot snapshot, ReviewAnalysisRun run,
             ContractSemantics semantics, AnalysisEnvironment environment) {
-        for (var check : reviewRepository.findPlanChecks(
-                review.organizationId(), review.id())) {
+        for (var check : reviewRepository.findPlanChecks(review.organizationId(), review.id())) {
             var existing = analysisRepository.findExecution(
                     review.organizationId(), run.id(), check.id());
             if (existing.isPresent() && existing.get().status().terminal()) {
                 continue;
             }
-            var execution = existing.orElseGet(() -> {
+            if (existing.isEmpty()) {
                 analysisRepository.insertExecutionIfAbsent(ReviewCheckExecution.pending(
                         UUID.randomUUID(), review.organizationId(), review.id(),
                         run.id(), check.id()));
-                return analysisRepository.findExecution(
-                        review.organizationId(), run.id(), check.id()).orElseThrow();
-            });
-            analysisRepository.updateExecution(review.organizationId(), execution.id(),
-                    CheckExecutionStatus.RUNNING, null, Map.of(), 0, clock.instant(), null);
-
+            }
+            var execution = analysisRepository.findExecution(
+                    review.organizationId(), run.id(), check.id()).orElseThrow();
+            if (!analysisRepository.claimExecution(review.organizationId(), execution.id())) {
+                continue;
+            }
             var context = new ReviewCheckContext(review, snapshot, check, run.id(),
                     semantics, environment, clock.instant());
             var outcome = runCheck(check, context, environment);
-            analysisRepository.insertSignals(outcome.signals());
-            var signalCount = analysisRepository.countSignals(
-                    review.organizationId(), run.id(), check.id());
-            analysisRepository.updateExecution(review.organizationId(), execution.id(),
-                    outcome.status(), outcome.evidenceTraceId(), outcome.detail(),
-                    signalCount, null, clock.instant());
+            transactionTemplate.executeWithoutResult(status -> {
+                analysisRepository.deleteSignals(
+                        review.organizationId(), run.id(), check.id());
+                analysisRepository.insertSignals(outcome.signals());
+                analysisRepository.completeExecution(review.organizationId(), execution.id(),
+                        outcome.status(), outcome.evidenceTraceId(), outcome.detail(),
+                        outcome.signals().size(), clock.instant());
+            });
+        }
+    }
+
+    private void completeIfDone(UUID organizationId, UUID reviewId, ReviewAnalysisRun run) {
+        var checks = reviewRepository.findPlanChecks(organizationId, reviewId);
+        var executions = analysisRepository.findExecutions(organizationId, run.id());
+        if (executions.size() == checks.size()
+                && executions.stream().allMatch(execution -> execution.status().terminal())) {
+            transactionTemplate.executeWithoutResult(status -> {
+                if (analysisRepository.markRunCompleted(organizationId, run.id(), clock.instant())) {
+                    reviewRepository.markCompleted(organizationId, reviewId, clock.instant());
+                }
+            });
         }
     }
 
@@ -161,9 +207,20 @@ public class ReviewAnalysisService {
                     .map(executor -> executor.execute(context))
                     .orElseGet(() -> CheckOutcome.degraded(
                             "mechanism_not_available:" + check.mechanism()));
+        } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
+            return CheckOutcome.degraded("provider_unavailable:" + e.getClass().getSimpleName());
         } catch (RuntimeException e) {
-            return CheckOutcome.failed(e.getClass().getSimpleName());
+            return CheckOutcome.failed(failureReason(e));
         }
+    }
+
+    static String failureReason(RuntimeException e) {
+        var origin = e.getStackTrace().length == 0 ? "unknown"
+                : e.getStackTrace()[0].getClassName() + "."
+                        + e.getStackTrace()[0].getMethodName()
+                        + ":" + e.getStackTrace()[0].getLineNumber();
+        var message = e.getMessage() == null ? "" : ":" + e.getMessage();
+        return e.getClass().getSimpleName() + message + "@" + origin;
     }
 
     private static int count(

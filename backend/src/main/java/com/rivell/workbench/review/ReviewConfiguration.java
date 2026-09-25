@@ -82,9 +82,10 @@ class ReviewConfiguration {
             ContractEnrichmentService contractEnrichmentService,
             RetrievalProperties retrievalProperties,
             EmbeddingService embeddingService,
+            TransactionTemplate transactionTemplate,
             Clock clock) {
         return new ReviewAnalysisService(reviewRepository, reviewAnalysisRepository,
                 reviewCheckExecutors, contractEnrichmentService, retrievalProperties,
-                embeddingService, clock);
+                embeddingService, transactionTemplate, clock);
     }
 }

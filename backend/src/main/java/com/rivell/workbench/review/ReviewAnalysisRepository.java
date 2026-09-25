@@ -15,7 +15,7 @@ public interface ReviewAnalysisRepository {
 
     int maxRunNumber(UUID organizationId, UUID reviewId);
 
-    void insertRun(ReviewAnalysisRun run);
+    boolean tryInsertRun(ReviewAnalysisRun run);
 
     boolean markRunCompleted(UUID organizationId, UUID runId, Instant completedAt);
 
@@ -28,12 +28,17 @@ public interface ReviewAnalysisRepository {
 
     boolean insertExecutionIfAbsent(ReviewCheckExecution execution);
 
-    boolean updateExecution(
+    /** Claims a PENDING or stale RUNNING execution; false when another worker holds it. */
+    boolean claimExecution(UUID organizationId, UUID executionId);
+
+    boolean completeExecution(
             UUID organizationId, UUID executionId, CheckExecutionStatus status,
             UUID evidenceTraceId, Map<String, Object> detail, int signalCount,
-            Instant startedAt, Instant completedAt);
+            Instant completedAt);
 
     void insertSignals(List<RawReviewSignal> signals);
+
+    int deleteSignals(UUID organizationId, UUID runId, UUID planCheckId);
 
     List<RawReviewSignal> findSignals(UUID organizationId, UUID runId);
 

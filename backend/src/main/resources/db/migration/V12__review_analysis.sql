@@ -61,16 +61,17 @@ CREATE TABLE raw_review_signal (
     signal_type TEXT NOT NULL CHECK (signal_type IN
         ('POLICY_DEVIATION', 'MISSING_REQUIRED_CONCEPT', 'EXPECTED_CONCEPT_ABSENT',
          'CROSS_CLAUSE_CONFLICT', 'APPROVED_DRAFTING_AVAILABLE', 'ESCALATION_REQUIRED',
-         'POLICY_UNAVAILABLE', 'POLICY_AMBIGUOUS', 'OPEN_ENDED_ANALYSIS_RESULT')),
+         'POLICY_UNAVAILABLE', 'POLICY_AMBIGUOUS', 'DEVIATION_UNCERTAIN',
+         'OPEN_ENDED_ANALYSIS_RESULT')),
     subject_kind TEXT NOT NULL CHECK (subject_kind IN ('CLAUSE', 'ABSENCE')),
     subject_heading_node_id UUID,
     absence_concept TEXT,
     concept TEXT NOT NULL,
     secondary_concept TEXT,
     issue_family TEXT NOT NULL CHECK (issue_family IN
-        ('LIABILITY_CAP_DEVIATION', 'MISSING_REQUIRED_PROVISION', 'EXPECTED_PROVISION_ABSENT',
-         'SURVIVAL_COVERAGE_GAP', 'CARVE_OUT_INCONSISTENCY', 'POLICY_UNAVAILABLE',
-         'POLICY_AMBIGUOUS', 'OPEN_ENDED_LIABILITY')),
+        ('LIABILITY_CAP_DEVIATION', 'LIABILITY_CAP_UNCERTAIN', 'MISSING_REQUIRED_PROVISION',
+         'EXPECTED_PROVISION_ABSENT', 'SURVIVAL_COVERAGE_GAP', 'CARVE_OUT_INCONSISTENCY',
+         'POLICY_UNAVAILABLE', 'POLICY_AMBIGUOUS', 'OPEN_ENDED_LIABILITY')),
     payload JSONB NOT NULL,
     evidence_item_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
     decision_spec_id TEXT,
@@ -78,6 +79,8 @@ CREATE TABLE raw_review_signal (
     jev_execution_id UUID,
     generative_execution_id UUID,
     verification_outcome TEXT,
+    resolved_model TEXT,
+    usage JSONB,
     quality JSONB NOT NULL DEFAULT '{}'::jsonb,
     dedupe_key TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
@@ -91,5 +94,8 @@ ALTER TABLE raw_review_signal
     ADD CONSTRAINT fk_raw_review_signal_run_org
     FOREIGN KEY (run_id, organization_id)
     REFERENCES review_analysis_run (id, organization_id);
+ALTER TABLE raw_review_signal
+    ADD CONSTRAINT fk_raw_review_signal_review_org
+    FOREIGN KEY (review_id, organization_id) REFERENCES review (id, organization_id);
 
 CREATE INDEX idx_raw_review_signal_run ON raw_review_signal (run_id, created_at);
