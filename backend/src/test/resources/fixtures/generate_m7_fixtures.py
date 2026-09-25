@@ -48,6 +48,32 @@ write_docx('m7-msa-uncapped.docx', msa(
     'however arising.'))
 
 
+write_docx('m7-msa-clean.docx', (
+    p('Master Services Agreement', 'Title')
+    + p('This Master Services Agreement is entered into as of January 1, 2026 by and '
+        'between Northwind Customer Group LLC ("Customer") and Pallas Cloud Services '
+        'GmbH ("Supplier").', 'Normal')
+    + p('1. Limitation of Liability', 'Heading1')
+    + p('Supplier\'s total aggregate liability arising out of or related to this '
+        'Agreement shall not exceed an amount equal to the fees paid in the twelve '
+        '(12) months immediately preceding the event giving rise to the claim.',
+        'Normal')
+    + p('2. Indemnification', 'Heading1')
+    + p('Supplier shall indemnify and defend Customer against third-party claims '
+        'arising from the Services, subject to the limitations in Section 1.', 'Normal')
+    + p('3. Confidentiality', 'Heading1')
+    + p('3.1 Each Party shall protect the other Party\'s confidential information '
+        'with reasonable care.', 'Normal')
+    + p('3.2 The obligations in this Section 3 survive termination of this Agreement '
+        'for three (3) years.', 'Normal')
+    + p('4. Survival', 'Heading1')
+    + p('4.1 Sections 2 (Indemnification) and 3 (Confidentiality) survive termination '
+        'of this Agreement.', 'Normal')
+    + p('5. Termination', 'Heading1')
+    + p('5.1 Either Party may terminate this Agreement for convenience upon sixty (60) '
+        'days\' prior written notice to the other Party.', 'Normal')))
+
+
 def cross_clause(title, liability_text, confidentiality_text, indemnification_text):
     body = p(title, 'Title')
     body += p('This Master Services Agreement is entered into as of January 1, 2026 '

@@ -306,9 +306,14 @@ public final class FindingAssembler {
                     absenceSubject, evidence));
         }
         if (drafting != null && action == ProposedAction.USE_APPROVED_FALLBACK) {
+            var preferredOnly = "PREFERRED".equals(drafting.variantRole());
             claims.add(FindingClaim.of(2, ClaimKind.EVIDENCE_BASIS,
-                    "Approved drafting is available in the clause library and is "
-                            + "proposed as the acceptable second position.",
+                    preferredOnly
+                            ? "Approved drafting is available in the clause library; the "
+                                    + "preferred variant is proposed because no fallback "
+                                    + "variant is published."
+                            : "Approved drafting is available in the clause library and is "
+                                    + "proposed as the acceptable second position.",
                     absenceSubject, List.of(drafting.draftingEvidenceId())));
         }
         if (openEnded != null

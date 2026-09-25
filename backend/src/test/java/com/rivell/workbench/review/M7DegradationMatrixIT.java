@@ -218,6 +218,31 @@ class M7DegradationMatrixIT {
     }
 
     @Test
+    void carveOutClassificationUncertaintyReportsCauseAccurateReason() throws Exception {
+        var organizationId = organizationId();
+        publishMainPolicyAndLibrary(organizationId);
+        var review = enrichedReview("m7-msa-carveout-conflict.docx",
+                ReviewPackRegistry.MSA_PACK);
+        scriptedProvider.consistencyTopProbability = 0.5;
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var uncertain = analysisRepository.findSignals(organizationId, run.id()).stream()
+                .filter(signal -> signal.signalType() == SignalType.CROSS_CLAUSE_UNCERTAIN)
+                .findFirst().orElseThrow();
+        assertThat(((DeviationUncertainPayload) uncertain.payload()).reason())
+                .isEqualTo("cross_clause_classification_uncertain");
+        var carveExecution = analysisRepository.findExecutions(organizationId, run.id()).stream()
+                .filter(execution -> execution.detail().containsKey("degradedReason"))
+                .findFirst().orElseThrow();
+        assertThat(carveExecution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+        assertThat(carveExecution.detail().get("degradedReason"))
+                .isEqualTo("cross_clause_classification_uncertain");
+        assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
+                .isEqualTo(ReviewStatus.COMPLETED);
+    }
+
+    @Test
     void disputedVerificationDemotesTheAssembledFinding() throws Exception {
         var organizationId = organizationId();
         var review = exoticReviewOnlyPolicy(organizationId);

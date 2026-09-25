@@ -132,13 +132,14 @@ class CrossClauseReviewIT {
                 .toList();
         assertThat(conflicts).hasSize(1);
         assertThat(conflicts.get(0).signalType()).isEqualTo(SignalType.CROSS_CLAUSE_CONFLICT);
-        assertThat(conflicts.get(0).evidenceItemIds()).isNotEmpty();
+        assertThat(conflicts.get(0).evidenceItemIds()).hasSizeGreaterThanOrEqualTo(3);
         assertThat(conflicts.get(0).jevExecutionId()).isNull();
         var survivalExecution = analysisRepository.findExecutions(organizationId, run.id())
                 .stream().filter(execution -> execution.detail().containsKey("covered"))
                 .findFirst().orElseThrow();
         assertThat(survivalExecution.detail().get("covered")).isEqualTo(false);
         assertThat(survivalExecution.detail().get("basis")).isEqualTo("none");
+        assertThat(survivalExecution.detail().get("counterpartTraceId")).isNotNull();
     }
 
     @Test
@@ -169,6 +170,7 @@ class CrossClauseReviewIT {
         assertThat(carveExecution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
         assertThat(carveExecution.detail().get("consistency"))
                 .isEqualTo(M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY);
+        assertThat(carveExecution.detail().get("counterpartTraceId")).isNotNull();
     }
 
     @Test

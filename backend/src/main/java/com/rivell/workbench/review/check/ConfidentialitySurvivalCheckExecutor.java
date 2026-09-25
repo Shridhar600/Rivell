@@ -68,7 +68,7 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
         if (covered) {
             return CheckOutcome.completed(List.of(), detail, bundle.traceId());
         }
-        var counterpartClauseIds = context.semantics().clauses().stream()
+        var counterparts = context.semantics().clauses().stream()
                 .filter(candidate -> context.check().secondaryConcept() != null
                         && (candidate.effectivePrimaryConcept()
                                         .filter(concept -> concept
@@ -76,9 +76,17 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
                                         .isPresent()
                                 || candidate.secondaryConcepts()
                                         .contains(context.check().secondaryConcept())))
-                .map(ClauseSemantics::id).toList();
+                .toList();
+        List<UUID> counterpartEvidence = List.of();
+        if (!counterparts.isEmpty()) {
+            var counterpartBundle = context.evidenceCache().build(request(context,
+                    counterparts.get(0), context.check().secondaryConcept()));
+            counterpartEvidence = subjectContractIds(counterpartBundle,
+                    counterparts.stream().map(ClauseSemantics::id).toList());
+            detail.put("counterpartTraceId", counterpartBundle.traceId());
+        }
         var evidence = union(subjectContractIds(bundle, clause.id()),
-                union(subjectContractIds(bundle, counterpartClauseIds), policyIds(bundle)));
+                union(counterpartEvidence, policyIds(bundle)));
         var signal = new RawReviewSignal(
                 UUID.randomUUID(), context.check().organizationId(),
                 context.check().reviewId(), context.runId(), context.check().id(),
@@ -102,9 +110,15 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
     }
 
     private static EvidenceRequest request(ReviewCheckContext context, ClauseSemantics clause) {
+        return request(context, clause, context.check().concept());
+    }
+
+    private static EvidenceRequest request(
+            ReviewCheckContext context, ClauseSemantics clause,
+            com.rivell.workbench.contracts.LegalConcept concept) {
         var snapshot = context.snapshot();
         return EvidenceRequest.forClauseReview(
-                snapshot.organizationId(), context.check().concept(),
+                snapshot.organizationId(), concept,
                 snapshot.contractId(), snapshot.contractVersionNumber(), clause.id(),
                 clause.contentText(),
                 new com.rivell.workbench.contracts.ReviewProfile(

@@ -299,9 +299,11 @@ class ReviewAnalysisIT {
         assertThat(analysisRepository.countSignals(organizationId, first.id()))
                 .isEqualTo(signalsAfterFirst);
 
-        var interrupted = executionsAfterFirst.stream()
-                .filter(execution -> execution.status() == CheckExecutionStatus.COMPLETED)
-                .findFirst().orElseThrow();
+        var interrupted = liabilityExecution(organizationId, review.id(), first.id());
+        var interruptedSignalIds = analysisRepository.findSignals(organizationId, first.id())
+                .stream().filter(signal -> signal.planCheckId().equals(interrupted.planCheckId()))
+                .map(RawReviewSignal::id).toList();
+        assertThat(interruptedSignalIds).isNotEmpty();
         jdbcClient.sql("""
                 update review_check_execution
                 set status = 'RUNNING', started_at = now() - interval '11 minutes',
@@ -328,6 +330,15 @@ class ReviewAnalysisIT {
         assertThat(findingRepository.findFindings(organizationId, first.id())
                 .stream().map(Finding::consolidationKey).toList())
                 .containsExactlyElementsOf(findingKeysAfterFirst);
+
+        var replaced = analysisRepository.findSignals(organizationId, first.id()).stream()
+                .filter(signal -> signal.planCheckId().equals(interrupted.planCheckId()))
+                .toList();
+        assertThat(replaced).isNotEmpty();
+        assertThat(replaced).extracting(RawReviewSignal::id)
+                .doesNotContainAnyElementsOf(interruptedSignalIds);
+        assertThat(analysisRepository.findSignals(organizationId, first.id()))
+                .extracting(RawReviewSignal::dedupeKey).doesNotHaveDuplicates();
     }
 
     private ReviewCheckExecution liabilityExecution(
@@ -561,20 +572,62 @@ class ReviewAnalysisIT {
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var review = reviewService.create(
                 corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
-        var run = analysisService.analyze(organizationId, review.id());
-        var execution = liabilityExecution(organizationId, review.id(), run.id());
+        var planCheck = reviewRepository.findPlanChecks(organizationId, review.id()).stream()
+                .filter(check -> check.mechanism() == CheckMechanism.LIABILITY_CAP)
+                .findFirst().orElseThrow();
+        var run = ReviewAnalysisRun.running(UUID.randomUUID(), organizationId, review.id(), 1,
+                RunTrigger.INITIAL, ReviewPipeline.VERSION, java.time.Instant.now());
+        assertThat(analysisRepository.tryInsertRun(run)).isTrue();
+        analysisRepository.insertExecutionIfAbsent(ReviewCheckExecution.pending(
+                UUID.randomUUID(), organizationId, review.id(), run.id(), planCheck.id()));
+        var execution = analysisRepository.findExecution(organizationId, run.id(),
+                planCheck.id()).orElseThrow();
+        var lease = analysisRepository.claimExecution(organizationId, execution.id())
+                .orElseThrow();
 
-        var written = analysisRepository.completeExecution(organizationId, execution.id(),
+        var loser = analysisRepository.completeExecution(organizationId, execution.id(),
                 UUID.randomUUID(), CheckExecutionStatus.COMPLETED, null,
                 java.util.Map.of("loser", true), 99, java.time.Instant.now());
 
-        assertThat(written).isFalse();
-        var reloaded = analysisRepository.findExecution(
-                organizationId, run.id(), execution.planCheckId()).orElseThrow();
-        assertThat(reloaded.status()).isEqualTo(execution.status());
-        assertThat(reloaded.detail()).doesNotContainKey("loser");
-        assertThat(reloaded.signalCount()).isEqualTo(execution.signalCount());
-        assertSignalCountParity(organizationId, run.id());
+        assertThat(loser).isFalse();
+        var untouched = analysisRepository.findExecution(organizationId, run.id(),
+                planCheck.id()).orElseThrow();
+        assertThat(untouched.status()).isEqualTo(CheckExecutionStatus.RUNNING);
+        assertThat(untouched.detail()).doesNotContainKey("loser");
+        assertThat(untouched.signalCount()).isZero();
+
+        var winner = analysisRepository.completeExecution(organizationId, execution.id(),
+                lease, CheckExecutionStatus.COMPLETED, null,
+                java.util.Map.of("winner", true), 0, java.time.Instant.now());
+        assertThat(winner).isTrue();
+        var completed = analysisRepository.findExecution(organizationId, run.id(),
+                planCheck.id()).orElseThrow();
+        assertThat(completed.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
+        assertThat(completed.detail()).containsEntry("winner", true);
+    }
+
+    @Test
+    void emptyPlanCompletesWithZeroFindings() throws Exception {
+        var organizationId = organizationId();
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/m5-nda-counterparty.docx"));
+        var ingested = contractIngestionService.ingest("m5-nda-counterparty.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.NDA, PartyRole.RECEIVING_PARTY,
+                        PaperSource.COUNTERPARTY_PAPER, Jurisdiction.US));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+
+        assertThat(reviewRepository.findPlanChecks(organizationId, review.id())).isEmpty();
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(run.status()).isEqualTo(RunStatus.COMPLETED);
+        assertThat(analysisRepository.findSignals(organizationId, run.id())).isEmpty();
+        assertThat(findingRepository.findFindings(organizationId, run.id())).isEmpty();
+        var progress = analysisService.progress(organizationId, review.id());
+        assertThat(progress.plannedChecks()).isZero();
+        assertThat(progress.reviewStatus()).isEqualTo(ReviewStatus.COMPLETED);
     }
 
     @Test

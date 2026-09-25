@@ -161,6 +161,7 @@ class LiabilityReviewIT {
         volatile String deviationAnswerOverride;
         volatile boolean failConsistencyDecision;
         volatile String consistencyAnswerOverride;
+        volatile double consistencyTopProbability = 0.9;
 
         @Override
         public String id() {
@@ -192,14 +193,17 @@ class LiabilityReviewIT {
                 }
                 if (consistencyAnswerOverride != null) {
                     var override = new LinkedHashMap<String, Double>();
+                    var residual = (1.0 - consistencyTopProbability) / 2;
                     for (var option : List.of(M7DecisionSpecs.CONSISTENT,
                             M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY,
                             M7DecisionSpecs.NOT_COMPARABLE_CARVE)) {
-                        override.put(option, option.equals(consistencyAnswerOverride) ? 0.9 : 0.03);
+                        override.put(option, option.equals(consistencyAnswerOverride)
+                                ? consistencyTopProbability : residual);
                     }
                     return new ProviderExecutionResult(
                             new LinkedHashMap<>(Map.of(M7DecisionSpecs.CONSISTENCY,
-                                    new ChoiceAnswer(consistencyAnswerOverride, 0.9, override))),
+                                    new ChoiceAnswer(consistencyAnswerOverride,
+                                            consistencyTopProbability, override))),
                             "fake-review-v1", new TokenUsage(140, 6));
                 }
                 var carveState = (M7DecisionSpecs.CarveOutConsistencyState)
@@ -222,14 +226,16 @@ class LiabilityReviewIT {
                     selected = M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY;
                 }
                 var consistency = new LinkedHashMap<String, Double>();
+                var residual = (1.0 - consistencyTopProbability) / 2;
                 for (var option : List.of(M7DecisionSpecs.CONSISTENT,
                         M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY,
                         M7DecisionSpecs.NOT_COMPARABLE_CARVE)) {
-                    consistency.put(option, option.equals(selected) ? 0.9 : 0.03);
+                    consistency.put(option, option.equals(selected)
+                            ? consistencyTopProbability : residual);
                 }
                 var carveAnswers = new LinkedHashMap<String, SemanticAnswer>();
                 carveAnswers.put(M7DecisionSpecs.CONSISTENCY,
-                        new ChoiceAnswer(selected, 0.9, consistency));
+                        new ChoiceAnswer(selected, consistencyTopProbability, consistency));
                 return new ProviderExecutionResult(carveAnswers, "fake-review-v1",
                         new TokenUsage(140, 6));
             }
@@ -293,6 +299,7 @@ class LiabilityReviewIT {
             deviationAnswerOverride = null;
             failConsistencyDecision = false;
             consistencyAnswerOverride = null;
+            consistencyTopProbability = 0.9;
         }
     }
 

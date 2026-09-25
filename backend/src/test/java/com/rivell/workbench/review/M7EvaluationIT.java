@@ -118,7 +118,8 @@ class M7EvaluationIT {
     void s1CleanPreferredAndS5OptionalAbsent() throws Exception {
         var organizationId = organizationId();
         publishMainPolicyAndLibrary(organizationId);
-        var review = enrichedReview("m7-msa-preferred.docx", msaProfile(null));
+        var review = enrichedReview("m7-msa-clean.docx",
+                msaProfile(ReviewPackRegistry.MSA_PACK));
         resetProviders();
 
         var start = System.nanoTime();
@@ -127,20 +128,28 @@ class M7EvaluationIT {
 
         assertThat(generativeProvider.calls()).isZero();
         assertThat(scriptedProvider.liabilityDecisions()).isEqualTo(1);
-        var signals = analysisRepository.findSignals(organizationId, run.id());
-        assertThat(signals).noneMatch(signal ->
+        var optionalCheck = reviewRepository.findPlanChecks(organizationId, review.id()).stream()
+                .filter(check -> "PRESENCE:GOVERNING_LAW".equals(check.checkKey()))
+                .findFirst().orElseThrow();
+        assertThat(optionalCheck.expectation()).isEqualTo(CheckExpectation.OPTIONAL);
+        assertThat(analysisRepository.findExecution(
+                organizationId, run.id(), optionalCheck.id()).orElseThrow().signalCount())
+                .isZero();
+        assertThat(analysisRepository.findSignals(organizationId, run.id())).noneMatch(signal ->
                 signal.concept() == LegalConcept.GOVERNING_LAW
                         || signal.absenceConcept() == LegalConcept.GOVERNING_LAW);
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()))
+                .allSatisfy(execution -> assertThat(execution.status())
+                        .isEqualTo(CheckExecutionStatus.COMPLETED));
         record("S1+S5 clean preferred, optional absent", organizationId, review.id(),
                 Set.of(), 0, 0, elapsed);
     }
 
     @Test
-    void s2AndS11BoundedDeviationConsolidatesSupportingSignals() {
+    void s2AndS11BoundedDeviationConsolidatesSupportingSignals() throws Exception {
         var organizationId = organizationId();
-        var corpus = corpusBuilder.buildMainCorpus(organizationId);
-        var review = reviewService.create(
-                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+        publishMainPolicyAndLibrary(organizationId);
+        var review = enrichedReview("m7-msa-fallback.docx", msaProfile(null));
         resetProviders();
 
         var start = System.nanoTime();
@@ -148,9 +157,8 @@ class M7EvaluationIT {
         var elapsed = (System.nanoTime() - start) / 1_000_000;
 
         var findings = findingRepository.findFindings(organizationId, run.id());
-        assertThat(findings).hasSize(1);
-        var finding = findings.get(0);
-        assertThat(finding.issueFamily()).isEqualTo(IssueFamily.LIABILITY_CAP_DEVIATION);
+        var finding = findings.stream().filter(candidate -> candidate.issueFamily()
+                == IssueFamily.LIABILITY_CAP_DEVIATION).findFirst().orElseThrow();
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
         assertThat(finding.proposedLanguage()).contains("two times the fees");
         assertThat(finding.signalIds()).hasSize(3);

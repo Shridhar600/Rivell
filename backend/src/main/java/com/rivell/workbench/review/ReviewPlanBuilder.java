@@ -50,6 +50,9 @@ public final class ReviewPlanBuilder {
                 }
             }
             for (var rule : pack.crossClauseChecks()) {
+                if (clausesByConcept.getOrDefault(rule.secondaryConcept(), List.of()).isEmpty()) {
+                    continue;
+                }
                 for (var subject : clausesByConcept.getOrDefault(rule.concept(), List.of())) {
                     checks.add(crossClauseCheck(reviewId, organizationId,
                             snapshot.createdAt(), ordinal[0]++, rule,

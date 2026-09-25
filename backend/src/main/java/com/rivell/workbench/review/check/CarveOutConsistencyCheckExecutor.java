@@ -67,18 +67,21 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
         var bundle = context.evidenceCache().build(request(context, liability));
         var subjectEvidence = subjectContractIds(bundle, liability.id());
         var counterpartIds = counterparts.stream().map(ClauseSemantics::id).toList();
-        var counterpartEvidence = subjectContractIds(bundle, counterpartIds);
+        var counterpartBundle = context.evidenceCache().build(request(context,
+                counterparts.get(0), LegalConcept.INDEMNIFICATION));
+        var counterpartEvidence = subjectContractIds(counterpartBundle, counterpartIds);
 
         var counterpartText = counterparts.stream().map(ClauseSemantics::contentText)
                 .reduce((first, second) -> first + "\n---\n" + second).orElse("");
         var detail = new LinkedHashMap<String, Object>();
         detail.put("counterpartCount", counterparts.size());
+        detail.put("counterpartTraceId", counterpartBundle.traceId());
         detail.put("sufficiency", bundle.sufficiency().name());
         if (counterpartText.length() > MAX_COUNTERPART_CHARS) {
             detail.put("uncertaintyReason", "carve_out_context_too_large");
             return boundedUncertainOutcome(context, detail, bundle,
                     union(subjectEvidence, counterpartEvidence),
-                    "carve_out_context_too_large");
+                    "carve_out_context_too_large", "carve_out_context_too_large");
         }
 
         var state = new M7DecisionSpecs.CarveOutConsistencyState(
@@ -96,7 +99,8 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
             return boundedUncertainOutcome(context, detail, bundle,
                     union(subjectEvidence, counterpartEvidence),
-                    "cross_clause_decision_unavailable");
+                    "cross_clause_decision_unavailable",
+                    "provider_unavailable:cross_clause_decision_unavailable");
         }
         var answer = execution.answers().get(M7DecisionSpecs.CONSISTENCY);
         if (!(answer instanceof ChoiceAnswer choice)) {
@@ -111,6 +115,7 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
             detail.put("uncertaintyReason", "cross_clause_classification_uncertain");
             return boundedUncertainOutcome(context, detail, bundle,
                     union(subjectEvidence, counterpartEvidence),
+                    "cross_clause_classification_uncertain",
                     "cross_clause_classification_uncertain");
         }
 
@@ -147,13 +152,12 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
 
     private CheckOutcome boundedUncertainOutcome(
             ReviewCheckContext context, Map<String, Object> detail, EvidenceBundle bundle,
-            List<UUID> evidence, String reason) {
+            List<UUID> evidence, String payloadReason, String degradedReason) {
         var signal = signal(context, SignalType.CROSS_CLAUSE_UNCERTAIN,
                 IssueFamily.CARVE_OUT_INCONSISTENCY,
-                new DeviationUncertainPayload(reason), evidence, null, null, null,
+                new DeviationUncertainPayload(payloadReason), evidence, null, null, null,
                 null, null, Map.of("sufficiency", bundle.sufficiency().name()));
-        return CheckOutcome.degraded(
-                "provider_unavailable:" + reason, List.of(signal), detail, bundle.traceId());
+        return CheckOutcome.degraded(degradedReason, List.of(signal), detail, bundle.traceId());
     }
 
     private static Map<String, Object> confidenceQuality(
@@ -173,9 +177,14 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
     }
 
     private static EvidenceRequest request(ReviewCheckContext context, ClauseSemantics clause) {
+        return request(context, clause, context.check().concept());
+    }
+
+    private static EvidenceRequest request(
+            ReviewCheckContext context, ClauseSemantics clause, LegalConcept concept) {
         var snapshot = context.snapshot();
         return EvidenceRequest.forClauseReview(
-                snapshot.organizationId(), context.check().concept(),
+                snapshot.organizationId(), concept,
                 snapshot.contractId(), snapshot.contractVersionNumber(), clause.id(),
                 clause.contentText(),
                 new com.rivell.workbench.contracts.ReviewProfile(

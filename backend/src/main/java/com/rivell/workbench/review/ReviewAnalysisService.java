@@ -165,6 +165,8 @@ public class ReviewAnalysisService {
             return created;
         }
         return analysisRepository.findRunningRun(organizationId, reviewId)
+                .or(() -> analysisRepository.findLatestRun(organizationId, reviewId)
+                        .filter(candidate -> candidate.status() == RunStatus.COMPLETED))
                 .orElseThrow(() -> new IllegalStateException(
                         "Unable to claim a recompute run for review " + reviewId));
     }
