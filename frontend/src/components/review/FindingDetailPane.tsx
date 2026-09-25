@@ -78,6 +78,8 @@ type Props = {
   regionLabels: Map<string, string>
   contractId: string
   clauseSource: ClauseSource | null
+  sourceVersion: number
+  latestVersion: number
 }
 
 export function FindingDetailView({
@@ -85,6 +87,8 @@ export function FindingDetailView({
   regionLabels,
   contractId,
   clauseSource,
+  sourceVersion,
+  latestVersion,
 }: Props) {
   const headingRef = useHeadingFocus<HTMLHeadingElement>(finding.id)
   const why = whyClaims(finding.claims)
@@ -162,12 +166,22 @@ export function FindingDetailView({
             <p>{clauseSource.heading}</p>
           )}
           <p>
-            <Link
-              className="link-button"
-              to={`/reviews/${contractId}?view=document&node=${clauseSource.nodeId}`}
-            >
-              View clause in contract
-            </Link>
+            {sourceVersion === latestVersion ? (
+              <Link
+                className="link-button"
+                to={`/reviews/${contractId}?view=document&node=${clauseSource.nodeId}`}
+              >
+                View clause in contract
+              </Link>
+            ) : (
+              <>
+                This review is pinned to v{sourceVersion}; the contract's current version is
+                v{latestVersion}.{' '}
+                <Link className="link-button" to={`/reviews/${contractId}`}>
+                  Open the contract
+                </Link>
+              </>
+            )}
           </p>
         </section>
       ) : null}
@@ -196,7 +210,9 @@ export function FindingDetailView({
         ))}
       </section>
 
-      {finding.proposedLanguage && finding.proposedLanguageSource === 'APPROVED_DRAFTING' ? (
+      {finding.proposedLanguage &&
+      finding.proposedLanguageSource === 'APPROVED_DRAFTING' &&
+      finding.approvedDraftingEvidenceId ? (
         <section className="finding-section" aria-labelledby="finding-language-heading">
           <h3 id="finding-language-heading">Approved language</h3>
           <p>
@@ -248,6 +264,8 @@ export function FindingDetailPane({
   regionLabels,
   contractId,
   clauseSource,
+  sourceVersion,
+  latestVersion,
   findingId,
   isPending,
   isError,
@@ -257,6 +275,8 @@ export function FindingDetailPane({
   regionLabels: Map<string, string>
   contractId: string
   clauseSource: ClauseSource | null
+  sourceVersion: number
+  latestVersion: number
   findingId: string | null
   isPending: boolean
   isError: boolean
@@ -282,6 +302,8 @@ export function FindingDetailPane({
       regionLabels={regionLabels}
       contractId={contractId}
       clauseSource={clauseSource}
+      sourceVersion={sourceVersion}
+      latestVersion={latestVersion}
     />
   )
 }

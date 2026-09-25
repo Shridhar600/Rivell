@@ -14,8 +14,7 @@ import {
 import { useSemanticsQuery } from '../api/semantics'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
-import { buildRegionLabelMap } from '../lib/contractSemantics'
-import { TAXONOMY_CONCEPTS } from '../lib/contractSemantics'
+import { buildRegionLabelMap, TAXONOMY_CONCEPTS } from '../lib/contractSemantics'
 import { subtreeNodes } from '../lib/documentTree'
 import { FindingDetailPane } from '../components/review/FindingDetailPane'
 import { FindingsPanel } from '../components/review/FindingsPanel'
@@ -45,10 +44,11 @@ export function ReviewWorkspacePage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const contractQuery = useContractQuery(contractId)
-  const versionNumber = contractQuery.data?.latestVersion.versionNumber
   const summaryQuery = useReviewSummaryQuery(reviewId)
-  const structureQuery = useContractStructureQuery(contractId, versionNumber)
-  const semanticsQuery = useSemanticsQuery(contractId, versionNumber)
+  const pinnedVersion = summaryQuery.data?.contractVersionNumber
+  const latestVersion = contractQuery.data?.latestVersion.versionNumber
+  const structureQuery = useContractStructureQuery(contractId, pinnedVersion)
+  const semanticsQuery = useSemanticsQuery(contractId, pinnedVersion)
 
   const selectedFindingId = searchParams.get('finding')
   const filters: FindingFilters = {
@@ -56,9 +56,10 @@ export function ReviewWorkspacePage() {
     classification: readClassification(searchParams.get('classification')),
     concept: readConcept(searchParams.get('concept')),
   }
-  const terminal = isReviewTerminal(summaryQuery.data?.status)
-  const findingsQuery = useFindingsQuery(reviewId, filters, terminal)
-  const findingQuery = useFindingQuery(reviewId, terminal ? selectedFindingId : null)
+  const status = summaryQuery.data?.status
+  const canReadFindings = isReviewTerminal(status) || status === 'UNKNOWN'
+  const findingsQuery = useFindingsQuery(reviewId, filters, canReadFindings)
+  const findingQuery = useFindingQuery(reviewId, canReadFindings ? selectedFindingId : null)
 
   const regionLabels = useMemo(
     () =>
@@ -70,15 +71,14 @@ export function ReviewWorkspacePage() {
   )
 
   const clauseSource = useMemo(() => {
-    const nodeId = findingQuery.data?.subjectHeadingNodeId
-    if (findingQuery.data?.subjectKind !== 'CLAUSE' || !nodeId) return null
-    const nodes = structureQuery.data?.nodes ?? []
-    const subtree = subtreeNodes(nodes, nodeId)
-    if (subtree.length === 0) return null
+    const finding = findingQuery.data
+    if (!finding || finding.subjectKind !== 'CLAUSE' || !finding.subjectHeadingNodeId) {
+      return null
+    }
     return {
-      nodeId,
-      heading: regionLabels.get(nodeId) ?? 'Contract clause',
-      nodes: subtree,
+      nodeId: finding.subjectHeadingNodeId,
+      heading: regionLabels.get(finding.subjectHeadingNodeId) ?? 'Clause source unavailable',
+      nodes: subtreeNodes(structureQuery.data?.nodes ?? [], finding.subjectHeadingNodeId),
     }
   }, [findingQuery.data, structureQuery.data, regionLabels])
 
@@ -99,6 +99,7 @@ export function ReviewWorkspacePage() {
       if (value) params.set(key, value)
       else params.delete(key)
     }
+    params.delete('finding')
     setSearchParams(params)
   }
 
@@ -154,7 +155,8 @@ export function ReviewWorkspacePage() {
           selectedFindingId={selectedFindingId}
           onSelect={selectFinding}
           regionLabels={regionLabels}
-          isEnabled={terminal}
+          isEnabled={canReadFindings}
+          isStateUnrecognized={status === 'UNKNOWN'}
           isPending={findingsQuery.isPending}
           isError={findingsQuery.isError}
           onRetry={() => void findingsQuery.refetch()}
@@ -164,7 +166,9 @@ export function ReviewWorkspacePage() {
           regionLabels={regionLabels}
           contractId={contractId}
           clauseSource={clauseSource}
-          findingId={terminal ? selectedFindingId : null}
+          sourceVersion={pinnedVersion ?? summaryQuery.data.contractVersionNumber}
+          latestVersion={latestVersion ?? summaryQuery.data.contractVersionNumber}
+          findingId={canReadFindings ? selectedFindingId : null}
           isPending={Boolean(selectedFindingId) && findingQuery.isPending}
           isError={findingQuery.isError}
           onRetry={() => void findingQuery.refetch()}

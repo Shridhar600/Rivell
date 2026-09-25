@@ -5,9 +5,10 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { AppProviders } from '../../app/AppProviders'
 import { appRoutes } from '../../app/router'
-import { stubContractApi, type StubOptions } from '../contract/testFixtures'
+import { fixtureContractSummary, stubContractApi, type StubOptions } from '../contract/testFixtures'
 import {
   fixtureAbsenceFindingDetail,
+  fixtureAbsenceFindingSummary,
   fixtureAmbiguousPolicyFindingDetail,
   fixtureAnalyzingReviewSummary,
   fixtureClauseFindingDetail,
@@ -91,30 +92,42 @@ describe('findings list', () => {
     ).toBeInTheDocument()
   })
 
-  it('filters through the API and keeps the filter in the URL', async () => {
+  it('maps filters to real API query parameters', async () => {
     const { api, router } = renderWorkspace('/reviews/c1/analysis/r-1', {
-      findingsResponse: (url) =>
-        jsonResponse(
+      findingsResponse: (url) => {
+        const both =
+          url.includes('severity=HIGH') && url.includes('classification=BLOCKING')
+        return jsonResponse(
           envelope(
-            url.includes('severity=HIGH')
-              ? { items: [fixtureClauseFindingSummary], truncated: false }
+            both
+              ? { items: [fixtureAbsenceFindingSummary], truncated: false }
               : fixtureFindingList,
           ),
-        ),
+        )
+      },
     })
 
     expect(await screen.findByRole('button', { name: /Missing: Limitation/ })).toBeInTheDocument()
 
     await userEvent.selectOptions(screen.getByLabelText('Severity'), 'HIGH')
+    await userEvent.selectOptions(screen.getByLabelText('Classification'), 'BLOCKING')
 
     await waitFor(() =>
       expect(router.state.location.search).toContain('severity=HIGH'),
     )
     await waitFor(() =>
-      expect(screen.queryByRole('button', { name: /Missing: Limitation/ })).not.toBeInTheDocument(),
+      expect(router.state.location.search).toContain('classification=BLOCKING'),
     )
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Liability cap deviation/ })).not.toBeInTheDocument(),
+    )
+
     const listCalls = api.requests.filter((request) => request.url.includes('/findings?'))
-    expect(listCalls.some((request) => request.url.includes('severity=HIGH'))).toBe(true)
+    const lastCall = listCalls[listCalls.length - 1]
+    const params = new URL(lastCall.url).searchParams
+    expect(params.get('severity')).toBe('HIGH')
+    expect(params.get('classification')).toBe('BLOCKING')
+    expect(params.get('limit')).toBe('100')
   })
 
   it('keeps two findings on the same clause distinct', async () => {
@@ -149,6 +162,30 @@ describe('findings list', () => {
     ).toBeInTheDocument()
     expect(api.requests.filter((request) => request.url.includes('/findings'))).toHaveLength(0)
   })
+
+  it('clears the selected finding when filters change', async () => {
+    const { router } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-2')
+    expect(await screen.findByRole('heading', { name: 'Missing provision' })).toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText('Severity'), 'HIGH')
+
+    await waitFor(() => expect(router.state.location.search).toContain('severity=HIGH'))
+    expect(router.state.location.search).not.toContain('finding=')
+    expect(
+      await screen.findByText(/Select a finding to see its observation/),
+    ).toBeInTheDocument()
+  })
+
+  it('attempts findings for an unrecognized review state and says so', async () => {
+    const { api } = renderWorkspace('/reviews/c1/analysis/r-1', {
+      reviewSummary: { ...fixtureCompletedReviewSummary, status: 'CANCELLED' },
+    })
+
+    expect(
+      await screen.findByText(/does not recognise\. Findings below are the latest persisted/),
+    ).toBeInTheDocument()
+    expect(api.requests.filter((request) => request.url.includes('/findings?'))).toHaveLength(1)
+  })
 })
 
 describe('finding detail', () => {
@@ -178,9 +215,34 @@ describe('finding detail', () => {
     expect(await screen.findByRole('heading', { name: 'Contract clause' })).toBeInTheDocument()
     const source = screen.getByRole('article', { name: 'Contract clause source' })
     expect(source).toHaveTextContent('6. Limitation of Liability')
+    expect(source).not.toHaveTextContent('1. Definitions')
+    expect(source).not.toHaveTextContent('5. Termination')
+    expect(source).not.toHaveTextContent('Schedule A')
+    expect(source).not.toHaveTextContent('6.3 The exclusions')
     expect(
       screen.getByRole('link', { name: 'View clause in contract' }),
     ).toHaveAttribute('href', '/reviews/c1?view=document&node=node-6')
+  })
+
+  it('reads the contract version pinned by the review, never the latest version', async () => {
+    const { api } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      contractSummary: {
+        ...fixtureContractSummary,
+        latestVersion: { ...fixtureContractSummary.latestVersion, versionNumber: 2 },
+      },
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Contract clause' })).toBeInTheDocument()
+    const structureCalls = api.requests.filter((request) => request.url.includes('/structure'))
+    expect(structureCalls).toHaveLength(1)
+    expect(structureCalls[0].url).toContain('/versions/1/structure')
+
+    expect(
+      screen.queryByRole('link', { name: 'View clause in contract' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/This review is pinned to v1; the contract's current version is v2/),
+    ).toBeInTheDocument()
   })
 
   it('represents an absence finding without a document location', async () => {
@@ -237,6 +299,44 @@ describe('finding detail', () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', { findingDetailStatus: 404 })
 
     expect(await screen.findByText('This finding could not be loaded.')).toBeInTheDocument()
+  })
+
+  it('never fabricates a clause source for an absence finding with a stale node id', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-2', {
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({ ...fixtureAbsenceFindingDetail, subjectHeadingNodeId: 'node-6' }),
+        ),
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Missing provision' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Contract clause' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'View clause in contract' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders a cross-clause finding without faking counterpart navigation', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-6')
+
+    expect(
+      await screen.findByText(/not covered by a survival provision/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Contract clause' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /related|corresponding|counterpart/i })).not.toBeInTheDocument()
+  })
+
+  it('does not claim approved language when the drafting evidence id is absent', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({ ...fixtureClauseFindingDetail, approvedDraftingEvidenceId: null }),
+        ),
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Observation' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Approved language' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Approved')).not.toBeInTheDocument()
   })
 })
 

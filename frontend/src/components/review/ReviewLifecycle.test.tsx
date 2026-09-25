@@ -106,7 +106,7 @@ describe('review lifecycle states', () => {
           request.method === 'GET' && /\/api\/reviews\/r-1$/.test(request.url),
       ).length
 
-    expect(await screen.findByText(/does not recognise/)).toBeInTheDocument()
+    expect(await screen.findByText(/does not recognise\. It may still be running/)).toBeInTheDocument()
     const before = summaryCalls()
 
     await userEvent.click(screen.getByRole('button', { name: 'Check again' }))

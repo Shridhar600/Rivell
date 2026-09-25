@@ -21,6 +21,7 @@ type Props = {
   onSelect: (findingId: string) => void
   regionLabels: Map<string, string>
   isEnabled: boolean
+  isStateUnrecognized: boolean
   isPending: boolean
   isError: boolean
   onRetry: () => void
@@ -39,6 +40,7 @@ export function FindingsPanel({
   onSelect,
   regionLabels,
   isEnabled,
+  isStateUnrecognized,
   isPending,
   isError,
   onRetry,
@@ -47,9 +49,18 @@ export function FindingsPanel({
     <section className="panel findings-panel" aria-labelledby="findings-heading">
       <h2 id="findings-heading">Findings</h2>
 
+      {isEnabled && isStateUnrecognized ? (
+        <p className="panel__hint">
+          This review is in a state this version of the app does not recognise. Findings below
+          are the latest persisted generation.
+        </p>
+      ) : null}
+
       {!isEnabled ? (
         <p className="panel__hint">
-          Findings appear here when the automated analysis completes.
+          {isStateUnrecognized
+            ? 'Findings are unavailable while the review state is unrecognized. Check again above.'
+            : 'Findings appear here when the automated analysis completes.'}
         </p>
       ) : null}
 

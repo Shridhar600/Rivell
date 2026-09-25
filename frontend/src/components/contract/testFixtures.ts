@@ -412,6 +412,7 @@ export const fixtureStructure = {
 }
 
 export type StubOptions = {
+  contractSummary?: unknown
   semantics?: SemanticContract | null
   semanticsStatus?: number
   enrichmentResponse?: () => Response
@@ -457,7 +458,7 @@ export function stubContractApi(options: StubOptions = {}) {
     requests.push({ method, url, body })
 
     if (method === 'GET' && /\/api\/contracts\/c1$/.test(url)) {
-      return jsonResponse(envelope(fixtureContractSummary))
+      return jsonResponse(envelope(options.contractSummary ?? fixtureContractSummary))
     }
     if (method === 'GET' && url.includes('/versions/1/structure')) {
       return jsonResponse(envelope(fixtureStructure))

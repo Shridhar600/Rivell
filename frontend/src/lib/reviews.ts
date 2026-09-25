@@ -137,7 +137,7 @@ const PROPOSED_ACTION_LABELS: Record<string, string> = {
   USE_APPROVED_FALLBACK: 'Use the approved fallback wording',
   ADD_REQUIRED_PROVISION: 'Add the required provision',
   REVIEW_AMBIGUITY: 'Resolve the policy ambiguity',
-  ESCALATE_TO_HUMAN: 'Human review requested',
+  ESCALATE_TO_HUMAN: 'Human review needed',
   CONSIDER_GENERATED_LANGUAGE: 'Consider the AI-proposed wording',
   NO_ACTION: 'No action proposed',
   UNKNOWN: 'Recommended action',
@@ -244,14 +244,21 @@ export function reviewFailureMessage(_reason: string | null): string {
 }
 
 export function findingSubjectLabel(
-  finding: Pick<FindingSummary, 'subjectKind' | 'subjectHeadingNodeId' | 'absenceConcept'>,
+  finding: Pick<
+    FindingSummary,
+    'subjectKind' | 'subjectHeadingNodeId' | 'absenceConcept' | 'concept'
+  >,
   regionLabels: Map<string, string>,
 ): string {
   if (finding.subjectKind === 'ABSENCE' && finding.absenceConcept) {
     return `Missing: ${conceptLabel(finding.absenceConcept)}`
   }
   if (finding.subjectKind === 'CLAUSE' && finding.subjectHeadingNodeId) {
-    return regionLabels.get(finding.subjectHeadingNodeId) ?? 'Contract clause'
+    const label = regionLabels.get(finding.subjectHeadingNodeId)
+    if (label) return label
+    return finding.concept
+      ? `Clause · ${conceptLabel(finding.concept)}`
+      : 'Clause source unavailable'
   }
   return 'Subject unavailable'
 }
