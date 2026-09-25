@@ -216,7 +216,7 @@ export const fixtureClauseFindingDetail = {
   evidenceItems: [
     fixturePolicyItem,
     fixtureDraftingItem,
-    fixtureContractItem,
+    { ...fixtureContractItem, sourceClauseId: 'cl6' },
     fixtureCompatiblePrecedent,
   ],
   evidenceItemIds: ['e-contract', 'e-policy', 'e-drafting', 'e-precedent-1'],
@@ -289,7 +289,10 @@ export const fixturePolicyMissingFindingDetail = {
       evidenceItemIds: ['e-contract'],
     },
   ],
-  evidenceItems: [fixtureContractItem, fixtureCompatiblePrecedent],
+  evidenceItems: [
+    { ...fixtureContractItem, sourceClauseId: 'cl6' },
+    fixtureCompatiblePrecedent,
+  ],
 }
 
 export const fixtureAmbiguousPolicyFindingDetail = {
@@ -366,7 +369,10 @@ export const fixtureGenerativeFindingDetail = {
       evidenceItemIds: ['e-contract'],
     },
   ],
-  evidenceItems: [fixtureContractItem, fixturePolicyItem],
+  evidenceItems: [
+    { ...fixtureContractItem, sourceClauseId: 'cl6' },
+    fixturePolicyItem,
+  ],
 }
 
 export const fixtureCrossClauseFindingDetail = {
@@ -393,6 +399,9 @@ export const fixtureCrossClauseFindingDetail = {
       evidenceItemIds: ['e-contract', 'e-related'],
     },
   ],
-  evidenceItems: [fixtureContractItem, fixtureRelatedContractItem],
+  evidenceItems: [
+    { ...fixtureContractItem, sourceClauseId: 'cl6' },
+    { ...fixtureRelatedContractItem, sourceClauseId: 'cl5', provenanceNodeIds: ['node-63'] },
+  ],
   evidenceItemIds: ['e-contract', 'e-related'],
 }

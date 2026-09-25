@@ -11,11 +11,6 @@ import type {
 import { humanizeCode } from './domainLabels'
 import { conceptLabel } from './contractSemantics'
 
-export const REVIEW_PACK_OPTIONS = [
-  { key: 'MSA_PACK', label: 'MSA pack' },
-  { key: 'NDA_PACK', label: 'NDA pack' },
-] as const
-
 const REVIEW_STATUS_LABELS: Record<string, string> = {
   ANALYSIS_QUEUED: 'Analysis queued',
   ANALYZING: 'Analyzing',

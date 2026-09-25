@@ -98,17 +98,28 @@ export function FindingDetailView({
     claim.evidenceItemIds.some((id) => !evidenceById.has(id)),
   )
   const subjectNodeId = finding.subjectHeadingNodeId
+  const subjectClauseId = subjectNodeId
+    ? ([...clauseHeadings.entries()].find(([, heading]) => heading === subjectNodeId)?.[0] ?? null)
+    : null
   const relatedProvisions: RelatedProvision[] = [
     ...new Map(
       finding.evidenceItems
         .filter(
           (item) =>
             item.authorityClass === 'CURRENT_CONTRACT' &&
-            item.sourceType === 'CURRENT_CONTRACT_CLAUSE',
+            item.sourceType === 'CURRENT_CONTRACT_CLAUSE' &&
+            item.sourceClauseId !== null &&
+            item.sourceClauseId !== subjectClauseId,
         )
-        .flatMap((item) => item.provenanceNodeIds)
-        .filter((nodeId) => nodeId !== subjectNodeId)
-        .map((nodeId) => [nodeId, regionLabels.get(nodeId) ?? 'Contract provision']),
+        .map((item) => {
+          const headingNodeId = clauseHeadings.get(item.sourceClauseId as string)
+          if (!headingNodeId) return null
+          return [headingNodeId, regionLabels.get(headingNodeId) ?? 'Contract provision'] as [
+            string,
+            string,
+          ]
+        })
+        .filter((entry): entry is [string, string] => entry !== null),
     ).entries(),
   ].map(([nodeId, label]) => ({ nodeId, label }))
   const canDeepLink =
@@ -243,7 +254,9 @@ export function FindingDetailView({
 
       {finding.proposedLanguage &&
       finding.proposedLanguageSource === 'APPROVED_DRAFTING' &&
-      finding.approvedDraftingEvidenceId ? (
+      finding.approvedDraftingEvidenceId &&
+      evidenceById.get(finding.approvedDraftingEvidenceId)?.authorityClass ===
+        'APPROVED_DRAFTING' ? (
         <section className="finding-section" aria-labelledby="finding-language-heading">
           <h3 id="finding-language-heading">Approved language</h3>
           <p>

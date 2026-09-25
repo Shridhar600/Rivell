@@ -24,6 +24,7 @@ import {
   fixtureFindingList,
   fixtureGenerativeFindingDetail,
   fixturePolicyMissingFindingDetail,
+  fixtureQueuedReviewSummary,
 } from './testFixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -399,9 +400,10 @@ describe('finding evidence amendment', () => {
 
     expect(await screen.findByRole('heading', { name: 'Related provisions' })).toBeInTheDocument()
     const counterpart = document.querySelector(
-      'a[href="/reviews/c1?view=document&node=node-3"]',
+      'a[href="/reviews/c1?view=document&node=node-5"]',
     )
     expect(counterpart).not.toBeNull()
+    expect(document.querySelector('a[href*="node-63"]')).toBeNull()
   })
 
   it('fails safely when a claim references evidence missing from the response', async () => {
@@ -422,6 +424,59 @@ describe('finding evidence amendment', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('unavailable in this response')).toBeInTheDocument()
     expect(document.querySelector('a[href="#finding-evidence-e-missing"]')).toBeNull()
+  })
+
+  it('does not claim approved language when the drafting evidence is unresolvable', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({
+            ...fixtureClauseFindingDetail,
+            approvedDraftingEvidenceId: 'e-dangling',
+          }),
+        ),
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Observation' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { level: 3, name: 'Approved language' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('never shows the clean-completion badge when coverage is limited', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1', {
+      reviewSummary: {
+        ...fixtureCompletedReviewSummary,
+        findings: 0,
+        degradedChecks: 0,
+        analysisWarnings: [],
+        coverage: [
+          {
+            concept: 'LIMITATION_OF_LIABILITY',
+            expectation: 'REQUIRED',
+            coverage: 'PRESENT_SECONDARY_ONLY',
+          },
+        ],
+      },
+      findings: { items: [], truncated: false },
+    })
+
+    expect(
+      await screen.findByText(/No findings were recorded, but review coverage is limited/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Every planned check completed without findings.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('says the pack context is unavailable when the snapshot is missing', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1', {
+      reviewSummary: { ...fixtureQueuedReviewSummary, snapshot: null },
+    })
+
+    const heading = await screen.findByText('Contract pack')
+    const row = heading.closest('.data-list__row') as HTMLElement
+    expect(within(row).getByText('Pack context unavailable')).toBeInTheDocument()
   })
 
   it('uses only resolved evidence and never rebuilds retrieval', async () => {

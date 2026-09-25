@@ -127,7 +127,11 @@ export function ReviewHeader({ contractId, contractTitle, summary }: Props) {
         </div>
         <div className="data-list__row">
           <dt>Contract pack</dt>
-          <dd>{packLabel ?? 'No pack (reduced checks)'}</dd>
+          <dd>
+            {snapshot === null
+              ? 'Pack context unavailable'
+              : (packLabel ?? 'No pack (reduced checks)')}
+          </dd>
         </div>
         {snapshot?.effectiveOn ? (
           <div className="data-list__row">

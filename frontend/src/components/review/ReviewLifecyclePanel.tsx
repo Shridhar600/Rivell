@@ -101,10 +101,17 @@ type Props = {
   contractId: string
   reviewId: string
   summary: ReviewSummary
+  coverageLimited: boolean
   onRefresh: () => void
 }
 
-export function ReviewLifecyclePanel({ contractId, reviewId, summary, onRefresh }: Props) {
+export function ReviewLifecyclePanel({
+  contractId,
+  reviewId,
+  summary,
+  coverageLimited,
+  onRefresh,
+}: Props) {
   const percent = progressPercent(summary)
   const pending = summary.status === 'ANALYSIS_QUEUED' || summary.status === 'ANALYZING'
 
@@ -147,9 +154,15 @@ export function ReviewLifecyclePanel({ contractId, reviewId, summary, onRefresh 
           </p>
           {summary.findings === 0 &&
           summary.degradedChecks === 0 &&
-          summary.failedChecks === 0 ? (
+          summary.failedChecks === 0 &&
+          !coverageLimited ? (
             <p className="state state--success">
               Every planned check completed without findings.
+            </p>
+          ) : null}
+          {summary.findings === 0 && coverageLimited ? (
+            <p className="state state--warning">
+              No findings were recorded, but review coverage is limited (see Review coverage).
             </p>
           ) : null}
           {summary.failedChecks > 0 ? (

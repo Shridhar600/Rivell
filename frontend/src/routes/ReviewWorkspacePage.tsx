@@ -170,6 +170,7 @@ export function ReviewWorkspacePage() {
         contractId={contractId}
         reviewId={reviewId}
         summary={summaryQuery.data}
+        coverageLimited={coverageLimitations(summaryQuery.data.coverage).length > 0}
         onRefresh={() => void summaryQuery.refetch()}
       />
       <ReviewCoveragePanel coverage={summaryQuery.data.coverage} />

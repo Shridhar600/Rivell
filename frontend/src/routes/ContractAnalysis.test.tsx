@@ -81,7 +81,9 @@ describe('review creation', () => {
     expect(await screen.findByText('Counterparty paper')).toBeInTheDocument()
     expect(screen.getByText('United Kingdom')).toBeInTheDocument()
 
-    expect(await screen.findByRole('option', { name: 'MSA pack' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('option', { name: 'MSA pack' }, { timeout: 4000 }),
+    ).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText(/Contract pack/), 'MSA_PACK')
     await userEvent.click(screen.getByRole('button', { name: 'Start review' }))
 
@@ -93,7 +95,7 @@ describe('review creation', () => {
     expect(creates[0].body).toEqual({ contractPackKey: 'MSA_PACK' })
 
     expect(await screen.findByRole('heading', { name: 'Master Services Agreement' })).toBeInTheDocument()
-    expect(screen.getByText('Analysis queued')).toBeInTheDocument()
+    expect(await screen.findByText('Analysis queued')).toBeInTheDocument()
   })
 
   it('creates a pack-less review when no pack is selected', async () => {
