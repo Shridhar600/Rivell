@@ -114,6 +114,18 @@ public class KnowledgeQueryService {
     }
 
     /** Whether a publication with the given number exists in the caller's organization. */
+    /** System-level existence check for background flows (explicit organization). */
+    public boolean publicationNumberExistsForOrganization(
+            UUID organizationId, long publicationNumber) {
+        return repository.publicationNumberExists(organizationId, publicationNumber);
+    }
+
+    /** System-level unit read for background flows (explicit organization). */
+    public java.util.Optional<ExtractionUnit> findUnitForOrganization(
+            UUID organizationId, UUID unitId) {
+        return repository.findUnit(unitId, organizationId);
+    }
+
     public boolean publicationNumberExists(long publicationNumber) {
         requireRead();
         return repository.publicationNumberExists(organizationId(), publicationNumber);

@@ -62,55 +62,9 @@ public class EvidenceApiService {
     }
 
     private RetrievalResponses.EvidenceBundleResponse toResponse(EvidenceBundle bundle) {
-        var items = new ArrayList<RetrievalResponses.EvidenceItemResponse>();
-        for (var item : bundle.items()) {
-            items.add(new RetrievalResponses.EvidenceItemResponse(
-                    item.evidenceId(),
-                    item.authorityClass().name(),
-                    item.sourceType(),
-                    item.sourceArtifactId(),
-                    item.sourceCandidateId(),
-                    item.sourceContractVersionId(),
-                    item.sourceClauseId(),
-                    item.legalConcept() == null ? null : item.legalConcept().name(),
-                    item.text(),
-                    item.policyFacts() == null ? null : new RetrievalResponses.PolicyFactsResponse(
-                            item.policyFacts().positions().stream()
-                                    .map(Enum::name)
-                                    .collect(java.util.stream.Collectors.toSet()),
-                            item.policyFacts().requiresApproval(),
-                            item.policyFacts().escalationTrigger()),
-                    item.contractFacts(),
-                    item.retrievalReason(),
-                    new RetrievalResponses.LaneInfoResponse(
-                            item.laneInfo().lexicalRank(),
-                            item.laneInfo().vectorRank(),
-                            item.laneInfo().fusedRank(),
-                            item.laneInfo().fusedScore()),
-                    item.semanticAssessment() == null
-                            ? null
-                            : new RetrievalResponses.SemanticAssessmentResponse(
-                                    item.semanticAssessment().judgments(),
-                                    item.semanticAssessment().decisionSpecId(),
-                                    item.semanticAssessment().decisionSpecVersion()),
-                    item.policyCompatibility() == null
-                            ? null
-                            : item.policyCompatibility().name(),
-                    item.provenanceNodeIds(),
-                    item.publicationId(),
-                    item.publicationNumber() == null ? null
-                            : item.publicationNumber().longValue(),
-                    item.applicabilityScope() == null ? null
-                            : new RetrievalResponses.ApplicabilityScopeResponse(
-                                    item.applicabilityScope().contractPackKey(),
-                                    List.copyOf(item.applicabilityScope()
-                                            .declaredContractTypes()),
-                                    item.applicabilityScope().partyPerspective(),
-                                    item.applicabilityScope().paperSource(),
-                                    item.applicabilityScope().jurisdiction(),
-                                    item.applicabilityScope().effectiveFrom(),
-                                    item.applicabilityScope().effectiveTo())));
-        }
+        var items = bundle.items().stream()
+                .map(RetrievalResponses::evidenceItem)
+                .toList();
         return new RetrievalResponses.EvidenceBundleResponse(
                 bundle.id(),
                 new RetrievalResponses.EvidenceRequestSummary(
@@ -121,7 +75,7 @@ public class EvidenceApiService {
                         bundle.request().clauseId(),
                         bundle.request().effectiveOn().toString(),
                         bundle.request().knowledgePin().publicationNumber()),
-                List.copyOf(items),
+                items,
                 bundle.sufficiency().name(),
                 bundle.traceId(),
                 bundle.degradationWarnings());

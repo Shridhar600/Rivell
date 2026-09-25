@@ -33,7 +33,7 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
     @Override
     public List<ConflictSignal> inspect(
             KnowledgeCandidate candidate, List<KnowledgeCandidate> publishedCandidates) {
-        var conceptUnclassified = candidate.legalConceptKey() == null;
+        var conceptUnclassified = candidate.effectiveConceptKey() == null;
         var signals = new ArrayList<ConflictSignal>();
         var peers = narrowPeers(candidate, publishedCandidates, conceptUnclassified);
 
@@ -170,6 +170,7 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
     }
 
     private static boolean sameConcept(KnowledgeCandidate a, KnowledgeCandidate b) {
-        return a.legalConceptKey() != null && a.legalConceptKey().equals(b.legalConceptKey());
+        return a.effectiveConceptKey() != null
+                && a.effectiveConceptKey().equals(b.effectiveConceptKey());
     }
 }

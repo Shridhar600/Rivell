@@ -508,6 +508,76 @@ class AuthorityAwareEvidenceFlowIT {
                 .allSatisfy(item -> assertThat(item.applicabilityScope()).isNull());
         // and the MSA-pack knowledge never leaks into this NDA-context request
         assertThat(bundle.policyItems().size()).isEqualTo(1);
+
+        // explicit pack selection (pre-M7 decision): a request that explicitly
+        // selects MSA_PACK must NOT see the NDA_PACK-declared rule — pack is a
+        // hard applicability dimension when explicitly declared
+        var msaPackRequest = EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
+                new com.rivell.workbench.contracts.ReviewProfile(
+                        com.rivell.workbench.contracts.ContractType.NDA,
+                        com.rivell.workbench.contracts.PartyRole.CUSTOMER,
+                        com.rivell.workbench.contracts.PaperSource.THIRD_PARTY,
+                        com.rivell.workbench.contracts.Jurisdiction.US,
+                        "MSA_PACK"),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
+        var msaBundle = evidenceService.build(msaPackRequest);
+        assertThat(msaBundle.policyItems()).isEmpty();
+        assertThat(msaBundle.sufficiency()).isEqualTo(EvidenceSufficiency.POLICY_MISSING);
+    }
+
+    @Test
+    void explicitPackSelectionExcludesByPackAloneAndAcceptsWildcardPackKnowledge() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var clauseId = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow().id();
+
+        // a rule that declares NO pack applies under any explicitly selected pack
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_AMBIGUOUS,
+                new com.rivell.workbench.knowledge.ArtifactManifest(
+                        java.util.Set.of("MSA"), null, "Customer", "Third-Party",
+                        "US", "en", null, null, null), null);
+
+        var msaPackRequest = EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
+                new com.rivell.workbench.contracts.ReviewProfile(
+                        com.rivell.workbench.contracts.ContractType.MSA,
+                        com.rivell.workbench.contracts.PartyRole.CUSTOMER,
+                        com.rivell.workbench.contracts.PaperSource.THIRD_PARTY,
+                        com.rivell.workbench.contracts.Jurisdiction.US,
+                        "MSA_PACK"),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
+        var msaBundle = evidenceService.build(msaPackRequest);
+        var packDeclarations = msaBundle.policyItems().stream()
+                .map(item -> item.applicabilityScope().contractPackKey())
+                .toList();
+        assertThat(packDeclarations).contains("MSA_PACK");
+        assertThat(packDeclarations).anyMatch(java.util.Objects::isNull);
+
+        // same contract type, different pack: MSA-pack rules are excluded BY PACK
+        // alone (the MSA contract type matches their declarations) while the
+        // wildcard-pack rule stays applicable
+        var ndaPackRequest = EvidenceRequest.forClauseReview(
+                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
+                new com.rivell.workbench.contracts.ReviewProfile(
+                        com.rivell.workbench.contracts.ContractType.MSA,
+                        com.rivell.workbench.contracts.PartyRole.CUSTOMER,
+                        com.rivell.workbench.contracts.PaperSource.THIRD_PARTY,
+                        com.rivell.workbench.contracts.Jurisdiction.US,
+                        "NDA_PACK"),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
+        var ndaPackBundle = evidenceService.build(ndaPackRequest);
+        assertThat(ndaPackBundle.policyItems())
+                .allSatisfy(item -> assertThat(item.applicabilityScope().contractPackKey()).isNull());
     }
 
     @Test

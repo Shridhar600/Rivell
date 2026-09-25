@@ -15,6 +15,12 @@ public class SemanticsNotFoundException extends RuntimeException {
         this.versionNumber = versionNumber;
     }
 
+    public SemanticsNotFoundException(UUID contractVersionId) {
+        super("No semantic contract state for contract version " + contractVersionId);
+        this.contractId = null;
+        this.versionNumber = 0;
+    }
+
     public UUID contractId() {
         return contractId;
     }

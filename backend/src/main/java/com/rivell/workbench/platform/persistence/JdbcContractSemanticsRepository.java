@@ -603,6 +603,9 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         payload.put("jurisdiction",
                 profile.jurisdiction() == null ? Jurisdiction.UNSPECIFIED.name()
                         : profile.jurisdiction().name());
+        if (profile.contractPackKey() != null) {
+            payload.put("contractPackKey", profile.contractPackKey());
+        }
         return payload;
     }
 
@@ -616,7 +619,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         return new ReviewProfile(contractType,
                 parseEnum(com.rivell.workbench.contracts.PartyRole.class, text(node, "ourSideRole")),
                 parseEnum(PaperSource.class, text(node, "paperSource")),
-                jurisdiction == null ? Jurisdiction.UNSPECIFIED : jurisdiction);
+                jurisdiction == null ? Jurisdiction.UNSPECIFIED : jurisdiction,
+                text(node, "contractPackKey"));
     }
 
     private List<String> quality(QualityReasons quality) {

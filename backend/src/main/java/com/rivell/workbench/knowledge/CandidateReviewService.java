@@ -26,16 +26,22 @@ public class CandidateReviewService {
     private final TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
+    private final DuplicateConflictDetector conflictDetector;
+    private final CandidateReviewCategorizer categorizer;
 
     public CandidateReviewService(
             KnowledgeRepository repository,
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            DuplicateConflictDetector conflictDetector,
+            CandidateReviewCategorizer categorizer) {
         this.repository = repository;
         this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+        this.conflictDetector = conflictDetector;
+        this.categorizer = categorizer;
     }
 
     public KnowledgeCandidate approve(UUID candidateId, String note) {
@@ -48,7 +54,9 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.APPROVED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.semanticFields(),
+                    candidate.legalConceptKey(), candidate.conceptCorrection(),
+                    candidate.conceptCorrectedBy(), candidate.conceptCorrectedAt(),
+                    candidate.semanticFields(),
                     candidate.editedSemanticFields(), candidate.interpretations(),
                     candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
@@ -76,7 +84,9 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.semanticFields(),
+                    candidate.legalConceptKey(), candidate.conceptCorrection(),
+                    candidate.conceptCorrectedBy(), candidate.conceptCorrectedAt(),
+                    candidate.semanticFields(),
                     !editedSemantic.equals(SemanticFields.EMPTY) ? editedSemantic : candidate.editedSemanticFields(),
                     candidate.interpretations(),
                     contentText != null ? contentText : candidate.editedContentText(),
@@ -97,7 +107,9 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.REJECTED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.semanticFields(),
+                    candidate.legalConceptKey(), candidate.conceptCorrection(),
+                    candidate.conceptCorrectedBy(), candidate.conceptCorrectedAt(),
+                    candidate.semanticFields(),
                     candidate.editedSemanticFields(), candidate.interpretations(),
                     candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
@@ -105,6 +117,64 @@ public class CandidateReviewService {
                     Texts.normalize(note), Instant.now(),
                     candidate.createdAt(), Instant.now());
         });
+    }
+
+    /**
+     * Human LegalConcept correction on a candidate before publication (DW-017):
+     * same layering proven in M5 contracts — the machine concept is preserved,
+     * a human correction (set key, or blank = clear to unclassified) defines the
+     * effective concept that publication and retrieval consume. A correction that
+     * changes the effective concept re-runs conflict analysis and review
+     * categorization against published truth on the effective concept (AD 6.9/7.15),
+     * and an APPROVED candidate demotes to EDITED so publication consumes a
+     * re-approved state (AD 6.11: the recorded approval must correspond to what is
+     * published). Published and rejected candidates cannot be corrected.
+     */
+    public KnowledgeCandidate correctConcept(UUID candidateId, String primary) {
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.KNOWLEDGE_REVIEW)) {
+            throw new UnauthorizedKnowledgeAccessException(identity.userId());
+        }
+        if (primary == null) {
+            throw new IllegalArgumentException(
+                    "A concept correction must set a LegalConcept name or an empty string to clear");
+        }
+        var normalized = primary.strip();
+        if (!normalized.isEmpty()) {
+            try {
+                com.rivell.workbench.contracts.LegalConcept.valueOf(normalized);
+            } catch (IllegalArgumentException e) {
+                throw new InvalidConceptCorrectionException(candidateId);
+            }
+        }
+        var candidate = repository.findCandidate(candidateId, identity.organizationId())
+                .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
+        if (candidate.isPublished() || candidate.reviewStatus() == ReviewStatus.REJECTED) {
+            throw new InvalidCandidateReviewStateException(candidate, "concept-corrected");
+        }
+        var corrected = candidate.withConceptCorrection(normalized.isEmpty()
+                ? "" : normalized);
+        if (!java.util.Objects.equals(corrected.effectiveConceptKey(),
+                candidate.effectiveConceptKey())) {
+            var signals = conflictDetector.inspect(corrected,
+                    repository.findPublishedCandidates(identity.organizationId()));
+            corrected = corrected.withConflictSignals(signals);
+        }
+        var assessment = repository.findArtifact(candidate.artifactId(), identity.organizationId())
+                .map(KnowledgeArtifact::assessment).orElse(null);
+        var categorization = categorizer.categorize(corrected, assessment);
+        corrected = corrected.withReviewOutcome(
+                categorization.category(), categorization.reasons());
+        var status = candidate.reviewStatus() == ReviewStatus.APPROVED
+                ? ReviewStatus.EDITED : candidate.reviewStatus();
+        corrected = corrected.withReviewStatus(status);
+        boolean persisted = repository.updateConceptCorrection(corrected.id(),
+                identity.organizationId(), corrected, candidate.reviewStatus(),
+                identity.userId(), Instant.now());
+        if (!persisted) {
+            throw new InvalidCandidateReviewStateException(corrected, "concept-corrected");
+        }
+        return corrected;
     }
 
     private KnowledgeCandidate transition(

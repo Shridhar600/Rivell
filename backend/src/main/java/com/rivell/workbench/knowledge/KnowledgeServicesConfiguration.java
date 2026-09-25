@@ -94,9 +94,12 @@ class KnowledgeServicesConfiguration {
             KnowledgeRepository knowledgeRepository,
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            DuplicateConflictDetector conflictDetector,
+            CandidateReviewCategorizer categorizer) {
         return new CandidateReviewService(
-                knowledgeRepository, transactionTemplate, identityProvider, authorizationService);
+                knowledgeRepository, transactionTemplate, identityProvider,
+                authorizationService, conflictDetector, categorizer);
     }
 
     @Bean

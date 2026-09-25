@@ -21,6 +21,13 @@ public record EmbeddingProperties(
         Duration connectTimeout,
         Duration readTimeout) {
 
+    /**
+     * pgvector regular-vector/HNSW index capability (pgvector 0.8.6). Storage/index
+     * semantics, not a model constant: a configured dimension count beyond this can
+     * never be indexed and must fail before indexing happens.
+     */
+    public static final int MAX_INDEXABLE_DIMENSIONS = 2000;
+
     public EmbeddingProperties {
         if (provider == null || provider.isBlank()) {
             provider = "openai-compatible";
@@ -36,6 +43,17 @@ public record EmbeddingProperties(
         }
         if (maxInputsPerBatch < 1) {
             maxInputsPerBatch = 64;
+        }
+        if (dimensions != null) {
+            if (dimensions < 1) {
+                throw new IllegalArgumentException("Embedding dimensions must be positive");
+            }
+            if (dimensions > MAX_INDEXABLE_DIMENSIONS) {
+                throw new IllegalArgumentException(
+                        "Configured embedding dimensions " + dimensions
+                                + " exceed the pgvector regular-vector/HNSW index capability ("
+                                + MAX_INDEXABLE_DIMENSIONS + "); indexing cannot proceed");
+            }
         }
     }
 

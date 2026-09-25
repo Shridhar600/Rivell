@@ -24,6 +24,9 @@ public record KnowledgeCandidate(
         String contentText,
         CandidatePayload payload,
         String legalConceptKey,
+        String conceptCorrection,
+        UUID conceptCorrectedBy,
+        Instant conceptCorrectedAt,
         SemanticFields semanticFields,
         SemanticFields editedSemanticFields,
         List<FieldInterpretation> interpretations,
@@ -61,17 +64,42 @@ public record KnowledgeCandidate(
 
     public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
-                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope, signals,
                 reviewCategory, reviewReasons, reviewNote, reviewedAt, createdAt, updatedAt);
+    }
+
+    /**
+     * The concept human review consumes: the human correction when one exists
+     * (set key, or blank = human-cleared unclassified), else the machine proposal
+     * (DW-017 — machine history is never erased).
+     */
+    public String effectiveConceptKey() {
+        if (conceptCorrection == null) {
+            return legalConceptKey;
+        }
+        return conceptCorrection.isBlank() ? null : conceptCorrection;
+    }
+
+    public KnowledgeCandidate withConceptCorrection(String correction) {
+        return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
+                correction,
+                conceptCorrectedBy, conceptCorrectedAt,
+                semanticFields, editedSemanticFields, interpretations,
+                editedContentText, editedPayload, supersedingCandidateId, scope,
+                conflictSignals, reviewCategory, reviewReasons, reviewNote, reviewedAt,
+                createdAt, Instant.now());
     }
 
     public KnowledgeCandidate withSemanticOutcome(
             SemanticFields fields, List<FieldInterpretation> fieldInterpretations,
             String conceptKey) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
-                candidateType, reviewStatus, rawLabel, contentText, payload, conceptKey,
+                candidateType, reviewStatus, rawLabel, contentText, payload, conceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
                 fields, editedSemanticFields, fieldInterpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
@@ -87,7 +115,8 @@ public record KnowledgeCandidate(
             throw new IllegalArgumentException("A candidate cannot supersede itself");
         }
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
-                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersededId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
@@ -96,10 +125,21 @@ public record KnowledgeCandidate(
 
     public KnowledgeCandidate withReviewOutcome(ReviewCategory category, Set<ReviewReason> reasons) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
-                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, category, reasons,
+                reviewNote, reviewedAt, createdAt, updatedAt);
+    }
+
+    public KnowledgeCandidate withReviewStatus(ReviewStatus status) {
+        return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
+                candidateType, status, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
+                semanticFields, editedSemanticFields, interpretations,
+                editedContentText, editedPayload, supersedingCandidateId, scope,
+                conflictSignals, reviewCategory, reviewReasons,
                 reviewNote, reviewedAt, createdAt, updatedAt);
     }
 

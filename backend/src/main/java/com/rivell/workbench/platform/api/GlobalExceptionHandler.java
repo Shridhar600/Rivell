@@ -30,6 +30,11 @@ import com.rivell.workbench.retrieval.ClauseNotClassifiedException;
 import com.rivell.workbench.retrieval.EnrichmentNotReadyException;
 import com.rivell.workbench.retrieval.TraceNotFoundException;
 import com.rivell.workbench.retrieval.UnauthorizedEvidenceAccessException;
+import com.rivell.workbench.review.FindingNotFoundException;
+import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
+import com.rivell.workbench.review.InvalidReviewConfigurationException;
+import com.rivell.workbench.review.ReviewNotFoundException;
+import com.rivell.workbench.review.UnauthorizedReviewAccessException;
 import com.rivell.workbench.foundation.ErrorResponse;
 
 /**
@@ -51,6 +56,7 @@ public class GlobalExceptionHandler {
             KnowledgeArtifactNotFoundException.class, KnowledgeCandidateNotFoundException.class,
             KnowledgeUnitNotFoundException.class, SemanticsNotFoundException.class,
             ClauseNotFoundException.class, TraceNotFoundException.class,
+            ReviewNotFoundException.class, FindingNotFoundException.class,
             NoSuchElementException.class})
     ResponseEntity<ErrorResponse> notFound(RuntimeException e) {
         return error(HttpStatus.NOT_FOUND, "404", "Not found",
@@ -65,9 +71,24 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({UnauthorizedContractAccessException.class,
             UnauthorizedKnowledgeAccessException.class,
-            UnauthorizedEvidenceAccessException.class})
+            UnauthorizedEvidenceAccessException.class,
+            UnauthorizedReviewAccessException.class})
     ResponseEntity<ErrorResponse> forbidden(RuntimeException e) {
         return error(HttpStatus.FORBIDDEN, "403", "Forbidden", "Not authorized for this operation.");
+    }
+
+    @ExceptionHandler(ReviewEvidenceIntegrityException.class)
+    ResponseEntity<ErrorResponse> evidenceIntegrity(ReviewEvidenceIntegrityException e) {
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "500",
+                "Finding evidence unavailable",
+                "The finding evidence could not be resolved; internal diagnostics were recorded.");
+    }
+
+    @ExceptionHandler(InvalidReviewConfigurationException.class)
+    ResponseEntity<ErrorResponse> invalidReviewConfiguration(
+            InvalidReviewConfigurationException e) {
+        return error(HttpStatus.BAD_REQUEST, "400", "Invalid review configuration",
+                e.getMessage());
     }
 
     @ExceptionHandler({InvalidCandidateReviewStateException.class, InvalidPublicationException.class,
@@ -77,7 +98,8 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }
 
-    @ExceptionHandler(InvalidCorrectionException.class)
+    @ExceptionHandler({InvalidCorrectionException.class,
+            com.rivell.workbench.knowledge.InvalidConceptCorrectionException.class})
     ResponseEntity<ErrorResponse> invalidCorrection(RuntimeException e) {
         return error(HttpStatus.BAD_REQUEST, "400", "Invalid correction", e.getMessage());
     }

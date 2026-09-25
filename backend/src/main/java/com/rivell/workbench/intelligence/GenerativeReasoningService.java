@@ -71,6 +71,14 @@ public class GenerativeReasoningService {
                         "Generative result contains unknown field " + name);
             }
         }
+        for (var entry : spec.allowedValues().entrySet()) {
+            var value = fields.get(entry.getKey());
+            if (value != null && !entry.getValue().contains(value)) {
+                throw new ProviderProtocolException(
+                        "Generative result field " + entry.getKey()
+                                + " is outside its allowed values");
+            }
+        }
     }
 
     public record GenerativeExecution(
