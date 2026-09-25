@@ -30,7 +30,7 @@ function describeCreateError(error: Error): CreateErrorCopy {
   if (isReviewBadRequestError(error)) {
     return {
       message:
-        "The selected contract pack conflicts with this contract's review profile. Choose a different pack, or run the review without a pack.",
+        'The review could not be started with the selected contract pack. Choose a different pack, or run the review without a pack.',
       uncertain: false,
     }
   }
@@ -62,12 +62,13 @@ export function ReviewCreatePanel({ contractId, versionNumber, profile, onCheckR
   const create = useCreateReview(contractId, versionNumber)
   const [packKey, setPackKey] = useState('')
   const [errorCopy, setErrorCopy] = useState<CreateErrorCopy | null>(null)
+  const [blocked, setBlocked] = useState(false)
   const [checked, setChecked] = useState(false)
   const submitting = useRef(false)
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (submitting.current || create.isPending) return
+    if (submitting.current || create.isPending || (blocked && !checked)) return
     submitting.current = true
     setErrorCopy(null)
     setChecked(false)
@@ -76,7 +77,12 @@ export function ReviewCreatePanel({ contractId, versionNumber, profile, onCheckR
       {
         onSuccess: (summary) =>
           navigate(`/reviews/${contractId}/analysis/${summary.id}`),
-        onError: (error) => setErrorCopy(describeCreateError(error)),
+        onError: (error) => {
+          const copy = describeCreateError(error)
+          setErrorCopy(copy)
+          setBlocked(copy.uncertain)
+          setChecked(false)
+        },
         onSettled: () => {
           submitting.current = false
         },
@@ -134,6 +140,7 @@ export function ReviewCreatePanel({ contractId, versionNumber, profile, onCheckR
             value={packKey}
             onChange={(event) => setPackKey(event.target.value)}
             disabled={create.isPending}
+            aria-describedby="review-pack-hint"
           >
             <option value="">No contract pack</option>
             {REVIEW_PACK_OPTIONS.map((option) => (
@@ -142,14 +149,19 @@ export function ReviewCreatePanel({ contractId, versionNumber, profile, onCheckR
               </option>
             ))}
           </select>
-          <p className="field__hint">
-            A pack adds completeness checks for that contract type. Without a pack, only
-            generally applicable clause checks run — that is a valid, reduced review.
+          <p className="field__hint" id="review-pack-hint">
+            A pack adds completeness checks for that contract type. If this contract's review
+            profile declares a pack, that pack is used; otherwise only generally applicable
+            clause checks run — a valid, reduced review.
           </p>
         </div>
 
         {create.isPending ? (
           <LoadingState label="Starting review…" />
+        ) : blocked && !checked ? (
+          <p className="state state--warning">
+            Re-check the review history before starting another review.
+          </p>
         ) : (
           <button type="submit" className="button button--primary">
             Start review

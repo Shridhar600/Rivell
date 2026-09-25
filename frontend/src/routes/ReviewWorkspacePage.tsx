@@ -15,7 +15,15 @@ export function ReviewWorkspacePage() {
     return <LoadingState label="Loading review…" />
   }
 
-  if (isReviewNotFoundError(summaryQuery.error) || isReviewNotFoundError(contractQuery.error)) {
+  const matchesRoute =
+    summaryQuery.data !== undefined &&
+    summaryQuery.data.contractId.toLowerCase() === contractId.toLowerCase()
+
+  if (
+    isReviewNotFoundError(summaryQuery.error) ||
+    isReviewNotFoundError(contractQuery.error) ||
+    (summaryQuery.data !== undefined && !matchesRoute)
+  ) {
     return (
       <ErrorState
         message="This review could not be found. It may not exist, or you may not have access to it."
@@ -24,7 +32,7 @@ export function ReviewWorkspacePage() {
     )
   }
 
-  if (summaryQuery.isError || !summaryQuery.data) {
+  if (summaryQuery.isError || !summaryQuery.data || contractQuery.isError) {
     return (
       <ErrorState
         message="This review could not be loaded."
@@ -34,13 +42,18 @@ export function ReviewWorkspacePage() {
   }
 
   return (
-    <section className="review-workspace" aria-labelledby="review-heading">
+    <section className="review-page" aria-labelledby="review-heading">
       <ReviewHeader
         contractId={contractId}
         contractTitle={contractQuery.data?.title ?? 'Untitled contract'}
         summary={summaryQuery.data}
       />
-      <ReviewLifecyclePanel reviewId={reviewId} summary={summaryQuery.data} />
+      <ReviewLifecyclePanel
+        contractId={contractId}
+        reviewId={reviewId}
+        summary={summaryQuery.data}
+        onRefresh={() => void summaryQuery.refetch()}
+      />
     </section>
   )
 }

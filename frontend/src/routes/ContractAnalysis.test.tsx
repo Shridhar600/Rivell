@@ -32,6 +32,19 @@ function renderRoute(initialEntry: string) {
   return { router, ...result }
 }
 
+function renderReviewRoute(summary: unknown) {
+  const api = stubContractApi({ reviewSummary: summary })
+  const router = createMemoryRouter(appRoutes, {
+    initialEntries: ['/reviews/c1/analysis/r-9'],
+  })
+  render(
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>,
+  )
+  return api
+}
+
 function createRequests(api: ReturnType<typeof stubContractApi>) {
   return api.requests.filter(
     (request) => request.method === 'POST' && request.url.includes('/reviews'),
@@ -150,6 +163,33 @@ describe('review creation', () => {
     expect(await screen.findByText(/Review history refreshed/)).toBeInTheDocument()
   })
 
+  it('blocks another submission until the review history has been re-checked', async () => {
+    let fail = true
+    const api = stubContractApi({
+      createReviewResponse: () => {
+        if (fail) return Promise.reject(new TypeError('Failed to fetch'))
+        return Promise.resolve(jsonResponse(envelope(fixtureQueuedReviewSummary)))
+      },
+      reviews: { items: [], truncated: false },
+      reviewSummary: fixtureQueuedReviewSummary,
+    })
+    renderRoute('/reviews/c1/analysis')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+    await screen.findByRole('alert')
+
+    expect(screen.queryByRole('button', { name: 'Start review' })).not.toBeInTheDocument()
+    expect(createRequests(api)).toHaveLength(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Re-check reviews' }))
+
+    fail = false
+    const resumed = await screen.findByRole('button', { name: 'Start review' })
+    await userEvent.click(resumed)
+
+    await waitFor(() => expect(createRequests(api)).toHaveLength(2))
+  })
+
   it('gates creation until semantic analysis is ready', async () => {
     const api = stubContractApi({
       semantics: { ...fixtureSemantics(), enrichmentStatus: 'NOT_ENRICHED' },
@@ -176,8 +216,9 @@ describe('review history', () => {
     expect(await screen.findByText('Analyzing')).toBeInTheDocument()
     expect(screen.getByText('Completed')).toBeInTheDocument()
 
-    const links = screen.getAllByRole('link', { name: 'Open review' })
+    const links = screen.getAllByRole('link', { name: /Open review/ })
     expect(links[0]).toHaveAttribute('href', '/reviews/c1/analysis/r-2')
+    expect(links[0]).toHaveAccessibleName(/Analyzing/)
 
     await userEvent.click(links[1])
     await waitFor(() =>
@@ -190,6 +231,16 @@ describe('review history', () => {
     renderRoute('/reviews/c1/analysis')
 
     expect(await screen.findByText('No automated reviews yet')).toBeInTheDocument()
+  })
+})
+
+describe('review workspace integrity', () => {
+  it('treats a review from another contract as not found', async () => {
+    renderReviewRoute({ ...fixtureQueuedReviewSummary, id: 'r-9', contractId: 'c2' })
+
+    expect(
+      await screen.findByText(/This review could not be found/),
+    ).toBeInTheDocument()
   })
 })
 

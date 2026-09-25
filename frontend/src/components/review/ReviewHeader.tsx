@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import type { ReviewSummary } from '../../api/reviews'
 import { contractPackLabel } from '../../lib/evidence'
 import { reviewStatusLabel, reviewStatusModifier } from '../../lib/reviews'
+import { useHeadingFocus } from '../../lib/useHeadingFocus'
 
 function formatTimestamp(iso: string | null): string {
   if (!iso) return '—'
@@ -17,6 +18,7 @@ type Props = {
 }
 
 export function ReviewHeader({ contractId, contractTitle, summary }: Props) {
+  const headingRef = useHeadingFocus<HTMLHeadingElement>(summary.id)
   return (
     <header className="review-header">
       <div className="review-header__title">
@@ -25,7 +27,7 @@ export function ReviewHeader({ contractId, contractTitle, summary }: Props) {
             Automated reviews
           </Link>
         </p>
-        <h1 id="review-heading" tabIndex={-1}>
+        <h1 id="review-heading" tabIndex={-1} ref={headingRef}>
           {contractTitle}
         </h1>
         <p className="review-header__meta">

@@ -6,6 +6,7 @@ import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
 import { ReviewCreatePanel } from '../components/review/ReviewCreatePanel'
 import { ReviewHistoryList } from '../components/review/ReviewHistoryList'
+import { useHeadingFocus } from '../lib/useHeadingFocus'
 
 export function ContractAnalysisPage() {
   const { contractId = '' } = useParams()
@@ -14,6 +15,7 @@ export function ContractAnalysisPage() {
   const versionNumber = contract?.latestVersion.versionNumber
   const semanticsQuery = useSemanticsQuery(contractId, versionNumber)
   const reviewsQuery = useContractReviewsQuery(contractId)
+  const headingRef = useHeadingFocus<HTMLHeadingElement>(contract?.id)
 
   if (!contractId) {
     return <ErrorState message="No contract was selected." onRetry={() => undefined} />
@@ -39,7 +41,7 @@ export function ContractAnalysisPage() {
       <header className="analysis-page__header">
         <div>
           <p className="analysis-page__eyebrow">Automated reviews</p>
-          <h1 id="analysis-heading" tabIndex={-1}>
+          <h1 id="analysis-heading" tabIndex={-1} ref={headingRef}>
             {contract.title ?? 'Untitled contract'}
           </h1>
         </div>

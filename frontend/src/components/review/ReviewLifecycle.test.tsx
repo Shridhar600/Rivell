@@ -44,6 +44,7 @@ describe('review lifecycle states', () => {
   it('shows the queued state and fetches progress only on disclosure', async () => {
     const api = renderReview(fixtureQueuedReviewSummary, {
       reviewProgress: {
+        reviewStatus: 'ANALYSIS_QUEUED',
         ...fixtureQueuedReviewSummary,
         pendingChecks: 3,
         runningChecks: 0,
@@ -78,7 +79,8 @@ describe('review lifecycle states', () => {
         'A bounded semantic decision was unavailable; the clause was not classified.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('LIABILITY_CAP:LIMITATION_OF_LIABILITY')).toBeInTheDocument()
+    const check = screen.getByTitle('LIABILITY_CAP:LIMITATION_OF_LIABILITY')
+    expect(check).toHaveTextContent('Liability cap · Limitation of liability')
   })
 
   it('renders a technical failure distinctly and never leaks the raw reason', async () => {
@@ -90,6 +92,26 @@ describe('review lifecycle states', () => {
     ).toBeInTheDocument()
     expect(screen.queryByText(/IllegalStateException/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Analysis warnings/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to review history' })).toHaveAttribute(
+      'href',
+      '/reviews/c1/analysis',
+    )
+  })
+
+  it('offers a manual refresh when the review status is unknown', async () => {
+    const api = renderReview({ ...fixtureQueuedReviewSummary, status: 'REANALYZING' })
+    const summaryCalls = () =>
+      api.requests.filter(
+        (request) =>
+          request.method === 'GET' && /\/api\/reviews\/r-1$/.test(request.url),
+      ).length
+
+    expect(await screen.findByText(/does not recognise/)).toBeInTheDocument()
+    const before = summaryCalls()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Check again' }))
+
+    await waitFor(() => expect(summaryCalls()).toBeGreaterThan(before))
   })
 
   it('gives a clean completed review a meaningful state', async () => {

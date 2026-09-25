@@ -137,7 +137,7 @@ const PROPOSED_ACTION_LABELS: Record<string, string> = {
   USE_APPROVED_FALLBACK: 'Use the approved fallback wording',
   ADD_REQUIRED_PROVISION: 'Add the required provision',
   REVIEW_AMBIGUITY: 'Resolve the policy ambiguity',
-  ESCALATE_TO_HUMAN: 'Escalate to a human reviewer',
+  ESCALATE_TO_HUMAN: 'Human review requested',
   CONSIDER_GENERATED_LANGUAGE: 'Consider the AI-proposed wording',
   NO_ACTION: 'No action proposed',
   UNKNOWN: 'Recommended action',
@@ -145,6 +145,12 @@ const PROPOSED_ACTION_LABELS: Record<string, string> = {
 
 export function proposedActionLabel(action: string): string {
   return PROPOSED_ACTION_LABELS[action] ?? humanizeCode(action)
+}
+
+export function checkKeyLabel(checkKey: string): string {
+  const [mechanism, concept] = checkKey.split(':')
+  if (!concept) return humanizeCode(checkKey)
+  return `${humanizeCode(mechanism)} · ${conceptLabel(concept)}`
 }
 
 export function proposedLanguageSourceLabel(source: string): string {

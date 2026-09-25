@@ -66,6 +66,7 @@ export function ReviewHistoryList({
                 <Link
                   className="link-button"
                   to={`/reviews/${contractId}/analysis/${review.id}`}
+                  aria-label={`Open review v${review.contractVersionNumber}, ${reviewStatusLabel(review.status)}, created ${formatTimestamp(review.createdAt)}`}
                 >
                   Open review
                 </Link>

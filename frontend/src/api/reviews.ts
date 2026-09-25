@@ -392,10 +392,6 @@ export function parseFindingDetail(value: unknown, what = 'finding detail'): Fin
   }
 }
 
-export function isReviewTerminal(status: ReviewStatus | undefined | null): boolean {
-  return status === 'COMPLETED' || status === 'FAILED' || status === 'UNKNOWN'
-}
-
 export function isReviewPending(status: ReviewStatus | undefined | null): boolean {
   return status === 'ANALYSIS_QUEUED' || status === 'ANALYZING'
 }
@@ -564,12 +560,14 @@ export function useReviewSummaryQuery(reviewId: string | undefined): UseQueryRes
 export function useReviewProgressQuery(
   reviewId: string | undefined,
   enabled: boolean,
+  poll = false,
 ): UseQueryResult<ReviewProgress> {
   return useQuery({
     queryKey: reviewKeys.progress(reviewId ?? ''),
     queryFn: reviewId ? () => fetchReviewProgress(reviewId) : skipToken,
     enabled: Boolean(reviewId) && enabled,
     retry: false,
+    refetchInterval: poll && enabled ? 2500 : false,
   })
 }
 
@@ -604,6 +602,7 @@ export function useCreateReview(
   return useMutation({
     mutationFn: ({ contractPackKey }) => createReview(contractId, versionNumber, contractPackKey),
     retry: false,
+    networkMode: 'always',
     onSuccess: (summary) => {
       queryClient.setQueryData(reviewKeys.summary(summary.id), summary)
       void queryClient.invalidateQueries({ queryKey: reviewKeys.list(contractId) })

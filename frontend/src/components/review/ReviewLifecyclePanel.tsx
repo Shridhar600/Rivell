@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 import type { ReviewSummary } from '../../api/reviews'
 import { useReviewProgressQuery } from '../../api/reviews'
 import {
   analysisWarningMessage,
+  checkKeyLabel,
   hasNewerRun,
   progressPercent,
   reviewFailureMessage,
@@ -13,10 +15,7 @@ import { LoadingState } from '../LoadingState'
 function AnalysisWarnings({
   summary,
 }: {
-  summary: Pick<
-    ReviewSummary,
-    'analysisWarnings' | 'analysisWarningsTruncated'
-  >
+  summary: Pick<ReviewSummary, 'analysisWarnings' | 'analysisWarningsTruncated'>
 }) {
   if (summary.analysisWarnings.length === 0) return null
   return (
@@ -28,7 +27,9 @@ function AnalysisWarnings({
       <ul>
         {summary.analysisWarnings.map((warning, index) => (
           <li key={`${warning.checkKey}-${index}`}>
-            <span className="analysis-warnings__check">{warning.checkKey}</span>{' '}
+            <span className="analysis-warnings__check" title={warning.checkKey}>
+              {checkKeyLabel(warning.checkKey)}
+            </span>{' '}
             {analysisWarningMessage(warning)}
           </li>
         ))}
@@ -40,9 +41,9 @@ function AnalysisWarnings({
   )
 }
 
-function ProgressDetail({ reviewId }: { reviewId: string }) {
+function ProgressDetail({ reviewId, poll }: { reviewId: string; poll: boolean }) {
   const [open, setOpen] = useState(false)
-  const progressQuery = useReviewProgressQuery(reviewId, open)
+  const progressQuery = useReviewProgressQuery(reviewId, open, open && poll)
 
   return (
     <details
@@ -88,11 +89,7 @@ function ProgressDetail({ reviewId }: { reviewId: string }) {
           </div>
           <div className="data-list__row">
             <dt>Latest attempt</dt>
-            <dd>
-              {progressQuery.data.latestRunStatus
-                ? runStatusLabel(progressQuery.data.latestRunStatus)
-                : runStatusLabel('UNKNOWN')}
-            </dd>
+            <dd>{runStatusLabel(progressQuery.data.latestRunStatus ?? 'UNKNOWN')}</dd>
           </div>
         </dl>
       ) : null}
@@ -100,13 +97,14 @@ function ProgressDetail({ reviewId }: { reviewId: string }) {
   )
 }
 
-export function ReviewLifecyclePanel({
-  reviewId,
-  summary,
-}: {
+type Props = {
+  contractId: string
   reviewId: string
   summary: ReviewSummary
-}) {
+  onRefresh: () => void
+}
+
+export function ReviewLifecyclePanel({ contractId, reviewId, summary, onRefresh }: Props) {
   const percent = progressPercent(summary)
   const pending = summary.status === 'ANALYSIS_QUEUED' || summary.status === 'ANALYZING'
 
@@ -158,23 +156,36 @@ export function ReviewLifecyclePanel({
       {summary.status === 'FAILED' ? (
         <div className="state state--error" role="alert">
           <p>{reviewFailureMessage(summary.failureReason)}</p>
+          <p>A new review creates a fresh frozen snapshot of the current policy state.</p>
+          <Link className="link-button" to={`/reviews/${contractId}/analysis`}>
+            Back to review history
+          </Link>
+        </div>
+      ) : null}
+
+      {summary.status === 'UNKNOWN' ? (
+        <div className="state state--warning">
           <p>
-            You can start a new review from the review history. Starting a new review creates
-            a fresh frozen snapshot.
+            This review is in a state this version of the app does not recognise. It may
+            still be running.
           </p>
+          <button type="button" className="button" onClick={onRefresh}>
+            Check again
+          </button>
         </div>
       ) : null}
 
       {hasNewerRun(summary) ? (
         <p className="state state--warning">
-          A newer analysis attempt exists ({runStatusLabel(summary.latestRunStatus ?? 'UNKNOWN')}).
-          This page shows the latest completed analysis.
+          A newer analysis attempt exists (
+          {runStatusLabel(summary.latestRunStatus ?? 'UNKNOWN')}). This page shows the latest
+          completed analysis.
         </p>
       ) : null}
 
       <AnalysisWarnings summary={summary} />
 
-      <ProgressDetail reviewId={reviewId} />
+      <ProgressDetail reviewId={reviewId} poll={pending} />
     </section>
   )
 }

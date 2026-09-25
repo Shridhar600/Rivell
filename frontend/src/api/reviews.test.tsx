@@ -15,6 +15,7 @@ import {
   reviewPollInterval,
   useCreateReview,
   useFindingsQuery,
+  useReviewProgressQuery,
   useReviewSummaryQuery,
 } from './reviews'
 
@@ -254,13 +255,15 @@ describe('review parsers', () => {
     expect(findings.items[1].absenceConcept).toBe('LIMITATION_OF_LIABILITY')
   })
 
-  it('parses progress counts', () => {
+  it('parses progress counts and status', () => {
     const progress = parseReviewProgress({
+      reviewStatus: 'ANALYZING',
       ...queuedSummary,
       pendingChecks: 2,
       runningChecks: 1,
       skippedChecks: 0,
     })
+    expect(progress.reviewStatus).toBe('ANALYZING')
     expect(progress.pendingChecks).toBe(2)
     expect(progress.runningChecks).toBe(1)
   })
@@ -292,7 +295,7 @@ describe('review requests', () => {
     expect(await requests[0].json()).toEqual({})
   })
 
-  it('does not retry a failed creation (no duplicate review)', async () => {
+  it('classifies a typed conflict without retrying the request', async () => {
     const requests = stubFetch(() =>
       jsonResponse({ code: 'ENRICHMENT_NOT_READY', detail: 'Semantic analysis not ready' }, 409),
     )
@@ -356,6 +359,26 @@ describe('review polling integration', () => {
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(6000)
+    })
+    expect(requests).toHaveLength(2)
+    vi.useRealTimers()
+  })
+
+  it('refreshes disclosed progress while analysis is pending', async () => {
+    vi.useFakeTimers()
+    const requests = stubFetch(() =>
+      jsonResponse(envelope({ ...queuedSummary, reviewStatus: 'ANALYZING', pendingChecks: 2 })),
+    )
+    const { wrapper } = createWrapper()
+    renderHook(() => useReviewProgressQuery('r-1', true, true), { wrapper })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10)
+    })
+    expect(requests).toHaveLength(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2600)
     })
     expect(requests).toHaveLength(2)
     vi.useRealTimers()
