@@ -1,71 +1,28 @@
 import { Link } from 'react-router'
-import type { FindingClaim, FindingDetail } from '../../api/reviews'
+import type { FindingDetail } from '../../api/reviews'
 import { conceptLabel } from '../../lib/contractSemantics'
 import type { StructureNode } from '../../lib/documentTree'
 import {
+  absenceClaims,
   checkKeyLabel,
   claimKindLabel,
   classificationLabel,
+  findingConceptLabels,
   findingSubjectLabel,
   issueFamilyLabel,
   observationKindLabel,
+  policyNoteText,
   proposedActionLabel,
   qualityFactorRows,
+  recommendationClaims,
   severityLabel,
   severityModifier,
+  whyClaims,
 } from '../../lib/reviews'
 import { useHeadingFocus } from '../../lib/useHeadingFocus'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
 import { StructuralRenderer } from '../StructuralRenderer'
-
-const OBSERVATION_KINDS = new Set(['OBSERVATION'])
-const RECOMMENDATION_KINDS = new Set(['RECOMMENDATION'])
-const ABSENCE_KINDS = new Set(['ABSENCE_BASIS'])
-
-function whyClaims(claims: FindingClaim[]): FindingClaim[] {
-  return claims
-    .filter(
-      (claim) =>
-        !OBSERVATION_KINDS.has(claim.claimKind) &&
-        !RECOMMENDATION_KINDS.has(claim.claimKind) &&
-        !ABSENCE_KINDS.has(claim.claimKind) &&
-        !claim.absence,
-    )
-    .sort((left, right) => left.ordinal - right.ordinal)
-}
-
-function recommendationClaims(claims: FindingClaim[]): FindingClaim[] {
-  return claims
-    .filter((claim) => RECOMMENDATION_KINDS.has(claim.claimKind) && !claim.absence)
-    .sort((left, right) => left.ordinal - right.ordinal)
-}
-
-function absenceClaims(claims: FindingClaim[]): FindingClaim[] {
-  return claims
-    .filter((claim) => ABSENCE_KINDS.has(claim.claimKind) || claim.absence)
-    .sort((left, right) => left.ordinal - right.ordinal)
-}
-
-function PolicyNote({ finding }: { finding: FindingDetail }) {
-  if (finding.issueFamily === 'POLICY_UNAVAILABLE') {
-    return (
-      <p className="finding-detail__note">
-        No organizational policy covers this clause. Historical precedent is evidence only
-        and does not establish policy.
-      </p>
-    )
-  }
-  if (finding.issueFamily === 'POLICY_AMBIGUOUS') {
-    return (
-      <p className="finding-detail__note">
-        More than one published policy applies. Rivell did not choose between them; the
-        ambiguity is preserved for human review.
-      </p>
-    )
-  }
-  return null
-}
 
 type ClauseSource = {
   nodeId: string
@@ -78,8 +35,8 @@ type Props = {
   regionLabels: Map<string, string>
   contractId: string
   clauseSource: ClauseSource | null
-  sourceVersion: number
-  latestVersion: number
+  sourceVersion: number | null
+  latestVersion: number | null
 }
 
 export function FindingDetailView({
@@ -95,6 +52,8 @@ export function FindingDetailView({
   const recommendations = recommendationClaims(finding.claims)
   const absences = absenceClaims(finding.claims)
   const qualityRows = qualityFactorRows(finding.quality)
+  const concepts = findingConceptLabels(finding)
+  const policyNote = policyNoteText(finding)
 
   return (
     <article className="finding-detail" aria-labelledby="finding-heading">
@@ -112,9 +71,7 @@ export function FindingDetailView({
           <span>{issueFamilyLabel(finding.issueFamily)}</span>
         </p>
         <p className="finding-detail__concepts">
-          {finding.concepts.length > 0
-            ? finding.concepts.map((concept) => conceptLabel(concept)).join(' · ')
-            : conceptLabel(finding.concept ?? 'UNKNOWN')}
+          {concepts.length > 0 ? concepts.join(' · ') : conceptLabel('UNKNOWN')}
         </p>
       </header>
 
@@ -166,7 +123,9 @@ export function FindingDetailView({
             <p>{clauseSource.heading}</p>
           )}
           <p>
-            {sourceVersion === latestVersion ? (
+            {sourceVersion !== null &&
+            latestVersion !== null &&
+            sourceVersion === latestVersion ? (
               <Link
                 className="link-button"
                 to={`/reviews/${contractId}?view=document&node=${clauseSource.nodeId}`}
@@ -175,8 +134,9 @@ export function FindingDetailView({
               </Link>
             ) : (
               <>
-                This review is pinned to v{sourceVersion}; the contract's current version is
-                v{latestVersion}.{' '}
+                {sourceVersion !== null && latestVersion !== null
+                  ? `This review is pinned to v${sourceVersion}; the contract's current version is v${latestVersion}. `
+                  : 'The contract version for this review could not be confirmed. '}
                 <Link className="link-button" to={`/reviews/${contractId}`}>
                   Open the contract
                 </Link>
@@ -186,7 +146,7 @@ export function FindingDetailView({
         </section>
       ) : null}
 
-      <PolicyNote finding={finding} />
+      {policyNote ? <p className="finding-detail__note">{policyNote}</p> : null}
 
       {why.length > 0 ? (
         <section className="finding-section" aria-labelledby="finding-why-heading">
@@ -247,8 +207,8 @@ export function FindingDetailView({
         <section className="finding-section" aria-labelledby="finding-quality-heading">
           <h3 id="finding-quality-heading">System assessment</h3>
           <ul className="finding-quality">
-            {qualityRows.map((row) => (
-              <li key={row}>{row}</li>
+            {qualityRows.map((row, index) => (
+              <li key={`${row}-${index}`}>{row}</li>
             ))}
           </ul>
         </section>
@@ -275,8 +235,8 @@ export function FindingDetailPane({
   regionLabels: Map<string, string>
   contractId: string
   clauseSource: ClauseSource | null
-  sourceVersion: number
-  latestVersion: number
+  sourceVersion: number | null
+  latestVersion: number | null
   findingId: string | null
   isPending: boolean
   isError: boolean

@@ -50,28 +50,44 @@ function describeCreateError(error: Error): CreateErrorCopy {
   }
 }
 
+type RecoveryOutcome = { ok: boolean; ids: string[] }
+
 type Props = {
   contractId: string
   versionNumber: number
   profile: ReviewProfile | null
-  onCheckReviews: () => void
+  reviewIds: string[]
+  onCheckReviews: () => Promise<RecoveryOutcome>
 }
 
-export function ReviewCreatePanel({ contractId, versionNumber, profile, onCheckReviews }: Props) {
+export function ReviewCreatePanel({
+  contractId,
+  versionNumber,
+  profile,
+  reviewIds,
+  onCheckReviews,
+}: Props) {
   const navigate = useNavigate()
   const create = useCreateReview(contractId, versionNumber)
   const [packKey, setPackKey] = useState('')
   const [errorCopy, setErrorCopy] = useState<CreateErrorCopy | null>(null)
   const [blocked, setBlocked] = useState(false)
-  const [checked, setChecked] = useState(false)
+  const [recoveryState, setRecoveryState] = useState<
+    'none' | 'needs-check' | 'refreshed' | 'found-review' | 'refresh-failed'
+  >('none')
+  const [foundReviewId, setFoundReviewId] = useState<string | null>(null)
   const submitting = useRef(false)
+  const knownReviewIds = useRef<string[]>([])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (submitting.current || create.isPending || (blocked && !checked)) return
+    if (submitting.current || create.isPending) return
+    if (blocked && recoveryState !== 'refreshed') return
     submitting.current = true
+    knownReviewIds.current = reviewIds
     setErrorCopy(null)
-    setChecked(false)
+    setRecoveryState('none')
+    setFoundReviewId(null)
     create.mutate(
       { contractPackKey: packKey || null },
       {
@@ -81,13 +97,29 @@ export function ReviewCreatePanel({ contractId, versionNumber, profile, onCheckR
           const copy = describeCreateError(error)
           setErrorCopy(copy)
           setBlocked(copy.uncertain)
-          setChecked(false)
+          setRecoveryState(copy.uncertain ? 'needs-check' : 'none')
         },
         onSettled: () => {
           submitting.current = false
         },
       },
     )
+  }
+
+  async function handleRecoveryCheck() {
+    const outcome = await onCheckReviews()
+    if (!outcome.ok) {
+      setRecoveryState('refresh-failed')
+      return
+    }
+    const known = new Set(knownReviewIds.current)
+    const appeared = outcome.ids.find((id) => !known.has(id))
+    if (appeared) {
+      setFoundReviewId(appeared)
+      setRecoveryState('found-review')
+    } else {
+      setRecoveryState('refreshed')
+    }
   }
 
   return (
@@ -158,14 +190,36 @@ export function ReviewCreatePanel({ contractId, versionNumber, profile, onCheckR
 
         {create.isPending ? (
           <LoadingState label="Starting review…" />
-        ) : blocked && !checked ? (
+        ) : blocked && recoveryState === 'needs-check' ? (
           <p className="state state--warning">
             Re-check the review history before starting another review.
           </p>
+        ) : blocked && recoveryState === 'refresh-failed' ? (
+          <p className="state state--warning">
+            The review history could not be refreshed. Do not start another review until you
+            can confirm whether the first one was created.
+          </p>
+        ) : blocked && recoveryState === 'found-review' && foundReviewId ? (
+          <p className="state state--warning">
+            A review was created while the outcome was unknown.{' '}
+            <Link
+              className="link-button"
+              to={`/reviews/${contractId}/analysis/${foundReviewId}`}
+            >
+              Open the created review
+            </Link>
+          </p>
         ) : (
-          <button type="submit" className="button button--primary">
-            Start review
-          </button>
+          <>
+            {blocked && recoveryState === 'refreshed' ? (
+              <p role="status">
+                No new review appeared in the history. You can start the review again.
+              </p>
+            ) : null}
+            <button type="submit" className="button button--primary">
+              Start review
+            </button>
+          </>
         )}
       </form>
 
@@ -173,14 +227,7 @@ export function ReviewCreatePanel({ contractId, versionNumber, profile, onCheckR
         <div role="alert" className="state state--error">
           <p>{errorCopy.message}</p>
           {errorCopy.uncertain ? (
-            <button
-              type="button"
-              className="button"
-              onClick={() => {
-                onCheckReviews()
-                setChecked(true)
-              }}
-            >
+            <button type="button" className="button" onClick={() => void handleRecoveryCheck()}>
               Re-check reviews
             </button>
           ) : isReviewConflictError(create.error) ? (
@@ -188,7 +235,6 @@ export function ReviewCreatePanel({ contractId, versionNumber, profile, onCheckR
               Open the contract's semantic analysis
             </Link>
           ) : null}
-          {checked ? <p role="status">Review history refreshed below.</p> : null}
         </div>
       ) : null}
     </section>

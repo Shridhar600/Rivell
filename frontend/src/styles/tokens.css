@@ -1756,6 +1756,21 @@ blockquote.evidence-card__text {
 }
 
 /* M7 — review workspace */
+.badge--status-active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.badge--status-complete {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.badge--status-failed {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
 .analysis-page {
   display: grid;
   gap: var(--space-3);

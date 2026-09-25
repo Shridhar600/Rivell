@@ -1,5 +1,7 @@
 import type {
   AnalysisWarning,
+  FindingClaim,
+  FindingDetail,
   FindingSummary,
   ReviewSummary,
   FindingQuality,
@@ -27,12 +29,12 @@ export function reviewStatusLabel(status: string): string {
 export function reviewStatusModifier(status: string): string {
   switch (status) {
     case 'COMPLETED':
-      return 'badge--approved'
+      return 'badge--status-complete'
     case 'FAILED':
-      return 'badge--rejected'
+      return 'badge--status-failed'
     case 'ANALYZING':
     case 'ANALYSIS_QUEUED':
-      return 'badge--pending'
+      return 'badge--status-active'
     default:
       return 'badge--muted'
   }
@@ -135,7 +137,7 @@ export function claimKindLabel(kind: string): string {
 const PROPOSED_ACTION_LABELS: Record<string, string> = {
   USE_APPROVED_FALLBACK: 'Use the approved fallback wording',
   ADD_REQUIRED_PROVISION: 'Add the required provision',
-  REVIEW_AMBIGUITY: 'Resolve the policy ambiguity',
+  REVIEW_AMBIGUITY: 'Policy ambiguity needs human review',
   ESCALATE_TO_HUMAN: 'Human review needed',
   CONSIDER_GENERATED_LANGUAGE: 'Consider the AI-proposed wording',
   NO_ACTION: 'No action proposed',
@@ -258,6 +260,56 @@ export function progressPercent(counts: {
 }
 
 export function hasNewerRun(summary: ReviewSummary): boolean {
-  if (!summary.activeRun || !summary.latestRunStatus) return false
-  return summary.activeRun.status !== summary.latestRunStatus
+  return summary.activeRun !== null && summary.latestRunStatus !== null
 }
+
+const OBSERVATION_CLAIM_KINDS = new Set<string>(['OBSERVATION'])
+const RECOMMENDATION_CLAIM_KINDS = new Set<string>(['RECOMMENDATION'])
+const ABSENCE_CLAIM_KINDS = new Set<string>(['ABSENCE_BASIS'])
+
+export function whyClaims(claims: FindingClaim[]): FindingClaim[] {
+  return claims
+    .filter(
+      (claim) =>
+        !OBSERVATION_CLAIM_KINDS.has(claim.claimKind) &&
+        !RECOMMENDATION_CLAIM_KINDS.has(claim.claimKind) &&
+        !ABSENCE_CLAIM_KINDS.has(claim.claimKind) &&
+        !claim.absence,
+    )
+    .sort((left, right) => left.ordinal - right.ordinal)
+}
+
+export function recommendationClaims(claims: FindingClaim[]): FindingClaim[] {
+  return claims
+    .filter((claim) => RECOMMENDATION_CLAIM_KINDS.has(claim.claimKind) && !claim.absence)
+    .sort((left, right) => left.ordinal - right.ordinal)
+}
+
+export function absenceClaims(claims: FindingClaim[]): FindingClaim[] {
+  return claims
+    .filter((claim) => ABSENCE_CLAIM_KINDS.has(claim.claimKind) || claim.absence)
+    .sort((left, right) => left.ordinal - right.ordinal)
+}
+
+export function findingConceptLabels(finding: FindingDetail): string[] {
+  const concepts =
+    finding.concepts.length > 0
+      ? finding.concepts
+      : [finding.concept, finding.secondaryConcept].filter(
+          (concept): concept is string => Boolean(concept),
+        )
+  return concepts.map((concept) => conceptLabel(concept))
+}
+
+export function policyNoteText(
+  finding: Pick<FindingDetail, 'issueFamily'>,
+): string | null {
+  if (finding.issueFamily === 'POLICY_UNAVAILABLE') {
+    return 'No organizational policy covers this clause. Historical precedent is evidence only and does not establish policy.'
+  }
+  if (finding.issueFamily === 'POLICY_AMBIGUOUS') {
+    return 'More than one published policy applies. Rivell did not choose between them; the ambiguity is preserved for human review.'
+  }
+  return null
+}
+

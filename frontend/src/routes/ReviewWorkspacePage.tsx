@@ -45,7 +45,7 @@ export function ReviewWorkspacePage() {
 
   const contractQuery = useContractQuery(contractId)
   const summaryQuery = useReviewSummaryQuery(reviewId)
-  const pinnedVersion = summaryQuery.data?.contractVersionNumber
+  const pinnedVersion = summaryQuery.data?.contractVersionNumber ?? undefined
   const latestVersion = contractQuery.data?.latestVersion.versionNumber
   const structureQuery = useContractStructureQuery(contractId, pinnedVersion)
   const semanticsQuery = useSemanticsQuery(contractId, pinnedVersion)
@@ -128,7 +128,10 @@ export function ReviewWorkspacePage() {
     return (
       <ErrorState
         message="This review could not be loaded."
-        onRetry={() => void summaryQuery.refetch()}
+        onRetry={() => {
+          void summaryQuery.refetch()
+          void contractQuery.refetch()
+        }}
       />
     )
   }
@@ -155,6 +158,7 @@ export function ReviewWorkspacePage() {
           selectedFindingId={selectedFindingId}
           onSelect={selectFinding}
           regionLabels={regionLabels}
+          reviewStatus={status ?? 'UNKNOWN'}
           isEnabled={canReadFindings}
           isStateUnrecognized={status === 'UNKNOWN'}
           isPending={findingsQuery.isPending}
@@ -166,8 +170,8 @@ export function ReviewWorkspacePage() {
           regionLabels={regionLabels}
           contractId={contractId}
           clauseSource={clauseSource}
-          sourceVersion={pinnedVersion ?? summaryQuery.data.contractVersionNumber}
-          latestVersion={latestVersion ?? summaryQuery.data.contractVersionNumber}
+          sourceVersion={summaryQuery.data.contractVersionNumber}
+          latestVersion={latestVersion ?? null}
           findingId={canReadFindings ? selectedFindingId : null}
           isPending={Boolean(selectedFindingId) && findingQuery.isPending}
           isError={findingQuery.isError}

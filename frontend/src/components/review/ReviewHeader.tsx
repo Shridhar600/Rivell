@@ -1,14 +1,12 @@
 import { Link } from 'react-router'
 import type { ReviewSummary } from '../../api/reviews'
 import { contractPackLabel } from '../../lib/evidence'
+import { formatTimestamp } from '../../lib/knowledgeLabels'
 import { reviewStatusLabel, reviewStatusModifier } from '../../lib/reviews'
 import { useHeadingFocus } from '../../lib/useHeadingFocus'
 
-function formatTimestamp(iso: string | null): string {
-  if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString()
+function timestampOrDash(iso: string | null): string {
+  return iso ? formatTimestamp(iso) : '—'
 }
 
 type Props = {
@@ -34,15 +32,25 @@ export function ReviewHeader({ contractId, contractTitle, summary }: Props) {
           <span className={`badge ${reviewStatusModifier(summary.status)}`}>
             {reviewStatusLabel(summary.status)}
           </span>
-          <span>v{summary.contractVersionNumber}</span>
           <span>
-            started <time dateTime={summary.createdAt}>{formatTimestamp(summary.createdAt)}</time>
+            {summary.contractVersionNumber !== null
+              ? `v${summary.contractVersionNumber}`
+              : 'Version unknown'}
           </span>
+          <span>
+            created <time dateTime={summary.createdAt}>{timestampOrDash(summary.createdAt)}</time>
+          </span>
+          {summary.startedAt ? (
+            <span>
+              started{' '}
+              <time dateTime={summary.startedAt}>{timestampOrDash(summary.startedAt)}</time>
+            </span>
+          ) : null}
           {summary.completedAt ? (
             <span>
               completed{' '}
               <time dateTime={summary.completedAt}>
-                {formatTimestamp(summary.completedAt)}
+                {timestampOrDash(summary.completedAt)}
               </time>
             </span>
           ) : null}
@@ -57,9 +65,11 @@ export function ReviewHeader({ contractId, contractTitle, summary }: Props) {
         <div className="data-list__row">
           <dt>Knowledge publication</dt>
           <dd>
-            {summary.knowledgePinNumber > 0
-              ? `Publication ${summary.knowledgePinNumber}`
-              : 'No published knowledge at creation'}
+            {summary.knowledgePinNumber === null
+              ? 'Knowledge pin unavailable'
+              : summary.knowledgePinNumber > 0
+                ? `Publication ${summary.knowledgePinNumber}`
+                : 'No published knowledge at creation'}
           </dd>
         </div>
         <div className="data-list__row">

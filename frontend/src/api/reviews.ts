@@ -32,7 +32,7 @@ export type ReviewConcept = NonNullable<
 export const CLASSIFICATIONS = ['BLOCKING', 'REVIEW_REQUIRED', 'INFORMATIONAL'] as const
 export type FindingClassification = (typeof CLASSIFICATIONS)[number] | 'UNKNOWN'
 
-export const MAX_FINDINGS_LIMIT = 100
+export const MAX_PAGE_LIMIT = 100
 
 export type AnalysisWarning = {
   checkKey: string
@@ -49,7 +49,7 @@ export type ReviewRun = {
 export type ReviewSummary = {
   id: string
   contractId: string
-  contractVersionNumber: number
+  contractVersionNumber: number | null
   status: ReviewStatus
   failureReason: string | null
   createdAt: string
@@ -65,7 +65,7 @@ export type ReviewSummary = {
   findings: number
   contractPackKey: string | null
   packVersion: string | null
-  knowledgePinNumber: number
+  knowledgePinNumber: number | null
   analysisWarnings: AnalysisWarning[]
   analysisWarningsTruncated: boolean
 }
@@ -89,7 +89,7 @@ export type ReviewProgress = {
 export type ReviewListItem = {
   id: string
   contractId: string
-  contractVersionNumber: number
+  contractVersionNumber: number | null
   status: ReviewStatus
   createdAt: string
   completedAt: string | null
@@ -226,7 +226,7 @@ export function parseReviewSummary(value: unknown, what = 'review summary'): Rev
   return {
     id: readString(summary, 'id', what),
     contractId: readString(summary, 'contractId', what),
-    contractVersionNumber: readOptionalNumber(summary, 'contractVersionNumber', what),
+    contractVersionNumber: readOptionalNullableNumber(summary, 'contractVersionNumber', what),
     status: readStatus(summary, 'status', REVIEW_STATUSES),
     failureReason: readOptionalNullableString(summary, 'failureReason', what),
     createdAt: readString(summary, 'createdAt', what),
@@ -245,7 +245,7 @@ export function parseReviewSummary(value: unknown, what = 'review summary'): Rev
     findings: readOptionalNumber(summary, 'findings', what),
     contractPackKey: readOptionalNullableString(summary, 'contractPackKey', what),
     packVersion: readOptionalNullableString(summary, 'packVersion', what),
-    knowledgePinNumber: readOptionalNullableNumber(summary, 'knowledgePinNumber', what) ?? 0,
+    knowledgePinNumber: readOptionalNullableNumber(summary, 'knowledgePinNumber', what),
     analysisWarnings: readArray(summary, 'analysisWarnings', what, parseAnalysisWarning),
     analysisWarningsTruncated: readOptionalBoolean(
       summary,
@@ -283,7 +283,7 @@ function parseReviewListItem(value: unknown, what: string): ReviewListItem {
   return {
     id: readString(item, 'id', what),
     contractId: readString(item, 'contractId', what),
-    contractVersionNumber: readOptionalNumber(item, 'contractVersionNumber', what),
+    contractVersionNumber: readOptionalNullableNumber(item, 'contractVersionNumber', what),
     status: readStatus(item, 'status', REVIEW_STATUSES),
     createdAt: readString(item, 'createdAt', what),
     completedAt: readOptionalNullableString(item, 'completedAt', what),
@@ -430,12 +430,8 @@ export function isReviewForbiddenError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 403
 }
 
-export function isReviewMalformedError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    !(error instanceof ReviewApiError) &&
-    error.message.startsWith('Malformed')
-  )
+function reviewRetry(failureCount: number, error: Error): boolean {
+  return failureCount < 1 && !isReviewNotFoundError(error)
 }
 
 export const reviewKeys = {
@@ -458,7 +454,7 @@ export const reviewKeys = {
 export async function fetchReviewList(contractId: string): Promise<ReviewListResponse> {
   const client = createApiClient()
   const { data, error, response } = await client.GET('/api/reviews', {
-    params: { query: { contractId, limit: MAX_FINDINGS_LIMIT } },
+    params: { query: { contractId, limit: MAX_PAGE_LIMIT } },
   })
   if (!data) {
     throw new ReviewApiError(errorMessage(error, 'Review list unavailable'), response.status)
@@ -497,7 +493,7 @@ export async function fetchFindingList(
     params: {
       path: { id: reviewId },
       query: {
-        limit: MAX_FINDINGS_LIMIT,
+        limit: MAX_PAGE_LIMIT,
         ...(filters.concept ? { concept: filters.concept } : {}),
         ...(filters.classification ? { classification: filters.classification } : {}),
         ...(filters.severity ? { severity: filters.severity } : {}),
@@ -549,6 +545,7 @@ export function useContractReviewsQuery(contractId: string): UseQueryResult<Revi
     queryKey: reviewKeys.list(contractId),
     queryFn: () => fetchReviewList(contractId),
     enabled: Boolean(contractId),
+    retry: reviewRetry,
   })
 }
 
@@ -557,6 +554,7 @@ export function useReviewSummaryQuery(reviewId: string | undefined): UseQueryRes
     queryKey: reviewKeys.summary(reviewId ?? ''),
     queryFn: reviewId ? () => fetchReviewSummary(reviewId) : skipToken,
     enabled: Boolean(reviewId),
+    retry: reviewRetry,
     refetchInterval: (query) => reviewPollInterval(query.state.data?.status),
   })
 }
@@ -584,6 +582,7 @@ export function useFindingsQuery(
     queryKey: reviewKeys.findings(reviewId ?? '', filters),
     queryFn: reviewId ? () => fetchFindingList(reviewId, filters) : skipToken,
     enabled: Boolean(reviewId) && enabled,
+    retry: reviewRetry,
   })
 }
 

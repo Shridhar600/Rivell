@@ -79,9 +79,12 @@ export function subtreeNodes(nodes: StructureNode[], rootId: string): StructureN
   if (!byId.has(rootId)) return []
 
   const isDescendant = (node: StructureNode): boolean => {
+    const visited = new Set<string>()
     let current: StructureNode | undefined = node
     while (current) {
       if (current.id === rootId) return true
+      if (visited.has(current.id)) return false
+      visited.add(current.id)
       current = current.parentId ? byId.get(current.parentId) : undefined
     }
     return false

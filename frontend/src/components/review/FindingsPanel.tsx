@@ -1,4 +1,4 @@
-import type { FindingFilters, FindingSummary } from '../../api/reviews'
+import type { FindingFilters, FindingSummary, ReviewStatus } from '../../api/reviews'
 import { CLASSIFICATIONS, SEVERITIES } from '../../api/reviews'
 import { TAXONOMY_CONCEPTS, conceptLabel } from '../../lib/contractSemantics'
 import {
@@ -20,6 +20,7 @@ type Props = {
   selectedFindingId: string | null
   onSelect: (findingId: string) => void
   regionLabels: Map<string, string>
+  reviewStatus: ReviewStatus
   isEnabled: boolean
   isStateUnrecognized: boolean
   isPending: boolean
@@ -39,6 +40,7 @@ export function FindingsPanel({
   selectedFindingId,
   onSelect,
   regionLabels,
+  reviewStatus,
   isEnabled,
   isStateUnrecognized,
   isPending,
@@ -147,10 +149,15 @@ export function FindingsPanel({
             title="No findings match these filters"
             message="Clear the filters to see every finding in this review."
           />
-        ) : (
+        ) : reviewStatus === 'COMPLETED' ? (
           <EmptyState
             title="No findings"
             message="The automated review recorded no findings for this contract version."
+          />
+        ) : (
+          <EmptyState
+            title="No findings available"
+            message="This review did not complete an analysis, so there are no findings to show."
           />
         )
       ) : null}

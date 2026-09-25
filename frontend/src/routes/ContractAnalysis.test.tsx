@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -25,9 +26,11 @@ function envelope(data: unknown) {
 function renderRoute(initialEntry: string) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [initialEntry] })
   const result = render(
-    <AppProviders>
-      <RouterProvider router={router} />
-    </AppProviders>,
+    <StrictMode>
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>
+    </StrictMode>,
   )
   return { router, ...result }
 }
@@ -160,7 +163,85 @@ describe('review creation', () => {
 
     await waitFor(() => expect(listRequests(api).length).toBeGreaterThan(listCallsBefore))
     expect(createRequests(api)).toHaveLength(1)
-    expect(await screen.findByText(/Review history refreshed/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/No new review appeared in the history/),
+    ).toBeInTheDocument()
+  })
+
+  it('opens the created review when one appears during recovery', async () => {
+    const api = stubContractApi({
+      createReviewResponse: () => Promise.reject(new TypeError('Failed to fetch')),
+      reviews: { items: [], truncated: false },
+    })
+    const { router } = renderRoute('/reviews/c1/analysis')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+    await screen.findByRole('alert')
+
+    api.setReviews?.({
+      items: [
+        {
+          id: 'r-99',
+          contractId: 'c1',
+          contractVersionNumber: 1,
+          status: 'ANALYSIS_QUEUED',
+          createdAt: '2026-09-25T10:00:00Z',
+          completedAt: null,
+        },
+      ],
+      truncated: false,
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Re-check reviews' }))
+
+    const link = await screen.findByRole('link', { name: 'Open the created review' })
+    expect(link).toHaveAttribute('href', '/reviews/c1/analysis/r-99')
+    expect(screen.queryByRole('button', { name: 'Start review' })).not.toBeInTheDocument()
+    expect(createRequests(api)).toHaveLength(1)
+    expect(router.state.location.pathname).toBe('/reviews/c1/analysis')
+  })
+
+  it('keeps the submit gated when the recovery re-check fails', async () => {
+    let fail = true
+    const api = stubContractApi({
+      createReviewResponse: () => Promise.reject(new TypeError('Failed to fetch')),
+      reviews: { items: [], truncated: false },
+      reviewsStatus: 500,
+    })
+    renderRoute('/reviews/c1/analysis')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+    await screen.findByRole('alert')
+    await userEvent.click(screen.getByRole('button', { name: 'Re-check reviews' }))
+
+    expect(
+      await screen.findByText(/could not be refreshed. Do not start another review/),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start review' })).not.toBeInTheDocument()
+    expect(createRequests(api)).toHaveLength(1)
+    void fail
+  })
+
+  it('maps a rejected contract pack without leaking server detail', async () => {
+    stubContractApi({ createReviewStatus: 400 })
+    renderRoute('/reviews/c1/analysis')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText(/could not be started with the selected contract pack/)).toBeInTheDocument()
+    expect(within(alert).queryByText(/server detail text/)).not.toBeInTheDocument()
+  })
+
+  it('shows no human workflow vocabulary on the analysis page', async () => {
+    stubContractApi({ reviews: fixtureReviewList })
+    renderRoute('/reviews/c1/analysis')
+
+    await screen.findByRole('button', { name: 'Start review' })
+    const text = document.body.textContent ?? ''
+    expect(text).not.toMatch(/ApprovedChange|Mark as approved|Resolved/)
+    expect(
+      screen.queryByRole('button', { name: /Accept|Reject|Approve|Escalate|Resolve/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('blocks another submission until the review history has been re-checked', async () => {

@@ -73,7 +73,7 @@ describe('review lifecycle states', () => {
   it('shows completed state with humanized degradation warnings', async () => {
     renderReview(fixtureCompletedReviewSummary)
 
-    expect(await screen.findByText('2 findings from 3 completed checks.')).toBeInTheDocument()
+    expect(await screen.findByText('2 findings from 2 completed checks.')).toBeInTheDocument()
     expect(
       screen.getByText(
         'A bounded semantic decision was unavailable; the clause was not classified.',
@@ -96,6 +96,53 @@ describe('review lifecycle states', () => {
       'href',
       '/reviews/c1/analysis',
     )
+    expect(
+      await screen.findByText(
+        'This review did not complete an analysis, so there are no findings to show.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/recorded no findings/)).not.toBeInTheDocument()
+  })
+
+  it('never claims every check completed when checks failed', async () => {
+    renderReview({
+      ...fixtureCompletedReviewSummary,
+      findings: 0,
+      degradedChecks: 0,
+      failedChecks: 2,
+      analysisWarnings: [
+        {
+          checkKey: 'LIABILITY_CAP:LIMITATION_OF_LIABILITY',
+          status: 'FAILED',
+          reason: null,
+        },
+      ],
+    })
+
+    expect(
+      await screen.findByText('Some checks did not complete. Review the analysis warnings.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Every planned check completed without findings.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('never echoes an unknown warning reason to the user', async () => {
+    renderReview({
+      ...fixtureCompletedReviewSummary,
+      analysisWarnings: [
+        {
+          checkKey: 'CARVE_OUT:INDEMNIFICATION',
+          status: 'DEGRADED',
+          reason: 'IllegalStateException: provider com.acme.Model exploded at line 42',
+        },
+      ],
+    })
+
+    expect(
+      await screen.findByText(/This check ran in a degraded mode/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/com\.acme\.Model/)).not.toBeInTheDocument()
   })
 
   it('offers a manual refresh when the review status is unknown', async () => {

@@ -5,7 +5,6 @@ import type { ReactNode } from 'react'
 import {
   createReview,
   isReviewConflictError,
-  isReviewMalformedError,
   parseFindingDetail,
   parseFindingList,
   parseReviewList,
@@ -91,7 +90,7 @@ const completedSummary = {
   completedAt: '2026-09-25T09:02:00Z',
   activeRun: { id: 'run-1', runNumber: 1, status: 'COMPLETED' },
   latestRunStatus: 'COMPLETED',
-  completedChecks: 3,
+  completedChecks: 2,
   degradedChecks: 1,
   signals: 5,
   findings: 2,
@@ -328,9 +327,9 @@ describe('review requests', () => {
     expect(requests).toHaveLength(1)
   })
 
-  it('surfaces malformed payloads as malformed errors', async () => {
+  it('rejects malformed payloads with a malformed-response error', async () => {
     stubFetch(() => jsonResponse(envelope({ id: 'r-1' })))
-    await expect(createReview('c-1', 1)).rejects.toSatisfy(isReviewMalformedError)
+    await expect(createReview('c-1', 1)).rejects.toThrow(/Malformed review summary/)
   })
 })
 
@@ -382,6 +381,38 @@ describe('review polling integration', () => {
     })
     expect(requests).toHaveLength(2)
     vi.useRealTimers()
+  })
+})
+
+describe('query key isolation', () => {
+  it('keeps summaries separate per review id', async () => {
+    const requests = stubFetch((request) => {
+      const id = request.url.split('/api/reviews/')[1]?.split('?')[0] ?? 'unknown'
+      return jsonResponse(envelope({ ...queuedSummary, id }))
+    })
+    const { wrapper } = createWrapper()
+    const first = renderHook(() => useReviewSummaryQuery('r-1'), { wrapper })
+    const second = renderHook(() => useReviewSummaryQuery('r-2'), { wrapper })
+
+    await waitFor(() => expect(first.result.current.data?.id).toBe('r-1'))
+    await waitFor(() => expect(second.result.current.data?.id).toBe('r-2'))
+    expect(requests).toHaveLength(2)
+  })
+
+  it('refetches findings when a filter changes', async () => {
+    const requests = stubFetch(() => jsonResponse(envelope({ items: [], truncated: false })))
+    const { wrapper } = createWrapper()
+    const view = renderHook(
+      (props: { severity: 'HIGH' | 'LOW' }) =>
+        useFindingsQuery('r-1', { severity: props.severity }, true),
+      { wrapper, initialProps: { severity: 'HIGH' } as { severity: 'HIGH' | 'LOW' } },
+    )
+
+    await waitFor(() => expect(view.result.current.data).toBeDefined())
+    view.rerender({ severity: 'LOW' })
+
+    await waitFor(() => expect(requests).toHaveLength(2))
+    expect(new URL(requests[1].url).searchParams.get('severity')).toBe('LOW')
   })
 })
 

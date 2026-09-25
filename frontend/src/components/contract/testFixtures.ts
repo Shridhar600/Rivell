@@ -446,6 +446,7 @@ export function stubContractApi(options: StubOptions = {}) {
   const requests: RecordedRequest[] = []
   let semantics = options.semantics === undefined ? fixtureSemantics() : options.semantics
   let semanticsStatus = options.semanticsStatus ?? 200
+  let reviews = options.reviews ?? { items: [], truncated: false }
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(String(input), init)
@@ -572,7 +573,7 @@ export function stubContractApi(options: StubOptions = {}) {
           options.reviewsStatus,
         )
       }
-      return jsonResponse(envelope(options.reviews ?? { items: [], truncated: false }))
+      return jsonResponse(envelope(reviews))
     }
     if (method === 'GET' && /\/api\/reviews\/[^/?]+$/.test(url)) {
       if (options.reviewSummaryStatus && options.reviewSummaryStatus !== 200) {
@@ -654,6 +655,9 @@ export function stubContractApi(options: StubOptions = {}) {
     },
     setSemanticsStatus: (status: number) => {
       semanticsStatus = status
+    },
+    setReviews: (next: unknown) => {
+      reviews = next as typeof reviews
     },
   }
 }

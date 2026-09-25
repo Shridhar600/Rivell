@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -54,9 +55,11 @@ function renderWorkspace(initialEntry = '/reviews/c1/analysis/r-1', options: Stu
   })
   const router = createMemoryRouter(appRoutes, { initialEntries: [initialEntry] })
   render(
-    <AppProviders>
-      <RouterProvider router={router} />
-    </AppProviders>,
+    <StrictMode>
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>
+    </StrictMode>,
   )
   return { api, router }
 }
@@ -174,6 +177,29 @@ describe('findings list', () => {
     expect(
       await screen.findByText(/Select a finding to see its observation/),
     ).toBeInTheDocument()
+  })
+
+  it('ignores filter values the API cannot express', async () => {
+    const { api } = renderWorkspace('/reviews/c1/analysis/r-1?severity=BOGUS')
+
+    expect(await screen.findByLabelText('Severity')).toHaveValue('')
+    const listCalls = api.requests.filter((request) => request.url.includes('/findings?'))
+    expect(listCalls[0].url).not.toContain('severity=')
+  })
+
+  it('renders a safe error state when findings cannot be loaded', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1', { findingsStatus: 500 })
+
+    expect(
+      await screen.findByText('Findings could not be loaded.', {}, { timeout: 4000 }),
+    ).toBeInTheDocument()
+  })
+
+  it('renders a safe error state when analysis detail cannot be loaded', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1', { reviewProgressStatus: 500 })
+
+    await userEvent.click(await screen.findByText('Analysis detail'))
+    expect(await screen.findByText('Analysis detail is unavailable.')).toBeInTheDocument()
   })
 
   it('attempts findings for an unrecognized review state and says so', async () => {

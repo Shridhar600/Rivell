@@ -1,15 +1,10 @@
 import { Link } from 'react-router'
 import type { ReviewListItem } from '../../api/reviews'
+import { formatTimestamp } from '../../lib/knowledgeLabels'
 import { reviewStatusLabel, reviewStatusModifier } from '../../lib/reviews'
 import { EmptyState } from '../EmptyState'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
-
-function formatTimestamp(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString()
-}
 
 type Props = {
   contractId: string
@@ -57,7 +52,10 @@ export function ReviewHistoryList({
                   {reviewStatusLabel(review.status)}
                 </span>
                 <span className="review-history__meta">
-                  v{review.contractVersionNumber} · created{' '}
+                  {review.contractVersionNumber !== null
+                    ? `v${review.contractVersionNumber}`
+                    : 'version unknown'}{' '}
+                  · created{' '}
                   <time dateTime={review.createdAt}>{formatTimestamp(review.createdAt)}</time>
                   {review.completedAt
                     ? ` · completed ${formatTimestamp(review.completedAt)}`
@@ -66,7 +64,7 @@ export function ReviewHistoryList({
                 <Link
                   className="link-button"
                   to={`/reviews/${contractId}/analysis/${review.id}`}
-                  aria-label={`Open review v${review.contractVersionNumber}, ${reviewStatusLabel(review.status)}, created ${formatTimestamp(review.createdAt)}`}
+                  aria-label={`Open review ${review.contractVersionNumber !== null ? `v${review.contractVersionNumber}` : 'unknown version'}, ${reviewStatusLabel(review.status)}, created ${formatTimestamp(review.createdAt)}`}
                 >
                   Open review
                 </Link>

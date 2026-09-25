@@ -22,7 +22,7 @@ function AnalysisWarnings({
     <div className="analysis-warnings">
       <h3>Analysis warnings</h3>
       <p className="panel__hint">
-        These checks ran with reduced certainty. The findings below are still shown.
+        These checks ran with reduced certainty. Their results may be incomplete.
       </p>
       <ul>
         {summary.analysisWarnings.map((warning, index) => (
@@ -145,9 +145,16 @@ export function ReviewLifecyclePanel({ contractId, reviewId, summary, onRefresh 
               ? 'The automated review found no findings for this contract version.'
               : `${summary.findings} ${summary.findings === 1 ? 'finding' : 'findings'} from ${summary.completedChecks} completed checks.`}
           </p>
-          {summary.findings === 0 && summary.degradedChecks === 0 ? (
+          {summary.findings === 0 &&
+          summary.degradedChecks === 0 &&
+          summary.failedChecks === 0 ? (
             <p className="state state--success">
               Every planned check completed without findings.
+            </p>
+          ) : null}
+          {summary.failedChecks > 0 ? (
+            <p className="state state--warning">
+              Some checks did not complete. Review the analysis warnings.
             </p>
           ) : null}
         </>

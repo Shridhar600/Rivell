@@ -18,7 +18,7 @@ export function ContractAnalysisPage() {
   const headingRef = useHeadingFocus<HTMLHeadingElement>(contract?.id)
 
   if (!contractId) {
-    return <ErrorState message="No contract was selected." onRetry={() => undefined} />
+    return <ErrorState message="No contract was selected." />
   }
 
   if (contractQuery.isPending) {
@@ -73,7 +73,14 @@ export function ContractAnalysisPage() {
           contractId={contractId}
           versionNumber={contract.latestVersion.versionNumber}
           profile={semanticsQuery.data?.reviewProfile ?? null}
-          onCheckReviews={() => void reviewsQuery.refetch()}
+          reviewIds={(reviewsQuery.data?.items ?? []).map((review) => review.id)}
+          onCheckReviews={async () => {
+            const result = await reviewsQuery.refetch()
+            return {
+              ok: !result.isError,
+              ids: (result.data?.items ?? []).map((review) => review.id),
+            }
+          }}
         />
       )}
 

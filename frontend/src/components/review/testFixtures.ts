@@ -38,7 +38,7 @@ export const fixtureCompletedReviewSummary = {
   completedAt: '2026-09-25T09:01:10Z',
   activeRun: { id: 'run-1', runNumber: 1, status: 'COMPLETED' },
   latestRunStatus: 'COMPLETED',
-  completedChecks: 3,
+  completedChecks: 2,
   degradedChecks: 1,
   signals: 5,
   findings: 2,
@@ -58,8 +58,10 @@ export const fixtureFailedReviewSummary = {
     'IllegalStateException:assembly@com.rivell.workbench.review.FindingAssembler.assemble:88',
   startedAt: '2026-09-25T09:00:30Z',
   completedAt: '2026-09-25T09:00:45Z',
-  activeRun: { id: 'run-2', runNumber: 2, status: 'FAILED' },
+  activeRun: null,
   latestRunStatus: 'FAILED',
+  completedChecks: 2,
+  failedChecks: 1,
 }
 
 export const fixtureCleanReviewSummary = {
