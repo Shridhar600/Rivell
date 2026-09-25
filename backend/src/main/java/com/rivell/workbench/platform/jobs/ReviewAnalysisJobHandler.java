@@ -8,7 +8,7 @@ import com.rivell.workbench.review.ReviewAnalysisService;
 
 /** JobRunr-resolvable bean entry point for asynchronous review analysis. */
 @Component
-class ReviewAnalysisJobHandler {
+public class ReviewAnalysisJobHandler {
 
     private final ReviewAnalysisService analysisService;
 
