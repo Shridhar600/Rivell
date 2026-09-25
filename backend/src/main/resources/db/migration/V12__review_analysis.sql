@@ -61,7 +61,7 @@ CREATE TABLE raw_review_signal (
     signal_type TEXT NOT NULL CHECK (signal_type IN
         ('POLICY_DEVIATION', 'MISSING_REQUIRED_CONCEPT', 'EXPECTED_CONCEPT_ABSENT',
          'CROSS_CLAUSE_CONFLICT', 'APPROVED_DRAFTING_AVAILABLE', 'ESCALATION_REQUIRED',
-         'OPEN_ENDED_ANALYSIS_RESULT')),
+         'POLICY_UNAVAILABLE', 'POLICY_AMBIGUOUS', 'OPEN_ENDED_ANALYSIS_RESULT')),
     subject_kind TEXT NOT NULL CHECK (subject_kind IN ('CLAUSE', 'ABSENCE')),
     subject_heading_node_id UUID,
     absence_concept TEXT,

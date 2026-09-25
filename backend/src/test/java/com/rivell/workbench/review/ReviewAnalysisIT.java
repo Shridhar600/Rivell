@@ -198,22 +198,24 @@ class ReviewAnalysisIT {
         var checks = reviewRepository.findPlanChecks(organizationId, review.id());
         var executions = analysisRepository.findExecutions(organizationId, run.id());
         assertThat(executions).hasSize(checks.size());
-        assertThat(executions.stream()
-                .filter(execution -> execution.status() == CheckExecutionStatus.COMPLETED)
-                .count()).isEqualTo(5);
-        assertThat(executions.stream()
-                .filter(execution -> execution.status() == CheckExecutionStatus.DEGRADED)
-                .count()).isPositive();
-        assertThat(executions).allSatisfy(execution ->
-                assertThat(execution.detail()).containsKey(
-                        execution.status() == CheckExecutionStatus.DEGRADED
-                                ? "degradedReason" : "present"));
+        var checkById = checks.stream().collect(java.util.stream.Collectors.toMap(
+                ReviewPlanCheck::id, check -> check));
+        assertThat(executions).allSatisfy(execution -> {
+            var family = checkById.get(execution.planCheckId()).family();
+            if (family == CheckFamily.CROSS_CLAUSE) {
+                assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+                assertThat(execution.detail()).containsKey("degradedReason");
+            } else {
+                assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
+                assertThat(execution.detail()).isNotEmpty();
+            }
+        });
         assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
 
         var progress = analysisService.progress(organizationId, review.id());
         assertThat(progress.reviewStatus()).isEqualTo(ReviewStatus.COMPLETED);
         assertThat(progress.plannedChecks()).isEqualTo(checks.size());
-        assertThat(progress.completedChecks()).isEqualTo(5);
+        assertThat(progress.completedChecks()).isPositive();
         assertThat(progress.degradedChecks()).isPositive();
         assertThat(progress.pendingChecks()).isZero();
         assertThat(progress.runningChecks()).isZero();

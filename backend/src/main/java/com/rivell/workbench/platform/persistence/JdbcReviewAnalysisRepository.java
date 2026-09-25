@@ -362,6 +362,26 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
             if ("PRESENCE".equals(kind)) {
                 return objectMapper.treeToValue(node, PresencePayload.class);
             }
+            if ("POLICY_UNAVAILABLE".equals(kind)) {
+                return objectMapper.treeToValue(node,
+                        com.rivell.workbench.review.PolicyUnavailablePayload.class);
+            }
+            if ("POLICY_AMBIGUOUS".equals(kind)) {
+                return objectMapper.treeToValue(node,
+                        com.rivell.workbench.review.PolicyAmbiguousPayload.class);
+            }
+            if ("LIABILITY_DEVIATION".equals(kind)) {
+                return objectMapper.treeToValue(node,
+                        com.rivell.workbench.review.LiabilityDeviationPayload.class);
+            }
+            if ("APPROVED_DRAFTING".equals(kind)) {
+                return objectMapper.treeToValue(node,
+                        com.rivell.workbench.review.ApprovedDraftingPayload.class);
+            }
+            if ("ESCALATION".equals(kind)) {
+                return objectMapper.treeToValue(node,
+                        com.rivell.workbench.review.EscalationPayload.class);
+            }
             throw new IllegalStateException(
                     "Unsupported signal payload kind '" + kind + "' for " + signalType);
         } catch (JsonProcessingException e) {

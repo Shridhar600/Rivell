@@ -61,6 +61,15 @@ public class EvidenceService {
                 com.rivell.workbench.organization.Permissions.RETRIEVAL_READ)) {
             throw new UnauthorizedEvidenceAccessException(identity.userId());
         }
+        return buildInternal(request);
+    }
+
+    /** System-level build for background analysis (explicit organization, no identity). */
+    public EvidenceBundle buildForOrganization(EvidenceRequest request) {
+        return buildInternal(request);
+    }
+
+    private EvidenceBundle buildInternal(EvidenceRequest request) {
         var startedAt = clock.instant();
         var stageStart = startedAt;
         var stageTimings = new LinkedHashMap<String, Long>();

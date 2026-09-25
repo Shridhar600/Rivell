@@ -34,7 +34,8 @@ public class CurrentContractLane {
     public Outcome gather(EvidenceRequest request) {
         ContractSemantics semantics;
         try {
-            semantics = enrichment.getSemantics(request.contractId(), request.versionNumber());
+            semantics = enrichment.getSemanticsForOrganization(request.organizationId(),
+                    request.contractId(), request.versionNumber());
         } catch (com.rivell.workbench.contracts.ContractNotFoundException
                 | com.rivell.workbench.contracts.ContractVersionNotFoundException
                 | SemanticsNotFoundException e) {

@@ -62,6 +62,14 @@ class ReviewConfiguration {
     }
 
     @Bean
+    ReviewCheckExecutor liabilityCapCheckExecutor(
+            com.rivell.workbench.retrieval.EvidenceService evidenceService,
+            com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService) {
+        return new com.rivell.workbench.review.check.LiabilityCapCheckExecutor(
+                evidenceService, semanticDecisionService);
+    }
+
+    @Bean
     ReviewCheckExecutors reviewCheckExecutors(List<ReviewCheckExecutor> executors) {
         return new ReviewCheckExecutors(executors);
     }

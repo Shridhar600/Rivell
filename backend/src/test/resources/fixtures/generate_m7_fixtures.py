@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Generate M7 review fixtures: minimal MSA variants for bounded liability checks."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from generate_knowledge_fixtures import p, write_docx  # noqa: E402
+
+
+def msa(title, liability_text, confidentiality_survival=True):
+    body = p(title, 'Title')
+    body += p('This Master Services Agreement is entered into as of January 1, 2026 '
+              'by and between Northwind Customer Group LLC ("Customer") and Pallas '
+              'Cloud Services GmbH ("Supplier").', 'Normal')
+    body += p('1. Limitation of Liability', 'Heading1')
+    body += p(liability_text, 'Normal')
+    body += p('2. Confidentiality', 'Heading1')
+    body += (p('2.1 Each Party shall protect the other Party\'s confidential '
+               'information with reasonable care.', 'Normal')
+             + p('2.2 The obligations in this Section 2 survive termination of this '
+                 'Agreement for three (3) years.', 'Normal')
+             if confidentiality_survival else
+             p('2.1 Each Party shall protect the other Party\'s confidential '
+               'information with reasonable care.', 'Normal'))
+    body += p('3. Termination', 'Heading1')
+    body += p('3.1 Either Party may terminate this Agreement for convenience upon '
+              'sixty (60) days\' prior written notice to the other Party.', 'Normal')
+    body += p('4. Governing Law', 'Heading1')
+    body += p('4.1 This Agreement is governed by the laws of the State of Delaware.',
+              'Normal')
+    return body
+
+
+write_docx('m7-msa-preferred.docx', msa(
+    'Master Services Agreement',
+    'Supplier\'s total aggregate liability arising out of or related to this '
+    'Agreement shall not exceed an amount equal to the fees paid in the twelve (12) '
+    'months immediately preceding the event giving rise to the claim.'))
+
+write_docx('m7-msa-fallback.docx', msa(
+    'Master Services Agreement',
+    'Supplier\'s total aggregate liability arising out of or related to this '
+    'Agreement shall not exceed two times the fees paid in the preceding 12 months.'))
+
+print('m7 review fixtures written')

@@ -58,6 +58,14 @@ public class ContractQueryService {
                 .orElseThrow(() -> new ContractVersionNotFoundException(contractId, versionNumber));
     }
 
+    /** System-level read for background flows (explicit organization, no authorization). */
+    public ContractVersionSummary getVersionSummaryForOrganization(
+            UUID organizationId, UUID contractId, int versionNumber) {
+        return repository
+                .findVersionSummary(contractId, versionNumber, organizationId)
+                .orElseThrow(() -> new ContractVersionNotFoundException(contractId, versionNumber));
+    }
+
     public ContractSource getSourceForDownload(UUID contractId, int versionNumber) {
         var summary = getVersionSummary(contractId, versionNumber);
         return repository

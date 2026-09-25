@@ -146,8 +146,8 @@ public class ReviewAnalysisService {
             var signalCount = analysisRepository.countSignals(
                     review.organizationId(), run.id(), check.id());
             analysisRepository.updateExecution(review.organizationId(), execution.id(),
-                    outcome.status(), null, outcome.detail(), signalCount, null,
-                    clock.instant());
+                    outcome.status(), outcome.evidenceTraceId(), outcome.detail(),
+                    signalCount, null, clock.instant());
         }
     }
 
