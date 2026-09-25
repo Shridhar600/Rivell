@@ -1,6 +1,5 @@
 import type {
   AnalysisWarning,
-  FindingDetail,
   FindingSummary,
   ReviewSummary,
   FindingQuality,
@@ -153,19 +152,6 @@ export function checkKeyLabel(checkKey: string): string {
   return `${humanizeCode(mechanism)} · ${conceptLabel(concept)}`
 }
 
-export function proposedLanguageSourceLabel(source: string): string {
-  switch (source) {
-    case 'APPROVED_DRAFTING':
-      return 'Approved language'
-    case 'GENERATIVE':
-      return 'AI-proposed language'
-    case 'NONE':
-      return 'No proposed language'
-    default:
-      return humanizeCode(source)
-  }
-}
-
 const SUFFICIENCY_LABELS: Record<string, string> = {
   SUFFICIENT: 'Evidence complete',
   PARTIAL: 'Evidence partially complete',
@@ -274,12 +260,4 @@ export function progressPercent(counts: {
 export function hasNewerRun(summary: ReviewSummary): boolean {
   if (!summary.activeRun || !summary.latestRunStatus) return false
   return summary.activeRun.status !== summary.latestRunStatus
-}
-
-export function findingConcepts(finding: FindingDetail): string[] {
-  if (finding.concepts.length > 0) return finding.concepts
-  const concepts = [finding.concept, finding.secondaryConcept].filter(
-    (concept): concept is string => Boolean(concept),
-  )
-  return concepts
 }
