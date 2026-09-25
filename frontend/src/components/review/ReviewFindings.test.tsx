@@ -86,7 +86,9 @@ describe('findings list', () => {
 
     await userEvent.click(clauseRow)
 
-    expect(await screen.findByRole('heading', { name: '6. Limitation of Liability' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' }),
+    ).toBeInTheDocument()
   })
 
   it('filters through the API and keeps the filter in the URL', async () => {
@@ -170,13 +172,25 @@ describe('finding detail', () => {
     expect(screen.queryByText(/Accept|Reject|Escalate|Resolved/)).not.toBeInTheDocument()
   })
 
+  it('synchronizes a clause finding with its exact contract source', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    expect(await screen.findByRole('heading', { name: 'Contract clause' })).toBeInTheDocument()
+    const source = screen.getByRole('article', { name: 'Contract clause source' })
+    expect(source).toHaveTextContent('6. Limitation of Liability')
+    expect(
+      screen.getByRole('link', { name: 'View clause in contract' }),
+    ).toHaveAttribute('href', '/reviews/c1?view=document&node=node-6')
+  })
+
   it('represents an absence finding without a document location', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-2')
 
     expect(await screen.findByRole('heading', { name: 'Missing provision' })).toBeInTheDocument()
     expect(screen.getByText('Required provision missing:')).toBeInTheDocument()
     expect(screen.getByText(/Presence · Limitation of liability/)).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /View in contract/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Contract clause' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /View clause in contract/ })).not.toBeInTheDocument()
   })
 
   it('labels generative language as machine-proposed, never approved', async () => {

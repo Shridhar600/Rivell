@@ -1,5 +1,7 @@
+import { Link } from 'react-router'
 import type { FindingClaim, FindingDetail } from '../../api/reviews'
 import { conceptLabel } from '../../lib/contractSemantics'
+import type { StructureNode } from '../../lib/documentTree'
 import {
   checkKeyLabel,
   claimKindLabel,
@@ -15,6 +17,7 @@ import {
 import { useHeadingFocus } from '../../lib/useHeadingFocus'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
+import { StructuralRenderer } from '../StructuralRenderer'
 
 const OBSERVATION_KINDS = new Set(['OBSERVATION'])
 const RECOMMENDATION_KINDS = new Set(['RECOMMENDATION'])
@@ -64,12 +67,25 @@ function PolicyNote({ finding }: { finding: FindingDetail }) {
   return null
 }
 
+type ClauseSource = {
+  nodeId: string
+  heading: string
+  nodes: StructureNode[]
+}
+
 type Props = {
   finding: FindingDetail
   regionLabels: Map<string, string>
+  contractId: string
+  clauseSource: ClauseSource | null
 }
 
-export function FindingDetailView({ finding, regionLabels }: Props) {
+export function FindingDetailView({
+  finding,
+  regionLabels,
+  contractId,
+  clauseSource,
+}: Props) {
   const headingRef = useHeadingFocus<HTMLHeadingElement>(finding.id)
   const why = whyClaims(finding.claims)
   const recommendations = recommendationClaims(finding.claims)
@@ -130,6 +146,31 @@ export function FindingDetailView({ finding, regionLabels }: Props) {
         </p>
         <p>{finding.observationText}</p>
       </section>
+
+      {finding.subjectKind === 'CLAUSE' && clauseSource ? (
+        <section className="finding-section" aria-labelledby="finding-source-heading">
+          <h3 id="finding-source-heading">Contract clause</h3>
+          {clauseSource.nodes.length > 0 ? (
+            <StructuralRenderer
+              nodes={clauseSource.nodes}
+              selectedId={clauseSource.nodeId}
+              onSelect={() => undefined}
+              selectable={false}
+              label="Contract clause source"
+            />
+          ) : (
+            <p>{clauseSource.heading}</p>
+          )}
+          <p>
+            <Link
+              className="link-button"
+              to={`/reviews/${contractId}?view=document&node=${clauseSource.nodeId}`}
+            >
+              View clause in contract
+            </Link>
+          </p>
+        </section>
+      ) : null}
 
       <PolicyNote finding={finding} />
 
@@ -205,6 +246,8 @@ export function FindingDetailView({ finding, regionLabels }: Props) {
 export function FindingDetailPane({
   finding,
   regionLabels,
+  contractId,
+  clauseSource,
   findingId,
   isPending,
   isError,
@@ -212,6 +255,8 @@ export function FindingDetailPane({
 }: {
   finding: FindingDetail | undefined
   regionLabels: Map<string, string>
+  contractId: string
+  clauseSource: ClauseSource | null
   findingId: string | null
   isPending: boolean
   isError: boolean
@@ -231,5 +276,12 @@ export function FindingDetailPane({
     return <ErrorState message="This finding could not be loaded." onRetry={onRetry} />
   }
 
-  return <FindingDetailView finding={finding} regionLabels={regionLabels} />
+  return (
+    <FindingDetailView
+      finding={finding}
+      regionLabels={regionLabels}
+      contractId={contractId}
+      clauseSource={clauseSource}
+    />
+  )
 }

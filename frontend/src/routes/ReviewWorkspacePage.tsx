@@ -16,6 +16,7 @@ import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
 import { buildRegionLabelMap } from '../lib/contractSemantics'
 import { TAXONOMY_CONCEPTS } from '../lib/contractSemantics'
+import { subtreeNodes } from '../lib/documentTree'
 import { FindingDetailPane } from '../components/review/FindingDetailPane'
 import { FindingsPanel } from '../components/review/FindingsPanel'
 import { ReviewHeader } from '../components/review/ReviewHeader'
@@ -67,6 +68,19 @@ export function ReviewWorkspacePage() {
       ),
     [semanticsQuery.data, structureQuery.data],
   )
+
+  const clauseSource = useMemo(() => {
+    const nodeId = findingQuery.data?.subjectHeadingNodeId
+    if (findingQuery.data?.subjectKind !== 'CLAUSE' || !nodeId) return null
+    const nodes = structureQuery.data?.nodes ?? []
+    const subtree = subtreeNodes(nodes, nodeId)
+    if (subtree.length === 0) return null
+    return {
+      nodeId,
+      heading: regionLabels.get(nodeId) ?? 'Contract clause',
+      nodes: subtree,
+    }
+  }, [findingQuery.data, structureQuery.data, regionLabels])
 
   function selectFinding(findingId: string) {
     const next = new URLSearchParams(searchParams)
@@ -148,6 +162,8 @@ export function ReviewWorkspacePage() {
         <FindingDetailPane
           finding={findingQuery.data}
           regionLabels={regionLabels}
+          contractId={contractId}
+          clauseSource={clauseSource}
           findingId={terminal ? selectedFindingId : null}
           isPending={Boolean(selectedFindingId) && findingQuery.isPending}
           isError={findingQuery.isError}
