@@ -237,7 +237,7 @@ function parseSemanticAssessment(value: unknown, what: string): SemanticAssessme
   }
 }
 
-function parseEvidenceItem(value: unknown, what: string): EvidenceItem {
+export function parseEvidenceItem(value: unknown, what: string): EvidenceItem {
   const item = asRecord(value, what)
   const rawAuthority = readOptionalNullableString(item, 'authorityClass', what)
   const rawCompatibility = readOptionalNullableString(item, 'policyCompatibility', what)

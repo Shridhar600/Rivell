@@ -74,7 +74,7 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
   if (contractQuery.isError || !contract) {
     return (
       <ErrorState
-        message={contractQuery.error?.message ?? 'Contract unavailable.'}
+        message="This contract could not be loaded. It may not exist, or you may not have access to it."
         onRetry={() => void contractQuery.refetch()}
       />
     )
@@ -165,7 +165,7 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
   } else if (semanticsQuery.isError && semantics == null) {
     body = (
       <ErrorState
-        message={semanticsQuery.error?.message ?? 'Semantic analysis unavailable.'}
+        message="The contract's semantic analysis state could not be loaded."
         onRetry={() => void semanticsQuery.refetch()}
       />
     )

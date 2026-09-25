@@ -73,6 +73,26 @@ export function flattenDocumentNodes(nodes: StructureNode[]): StructureNode[] {
   return flat
 }
 
+/** The exact node with the given id plus all its descendants, in source order. */
+export function subtreeNodes(nodes: StructureNode[], rootId: string): StructureNode[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  if (!byId.has(rootId)) return []
+
+  const isDescendant = (node: StructureNode): boolean => {
+    const visited = new Set<string>()
+    let current: StructureNode | undefined = node
+    while (current) {
+      if (current.id === rootId) return true
+      if (visited.has(current.id)) return false
+      visited.add(current.id)
+      current = current.parentId ? byId.get(current.parentId) : undefined
+    }
+    return false
+  }
+
+  return flattenDocumentNodes(nodes.filter(isDescendant))
+}
+
 function outlineLevel(node: StructureNode): number {
   if (node.nodeType === 'TITLE') return 0
   const level = node.headingLevel

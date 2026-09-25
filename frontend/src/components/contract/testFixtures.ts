@@ -412,6 +412,7 @@ export const fixtureStructure = {
 }
 
 export type StubOptions = {
+  contractSummary?: unknown
   semantics?: SemanticContract | null
   semanticsStatus?: number
   enrichmentResponse?: () => Response
@@ -424,12 +425,47 @@ export type StubOptions = {
   trace?: unknown
   traceResponse?: () => Response | Promise<Response>
   traceStatus?: number
+  packs?: unknown
+  packsStatus?: number
+  reviews?: unknown
+  reviewsStatus?: number
+  reviewSummary?: unknown
+  reviewSummaryStatus?: number
+  reviewProgress?: unknown
+  reviewProgressStatus?: number
+  findings?: unknown
+  findingsStatus?: number
+  findingsResponse?: (url: string) => Response | Promise<Response>
+  findingDetail?: unknown
+  findingDetailStatus?: number
+  findingDetailResponse?: (findingId: string) => Response | Promise<Response>
+  createReviewResponse?: (body: unknown) => Response | Promise<Response>
+  createReviewSummary?: unknown
+  createReviewStatus?: number
+}
+
+const defaultPackCatalog = {
+  packs: [
+    {
+      key: 'MSA_PACK',
+      displayName: 'MSA pack',
+      summary: 'Liability, confidentiality and termination checks for master services agreements.',
+      version: 'rivell-review-pack-1',
+    },
+    {
+      key: 'NDA_PACK',
+      displayName: 'NDA pack',
+      summary: 'Confidentiality and term checks for non-disclosure agreements.',
+      version: 'rivell-review-pack-1',
+    },
+  ],
 }
 
 export function stubContractApi(options: StubOptions = {}) {
   const requests: RecordedRequest[] = []
   let semantics = options.semantics === undefined ? fixtureSemantics() : options.semantics
   let semanticsStatus = options.semanticsStatus ?? 200
+  let reviews = options.reviews ?? { items: [], truncated: false }
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(String(input), init)
@@ -442,7 +478,7 @@ export function stubContractApi(options: StubOptions = {}) {
     requests.push({ method, url, body })
 
     if (method === 'GET' && /\/api\/contracts\/c1$/.test(url)) {
-      return jsonResponse(envelope(fixtureContractSummary))
+      return jsonResponse(envelope(options.contractSummary ?? fixtureContractSummary))
     }
     if (method === 'GET' && url.includes('/versions/1/structure')) {
       return jsonResponse(envelope(fixtureStructure))
@@ -549,6 +585,92 @@ export function stubContractApi(options: StubOptions = {}) {
       return jsonResponse(envelope(options.trace ?? null))
     }
 
+    if (method === 'GET' && /\/api\/reviews\/packs$/.test(url)) {
+      if (options.packsStatus && options.packsStatus !== 200) {
+        return jsonResponse(
+          { code: String(options.packsStatus), title: 'Error', detail: 'server detail text' },
+          options.packsStatus,
+        )
+      }
+      return jsonResponse(envelope(options.packs ?? defaultPackCatalog))
+    }
+    if (method === 'GET' && /\/api\/reviews\?(.*)contractId=/.test(url)) {
+      if (options.reviewsStatus && options.reviewsStatus !== 200) {
+        return jsonResponse(
+          { code: String(options.reviewsStatus), title: 'Error', detail: 'server detail text' },
+          options.reviewsStatus,
+        )
+      }
+      return jsonResponse(envelope(reviews))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+$/.test(url)) {
+      if (options.reviewSummaryStatus && options.reviewSummaryStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.reviewSummaryStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.reviewSummaryStatus,
+        )
+      }
+      return jsonResponse(envelope(options.reviewSummary ?? null))
+    }
+    if (method === 'GET' && url.includes('/progress')) {
+      if (options.reviewProgressStatus && options.reviewProgressStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.reviewProgressStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.reviewProgressStatus,
+        )
+      }
+      return jsonResponse(envelope(options.reviewProgress ?? null))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/findings\/[^/?]+$/.test(url)) {
+      if (options.findingDetailResponse) {
+        const findingId = url.split('/findings/')[1] ?? ''
+        return await options.findingDetailResponse(findingId)
+      }
+      if (options.findingDetailStatus && options.findingDetailStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.findingDetailStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.findingDetailStatus,
+        )
+      }
+      return jsonResponse(envelope(options.findingDetail ?? null))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/findings(\?|$)/.test(url)) {
+      if (options.findingsResponse) return await options.findingsResponse(url)
+      if (options.findingsStatus && options.findingsStatus !== 200) {
+        return jsonResponse(
+          { code: String(options.findingsStatus), title: 'Error', detail: 'server detail text' },
+          options.findingsStatus,
+        )
+      }
+      return jsonResponse(envelope(options.findings ?? { items: [], truncated: false }))
+    }
+    if (method === 'POST' && url.includes('/versions/1/reviews')) {
+      if (options.createReviewResponse) return await options.createReviewResponse(body)
+      if (options.createReviewStatus && options.createReviewStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.createReviewStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.createReviewStatus,
+        )
+      }
+      return jsonResponse(envelope(options.createReviewSummary ?? null))
+    }
+
     return jsonResponse({ message: 'not found' }, 404)
   })
 
@@ -561,6 +683,9 @@ export function stubContractApi(options: StubOptions = {}) {
     },
     setSemanticsStatus: (status: number) => {
       semanticsStatus = status
+    },
+    setReviews: (next: unknown) => {
+      reviews = next as typeof reviews
     },
   }
 }

@@ -73,6 +73,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/candidates/{id}/concept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct or clear a candidate's LegalConcept (machine proposal preserved) */
+        post: operations["correctConcept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/candidates/{id}/approve": {
         parameters: {
             query?: never;
@@ -203,7 +220,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Correct a clause's primary concept (machine proposal preserved) */
-        post: operations["correctConcept"];
+        post: operations["correctConcept_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -227,6 +244,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contracts/{contractId}/versions/{versionNumber}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a review for a contract version (optional explicit pack) */
+        post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system/status": {
         parameters: {
             query?: never;
@@ -235,6 +269,108 @@ export interface paths {
             cookie?: never;
         };
         get: operations["status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a contract's reviews, newest first (bounded) */
+        get: operations["list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a review summary with its active analysis run and counts */
+        get: operations["summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get typed analysis progress for a review */
+        get: operations["progress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the active run's findings with optional filters (bounded) */
+        get: operations["findings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/findings/{findingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one finding's detail with claims, evidence, and absence basis */
+        get: operations["finding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/packs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the currently selectable contract packs */
+        get: operations["packs"];
         put?: never;
         post?: never;
         delete?: never;
@@ -628,6 +764,12 @@ export interface components {
                 [key: string]: string;
             };
             legalConceptKey?: string;
+            conceptCorrection?: string;
+            /** Format: uuid */
+            conceptCorrectedBy?: string;
+            /** Format: date-time */
+            conceptCorrectedAt?: string;
+            effectiveConceptKey?: string;
             classifiedConcepts?: {
                 [key: string]: number;
             };
@@ -709,6 +851,9 @@ export interface components {
             escalationTrigger?: string;
             /** @enum {string} */
             variantRole?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
+        };
+        ConceptCorrectionRequest: {
+            primary: string;
         };
         BulkApproveRequest: {
             candidateIds?: string[];
@@ -996,6 +1141,91 @@ export interface components {
             paperSource?: "OUR_PAPER" | "COUNTERPARTY_PAPER" | "THIRD_PARTY";
             /** @enum {string} */
             jurisdiction?: "US" | "UK" | "UNSPECIFIED";
+            contractPackKey?: string;
+        };
+        CreateReviewRequest: {
+            contractPackKey?: string;
+        };
+        AnalysisWarningView: {
+            checkKey?: string;
+            status?: string;
+            reasonCode?: string;
+            message?: string;
+        };
+        ApiResultReviewSummaryView: {
+            data?: components["schemas"]["ReviewSummaryView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        FailureView: {
+            code?: string;
+            message?: string;
+        };
+        ProfileView: {
+            contractType?: string;
+            ourSideRole?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+            contractPackKey?: string;
+        };
+        ReviewCoverageView: {
+            /** @enum {string} */
+            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            /** @enum {string} */
+            expectation?: "REQUIRED" | "EXPECTED" | "OPTIONAL";
+            /** @enum {string} */
+            coverage?: "PRESENT_PRIMARY" | "PRESENT_SECONDARY_ONLY" | "ABSENT" | "UNKNOWN";
+        };
+        ReviewRunView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: int32 */
+            runNumber?: number;
+            status?: string;
+        };
+        ReviewSummaryView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: int32 */
+            contractVersionNumber?: number;
+            status?: string;
+            failure?: components["schemas"]["FailureView"];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            activeRun?: components["schemas"]["ReviewRunView"];
+            latestRunStatus?: string;
+            /** Format: int32 */
+            plannedChecks?: number;
+            /** Format: int32 */
+            completedChecks?: number;
+            /** Format: int32 */
+            degradedChecks?: number;
+            /** Format: int32 */
+            failedChecks?: number;
+            /** Format: int32 */
+            signals?: number;
+            /** Format: int32 */
+            findings?: number;
+            snapshot?: components["schemas"]["SnapshotView"];
+            coverage?: components["schemas"]["ReviewCoverageView"][];
+            analysisWarnings?: components["schemas"]["AnalysisWarningView"][];
+            analysisWarningsTruncated?: boolean;
+        };
+        SnapshotView: {
+            profile?: components["schemas"]["ProfileView"];
+            packVersion?: string;
+            /** Format: int64 */
+            knowledgePinNumber?: number;
+            /** Format: date */
+            effectiveOn?: string;
         };
         ApiResultSystemStatusResponse: {
             data?: components["schemas"]["SystemStatusResponse"];
@@ -1007,6 +1237,181 @@ export interface components {
         SystemStatusResponse: {
             service?: string;
             status?: string;
+        };
+        ApiResultReviewListResponse: {
+            data?: components["schemas"]["ReviewListResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ReviewListItemView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: int32 */
+            contractVersionNumber?: number;
+            status?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+        };
+        ReviewListResponse: {
+            items?: components["schemas"]["ReviewListItemView"][];
+            truncated?: boolean;
+        };
+        ApiResultReviewProgressView: {
+            data?: components["schemas"]["ReviewProgressView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ReviewProgressView: {
+            reviewStatus?: string;
+            /** Format: int32 */
+            plannedChecks?: number;
+            /** Format: int32 */
+            pendingChecks?: number;
+            /** Format: int32 */
+            runningChecks?: number;
+            /** Format: int32 */
+            completedChecks?: number;
+            /** Format: int32 */
+            degradedChecks?: number;
+            /** Format: int32 */
+            failedChecks?: number;
+            /** Format: int32 */
+            skippedChecks?: number;
+            /** Format: int32 */
+            signals?: number;
+            /** Format: int32 */
+            findings?: number;
+            latestRunStatus?: string;
+            coverage?: components["schemas"]["ReviewCoverageView"][];
+            analysisWarnings?: components["schemas"]["AnalysisWarningView"][];
+            analysisWarningsTruncated?: boolean;
+        };
+        ApiResultFindingListResponse: {
+            data?: components["schemas"]["FindingListResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        FindingListResponse: {
+            items?: components["schemas"]["FindingSummaryView"][];
+            truncated?: boolean;
+        };
+        FindingSummaryView: {
+            /** Format: uuid */
+            id?: string;
+            /** @enum {string} */
+            subjectKind?: "CLAUSE" | "ABSENCE";
+            /** Format: uuid */
+            subjectHeadingNodeId?: string;
+            /** @enum {string} */
+            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            /** @enum {string} */
+            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            /** @enum {string} */
+            secondaryConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            /** @enum {string} */
+            issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
+            observationKind?: string;
+            /** @enum {string} */
+            severity?: "HIGH" | "MEDIUM" | "LOW";
+            /** @enum {string} */
+            reviewClassification?: "BLOCKING" | "REVIEW_REQUIRED" | "INFORMATIONAL";
+            /** @enum {string} */
+            proposedAction?: "USE_APPROVED_FALLBACK" | "ADD_REQUIRED_PROVISION" | "REVIEW_AMBIGUITY" | "ESCALATE_TO_HUMAN" | "CONSIDER_GENERATED_LANGUAGE" | "NO_ACTION";
+            /** @enum {string} */
+            proposedLanguageSource?: "APPROVED_DRAFTING" | "GENERATIVE" | "NONE";
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        AbsenceBasisView: {
+            /** Format: uuid */
+            planCheckId?: string;
+            checkKey?: string;
+        };
+        ApiResultFindingDetailView: {
+            data?: components["schemas"]["FindingDetailView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ClaimView: {
+            /** Format: int32 */
+            ordinal?: number;
+            /** @enum {string} */
+            claimKind?: "OBSERVATION" | "POLICY_BASIS" | "EVIDENCE_BASIS" | "ABSENCE_BASIS" | "RECOMMENDATION" | "GENERATIVE_EXPLANATION";
+            text?: string;
+            absence?: boolean;
+            evidenceItemIds?: string[];
+        };
+        FindingDetailView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            reviewId?: string;
+            /** Format: uuid */
+            runId?: string;
+            /** @enum {string} */
+            subjectKind?: "CLAUSE" | "ABSENCE";
+            /** Format: uuid */
+            subjectHeadingNodeId?: string;
+            /** @enum {string} */
+            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            /** @enum {string} */
+            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            /** @enum {string} */
+            secondaryConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            concepts?: ("CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW")[];
+            /** @enum {string} */
+            issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
+            observationKind?: string;
+            observationText?: string;
+            /** @enum {string} */
+            severity?: "HIGH" | "MEDIUM" | "LOW";
+            /** @enum {string} */
+            reviewClassification?: "BLOCKING" | "REVIEW_REQUIRED" | "INFORMATIONAL";
+            /** @enum {string} */
+            proposedAction?: "USE_APPROVED_FALLBACK" | "ADD_REQUIRED_PROVISION" | "REVIEW_AMBIGUITY" | "ESCALATE_TO_HUMAN" | "CONSIDER_GENERATED_LANGUAGE" | "NO_ACTION";
+            proposedLanguage?: string;
+            /** @enum {string} */
+            proposedLanguageSource?: "APPROVED_DRAFTING" | "GENERATIVE" | "NONE";
+            /** Format: uuid */
+            approvedDraftingEvidenceId?: string;
+            quality?: {
+                [key: string]: unknown;
+            };
+            claims?: components["schemas"]["ClaimView"][];
+            evidenceItemIds?: string[];
+            evidenceItems?: components["schemas"]["EvidenceItemResponse"][];
+            signalIds?: string[];
+            absenceBasis?: components["schemas"]["AbsenceBasisView"];
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ApiResultReviewPackCatalogView: {
+            data?: components["schemas"]["ReviewPackCatalogView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        PackView: {
+            key?: string;
+            displayName?: string;
+            summary?: string;
+            version?: string;
+        };
+        ReviewPackCatalogView: {
+            packs?: components["schemas"]["PackView"][];
         };
         ApiResultRetrievalTraceResponse: {
             data?: components["schemas"]["RetrievalTraceResponse"];
@@ -1469,6 +1874,59 @@ export interface operations {
             };
         };
     };
+    correctConcept: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConceptCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultCandidateView"];
+                };
+            };
+            /** @description Unknown LegalConcept or missing primary value */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Resource does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Candidate published, rejected, or concurrently transitioned */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     approve: {
         parameters: {
             query?: never;
@@ -1836,7 +2294,7 @@ export interface operations {
             };
         };
     };
-    correctConcept: {
+    correctConcept_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -1945,6 +2403,60 @@ export interface operations {
             };
         };
     };
+    create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contractId: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultReviewSummaryView"];
+                };
+            };
+            /** @description Invalid review configuration */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown contract version */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Contract version is not enrichment-ready */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     status: {
         parameters: {
             query?: never;
@@ -1961,6 +2473,197 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiResultSystemStatusResponse"];
+                };
+            };
+        };
+    };
+    list: {
+        parameters: {
+            query: {
+                contractId: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultReviewListResponse"];
+                };
+            };
+            /** @description Unknown contract */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultReviewSummaryView"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultReviewProgressView"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    findings: {
+        parameters: {
+            query?: {
+                concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+                classification?: "BLOCKING" | "REVIEW_REQUIRED" | "INFORMATIONAL";
+                severity?: "HIGH" | "MEDIUM" | "LOW";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultFindingListResponse"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    finding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                findingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultFindingDetailView"];
+                };
+            };
+            /** @description Unknown finding */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    packs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultReviewPackCatalogView"];
+                };
+            };
+            /** @description Missing reviews:read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
                 };
             };
         };

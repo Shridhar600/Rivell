@@ -167,6 +167,9 @@ export function ContractWorkspace({ contractId }: { contractId: string }) {
         </p>
       </div>
       <div className="workspace__actions">
+        <Link className="button" to={`/reviews/${contractId}/analysis`}>
+          Reviews &amp; findings
+        </Link>
         <a
           href={originalUrl}
           target="_blank"
