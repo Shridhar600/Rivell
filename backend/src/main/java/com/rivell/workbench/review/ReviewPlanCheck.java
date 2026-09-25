@@ -6,7 +6,9 @@ import java.util.UUID;
 
 /**
  * One typed plan entry: what a review must check. The plan is frozen with the
- * snapshot; execution state lives separately per analysis run.
+ * snapshot; subjects are stable canonical heading-node identities so re-enrichment
+ * cannot silently change what a check analyzes. Execution state lives separately per
+ * analysis run.
  */
 public record ReviewPlanCheck(
         UUID id,
@@ -19,7 +21,7 @@ public record ReviewPlanCheck(
         CheckMechanism mechanism,
         com.rivell.workbench.contracts.LegalConcept concept,
         com.rivell.workbench.contracts.LegalConcept secondaryConcept,
-        UUID subjectClauseId,
+        UUID subjectHeadingNodeId,
         Instant createdAt) {
 
     public ReviewPlanCheck {
@@ -35,15 +37,23 @@ public record ReviewPlanCheck(
             if (expectation == null) {
                 throw new IllegalArgumentException("presence checks require an expectation");
             }
-            if (secondaryConcept != null || subjectClauseId != null) {
-                throw new IllegalArgumentException("presence checks carry no clause subject");
+            if (secondaryConcept != null || subjectHeadingNodeId != null) {
+                throw new IllegalArgumentException("presence checks carry no subject");
             }
         }
-        if (family == CheckFamily.CLAUSE_REVIEW && subjectClauseId == null) {
-            throw new IllegalArgumentException("clause checks require a subject clause");
+        if (family == CheckFamily.CLAUSE_REVIEW) {
+            if (subjectHeadingNodeId == null) {
+                throw new IllegalArgumentException("clause checks require a subject");
+            }
+            if (secondaryConcept != null) {
+                throw new IllegalArgumentException("clause checks carry one subject");
+            }
         }
-        if (family == CheckFamily.CROSS_CLAUSE && secondaryConcept == null) {
-            throw new IllegalArgumentException("cross-clause checks require a secondary concept");
+        if (family == CheckFamily.CROSS_CLAUSE) {
+            if (secondaryConcept == null || subjectHeadingNodeId == null) {
+                throw new IllegalArgumentException(
+                        "cross-clause checks require the secondary concept and a subject");
+            }
         }
     }
 }

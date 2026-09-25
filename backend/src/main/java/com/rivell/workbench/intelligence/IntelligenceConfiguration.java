@@ -38,13 +38,13 @@ class IntelligenceConfiguration {
     }
 
     @Bean
-    ModelPolicy propertiesModelPolicy(
-            IntelligenceProperties properties,
-            JevProperties jevProperties,
-            com.rivell.workbench.intelligence.provider.GenerativeProperties generativeProperties) {
-        return asset -> asset instanceof ReasoningSpec
-                ? new ModelBinding(generativeProperties.provider(), generativeProperties.model())
-                : new ModelBinding(properties.provider(), jevProperties.model());
+    ModelPolicy propertiesModelPolicy(ModelBindingCatalog modelBindingCatalog) {
+        return asset -> {
+            var bindings = modelBindingCatalog.current();
+            return asset instanceof ReasoningSpec
+                    ? bindings.generativeProvider()
+                    : bindings.decisionProvider();
+        };
     }
 
     @Bean

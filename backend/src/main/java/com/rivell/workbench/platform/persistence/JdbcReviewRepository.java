@@ -62,15 +62,19 @@ class JdbcReviewRepository implements ReviewRepository {
         jdbcClient.sql("""
                 insert into review_snapshot
                   (review_id, organization_id, contract_id, contract_version_id,
-                   contract_version_number, contract_type, our_side_role, paper_source,
-                   jurisdiction, contract_pack_key, pack_version, knowledge_pin_number,
-                   effective_on, review_pipeline_version, embedding_index_version,
+                   contract_version_number, contract_semantics_id,
+                   semantics_pipeline_version, semantics_digest, contract_type,
+                   our_side_role, paper_source, jurisdiction, contract_pack_key,
+                   pack_version, knowledge_pin_number, effective_on,
+                   review_pipeline_version, embedding_index_version,
                    embedding_model_identity, decision_provider_id, decision_model_alias,
                    generative_provider_id, generative_model_alias, created_at)
                 values (:reviewId, :organizationId, :contractId, :contractVersionId,
-                   :contractVersionNumber, :contractType, :ourSideRole, :paperSource,
-                   :jurisdiction, :contractPackKey, :packVersion, :knowledgePinNumber,
-                   :effectiveOn, :reviewPipelineVersion, :embeddingIndexVersion,
+                   :contractVersionNumber, :contractSemanticsId,
+                   :semanticsPipelineVersion, :semanticsDigest, :contractType,
+                   :ourSideRole, :paperSource, :jurisdiction, :contractPackKey,
+                   :packVersion, :knowledgePinNumber, :effectiveOn,
+                   :reviewPipelineVersion, :embeddingIndexVersion,
                    :embeddingModelIdentity, :decisionProviderId, :decisionModelAlias,
                    :generativeProviderId, :generativeModelAlias, :createdAt)
                 """)
@@ -79,6 +83,9 @@ class JdbcReviewRepository implements ReviewRepository {
                 .param("contractId", snapshot.contractId())
                 .param("contractVersionId", snapshot.contractVersionId())
                 .param("contractVersionNumber", snapshot.contractVersionNumber())
+                .param("contractSemanticsId", snapshot.contractSemanticsId())
+                .param("semanticsPipelineVersion", snapshot.semanticsPipelineVersion())
+                .param("semanticsDigest", snapshot.semanticsDigest())
                 .param("contractType", snapshot.contractType().name())
                 .param("ourSideRole", snapshot.ourSideRole() == null ? null : snapshot.ourSideRole().name())
                 .param("paperSource", snapshot.paperSource() == null ? null : snapshot.paperSource().name())
@@ -101,11 +108,11 @@ class JdbcReviewRepository implements ReviewRepository {
             jdbcClient.sql("""
                     insert into review_plan_check
                       (id, review_id, organization_id, ordinal, check_key, family,
-                       expectation, mechanism, concept, secondary_concept, subject_clause_id,
-                       created_at)
+                       expectation, mechanism, concept, secondary_concept,
+                       subject_heading_node_id, created_at)
                     values (:id, :reviewId, :organizationId, :ordinal, :checkKey, :family,
-                       :expectation, :mechanism, :concept, :secondaryConcept, :subjectClauseId,
-                       :createdAt)
+                       :expectation, :mechanism, :concept, :secondaryConcept,
+                       :subjectHeadingNodeId, :createdAt)
                     """)
                     .param("id", check.id())
                     .param("reviewId", check.reviewId())
@@ -117,7 +124,7 @@ class JdbcReviewRepository implements ReviewRepository {
                     .param("mechanism", check.mechanism().name())
                     .param("concept", check.concept().name())
                     .param("secondaryConcept", check.secondaryConcept() == null ? null : check.secondaryConcept().name())
-                    .param("subjectClauseId", check.subjectClauseId())
+                    .param("subjectHeadingNodeId", check.subjectHeadingNodeId())
                     .param("createdAt", timestamp(check.createdAt()))
                     .update();
         }
@@ -153,9 +160,11 @@ class JdbcReviewRepository implements ReviewRepository {
     public Optional<ReviewSnapshot> findSnapshot(UUID organizationId, UUID reviewId) {
         return jdbcClient.sql("""
                 select review_id, organization_id, contract_id, contract_version_id,
-                       contract_version_number, contract_type, our_side_role, paper_source,
-                       jurisdiction, contract_pack_key, pack_version, knowledge_pin_number,
-                       effective_on, review_pipeline_version, embedding_index_version,
+                       contract_version_number, contract_semantics_id,
+                       semantics_pipeline_version, semantics_digest, contract_type,
+                       our_side_role, paper_source, jurisdiction, contract_pack_key,
+                       pack_version, knowledge_pin_number, effective_on,
+                       review_pipeline_version, embedding_index_version,
                        embedding_model_identity, decision_provider_id, decision_model_alias,
                        generative_provider_id, generative_model_alias, created_at
                 from review_snapshot
@@ -175,6 +184,9 @@ class JdbcReviewRepository implements ReviewRepository {
                         Jurisdiction.valueOf(rs.getString("jurisdiction")),
                         rs.getString("contract_pack_key"),
                         rs.getString("pack_version"),
+                        rs.getObject("contract_semantics_id", UUID.class),
+                        rs.getString("semantics_pipeline_version"),
+                        rs.getString("semantics_digest"),
                         rs.getLong("knowledge_pin_number"),
                         rs.getObject("effective_on", java.time.LocalDate.class),
                         rs.getString("review_pipeline_version"),
@@ -193,8 +205,8 @@ class JdbcReviewRepository implements ReviewRepository {
     public List<ReviewPlanCheck> findPlanChecks(UUID organizationId, UUID reviewId) {
         return jdbcClient.sql("""
                 select id, review_id, organization_id, ordinal, check_key, family,
-                       expectation, mechanism, concept, secondary_concept, subject_clause_id,
-                       created_at
+                       expectation, mechanism, concept, secondary_concept,
+                       subject_heading_node_id, created_at
                 from review_plan_check
                 where review_id = :reviewId and organization_id = :organizationId
                 order by ordinal
@@ -212,7 +224,7 @@ class JdbcReviewRepository implements ReviewRepository {
                         CheckMechanism.valueOf(rs.getString("mechanism")),
                         LegalConcept.valueOf(rs.getString("concept")),
                         rs.getString("secondary_concept") == null ? null : LegalConcept.valueOf(rs.getString("secondary_concept")),
-                        rs.getObject("subject_clause_id", UUID.class),
+                        rs.getObject("subject_heading_node_id", UUID.class),
                         rs.getTimestamp("created_at").toInstant()))
                 .list();
     }

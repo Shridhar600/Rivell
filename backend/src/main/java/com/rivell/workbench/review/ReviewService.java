@@ -6,6 +6,10 @@ import java.util.UUID;
 
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractQueryService;
+import com.rivell.workbench.contracts.EnrichmentFailedException;
+import com.rivell.workbench.contracts.EnrichmentInProgressException;
+import com.rivell.workbench.contracts.EnrichmentStatus;
+import com.rivell.workbench.contracts.SemanticsNotFoundException;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
@@ -68,6 +72,7 @@ public class ReviewService {
         }
         var version = contractQueryService.getVersionSummary(contractId, versionNumber);
         var semantics = contractEnrichmentService.getSemantics(contractId, versionNumber);
+        requireEnrichmentReady(semantics.enrichmentStatus(), contractId, versionNumber);
         var profile = semantics.reviewProfile();
         var packKey = resolvePackKey(profile.contractPackKey(), requestedPackKey);
         if (packKey != null && packs.find(packKey).isEmpty()) {
@@ -83,6 +88,7 @@ public class ReviewService {
                 profile.contractType(), profile.ourSideRole(), profile.paperSource(),
                 profile.jurisdiction(), packKey,
                 packKey == null ? null : ReviewPackRegistry.VERSION,
+                semantics.id(), semantics.pipelineVersion(), SemanticsDigest.of(semantics),
                 knowledgeQueryService.maxPublicationNumber(),
                 LocalDate.now(clock), ReviewPipeline.VERSION,
                 retrievalProperties.indexVersion(),
@@ -98,6 +104,17 @@ public class ReviewService {
         reviewRepository.create(review, snapshot, planBuilder.build(reviewId, organizationId,
                 snapshot, semantics));
         return review;
+    }
+
+    private static void requireEnrichmentReady(
+            EnrichmentStatus status, UUID contractId, int versionNumber) {
+        switch (status) {
+            case READY -> {
+            }
+            case ENRICHING -> throw new EnrichmentInProgressException(contractId, versionNumber);
+            case FAILED -> throw new EnrichmentFailedException(contractId, versionNumber);
+            case NOT_ENRICHED -> throw new SemanticsNotFoundException(contractId, versionNumber);
+        }
     }
 
     private String resolvePackKey(String profilePackKey, String requestedPackKey) {

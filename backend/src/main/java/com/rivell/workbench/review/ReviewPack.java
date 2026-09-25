@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -21,8 +23,8 @@ public record ReviewPack(
     public ReviewPack {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(version, "version");
-        conceptExpectations = Map.copyOf(conceptExpectations);
-        clauseChecks = Map.copyOf(clauseChecks);
+        conceptExpectations = Collections.unmodifiableMap(new LinkedHashMap<>(conceptExpectations));
+        clauseChecks = Collections.unmodifiableMap(new LinkedHashMap<>(clauseChecks));
         crossClauseChecks = List.copyOf(crossClauseChecks);
     }
 

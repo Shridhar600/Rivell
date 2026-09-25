@@ -27,6 +27,9 @@ public record ReviewSnapshot(
         Jurisdiction jurisdiction,
         String contractPackKey,
         String packVersion,
+        UUID contractSemanticsId,
+        String semanticsPipelineVersion,
+        String semanticsDigest,
         long knowledgePinNumber,
         LocalDate effectiveOn,
         String reviewPipelineVersion,
@@ -42,6 +45,9 @@ public record ReviewSnapshot(
         Objects.requireNonNull(contractVersionId, "contractVersionId");
         Objects.requireNonNull(contractType, "contractType");
         Objects.requireNonNull(jurisdiction, "jurisdiction");
+        Objects.requireNonNull(contractSemanticsId, "contractSemanticsId");
+        Objects.requireNonNull(semanticsPipelineVersion, "semanticsPipelineVersion");
+        Objects.requireNonNull(semanticsDigest, "semanticsDigest");
         Objects.requireNonNull(effectiveOn, "effectiveOn");
         Objects.requireNonNull(reviewPipelineVersion, "reviewPipelineVersion");
         Objects.requireNonNull(embeddingIndexVersion, "embeddingIndexVersion");

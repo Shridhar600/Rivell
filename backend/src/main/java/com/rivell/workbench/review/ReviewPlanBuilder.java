@@ -7,12 +7,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.contracts.LegalConcept;
 
 /**
  * Deterministic plan construction from snapshot-frozen inputs. Pack definitions own
  * WHICH concepts are checked; this builder owns HOW the plan entries are derived.
+ * Subjects are stable canonical heading-node identities.
  */
 public final class ReviewPlanBuilder {
 
@@ -41,34 +43,37 @@ public final class ReviewPlanBuilder {
                         ordinal[0]++, entry.getKey(), entry.getValue()));
             }
             for (var entry : pack.clauseChecks().entrySet()) {
-                for (var clauseId : clausesByConcept.getOrDefault(entry.getKey(), List.of())) {
+                for (var clause : clausesByConcept.getOrDefault(entry.getKey(), List.of())) {
                     checks.add(clauseCheck(reviewId, organizationId, snapshot.createdAt(),
-                            ordinal[0]++, entry.getKey(), entry.getValue(), clauseId));
+                            ordinal[0]++, entry.getKey(), entry.getValue(),
+                            clause.headingNodeId()));
                 }
             }
             for (var rule : pack.crossClauseChecks()) {
-                if (clausesByConcept.containsKey(rule.concept())
-                        && clausesByConcept.containsKey(rule.secondaryConcept())) {
-                    checks.add(crossClauseCheck(reviewId, organizationId, snapshot.createdAt(),
-                            ordinal[0]++, rule));
+                for (var subject : clausesByConcept.getOrDefault(rule.concept(), List.of())) {
+                    checks.add(crossClauseCheck(reviewId, organizationId,
+                            snapshot.createdAt(), ordinal[0]++, rule,
+                            subject.headingNodeId()));
                 }
             }
         } else {
             for (var entry : SUPPORTED_CLAUSE_CHECKS.entrySet()) {
-                for (var clauseId : clausesByConcept.getOrDefault(entry.getKey(), List.of())) {
+                for (var clause : clausesByConcept.getOrDefault(entry.getKey(), List.of())) {
                     checks.add(clauseCheck(reviewId, organizationId, snapshot.createdAt(),
-                            ordinal[0]++, entry.getKey(), entry.getValue(), clauseId));
+                            ordinal[0]++, entry.getKey(), entry.getValue(),
+                            clause.headingNodeId()));
                 }
             }
         }
         return List.copyOf(checks);
     }
 
-    private static Map<LegalConcept, List<UUID>> clausesByConcept(ContractSemantics semantics) {
-        var byConcept = new LinkedHashMap<LegalConcept, List<UUID>>();
+    private static Map<LegalConcept, List<ClauseSemantics>> clausesByConcept(
+            ContractSemantics semantics) {
+        var byConcept = new LinkedHashMap<LegalConcept, List<ClauseSemantics>>();
         for (var clause : semantics.clauses()) {
             clause.effectivePrimaryConcept().ifPresent(concept ->
-                    byConcept.computeIfAbsent(concept, key -> new ArrayList<>()).add(clause.id()));
+                    byConcept.computeIfAbsent(concept, key -> new ArrayList<>()).add(clause));
         }
         return byConcept;
     }
@@ -83,18 +88,20 @@ public final class ReviewPlanBuilder {
 
     private static ReviewPlanCheck clauseCheck(
             UUID reviewId, UUID organizationId, Instant createdAt, int ordinal,
-            LegalConcept concept, CheckMechanism mechanism, UUID clauseId) {
+            LegalConcept concept, CheckMechanism mechanism, UUID subjectHeadingNodeId) {
         return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,
-                "CLAUSE:" + mechanism + ":" + concept + ":" + clauseId,
-                CheckFamily.CLAUSE_REVIEW, null, mechanism, concept, null, clauseId, createdAt);
+                "CLAUSE:" + mechanism + ":" + concept + ":" + subjectHeadingNodeId,
+                CheckFamily.CLAUSE_REVIEW, null, mechanism, concept, null,
+                subjectHeadingNodeId, createdAt);
     }
 
     private static ReviewPlanCheck crossClauseCheck(
             UUID reviewId, UUID organizationId, Instant createdAt, int ordinal,
-            ReviewPack.CrossClauseRule rule) {
+            ReviewPack.CrossClauseRule rule, UUID subjectHeadingNodeId) {
         return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,
-                "CROSS:" + rule.mechanism() + ":" + rule.concept() + ":" + rule.secondaryConcept(),
+                "CROSS:" + rule.mechanism() + ":" + rule.concept() + ":"
+                        + rule.secondaryConcept() + ":" + subjectHeadingNodeId,
                 CheckFamily.CROSS_CLAUSE, null, rule.mechanism(), rule.concept(),
-                rule.secondaryConcept(), null, createdAt);
+                rule.secondaryConcept(), subjectHeadingNodeId, createdAt);
     }
 }

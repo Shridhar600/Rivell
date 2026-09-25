@@ -42,7 +42,7 @@ public final class ReviewPackRegistry {
                 List.of(
                         new ReviewPack.CrossClauseRule(
                                 CheckMechanism.CONFIDENTIALITY_SURVIVAL,
-                                TERM_TERMINATION, CONFIDENTIALITY),
+                                CONFIDENTIALITY, TERM_TERMINATION),
                         new ReviewPack.CrossClauseRule(
                                 CheckMechanism.CARVE_OUT_CONSISTENCY,
                                 LIMITATION_OF_LIABILITY, INDEMNIFICATION)));
@@ -58,7 +58,7 @@ public final class ReviewPackRegistry {
                 Map.of(LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP),
                 List.of(new ReviewPack.CrossClauseRule(
                         CheckMechanism.CONFIDENTIALITY_SURVIVAL,
-                        TERM_TERMINATION, CONFIDENTIALITY)));
+                        CONFIDENTIALITY, TERM_TERMINATION)));
 
         var packs = new LinkedHashMap<String, ReviewPack>();
         packs.put(msa.key(), msa);

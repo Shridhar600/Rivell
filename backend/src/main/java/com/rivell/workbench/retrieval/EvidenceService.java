@@ -208,6 +208,9 @@ public class EvidenceService {
 
     private long resolveAsOf(EvidenceRequest request) {
         if (request.knowledgePin().pinned()) {
+            if (request.knowledgePin().empty()) {
+                return 0L;
+            }
             var pin = request.knowledgePin().publicationNumber();
             if (!knowledgeQueries.publicationNumberExists(pin)) {
                 throw new IllegalArgumentException(
