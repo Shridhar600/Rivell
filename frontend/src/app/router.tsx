@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router'
 import { AppShell } from '../components/AppShell'
+import { ContractAnalysisPage } from '../routes/ContractAnalysisPage'
 import { ContractPage } from '../routes/ContractPage'
 import { EvidenceInspectorPage } from '../routes/EvidenceInspectorPage'
 import { KnowledgeArtifactPage } from '../routes/KnowledgeArtifactPage'
@@ -8,6 +9,7 @@ import { KnowledgePage } from '../routes/KnowledgePage'
 import { KnowledgePublicationPage } from '../routes/KnowledgePublicationPage'
 import { KnowledgePublicationsPage } from '../routes/KnowledgePublicationsPage'
 import { ReviewsPage } from '../routes/ReviewsPage'
+import { ReviewWorkspacePage } from '../routes/ReviewWorkspacePage'
 
 export const appRoutes = [
   {
@@ -17,6 +19,8 @@ export const appRoutes = [
       { index: true, element: <Navigate to="/reviews" replace /> },
       { path: 'reviews', element: <ReviewsPage /> },
       { path: 'reviews/:contractId', element: <ContractPage /> },
+      { path: 'reviews/:contractId/analysis', element: <ContractAnalysisPage /> },
+      { path: 'reviews/:contractId/analysis/:reviewId', element: <ReviewWorkspacePage /> },
       { path: 'reviews/:contractId/evidence', element: <EvidenceInspectorPage /> },
       { path: 'knowledge', element: <KnowledgePage /> },
       { path: 'knowledge/new', element: <KnowledgeNewPage /> },

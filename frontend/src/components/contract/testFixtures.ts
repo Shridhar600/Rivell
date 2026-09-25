@@ -424,6 +424,15 @@ export type StubOptions = {
   trace?: unknown
   traceResponse?: () => Response | Promise<Response>
   traceStatus?: number
+  reviews?: unknown
+  reviewsStatus?: number
+  reviewSummary?: unknown
+  reviewSummaryStatus?: number
+  reviewProgress?: unknown
+  reviewProgressStatus?: number
+  createReviewResponse?: (body: unknown) => Response | Promise<Response>
+  createReviewSummary?: unknown
+  createReviewStatus?: number
 }
 
 export function stubContractApi(options: StubOptions = {}) {
@@ -547,6 +556,56 @@ export function stubContractApi(options: StubOptions = {}) {
         )
       }
       return jsonResponse(envelope(options.trace ?? null))
+    }
+
+    if (method === 'GET' && /\/api\/reviews\?(.*)contractId=/.test(url)) {
+      if (options.reviewsStatus && options.reviewsStatus !== 200) {
+        return jsonResponse(
+          { code: String(options.reviewsStatus), title: 'Error', detail: 'server detail text' },
+          options.reviewsStatus,
+        )
+      }
+      return jsonResponse(envelope(options.reviews ?? { items: [], truncated: false }))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+$/.test(url)) {
+      if (options.reviewSummaryStatus && options.reviewSummaryStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.reviewSummaryStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.reviewSummaryStatus,
+        )
+      }
+      return jsonResponse(envelope(options.reviewSummary ?? null))
+    }
+    if (method === 'GET' && url.includes('/progress')) {
+      if (options.reviewProgressStatus && options.reviewProgressStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.reviewProgressStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.reviewProgressStatus,
+        )
+      }
+      return jsonResponse(envelope(options.reviewProgress ?? null))
+    }
+    if (method === 'POST' && url.includes('/versions/1/reviews')) {
+      if (options.createReviewResponse) return await options.createReviewResponse(body)
+      if (options.createReviewStatus && options.createReviewStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.createReviewStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.createReviewStatus,
+        )
+      }
+      return jsonResponse(envelope(options.createReviewSummary ?? null))
     }
 
     return jsonResponse({ message: 'not found' }, 404)
