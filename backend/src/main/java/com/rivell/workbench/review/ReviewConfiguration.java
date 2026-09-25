@@ -24,6 +24,11 @@ import com.rivell.workbench.review.check.ReviewCheckExecutors;
 class ReviewConfiguration {
 
     @Bean
+    FindingAssembler findingAssembler() {
+        return new FindingAssembler();
+    }
+
+    @Bean
     ReviewPackRegistry reviewPackRegistry() {
         return new ReviewPackRegistry();
     }
@@ -96,11 +101,13 @@ class ReviewConfiguration {
             EmbeddingService embeddingService,
             com.rivell.workbench.retrieval.EvidenceService evidenceService,
             ModelBindingCatalog modelBindingCatalog,
+            FindingRepository findingRepository,
+            FindingAssembler findingAssembler,
             TransactionTemplate transactionTemplate,
             Clock clock) {
         return new ReviewAnalysisService(reviewRepository, reviewAnalysisRepository,
                 reviewCheckExecutors, contractEnrichmentService, retrievalProperties,
-                embeddingService, evidenceService, modelBindingCatalog,
-                transactionTemplate, clock);
+                embeddingService, evidenceService, modelBindingCatalog, findingRepository,
+                findingAssembler, transactionTemplate, clock);
     }
 }

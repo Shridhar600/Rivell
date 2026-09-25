@@ -461,6 +461,43 @@ class ReviewAnalysisIT {
     }
 
     @Test
+    void recomputeCreatesANewRunAndRetainsHistory() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+        var initial = analysisService.analyze(organizationId, review.id());
+        var initialSignals = analysisRepository.findSignals(organizationId, initial.id());
+
+        var recomputed = analysisService.recompute(organizationId, review.id());
+
+        assertThat(recomputed.id()).isNotEqualTo(initial.id());
+        assertThat(recomputed.runNumber()).isEqualTo(initial.runNumber() + 1);
+        assertThat(recomputed.trigger()).isEqualTo(RunTrigger.RECOMPUTE);
+        assertThat(recomputed.status()).isEqualTo(RunStatus.COMPLETED);
+        assertThat(analysisRepository.findLatestRun(organizationId, review.id())
+                .orElseThrow().id()).isEqualTo(recomputed.id());
+        assertThat(analysisRepository.findSignals(organizationId, initial.id()))
+                .hasSameSizeAs(initialSignals);
+        assertThat(analysisRepository.findSignals(organizationId, recomputed.id()))
+                .hasSameSizeAs(initialSignals);
+        assertThat(reviewRepository.find(organizationId, review.id())
+                .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
+        assertSignalCountParity(organizationId, recomputed.id());
+    }
+
+    @Test
+    void recomputeRejectsANonTerminalReview() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(corpus.contract().contractId(), 1, null);
+
+        assertThatThrownBy(() -> analysisService.recompute(organizationId, review.id()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("COMPLETED");
+    }
+
+    @Test
     void modelBindingChangeAfterCreationDegradesAllChecks() {
         var organizationId = organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);

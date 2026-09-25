@@ -34,6 +34,8 @@ public class ReviewAnalysisService {
     private final EmbeddingService embeddingService;
     private final EvidenceService evidenceService;
     private final ModelBindingCatalog modelBindingCatalog;
+    private final FindingRepository findingRepository;
+    private final FindingAssembler findingAssembler;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -46,6 +48,8 @@ public class ReviewAnalysisService {
             EmbeddingService embeddingService,
             EvidenceService evidenceService,
             ModelBindingCatalog modelBindingCatalog,
+            FindingRepository findingRepository,
+            FindingAssembler findingAssembler,
             TransactionTemplate transactionTemplate,
             Clock clock) {
         this.reviewRepository = reviewRepository;
@@ -56,6 +60,8 @@ public class ReviewAnalysisService {
         this.embeddingService = embeddingService;
         this.evidenceService = evidenceService;
         this.modelBindingCatalog = modelBindingCatalog;
+        this.findingRepository = findingRepository;
+        this.findingAssembler = findingAssembler;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
     }
@@ -101,13 +107,66 @@ public class ReviewAnalysisService {
                 .orElse(acquiredRun);
     }
 
+    /**
+     * Recomputes a completed review as a new run (never a status rollback): the
+     * previous run and its signals remain as audit history, the new run becomes the
+     * active generation when it completes. Failed reviews stay terminal in v1.
+     */
+    public ReviewAnalysisRun recompute(UUID organizationId, UUID reviewId) {
+        var review = reviewRepository.find(organizationId, reviewId)
+                .orElseThrow(() -> new ReviewNotFoundException(reviewId));
+        if (review.status() != ReviewStatus.COMPLETED) {
+            throw new IllegalStateException(
+                    "recompute requires a COMPLETED review: " + reviewId);
+        }
+        ReviewAnalysisRun acquiredRun = null;
+        try {
+            var snapshot = reviewRepository.findSnapshot(organizationId, reviewId).orElseThrow(
+                    () -> new IllegalStateException("Review snapshot missing: " + reviewId));
+            acquiredRun = resolveRecomputeRun(organizationId, reviewId);
+            var run = acquiredRun;
+            var semantics = contractEnrichmentService.getSemanticsForOrganization(
+                    organizationId, snapshot.contractVersionId());
+            var environment = evaluateEnvironment(snapshot, semantics);
+            executePlannedChecks(review, snapshot, run, semantics, environment);
+            completeIfDone(organizationId, reviewId, run);
+        } catch (RuntimeException e) {
+            var failedRun = acquiredRun;
+            transactionTemplate.executeWithoutResult(status -> {
+                if (failedRun != null) {
+                    analysisRepository.markRunFailed(organizationId, failedRun.id(),
+                            failureReason(e), clock.instant());
+                }
+            });
+            throw e;
+        }
+        return analysisRepository.findLatestRun(organizationId, reviewId)
+                .orElse(acquiredRun);
+    }
+
+    private ReviewAnalysisRun resolveRecomputeRun(UUID organizationId, UUID reviewId) {
+        var running = analysisRepository.findRunningRun(organizationId, reviewId);
+        if (running.isPresent()) {
+            return running.get();
+        }
+        var created = ReviewAnalysisRun.running(UUID.randomUUID(), organizationId,
+                reviewId, analysisRepository.maxRunNumber(organizationId, reviewId) + 1,
+                RunTrigger.RECOMPUTE, ReviewPipeline.VERSION, clock.instant());
+        if (analysisRepository.tryInsertRun(created)) {
+            return created;
+        }
+        return analysisRepository.findRunningRun(organizationId, reviewId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Unable to claim a recompute run for review " + reviewId));
+    }
+
     public ReviewProgress progress(UUID organizationId, UUID reviewId) {
         var review = reviewRepository.find(organizationId, reviewId)
                 .orElseThrow(() -> new ReviewNotFoundException(reviewId));
         var planned = reviewRepository.findPlanChecks(organizationId, reviewId).size();
         var latest = analysisRepository.findLatestRun(organizationId, reviewId);
         if (latest.isEmpty()) {
-            return new ReviewProgress(review.status(), planned, planned, 0, 0, 0, 0, 0, 0);
+            return new ReviewProgress(review.status(), planned, planned, 0, 0, 0, 0, 0, 0, 0);
         }
         var executions = analysisRepository.findExecutions(organizationId, latest.get().id());
         var pending = Math.max(0, planned - executions.size())
@@ -119,7 +178,8 @@ public class ReviewAnalysisService {
                 count(executions, CheckExecutionStatus.DEGRADED),
                 count(executions, CheckExecutionStatus.FAILED),
                 count(executions, CheckExecutionStatus.SKIPPED),
-                analysisRepository.countSignals(organizationId, latest.get().id()));
+                analysisRepository.countSignals(organizationId, latest.get().id()),
+                findingRepository.countFindings(organizationId, latest.get().id()));
     }
 
     public AnalysisEnvironment evaluateEnvironment(
@@ -203,6 +263,7 @@ public class ReviewAnalysisService {
                             outcome.detail(), outcome.signals().size(), clock.instant())) {
                         throw new LeaseLostException(execution.id());
                     }
+                    findingRepository.deleteFindings(review.organizationId(), run.id());
                     analysisRepository.deleteSignals(
                             review.organizationId(), run.id(), check.id());
                     analysisRepository.insertSignals(outcome.signals());
@@ -221,6 +282,9 @@ public class ReviewAnalysisService {
                 && executions.stream().allMatch(execution -> execution.status().terminal())) {
             transactionTemplate.executeWithoutResult(status -> {
                 if (analysisRepository.markRunCompleted(organizationId, run.id(), clock.instant())) {
+                    var signals = analysisRepository.findSignals(organizationId, run.id());
+                    findingRepository.replaceFindings(organizationId, reviewId, run.id(),
+                            findingAssembler.assemble(run, signals, clock.instant()));
                     reviewRepository.markCompleted(organizationId, reviewId, clock.instant());
                 }
             });
