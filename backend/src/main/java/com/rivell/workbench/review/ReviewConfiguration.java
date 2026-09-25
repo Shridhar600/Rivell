@@ -62,6 +62,21 @@ class ReviewConfiguration {
     }
 
     @Bean
+    ReviewCheckExecutor confidentialitySurvivalCheckExecutor(
+            com.rivell.workbench.retrieval.EvidenceService evidenceService) {
+        return new com.rivell.workbench.review.check.ConfidentialitySurvivalCheckExecutor(
+                evidenceService);
+    }
+
+    @Bean
+    ReviewCheckExecutor carveOutConsistencyCheckExecutor(
+            com.rivell.workbench.retrieval.EvidenceService evidenceService,
+            com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService) {
+        return new com.rivell.workbench.review.check.CarveOutConsistencyCheckExecutor(
+                evidenceService, semanticDecisionService);
+    }
+
+    @Bean
     ReviewCheckExecutor liabilityCapCheckExecutor(
             com.rivell.workbench.retrieval.EvidenceService evidenceService,
             com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService) {

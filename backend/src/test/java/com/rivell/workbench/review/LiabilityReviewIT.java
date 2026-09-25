@@ -151,6 +151,7 @@ class LiabilityReviewIT {
 
         private final CorpusScriptedProvider base = new CorpusScriptedProvider();
         private final AtomicInteger liabilityDecisions = new AtomicInteger();
+        private final AtomicInteger consistencyDecisions = new AtomicInteger();
 
         @Override
         public String id() {
@@ -159,6 +160,32 @@ class LiabilityReviewIT {
 
         @Override
         public ProviderExecutionResult execute(DecisionExecutionRequest request) {
+            if (request.pack().questions().containsKey(M7DecisionSpecs.CONSISTENCY)) {
+                consistencyDecisions.incrementAndGet();
+                var carveState = (M7DecisionSpecs.CarveOutConsistencyState)
+                        request.state().payload();
+                var liability = carveState.liabilityText().toLowerCase();
+                var indemnity = carveState.indemnityText().toLowerCase();
+                var selected = M7DecisionSpecs.CONSISTENT;
+                if ((indemnity.contains("without regard") || indemnity.contains("without limitation")
+                        || indemnity.contains("unlimited"))
+                        && (liability.contains("do not apply") || liability.contains("excluded"))) {
+                    selected = M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY;
+                } else if (indemnity.isBlank()) {
+                    selected = M7DecisionSpecs.NOT_COMPARABLE_CARVE;
+                }
+                var consistency = new LinkedHashMap<String, Double>();
+                for (var option : List.of(M7DecisionSpecs.CONSISTENT,
+                        M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY,
+                        M7DecisionSpecs.NOT_COMPARABLE_CARVE)) {
+                    consistency.put(option, option.equals(selected) ? 0.9 : 0.03);
+                }
+                var carveAnswers = new LinkedHashMap<String, SemanticAnswer>();
+                carveAnswers.put(M7DecisionSpecs.CONSISTENCY,
+                        new ChoiceAnswer(selected, 0.9, consistency));
+                return new ProviderExecutionResult(carveAnswers, "fake-review-v1",
+                        new TokenUsage(140, 6));
+            }
             if (!request.pack().questions().containsKey(M7DecisionSpecs.DEVIATION_TYPE)) {
                 return base.execute(request);
             }
@@ -200,6 +227,7 @@ class LiabilityReviewIT {
 
         void reset() {
             liabilityDecisions.set(0);
+            consistencyDecisions.set(0);
         }
     }
 

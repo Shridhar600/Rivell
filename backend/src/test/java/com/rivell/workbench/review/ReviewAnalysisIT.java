@@ -198,25 +198,16 @@ class ReviewAnalysisIT {
         var checks = reviewRepository.findPlanChecks(organizationId, review.id());
         var executions = analysisRepository.findExecutions(organizationId, run.id());
         assertThat(executions).hasSize(checks.size());
-        var checkById = checks.stream().collect(java.util.stream.Collectors.toMap(
-                ReviewPlanCheck::id, check -> check));
         assertThat(executions).allSatisfy(execution -> {
-            var family = checkById.get(execution.planCheckId()).family();
-            if (family == CheckFamily.CROSS_CLAUSE) {
-                assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
-                assertThat(execution.detail()).containsKey("degradedReason");
-            } else {
-                assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
-                assertThat(execution.detail()).isNotEmpty();
-            }
+            assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
+            assertThat(execution.detail()).isNotEmpty();
         });
         assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
 
         var progress = analysisService.progress(organizationId, review.id());
         assertThat(progress.reviewStatus()).isEqualTo(ReviewStatus.COMPLETED);
         assertThat(progress.plannedChecks()).isEqualTo(checks.size());
-        assertThat(progress.completedChecks()).isPositive();
-        assertThat(progress.degradedChecks()).isPositive();
+        assertThat(progress.completedChecks()).isEqualTo(progress.plannedChecks());
         assertThat(progress.pendingChecks()).isZero();
         assertThat(progress.runningChecks()).isZero();
     }
