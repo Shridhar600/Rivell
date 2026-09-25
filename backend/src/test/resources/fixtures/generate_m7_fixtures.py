@@ -80,6 +80,17 @@ write_docx('m7-msa-survival-gap.docx', cross_clause(
 write_docx('m7-msa-carveout-conflict.docx', cross_clause(
     'Master Services Agreement',
     'Supplier\'s aggregate liability shall not exceed two times the fees paid in '
+    'the preceding 12 months, and this limitation applies to all obligations under '
+    'this Agreement, including indemnification obligations under Section 2.',
+    'Each Party shall protect the other Party\'s confidential information with '
+    'reasonable care. The obligations in this Section 3 survive termination of this '
+    'Agreement for three (3) years.',
+    'Supplier shall indemnify and defend Customer against third-party claims '
+    'without regard to any limitation of liability in this Agreement.'))
+
+write_docx('m7-msa-carveout-consistent.docx', cross_clause(
+    'Master Services Agreement',
+    'Supplier\'s aggregate liability shall not exceed two times the fees paid in '
     'the preceding 12 months, and the limitations in this Section 1 do not apply to '
     'indemnification obligations under Section 2.',
     'Each Party shall protect the other Party\'s confidential information with '

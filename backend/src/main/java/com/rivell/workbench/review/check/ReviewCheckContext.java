@@ -17,6 +17,7 @@ public record ReviewCheckContext(
         UUID runId,
         ContractSemantics semantics,
         AnalysisEnvironment environment,
+        ReviewEvidenceCache evidenceCache,
         Instant executedAt) {
 
     public ReviewCheckContext {
@@ -26,6 +27,7 @@ public record ReviewCheckContext(
         Objects.requireNonNull(runId, "runId");
         Objects.requireNonNull(semantics, "semantics");
         Objects.requireNonNull(environment, "environment");
+        Objects.requireNonNull(evidenceCache, "evidenceCache");
         Objects.requireNonNull(executedAt, "executedAt");
     }
 }

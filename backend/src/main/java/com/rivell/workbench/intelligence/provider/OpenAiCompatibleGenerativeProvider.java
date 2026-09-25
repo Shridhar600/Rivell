@@ -45,7 +45,7 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
 
     static final String PROVIDER_ID = "openai-compatible";
     private static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
-    private static final int MAX_FIELD_LENGTH = 500;
+    private static final int MAX_FIELD_LENGTH = 2000;
 
     private final RestClientAccessor restClient;
     private final ObjectMapper objectMapper;
@@ -150,10 +150,11 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
 
     private String systemInstruction(ReasoningSpec spec) {
         var instruction = new StringBuilder()
-                .append("You extract structured data from legal documents. You are given a document ")
-                .append("excerpt and must return exactly one JSON object with the fields ")
-                .append(spec.fields().keySet()).append(". Extract only what the excerpt states. ")
-                .append("Never invent values. Output must match the supplied JSON schema.");
+                .append(spec.purpose())
+                .append(" Return exactly one JSON object with the fields ")
+                .append(spec.fields().keySet())
+                .append(", following each field description. Output must match the supplied ")
+                .append("JSON schema.");
         for (var entry : spec.allowedValues().entrySet()) {
             instruction.append(" Field ").append(entry.getKey())
                     .append(" must be exactly one of ").append(entry.getValue().stream()
@@ -163,7 +164,13 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
     }
 
     private String userInstruction(GenerationRequest request) {
-        return "Document excerpt:\n" + request.state().payload();
+        try {
+            return "Input state (JSON):\n"
+                    + objectMapper.writeValueAsString(request.state().payload());
+        } catch (Exception e) {
+            throw new ProviderRejectedException(
+                    "Generative request state could not be serialized", e);
+        }
     }
 
     private OpenAiCompatibleDtos.ChatResponse postChatCompletions(String payload) {

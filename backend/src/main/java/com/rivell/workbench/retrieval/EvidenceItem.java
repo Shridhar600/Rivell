@@ -37,7 +37,8 @@ public record EvidenceItem(
         PolicyCompatibility policyCompatibility,
         List<String> provenanceNodeIds,
         UUID publicationId,
-        Long publicationNumber) {
+        Long publicationNumber,
+        PositionRole variantRole) {
 
     public EvidenceItem {
         Objects.requireNonNull(evidenceId, "evidenceId");
@@ -54,6 +55,34 @@ public record EvidenceItem(
         }
         laneInfo = laneInfo == null ? LaneInfo.NONE : laneInfo;
         provenanceNodeIds = provenanceNodeIds == null ? List.of() : List.copyOf(provenanceNodeIds);
+    }
+
+    /** Non-drafting authority items carry no clause-library variant role. */
+    public EvidenceItem(
+            UUID evidenceId,
+            AuthorityClass authorityClass,
+            String sourceType,
+            UUID sourceArtifactId,
+            UUID sourceCandidateId,
+            UUID sourceContractVersionId,
+            UUID sourceClauseId,
+            LegalConcept legalConcept,
+            ApplicabilityScope applicabilityScope,
+            String text,
+            PolicyFacts policyFacts,
+            List<LegalFact> contractFacts,
+            String retrievalReason,
+            LaneInfo laneInfo,
+            SemanticAssessment semanticAssessment,
+            PolicyCompatibility policyCompatibility,
+            List<String> provenanceNodeIds,
+            UUID publicationId,
+            Long publicationNumber) {
+        this(evidenceId, authorityClass, sourceType, sourceArtifactId, sourceCandidateId,
+                sourceContractVersionId, sourceClauseId, legalConcept, applicabilityScope,
+                text, policyFacts, contractFacts, retrievalReason, laneInfo,
+                semanticAssessment, policyCompatibility, provenanceNodeIds, publicationId,
+                publicationNumber, null);
     }
 
     /**

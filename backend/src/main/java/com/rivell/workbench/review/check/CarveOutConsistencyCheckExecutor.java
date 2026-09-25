@@ -13,7 +13,6 @@ import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.retrieval.EvidenceBundle;
 import com.rivell.workbench.retrieval.EvidenceItem;
 import com.rivell.workbench.retrieval.EvidenceRequest;
-import com.rivell.workbench.retrieval.EvidenceService;
 import com.rivell.workbench.retrieval.KnowledgePin;
 import com.rivell.workbench.review.CheckMechanism;
 import com.rivell.workbench.review.CrossClauseConflictPayload;
@@ -31,12 +30,13 @@ import com.rivell.workbench.review.SignalType;
  */
 public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecutor {
 
-    private final EvidenceService evidenceService;
+    /** Uncalibrated fail-closed bands (DW-007); see LiabilityCapCheckExecutor. */
+    private static final double TRUE_BAND = 0.6;
+    private static final int MAX_COUNTERPART_CHARS = 6000;
+
     private final SemanticDecisionService decisionService;
 
-    public CarveOutConsistencyCheckExecutor(
-            EvidenceService evidenceService, SemanticDecisionService decisionService) {
-        this.evidenceService = evidenceService;
+    public CarveOutConsistencyCheckExecutor(SemanticDecisionService decisionService) {
         this.decisionService = decisionService;
     }
 
@@ -64,27 +64,55 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
         if (counterparts.isEmpty()) {
             return CheckOutcome.degraded("counterpart_clause_not_found");
         }
-        var bundle = evidenceService.buildForOrganization(request(context, liability));
+        var bundle = context.evidenceCache().build(request(context, liability));
         var subjectEvidence = subjectContractIds(bundle, liability.id());
         var counterpartIds = counterparts.stream().map(ClauseSemantics::id).toList();
         var counterpartEvidence = subjectContractIds(bundle, counterpartIds);
 
-        var state = new M7DecisionSpecs.CarveOutConsistencyState(
-                M7DecisionSpecs.CARVE_OUT_STATE_SCHEMA,
-                liability.contentText(),
-                counterparts.stream().map(ClauseSemantics::contentText)
-                        .reduce((first, second) -> first + "\n---\n" + second).orElse(""));
-        var execution = decisionService.evaluate(
-                M7DecisionSpecs.carveOutConsistency(), state);
-        var answer = execution.answers().get(M7DecisionSpecs.CONSISTENCY);
-        if (!(answer instanceof ChoiceAnswer choice)) {
-            return CheckOutcome.degraded("consistency_answer_missing");
-        }
-
+        var counterpartText = counterparts.stream().map(ClauseSemantics::contentText)
+                .reduce((first, second) -> first + "\n---\n" + second).orElse("");
         var detail = new LinkedHashMap<String, Object>();
-        detail.put("consistency", choice.selected());
         detail.put("counterpartCount", counterparts.size());
         detail.put("sufficiency", bundle.sufficiency().name());
+        if (counterpartText.length() > MAX_COUNTERPART_CHARS) {
+            detail.put("uncertaintyReason", "carve_out_context_too_large");
+            return boundedUncertainOutcome(context, detail, bundle,
+                    union(subjectEvidence, counterpartEvidence),
+                    "carve_out_context_too_large");
+        }
+
+        var state = new M7DecisionSpecs.CarveOutConsistencyState(
+                M7DecisionSpecs.CARVE_OUT_STATE_SCHEMA,
+                liability.contentText(), counterpartText);
+        com.rivell.workbench.intelligence.DecisionExecution execution;
+        try {
+            execution = decisionService.evaluate(
+                    M7DecisionSpecs.carveOutConsistency(), state);
+        } catch (com.rivell.workbench.intelligence.SpecStateMismatchException
+                | com.rivell.workbench.intelligence.UnknownDecisionSpecException
+                | com.rivell.workbench.intelligence.NoProviderConfiguredException e) {
+            return CheckOutcome.failed(
+                    "decision_contract_error:" + e.getClass().getSimpleName());
+        } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
+            return boundedUncertainOutcome(context, detail, bundle,
+                    union(subjectEvidence, counterpartEvidence),
+                    "cross_clause_decision_unavailable");
+        }
+        var answer = execution.answers().get(M7DecisionSpecs.CONSISTENCY);
+        if (!(answer instanceof ChoiceAnswer choice)) {
+            return CheckOutcome.failed("consistency_answer_missing");
+        }
+        detail.put("consistency", choice.selected());
+        detail.put("confidence", choice.confidence());
+        var bestProbability = choice.probabilities()
+                .getOrDefault(choice.selected(), choice.confidence());
+        if (bestProbability < TRUE_BAND
+                && !M7DecisionSpecs.NOT_COMPARABLE_CARVE.equals(choice.selected())) {
+            detail.put("uncertaintyReason", "cross_clause_classification_uncertain");
+            return boundedUncertainOutcome(context, detail, bundle,
+                    union(subjectEvidence, counterpartEvidence),
+                    "cross_clause_classification_uncertain");
+        }
 
         if (M7DecisionSpecs.CONSISTENT.equals(choice.selected())) {
             return CheckOutcome.completed(List.of(), detail, bundle.traceId());
@@ -98,7 +126,7 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
                     M7DecisionSpecs.CARVE_OUT_CONSISTENCY_VERSION,
                     execution.executionId(), execution.metadata().resolvedModel(),
                     execution.metadata().usage(),
-                    Map.of("sufficiency", bundle.sufficiency().name()))),
+                    confidenceQuality(bundle.sufficiency().name(), choice))),
                     detail, bundle.traceId());
         }
         if (!M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY.equals(choice.selected())) {
@@ -113,8 +141,28 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
                 M7DecisionSpecs.CARVE_OUT_CONSISTENCY_SPEC,
                 M7DecisionSpecs.CARVE_OUT_CONSISTENCY_VERSION, execution.executionId(),
                 execution.metadata().resolvedModel(), execution.metadata().usage(),
-                Map.of("sufficiency", bundle.sufficiency().name())));
+                confidenceQuality(bundle.sufficiency().name(), choice)));
         return CheckOutcome.completed(signals, detail, bundle.traceId());
+    }
+
+    private CheckOutcome boundedUncertainOutcome(
+            ReviewCheckContext context, Map<String, Object> detail, EvidenceBundle bundle,
+            List<UUID> evidence, String reason) {
+        var signal = signal(context, SignalType.CROSS_CLAUSE_UNCERTAIN,
+                IssueFamily.CARVE_OUT_INCONSISTENCY,
+                new DeviationUncertainPayload(reason), evidence, null, null, null,
+                null, null, Map.of("sufficiency", bundle.sufficiency().name()));
+        return CheckOutcome.degraded(
+                "provider_unavailable:" + reason, List.of(signal), detail, bundle.traceId());
+    }
+
+    private static Map<String, Object> confidenceQuality(
+            String sufficiency, ChoiceAnswer choice) {
+        var quality = new LinkedHashMap<String, Object>();
+        quality.put("sufficiency", sufficiency);
+        quality.put("confidence", choice.confidence());
+        quality.put("probabilities", choice.probabilities());
+        return quality;
     }
 
     private ClauseSemantics resolveSubject(ReviewCheckContext context) {

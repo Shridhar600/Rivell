@@ -28,13 +28,20 @@ public interface ReviewAnalysisRepository {
 
     boolean insertExecutionIfAbsent(ReviewCheckExecution execution);
 
-    /** Claims a PENDING or stale RUNNING execution; false when another worker holds it. */
-    boolean claimExecution(UUID organizationId, UUID executionId);
+    /**
+     * Claims a PENDING or stale RUNNING execution by minting a lease token. Empty when
+     * another worker holds a fresh lease; the token fences the terminal write.
+     */
+    Optional<UUID> claimExecution(UUID organizationId, UUID executionId);
 
+    /**
+     * Terminal write fenced by the lease token; false when the lease was lost (the caller
+     * must abort its transaction so a stale worker cannot replace the winner's signals).
+     */
     boolean completeExecution(
-            UUID organizationId, UUID executionId, CheckExecutionStatus status,
-            UUID evidenceTraceId, Map<String, Object> detail, int signalCount,
-            Instant completedAt);
+            UUID organizationId, UUID executionId, UUID leaseId,
+            CheckExecutionStatus status, UUID evidenceTraceId, Map<String, Object> detail,
+            int signalCount, Instant completedAt);
 
     void insertSignals(List<RawReviewSignal> signals);
 

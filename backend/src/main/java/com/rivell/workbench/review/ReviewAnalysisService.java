@@ -10,11 +10,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.intelligence.EmbeddingService;
+import com.rivell.workbench.intelligence.ModelBindingCatalog;
+import com.rivell.workbench.retrieval.EvidenceService;
 import com.rivell.workbench.retrieval.RetrievalProperties;
 import com.rivell.workbench.review.check.AnalysisEnvironment;
 import com.rivell.workbench.review.check.CheckOutcome;
 import com.rivell.workbench.review.check.ReviewCheckContext;
 import com.rivell.workbench.review.check.ReviewCheckExecutors;
+import com.rivell.workbench.review.check.ReviewEvidenceCache;
 
 /**
  * Deterministic machine-analysis orchestration. One run (generation) per attempt with a
@@ -29,6 +32,8 @@ public class ReviewAnalysisService {
     private final ContractEnrichmentService contractEnrichmentService;
     private final RetrievalProperties retrievalProperties;
     private final EmbeddingService embeddingService;
+    private final EvidenceService evidenceService;
+    private final ModelBindingCatalog modelBindingCatalog;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -39,6 +44,8 @@ public class ReviewAnalysisService {
             ContractEnrichmentService contractEnrichmentService,
             RetrievalProperties retrievalProperties,
             EmbeddingService embeddingService,
+            EvidenceService evidenceService,
+            ModelBindingCatalog modelBindingCatalog,
             TransactionTemplate transactionTemplate,
             Clock clock) {
         this.reviewRepository = reviewRepository;
@@ -47,6 +54,8 @@ public class ReviewAnalysisService {
         this.contractEnrichmentService = contractEnrichmentService;
         this.retrievalProperties = retrievalProperties;
         this.embeddingService = embeddingService;
+        this.evidenceService = evidenceService;
+        this.modelBindingCatalog = modelBindingCatalog;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
     }
@@ -101,8 +110,8 @@ public class ReviewAnalysisService {
             return new ReviewProgress(review.status(), planned, planned, 0, 0, 0, 0, 0, 0);
         }
         var executions = analysisRepository.findExecutions(organizationId, latest.get().id());
-        var pending = Math.max(0, planned - (int) executions.stream()
-                .filter(execution -> execution.status().terminal()).count());
+        var pending = Math.max(0, planned - executions.size())
+                + count(executions, CheckExecutionStatus.PENDING);
         return new ReviewProgress(
                 review.status(), planned, pending,
                 count(executions, CheckExecutionStatus.RUNNING),
@@ -122,7 +131,17 @@ public class ReviewAnalysisService {
                 ? embeddingService.modelIdentity()
                 : null;
         var modelMatches = Objects.equals(snapshot.embeddingModelIdentity(), liveIdentity);
-        return new AnalysisEnvironment(digestMatches, indexMatches, modelMatches);
+        var frozen = snapshot.modelPolicy();
+        var live = modelBindingCatalog.current();
+        var bindingsMatch = frozen.decisionProviderId()
+                        .equals(live.decisionProvider().providerId())
+                && frozen.decisionModelAlias().equals(live.decisionProvider().modelAlias())
+                && frozen.generativeProviderId()
+                        .equals(live.generativeProvider().providerId())
+                && frozen.generativeModelAlias()
+                        .equals(live.generativeProvider().modelAlias());
+        return new AnalysisEnvironment(digestMatches, indexMatches, modelMatches,
+                bindingsMatch);
     }
 
     private ReviewAnalysisRun resolveRun(
@@ -154,6 +173,7 @@ public class ReviewAnalysisService {
     private void executePlannedChecks(
             Review review, ReviewSnapshot snapshot, ReviewAnalysisRun run,
             ContractSemantics semantics, AnalysisEnvironment environment) {
+        var evidenceCache = new ReviewEvidenceCache(evidenceService);
         for (var check : reviewRepository.findPlanChecks(review.organizationId(), review.id())) {
             var existing = analysisRepository.findExecution(
                     review.organizationId(), run.id(), check.id());
@@ -167,20 +187,30 @@ public class ReviewAnalysisService {
             }
             var execution = analysisRepository.findExecution(
                     review.organizationId(), run.id(), check.id()).orElseThrow();
-            if (!analysisRepository.claimExecution(review.organizationId(), execution.id())) {
+            var lease = analysisRepository.claimExecution(
+                    review.organizationId(), execution.id());
+            if (lease.isEmpty()) {
                 continue;
             }
             var context = new ReviewCheckContext(review, snapshot, check, run.id(),
-                    semantics, environment, clock.instant());
+                    semantics, environment, evidenceCache, clock.instant());
             var outcome = runCheck(check, context, environment);
-            transactionTemplate.executeWithoutResult(status -> {
-                analysisRepository.deleteSignals(
-                        review.organizationId(), run.id(), check.id());
-                analysisRepository.insertSignals(outcome.signals());
-                analysisRepository.completeExecution(review.organizationId(), execution.id(),
-                        outcome.status(), outcome.evidenceTraceId(), outcome.detail(),
-                        outcome.signals().size(), clock.instant());
-            });
+            var leaseId = lease.get();
+            try {
+                transactionTemplate.executeWithoutResult(status -> {
+                    if (!analysisRepository.completeExecution(review.organizationId(),
+                            execution.id(), leaseId, outcome.status(), outcome.evidenceTraceId(),
+                            outcome.detail(), outcome.signals().size(), clock.instant())) {
+                        throw new LeaseLostException(execution.id());
+                    }
+                    analysisRepository.deleteSignals(
+                            review.organizationId(), run.id(), check.id());
+                    analysisRepository.insertSignals(outcome.signals());
+                });
+            } catch (LeaseLostException e) {
+                // another worker reclaimed this execution; it owns the terminal write
+                continue;
+            }
         }
     }
 
@@ -199,7 +229,7 @@ public class ReviewAnalysisService {
 
     private CheckOutcome runCheck(
             ReviewPlanCheck check, ReviewCheckContext context, AnalysisEnvironment environment) {
-        if (!environment.semanticsDigestMatches()) {
+        if (!environment.fullyMatches()) {
             return CheckOutcome.degraded(environment.mismatchReason());
         }
         try {
@@ -208,9 +238,26 @@ public class ReviewAnalysisService {
                     .orElseGet(() -> CheckOutcome.degraded(
                             "mechanism_not_available:" + check.mechanism()));
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
-            return CheckOutcome.degraded("provider_unavailable:" + e.getClass().getSimpleName());
+            return isDecisionContractError(e)
+                    ? CheckOutcome.failed("decision_contract_error:" + e.getClass().getSimpleName())
+                    : CheckOutcome.degraded(
+                            "provider_unavailable:" + e.getClass().getSimpleName());
         } catch (RuntimeException e) {
             return CheckOutcome.failed(failureReason(e));
+        }
+    }
+
+    private static boolean isDecisionContractError(
+            com.rivell.workbench.intelligence.SemanticDecisionException e) {
+        return e instanceof com.rivell.workbench.intelligence.SpecStateMismatchException
+                || e instanceof com.rivell.workbench.intelligence.UnknownDecisionSpecException
+                || e instanceof com.rivell.workbench.intelligence.NoProviderConfiguredException;
+    }
+
+    /** Signals that the check's lease was reclaimed by another worker. */
+    static final class LeaseLostException extends RuntimeException {
+        LeaseLostException(java.util.UUID executionId) {
+            super("execution lease lost: " + executionId);
         }
     }
 

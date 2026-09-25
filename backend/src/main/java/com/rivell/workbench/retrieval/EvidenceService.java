@@ -319,7 +319,10 @@ public class EvidenceService {
                 PolicyCompatibility.NOT_ASSESSED,
                 provenance(organizationId, candidate),
                 match.publicationId(),
-                match.publicationNumber());
+                match.publicationNumber(),
+                authority == AuthorityClass.APPROVED_DRAFTING
+                        ? candidate.effectiveVariantRole()
+                        : null);
     }
 
     private EvidenceItem.PolicyFacts policyFacts(

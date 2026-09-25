@@ -13,12 +13,12 @@ import com.rivell.workbench.contracts.LegalFact;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.GenerativeReasoningService;
 import com.rivell.workbench.intelligence.SemanticAnswer;
+import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
 import com.rivell.workbench.retrieval.EvidenceBundle;
 import com.rivell.workbench.retrieval.EvidenceItem;
 import com.rivell.workbench.retrieval.EvidenceRequest;
-import com.rivell.workbench.retrieval.EvidenceService;
 import com.rivell.workbench.retrieval.EvidenceSufficiency;
 import com.rivell.workbench.retrieval.KnowledgePin;
 import com.rivell.workbench.review.ApprovedDraftingPayload;
@@ -47,15 +47,18 @@ import com.rivell.workbench.review.SignalType;
  */
 public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
 
-    private final EvidenceService evidenceService;
+    /** Uncalibrated fail-closed bands (DW-007): only a clear provider answer counts. */
+    private static final double TRUE_BAND = 0.6;
+    private static final double FALSE_BAND = 0.4;
+    private static final int MAX_CANDIDATE_LENGTH = 2000;
+    private static final double MAX_COPY_OVERLAP = 0.9;
+
     private final SemanticDecisionService decisionService;
     private final GenerativeReasoningService reasoningService;
 
     public LiabilityCapCheckExecutor(
-            EvidenceService evidenceService,
             SemanticDecisionService decisionService,
             GenerativeReasoningService reasoningService) {
-        this.evidenceService = evidenceService;
         this.decisionService = decisionService;
         this.reasoningService = reasoningService;
     }
@@ -76,7 +79,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
             return CheckOutcome.degraded("subject_clause_not_found");
         }
 
-        var bundle = evidenceService.buildForOrganization(request(context, clause));
+        var bundle = context.evidenceCache().build(request(context, clause));
         var sufficiency = bundle.sufficiency();
         var subjectEvidence = subjectContractIds(bundle, clause.id());
         var detail = new LinkedHashMap<String, Object>();
@@ -135,15 +138,51 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                         .getOrDefault("consequentialDamagesExcluded", "false")),
                 firstText(bundle.policyItems()), prohibitedPosition(bundle), escalationTrigger);
 
-        var execution = decisionService.evaluate(M7DecisionSpecs.liabilityDeviation(), state);
+        com.rivell.workbench.intelligence.DecisionExecution execution;
+        try {
+            execution = decisionService.evaluate(M7DecisionSpecs.liabilityDeviation(), state);
+        } catch (com.rivell.workbench.intelligence.SpecStateMismatchException
+                | com.rivell.workbench.intelligence.UnknownDecisionSpecException
+                | com.rivell.workbench.intelligence.NoProviderConfiguredException e) {
+            return CheckOutcome.failed(
+                    "decision_contract_error:" + e.getClass().getSimpleName());
+        } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
+            detail.put("uncertaintyReason", "bounded_decision_unavailable");
+            var signal = signal(context, SignalType.DEVIATION_UNCERTAIN,
+                    IssueFamily.LIABILITY_CAP_UNCERTAIN,
+                    new DeviationUncertainPayload("bounded_decision_unavailable"),
+                    union(policyIds(bundle), subjectEvidence), null, null, null, null, null,
+                    null, null, Map.of("sufficiency", sufficiency.name()));
+            return CheckOutcome.degraded(
+                    "provider_unavailable:" + e.getClass().getSimpleName(),
+                    List.of(signal), detail, bundle.traceId());
+        }
         var answer = execution.answers().get(M7DecisionSpecs.DEVIATION_TYPE);
         if (!(answer instanceof ChoiceAnswer choice)) {
-            return CheckOutcome.degraded("deviation_answer_missing");
+            return CheckOutcome.failed("deviation_answer_missing");
         }
         var selected = choice.selected();
         detail.put("deviationType", selected);
+        detail.put("confidence", choice.confidence());
         detail.put("policyItemCount", bundle.policyItems().size());
         detail.put("draftingItemCount", bundle.approvedDraftingItems().size());
+
+        var bestProbability = choice.probabilities()
+                .getOrDefault(selected, choice.confidence());
+        if (bestProbability < TRUE_BAND) {
+            detail.put("uncertaintyReason", "classification_uncertain");
+            return CheckOutcome.completed(List.of(signal(context,
+                    SignalType.DEVIATION_UNCERTAIN, IssueFamily.LIABILITY_CAP_UNCERTAIN,
+                    new DeviationUncertainPayload("classification_uncertain"),
+                    union(policyIds(bundle), subjectEvidence),
+                    M7DecisionSpecs.LIABILITY_DEVIATION_SPEC,
+                    M7DecisionSpecs.LIABILITY_DEVIATION_VERSION, execution.executionId(),
+                    null, null, execution.metadata().resolvedModel(),
+                    execution.metadata().usage(),
+                    confidenceQuality(Map.of("sufficiency", sufficiency.name(),
+                            "uncertaintyReason", "classification_uncertain"), choice))),
+                    detail, bundle.traceId());
+        }
 
         if (M7DecisionSpecs.NOT_COMPARABLE.equals(selected)) {
             detail.put("uncertaintyReason", "policy_not_comparable");
@@ -159,7 +198,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                     M7DecisionSpecs.LIABILITY_DEVIATION_VERSION, execution.executionId(),
                     null, null, execution.metadata().resolvedModel(),
                     execution.metadata().usage(),
-                    Map.of("sufficiency", sufficiency.name()))),
+                    confidenceQuality(Map.of("sufficiency", sufficiency.name()), choice))),
                     detail, bundle.traceId());
         }
         if (M7DecisionSpecs.NO_DEVIATION.equals(selected)) {
@@ -179,13 +218,16 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                 deviationEvidence, M7DecisionSpecs.LIABILITY_DEVIATION_SPEC,
                 M7DecisionSpecs.LIABILITY_DEVIATION_VERSION, execution.executionId(), null, null,
                 execution.metadata().resolvedModel(), execution.metadata().usage(),
-                Map.of("sufficiency", sufficiency.name(), "deviationType", selected,
-                        "factsAvailable", facts != null)));
-        var drafting = bundle.approvedDraftingItems().stream().findFirst().orElse(null);
+                confidenceQuality(Map.of("sufficiency", sufficiency.name(),
+                        "deviationType", selected, "factsAvailable", facts != null),
+                        choice)));
+        var drafting = chooseDrafting(bundle.approvedDraftingItems());
         if (drafting != null) {
             signals.add(signal(context, SignalType.APPROVED_DRAFTING_AVAILABLE,
                     IssueFamily.LIABILITY_CAP_DEVIATION,
-                    new ApprovedDraftingPayload(drafting.evidenceId(), drafting.text()),
+                    new ApprovedDraftingPayload(drafting.evidenceId(), drafting.text(),
+                            drafting.variantRole() == null
+                                    ? null : drafting.variantRole().name()),
                     List.of(drafting.evidenceId()), null, null, null, null, null, null, null,
                     Map.of("draftingAvailable", true)));
         }
@@ -214,11 +256,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                             clause.contentText(), firstText(bundle.policyItems())));
             var proposed = generation.fields().get(M7ReasoningSpecs.PROPOSED_LANGUAGE);
             var explanation = generation.fields().get(M7ReasoningSpecs.EXPLANATION);
-            if (proposed == null || proposed.isBlank() || explanation == null
-                    || explanation.isBlank() || proposed.length() > 2000
-                    || proposed.equals(clause.contentText())) {
-                throw new IllegalStateException("open_ended_candidate_failed_validation");
-            }
+            validateCandidate(proposed, explanation, clause.contentText());
             var verification = verifyCandidate(context, clause, proposed, bundle);
             detail.put("openEnded", true);
             detail.put("verificationOutcome", verification.outcome());
@@ -236,7 +274,11 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                             "verificationOutcome", verification.outcome(),
                             "verificationExecutionId",
                             verification.executionId() == null
-                                    ? "" : verification.executionId().toString()));
+                                    ? "" : verification.executionId().toString(),
+                            "verificationSatisfiesProbability",
+                            verification.satisfiesProbability(),
+                            "verificationNewRiskProbability",
+                            verification.newRiskProbability()));
             return CheckOutcome.completed(List.of(signal), detail, bundle.traceId());
         } catch (RuntimeException e) {
             var reason = "open_ended_generation_unavailable:"
@@ -259,22 +301,86 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                     new M7DecisionSpecs.FindingVerificationState(
                             M7DecisionSpecs.FINDING_VERIFICATION_STATE_SCHEMA,
                             proposed, firstText(bundle.policyItems()), clause.contentText()));
-            var satisfies = booleanAnswer(
+            var satisfies = probability(
                     execution.answers().get(M7DecisionSpecs.SATISFIES_POLICY));
-            var newRisk = booleanAnswer(
+            var newRisk = probability(
                     execution.answers().get(M7DecisionSpecs.INTRODUCED_NEW_RISK));
-            var outcome = newRisk ? "DISPUTED" : satisfies ? "VERIFIED" : "UNCERTAIN";
-            return new Verification(outcome, execution.executionId());
-        } catch (RuntimeException e) {
-            return new Verification("UNCERTAIN", null);
+            var satisfiesBand = band(satisfies);
+            var riskBand = band(newRisk);
+            // fail closed: only a clear risk-free answer avoids DISPUTED
+            var outcome = riskBand != Band.FALSE ? "DISPUTED"
+                    : satisfiesBand == Band.TRUE ? "VERIFIED" : "UNCERTAIN";
+            return new Verification(outcome, execution.executionId(), satisfies, newRisk);
+        } catch (SemanticDecisionException e) {
+            return new Verification("UNCERTAIN", null, 0.5, 0.5);
         }
     }
 
-    private static boolean booleanAnswer(SemanticAnswer answer) {
-        return answer instanceof YesNoAnswer yesNo && yesNo.probability() >= 0.5;
+    private static double probability(SemanticAnswer answer) {
+        return answer instanceof YesNoAnswer yesNo ? yesNo.probability() : 0.5;
     }
 
-    private record Verification(String outcome, UUID executionId) {
+    private static Band band(double probability) {
+        if (probability > TRUE_BAND) {
+            return Band.TRUE;
+        }
+        if (probability < FALSE_BAND) {
+            return Band.FALSE;
+        }
+        return Band.AMBIGUOUS;
+    }
+
+    private enum Band {
+        FALSE, AMBIGUOUS, TRUE
+    }
+
+    private static Map<String, Object> confidenceQuality(
+            Map<String, Object> quality, ChoiceAnswer choice) {
+        var merged = new LinkedHashMap<String, Object>(quality);
+        merged.put("confidence", choice.confidence());
+        merged.put("probabilities", choice.probabilities());
+        return merged;
+    }
+
+    private static void validateCandidate(
+            String proposed, String explanation, String clauseText) {
+        if (proposed == null || proposed.isBlank() || explanation == null
+                || explanation.isBlank()
+                || proposed.length() > MAX_CANDIDATE_LENGTH
+                || explanation.length() > MAX_CANDIDATE_LENGTH
+                || nearCopy(proposed, clauseText)) {
+            throw new IllegalStateException("open_ended_candidate_failed_validation");
+        }
+    }
+
+    private static boolean nearCopy(String proposed, String source) {
+        var proposedTokens = tokens(proposed);
+        var sourceTokens = tokens(source);
+        if (proposedTokens.isEmpty() || sourceTokens.isEmpty()) {
+            return false;
+        }
+        var intersection = new java.util.LinkedHashSet<>(proposedTokens);
+        intersection.retainAll(sourceTokens);
+        var smaller = Math.min(proposedTokens.size(), sourceTokens.size());
+        return smaller > 0
+                && (double) intersection.size() / smaller >= MAX_COPY_OVERLAP;
+    }
+
+    private static java.util.Set<String> tokens(String value) {
+        return java.util.Arrays.stream(java.text.Normalizer
+                        .normalize(value, java.text.Normalizer.Form.NFKC)
+                        .toLowerCase(java.util.Locale.ROOT)
+                        .replaceAll("[^a-z0-9]+", " ")
+                        .trim()
+                        .split("\\s+"))
+                .filter(token -> !token.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(
+                        java.util.LinkedHashSet::new));
+    }
+
+    private record Verification(
+            String outcome, UUID executionId, double satisfiesProbability,
+            double newRiskProbability) {
     }
 
     private ClauseSemantics resolveSubject(ReviewCheckContext context) {
@@ -304,6 +410,19 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                 snapshot.knowledgePinNumber() == 0L
                         ? KnowledgePin.none()
                         : KnowledgePin.at(snapshot.knowledgePinNumber()));
+    }
+
+    /** Recommend the acceptable second position (fallback) before the ideal position. */
+    private static EvidenceItem chooseDrafting(List<EvidenceItem> items) {
+        return items.stream()
+                .filter(item -> item.variantRole()
+                        == com.rivell.workbench.knowledge.PositionRole.FALLBACK)
+                .findFirst()
+                .orElseGet(() -> items.stream()
+                        .filter(item -> item.variantRole()
+                                == com.rivell.workbench.knowledge.PositionRole.PREFERRED)
+                        .findFirst()
+                        .orElseGet(() -> items.isEmpty() ? null : items.get(0)));
     }
 
     private static String firstText(List<EvidenceItem> items) {

@@ -263,12 +263,22 @@ class ReviewCreationIT {
             assertThat(headingNodeIds).contains(check.subjectHeadingNodeId());
         });
 
+        // Substantive clause/cross checks are planned per primary-classified clause only
+        // (documented coverage limit, DW-024): clauses that carry a concept as a
+        // secondary classification satisfy presence but get no substantive check.
         var clausesByConcept = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.effectivePrimaryConcept().isPresent())
                 .collect(java.util.stream.Collectors.groupingBy(
                         clause -> clause.effectivePrimaryConcept().orElseThrow(),
                         java.util.stream.Collectors.mapping(
                                 ClauseSemantics::headingNodeId, java.util.stream.Collectors.toList())));
+        var secondaryOnly = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.effectivePrimaryConcept().isEmpty())
+                .filter(clause -> !clause.secondaryConcepts().isEmpty())
+                .map(ClauseSemantics::headingNodeId)
+                .toList();
+        assertThat(clauseChecks).noneSatisfy(check ->
+                assertThat(secondaryOnly).contains(check.subjectHeadingNodeId()));
         var crossChecks = checks.stream()
                 .filter(check -> check.family() == CheckFamily.CROSS_CLAUSE)
                 .toList();

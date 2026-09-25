@@ -29,7 +29,7 @@ final class SemanticsDigest {
 
     static String of(ContractSemantics semantics) {
         var canonical = new StringBuilder();
-        canonical.append("v1\n");
+        canonical.append("v2\n");
         canonical.append("status=").append(semantics.enrichmentStatus()).append('\n');
         canonical.append("pipeline=").append(semantics.pipelineVersion()).append('\n');
         var profile = semantics.reviewProfile();
@@ -64,6 +64,10 @@ final class SemanticsDigest {
                 .forEach(clause -> {
                     canonical.append("clause=").append(clause.headingNodeId()).append('|')
                             .append(clause.effectivePrimaryConcept().orElse(null)).append('|')
+                            .append(clause.secondaryConcepts().stream()
+                                    .map(Enum::name).sorted()
+                                    .collect(Collectors.joining(",")))
+                            .append('|')
                             .append(clause.effectiveFacts().stream()
                                     .sorted(Comparator.comparing(LegalFact::factSchema))
                                     .map(SemanticsDigest::fact)

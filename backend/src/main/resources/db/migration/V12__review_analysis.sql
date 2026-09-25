@@ -14,8 +14,9 @@ CREATE TABLE review_analysis_run (
     completed_at TIMESTAMPTZ,
     failure_reason TEXT,
     CHECK ((status = 'FAILED') = (failure_reason IS NOT NULL)),
-    CHECK ((status = 'COMPLETED') = (completed_at IS NOT NULL)),
+    CHECK ((status = 'RUNNING') = (completed_at IS NULL)),
     UNIQUE (id, organization_id),
+    UNIQUE (id, review_id, organization_id),
     UNIQUE (review_id, run_number)
 );
 
@@ -35,6 +36,7 @@ CREATE TABLE review_check_execution (
     plan_check_id UUID NOT NULL,
     status TEXT NOT NULL CHECK (status IN
         ('PENDING', 'RUNNING', 'COMPLETED', 'DEGRADED', 'FAILED', 'SKIPPED')),
+    lease_id UUID,
     evidence_trace_id UUID,
     detail JSONB NOT NULL DEFAULT '{}'::jsonb,
     signal_count INTEGER NOT NULL DEFAULT 0 CHECK (signal_count >= 0),
@@ -46,11 +48,14 @@ CREATE TABLE review_check_execution (
 
 ALTER TABLE review_check_execution
     ADD CONSTRAINT fk_review_check_execution_run_org
-    FOREIGN KEY (run_id, organization_id)
-    REFERENCES review_analysis_run (id, organization_id);
+    FOREIGN KEY (run_id, review_id, organization_id)
+    REFERENCES review_analysis_run (id, review_id, organization_id);
 ALTER TABLE review_check_execution
     ADD CONSTRAINT fk_review_check_execution_review_org
     FOREIGN KEY (review_id, organization_id) REFERENCES review (id, organization_id);
+ALTER TABLE review_check_execution
+    ADD CONSTRAINT fk_review_check_execution_plan_check_org
+    FOREIGN KEY (plan_check_id, organization_id) REFERENCES review_plan_check (id, organization_id);
 
 CREATE TABLE raw_review_signal (
     id UUID PRIMARY KEY,
@@ -78,7 +83,8 @@ CREATE TABLE raw_review_signal (
     decision_spec_version INTEGER,
     jev_execution_id UUID,
     generative_execution_id UUID,
-    verification_outcome TEXT,
+    verification_outcome TEXT CHECK (verification_outcome IN
+        ('VERIFIED', 'UNCERTAIN', 'DISPUTED')),
     resolved_model TEXT,
     usage JSONB,
     quality JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -92,10 +98,13 @@ CREATE TABLE raw_review_signal (
 
 ALTER TABLE raw_review_signal
     ADD CONSTRAINT fk_raw_review_signal_run_org
-    FOREIGN KEY (run_id, organization_id)
-    REFERENCES review_analysis_run (id, organization_id);
+    FOREIGN KEY (run_id, review_id, organization_id)
+    REFERENCES review_analysis_run (id, review_id, organization_id);
 ALTER TABLE raw_review_signal
     ADD CONSTRAINT fk_raw_review_signal_review_org
     FOREIGN KEY (review_id, organization_id) REFERENCES review (id, organization_id);
+ALTER TABLE raw_review_signal
+    ADD CONSTRAINT fk_raw_review_signal_plan_check_org
+    FOREIGN KEY (plan_check_id, organization_id) REFERENCES review_plan_check (id, organization_id);
 
-CREATE INDEX idx_raw_review_signal_run ON raw_review_signal (run_id, created_at);
+CREATE INDEX idx_raw_review_signal_run ON raw_review_signal (run_id, dedupe_key);

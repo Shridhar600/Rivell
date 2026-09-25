@@ -83,6 +83,7 @@ class OpenEndedEscalationIT {
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
         scriptedProvider.reset();
+        generativeProvider.reset();
     }
 
     private UUID organizationId() {
@@ -108,9 +109,11 @@ class OpenEndedEscalationIT {
     void openEndedEscalationProducesVerifiedMachineProposal() throws Exception {
         var organizationId = organizationId();
         var review = exoticReviewOnlyPolicy();
+        generativeProvider.reset();
 
         var run = analysisService.analyze(organizationId, review.id());
 
+        assertThat(generativeProvider.calls()).isEqualTo(1);
         var openEnded = analysisRepository.findSignals(organizationId, run.id()).stream()
                 .filter(signal -> signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT)
                 .findFirst().orElseThrow();
@@ -170,6 +173,98 @@ class OpenEndedEscalationIT {
 
     @Autowired
     LiabilityReviewIT.ReviewGenerativeProvider generativeProvider;
+
+    @Test
+    void approvedDraftingPresentSuppressesGenerationEntirely() throws Exception {
+        var organizationId = organizationId();
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.LIBRARY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/m7-msa-exotic.docx"));
+        var ingested = contractIngestionService.ingest("m7-msa-exotic.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+        generativeProvider.reset();
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(generativeProvider.calls()).isZero();
+        var signals = analysisRepository.findSignals(organizationId, run.id());
+        assertThat(signals).noneMatch(signal ->
+                signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT);
+        assertThat(signals).anyMatch(signal ->
+                signal.signalType() == SignalType.DEVIATION_UNCERTAIN
+                        && ((DeviationUncertainPayload) signal.payload()).reason()
+                                .equals("policy_not_comparable"));
+    }
+
+    @Test
+    void ambiguousVerificationDemotesCandidateToUncertain() throws Exception {
+        var organizationId = organizationId();
+        var review = exoticReviewOnlyPolicy();
+        scriptedProvider.verificationSatisfiesProbability = 0.5;
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var openEnded = analysisRepository.findSignals(organizationId, run.id()).stream()
+                .filter(signal -> signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT)
+                .findFirst().orElseThrow();
+        assertThat(((OpenEndedAnalysisPayload) openEnded.payload()).verificationOutcome())
+                .isEqualTo("UNCERTAIN");
+        assertThat(openEnded.verificationOutcome()).isEqualTo("UNCERTAIN");
+        assertThat(openEnded.quality()).containsKey("verificationSatisfiesProbability");
+    }
+
+    @Test
+    void ambiguousRiskAnswerFailsClosedToDisputed() throws Exception {
+        var organizationId = organizationId();
+        var review = exoticReviewOnlyPolicy();
+        scriptedProvider.verificationRiskProbability = 0.5;
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var openEnded = analysisRepository.findSignals(organizationId, run.id()).stream()
+                .filter(signal -> signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT)
+                .findFirst().orElseThrow();
+        assertThat(openEnded.verificationOutcome()).isEqualTo("DISPUTED");
+    }
+
+    @Test
+    void oversizedExplanationIsRejectedWithoutFabrication() throws Exception {
+        var organizationId = organizationId();
+        var review = exoticReviewOnlyPolicy();
+        generativeProvider.openEndedExplanation = "x".repeat(2500);
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var signals = analysisRepository.findSignals(organizationId, run.id());
+        assertThat(signals).noneMatch(signal ->
+                signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT);
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()).get(0)
+                .status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+    }
+
+    @Test
+    void whitespaceNearCopyCandidateIsRejected() throws Exception {
+        var organizationId = organizationId();
+        var review = exoticReviewOnlyPolicy();
+        generativeProvider.openEndedProposed =
+                "Supplier's   aggregate liability shall not exceed the insurance "
+                        + "proceeds actually recovered by Supplier in respect of the claim.";
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var signals = analysisRepository.findSignals(organizationId, run.id());
+        assertThat(signals).noneMatch(signal ->
+                signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT);
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()).get(0)
+                .status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+    }
 
     private ReviewStatus reviewRepositoryStatus(UUID organizationId, UUID reviewId) {
         return reviewRepository.find(organizationId, reviewId).orElseThrow().status();

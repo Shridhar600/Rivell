@@ -31,8 +31,9 @@ public record ReviewAnalysisRun(
         if ((status == RunStatus.FAILED) != (failureReason != null)) {
             throw new IllegalArgumentException("failureReason is required iff FAILED");
         }
-        if ((status == RunStatus.COMPLETED) != (completedAt != null)) {
-            throw new IllegalArgumentException("completedAt is set iff COMPLETED");
+        if ((status == RunStatus.RUNNING) != (completedAt == null)) {
+            throw new IllegalArgumentException(
+                    "completedAt is the terminal timestamp; unset iff RUNNING");
         }
     }
 

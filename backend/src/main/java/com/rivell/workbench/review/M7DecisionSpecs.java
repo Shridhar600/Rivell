@@ -60,6 +60,12 @@ public final class M7DecisionSpecs {
     public static final String CAP_CARVEOUT_CONTRADICTS_INDEMNITY = "CAP_CARVEOUT_CONTRADICTS_INDEMNITY";
     public static final String NOT_COMPARABLE_CARVE = "NOT_COMPARABLE";
 
+    /**
+     * Contradiction means the two clauses disagree about whether the cap applies to
+     * indemnification (e.g. the cap states it applies while the indemnity disclaims
+     * all limitations, or the reverse). A carve-out plus an unlimited indemnity is
+     * consistent and must not be reported.
+     */
     public static DecisionSpec carveOutConsistency() {
         var options = new LinkedHashMap<String, String>();
         options.put(CONSISTENT,
@@ -67,8 +73,9 @@ public final class M7DecisionSpecs {
                         + "without contradiction.");
         options.put(CAP_CARVEOUT_CONTRADICTS_INDEMNITY,
                 "The liability carve-out and the indemnification clause contradict each "
-                        + "other (for example the cap excludes indemnity while indemnity "
-                        + "disclaims all limitations).");
+                        + "other (for example the liability cap applies to indemnification "
+                        + "while the indemnity clause disclaims all limitations of "
+                        + "liability).");
         options.put(NOT_COMPARABLE_CARVE,
                 "The interaction cannot be determined from the given clause texts.");
         return new DecisionSpec(

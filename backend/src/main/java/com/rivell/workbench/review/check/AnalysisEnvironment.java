@@ -7,10 +7,12 @@ package com.rivell.workbench.review.check;
 public record AnalysisEnvironment(
         boolean semanticsDigestMatches,
         boolean embeddingIndexMatches,
-        boolean embeddingModelMatches) {
+        boolean embeddingModelMatches,
+        boolean modelBindingsMatch) {
 
     public boolean fullyMatches() {
-        return semanticsDigestMatches && embeddingIndexMatches && embeddingModelMatches;
+        return semanticsDigestMatches && embeddingIndexMatches && embeddingModelMatches
+                && modelBindingsMatch;
     }
 
     public String mismatchReason() {
@@ -22,6 +24,9 @@ public record AnalysisEnvironment(
         }
         if (!embeddingModelMatches) {
             return "embedding model identity changed after the snapshot was frozen";
+        }
+        if (!modelBindingsMatch) {
+            return "model policy bindings changed after the snapshot was frozen";
         }
         return null;
     }

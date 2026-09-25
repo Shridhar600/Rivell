@@ -9,7 +9,6 @@ import com.rivell.workbench.contracts.RelationshipType;
 import com.rivell.workbench.retrieval.EvidenceBundle;
 import com.rivell.workbench.retrieval.EvidenceItem;
 import com.rivell.workbench.retrieval.EvidenceRequest;
-import com.rivell.workbench.retrieval.EvidenceService;
 import com.rivell.workbench.retrieval.KnowledgePin;
 import com.rivell.workbench.review.CheckMechanism;
 import com.rivell.workbench.review.CrossClauseConflictPayload;
@@ -25,11 +24,6 @@ import com.rivell.workbench.review.SignalType;
  */
 public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckExecutor {
 
-    private final EvidenceService evidenceService;
-
-    public ConfidentialitySurvivalCheckExecutor(EvidenceService evidenceService) {
-        this.evidenceService = evidenceService;
-    }
 
     @Override
     public CheckMechanism mechanism() {
@@ -42,7 +36,7 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
         if (clause == null) {
             return CheckOutcome.degraded("subject_clause_not_found");
         }
-        var bundle = evidenceService.buildForOrganization(request(context, clause));
+        var bundle = context.evidenceCache().build(request(context, clause));
 
         // Coverage is assessed for the concept, not one classified clause: a
         // carve-out or reference clause can also carry the concept, and the human
@@ -74,7 +68,17 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
         if (covered) {
             return CheckOutcome.completed(List.of(), detail, bundle.traceId());
         }
-        var evidence = union(subjectContractIds(bundle, clause.id()), policyIds(bundle));
+        var counterpartClauseIds = context.semantics().clauses().stream()
+                .filter(candidate -> context.check().secondaryConcept() != null
+                        && (candidate.effectivePrimaryConcept()
+                                        .filter(concept -> concept
+                                                == context.check().secondaryConcept())
+                                        .isPresent()
+                                || candidate.secondaryConcepts()
+                                        .contains(context.check().secondaryConcept())))
+                .map(ClauseSemantics::id).toList();
+        var evidence = union(subjectContractIds(bundle, clause.id()),
+                union(subjectContractIds(bundle, counterpartClauseIds), policyIds(bundle)));
         var signal = new RawReviewSignal(
                 UUID.randomUUID(), context.check().organizationId(),
                 context.check().reviewId(), context.runId(), context.check().id(),
@@ -116,6 +120,12 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
     private static List<UUID> subjectContractIds(EvidenceBundle bundle, UUID clauseId) {
         return bundle.currentContractItems().stream()
                 .filter(item -> clauseId.equals(item.sourceClauseId()))
+                .map(EvidenceItem::evidenceId).toList();
+    }
+
+    private static List<UUID> subjectContractIds(EvidenceBundle bundle, List<UUID> clauseIds) {
+        return bundle.currentContractItems().stream()
+                .filter(item -> clauseIds.contains(item.sourceClauseId()))
                 .map(EvidenceItem::evidenceId).toList();
     }
 

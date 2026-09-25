@@ -35,6 +35,14 @@ public record Review(
         if (contractVersionNumber < 1) {
             throw new IllegalArgumentException("contractVersionNumber must be >= 1");
         }
+        if ((status == ReviewStatus.COMPLETED || status == ReviewStatus.FAILED)
+                != (completedAt != null)) {
+            throw new IllegalArgumentException(
+                    "completedAt is set iff the review is terminal");
+        }
+        if ((status == ReviewStatus.FAILED) != (failureReason != null)) {
+            throw new IllegalArgumentException("failureReason is required iff FAILED");
+        }
     }
 
     public static Review analysisQueued(

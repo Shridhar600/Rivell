@@ -37,7 +37,6 @@ import com.rivell.workbench.intelligence.ModelBindings;
 import com.rivell.workbench.intelligence.ModelPolicy;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
-import com.rivell.workbench.retrieval.CorpusScriptedProvider;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 @SpringBootTest
@@ -68,10 +67,8 @@ class ReviewAnalysisIT {
 
         @Bean
         @Primary
-        ModelBindingCatalog fakeModelBindingCatalog() {
-            return () -> new ModelBindings(
-                    new ModelBinding("fake", "fake-decision-model"),
-                    new ModelBinding("fake", "fake-gen-model"));
+        MutableModelBindingCatalog fakeModelBindingCatalog() {
+            return new MutableModelBindingCatalog();
         }
 
         @Bean
@@ -84,8 +81,8 @@ class ReviewAnalysisIT {
 
         @Bean
         @Primary
-        com.rivell.workbench.intelligence.SemanticDecisionProvider fakeSemanticDecisionProvider() {
-            return new CorpusScriptedProvider();
+        LiabilityReviewIT.ReviewScriptedProvider fakeSemanticDecisionProvider() {
+            return new LiabilityReviewIT.ReviewScriptedProvider();
         }
 
         @Bean
@@ -121,6 +118,20 @@ class ReviewAnalysisIT {
         }
     }
 
+    static final class MutableModelBindingCatalog implements ModelBindingCatalog {
+
+        static final ModelBindings INITIAL = new ModelBindings(
+                new ModelBinding("fake", "fake-decision-model"),
+                new ModelBinding("fake", "fake-gen-model"));
+
+        volatile ModelBindings current = INITIAL;
+
+        @Override
+        public ModelBindings current() {
+            return current;
+        }
+    }
+
     static final class MutableIdentity implements IdentityProvider {
 
         volatile UserIdentity current = new UserIdentity(
@@ -138,6 +149,12 @@ class ReviewAnalysisIT {
 
     @Autowired
     MutableIdentity identityProvider;
+
+    @Autowired
+    MutableModelBindingCatalog modelBindingCatalog;
+
+    @Autowired
+    LiabilityReviewIT.ReviewScriptedProvider scriptedProvider;
 
     @Autowired
     ReviewService reviewService;
@@ -170,6 +187,8 @@ class ReviewAnalysisIT {
     void freshOrganization() {
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
+        modelBindingCatalog.current = MutableModelBindingCatalog.INITIAL;
+        scriptedProvider.reset();
     }
 
     private UUID organizationId() {
@@ -202,7 +221,12 @@ class ReviewAnalysisIT {
             assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
             assertThat(execution.detail()).isNotEmpty();
         });
-        assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
+        // this configuration's published policy carries no escalation trigger; the
+        // bounded semantic path is still exercised (no zero-signal fake artefact)
+        var signals = analysisRepository.findSignals(organizationId, run.id());
+        assertThat(signals).extracting(RawReviewSignal::signalType)
+                .containsExactlyInAnyOrder(SignalType.POLICY_DEVIATION,
+                        SignalType.APPROVED_DRAFTING_AVAILABLE);
 
         var progress = analysisService.progress(organizationId, review.id());
         assertThat(progress.reviewStatus()).isEqualTo(ReviewStatus.COMPLETED);
@@ -258,6 +282,8 @@ class ReviewAnalysisIT {
         var first = analysisService.analyze(organizationId, review.id());
         var executionsAfterFirst = analysisRepository.findExecutions(organizationId, first.id());
         var signalsAfterFirst = analysisRepository.countSignals(organizationId, first.id());
+        assertThat(signalsAfterFirst).isPositive();
+        assertSignalCountParity(organizationId, first.id());
 
         var second = analysisService.analyze(organizationId, review.id());
         assertThat(second.id()).isEqualTo(first.id());
@@ -292,6 +318,23 @@ class ReviewAnalysisIT {
                 .hasSize(executionsAfterFirst.size());
         assertThat(analysisRepository.countSignals(organizationId, first.id()))
                 .isEqualTo(signalsAfterFirst);
+        assertSignalCountParity(organizationId, first.id());
+    }
+
+    private ReviewCheckExecution liabilityExecution(
+            UUID organizationId, UUID reviewId, UUID runId) {
+        var planCheck = reviewRepository.findPlanChecks(organizationId, reviewId).stream()
+                .filter(check -> check.mechanism() == CheckMechanism.LIABILITY_CAP)
+                .findFirst().orElseThrow();
+        return analysisRepository.findExecution(organizationId, runId, planCheck.id())
+                .orElseThrow();
+    }
+
+    private void assertSignalCountParity(UUID organizationId, UUID runId) {
+        for (var execution : analysisRepository.findExecutions(organizationId, runId)) {
+            assertThat(execution.signalCount()).isEqualTo(analysisRepository.countSignals(
+                    organizationId, runId, execution.planCheckId()));
+        }
     }
 
     @Test
@@ -368,7 +411,7 @@ class ReviewAnalysisIT {
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var review = reviewService.create(corpus.contract().contractId(), 1, null);
         var first = analysisService.analyze(organizationId, review.id());
-        var execution = analysisRepository.findExecutions(organizationId, first.id()).get(0);
+        var execution = liabilityExecution(organizationId, review.id(), first.id());
 
         jdbcClient.sql("""
                 update review_check_execution
@@ -415,6 +458,77 @@ class ReviewAnalysisIT {
         var failed = reviewRepository.find(organizationId, review.id()).orElseThrow();
         assertThat(failed.status()).isEqualTo(ReviewStatus.FAILED);
         assertThat(failed.failureReason()).contains("IllegalStateException");
+    }
+
+    @Test
+    void modelBindingChangeAfterCreationDegradesAllChecks() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        modelBindingCatalog.current = new ModelBindings(
+                new ModelBinding("fake", "rebound-decision-model"),
+                new ModelBinding("fake", "fake-gen-model"));
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var executions = analysisRepository.findExecutions(organizationId, run.id());
+        assertThat(executions).isNotEmpty();
+        assertThat(executions).allSatisfy(execution -> {
+            assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+            assertThat(execution.detail().get("degradedReason").toString())
+                    .contains("model policy bindings changed");
+        });
+        assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
+        assertThat(reviewRepository.find(organizationId, review.id())
+                .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
+    }
+
+    @Test
+    void failureAfterRunAcquisitionPersistsRunAndReviewFailed() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        jdbcClient.sql("""
+                update contract_semantics set pipeline_version = ''
+                where contract_version_id = :id
+                """).param("id", review.contractVersionId()).update();
+
+        assertThatThrownBy(() -> analysisService.analyze(organizationId, review.id()))
+                .isInstanceOf(RuntimeException.class);
+        var failedReview = reviewRepository.find(organizationId, review.id()).orElseThrow();
+        assertThat(failedReview.status()).isEqualTo(ReviewStatus.FAILED);
+        assertThat(failedReview.failureReason()).isNotBlank();
+        assertThat(failedReview.completedAt()).isNotNull();
+        var run = analysisRepository.findLatestRun(organizationId, review.id()).orElseThrow();
+        assertThat(run.status()).isEqualTo(RunStatus.FAILED);
+        assertThat(run.failureReason()).isNotBlank();
+        assertThat(run.completedAt()).isNotNull();
+    }
+
+    @Test
+    void staleLeaseTokenCannotWriteTerminalState() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+        var run = analysisService.analyze(organizationId, review.id());
+        var execution = liabilityExecution(organizationId, review.id(), run.id());
+
+        var written = analysisRepository.completeExecution(organizationId, execution.id(),
+                UUID.randomUUID(), CheckExecutionStatus.COMPLETED, null,
+                java.util.Map.of("loser", true), 99, java.time.Instant.now());
+
+        assertThat(written).isFalse();
+        var reloaded = analysisRepository.findExecution(
+                organizationId, run.id(), execution.planCheckId()).orElseThrow();
+        assertThat(reloaded.status()).isEqualTo(execution.status());
+        assertThat(reloaded.detail()).doesNotContainKey("loser");
+        assertThat(reloaded.signalCount()).isEqualTo(execution.signalCount());
+        assertSignalCountParity(organizationId, run.id());
     }
 
     @Test

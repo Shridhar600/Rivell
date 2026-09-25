@@ -271,7 +271,8 @@ class JdbcReviewRepository implements ReviewRepository {
     public boolean markFailed(UUID organizationId, UUID reviewId, String reason,
             java.time.Instant at) {
         return jdbcClient.sql("""
-                update review set status = 'FAILED', failure_reason = :reason, updated_at = :at
+                update review set status = 'FAILED', failure_reason = :reason,
+                    completed_at = :at, updated_at = :at
                 where id = :reviewId and organization_id = :organizationId
                   and status in ('ANALYSIS_QUEUED', 'ANALYZING')
                 """)

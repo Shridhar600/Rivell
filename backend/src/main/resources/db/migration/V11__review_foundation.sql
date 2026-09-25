@@ -23,7 +23,7 @@ CREATE TABLE review (
     started_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
     CHECK ((status = 'FAILED') = (failure_reason IS NOT NULL)),
-    CHECK ((status = 'COMPLETED') = (completed_at IS NOT NULL)),
+    CHECK ((status IN ('ANALYSIS_QUEUED', 'ANALYZING')) = (completed_at IS NULL)),
     CHECK (status <> 'ANALYSIS_QUEUED' OR started_at IS NULL),
     UNIQUE (id, organization_id)
 );

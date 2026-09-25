@@ -62,27 +62,23 @@ class ReviewConfiguration {
     }
 
     @Bean
-    ReviewCheckExecutor confidentialitySurvivalCheckExecutor(
-            com.rivell.workbench.retrieval.EvidenceService evidenceService) {
-        return new com.rivell.workbench.review.check.ConfidentialitySurvivalCheckExecutor(
-                evidenceService);
+    ReviewCheckExecutor confidentialitySurvivalCheckExecutor() {
+        return new com.rivell.workbench.review.check.ConfidentialitySurvivalCheckExecutor();
     }
 
     @Bean
     ReviewCheckExecutor carveOutConsistencyCheckExecutor(
-            com.rivell.workbench.retrieval.EvidenceService evidenceService,
             com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService) {
         return new com.rivell.workbench.review.check.CarveOutConsistencyCheckExecutor(
-                evidenceService, semanticDecisionService);
+                semanticDecisionService);
     }
 
     @Bean
     ReviewCheckExecutor liabilityCapCheckExecutor(
-            com.rivell.workbench.retrieval.EvidenceService evidenceService,
             com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService,
             com.rivell.workbench.intelligence.GenerativeReasoningService generativeReasoningService) {
         return new com.rivell.workbench.review.check.LiabilityCapCheckExecutor(
-                evidenceService, semanticDecisionService, generativeReasoningService);
+                semanticDecisionService, generativeReasoningService);
     }
 
     @Bean
@@ -98,10 +94,13 @@ class ReviewConfiguration {
             ContractEnrichmentService contractEnrichmentService,
             RetrievalProperties retrievalProperties,
             EmbeddingService embeddingService,
+            com.rivell.workbench.retrieval.EvidenceService evidenceService,
+            ModelBindingCatalog modelBindingCatalog,
             TransactionTemplate transactionTemplate,
             Clock clock) {
         return new ReviewAnalysisService(reviewRepository, reviewAnalysisRepository,
                 reviewCheckExecutors, contractEnrichmentService, retrievalProperties,
-                embeddingService, transactionTemplate, clock);
+                embeddingService, evidenceService, modelBindingCatalog,
+                transactionTemplate, clock);
     }
 }

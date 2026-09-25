@@ -4,7 +4,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 /** Published approved drafting that fits the issue; exact source wording preserved. */
-public record ApprovedDraftingPayload(UUID draftingEvidenceId, String evidenceText)
+public record ApprovedDraftingPayload(
+        UUID draftingEvidenceId, String evidenceText, String variantRole)
         implements SignalPayload {
 
     public ApprovedDraftingPayload {

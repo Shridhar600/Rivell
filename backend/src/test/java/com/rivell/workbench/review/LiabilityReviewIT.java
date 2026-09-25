@@ -154,6 +154,10 @@ class LiabilityReviewIT {
         private final AtomicInteger consistencyDecisions = new AtomicInteger();
         volatile boolean verificationSatisfies = true;
         volatile boolean verificationIntroducesRisk;
+        volatile Double verificationSatisfiesProbability;
+        volatile Double verificationRiskProbability;
+        volatile double liabilityTopProbability = 0.9;
+        volatile boolean failLiabilityDecision;
 
         @Override
         public String id() {
@@ -166,10 +170,14 @@ class LiabilityReviewIT {
                 var verificationAnswers = new LinkedHashMap<String, SemanticAnswer>();
                 verificationAnswers.put(M7DecisionSpecs.SATISFIES_POLICY,
                         new com.rivell.workbench.intelligence.YesNoAnswer(
-                                verificationSatisfies ? 0.95 : 0.05));
+                                verificationSatisfiesProbability != null
+                                        ? verificationSatisfiesProbability
+                                        : verificationSatisfies ? 0.95 : 0.05));
                 verificationAnswers.put(M7DecisionSpecs.INTRODUCED_NEW_RISK,
                         new com.rivell.workbench.intelligence.YesNoAnswer(
-                                verificationIntroducesRisk ? 0.95 : 0.05));
+                                verificationRiskProbability != null
+                                        ? verificationRiskProbability
+                                        : verificationIntroducesRisk ? 0.95 : 0.05));
                 return new ProviderExecutionResult(verificationAnswers, "fake-review-v1",
                         new TokenUsage(120, 5));
             }
@@ -179,13 +187,20 @@ class LiabilityReviewIT {
                         request.state().payload();
                 var liability = carveState.liabilityText().toLowerCase();
                 var indemnity = carveState.indemnityText().toLowerCase();
+                var indemnityDisclaims = indemnity.contains("without regard")
+                        || indemnity.contains("without limitation")
+                        || indemnity.contains("unlimited");
+                var capExcludesIndemnity = liability.contains("do not apply")
+                        || liability.contains("does not apply")
+                        || liability.contains("excluded");
+                var capStatesItApplies = liability.contains("applies to all")
+                        || liability.contains("including indemnification");
                 var selected = M7DecisionSpecs.CONSISTENT;
-                if ((indemnity.contains("without regard") || indemnity.contains("without limitation")
-                        || indemnity.contains("unlimited"))
-                        && (liability.contains("do not apply") || liability.contains("excluded"))) {
-                    selected = M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY;
-                } else if (indemnity.isBlank()) {
+                if (indemnity.isBlank()) {
                     selected = M7DecisionSpecs.NOT_COMPARABLE_CARVE;
+                } else if (indemnityDisclaims
+                        && (capStatesItApplies || !capExcludesIndemnity)) {
+                    selected = M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY;
                 }
                 var consistency = new LinkedHashMap<String, Double>();
                 for (var option : List.of(M7DecisionSpecs.CONSISTENT,
@@ -203,6 +218,10 @@ class LiabilityReviewIT {
                 return base.execute(request);
             }
             liabilityDecisions.incrementAndGet();
+            if (failLiabilityDecision) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "liability decision provider unavailable");
+            }
             var state = (M7DecisionSpecs.LiabilityDeviationState) request.state().payload();
             var text = state.clauseText() == null ? "" : state.clauseText().toLowerCase();
             var multiple = state.capMultiple() == null ? "" : state.capMultiple();
@@ -220,16 +239,19 @@ class LiabilityReviewIT {
             } else {
                 selected = M7DecisionSpecs.NO_DEVIATION;
             }
-            var probabilities = new LinkedHashMap<String, Double>();
-            for (var option : List.of(M7DecisionSpecs.NO_DEVIATION,
+            var options = List.of(M7DecisionSpecs.NO_DEVIATION,
                     M7DecisionSpecs.CAP_ABOVE_PREFERRED,
                     M7DecisionSpecs.PROHIBITED_STRUCTURE,
-                    M7DecisionSpecs.NOT_COMPARABLE)) {
-                probabilities.put(option, option.equals(selected) ? 0.9 : 0.03);
+                    M7DecisionSpecs.NOT_COMPARABLE);
+            var residual = (1.0 - liabilityTopProbability) / (options.size() - 1);
+            var probabilities = new LinkedHashMap<String, Double>();
+            for (var option : options) {
+                probabilities.put(option,
+                        option.equals(selected) ? liabilityTopProbability : residual);
             }
             var answers = new LinkedHashMap<String, SemanticAnswer>();
             answers.put(M7DecisionSpecs.DEVIATION_TYPE,
-                    new ChoiceAnswer(selected, 0.9, probabilities));
+                    new ChoiceAnswer(selected, liabilityTopProbability, probabilities));
             return new ProviderExecutionResult(answers, "fake-review-v1",
                     new TokenUsage(180, 8));
         }
@@ -243,6 +265,10 @@ class LiabilityReviewIT {
             consistencyDecisions.set(0);
             verificationSatisfies = true;
             verificationIntroducesRisk = false;
+            verificationSatisfiesProbability = null;
+            verificationRiskProbability = null;
+            liabilityTopProbability = 0.9;
+            failLiabilityDecision = false;
         }
     }
 
@@ -252,6 +278,8 @@ class LiabilityReviewIT {
                 new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();
         private final AtomicInteger calls = new AtomicInteger();
         volatile boolean failOpenEnded;
+        volatile String openEndedProposed;
+        volatile String openEndedExplanation;
 
         @Override
         public String id() {
@@ -265,6 +293,8 @@ class LiabilityReviewIT {
         void reset() {
             calls.set(0);
             failOpenEnded = false;
+            openEndedProposed = null;
+            openEndedExplanation = null;
         }
 
         @Override
@@ -275,13 +305,15 @@ class LiabilityReviewIT {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                             "generative provider unavailable");
                 }
+                var proposed = openEndedProposed != null ? openEndedProposed
+                        : "Supplier's aggregate liability shall not exceed two times the "
+                                + "fees paid in the preceding 12 months.";
+                var explanation = openEndedExplanation != null ? openEndedExplanation
+                        : "Caps the liability at the policy-preferred basis while removing "
+                                + "the indeterminate insurance-proceeds structure.";
                 return new GenerationResult(Map.of(
-                        "proposedLanguage",
-                        "Supplier's aggregate liability shall not exceed two times the "
-                                + "fees paid in the preceding 12 months.",
-                        "explanation",
-                        "Caps the liability at the policy-preferred basis while removing "
-                                + "the indeterminate insurance-proceeds structure."),
+                        "proposedLanguage", proposed,
+                        "explanation", explanation),
                         "fake-gen-v1", new TokenUsage(160, 40));
             }
             if (request.spec().fields().containsKey("escalationTrigger")) {
@@ -417,11 +449,10 @@ class LiabilityReviewIT {
                 .filter(signal -> signal.signalType() == SignalType.APPROVED_DRAFTING_AVAILABLE)
                 .map(signal -> (ApprovedDraftingPayload) signal.payload())
                 .findFirst().orElseThrow();
-        assertThat(drafting.evidenceText()).isIn(
-                "The total liability of Supplier shall not exceed the fees paid in the "
-                        + "preceding 12 months.",
+        assertThat(drafting.evidenceText()).isEqualTo(
                 "The total liability of Supplier shall not exceed two times the fees paid "
                         + "in the preceding 12 months.");
+        assertThat(drafting.variantRole()).isEqualTo("FALLBACK");
 
         var escalation = signals.stream()
                 .filter(signal -> signal.signalType() == SignalType.ESCALATION_REQUIRED)
@@ -498,6 +529,55 @@ class LiabilityReviewIT {
         var executions = analysisRepository.findExecutions(organizationId, run.id());
         assertThat(executions.get(0).status()).isEqualTo(CheckExecutionStatus.COMPLETED);
         assertThat(executions.get(0).detail().get("factsAvailable")).isEqualTo(false);
+        assertThat(generativeProvider.calls()).isZero();
+    }
+
+    @Test
+    void boundedProviderFailurePreservesFactsTraceAndUncertainty() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(corpus.contract().contractId(), 1, null);
+        generativeProvider.reset();
+        scriptedProvider.failLiabilityDecision = true;
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var execution = analysisRepository.findExecutions(organizationId, run.id()).get(0);
+        assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+        assertThat(execution.evidenceTraceId()).isNotNull();
+        assertThat(execution.detail().get("factsAvailable")).isEqualTo(true);
+        assertThat(execution.detail().get("degradedReason").toString())
+                .contains("provider_unavailable");
+        var signals = analysisRepository.findSignals(organizationId, run.id());
+        assertThat(signals).hasSize(1);
+        assertThat(signals.get(0).signalType()).isEqualTo(SignalType.DEVIATION_UNCERTAIN);
+        assertThat(((DeviationUncertainPayload) signals.get(0).payload()).reason())
+                .isEqualTo("bounded_decision_unavailable");
+        assertThat(signals.get(0).evidenceItemIds()).isNotEmpty();
+        assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
+                .isEqualTo(ReviewStatus.COMPLETED);
+        assertThat(generativeProvider.calls()).isZero();
+    }
+
+    @Test
+    void ambiguousClassificationBecomesUncertaintyNotDeviation() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(corpus.contract().contractId(), 1, null);
+        generativeProvider.reset();
+        scriptedProvider.liabilityTopProbability = 0.5;
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var signals = analysisRepository.findSignals(organizationId, run.id());
+        assertThat(signals).hasSize(1);
+        assertThat(signals.get(0).signalType()).isEqualTo(SignalType.DEVIATION_UNCERTAIN);
+        assertThat(((DeviationUncertainPayload) signals.get(0).payload()).reason())
+                .isEqualTo("classification_uncertain");
+        assertThat(signals.get(0).quality()).containsKey("confidence");
+        var execution = analysisRepository.findExecutions(organizationId, run.id()).get(0);
+        assertThat(execution.detail().get("uncertaintyReason"))
+                .isEqualTo("classification_uncertain");
         assertThat(generativeProvider.calls()).isZero();
     }
 }

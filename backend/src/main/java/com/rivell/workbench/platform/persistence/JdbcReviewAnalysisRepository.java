@@ -82,6 +82,11 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 .single();
     }
 
+    /**
+     * One RUNNING run per review is enforced by a partial unique index; the duplicate-key
+     * race is resolved by returning false. The guard is safe because the method runs in
+     * its own transaction (an aborted Postgres transaction is fully rolled back).
+     */
     @Override
     @Transactional
     public boolean tryInsertRun(ReviewAnalysisRun run) {
@@ -160,11 +165,14 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
     @Override
     public List<ReviewCheckExecution> findExecutions(UUID organizationId, UUID runId) {
         return jdbcClient.sql("""
-                select id, organization_id, review_id, run_id, plan_check_id, status,
-                       evidence_trace_id, detail, signal_count, started_at, completed_at
-                from review_check_execution
-                where run_id = :runId and organization_id = :organizationId
-                order by plan_check_id
+                select e.id, e.organization_id, e.review_id, e.run_id, e.plan_check_id,
+                       e.status, e.evidence_trace_id, e.detail, e.signal_count,
+                       e.started_at, e.completed_at
+                from review_check_execution e
+                join review_plan_check p
+                  on p.id = e.plan_check_id and p.organization_id = e.organization_id
+                where e.run_id = :runId and e.organization_id = :organizationId
+                order by p.ordinal
                 """)
                 .param("runId", runId)
                 .param("organizationId", organizationId)
@@ -195,35 +203,39 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
 
     @Override
     @Transactional
-    public boolean claimExecution(UUID organizationId, UUID executionId) {
-        return jdbcClient.sql("""
+    public Optional<UUID> claimExecution(UUID organizationId, UUID executionId) {
+        var leaseId = UUID.randomUUID();
+        var claimed = jdbcClient.sql("""
                 update review_check_execution
-                set status = 'RUNNING', started_at = now()
+                set status = 'RUNNING', started_at = now(), lease_id = :leaseId
                 where id = :executionId and organization_id = :organizationId
                   and (status = 'PENDING'
                        or (status = 'RUNNING' and started_at < now() - interval '10 minutes'))
                 """)
                 .param("executionId", executionId)
                 .param("organizationId", organizationId)
+                .param("leaseId", leaseId)
                 .update() == 1;
+        return claimed ? Optional.of(leaseId) : Optional.empty();
     }
 
     @Override
     @Transactional
     public boolean completeExecution(
-            UUID organizationId, UUID executionId, CheckExecutionStatus status,
-            UUID evidenceTraceId, Map<String, Object> detail, int signalCount,
-            java.time.Instant completedAt) {
+            UUID organizationId, UUID executionId, UUID leaseId,
+            CheckExecutionStatus status, UUID evidenceTraceId, Map<String, Object> detail,
+            int signalCount, java.time.Instant completedAt) {
         return jdbcClient.sql("""
                 update review_check_execution
                 set status = :status, evidence_trace_id = :evidenceTraceId,
                     detail = cast(:detail as jsonb), signal_count = :signalCount,
                     completed_at = :completedAt
                 where id = :executionId and organization_id = :organizationId
-                  and status = 'RUNNING'
+                  and status = 'RUNNING' and lease_id = :leaseId
                 """)
                 .param("executionId", executionId)
                 .param("organizationId", organizationId)
+                .param("leaseId", leaseId)
                 .param("status", status.name())
                 .param("evidenceTraceId", evidenceTraceId)
                 .param("detail", json(detail))
@@ -249,9 +261,8 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                        :secondaryConcept, :issueFamily, cast(:payload as jsonb),
                        cast(:evidenceItemIds as jsonb), :decisionSpecId, :decisionSpecVersion,
                        :jevExecutionId, :generativeExecutionId, :verificationOutcome,
-                       :resolvedModel, cast(:usage as jsonb),
+                        :resolvedModel, cast(:usage as jsonb),
                        cast(:quality as jsonb), :dedupeKey, :createdAt)
-                    on conflict (run_id, dedupe_key) do nothing
                     """)
                     .param("id", signal.id())
                     .param("organizationId", signal.organizationId())
@@ -306,7 +317,7 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                        quality, dedupe_key, created_at
                 from raw_review_signal
                 where run_id = :runId and organization_id = :organizationId
-                order by created_at, plan_check_id
+                order by dedupe_key
                 """)
                 .param("runId", runId)
                 .param("organizationId", organizationId)

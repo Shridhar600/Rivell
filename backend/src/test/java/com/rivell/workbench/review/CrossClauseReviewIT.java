@@ -172,6 +172,26 @@ class CrossClauseReviewIT {
     }
 
     @Test
+    void uncappedIndemnityWithCarveOutIsNotAContradiction() throws Exception {
+        var organizationId = organizationId();
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.LIBRARY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var review = enrichedReviewWithPack("m7-msa-carveout-consistent.docx");
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(analysisRepository.findSignals(organizationId, run.id()))
+                .noneMatch(signal -> signal.issueFamily() == IssueFamily.CARVE_OUT_INCONSISTENCY);
+        var carveExecution = analysisRepository.findExecutions(organizationId, run.id())
+                .stream().filter(execution -> execution.detail().containsKey("consistency"))
+                .findFirst().orElseThrow();
+        assertThat(carveExecution.detail().get("consistency"))
+                .isEqualTo(M7DecisionSpecs.CONSISTENT);
+    }
+
+    @Test
     void consistentCarveOutProducesNoConflict() {
         var organizationId = organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
