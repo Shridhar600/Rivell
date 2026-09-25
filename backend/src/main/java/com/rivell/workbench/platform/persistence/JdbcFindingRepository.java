@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -200,31 +201,7 @@ class JdbcFindingRepository implements FindingRepository {
                 """)
                 .param("runId", runId)
                 .param("organizationId", organizationId)
-                .query((rs, rowNum) -> new FindingRow(
-                        rs.getObject("id", UUID.class),
-                        rs.getObject("organization_id", UUID.class),
-                        rs.getObject("review_id", UUID.class),
-                        rs.getObject("run_id", UUID.class),
-                        rs.getString("consolidation_key"),
-                        FindingSubjectKind.valueOf(rs.getString("subject_kind")),
-                        rs.getObject("subject_heading_node_id", UUID.class),
-                        rs.getString("absence_concept") == null ? null
-                                : LegalConcept.valueOf(rs.getString("absence_concept")),
-                        LegalConcept.valueOf(rs.getString("concept")),
-                        rs.getString("secondary_concept") == null ? null
-                                : LegalConcept.valueOf(rs.getString("secondary_concept")),
-                        IssueFamily.valueOf(rs.getString("issue_family")),
-                        rs.getString("observation_kind"),
-                        rs.getString("observation_text"),
-                        FindingSeverity.valueOf(rs.getString("severity")),
-                        FindingClassification.valueOf(rs.getString("review_classification")),
-                        ProposedAction.valueOf(rs.getString("proposed_action")),
-                        rs.getString("proposed_language"),
-                        ProposedLanguageSource.valueOf(
-                                rs.getString("proposed_language_source")),
-                        rs.getObject("approved_drafting_evidence_id", UUID.class),
-                        map(rs.getString("quality")),
-                        rs.getTimestamp("created_at").toInstant()))
+                .query((rs, rowNum) -> mapFindingRow(rs))
                 .list();
 
         var concepts = children(organizationId, runId, "concept", (findingId, row) ->
@@ -252,16 +229,202 @@ class JdbcFindingRepository implements FindingRepository {
                     .map(EvidenceRow::evidenceId).toList();
             var rowSignals = signals.getOrDefault(row.id(), List.of()).stream()
                     .map(SignalRow::signalId).toList();
-            findings.add(new Finding(row.id(), row.organizationId(), row.reviewId(),
-                    row.runId(), row.consolidationKey(), row.subjectKind(),
-                    row.subjectHeadingNodeId(), row.absenceConcept(), row.concept(),
-                    row.secondaryConcept(), row.issueFamily(), row.observationKind(),
-                    row.observationText(), row.severity(), row.reviewClassification(),
-                    row.proposedAction(), row.proposedLanguage(), row.proposedLanguageSource(),
-                    row.approvedDraftingEvidenceId(), row.quality(), row.createdAt(),
-                    rowConcepts, rowClaims, rowEvidence, rowSignals));
+            findings.add(toFinding(row, rowConcepts, rowClaims, rowEvidence, rowSignals));
         }
         return List.copyOf(findings);
+    }
+
+    @Override
+    public List<Finding> findFindings(
+            UUID organizationId, UUID runId, LegalConcept concept,
+            FindingClassification classification, FindingSeverity severity, int limit) {
+        var conditions = new ArrayList<String>();
+        var params = new LinkedHashMap<String, Object>();
+        conditions.add("organization_id = :organizationId");
+        params.put("organizationId", organizationId);
+        conditions.add("run_id = :runId");
+        params.put("runId", runId);
+        if (concept != null) {
+            conditions.add("(concept = :concept or secondary_concept = :concept)");
+            params.put("concept", concept.name());
+        }
+        if (classification != null) {
+            conditions.add("review_classification = :classification");
+            params.put("classification", classification.name());
+        }
+        if (severity != null) {
+            conditions.add("severity = :severity");
+            params.put("severity", severity.name());
+        }
+        var statement = jdbcClient.sql("""
+                select id, organization_id, review_id, run_id, consolidation_key,
+                       subject_kind, subject_heading_node_id, absence_concept, concept,
+                       secondary_concept, issue_family, observation_kind, observation_text,
+                       severity, review_classification, proposed_action, proposed_language,
+                       proposed_language_source, approved_drafting_evidence_id, quality,
+                       created_at
+                from finding
+                where %s
+                order by case severity when 'HIGH' then 0 when 'MEDIUM' then 1 else 2 end,
+                         consolidation_key
+                limit :limit
+                """.formatted(String.join(" and ", conditions)));
+        for (var entry : params.entrySet()) {
+            statement = statement.param(entry.getKey(), entry.getValue());
+        }
+        return statement
+                .param("limit", limit + 1)
+                .query((rs, rowNum) -> mapFindingRow(rs))
+                .list().stream()
+                .map(row -> toFinding(row, List.of(), List.of(), List.of(), List.of()))
+                .toList();
+    }
+
+    @Override
+    public Optional<Finding> findFinding(
+            UUID organizationId, UUID reviewId, UUID runId, UUID findingId) {
+        return jdbcClient.sql("""
+                select id, organization_id, review_id, run_id, consolidation_key,
+                       subject_kind, subject_heading_node_id, absence_concept, concept,
+                       secondary_concept, issue_family, observation_kind, observation_text,
+                       severity, review_classification, proposed_action, proposed_language,
+                       proposed_language_source, approved_drafting_evidence_id, quality,
+                       created_at
+                from finding
+                where id = :findingId and review_id = :reviewId and run_id = :runId
+                  and organization_id = :organizationId
+                """)
+                .param("findingId", findingId)
+                .param("reviewId", reviewId)
+                .param("runId", runId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> mapFindingRow(rs))
+                .optional()
+                .map(row -> toFinding(row,
+                        findConcepts(organizationId, findingId),
+                        findClaims(organizationId, findingId),
+                        findEvidence(organizationId, findingId),
+                        findSignals(organizationId, findingId)));
+    }
+
+    @Override
+    public Optional<AbsenceBasis> findAbsenceBasis(
+            UUID organizationId, UUID runId, UUID findingId) {
+        return jdbcClient.sql("""
+                select p.id as plan_check_id, p.check_key
+                from finding_signal s
+                join finding f on f.id = s.finding_id and f.organization_id = s.organization_id
+                join raw_review_signal r
+                  on r.id = s.signal_id and r.organization_id = s.organization_id
+                join review_plan_check p
+                  on p.id = r.plan_check_id and p.organization_id = r.organization_id
+                where f.id = :findingId and f.run_id = :runId
+                  and f.organization_id = :organizationId
+                  and f.subject_kind = 'ABSENCE'
+                order by p.check_key
+                limit 1
+                """)
+                .param("findingId", findingId)
+                .param("runId", runId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> new AbsenceBasis(
+                        rs.getObject("plan_check_id", UUID.class),
+                        rs.getString("check_key")))
+                .optional();
+    }
+
+    private List<LegalConcept> findConcepts(UUID organizationId, UUID findingId) {
+        return jdbcClient.sql("""
+                select concept from finding_concept
+                where finding_id = :findingId and organization_id = :organizationId
+                order by ordinal
+                """)
+                .param("findingId", findingId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> LegalConcept.valueOf(rs.getString("concept")))
+                .list();
+    }
+
+    private List<FindingClaim> findClaims(UUID organizationId, UUID findingId) {
+        return jdbcClient.sql("""
+                select id, ordinal, claim_kind, text, absence, evidence_item_ids
+                from finding_claim
+                where finding_id = :findingId and organization_id = :organizationId
+                order by ordinal
+                """)
+                .param("findingId", findingId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> new FindingClaim(
+                        rs.getObject("id", UUID.class),
+                        rs.getInt("ordinal"),
+                        ClaimKind.valueOf(rs.getString("claim_kind")),
+                        rs.getString("text"),
+                        rs.getBoolean("absence"),
+                        uuidList(rs.getString("evidence_item_ids"))))
+                .list();
+    }
+
+    private List<UUID> findEvidence(UUID organizationId, UUID findingId) {
+        return jdbcClient.sql("""
+                select evidence_item_id from finding_evidence
+                where finding_id = :findingId and organization_id = :organizationId
+                order by ordinal
+                """)
+                .param("findingId", findingId)
+                .param("organizationId", organizationId)
+                .query(UUID.class)
+                .list();
+    }
+
+    private List<UUID> findSignals(UUID organizationId, UUID findingId) {
+        return jdbcClient.sql("""
+                select signal_id from finding_signal
+                where finding_id = :findingId and organization_id = :organizationId
+                order by signal_id
+                """)
+                .param("findingId", findingId)
+                .param("organizationId", organizationId)
+                .query(UUID.class)
+                .list();
+    }
+
+    private static Finding toFinding(
+            FindingRow row, List<LegalConcept> concepts, List<FindingClaim> claims,
+            List<UUID> evidence, List<UUID> signals) {
+        return new Finding(row.id(), row.organizationId(), row.reviewId(), row.runId(),
+                row.consolidationKey(), row.subjectKind(), row.subjectHeadingNodeId(),
+                row.absenceConcept(), row.concept(), row.secondaryConcept(), row.issueFamily(),
+                row.observationKind(), row.observationText(), row.severity(),
+                row.reviewClassification(), row.proposedAction(), row.proposedLanguage(),
+                row.proposedLanguageSource(), row.approvedDraftingEvidenceId(), row.quality(),
+                row.createdAt(), concepts, claims, evidence, signals);
+    }
+
+    private FindingRow mapFindingRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new FindingRow(
+                rs.getObject("id", UUID.class),
+                rs.getObject("organization_id", UUID.class),
+                rs.getObject("review_id", UUID.class),
+                rs.getObject("run_id", UUID.class),
+                rs.getString("consolidation_key"),
+                FindingSubjectKind.valueOf(rs.getString("subject_kind")),
+                rs.getObject("subject_heading_node_id", UUID.class),
+                rs.getString("absence_concept") == null ? null
+                        : LegalConcept.valueOf(rs.getString("absence_concept")),
+                LegalConcept.valueOf(rs.getString("concept")),
+                rs.getString("secondary_concept") == null ? null
+                        : LegalConcept.valueOf(rs.getString("secondary_concept")),
+                IssueFamily.valueOf(rs.getString("issue_family")),
+                rs.getString("observation_kind"),
+                rs.getString("observation_text"),
+                FindingSeverity.valueOf(rs.getString("severity")),
+                FindingClassification.valueOf(rs.getString("review_classification")),
+                ProposedAction.valueOf(rs.getString("proposed_action")),
+                rs.getString("proposed_language"),
+                ProposedLanguageSource.valueOf(rs.getString("proposed_language_source")),
+                rs.getObject("approved_drafting_evidence_id", UUID.class),
+                map(rs.getString("quality")),
+                rs.getTimestamp("created_at").toInstant());
     }
 
     @Override

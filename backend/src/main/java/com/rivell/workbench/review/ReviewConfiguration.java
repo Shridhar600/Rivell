@@ -110,4 +110,20 @@ class ReviewConfiguration {
                 embeddingService, evidenceService, modelBindingCatalog, findingRepository,
                 findingAssembler, transactionTemplate, clock);
     }
+
+    @Bean
+    com.rivell.workbench.review.api.ReviewApiService reviewApiService(
+            ReviewService reviewService,
+            ReviewAnalysisService reviewAnalysisService,
+            ReviewRepository reviewRepository,
+            ReviewAnalysisRepository reviewAnalysisRepository,
+            FindingRepository findingRepository,
+            ContractQueryService contractQueryService,
+            IdentityProvider identityProvider,
+            AuthorizationService authorizationService) {
+        return new com.rivell.workbench.review.api.ReviewApiService(
+                reviewService, reviewAnalysisService, reviewRepository,
+                reviewAnalysisRepository, findingRepository, contractQueryService,
+                identityProvider, authorizationService);
+    }
 }
