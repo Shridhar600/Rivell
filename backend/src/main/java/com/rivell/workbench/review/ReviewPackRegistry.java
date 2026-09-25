@@ -20,7 +20,7 @@ public final class ReviewPackRegistry {
     public static final String MSA_PACK = "MSA_PACK";
     public static final String NDA_PACK = "NDA_PACK";
 
-    private static final Map<String, ReviewPack> PACKS = build();
+    private static final java.util.LinkedHashMap<String, ReviewPack> PACKS = build();
 
     public java.util.List<ReviewPack> all() {
         return java.util.List.copyOf(PACKS.values());
@@ -33,7 +33,7 @@ public final class ReviewPackRegistry {
         return Optional.ofNullable(PACKS.get(key.trim()));
     }
 
-    private static Map<String, ReviewPack> build() {
+    private static java.util.LinkedHashMap<String, ReviewPack> build() {
         var msaExpectations = new LinkedHashMap<LegalConcept, CheckExpectation>();
         msaExpectations.put(LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED);
         msaExpectations.put(CONFIDENTIALITY, CheckExpectation.REQUIRED);
@@ -69,9 +69,9 @@ public final class ReviewPackRegistry {
                         CheckMechanism.CONFIDENTIALITY_SURVIVAL,
                         CONFIDENTIALITY, TERM_TERMINATION)));
 
-        var packs = new LinkedHashMap<String, ReviewPack>();
+        var packs = new java.util.LinkedHashMap<String, ReviewPack>();
         packs.put(msa.key(), msa);
         packs.put(nda.key(), nda);
-        return Map.copyOf(packs);
+        return packs;
     }
 }

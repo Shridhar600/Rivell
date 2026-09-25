@@ -574,13 +574,17 @@ class ReviewApiIT {
         analysisService.analyze(organizationId(), reviewId);
 
         var findingId = listFindings(reviewId).get(0).get("id").asText();
-        var detail = json(mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}",
+        var response = mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}",
                         reviewId, findingId))
                 .andExpect(status().isOk())
-                .andReturn()).get("data");
+                .andReturn().getResponse().getContentAsString();
+        var detail = objectMapper.readTree(response).get("data");
 
         var evidenceItems = detail.get("evidenceItems");
         assertThat(evidenceItems.size()).isPositive();
+        System.out.println("M7-EVIDENCE-OBSERVATION items=" + evidenceItems.size()
+                + " claims=" + detail.get("claims").size()
+                + " responseBytes=" + response.length());
         var evidenceIds = new java.util.HashSet<String>();
         evidenceItems.forEach(item -> {
             evidenceIds.add(item.get("evidenceId").asText());
@@ -599,6 +603,8 @@ class ReviewApiIT {
         assertThat(evidenceItems).anySatisfy(item -> {
             assertThat(item.get("authorityClass").asText()).isEqualTo("POLICY");
             assertThat(item.get("publicationNumber").isNull()).isFalse();
+            assertThat(item.get("policyFacts").isNull()).isFalse();
+            assertThat(item.get("policyFacts").get("positions").size()).isPositive();
         });
     }
 
@@ -666,6 +672,27 @@ class ReviewApiIT {
     }
 
     @Test
+    void missingPersistedEvidenceFailsLoudlyAndSafely() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+        var reviewId = UUID.fromString(created.get("id").asText());
+        analysisService.analyze(organizationId(), reviewId);
+        var findingId = listFindings(reviewId).get(0).get("id").asText();
+        jdbcClient.sql("delete from review_evidence_item where organization_id = :org")
+                .param("org", organizationId()).update();
+
+        var raw = mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}",
+                        reviewId, findingId))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("500"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(raw).doesNotContain("Exception");
+        assertThat(raw).doesNotContain(".java");
+        assertThat(raw).doesNotContain("ReviewEvidenceIntegrity");
+    }
+
+    @Test
     void packCatalogListsCurrentlySelectablePacks() throws Exception {
         var catalog = json(mockMvc.perform(get("/api/reviews/packs"))
                 .andExpect(status().isOk())
@@ -683,6 +710,8 @@ class ReviewApiIT {
         });
         assertThat(keys).containsExactlyInAnyOrder(
                 ReviewPackRegistry.MSA_PACK, ReviewPackRegistry.NDA_PACK);
+        assertThat(packs.get(0).get("key").asText()).isEqualTo(ReviewPackRegistry.MSA_PACK);
+        assertThat(packs.get(1).get("key").asText()).isEqualTo(ReviewPackRegistry.NDA_PACK);
     }
 
     @Test

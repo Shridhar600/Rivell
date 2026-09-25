@@ -381,31 +381,35 @@ public class ReviewApiService {
      */
     private List<ReviewCoverageView> coverage(
             UUID organizationId, UUID reviewId, Optional<ReviewAnalysisRun> countedRun) {
-        if (countedRun.isEmpty()) {
+        var presenceChecks = new ArrayList<ReviewPlanCheck>();
+        for (var check : reviewRepository.findPlanChecks(organizationId, reviewId)) {
+            if (check.mechanism() == CheckMechanism.PRESENCE) {
+                presenceChecks.add(check);
+            }
+        }
+        if (presenceChecks.isEmpty()) {
             return List.of();
         }
-        var checks = new HashMap<UUID, ReviewPlanCheck>();
-        for (var check : reviewRepository.findPlanChecks(organizationId, reviewId)) {
-            checks.put(check.id(), check);
+        var recorded = new HashMap<UUID, ReviewCoverageView.Coverage>();
+        if (countedRun.isPresent()) {
+            for (var execution : analysisRepository.findExecutions(
+                    organizationId, countedRun.get().id())) {
+                var raw = execution.detail().get("coverage");
+                if (raw == null) {
+                    continue;
+                }
+                try {
+                    recorded.put(execution.planCheckId(),
+                            ReviewCoverageView.Coverage.valueOf(raw.toString()));
+                } catch (IllegalArgumentException e) {
+                    recorded.put(execution.planCheckId(), ReviewCoverageView.Coverage.UNKNOWN);
+                }
+            }
         }
         var views = new ArrayList<ReviewCoverageView>();
-        for (var execution : analysisRepository.findExecutions(
-                organizationId, countedRun.get().id())) {
-            var check = checks.get(execution.planCheckId());
-            if (check == null || check.mechanism() != CheckMechanism.PRESENCE) {
-                continue;
-            }
-            var raw = execution.detail().get("coverage");
-            if (raw == null) {
-                continue;
-            }
-            ReviewCoverageView.Coverage value;
-            try {
-                value = ReviewCoverageView.Coverage.valueOf(raw.toString());
-            } catch (IllegalArgumentException e) {
-                continue;
-            }
-            views.add(new ReviewCoverageView(check.concept(), check.expectation(), value));
+        for (var check : presenceChecks) {
+            views.add(new ReviewCoverageView(check.concept(), check.expectation(),
+                    recorded.getOrDefault(check.id(), ReviewCoverageView.Coverage.UNKNOWN)));
         }
         return List.copyOf(views);
     }

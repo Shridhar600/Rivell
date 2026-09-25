@@ -331,6 +331,7 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
     }
 
     @Override
+    @Transactional
     public void replaceEvidenceItems(
             UUID organizationId, UUID reviewId, UUID runId, UUID planCheckId,
             List<com.rivell.workbench.retrieval.EvidenceItem> items) {

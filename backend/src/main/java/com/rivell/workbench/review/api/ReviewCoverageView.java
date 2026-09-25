@@ -16,6 +16,7 @@ public record ReviewCoverageView(
     public enum Coverage {
         PRESENT_PRIMARY,
         PRESENT_SECONDARY_ONLY,
-        ABSENT
+        ABSENT,
+        UNKNOWN
     }
 }
