@@ -13,6 +13,9 @@ public final class Permissions {
 
     public static final Permission RETRIEVAL_READ = new Permission("retrieval:read");
 
+    public static final Permission REVIEW_CREATE = new Permission("reviews:create");
+    public static final Permission REVIEW_READ = new Permission("reviews:read");
+
     private Permissions() {
     }
 }

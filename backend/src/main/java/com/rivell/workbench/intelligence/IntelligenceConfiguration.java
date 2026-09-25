@@ -48,6 +48,16 @@ class IntelligenceConfiguration {
     }
 
     @Bean
+    ModelBindingCatalog modelBindingCatalog(
+            IntelligenceProperties properties,
+            JevProperties jevProperties,
+            com.rivell.workbench.intelligence.provider.GenerativeProperties generativeProperties) {
+        return () -> new ModelBindings(
+                new ModelBinding(properties.provider(), jevProperties.model()),
+                new ModelBinding(generativeProperties.provider(), generativeProperties.model()));
+    }
+
+    @Bean
     ProviderRegistry providerRegistry(List<SemanticDecisionProvider> providers) {
         var byId = providers.stream()
                 .collect(Collectors.toMap(SemanticDecisionProvider::id, Function.identity()));
