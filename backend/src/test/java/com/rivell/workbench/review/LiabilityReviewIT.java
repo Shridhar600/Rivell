@@ -152,6 +152,8 @@ class LiabilityReviewIT {
         private final CorpusScriptedProvider base = new CorpusScriptedProvider();
         private final AtomicInteger liabilityDecisions = new AtomicInteger();
         private final AtomicInteger consistencyDecisions = new AtomicInteger();
+        volatile boolean verificationSatisfies = true;
+        volatile boolean verificationIntroducesRisk;
 
         @Override
         public String id() {
@@ -160,6 +162,17 @@ class LiabilityReviewIT {
 
         @Override
         public ProviderExecutionResult execute(DecisionExecutionRequest request) {
+            if (request.pack().questions().containsKey(M7DecisionSpecs.SATISFIES_POLICY)) {
+                var verificationAnswers = new LinkedHashMap<String, SemanticAnswer>();
+                verificationAnswers.put(M7DecisionSpecs.SATISFIES_POLICY,
+                        new com.rivell.workbench.intelligence.YesNoAnswer(
+                                verificationSatisfies ? 0.95 : 0.05));
+                verificationAnswers.put(M7DecisionSpecs.INTRODUCED_NEW_RISK,
+                        new com.rivell.workbench.intelligence.YesNoAnswer(
+                                verificationIntroducesRisk ? 0.95 : 0.05));
+                return new ProviderExecutionResult(verificationAnswers, "fake-review-v1",
+                        new TokenUsage(120, 5));
+            }
             if (request.pack().questions().containsKey(M7DecisionSpecs.CONSISTENCY)) {
                 consistencyDecisions.incrementAndGet();
                 var carveState = (M7DecisionSpecs.CarveOutConsistencyState)
@@ -228,6 +241,8 @@ class LiabilityReviewIT {
         void reset() {
             liabilityDecisions.set(0);
             consistencyDecisions.set(0);
+            verificationSatisfies = true;
+            verificationIntroducesRisk = false;
         }
     }
 
@@ -236,6 +251,7 @@ class LiabilityReviewIT {
         private final com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider base =
                 new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();
         private final AtomicInteger calls = new AtomicInteger();
+        volatile boolean failOpenEnded;
 
         @Override
         public String id() {
@@ -248,11 +264,26 @@ class LiabilityReviewIT {
 
         void reset() {
             calls.set(0);
+            failOpenEnded = false;
         }
 
         @Override
         public GenerationResult generate(GenerationRequest request) {
             calls.incrementAndGet();
+            if (request.spec().fields().containsKey("proposedLanguage")) {
+                if (failOpenEnded) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "generative provider unavailable");
+                }
+                return new GenerationResult(Map.of(
+                        "proposedLanguage",
+                        "Supplier's aggregate liability shall not exceed two times the "
+                                + "fees paid in the preceding 12 months.",
+                        "explanation",
+                        "Caps the liability at the policy-preferred basis while removing "
+                                + "the indeterminate insurance-proceeds structure."),
+                        "fake-gen-v1", new TokenUsage(160, 40));
+            }
             if (request.spec().fields().containsKey("escalationTrigger")) {
                 if (request.state().payload() instanceof Map<?, ?> payload
                         && payload.get("text") instanceof String text) {

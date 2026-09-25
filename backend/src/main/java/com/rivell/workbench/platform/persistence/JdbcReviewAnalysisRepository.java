@@ -429,6 +429,10 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 return objectMapper.treeToValue(node,
                         com.rivell.workbench.review.CrossClauseConflictPayload.class);
             }
+            if ("OPEN_ENDED".equals(kind)) {
+                return objectMapper.treeToValue(node,
+                        com.rivell.workbench.review.OpenEndedAnalysisPayload.class);
+            }
             throw new IllegalStateException(
                     "Unsupported signal payload kind '" + kind + "' for " + signalType);
         } catch (JsonProcessingException e) {

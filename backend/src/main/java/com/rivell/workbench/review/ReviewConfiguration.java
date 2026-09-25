@@ -79,9 +79,10 @@ class ReviewConfiguration {
     @Bean
     ReviewCheckExecutor liabilityCapCheckExecutor(
             com.rivell.workbench.retrieval.EvidenceService evidenceService,
-            com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService) {
+            com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService,
+            com.rivell.workbench.intelligence.GenerativeReasoningService generativeReasoningService) {
         return new com.rivell.workbench.review.check.LiabilityCapCheckExecutor(
-                evidenceService, semanticDecisionService);
+                evidenceService, semanticDecisionService, generativeReasoningService);
     }
 
     @Bean

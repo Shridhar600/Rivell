@@ -88,4 +88,9 @@ write_docx('m7-msa-carveout-conflict.docx', cross_clause(
     'Supplier shall indemnify and defend Customer against third-party claims '
     'without regard to any limitation of liability in this Agreement.'))
 
+write_docx('m7-msa-exotic.docx', msa(
+    'Master Services Agreement',
+    'Supplier\'s aggregate liability shall not exceed the insurance proceeds '
+    'actually recovered by Supplier in respect of the claim.'))
+
 print('m7 review fixtures written')

@@ -39,6 +39,15 @@ public record CheckOutcome(
                 java.util.Map.of("degradedReason", reason), null);
     }
 
+    public static CheckOutcome degraded(
+            String reason, List<RawReviewSignal> signals, Map<String, Object> detail,
+            java.util.UUID evidenceTraceId) {
+        var merged = new java.util.LinkedHashMap<String, Object>();
+        merged.putAll(detail);
+        merged.put("degradedReason", reason);
+        return new CheckOutcome(CheckExecutionStatus.DEGRADED, signals, merged, evidenceTraceId);
+    }
+
     public static CheckOutcome skipped(String reason) {
         return new CheckOutcome(CheckExecutionStatus.SKIPPED, List.of(),
                 java.util.Map.of("skippedReason", reason), null);
