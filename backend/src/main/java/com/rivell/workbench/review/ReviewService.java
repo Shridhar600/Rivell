@@ -4,6 +4,9 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.support.TransactionTemplate;
+
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.EnrichmentFailedException;
@@ -36,6 +39,8 @@ public class ReviewService {
     private final ReviewPackRegistry packs;
     private final ReviewPlanBuilder planBuilder;
     private final ReviewRepository reviewRepository;
+    private final TransactionTemplate transactionTemplate;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public ReviewService(
@@ -50,6 +55,8 @@ public class ReviewService {
             ReviewPackRegistry packs,
             ReviewPlanBuilder planBuilder,
             ReviewRepository reviewRepository,
+            TransactionTemplate transactionTemplate,
+            ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
@@ -62,6 +69,8 @@ public class ReviewService {
         this.packs = packs;
         this.planBuilder = planBuilder;
         this.reviewRepository = reviewRepository;
+        this.transactionTemplate = transactionTemplate;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -102,8 +111,11 @@ public class ReviewService {
         var review = Review.analysisQueued(
                 reviewId, organizationId, contractId, version.versionId(), versionNumber,
                 identity.userId(), now);
-        reviewRepository.create(review, snapshot, planBuilder.build(reviewId, organizationId,
-                snapshot, semantics));
+        transactionTemplate.executeWithoutResult(status -> {
+            reviewRepository.create(review, snapshot, planBuilder.build(reviewId,
+                    organizationId, snapshot, semantics));
+            eventPublisher.publishEvent(new ReviewCreatedEvent(organizationId, reviewId));
+        });
         return review;
     }
 

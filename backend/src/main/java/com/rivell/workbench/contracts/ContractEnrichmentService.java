@@ -84,6 +84,16 @@ public class ContractEnrichmentService {
                 .orElseThrow(() -> new SemanticsNotFoundException(contractId, versionNumber));
     }
 
+    /**
+     * System-level read for background analysis (no request identity): explicit
+     * organization, no authorization check. The caller owns tenant scoping.
+     */
+    public ContractSemantics getSemanticsForOrganization(
+            UUID organizationId, UUID contractVersionId) {
+        return semanticsRepository.find(contractVersionId, organizationId)
+                .orElseThrow(() -> new SemanticsNotFoundException(contractVersionId));
+    }
+
     public ContractSemantics correctPartyRole(UUID contractId, int versionNumber,
             UUID partyId, List<PartyRole> roles) {
         requireEnrichPermission();

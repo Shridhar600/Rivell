@@ -237,4 +237,48 @@ class JdbcReviewRepository implements ReviewRepository {
     private static OffsetDateTime timestamp(java.time.Instant instant) {
         return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
+
+    @Override
+    @Transactional
+    public boolean markAnalyzing(UUID organizationId, UUID reviewId, java.time.Instant at) {
+        return jdbcClient.sql("""
+                update review set status = 'ANALYZING', started_at = :at, updated_at = :at
+                where id = :reviewId and organization_id = :organizationId
+                  and status = 'ANALYSIS_QUEUED'
+                """)
+                .param("reviewId", reviewId)
+                .param("organizationId", organizationId)
+                .param("at", timestamp(at))
+                .update() == 1;
+    }
+
+    @Override
+    @Transactional
+    public boolean markCompleted(UUID organizationId, UUID reviewId, java.time.Instant at) {
+        return jdbcClient.sql("""
+                update review set status = 'COMPLETED', completed_at = :at, updated_at = :at
+                where id = :reviewId and organization_id = :organizationId
+                  and status = 'ANALYZING'
+                """)
+                .param("reviewId", reviewId)
+                .param("organizationId", organizationId)
+                .param("at", timestamp(at))
+                .update() == 1;
+    }
+
+    @Override
+    @Transactional
+    public boolean markFailed(UUID organizationId, UUID reviewId, String reason,
+            java.time.Instant at) {
+        return jdbcClient.sql("""
+                update review set status = 'FAILED', failure_reason = :reason, updated_at = :at
+                where id = :reviewId and organization_id = :organizationId
+                  and status in ('ANALYSIS_QUEUED', 'ANALYZING')
+                """)
+                .param("reviewId", reviewId)
+                .param("organizationId", organizationId)
+                .param("reason", reason)
+                .param("at", timestamp(at))
+                .update() == 1;
+    }
 }

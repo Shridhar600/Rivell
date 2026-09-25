@@ -18,4 +18,10 @@ public interface ReviewRepository {
     Optional<ReviewSnapshot> findSnapshot(UUID organizationId, UUID reviewId);
 
     List<ReviewPlanCheck> findPlanChecks(UUID organizationId, UUID reviewId);
+
+    boolean markAnalyzing(UUID organizationId, UUID reviewId, java.time.Instant at);
+
+    boolean markCompleted(UUID organizationId, UUID reviewId, java.time.Instant at);
+
+    boolean markFailed(UUID organizationId, UUID reviewId, String reason, java.time.Instant at);
 }
