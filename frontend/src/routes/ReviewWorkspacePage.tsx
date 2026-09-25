@@ -4,6 +4,7 @@ import { isReviewNotFoundError, useReviewSummaryQuery } from '../api/reviews'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
 import { ReviewHeader } from '../components/review/ReviewHeader'
+import { ReviewLifecyclePanel } from '../components/review/ReviewLifecyclePanel'
 
 export function ReviewWorkspacePage() {
   const { contractId = '', reviewId = '' } = useParams()
@@ -39,6 +40,7 @@ export function ReviewWorkspacePage() {
         contractTitle={contractQuery.data?.title ?? 'Untitled contract'}
         summary={summaryQuery.data}
       />
+      <ReviewLifecyclePanel reviewId={reviewId} summary={summaryQuery.data} />
     </section>
   )
 }
