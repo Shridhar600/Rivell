@@ -264,4 +264,73 @@ class CandidateConceptCorrectionIT {
                 precedent.clause().id(), LegalConcept.CONFIDENTIALITY.name()))
                 .isInstanceOf(com.rivell.workbench.knowledge.InvalidCandidateReviewStateException.class);
     }
+
+    @Test
+    void rejectedCandidatesCannotBeCorrectedAndUnauthorizedCallersAreRefused() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var precedent = ingestUnclassifiedPrecedent(organizationId);
+
+        reviewService.reject(precedent.clause().id(), "not acceptable");
+        assertThatThrownBy(() -> reviewService.correctConcept(
+                precedent.clause().id(), LegalConcept.LIMITATION_OF_LIABILITY.name()))
+                .isInstanceOf(com.rivell.workbench.knowledge.InvalidCandidateReviewStateException.class);
+
+        identityProvider.use(new UserIdentity(
+                UUID.randomUUID(), organizationId, java.util.Set.of("VIEWER")));
+        assertThatThrownBy(() -> reviewService.correctConcept(
+                precedent.clause().id(), LegalConcept.LIMITATION_OF_LIABILITY.name()))
+                .isInstanceOf(com.rivell.workbench.knowledge.UnauthorizedKnowledgeAccessException.class);
+    }
+
+    @Test
+    void correctingAnApprovedCandidateDemotesToEditedAndRequiresReApproval() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var precedent = ingestUnclassifiedPrecedent(organizationId);
+
+        reviewService.correctConcept(precedent.clause().id(),
+                LegalConcept.LIMITATION_OF_LIABILITY.name());
+        reviewService.approve(precedent.clause().id(), "approved on the corrected concept");
+
+        // a second correction invalidates the recorded approval: demote to EDITED
+        var corrected = reviewService.correctConcept(precedent.clause().id(),
+                LegalConcept.CONFIDENTIALITY.name());
+        assertThat(corrected.reviewStatus()).isEqualTo(com.rivell.workbench.knowledge.ReviewStatus.EDITED);
+        assertThat(corrected.conceptCorrectedBy()).isNotNull();
+        assertThat(corrected.conceptCorrectedAt()).isNotNull();
+
+        var reloaded = knowledgeQueries.getCandidate(precedent.clause().id());
+        assertThat(reloaded.reviewStatus()).isEqualTo(com.rivell.workbench.knowledge.ReviewStatus.EDITED);
+        assertThat(reloaded.conceptCorrectedBy()).isEqualTo(identityProvider.currentIdentity().userId());
+        assertThat(reloaded.conceptCorrectedAt()).isNotNull();
+        assertThat(reloaded.effectiveConceptKey()).isEqualTo(LegalConcept.CONFIDENTIALITY.name());
+
+        // re-approval consumes the effective concept; publication succeeds
+        var approved = reviewService.approve(precedent.clause().id(), "re-approved");
+        var publication = publicationService.publish(
+                java.util.List.of(approved.id()), java.util.Map.of(), "correction re-approval");
+        assertThat(publication.publicationNumber()).isPositive();
+        var published = knowledgeQueries.getCandidate(precedent.clause().id());
+        assertThat(published.effectiveConceptKey()).isEqualTo(LegalConcept.CONFIDENTIALITY.name());
+        assertThat(published.legalConceptKey()).isNull();
+    }
+
+    @Test
+    void correctionRecomputesReviewCategorizationOnTheEffectiveConcept() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var precedent = ingestUnclassifiedPrecedent(organizationId);
+
+        // the machine concept is unclassified with low confidence: the categorizer
+        // runs on the effective concept, so a correction must recompute the outcome
+        var corrected = reviewService.correctConcept(precedent.clause().id(),
+                LegalConcept.LIMITATION_OF_LIABILITY.name());
+        assertThat(corrected.reviewCategory()).isNotNull();
+        assertThat(corrected.reviewReasons())
+                .contains(com.rivell.workbench.knowledge.ReviewReason.LOW_CLASSIFICATION_CONFIDENCE);
+        assertThat(corrected.conflictSignals()).isEmpty();
+
+        // bulk approval must not shortcut the recomputed (non-ROUTINE) category
+        var bulk = reviewService.bulkApprove(java.util.List.of(precedent.clause().id()));
+        assertThat(bulk.approvedIds()).isEmpty();
+        assertThat(bulk.skipped()).containsKey(precedent.clause().id());
+    }
 }

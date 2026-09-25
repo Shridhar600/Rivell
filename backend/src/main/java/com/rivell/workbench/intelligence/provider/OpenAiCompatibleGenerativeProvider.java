@@ -40,6 +40,9 @@ import com.fasterxml.jackson.databind.JsonNode;
  */
 public final class OpenAiCompatibleGenerativeProvider implements GenerativeReasoningProvider {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory
+            .getLogger(OpenAiCompatibleGenerativeProvider.class);
+
     static final String PROVIDER_ID = "openai-compatible";
     private static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
     private static final int MAX_FIELD_LENGTH = 500;
@@ -79,12 +82,22 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
                 var property = new LinkedHashMap<String, Object>();
                 property.put("type", "string");
                 property.put("description", entry.getValue());
+                var allowed = request.spec().allowedValues().get(entry.getKey());
+                if (allowed != null && !allowed.isEmpty()) {
+                    property.put("enum", allowed.stream().sorted().toList());
+                }
                 fields.put(entry.getKey(), property);
             }
             var schema = new OpenAiCompatibleDtos.ChatRequest.ResponseFormatJsonSchema.SchemaWrapper(
                     "object", fields,
                     request.spec().fields().keySet().stream().toList(),
                     false);
+            var responseFormat = GenerativeProperties.RESPONSE_MODE_JSON_OBJECT
+                    .equals(properties.responseMode())
+                    ? OpenAiCompatibleDtos.ChatRequest.ResponseFormat.jsonObject()
+                    : OpenAiCompatibleDtos.ChatRequest.ResponseFormat.strictSchema(
+                            new OpenAiCompatibleDtos.ChatRequest.ResponseFormatJsonSchema(
+                                    schemaName(request.spec().id()), true, schema));
             return objectMapper.writeValueAsString(new OpenAiCompatibleDtos.ChatRequest(
                     request.modelAlias(),
                     List.of(
@@ -93,9 +106,7 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
                             new OpenAiCompatibleDtos.ChatRequest.Message(
                                     "user", userInstruction(request))),
                     0.0,
-                    new OpenAiCompatibleDtos.ChatRequest.ResponseFormat(
-                            new OpenAiCompatibleDtos.ChatRequest.ResponseFormatJsonSchema(
-                                    schemaName(request.spec().id()), true, schema))));
+                    responseFormat));
         } catch (Exception e) {
             throw new ProviderRejectedException("Generative request could not be serialized", e);
         }
@@ -106,11 +117,49 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
                 .replace('-', '_');
     }
 
+    /**
+     * Extracts exactly one markdown-fenced JSON block (transport tolerance for
+     * models that fence JSON despite instructions); surrounding prose is
+     * discarded and the inner content is still validated strictly. Returns null
+     * when there is no complete fence pair.
+     */
+    private static String stripMarkdownFence(String content) {
+        var trimmed = content.strip();
+        if (!trimmed.startsWith("```")) {
+            return null;
+        }
+        var firstBreak = trimmed.indexOf('\n');
+        if (firstBreak >= 0) {
+            var closing = trimmed.lastIndexOf("```");
+            if (closing <= firstBreak) {
+                return null;
+            }
+            return trimmed.substring(firstBreak + 1, closing).strip();
+        }
+        var afterFence = trimmed.substring(3);
+        var closing = afterFence.lastIndexOf("```");
+        if (closing < 0) {
+            return null;
+        }
+        var inner = afterFence.substring(0, closing);
+        if (inner.startsWith("json")) {
+            inner = inner.substring(4);
+        }
+        return inner.strip();
+    }
+
     private String systemInstruction(ReasoningSpec spec) {
-        return "You extract structured data from legal documents. You are given a document "
-                + "excerpt and must return exactly one JSON object with the fields "
-                + spec.fields().keySet() + ". Extract only what the excerpt states. "
-                + "Never invent values. Output must match the supplied JSON schema.";
+        var instruction = new StringBuilder()
+                .append("You extract structured data from legal documents. You are given a document ")
+                .append("excerpt and must return exactly one JSON object with the fields ")
+                .append(spec.fields().keySet()).append(". Extract only what the excerpt states. ")
+                .append("Never invent values. Output must match the supplied JSON schema.");
+        for (var entry : spec.allowedValues().entrySet()) {
+            instruction.append(" Field ").append(entry.getKey())
+                    .append(" must be exactly one of ").append(entry.getValue().stream()
+                            .sorted().toList()).append('.');
+        }
+        return instruction.toString();
     }
 
     private String userInstruction(GenerationRequest request) {
@@ -166,8 +215,14 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
 
     private GenerationResult toResult(
             GenerationRequest request, OpenAiCompatibleDtos.ChatResponse response) {
+        if (response.error() != null) {
+            throw new ProviderUnavailableException(
+                    "Provider returned an error response (type="
+                            + response.error().type() + ", code=" + response.error().code() + ")");
+        }
         if (response.model() == null || response.model().isBlank()) {
-            throw new ProviderProtocolException("Provider response has no resolved model");
+            throw new ProviderProtocolException(
+                    "Provider response is missing the model identifier");
         }
         if (response.usage() == null
                 || response.usage().promptTokens() == null
@@ -197,7 +252,19 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
         try {
             node = objectMapper.readTree(content);
         } catch (Exception e) {
-            throw new ProviderProtocolException("Generative content is not valid JSON");
+            // small models frequently wrap JSON in a markdown fence; stripping one
+            // fence is transport tolerance — the content must still be exactly one
+            // JSON object and is otherwise validated strictly
+            var stripped = stripMarkdownFence(content);
+            if (stripped == null) {
+                throw new ProviderProtocolException("Generative content is not valid JSON");
+            }
+            log.warn("Generative content required markdown-fence transport tolerance");
+            try {
+                node = objectMapper.readTree(stripped);
+            } catch (Exception e2) {
+                throw new ProviderProtocolException("Generative content is not valid JSON");
+            }
         }
         if (!node.isObject()) {
             throw new ProviderProtocolException("Generative content is not a JSON object");
@@ -205,12 +272,13 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
         var fields = new LinkedHashMap<String, String>();
         for (var name : request.spec().fields().keySet()) {
             var value = node.get(name);
-            if (value == null || value.isNull() || !value.isTextual()
-                    || value.asText().isBlank() || value.asText().length() > MAX_FIELD_LENGTH) {
+            var textual = asTextual(value, request.spec().listFields().contains(name));
+            if (textual == null || textual.isBlank()
+                    || textual.length() > MAX_FIELD_LENGTH) {
                 throw new ProviderProtocolException(
                         "Generative content is missing or malformed field " + name);
             }
-            fields.put(name, value.asText());
+            fields.put(name, textual);
         }
         for (var entry : node.properties()) {
             if (!request.spec().fields().containsKey(entry.getKey())) {
@@ -219,6 +287,35 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
             }
         }
         return fields;
+    }
+
+    /**
+     * Field values are domain strings. Only fields the spec explicitly declares
+     * list-shaped may arrive as a JSON array of strings; joining is transport
+     * normalization for those declared fields alone — anything else fails closed
+     * rather than inventing a value the spec never declared.
+     */
+    private static String asTextual(JsonNode value, boolean listShaped) {
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        if (value.isTextual()) {
+            return value.asText();
+        }
+        if (value.isArray() && listShaped) {
+            var joined = new StringBuilder();
+            for (var element : value) {
+                if (!element.isTextual()) {
+                    return null;
+                }
+                if (joined.length() > 0) {
+                    joined.append(',');
+                }
+                joined.append(element.asText());
+            }
+            return joined.toString();
+        }
+        return null;
     }
 
     public interface RestClientAccessor {

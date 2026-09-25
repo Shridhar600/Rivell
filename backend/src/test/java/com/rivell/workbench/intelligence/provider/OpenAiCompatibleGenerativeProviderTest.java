@@ -8,6 +8,9 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.util.Optional;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.intelligence.GenerationRequest;
 import com.rivell.workbench.intelligence.GenerationResult;
@@ -82,6 +85,179 @@ class OpenAiCompatibleGenerativeProviderTest {
                 .containsEntry("liabilityCapMultiple", "3")
                 .containsEntry("capBasis", "PRECEDING_12_MONTH_FEES");
         assertThat(result.resolvedModel()).isEqualTo("gpt-test");
+    }
+
+    @Test
+    void strictSchemaWireShapeIsOpenAiCompliant() throws Exception {
+        var spec = new ReasoningSpec(
+                "liability-cap-extraction", 1, "Extract cap facts.", 1,
+                new LinkedHashMap<>(Map.of("capBasis", "cap basis")),
+                Map.of("capBasis", java.util.Set.of("PRECEDING_12_MONTH_FEES", "ANNUAL_FEES")));
+        var requests = new java.util.ArrayList<String>();
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> {
+                    requests.add(request);
+                    return chatResponse("{\"capBasis\":\"ANNUAL_FEES\"}", "stop", null);
+                }),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt",
+                        null, null));
+
+        provider.generate(new GenerationRequest("cap-model", state("t"), spec));
+
+        var request = MAPPER.readTree(requests.get(0));
+        var responseFormat = request.path("response_format");
+        assertThat(responseFormat.path("type").asText()).isEqualTo("json_schema");
+        var jsonSchema = responseFormat.path("json_schema");
+        assertThat(jsonSchema.path("name").asText()).isEqualTo("liability_cap_extraction");
+        assertThat(jsonSchema.path("strict").asBoolean()).isTrue();
+        assertThat(jsonSchema.path("schema").path("additionalProperties").asBoolean()).isFalse();
+        assertThat(jsonSchema.path("schema").path("required").toString())
+                .contains("capBasis");
+        var capProperty = jsonSchema.path("schema").path("properties").path("capBasis");
+        assertThat(capProperty.path("type").asText()).isEqualTo("string");
+        assertThat(capProperty.path("enum").toString())
+                .contains("PRECEDING_12_MONTH_FEES", "ANNUAL_FEES");
+        // the M5 defect regression guard: camelCase wire keys must never reappear
+        assertThat(requests.get(0))
+                .doesNotContain("responseFormat").doesNotContain("jsonSchema")
+                .doesNotContain("Bearer");
+        assertThat(requests.get(0)).contains("must be exactly one of");
+    }
+
+    @Test
+    void jsonObjectModeSendsJsonObjectTypeWithoutSchema() throws Exception {
+        var requests = new java.util.ArrayList<String>();
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> {
+                    requests.add(request);
+                    return chatResponse(
+                            "{\"liabilityCapMultiple\":\"3\",\"capBasis\":\"ANNUAL_FEES\"}",
+                            "stop", null);
+                }),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt",
+                        GenerativeProperties.RESPONSE_MODE_JSON_OBJECT, null, null));
+
+        var result = provider.generate(new GenerationRequest(
+                "cap-model", state("t"), capSpec()));
+
+        var request = MAPPER.readTree(requests.get(0));
+        assertThat(request.path("response_format").path("type").asText())
+                .isEqualTo("json_object");
+        assertThat(request.path("response_format").has("json_schema")).isFalse();
+        assertThat(result.fields()).containsEntry("capBasis", "ANNUAL_FEES");
+    }
+
+    @Test
+    void fencedJsonWithProseIsToleratedThenValidated() {
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> chatResponse(
+                        "```json\n"
+                                + "{\"liabilityCapMultiple\":\"3\",\"capBasis\":\"ANNUAL_FEES\"}\n"
+                                + "```\nHope that helps.",
+                        "stop", null)),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+        var result = provider.generate(new GenerationRequest(
+                "cap-model", state("t"), capSpec()));
+        assertThat(result.fields()).containsEntry("capBasis", "ANNUAL_FEES");
+    }
+
+    @Test
+    void singleLineFencedJsonIsToleratedThenValidated() {
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> chatResponse(
+                        "```json {\"liabilityCapMultiple\":\"3\",\"capBasis\":\"ANNUAL_FEES\"}```",
+                        "stop", null)),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+        var result = provider.generate(new GenerationRequest(
+                "cap-model", state("t"), capSpec()));
+        assertThat(result.fields()).containsEntry("liabilityCapMultiple", "3");
+    }
+
+    @Test
+    void nonJsonProseStillFailsClosed() {
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> chatResponse(
+                        "The liability cap is three times the fees.", "stop", null)),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+        assertThatThrownBy(() -> provider.generate(
+                new GenerationRequest("cap-model", state("t"), capSpec())))
+                .isInstanceOf(ProviderProtocolException.class);
+    }
+
+    @Test
+    void arraysJoinOnlyForDeclaredListFields() {
+        var spec = new ReasoningSpec(
+                "evidence-ids", 1, "Extract evidence ids.", 1,
+                new LinkedHashMap<>(Map.of(
+                        "liabilityCapMultiple", "numeric multiple", "evidenceIds", "evidence ids")),
+                Map.of(), java.util.Set.of("evidenceIds"));
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> chatResponse(
+                        "{\"liabilityCapMultiple\":\"3\",\"evidenceIds\":[\"EV1\",\"EV2\"]}",
+                        "stop", null)),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+        var result = provider.generate(new GenerationRequest("cap-model", state("t"), spec));
+        assertThat(result.fields()).containsEntry("evidenceIds", "EV1,EV2");
+    }
+
+    @Test
+    void arraysOnUndeclaredFieldsFailClosed() {
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> chatResponse(
+                        "{\"liabilityCapMultiple\":\"3\",\"capBasis\":[\"ANNUAL_FEES\"]}",
+                        "stop", null)),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+        assertThatThrownBy(() -> provider.generate(
+                new GenerationRequest("cap-model", state("t"), capSpec())))
+                .isInstanceOf(ProviderProtocolException.class);
+    }
+
+    @Test
+    void errorBodySurfacesTypedProviderFailureWithDiagnostics() {
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> "{\"error\":{\"type\":\"rate_limit\",\"code\":\"42\"}}"),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+        assertThatThrownBy(() -> provider.generate(
+                new GenerationRequest("cap-model", state("t"), capSpec())))
+                .isInstanceOf(ProviderUnavailableException.class)
+                .hasMessageContaining("rate_limit").hasMessageContaining("42");
+    }
+
+    @Test
+    void allowedValuesRejectOutsideEnumValues() {
+        var spec = new ReasoningSpec(
+                "cap-spec", 1, "Extract cap facts.", 1,
+                new LinkedHashMap<>(Map.of("liabilityCapMultiple", "numeric multiple", "capBasis", "cap basis")),
+                Map.of("capBasis", java.util.Set.of("PRECEDING_12_MONTH_FEES", "ANNUAL_FEES")));
+        var accessor = scripted(request -> chatResponse(
+                "{\"liabilityCapMultiple\":\"3\",\"capBasis\":\"UNLIMITED\"}",
+                "stop", null));
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                accessor, MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt-test",
+                        null, null));
+        var service = new GenerativeReasoningService(
+                asset -> new ModelBinding("openai-compatible", "gpt-test"),
+                (GenerativeProviderRegistry) id -> Optional.of(provider),
+                Clock.systemUTC());
+
+        assertThatThrownBy(() -> service.generate(spec, state("t")))
+                .isInstanceOf(ProviderProtocolException.class)
+                .hasMessageContaining("outside its allowed values");
     }
 
     private OpenAiCompatibleGenerativeProvider.RestClientAccessor scripted(

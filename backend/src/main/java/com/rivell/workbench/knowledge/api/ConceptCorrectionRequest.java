@@ -7,5 +7,5 @@ import jakarta.validation.constraints.NotNull;
  * `primary` is required: a LegalConcept name to set, or "" to clear the
  * concept to unclassified. Machine history is preserved.
  */
-public record ConceptCorrectionRequest(String primary) {
+public record ConceptCorrectionRequest(@NotNull String primary) {
 }

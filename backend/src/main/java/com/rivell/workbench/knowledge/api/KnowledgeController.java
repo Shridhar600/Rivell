@@ -192,15 +192,15 @@ class KnowledgeController {
     @Operation(summary = "Correct or clear a candidate's LegalConcept (machine proposal preserved)")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Unknown LegalConcept or no-op request",
+            @ApiResponse(responseCode = "400", description = "Unknown LegalConcept or missing primary value",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Candidate already published",
+            @ApiResponse(responseCode = "409", description = "Candidate published, rejected, or concurrently transitioned",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
     @PostMapping("/candidates/{id}/concept")
     ApiResult<CandidateView> correctConcept(
-            @PathVariable UUID id, @RequestBody ConceptCorrectionRequest request) {
+            @PathVariable UUID id, @jakarta.validation.Valid @RequestBody ConceptCorrectionRequest request) {
         return ApiResult.ok(toCandidateView(reviewService.correctConcept(id, request.primary())));
     }
 
@@ -419,6 +419,8 @@ class KnowledgeController {
                 candidate.contentText(), candidate.payload().columns(),
                 candidate.legalConceptKey(),
                 candidate.conceptCorrection(),
+                candidate.conceptCorrectedBy(),
+                candidate.conceptCorrectedAt(),
                 candidate.effectiveConceptKey(),
                 candidate.semanticFields().conceptProbabilities(),
                 candidate.effectivePositions(),

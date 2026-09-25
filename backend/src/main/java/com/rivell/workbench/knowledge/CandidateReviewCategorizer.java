@@ -52,7 +52,7 @@ public class CandidateReviewCategorizer {
                 reasons.add(ReviewReason.UNVERIFIED_GENERATIVE_FIELD);
             }
         }
-        var primary = candidate.legalConceptKey();
+        var primary = candidate.effectiveConceptKey();
         var belowConceptThreshold = candidate.semanticFields().conceptProbabilities().values().stream()
                 .noneMatch(probability -> probability >= conceptProperties.conceptThreshold());
         if (primary == null || belowConceptThreshold) {

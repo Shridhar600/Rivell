@@ -40,9 +40,15 @@ public interface KnowledgeRepository {
 
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);
 
-    /** Human LegalConcept correction (DW-017); pre-publication only. */
+    /**
+     * Human LegalConcept correction (DW-017); pre-publication only. Persists the
+     * correction, the resulting review status (an APPROVED candidate demotes to
+     * EDITED for re-approval), and the recomputed analysis outcome. Returns false
+     * when the expected status no longer holds (concurrent transition).
+     */
     boolean updateConceptCorrection(UUID candidateId, UUID organizationId,
-            String conceptCorrection, UUID correctedBy, java.time.Instant updatedAt);
+            KnowledgeCandidate updated, ReviewStatus expectedStatus,
+            UUID correctedBy, java.time.Instant updatedAt);
 
     void updateReviewState(
             UUID candidateId,

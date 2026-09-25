@@ -378,20 +378,33 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     @Override
     @Transactional
     public boolean updateConceptCorrection(UUID candidateId, UUID organizationId,
-            String conceptCorrection, UUID correctedBy, java.time.Instant updatedAt) {
+            KnowledgeCandidate updated, ReviewStatus expectedStatus,
+            UUID correctedBy, java.time.Instant updatedAt) {
         return jdbcClient.sql("""
                         update knowledge_candidate
                         set concept_correction = :conceptCorrection,
                             concept_corrected_by = :correctedBy,
+                            concept_corrected_at = :correctedAt,
+                            review_status = :reviewStatus,
+                            conflict_signals = :conflictSignals::jsonb,
+                            review_category = :reviewCategory,
+                            review_reasons = :reviewReasons::jsonb,
                             updated_at = :updatedAt
                         where id = :id and organization_id = :organizationId
-                          and review_status in ('PENDING', 'EDITED', 'APPROVED')
+                          and review_status = :expectedStatus
                         """)
-                .param("conceptCorrection", conceptCorrection)
+                .param("conceptCorrection", updated.conceptCorrection())
                 .param("correctedBy", correctedBy)
+                .param("correctedAt", toTimestamp(updatedAt))
+                .param("reviewStatus", updated.reviewStatus().name())
+                .param("conflictSignals", writeConflictSignals(updated.conflictSignals()))
+                .param("reviewCategory", updated.reviewCategory() == null
+                        ? null : updated.reviewCategory().name())
+                .param("reviewReasons", writeReviewReasons(updated.reviewReasons()))
                 .param("updatedAt", Timestamp.from(updatedAt))
                 .param("id", candidateId)
                 .param("organizationId", organizationId)
+                .param("expectedStatus", expectedStatus.name())
                 .update() == 1;
     }
 
@@ -774,6 +787,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 readPayload(rs.getString("payload")),
                 rs.getString("legal_concept_key"),
                 rs.getString("concept_correction"),
+                uuid(rs, "concept_corrected_by"),
+                instant(rs, "concept_corrected_at"),
                 readSemanticFields(rs.getString("semantic_fields")),
                 readSemanticFields(rs.getString("edited_semantic_fields")),
                 readInterpretations(rs.getString("interpretations")),

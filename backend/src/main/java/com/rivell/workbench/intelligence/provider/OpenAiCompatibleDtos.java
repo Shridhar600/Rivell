@@ -16,19 +16,32 @@ final class OpenAiCompatibleDtos {
     private OpenAiCompatibleDtos() {
     }
 
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     record ChatRequest(
             String model,
             List<Message> messages,
             double temperature,
-            ResponseFormat responseFormat) {
+            @JsonProperty("response_format") ResponseFormat responseFormat) {
 
         record Message(String role, String content) {
         }
 
-        record ResponseFormat(ResponseFormatJsonSchema jsonSchema) {
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        record ResponseFormat(
+                @JsonProperty("json_schema") ResponseFormatJsonSchema jsonSchema,
+                @JsonProperty("type") String type) {
+
+            static ResponseFormat strictSchema(ResponseFormatJsonSchema jsonSchema) {
+                return new ResponseFormat(jsonSchema, "json_schema");
+            }
+
+            static ResponseFormat jsonObject() {
+                return new ResponseFormat(null, "json_object");
+            }
         }
 
         record ResponseFormatJsonSchema(String name, boolean strict, SchemaWrapper schema) {
+            // name/strict/schema field names match the wire contract
 
             record SchemaWrapper(String type, Map<String, Object> properties,
                     List<String> required, boolean additionalProperties) {
@@ -40,7 +53,12 @@ final class OpenAiCompatibleDtos {
     record ChatResponse(
             String model,
             List<Choice> choices,
-            Usage usage) {
+            Usage usage,
+            @JsonProperty("error") ErrorBody error) {
+
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        record ErrorBody(String type, String code) {
+        }
 
         @JsonIgnoreProperties(ignoreUnknown = true)
         record Choice(Message message,

@@ -88,9 +88,9 @@ public class KnowledgePublicationService {
                     throw new InvalidPublicationException(candidate.id(),
                             "superseded candidate must itself be published");
                 }
-                if (superseded.legalConceptKey() != null
-                        && candidate.legalConceptKey() != null
-                        && !superseded.legalConceptKey().equals(candidate.legalConceptKey())) {
+                if (superseded.effectiveConceptKey() != null
+                        && candidate.effectiveConceptKey() != null
+                        && !superseded.effectiveConceptKey().equals(candidate.effectiveConceptKey())) {
                     throw new InvalidPublicationException(candidate.id(),
                             "superseded candidate must cover the same legal concept");
                 }

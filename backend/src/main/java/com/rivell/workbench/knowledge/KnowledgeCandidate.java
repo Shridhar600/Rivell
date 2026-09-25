@@ -25,6 +25,8 @@ public record KnowledgeCandidate(
         CandidatePayload payload,
         String legalConceptKey,
         String conceptCorrection,
+        UUID conceptCorrectedBy,
+        Instant conceptCorrectedAt,
         SemanticFields semanticFields,
         SemanticFields editedSemanticFields,
         List<FieldInterpretation> interpretations,
@@ -63,6 +65,7 @@ public record KnowledgeCandidate(
     public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope, signals,
                 reviewCategory, reviewReasons, reviewNote, reviewedAt, createdAt, updatedAt);
@@ -84,6 +87,7 @@ public record KnowledgeCandidate(
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
                 correction,
+                conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons, reviewNote, reviewedAt,
@@ -95,6 +99,7 @@ public record KnowledgeCandidate(
             String conceptKey) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, conceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
                 fields, editedSemanticFields, fieldInterpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
@@ -111,6 +116,7 @@ public record KnowledgeCandidate(
         }
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersededId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
@@ -120,9 +126,20 @@ public record KnowledgeCandidate(
     public KnowledgeCandidate withReviewOutcome(ReviewCategory category, Set<ReviewReason> reasons) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, category, reasons,
+                reviewNote, reviewedAt, createdAt, updatedAt);
+    }
+
+    public KnowledgeCandidate withReviewStatus(ReviewStatus status) {
+        return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
+                candidateType, status, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
+                semanticFields, editedSemanticFields, interpretations,
+                editedContentText, editedPayload, supersedingCandidateId, scope,
+                conflictSignals, reviewCategory, reviewReasons,
                 reviewNote, reviewedAt, createdAt, updatedAt);
     }
 

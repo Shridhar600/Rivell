@@ -33,6 +33,8 @@ public record CandidateView(
         Map<String, String> payloadColumns,
         String legalConceptKey,
         String conceptCorrection,
+        UUID conceptCorrectedBy,
+        Instant conceptCorrectedAt,
         String effectiveConceptKey,
         Map<LegalConcept, Double> classifiedConcepts,
         Set<PositionRole> positions,
