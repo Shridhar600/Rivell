@@ -20,7 +20,7 @@ final class OpenAiCompatibleDtos {
     record ChatRequest(
             String model,
             List<Message> messages,
-            double temperature,
+            Double temperature,
             @JsonProperty("response_format") ResponseFormat responseFormat) {
 
         record Message(String role, String content) {

@@ -137,7 +137,7 @@ class OpenAiCompatibleGenerativeProviderTest {
                 }),
                 MAPPER, new GenerativeProperties(
                         "openai-compatible", "https://gateway.test/v1", "key", "gpt",
-                        GenerativeProperties.RESPONSE_MODE_JSON_OBJECT, null, null));
+                        GenerativeProperties.RESPONSE_MODE_JSON_OBJECT, null, null, null));
 
         var result = provider.generate(new GenerationRequest(
                 "cap-model", state("t"), capSpec()));

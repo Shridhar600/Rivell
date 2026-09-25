@@ -17,6 +17,7 @@ public record GenerativeProperties(
         String apiKey,
         String model,
         String responseMode,
+        Double temperature,
         Duration connectTimeout,
         Duration readTimeout) {
 
@@ -36,6 +37,9 @@ public record GenerativeProperties(
             throw new IllegalArgumentException(
                     "responseMode must be strict-schema or json-object");
         }
+        if (temperature != null && (temperature < 0.0 || temperature > 2.0)) {
+            throw new IllegalArgumentException("temperature must be between 0 and 2");
+        }
         if (baseUrl == null || baseUrl.isBlank()) {
             baseUrl = "https://api.openai.com/v1";
         }
@@ -50,7 +54,7 @@ public record GenerativeProperties(
     public GenerativeProperties(
             String provider, String baseUrl, String apiKey, String model,
             Duration connectTimeout, Duration readTimeout) {
-        this(provider, baseUrl, apiKey, model, null, connectTimeout, readTimeout);
+        this(provider, baseUrl, apiKey, model, null, null, connectTimeout, readTimeout);
     }
 
     public boolean isConfigured() {

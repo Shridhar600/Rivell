@@ -87,6 +87,15 @@ public class EvidenceIndexService {
             var model = embeddingService.modelIdentity();
             for (int i = 0; i < candidates.size(); i++) {
                 var vector = execution.vectors().get(i);
+                if (vector.length > com.rivell.workbench.intelligence.provider.EmbeddingProperties
+                        .MAX_INDEXABLE_DIMENSIONS) {
+                    // fail fast before any persist: rows beyond the pgvector
+                    // regular-vector/HNSW capability could never be indexed
+                    throw new IllegalStateException(
+                            "Provider returned " + vector.length + "-dimension embeddings exceeding "
+                                    + "the pgvector HNSW index capability; configure explicit "
+                                    + "supported embedding dimensions");
+                }
                 if (i == 0) {
                     ensureVectorIndex(vector.length);
                 }

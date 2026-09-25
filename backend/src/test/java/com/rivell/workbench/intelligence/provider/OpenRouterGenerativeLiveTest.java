@@ -47,7 +47,7 @@ class OpenRouterGenerativeLiveTest {
         assertThat(apiKey).isNotBlank();
         var properties = new GenerativeProperties(
                 "openai-compatible", "https://openrouter.ai/api/v1", apiKey,
-                MODEL, "json-object",
+                MODEL, "json-object", 0.0,
                 Duration.ofSeconds(10), Duration.ofSeconds(120));
         var httpClient = java.net.http.HttpClient.newBuilder()
                 .connectTimeout(properties.connectTimeout())
@@ -147,7 +147,7 @@ class OpenRouterGenerativeLiveTest {
         var apiKey = System.getenv("OPENROUTER_API_KEY");
         var properties = new GenerativeProperties(
                 "openai-compatible", "https://openrouter.ai/api/v1", apiKey,
-                "no-such-model-xyz", "strict-schema",
+                "no-such-model-xyz", "strict-schema", 0.0,
                 Duration.ofSeconds(10), Duration.ofSeconds(60));
         var provider = new OpenAiCompatibleGenerativeProvider(
                 (path, payload) -> RestClient.builder()

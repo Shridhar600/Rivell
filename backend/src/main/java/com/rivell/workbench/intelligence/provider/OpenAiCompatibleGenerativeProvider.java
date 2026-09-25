@@ -105,7 +105,7 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
                                     "system", systemInstruction(request.spec())),
                             new OpenAiCompatibleDtos.ChatRequest.Message(
                                     "user", userInstruction(request))),
-                    0.0,
+                    properties.temperature(),
                     responseFormat));
         } catch (Exception e) {
             throw new ProviderRejectedException("Generative request could not be serialized", e);
