@@ -239,3 +239,58 @@ describe('finding detail', () => {
     expect(await screen.findByText('This finding could not be loaded.')).toBeInTheDocument()
   })
 })
+
+describe('review workspace authority and network guards', () => {
+  it('reads persisted state only: no create, no evidence, no trace requests on load', async () => {
+    const { api } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    await screen.findByRole('heading', { name: 'Observation' })
+
+    expect(api.requests.filter((request) => request.method === 'POST')).toHaveLength(0)
+    expect(api.requests.filter((request) => request.url.includes('/retrieval/'))).toHaveLength(0)
+  })
+
+  it('introduces no human-decision or provider vocabulary', async () => {
+    stubContractApi({
+      reviewSummary: fixtureCompletedReviewSummary,
+      findings: fixtureFindingList,
+      findingDetailResponse: () => jsonResponse(envelope(fixtureClauseFindingDetail)),
+    })
+    const first = render(
+      <AppProviders>
+        <RouterProvider
+          router={createMemoryRouter(appRoutes, {
+            initialEntries: ['/reviews/c1/analysis/r-1?finding=f-1'],
+          })}
+        />
+      </AppProviders>,
+    )
+    await screen.findByRole('heading', { name: 'Approved language' })
+    const approvedText = document.body.textContent ?? ''
+    expect(approvedText).toMatch(/Approved language/)
+    expect(approvedText).not.toMatch(/ApprovedChange|Mark as approved|Resolved/)
+    expect(approvedText).not.toMatch(/\bJev\b|OpenAI|OpenRouter|embedding|rerank/i)
+    expect(
+      screen.queryByRole('button', { name: /Accept|Reject|Approve|Escalate|Resolve/i }),
+    ).not.toBeInTheDocument()
+    first.unmount()
+
+    stubContractApi({
+      reviewSummary: fixtureCompletedReviewSummary,
+      findings: fixtureFindingList,
+      findingDetailResponse: () => jsonResponse(envelope(fixtureGenerativeFindingDetail)),
+    })
+    render(
+      <AppProviders>
+        <RouterProvider
+          router={createMemoryRouter(appRoutes, {
+            initialEntries: ['/reviews/c1/analysis/r-1?finding=f-5'],
+          })}
+        />
+      </AppProviders>,
+    )
+    await screen.findByRole('heading', { name: 'AI-proposed language' })
+    const generativeText = document.body.textContent ?? ''
+    expect(generativeText).not.toMatch(/Approved language/)
+  })
+})
