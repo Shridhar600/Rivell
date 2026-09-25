@@ -331,6 +331,88 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
     }
 
     @Override
+    public void replaceEvidenceItems(
+            UUID organizationId, UUID reviewId, UUID runId, UUID planCheckId,
+            List<com.rivell.workbench.retrieval.EvidenceItem> items) {
+        jdbcClient.sql("""
+                delete from review_evidence_item
+                where run_id = :runId and plan_check_id = :planCheckId
+                  and organization_id = :organizationId
+                """)
+                .param("runId", runId)
+                .param("planCheckId", planCheckId)
+                .param("organizationId", organizationId)
+                .update();
+        for (var item : items) {
+            jdbcClient.sql("""
+                    insert into review_evidence_item (
+                        id, organization_id, review_id, run_id, plan_check_id,
+                        evidence_item_id, authority_class, source_clause_id,
+                        publication_number, payload, created_at)
+                    values (
+                        :id, :organizationId, :reviewId, :runId, :planCheckId,
+                        :evidenceItemId, :authorityClass, :sourceClauseId,
+                        :publicationNumber, cast(:payload as jsonb), :createdAt)
+                    """)
+                    .param("id", UUID.randomUUID())
+                    .param("organizationId", organizationId)
+                    .param("reviewId", reviewId)
+                    .param("runId", runId)
+                    .param("planCheckId", planCheckId)
+                    .param("evidenceItemId", item.evidenceId())
+                    .param("authorityClass", item.authorityClass().name())
+                    .param("sourceClauseId", item.sourceClauseId())
+                    .param("publicationNumber", item.publicationNumber())
+                    .param("payload", json(item))
+                    .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
+                    .update();
+        }
+    }
+
+    @Override
+    public List<com.rivell.workbench.retrieval.EvidenceItem> findEvidenceItems(
+            UUID organizationId, UUID runId, java.util.Collection<UUID> evidenceItemIds) {
+        if (evidenceItemIds == null || evidenceItemIds.isEmpty()) {
+            return List.of();
+        }
+        var sql = new StringBuilder("""
+                select payload from review_evidence_item
+                where run_id = :runId and organization_id = :organizationId
+                  and evidence_item_id in (""");
+        var params = new java.util.LinkedHashMap<String, Object>();
+        params.put("runId", runId);
+        params.put("organizationId", organizationId);
+        var index = 0;
+        for (var evidenceItemId : evidenceItemIds) {
+            var name = "evidence" + index++;
+            if (index > 1) {
+                sql.append(", ");
+            }
+            sql.append(":").append(name);
+            params.put(name, evidenceItemId);
+        }
+        sql.append(")");
+        var statement = jdbcClient.sql(sql.toString());
+        for (var entry : params.entrySet()) {
+            statement = statement.param(entry.getKey(), entry.getValue());
+        }
+        var byId = new java.util.LinkedHashMap<UUID, com.rivell.workbench.retrieval.EvidenceItem>();
+        statement.query((rs, rowNum) -> readEvidenceItem(rs.getString("payload")))
+                .list()
+                .forEach(item -> byId.putIfAbsent(item.evidenceId(), item));
+        return List.copyOf(byId.values());
+    }
+
+    private com.rivell.workbench.retrieval.EvidenceItem readEvidenceItem(String payload) {
+        try {
+            return objectMapper.readValue(payload,
+                    com.rivell.workbench.retrieval.EvidenceItem.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Invalid persisted evidence item JSON", e);
+        }
+    }
+
+    @Override
     public List<RawReviewSignal> findSignals(UUID organizationId, UUID runId) {
         return jdbcClient.sql("""
                 select id, organization_id, review_id, run_id, plan_check_id, signal_type,

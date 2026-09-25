@@ -390,28 +390,50 @@ class M7EvaluationIT {
                         .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
                         .orElse(false))
                 .findFirst().orElseThrow();
+
+        var machineReview = reviewService.create(contractId, 1, ReviewPackRegistry.MSA_PACK);
+        resetProviders();
+        var machineStart = System.nanoTime();
+        var machineRun = analysisService.analyze(organizationId, machineReview.id());
+        var machineElapsed = (System.nanoTime() - machineStart) / 1_000_000;
+        var machineDeviation = analysisRepository.findSignals(organizationId, machineRun.id())
+                .stream().filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
+                .findFirst().orElseThrow();
+        assertThat(((LiabilityDeviationPayload) machineDeviation.payload()).capMultiple())
+                .isEqualTo("3");
+        record("S14 machine cap 3x deviates", organizationId, machineReview.id(),
+                Set.of(IssueFamily.LIABILITY_CAP_DEVIATION), 1, 0, machineElapsed);
+
         enrichmentService.correctClause(contractId, 1, liability.id(),
                 FactCorrection.ofFacts(java.util.Map.of("liabilityCapMultiple", "2")));
-        var review = reviewService.create(contractId, 1, ReviewPackRegistry.MSA_PACK);
-
+        var correctedReview = reviewService.create(contractId, 1, ReviewPackRegistry.MSA_PACK);
         resetProviders();
-
-        var start = System.nanoTime();
-        var run = analysisService.analyze(organizationId, review.id());
-        var elapsed = (System.nanoTime() - start) / 1_000_000;
-
-        var deviation = analysisRepository.findSignals(organizationId, run.id()).stream()
-                .filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
+        var correctedStart = System.nanoTime();
+        var correctedRun = analysisService.analyze(organizationId, correctedReview.id());
+        var correctedElapsed = (System.nanoTime() - correctedStart) / 1_000_000;
+        var correctedDeviation = analysisRepository.findSignals(organizationId, correctedRun.id())
+                .stream().filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
                 .findFirst().orElseThrow();
-        assertThat(((LiabilityDeviationPayload) deviation.payload()).capMultiple())
+        assertThat(((LiabilityDeviationPayload) correctedDeviation.payload()).capMultiple())
                 .isEqualTo("2");
-        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
-                .filter(candidate -> candidate.issueFamily()
-                        == IssueFamily.LIABILITY_CAP_DEVIATION)
-                .findFirst().orElseThrow();
-        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
-        record("S14 corrected cap 3x -> 2x drives review", organizationId, review.id(),
-                Set.of(IssueFamily.LIABILITY_CAP_DEVIATION), 1, 0, elapsed);
+        record("S14 corrected cap 2x still deviates", organizationId, correctedReview.id(),
+                Set.of(IssueFamily.LIABILITY_CAP_DEVIATION), 1, 0, correctedElapsed);
+
+        enrichmentService.correctClause(contractId, 1, liability.id(),
+                FactCorrection.ofFacts(java.util.Map.of("liabilityCapMultiple", "1")));
+        var compliantReview = reviewService.create(contractId, 1, ReviewPackRegistry.MSA_PACK);
+        resetProviders();
+        var compliantStart = System.nanoTime();
+        var compliantRun = analysisService.analyze(organizationId, compliantReview.id());
+        var compliantElapsed = (System.nanoTime() - compliantStart) / 1_000_000;
+        assertThat(analysisRepository.findSignals(organizationId, compliantRun.id()))
+                .noneMatch(signal -> signal.signalType() == SignalType.POLICY_DEVIATION
+                        );
+        assertThat(findingRepository.findFindings(organizationId, compliantRun.id()))
+                .noneMatch(finding -> finding.issueFamily()
+                        == IssueFamily.LIABILITY_CAP_DEVIATION);
+        record("S14 corrected cap 1x is compliant (classification changed)",
+                organizationId, compliantReview.id(), Set.of(), 0, 0, compliantElapsed);
     }
 
     @AfterAll

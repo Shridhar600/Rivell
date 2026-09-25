@@ -57,6 +57,15 @@ class ReviewController {
                 request == null ? null : request.contractPackKey()));
     }
 
+    @Operation(summary = "List the currently selectable contract packs")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses(@ApiResponse(responseCode = "403", description = "Missing reviews:read",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
+    @GetMapping("/reviews/packs")
+    ApiResult<ReviewPackCatalogView> packs() {
+        return ApiResult.ok(apiService.packs());
+    }
+
     @Operation(summary = "List a contract's reviews, newest first (bounded)")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses(@ApiResponse(responseCode = "404", description = "Unknown contract",

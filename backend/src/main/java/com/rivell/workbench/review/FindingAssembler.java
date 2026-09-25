@@ -201,6 +201,9 @@ public final class FindingAssembler {
                     + "no conflict or consistency was asserted.";
             case "cross_clause_classification_uncertain" -> "The cross-clause classification "
                     + "did not reach a clear verdict; the interaction requires human review.";
+            case "survival_coverage_partial" -> "Survival coverage could not be established "
+                    + "for all confidentiality provisions; the limitation requires human "
+                    + "review.";
             default -> "The check recorded unresolved uncertainty for "
                     + signal.concept().name() + ".";
         };

@@ -27,25 +27,30 @@ public final class PresenceCheckExecutor implements ReviewCheckExecutor {
     @Override
     public CheckOutcome execute(ReviewCheckContext context) {
         var check = context.check();
-        var present = context.semantics().clauses().stream().anyMatch(clause ->
+        var primaryPresent = context.semantics().clauses().stream().anyMatch(clause ->
                 clause.effectivePrimaryConcept()
-                        .filter(concept -> concept == check.concept()).isPresent()
-                        || clause.secondaryConcepts().contains(check.concept()));
-        if (present) {
-            return CheckOutcome.completed(List.of(), Map.of("present", true));
+                        .filter(concept -> concept == check.concept()).isPresent());
+        var secondaryPresent = context.semantics().clauses().stream().anyMatch(clause ->
+                clause.secondaryConcepts().contains(check.concept()));
+        if (primaryPresent || secondaryPresent) {
+            return CheckOutcome.completed(List.of(), Map.of("present", true, "coverage",
+                    primaryPresent ? "PRESENT_PRIMARY" : "PRESENT_SECONDARY_ONLY"));
         }
         return switch (check.expectation()) {
             case REQUIRED -> CheckOutcome.completed(
                     List.of(signal(context, SignalType.MISSING_REQUIRED_CONCEPT,
                             IssueFamily.MISSING_REQUIRED_PROVISION)),
-                    Map.of("present", false, "expectation", CheckExpectation.REQUIRED.name()));
+                    Map.of("present", false, "coverage", "ABSENT",
+                            "expectation", CheckExpectation.REQUIRED.name()));
             case EXPECTED -> CheckOutcome.completed(
                     List.of(signal(context, SignalType.EXPECTED_CONCEPT_ABSENT,
                             IssueFamily.EXPECTED_PROVISION_ABSENT)),
-                    Map.of("present", false, "expectation", CheckExpectation.EXPECTED.name()));
+                    Map.of("present", false, "coverage", "ABSENT",
+                            "expectation", CheckExpectation.EXPECTED.name()));
             case OPTIONAL -> CheckOutcome.completed(
                     List.of(),
-                    Map.of("present", false, "expectation", CheckExpectation.OPTIONAL.name()));
+                    Map.of("present", false, "coverage", "ABSENT",
+                            "expectation", CheckExpectation.OPTIONAL.name()));
         };
     }
 

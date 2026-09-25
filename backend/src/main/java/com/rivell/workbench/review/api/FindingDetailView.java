@@ -13,11 +13,14 @@ import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.ProposedAction;
 import com.rivell.workbench.review.ProposedLanguageSource;
+import com.rivell.workbench.retrieval.api.RetrievalResponses;
 
 /**
  * Finding detail: observation, proposal, typed quality, evidence-bound claims, and the
- * plan-check basis for absence findings. Signal ids are provenance references only; no
- * raw signal surface is exposed.
+ * plan-check basis for absence findings. {@code evidenceItems} are the exact frozen
+ * items the finding cites (G-M7-1), resolved from the finding's run and never rebuilt
+ * from latest knowledge; every claim evidence id resolves inside this set. Signal ids
+ * are provenance references only; no raw signal surface is exposed.
  */
 public record FindingDetailView(
         UUID id,
@@ -41,6 +44,7 @@ public record FindingDetailView(
         Map<String, Object> quality,
         List<ClaimView> claims,
         List<UUID> evidenceItemIds,
+        List<RetrievalResponses.EvidenceItemResponse> evidenceItems,
         List<UUID> signalIds,
         AbsenceBasisView absenceBasis,
         Instant createdAt) {

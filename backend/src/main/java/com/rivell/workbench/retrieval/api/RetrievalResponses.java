@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.rivell.workbench.contracts.LegalFact;
+import com.rivell.workbench.retrieval.EvidenceItem;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -61,6 +62,49 @@ public final class RetrievalResponses {
             UUID publicationId,
             Long publicationNumber,
             ApplicabilityScopeResponse applicabilityScope) {
+    }
+
+    /** Single source of truth for the product evidence-item shape (M6 + M7 reuse). */
+    public static EvidenceItemResponse evidenceItem(EvidenceItem item) {
+        return new EvidenceItemResponse(
+                item.evidenceId(),
+                item.authorityClass().name(),
+                item.sourceType(),
+                item.sourceArtifactId(),
+                item.sourceCandidateId(),
+                item.sourceContractVersionId(),
+                item.sourceClauseId(),
+                item.legalConcept() == null ? null : item.legalConcept().name(),
+                item.text(),
+                item.policyFacts() == null ? null : new PolicyFactsResponse(
+                        item.policyFacts().positions().stream()
+                                .map(Enum::name)
+                                .collect(java.util.stream.Collectors.toSet()),
+                        item.policyFacts().requiresApproval(),
+                        item.policyFacts().escalationTrigger()),
+                item.contractFacts(),
+                item.retrievalReason(),
+                new LaneInfoResponse(
+                        item.laneInfo().lexicalRank(),
+                        item.laneInfo().vectorRank(),
+                        item.laneInfo().fusedRank(),
+                        item.laneInfo().fusedScore()),
+                item.semanticAssessment() == null ? null : new SemanticAssessmentResponse(
+                        item.semanticAssessment().judgments(),
+                        item.semanticAssessment().decisionSpecId(),
+                        item.semanticAssessment().decisionSpecVersion()),
+                item.policyCompatibility() == null ? null : item.policyCompatibility().name(),
+                item.provenanceNodeIds(),
+                item.publicationId(),
+                item.publicationNumber() == null ? null : item.publicationNumber(),
+                item.applicabilityScope() == null ? null : new ApplicabilityScopeResponse(
+                        item.applicabilityScope().contractPackKey(),
+                        List.copyOf(item.applicabilityScope().declaredContractTypes()),
+                        item.applicabilityScope().partyPerspective(),
+                        item.applicabilityScope().paperSource(),
+                        item.applicabilityScope().jurisdiction(),
+                        item.applicabilityScope().effectiveFrom(),
+                        item.applicabilityScope().effectiveTo()));
     }
 
     @Schema(name = "ApplicabilityScopeResponse")

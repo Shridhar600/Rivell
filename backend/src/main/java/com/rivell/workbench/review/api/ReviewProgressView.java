@@ -15,6 +15,7 @@ public record ReviewProgressView(
         int signals,
         int findings,
         String latestRunStatus,
+        List<ReviewCoverageView> coverage,
         List<AnalysisWarningView> analysisWarnings,
         boolean analysisWarningsTruncated) {
 }

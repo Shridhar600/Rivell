@@ -221,8 +221,11 @@ class ReviewAnalysisIT {
         var executions = analysisRepository.findExecutions(organizationId, run.id());
         assertThat(executions).hasSize(checks.size());
         assertThat(executions).allSatisfy(execution -> {
-            assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
             assertThat(execution.detail()).isNotEmpty();
+            if (execution.status() != CheckExecutionStatus.COMPLETED) {
+                assertThat(execution.detail().get("degradedReason"))
+                        .isEqualTo("survival_coverage_partial");
+            }
         });
         // this configuration's published policy carries no escalation trigger; the
         // bounded semantic path is still exercised (no zero-signal fake artefact)
@@ -234,7 +237,9 @@ class ReviewAnalysisIT {
         var progress = analysisService.progress(organizationId, review.id());
         assertThat(progress.reviewStatus()).isEqualTo(ReviewStatus.COMPLETED);
         assertThat(progress.plannedChecks()).isEqualTo(checks.size());
-        assertThat(progress.completedChecks()).isEqualTo(progress.plannedChecks());
+        assertThat(progress.completedChecks() + progress.degradedChecks())
+                .isEqualTo(progress.plannedChecks());
+        assertThat(progress.degradedChecks()).isEqualTo(1);
         assertThat(progress.pendingChecks()).isZero();
         assertThat(progress.runningChecks()).isZero();
     }

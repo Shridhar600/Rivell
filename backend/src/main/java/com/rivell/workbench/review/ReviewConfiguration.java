@@ -119,11 +119,13 @@ class ReviewConfiguration {
             ReviewAnalysisRepository reviewAnalysisRepository,
             FindingRepository findingRepository,
             ContractQueryService contractQueryService,
+            ReviewPackRegistry reviewPackRegistry,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         return new com.rivell.workbench.review.api.ReviewApiService(
                 reviewService, reviewAnalysisService, reviewRepository,
                 reviewAnalysisRepository, findingRepository, contractQueryService,
+                    reviewPackRegistry,
                 identityProvider, authorizationService);
     }
 }

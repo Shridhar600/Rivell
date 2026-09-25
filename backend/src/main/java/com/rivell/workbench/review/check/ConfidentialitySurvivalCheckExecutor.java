@@ -12,6 +12,7 @@ import com.rivell.workbench.retrieval.EvidenceRequest;
 import com.rivell.workbench.retrieval.KnowledgePin;
 import com.rivell.workbench.review.CheckMechanism;
 import com.rivell.workbench.review.CrossClauseConflictPayload;
+import com.rivell.workbench.review.DeviationUncertainPayload;
 import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.RawReviewSignal;
@@ -38,31 +39,51 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
         }
         var bundle = context.evidenceCache().build(request(context, clause));
 
-        // Coverage is assessed for the concept, not one classified clause: a
-        // carve-out or reference clause can also carry the concept, and the human
-        // issue is whether the confidentiality concept is covered by survival
-        // semantics at all (per-clause obligation granularity recorded as a limit).
-        var conceptHeadingIds = context.semantics().clauses().stream()
+        // Coverage must not become falsely clean when several clauses carry the
+        // concept: one SURVIVES relationship cannot prove every obligation is
+        // covered. Multi-clause coverage is clean only when every candidate clause
+        // is an endpoint of a survival relationship; partial/ambiguous coverage is
+        // explicit uncertainty, never a fabricated per-clause verdict (DW-027).
+        var candidates = context.semantics().clauses().stream()
                 .filter(candidate -> candidate.effectivePrimaryConcept()
-                                .filter(concept -> concept == context.check().concept())
-                                .isPresent()
-                        || candidate.secondaryConcepts().contains(context.check().concept()))
-                .map(ClauseSemantics::headingNodeId)
-                .collect(java.util.stream.Collectors.toSet());
-        var coveredByRelationship = context.semantics().relationships().stream()
+                        .filter(concept -> concept == context.check().concept())
+                        .isPresent())
+                .toList();
+        var survivalEndpoints = context.semantics().relationships().stream()
                 .filter(relationship -> relationship.type() == RelationshipType.SURVIVES)
-                .anyMatch(relationship -> conceptHeadingIds.contains(
-                                relationship.sourceRegionNodeId())
-                        || conceptHeadingIds.contains(relationship.targetRegionNodeId()));
+                .flatMap(relationship -> java.util.stream.Stream.of(
+                        relationship.sourceRegionNodeId(), relationship.targetRegionNodeId()))
+                .collect(java.util.stream.Collectors.toSet());
+        var relationshipCoveredCount = candidates.stream()
+                .filter(candidate -> survivalEndpoints.contains(candidate.headingNodeId()))
+                .count();
         var coveredByEvidence = bundle.currentContractItems().stream()
                 .anyMatch(item -> item.retrievalReason() != null
                         && item.retrievalReason().contains("SURVIVES"));
-        var covered = coveredByRelationship || coveredByEvidence;
+        var subjectCoveredByRelationship = survivalEndpoints.contains(clause.headingNodeId());
+
+        boolean covered;
+        boolean uncertain = false;
+        String basis;
+        if (subjectCoveredByRelationship || coveredByEvidence) {
+            covered = true;
+            basis = subjectCoveredByRelationship ? "relationship" : "evidence";
+        } else if (relationshipCoveredCount > 0) {
+            // Survival semantics exist for the concept but cannot be established for
+            // this clause; the limitation is explicit instead of a fabricated verdict.
+            covered = false;
+            uncertain = true;
+            basis = "partial";
+        } else {
+            covered = false;
+            basis = "none";
+        }
 
         var detail = new java.util.LinkedHashMap<String, Object>();
         detail.put("covered", covered);
-        detail.put("basis", coveredByRelationship ? "relationship"
-                : coveredByEvidence ? "evidence" : "none");
+        detail.put("basis", basis);
+        detail.put("candidateClauseCount", candidates.size());
+        detail.put("relationshipCoveredCount", relationshipCoveredCount);
         detail.put("sufficiency", bundle.sufficiency().name());
 
         if (covered) {
@@ -78,8 +99,9 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
                                         .contains(context.check().secondaryConcept())))
                 .toList();
         List<UUID> counterpartEvidence = List.of();
+        com.rivell.workbench.retrieval.EvidenceBundle counterpartBundle = null;
         if (!counterparts.isEmpty()) {
-            var counterpartBundle = context.evidenceCache().build(request(context,
+            counterpartBundle = context.evidenceCache().build(request(context,
                     counterparts.get(0), context.check().secondaryConcept()));
             counterpartEvidence = subjectContractIds(counterpartBundle,
                     counterparts.stream().map(ClauseSemantics::id).toList());
@@ -87,6 +109,16 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
         }
         var evidence = union(subjectContractIds(bundle, clause.id()),
                 union(counterpartEvidence, policyIds(bundle)));
+        if (uncertain) {
+            // Coverage exists for the concept but cannot be established for this
+            // clause; the limitation is explicit (DEGRADED warning) instead of a
+            // fabricated per-clause verdict.
+            detail.put("uncertaintyReason", "survival_coverage_partial");
+            return CheckOutcome.degraded("survival_coverage_partial", List.of(), detail,
+                            bundle.traceId())
+                    .withCitedEvidence(counterpartBundle == null
+                            ? List.of(bundle) : List.of(bundle, counterpartBundle));
+        }
         var signal = new RawReviewSignal(
                 UUID.randomUUID(), context.check().organizationId(),
                 context.check().reviewId(), context.runId(), context.check().id(),
@@ -99,7 +131,9 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
                 Map.of("sufficiency", bundle.sufficiency().name()),
                 SignalType.CROSS_CLAUSE_CONFLICT + ":" + context.check().id(),
                 context.executedAt());
-        return CheckOutcome.completed(List.of(signal), detail, bundle.traceId());
+        return CheckOutcome.completed(List.of(signal), detail, bundle.traceId())
+                .withCitedEvidence(counterpartBundle == null
+                        ? List.of(bundle) : List.of(bundle, counterpartBundle));
     }
 
     private ClauseSemantics resolveSubject(ReviewCheckContext context) {

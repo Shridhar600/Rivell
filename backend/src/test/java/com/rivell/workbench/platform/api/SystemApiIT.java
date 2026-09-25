@@ -87,6 +87,7 @@ class SystemApiIT {
                         "/api/contracts/{id}/versions/{versionNumber}/semantics/clauses/{clauseId}/facts",
                         "/api/contracts/{contractId}/versions/{versionNumber}/reviews",
                         "/api/reviews",
+                        "/api/reviews/packs",
                         "/api/reviews/{id}",
                         "/api/reviews/{id}/findings",
                         "/api/reviews/{id}/findings/{findingId}",

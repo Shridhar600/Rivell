@@ -282,6 +282,8 @@ public class ReviewAnalysisService {
                     analysisRepository.deleteSignals(
                             review.organizationId(), run.id(), check.id());
                     analysisRepository.insertSignals(outcome.signals());
+                    analysisRepository.replaceEvidenceItems(review.organizationId(),
+                            review.id(), run.id(), check.id(), outcome.evidenceItems());
                 });
             } catch (LeaseLostException e) {
                 // another worker reclaimed this execution; it owns the terminal write

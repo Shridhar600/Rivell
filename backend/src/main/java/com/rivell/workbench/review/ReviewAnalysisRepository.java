@@ -55,4 +55,16 @@ public interface ReviewAnalysisRepository {
     int countSignals(UUID organizationId, UUID runId);
 
     int countSignals(UUID organizationId, UUID runId, UUID planCheckId);
+
+    /** Replaces the frozen evidence items cited by one check execution (G-M7-1). */
+    void replaceEvidenceItems(
+            UUID organizationId, UUID reviewId, UUID runId, UUID planCheckId,
+            List<com.rivell.workbench.retrieval.EvidenceItem> items);
+
+    /**
+     * The exact evidence items persisted for the given run, filtered by organization and
+     * evidence ids. Missing ids are absent from the result (the caller fails loudly).
+     */
+    List<com.rivell.workbench.retrieval.EvidenceItem> findEvidenceItems(
+            UUID organizationId, UUID runId, java.util.Collection<UUID> evidenceItemIds);
 }

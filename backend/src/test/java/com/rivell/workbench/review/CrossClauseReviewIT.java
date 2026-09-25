@@ -98,7 +98,7 @@ class CrossClauseReviewIT {
     }
 
     @Test
-    void survivalCoverageIsDeterministicallyProvenForTheMsaCorpus() {
+    void msaCorpusSurvivalCoverageIsPartialNotFalselyClean() {
         var organizationId = organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var review = reviewService.create(
@@ -110,9 +110,16 @@ class CrossClauseReviewIT {
                 .stream().filter(execution -> execution.detail().containsKey("covered"))
                 .toList();
         assertThat(coverageExecutions).isNotEmpty();
-        assertThat(coverageExecutions).allSatisfy(execution -> {
+        assertThat(coverageExecutions).anySatisfy(execution -> {
             assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
             assertThat(execution.detail().get("covered")).isEqualTo(true);
+        });
+        assertThat(coverageExecutions).anySatisfy(execution -> {
+            assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+            assertThat(execution.detail().get("covered")).isEqualTo(false);
+            assertThat(execution.detail().get("basis")).isEqualTo("partial");
+            assertThat(execution.detail().get("degradedReason"))
+                    .isEqualTo("survival_coverage_partial");
         });
         assertThat(analysisRepository.findSignals(organizationId, run.id()))
                 .noneMatch(signal -> signal.issueFamily() == IssueFamily.SURVIVAL_COVERAGE_GAP);

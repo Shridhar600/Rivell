@@ -91,6 +91,12 @@ class ReviewApiIT {
     ReviewAnalysisService analysisService;
 
     @Autowired
+    ReviewService reviewService;
+
+    @Autowired
+    ReviewRepository reviewRepository;
+
+    @Autowired
     ContractIngestionService contractIngestionService;
 
     @Autowired
@@ -117,10 +123,13 @@ class ReviewApiIT {
                 ReviewPackRegistry.MSA_PACK);
         assertThat(created.get("status").asText()).isEqualTo("ANALYSIS_QUEUED");
         assertThat(created.get("contractVersionNumber").asInt()).isEqualTo(1);
-        assertThat(created.get("contractPackKey").asText()).isEqualTo("MSA_PACK");
-        assertThat(created.get("packVersion").asText())
+        assertThat(created.get("snapshot").get("profile").get("contractPackKey").asText())
+                .isEqualTo("MSA_PACK");
+        assertThat(created.get("snapshot").get("packVersion").asText())
                 .isEqualTo(ReviewPackRegistry.VERSION);
-        assertThat(created.get("knowledgePinNumber").asLong()).isPositive();
+        assertThat(created.get("snapshot").get("knowledgePinNumber").asLong()).isPositive();
+        assertThat(created.get("snapshot").get("effectiveOn").asText()).isNotBlank();
+        assertThat(created.get("failure").isNull()).isTrue();
         assertThat(created.get("activeRun").isNull()).isTrue();
         assertThat(created.get("analysisWarnings").isEmpty()).isTrue();
 
@@ -134,18 +143,20 @@ class ReviewApiIT {
                 .andExpect(jsonPath("$.data.contractId")
                         .value(corpus.contract().contractId().toString()))
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data.failureReason").value(nullValue()))
+                .andExpect(jsonPath("$.data.failure").value(nullValue()))
                 .andExpect(jsonPath("$.data.activeRun.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.activeRun.runNumber").value(1))
                 .andExpect(jsonPath("$.data.latestRunStatus").value(nullValue()))
-                .andExpect(jsonPath("$.data.degradedChecks").value(0))
+                .andExpect(jsonPath("$.data.degradedChecks").value(1))
                 .andExpect(jsonPath("$.data.failedChecks").value(0))
                 .andExpect(jsonPath("$.data.findings").value(1))
                 .andExpect(jsonPath("$.data.signals").value(3))
-                .andExpect(jsonPath("$.data.analysisWarnings").isEmpty())
+                .andExpect(jsonPath("$.data.analysisWarnings[0].reasonCode")
+                        .value("SURVIVAL_COVERAGE_PARTIAL"))
                 .andExpect(jsonPath("$.data.analysisWarningsTruncated").value(false))
                 .andReturn()).get("data");
-        assertThat(summary.get("completedChecks").asInt())
+        assertThat(summary.get("completedChecks").asInt()
+                + summary.get("degradedChecks").asInt())
                 .isEqualTo(summary.get("plannedChecks").asInt())
                 .isPositive();
         assertThat(summary.get("startedAt").isNull()).isFalse();
@@ -162,7 +173,8 @@ class ReviewApiIT {
                 .andExpect(jsonPath("$.data.signals").value(3))
                 .andExpect(jsonPath("$.data.plannedChecks")
                         .value(greaterThan(0)))
-                .andExpect(jsonPath("$.data.analysisWarnings").isEmpty());
+                .andExpect(jsonPath("$.data.analysisWarnings[0].reasonCode")
+                        .value("SURVIVAL_COVERAGE_PARTIAL"));
     }
 
     @Test
@@ -507,7 +519,9 @@ class ReviewApiIT {
                 .andExpect(jsonPath("$.data.analysisWarnings[0].status")
                         .value("DEGRADED"))
                 .andExpect(jsonPath("$.data.analysisWarnings[0].checkKey").isString())
-                .andExpect(jsonPath("$.data.analysisWarnings[0].reason")
+                .andExpect(jsonPath("$.data.analysisWarnings[0].reasonCode")
+                        .value("SEMANTICS_CHANGED"))
+                .andExpect(jsonPath("$.data.analysisWarnings[0].message")
                         .value(containsString("semantics changed")))
                 .andReturn()).get("data");
         assertThat(summary.get("degradedChecks").asInt())
@@ -517,8 +531,8 @@ class ReviewApiIT {
         mockMvc.perform(get("/api/reviews/{id}/progress", reviewId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.analysisWarnings").isNotEmpty())
-                .andExpect(jsonPath("$.data.analysisWarnings[0].reason")
-                        .value(containsString("semantics changed")));
+                .andExpect(jsonPath("$.data.analysisWarnings[0].reasonCode")
+                        .value("SEMANTICS_CHANGED"));
     }
 
     @Test
@@ -548,6 +562,190 @@ class ReviewApiIT {
                 .andExpect(jsonPath("$.data.reviewStatus").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.latestRunStatus").value("FAILED"))
                 .andExpect(jsonPath("$.data.findings").value(1));
+    }
+
+
+    @Test
+    void findingDetailResolvesExactFrozenEvidenceWithClaimLinkage() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+        var reviewId = UUID.fromString(created.get("id").asText());
+        analysisService.analyze(organizationId(), reviewId);
+
+        var findingId = listFindings(reviewId).get(0).get("id").asText();
+        var detail = json(mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}",
+                        reviewId, findingId))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+
+        var evidenceItems = detail.get("evidenceItems");
+        assertThat(evidenceItems.size()).isPositive();
+        var evidenceIds = new java.util.HashSet<String>();
+        evidenceItems.forEach(item -> {
+            evidenceIds.add(item.get("evidenceId").asText());
+            assertThat(item.get("authorityClass").asText()).isNotBlank();
+            assertThat(item.get("text").asText()).isNotBlank();
+            assertThat(item.get("legalConcept").asText()).isNotBlank();
+        });
+        detail.get("evidenceItemIds").forEach(id -> {
+            assertThat(evidenceIds).contains(id.asText());
+        });
+        for (var claim : detail.get("claims")) {
+            for (var id : claim.get("evidenceItemIds")) {
+                assertThat(evidenceIds).contains(id.asText());
+            }
+        }
+        assertThat(evidenceItems).anySatisfy(item -> {
+            assertThat(item.get("authorityClass").asText()).isEqualTo("POLICY");
+            assertThat(item.get("publicationNumber").isNull()).isFalse();
+        });
+    }
+
+    @Test
+    void findingEvidenceStaysFrozenAfterNewerKnowledgePublication() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+        var reviewId = UUID.fromString(created.get("id").asText());
+        analysisService.analyze(organizationId(), reviewId);
+        var findingId = listFindings(reviewId).get(0).get("id").asText();
+
+        var before = json(mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}",
+                        reviewId, findingId))
+                .andExpect(status().isOk())
+                .andReturn()).get("data").get("evidenceItems");
+        assertThat(before.size()).isPositive();
+
+        corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.LIBRARY_UK,
+                M6EvidenceCorpus.msaManifest2026(), null);
+
+        var after = json(mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}",
+                        reviewId, findingId))
+                .andExpect(status().isOk())
+                .andReturn()).get("data").get("evidenceItems");
+        assertThat(after).isEqualTo(before);
+    }
+
+    @Test
+    void crossClauseFindingEvidenceExposesBothClauseSources() throws Exception {
+        corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.LIBRARY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var bytes = Files.readAllBytes(Path.of(
+                "src/test/resources/fixtures/m7-msa-carveout-conflict.docx"));
+        var ingested = contractIngestionService.ingest("m7-msa-carveout-conflict.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US,
+                        ReviewPackRegistry.MSA_PACK));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+        analysisService.analyze(organizationId(), review.id());
+
+        var findings = listFindings(review.id());
+        var carveFinding = findings.get(0);
+        var detail = json(mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}",
+                        review.id(), carveFinding.get("id").asText()))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+        var subjectClauseId = detail.get("subjectHeadingNodeId").asText();
+        var sourceClauseIds = new java.util.HashSet<String>();
+        detail.get("evidenceItems").forEach(item -> {
+            if (!item.get("sourceClauseId").isNull()) {
+                sourceClauseIds.add(item.get("sourceClauseId").asText());
+            }
+        });
+        assertThat(sourceClauseIds).isNotEmpty();
+        var semantics = enrichmentService.getSemantics(ingested.contractId(), 1);
+        var subjectClause = semantics.clauses().stream()
+                .filter(clause -> clause.headingNodeId().toString().equals(subjectClauseId))
+                .findFirst().orElseThrow();
+        assertThat(sourceClauseIds).contains(subjectClause.id().toString());
+    }
+
+    @Test
+    void packCatalogListsCurrentlySelectablePacks() throws Exception {
+        var catalog = json(mockMvc.perform(get("/api/reviews/packs"))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+
+        var packs = catalog.get("packs");
+        assertThat(packs.size()).isEqualTo(2);
+        var keys = new java.util.HashSet<String>();
+        packs.forEach(pack -> {
+            keys.add(pack.get("key").asText());
+            assertThat(pack.get("displayName").asText()).isNotBlank();
+            assertThat(pack.get("summary").asText()).isNotBlank();
+            assertThat(pack.get("version").asText())
+                    .isEqualTo(ReviewPackRegistry.VERSION);
+        });
+        assertThat(keys).containsExactlyInAnyOrder(
+                ReviewPackRegistry.MSA_PACK, ReviewPackRegistry.NDA_PACK);
+    }
+
+    @Test
+    void progressExposesSecondaryOnlyCoverage() throws Exception {
+        corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.LIBRARY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var bytes = Files.readAllBytes(Path.of(
+                "src/test/resources/fixtures/m7-msa-secondary-conf.docx"));
+        var ingested = contractIngestionService.ingest("m7-msa-secondary-conf.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US,
+                        ReviewPackRegistry.MSA_PACK));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+        analysisService.analyze(organizationId(), review.id());
+
+        var progress = json(mockMvc.perform(get("/api/reviews/{id}/progress", review.id()))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+
+        assertThat(progress.get("coverage")).anySatisfy(entry -> {
+            assertThat(entry.get("concept").asText()).isEqualTo("CONFIDENTIALITY");
+            assertThat(entry.get("expectation").asText()).isEqualTo("REQUIRED");
+            assertThat(entry.get("coverage").asText())
+                    .isEqualTo("PRESENT_SECONDARY_ONLY");
+        });
+        assertThat(progress.get("coverage")).anySatisfy(entry -> {
+            assertThat(entry.get("concept").asText()).isEqualTo("TERM_TERMINATION");
+            assertThat(entry.get("coverage").asText()).isEqualTo("PRESENT_PRIMARY");
+        });
+    }
+
+    @Test
+    void failedReviewExposesSanitizedFailureAndKeepsInternalDiagnostics() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+        var reviewId = UUID.fromString(created.get("id").asText());
+        jdbcClient.sql("""
+                update contract_semantics set pipeline_version = ''
+                where contract_version_id = :id
+                """).param("id", corpus.contract().contractVersionId()).update();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> analysisService.analyze(organizationId(), reviewId))
+                .isInstanceOf(RuntimeException.class);
+
+        var raw = mockMvc.perform(get("/api/reviews/{id}", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("FAILED"))
+                .andExpect(jsonPath("$.data.failure.code").value("ANALYSIS_INTERNAL_ERROR"))
+                .andExpect(jsonPath("$.data.failure.message").isString())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(raw).doesNotContain("Exception");
+        assertThat(raw).doesNotContain(".java");
+        assertThat(raw).doesNotContain("SECRET");
+
+        var internal = reviewRepository.find(organizationId(), reviewId)
+                .orElseThrow().failureReason();
+        assertThat(internal).contains("@");
     }
 
     private JsonNode createReview(UUID contractId, String packKey) throws Exception {

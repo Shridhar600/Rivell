@@ -91,7 +91,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                     new PolicyUnavailablePayload(sufficiency.name()),
                     subjectEvidence, null, null, null, null, null, null, null,
                     Map.of("sufficiency", sufficiency.name()))),
-                    detail, bundle.traceId());
+                    detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
         }
         if (sufficiency == EvidenceSufficiency.AMBIGUOUS_POLICY) {
             var ruleCount = bundle.policyItems().size();
@@ -104,7 +104,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                     new PolicyAmbiguousPayload(ruleCount), policyIds(bundle),
                     null, null, null, null, null, null, null,
                     Map.of("sufficiency", sufficiency.name()))),
-                    detail, bundle.traceId());
+                    detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
         }
         if (sufficiency == EvidenceSufficiency.SOURCE_CONFLICT
                 || sufficiency == EvidenceSufficiency.CONTRACT_CONTEXT_INCOMPLETE) {
@@ -115,7 +115,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                     union(policyIds(bundle), subjectEvidence),
                     null, null, null, null, null, null, null,
                     Map.of("sufficiency", sufficiency.name()))),
-                    detail, bundle.traceId());
+                    detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
         }
 
         var facts = liabilityFacts(clause);
@@ -155,7 +155,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                     null, null, Map.of("sufficiency", sufficiency.name()));
             return CheckOutcome.degraded(
                     "provider_unavailable:" + e.getClass().getSimpleName(),
-                    List.of(signal), detail, bundle.traceId());
+                    List.of(signal), detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
         }
         var answer = execution.answers().get(M7DecisionSpecs.DEVIATION_TYPE);
         if (!(answer instanceof ChoiceAnswer choice)) {
@@ -181,7 +181,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                     execution.metadata().usage(),
                     confidenceQuality(Map.of("sufficiency", sufficiency.name(),
                             "uncertaintyReason", "classification_uncertain"), choice))),
-                    detail, bundle.traceId());
+                    detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
         }
 
         if (M7DecisionSpecs.NOT_COMPARABLE.equals(selected)) {
@@ -199,10 +199,10 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                     null, null, execution.metadata().resolvedModel(),
                     execution.metadata().usage(),
                     confidenceQuality(Map.of("sufficiency", sufficiency.name()), choice))),
-                    detail, bundle.traceId());
+                    detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
         }
         if (M7DecisionSpecs.NO_DEVIATION.equals(selected)) {
-            return CheckOutcome.completed(List.of(), detail, bundle.traceId());
+            return CheckOutcome.completed(List.of(), detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
         }
         if (!M7DecisionSpecs.CAP_ABOVE_PREFERRED.equals(selected)
                 && !M7DecisionSpecs.PROHIBITED_STRUCTURE.equals(selected)) {
@@ -240,7 +240,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                             "escalationTrigger", escalationTrigger == null
                                     ? "" : escalationTrigger)));
         }
-        return CheckOutcome.completed(signals, detail, bundle.traceId());
+        return CheckOutcome.completed(signals, detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
     }
 
     private CheckOutcome openEndedEscalation(
@@ -279,7 +279,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                             verification.satisfiesProbability(),
                             "verificationNewRiskProbability",
                             verification.newRiskProbability()));
-            return CheckOutcome.completed(List.of(signal), detail, bundle.traceId());
+            return CheckOutcome.completed(List.of(signal), detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
         } catch (RuntimeException e) {
             var reason = "open_ended_generation_unavailable:"
                     + e.getClass().getSimpleName();
@@ -289,7 +289,7 @@ public final class LiabilityCapCheckExecutor implements ReviewCheckExecutor {
                     new DeviationUncertainPayload("open_ended_generation_unavailable"),
                     evidence, null, null, null, null, null, null, null,
                     Map.of("sufficiency", sufficiency.name()));
-            return CheckOutcome.degraded(reason, List.of(signal), detail, bundle.traceId());
+            return CheckOutcome.degraded(reason, List.of(signal), detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
         }
     }
 

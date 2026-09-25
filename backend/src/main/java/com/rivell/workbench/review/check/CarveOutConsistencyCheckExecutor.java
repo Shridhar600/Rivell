@@ -81,7 +81,8 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
             detail.put("uncertaintyReason", "carve_out_context_too_large");
             return boundedUncertainOutcome(context, detail, bundle,
                     union(subjectEvidence, counterpartEvidence),
-                    "carve_out_context_too_large", "carve_out_context_too_large");
+                    "carve_out_context_too_large", "carve_out_context_too_large")
+                    .withCitedEvidence(List.of(bundle, counterpartBundle));
         }
 
         var state = new M7DecisionSpecs.CarveOutConsistencyState(
@@ -100,7 +101,8 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
             return boundedUncertainOutcome(context, detail, bundle,
                     union(subjectEvidence, counterpartEvidence),
                     "cross_clause_decision_unavailable",
-                    "provider_unavailable:cross_clause_decision_unavailable");
+                    "provider_unavailable:cross_clause_decision_unavailable")
+                    .withCitedEvidence(List.of(bundle, counterpartBundle));
         }
         var answer = execution.answers().get(M7DecisionSpecs.CONSISTENCY);
         if (!(answer instanceof ChoiceAnswer choice)) {
@@ -116,11 +118,12 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
             return boundedUncertainOutcome(context, detail, bundle,
                     union(subjectEvidence, counterpartEvidence),
                     "cross_clause_classification_uncertain",
-                    "cross_clause_classification_uncertain");
+                    "cross_clause_classification_uncertain")
+                    .withCitedEvidence(List.of(bundle, counterpartBundle));
         }
 
         if (M7DecisionSpecs.CONSISTENT.equals(choice.selected())) {
-            return CheckOutcome.completed(List.of(), detail, bundle.traceId());
+            return CheckOutcome.completed(List.of(), detail, bundle.traceId()).withCitedEvidence(List.of(bundle, counterpartBundle));
         }
         if (M7DecisionSpecs.NOT_COMPARABLE_CARVE.equals(choice.selected())) {
             return CheckOutcome.completed(List.of(signal(context,
@@ -132,7 +135,7 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
                     execution.executionId(), execution.metadata().resolvedModel(),
                     execution.metadata().usage(),
                     confidenceQuality(bundle.sufficiency().name(), choice))),
-                    detail, bundle.traceId());
+                    detail, bundle.traceId()).withCitedEvidence(List.of(bundle, counterpartBundle));
         }
         if (!M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY.equals(choice.selected())) {
             return CheckOutcome.degraded("unexpected_consistency_answer:" + choice.selected());
@@ -147,7 +150,7 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
                 M7DecisionSpecs.CARVE_OUT_CONSISTENCY_VERSION, execution.executionId(),
                 execution.metadata().resolvedModel(), execution.metadata().usage(),
                 confidenceQuality(bundle.sufficiency().name(), choice)));
-        return CheckOutcome.completed(signals, detail, bundle.traceId());
+        return CheckOutcome.completed(signals, detail, bundle.traceId()).withCitedEvidence(List.of(bundle, counterpartBundle));
     }
 
     private CheckOutcome boundedUncertainOutcome(

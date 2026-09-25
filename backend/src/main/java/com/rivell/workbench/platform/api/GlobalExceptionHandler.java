@@ -31,6 +31,7 @@ import com.rivell.workbench.retrieval.EnrichmentNotReadyException;
 import com.rivell.workbench.retrieval.TraceNotFoundException;
 import com.rivell.workbench.retrieval.UnauthorizedEvidenceAccessException;
 import com.rivell.workbench.review.FindingNotFoundException;
+import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
 import com.rivell.workbench.review.InvalidReviewConfigurationException;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.UnauthorizedReviewAccessException;
@@ -74,6 +75,13 @@ public class GlobalExceptionHandler {
             UnauthorizedReviewAccessException.class})
     ResponseEntity<ErrorResponse> forbidden(RuntimeException e) {
         return error(HttpStatus.FORBIDDEN, "403", "Forbidden", "Not authorized for this operation.");
+    }
+
+    @ExceptionHandler(ReviewEvidenceIntegrityException.class)
+    ResponseEntity<ErrorResponse> evidenceIntegrity(ReviewEvidenceIntegrityException e) {
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "500",
+                "Finding evidence unavailable",
+                "The finding evidence could not be resolved; internal diagnostics were recorded.");
     }
 
     @ExceptionHandler(InvalidReviewConfigurationException.class)

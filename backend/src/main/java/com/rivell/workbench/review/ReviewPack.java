@@ -15,6 +15,8 @@ import com.rivell.workbench.contracts.LegalConcept;
  */
 public record ReviewPack(
         String key,
+        String displayName,
+        String summary,
         String version,
         Map<LegalConcept, CheckExpectation> conceptExpectations,
         Map<LegalConcept, CheckMechanism> clauseChecks,
@@ -22,6 +24,8 @@ public record ReviewPack(
 
     public ReviewPack {
         Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(displayName, "displayName");
+        Objects.requireNonNull(summary, "summary");
         Objects.requireNonNull(version, "version");
         conceptExpectations = Collections.unmodifiableMap(new LinkedHashMap<>(conceptExpectations));
         clauseChecks = Collections.unmodifiableMap(new LinkedHashMap<>(clauseChecks));

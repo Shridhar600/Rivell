@@ -22,6 +22,10 @@ public final class ReviewPackRegistry {
 
     private static final Map<String, ReviewPack> PACKS = build();
 
+    public java.util.List<ReviewPack> all() {
+        return java.util.List.copyOf(PACKS.values());
+    }
+
     public Optional<ReviewPack> find(String key) {
         if (key == null) {
             return Optional.empty();
@@ -37,7 +41,10 @@ public final class ReviewPackRegistry {
         msaExpectations.put(INDEMNIFICATION, CheckExpectation.EXPECTED);
         msaExpectations.put(GOVERNING_LAW, CheckExpectation.OPTIONAL);
 
-        var msa = new ReviewPack(MSA_PACK, VERSION, msaExpectations,
+        var msa = new ReviewPack(MSA_PACK, "Master Services Agreement Pack",
+                "Completeness, liability-cap, confidentiality-survival, and "
+                        + "carve-out consistency review for MSAs.",
+                VERSION, msaExpectations,
                 Map.of(LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP),
                 List.of(
                         new ReviewPack.CrossClauseRule(
@@ -54,7 +61,9 @@ public final class ReviewPackRegistry {
         ndaExpectations.put(INDEMNIFICATION, CheckExpectation.OPTIONAL);
         ndaExpectations.put(GOVERNING_LAW, CheckExpectation.OPTIONAL);
 
-        var nda = new ReviewPack(NDA_PACK, VERSION, ndaExpectations,
+        var nda = new ReviewPack(NDA_PACK, "Mutual NDA Pack",
+                "Confidentiality completeness and survival review for NDAs.",
+                VERSION, ndaExpectations,
                 Map.of(LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP),
                 List.of(new ReviewPack.CrossClauseRule(
                         CheckMechanism.CONFIDENTIALITY_SURVIVAL,
