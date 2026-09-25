@@ -1756,6 +1756,49 @@ blockquote.evidence-card__text {
 }
 
 /* M7 — review workspace */
+.coverage-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.coverage-list__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.coverage-list__concept {
+  font-weight: 600;
+}
+
+.coverage-list__expectation {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.finding-evidence__lane {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.finding-evidence__lane h4 {
+  margin: 0;
+}
+
+.finding-claims__refs {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.finding-claims__missing {
+  color: var(--color-warning);
+}
+
 .badge--status-active {
   border-color: var(--color-accent);
   color: var(--color-accent);

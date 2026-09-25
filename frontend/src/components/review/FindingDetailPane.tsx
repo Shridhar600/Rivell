@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
-import type { FindingDetail } from '../../api/reviews'
+import type { EvidenceItem } from '../../api/retrieval'
+import type { FindingClaim, FindingDetail } from '../../api/reviews'
 import { conceptLabel } from '../../lib/contractSemantics'
 import type { StructureNode } from '../../lib/documentTree'
 import {
@@ -23,6 +24,8 @@ import { useHeadingFocus } from '../../lib/useHeadingFocus'
 import { ErrorState } from '../ErrorState'
 import { LoadingState } from '../LoadingState'
 import { StructuralRenderer } from '../StructuralRenderer'
+import { authorityLabel } from '../../lib/evidence'
+import { FindingEvidencePanel, type RelatedProvision } from './FindingEvidencePanel'
 
 type ClauseSource = {
   nodeId: string
@@ -37,6 +40,37 @@ type Props = {
   clauseSource: ClauseSource | null
   sourceVersion: number | null
   latestVersion: number | null
+  clauseHeadings: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
+  onOpenClauseSemantics: (headingNodeId: string) => void
+}
+
+function ClaimEvidenceRefs({
+  claim,
+  evidenceById,
+}: {
+  claim: FindingClaim
+  evidenceById: Map<string, EvidenceItem>
+}) {
+  if (claim.evidenceItemIds.length === 0) return null
+  return (
+    <p className="finding-claims__refs">
+      Evidence:{' '}
+      {claim.evidenceItemIds.map((id, index) => {
+        const item = evidenceById.get(id)
+        return (
+          <span key={id}>
+            {index > 0 ? ', ' : ''}
+            {item ? (
+              <a href={`#finding-evidence-${id}`}>{authorityLabel(item.authorityClass)}</a>
+            ) : (
+              <span className="finding-claims__missing">unavailable in this response</span>
+            )}
+          </span>
+        )
+      })}
+    </p>
+  )
 }
 
 export function FindingDetailView({
@@ -46,6 +80,9 @@ export function FindingDetailView({
   clauseSource,
   sourceVersion,
   latestVersion,
+  clauseHeadings,
+  onNavigateToNode,
+  onOpenClauseSemantics,
 }: Props) {
   const headingRef = useHeadingFocus<HTMLHeadingElement>(finding.id)
   const why = whyClaims(finding.claims)
@@ -54,6 +91,28 @@ export function FindingDetailView({
   const qualityRows = qualityFactorRows(finding.quality)
   const concepts = findingConceptLabels(finding)
   const policyNote = policyNoteText(finding)
+  const evidenceById = new Map(
+    finding.evidenceItems.map((item) => [item.evidenceId, item]),
+  )
+  const hasUnresolvedClaimEvidence = finding.claims.some((claim) =>
+    claim.evidenceItemIds.some((id) => !evidenceById.has(id)),
+  )
+  const subjectNodeId = finding.subjectHeadingNodeId
+  const relatedProvisions: RelatedProvision[] = [
+    ...new Map(
+      finding.evidenceItems
+        .filter(
+          (item) =>
+            item.authorityClass === 'CURRENT_CONTRACT' &&
+            item.sourceType === 'CURRENT_CONTRACT_CLAUSE',
+        )
+        .flatMap((item) => item.provenanceNodeIds)
+        .filter((nodeId) => nodeId !== subjectNodeId)
+        .map((nodeId) => [nodeId, regionLabels.get(nodeId) ?? 'Contract provision']),
+    ).entries(),
+  ].map(([nodeId, label]) => ({ nodeId, label }))
+  const canDeepLink =
+    sourceVersion !== null && latestVersion !== null && sourceVersion === latestVersion
 
   return (
     <article className="finding-detail" aria-labelledby="finding-heading">
@@ -75,6 +134,13 @@ export function FindingDetailView({
         </p>
       </header>
 
+      {hasUnresolvedClaimEvidence ? (
+        <p className="state state--warning" role="status">
+          Some statements reference supporting evidence that is not available in this response;
+          they are not shown as grounded.
+        </p>
+      ) : null}
+
       {finding.subjectKind === 'ABSENCE' ? (
         <section className="finding-section" aria-labelledby="finding-absence-heading">
           <h3 id="finding-absence-heading">Missing provision</h3>
@@ -93,6 +159,7 @@ export function FindingDetailView({
                 <li key={claim.ordinal}>
                   <span className="finding-claims__kind">{claimKindLabel(claim.claimKind)}</span>
                   <p>{claim.text}</p>
+                  <ClaimEvidenceRefs claim={claim} evidenceById={evidenceById} />
                 </li>
               ))}
             </ul>
@@ -156,6 +223,7 @@ export function FindingDetailView({
               <li key={claim.ordinal}>
                 <span className="finding-claims__kind">{claimKindLabel(claim.claimKind)}</span>
                 <p>{claim.text}</p>
+                <ClaimEvidenceRefs claim={claim} evidenceById={evidenceById} />
               </li>
             ))}
           </ul>
@@ -166,7 +234,10 @@ export function FindingDetailView({
         <h3 id="finding-recommendation-heading">Recommended action</h3>
         <p>{proposedActionLabel(finding.proposedAction)}</p>
         {recommendations.map((claim) => (
-          <p key={claim.ordinal}>{claim.text}</p>
+          <div key={claim.ordinal}>
+            <p>{claim.text}</p>
+            <ClaimEvidenceRefs claim={claim} evidenceById={evidenceById} />
+          </div>
         ))}
       </section>
 
@@ -203,6 +274,19 @@ export function FindingDetailView({
         </section>
       ) : null}
 
+      {finding.evidenceItems.length > 0 ? (
+        <FindingEvidencePanel
+          items={finding.evidenceItems}
+          relatedProvisions={relatedProvisions}
+          canDeepLink={canDeepLink}
+          contractId={contractId}
+          regionLabels={regionLabels}
+          clauseHeadings={clauseHeadings}
+          onNavigateToNode={onNavigateToNode}
+          onOpenClauseSemantics={onOpenClauseSemantics}
+        />
+      ) : null}
+
       {qualityRows.length > 0 ? (
         <section className="finding-section" aria-labelledby="finding-quality-heading">
           <h3 id="finding-quality-heading">System assessment</h3>
@@ -226,6 +310,9 @@ export function FindingDetailPane({
   clauseSource,
   sourceVersion,
   latestVersion,
+  clauseHeadings,
+  onNavigateToNode,
+  onOpenClauseSemantics,
   findingId,
   isPending,
   isError,
@@ -237,6 +324,9 @@ export function FindingDetailPane({
   clauseSource: ClauseSource | null
   sourceVersion: number | null
   latestVersion: number | null
+  clauseHeadings: Map<string, string>
+  onNavigateToNode: (nodeId: string) => void
+  onOpenClauseSemantics: (headingNodeId: string) => void
   findingId: string | null
   isPending: boolean
   isError: boolean
@@ -264,6 +354,9 @@ export function FindingDetailPane({
       clauseSource={clauseSource}
       sourceVersion={sourceVersion}
       latestVersion={latestVersion}
+      clauseHeadings={clauseHeadings}
+      onNavigateToNode={onNavigateToNode}
+      onOpenClauseSemantics={onOpenClauseSemantics}
     />
   )
 }

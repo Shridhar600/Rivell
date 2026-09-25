@@ -425,6 +425,8 @@ export type StubOptions = {
   trace?: unknown
   traceResponse?: () => Response | Promise<Response>
   traceStatus?: number
+  packs?: unknown
+  packsStatus?: number
   reviews?: unknown
   reviewsStatus?: number
   reviewSummary?: unknown
@@ -440,6 +442,23 @@ export type StubOptions = {
   createReviewResponse?: (body: unknown) => Response | Promise<Response>
   createReviewSummary?: unknown
   createReviewStatus?: number
+}
+
+const defaultPackCatalog = {
+  packs: [
+    {
+      key: 'MSA_PACK',
+      displayName: 'MSA pack',
+      summary: 'Liability, confidentiality and termination checks for master services agreements.',
+      version: 'rivell-review-pack-1',
+    },
+    {
+      key: 'NDA_PACK',
+      displayName: 'NDA pack',
+      summary: 'Confidentiality and term checks for non-disclosure agreements.',
+      version: 'rivell-review-pack-1',
+    },
+  ],
 }
 
 export function stubContractApi(options: StubOptions = {}) {
@@ -566,6 +585,15 @@ export function stubContractApi(options: StubOptions = {}) {
       return jsonResponse(envelope(options.trace ?? null))
     }
 
+    if (method === 'GET' && /\/api\/reviews\/packs$/.test(url)) {
+      if (options.packsStatus && options.packsStatus !== 200) {
+        return jsonResponse(
+          { code: String(options.packsStatus), title: 'Error', detail: 'server detail text' },
+          options.packsStatus,
+        )
+      }
+      return jsonResponse(envelope(options.packs ?? defaultPackCatalog))
+    }
     if (method === 'GET' && /\/api\/reviews\?(.*)contractId=/.test(url)) {
       if (options.reviewsStatus && options.reviewsStatus !== 200) {
         return jsonResponse(

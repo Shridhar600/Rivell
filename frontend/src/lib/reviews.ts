@@ -3,6 +3,8 @@ import type {
   FindingClaim,
   FindingDetail,
   FindingSummary,
+  ReviewCoverage,
+  ReviewFailure,
   ReviewSummary,
   FindingQuality,
 } from '../api/reviews'
@@ -203,32 +205,62 @@ function degradationFlagLabel(flag: string): string {
 }
 
 export function analysisWarningMessage(warning: AnalysisWarning): string {
-  const reason = warning.reason ?? ''
-  if (reason.includes('provider_unavailable') || reason.includes('bounded_decision_unavailable')) {
-    return 'A bounded semantic decision was unavailable; the clause was not classified.'
+  const message = warning.message.trim()
+  const fallback =
+    warning.status === 'FAILED'
+      ? 'This check did not complete; its result is missing.'
+      : 'This check ran in a degraded mode; its result may be incomplete.'
+  const base = message || fallback
+  if (warning.reasonCode === 'SURVIVAL_COVERAGE_PARTIAL') {
+    return `${base} Human review is required before treating the provision as covered or uncovered.`
   }
-  if (reason.includes('open_ended_generation_unavailable')) {
-    return 'The machine-proposed wording could not be produced; human review is required.'
-  }
-  if (reason.includes('cross_clause_decision_unavailable')) {
-    return 'The cross-clause assessment was unavailable.'
-  }
-  if (reason.includes('carve_out_context_too_large')) {
-    return 'The cross-clause context exceeded the bounded analysis size.'
-  }
-  if (reason.includes('carve_out_not_comparable')) {
-    return 'The cross-clause classifier could not compare the provisions.'
-  }
-  if (reason.includes('classification_uncertain')) {
-    return 'The classifier did not reach a clear classification for this clause.'
-  }
-  return warning.status === 'FAILED'
-    ? 'This check did not complete; its result is missing.'
-    : 'This check ran in a degraded mode; its result may be incomplete.'
+  return base
 }
 
-export function reviewFailureMessage(_reason: string | null): string {
+export function reviewFailureMessage(failure: ReviewFailure | null): string {
+  if (failure?.message.trim()) return failure.message.trim()
   return 'The automated review could not be completed. The contract and any earlier reviews are unaffected.'
+}
+
+const COVERAGE_LABELS: Record<string, string> = {
+  PRESENT_PRIMARY: 'Reviewed as a primary clause',
+  PRESENT_SECONDARY_ONLY: 'Detected as a secondary mention only',
+  ABSENT: 'Not found in the contract',
+  UNKNOWN: 'Coverage not established',
+}
+
+export function coverageLabel(state: string): string {
+  return COVERAGE_LABELS[state] ?? 'Coverage not established'
+}
+
+export function coverageExpectationLabel(expectation: string): string {
+  switch (expectation) {
+    case 'REQUIRED':
+      return 'Required'
+    case 'EXPECTED':
+      return 'Expected'
+    case 'OPTIONAL':
+      return 'Optional'
+    default:
+      return humanizeCode(expectation)
+  }
+}
+
+export function coverageModifier(state: string): string {
+  return state === 'PRESENT_PRIMARY' ? 'badge--muted' : 'badge--status-active'
+}
+
+export function coverageLimitations(coverage: ReviewCoverage[]): ReviewCoverage[] {
+  return coverage.filter((entry) => entry.coverage !== 'PRESENT_PRIMARY')
+}
+
+export function coverageLimitationSummary(coverage: ReviewCoverage[]): string | null {
+  const limited = coverageLimitations(coverage)
+  if (limited.length === 0) return null
+  const parts = limited.map(
+    (entry) => `${conceptLabel(entry.concept)} (${coverageLabel(entry.coverage).toLowerCase()})`,
+  )
+  return `Review coverage is limited for: ${parts.join('; ')}.`
 }
 
 export function findingSubjectLabel(

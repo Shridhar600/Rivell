@@ -81,6 +81,7 @@ describe('review creation', () => {
     expect(await screen.findByText('Counterparty paper')).toBeInTheDocument()
     expect(screen.getByText('United Kingdom')).toBeInTheDocument()
 
+    expect(await screen.findByRole('option', { name: 'MSA pack' })).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText(/Contract pack/), 'MSA_PACK')
     await userEvent.click(screen.getByRole('button', { name: 'Start review' }))
 
@@ -269,6 +270,54 @@ describe('review creation', () => {
     await userEvent.click(resumed)
 
     await waitFor(() => expect(createRequests(api)).toHaveLength(2))
+  })
+
+  it('builds pack options from the API catalog without inventing entries', async () => {
+    const api = stubContractApi({
+      packs: {
+        packs: [
+          {
+            key: 'CUSTOM_PACK',
+            displayName: 'Custom pack',
+            summary: 'Only from the catalog.',
+            version: 'rivell-review-pack-9',
+          },
+        ],
+      },
+      createReviewSummary: fixtureQueuedReviewSummary,
+      reviewSummary: fixtureQueuedReviewSummary,
+    })
+    renderRoute('/reviews/c1/analysis')
+
+    expect(await screen.findByRole('option', { name: 'Custom pack' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'No contract pack' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'MSA pack' })).not.toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText(/Contract pack/), 'CUSTOM_PACK')
+    await userEvent.click(screen.getByRole('button', { name: 'Start review' }))
+
+    await waitFor(() => expect(createRequests(api)).toHaveLength(1))
+    expect(createRequests(api)[0].body).toEqual({ contractPackKey: 'CUSTOM_PACK' })
+  })
+
+  it('keeps pack-less creation available when the catalog fails', async () => {
+    const api = stubContractApi({
+      packsStatus: 500,
+      createReviewSummary: fixtureQueuedReviewSummary,
+      reviewSummary: fixtureQueuedReviewSummary,
+    })
+    renderRoute('/reviews/c1/analysis')
+
+    expect(
+      await screen.findByText(/review pack catalog could not be loaded/, {}, { timeout: 4000 }),
+    ).toBeInTheDocument()
+    const options = screen.getAllByRole('option')
+    expect(options).toHaveLength(1)
+    expect(options[0]).toHaveTextContent('No contract pack')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start review' }))
+    await waitFor(() => expect(createRequests(api)).toHaveLength(1))
+    expect(createRequests(api)[0].body).toEqual({})
   })
 
   it('gates creation until semantic analysis is ready', async () => {

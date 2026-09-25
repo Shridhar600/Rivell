@@ -362,6 +362,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reviews/packs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the currently selectable contract packs */
+        get: operations["packs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/retrieval/traces/{id}": {
         parameters: {
             query?: never;
@@ -1132,7 +1149,8 @@ export interface components {
         AnalysisWarningView: {
             checkKey?: string;
             status?: string;
-            reason?: string;
+            reasonCode?: string;
+            message?: string;
         };
         ApiResultReviewSummaryView: {
             data?: components["schemas"]["ReviewSummaryView"];
@@ -1140,6 +1158,25 @@ export interface components {
             status?: number;
             /** Format: date-time */
             timestamp?: string;
+        };
+        FailureView: {
+            code?: string;
+            message?: string;
+        };
+        ProfileView: {
+            contractType?: string;
+            ourSideRole?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+            contractPackKey?: string;
+        };
+        ReviewCoverageView: {
+            /** @enum {string} */
+            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            /** @enum {string} */
+            expectation?: "REQUIRED" | "EXPECTED" | "OPTIONAL";
+            /** @enum {string} */
+            coverage?: "PRESENT_PRIMARY" | "PRESENT_SECONDARY_ONLY" | "ABSENT" | "UNKNOWN";
         };
         ReviewRunView: {
             /** Format: uuid */
@@ -1156,7 +1193,7 @@ export interface components {
             /** Format: int32 */
             contractVersionNumber?: number;
             status?: string;
-            failureReason?: string;
+            failure?: components["schemas"]["FailureView"];
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -1177,12 +1214,18 @@ export interface components {
             signals?: number;
             /** Format: int32 */
             findings?: number;
-            contractPackKey?: string;
+            snapshot?: components["schemas"]["SnapshotView"];
+            coverage?: components["schemas"]["ReviewCoverageView"][];
+            analysisWarnings?: components["schemas"]["AnalysisWarningView"][];
+            analysisWarningsTruncated?: boolean;
+        };
+        SnapshotView: {
+            profile?: components["schemas"]["ProfileView"];
             packVersion?: string;
             /** Format: int64 */
             knowledgePinNumber?: number;
-            analysisWarnings?: components["schemas"]["AnalysisWarningView"][];
-            analysisWarningsTruncated?: boolean;
+            /** Format: date */
+            effectiveOn?: string;
         };
         ApiResultSystemStatusResponse: {
             data?: components["schemas"]["SystemStatusResponse"];
@@ -1247,6 +1290,7 @@ export interface components {
             /** Format: int32 */
             findings?: number;
             latestRunStatus?: string;
+            coverage?: components["schemas"]["ReviewCoverageView"][];
             analysisWarnings?: components["schemas"]["AnalysisWarningView"][];
             analysisWarningsTruncated?: boolean;
         };
@@ -1347,10 +1391,27 @@ export interface components {
             };
             claims?: components["schemas"]["ClaimView"][];
             evidenceItemIds?: string[];
+            evidenceItems?: components["schemas"]["EvidenceItemResponse"][];
             signalIds?: string[];
             absenceBasis?: components["schemas"]["AbsenceBasisView"];
             /** Format: date-time */
             createdAt?: string;
+        };
+        ApiResultReviewPackCatalogView: {
+            data?: components["schemas"]["ReviewPackCatalogView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        PackView: {
+            key?: string;
+            displayName?: string;
+            summary?: string;
+            version?: string;
+        };
+        ReviewPackCatalogView: {
+            packs?: components["schemas"]["PackView"][];
         };
         ApiResultRetrievalTraceResponse: {
             data?: components["schemas"]["RetrievalTraceResponse"];
@@ -2569,6 +2630,35 @@ export interface operations {
             };
             /** @description Unknown finding */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    packs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultReviewPackCatalogView"];
+                };
+            };
+            /** @description Missing reviews:read */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -21,6 +21,7 @@ type Props = {
   onSelect: (findingId: string) => void
   regionLabels: Map<string, string>
   reviewStatus: ReviewStatus
+  coverageLimited: boolean
   isEnabled: boolean
   isStateUnrecognized: boolean
   isPending: boolean
@@ -41,6 +42,7 @@ export function FindingsPanel({
   onSelect,
   regionLabels,
   reviewStatus,
+  coverageLimited,
   isEnabled,
   isStateUnrecognized,
   isPending,
@@ -152,7 +154,11 @@ export function FindingsPanel({
         ) : reviewStatus === 'COMPLETED' ? (
           <EmptyState
             title="No findings"
-            message="The automated review recorded no findings for this contract version."
+            message={
+              coverageLimited
+                ? 'The automated review recorded no findings, but review coverage is limited for some provisions (see Review coverage above).'
+                : 'The automated review recorded no findings for this contract version.'
+            }
           />
         ) : (
           <EmptyState

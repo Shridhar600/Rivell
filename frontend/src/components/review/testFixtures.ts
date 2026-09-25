@@ -1,9 +1,26 @@
+export const fixturePackCatalog = {
+  packs: [
+    {
+      key: 'MSA_PACK',
+      displayName: 'MSA pack',
+      summary: 'Liability, confidentiality and termination checks for master services agreements.',
+      version: 'rivell-review-pack-1',
+    },
+    {
+      key: 'NDA_PACK',
+      displayName: 'NDA pack',
+      summary: 'Confidentiality and term checks for non-disclosure agreements.',
+      version: 'rivell-review-pack-1',
+    },
+  ],
+}
+
 export const fixtureQueuedReviewSummary = {
   id: 'r-1',
   contractId: 'c1',
   contractVersionNumber: 1,
   status: 'ANALYSIS_QUEUED',
-  failureReason: null,
+  failure: null,
   createdAt: '2026-09-25T09:00:00Z',
   startedAt: null,
   completedAt: null,
@@ -15,9 +32,22 @@ export const fixtureQueuedReviewSummary = {
   failedChecks: 0,
   signals: 0,
   findings: 0,
-  contractPackKey: 'MSA_PACK',
-  packVersion: 'rivell-review-pack-1',
-  knowledgePinNumber: 6,
+  snapshot: {
+    profile: {
+      contractType: 'MSA',
+      ourSideRole: 'CUSTOMER',
+      paperSource: 'COUNTERPARTY_PAPER',
+      jurisdiction: 'UK',
+      contractPackKey: 'MSA_PACK',
+    },
+    packVersion: 'rivell-review-pack-1',
+    knowledgePinNumber: 6,
+    effectiveOn: '2026-09-25',
+  },
+  coverage: [
+    { concept: 'LIMITATION_OF_LIABILITY', expectation: 'REQUIRED', coverage: 'PRESENT_PRIMARY' },
+    { concept: 'CONFIDENTIALITY', expectation: 'EXPECTED', coverage: 'PRESENT_PRIMARY' },
+  ],
   analysisWarnings: [],
   analysisWarningsTruncated: false,
 }
@@ -46,7 +76,8 @@ export const fixtureCompletedReviewSummary = {
     {
       checkKey: 'LIABILITY_CAP:LIMITATION_OF_LIABILITY',
       status: 'DEGRADED',
-      reason: 'provider_unavailable: bounded semantic decision unavailable',
+      reasonCode: 'PROVIDER_UNAVAILABLE',
+      message: 'An external analysis provider was unavailable for this check.',
     },
   ],
 }
@@ -54,8 +85,10 @@ export const fixtureCompletedReviewSummary = {
 export const fixtureFailedReviewSummary = {
   ...fixtureQueuedReviewSummary,
   status: 'FAILED',
-  failureReason:
-    'IllegalStateException:assembly@com.rivell.workbench.review.FindingAssembler.assemble:88',
+  failure: {
+    code: 'ANALYSIS_INTERNAL_ERROR',
+    message: 'The automated review could not be completed.',
+  },
   startedAt: '2026-09-25T09:00:30Z',
   completedAt: '2026-09-25T09:00:45Z',
   activeRun: null,
@@ -93,6 +126,14 @@ export const fixtureReviewList = {
   ],
   truncated: false,
 }
+
+import {
+  fixtureCompatiblePrecedent,
+  fixtureContractItem,
+  fixtureDraftingItem,
+  fixturePolicyItem,
+  fixtureRelatedContractItem,
+} from '../evidence/testFixtures'
 
 export const fixtureClauseFindingSummary = {
   id: 'f-1',
@@ -138,7 +179,7 @@ const clauseClaims = [
     text:
       'The liability cap of three times the fees paid is above the organization’s preferred position.',
     absence: false,
-    evidenceItemIds: ['e-clause', 'e-policy'],
+    evidenceItemIds: ['e-contract', 'e-policy'],
   },
   {
     ordinal: 1,
@@ -172,7 +213,13 @@ export const fixtureClauseFindingDetail = {
     degradationFlags: [],
   },
   claims: clauseClaims,
-  evidenceItemIds: ['e-clause', 'e-policy', 'e-drafting'],
+  evidenceItems: [
+    fixturePolicyItem,
+    fixtureDraftingItem,
+    fixtureContractItem,
+    fixtureCompatiblePrecedent,
+  ],
+  evidenceItemIds: ['e-contract', 'e-policy', 'e-drafting', 'e-precedent-1'],
   signalIds: ['s-1', 's-2', 's-3'],
   absenceBasis: null,
 }
@@ -195,6 +242,7 @@ export const fixtureAbsenceFindingDetail = {
       evidenceItemIds: [],
     },
   ],
+  evidenceItems: [],
   evidenceItemIds: [],
   signalIds: ['s-4'],
   absenceBasis: { planCheckId: 'pc-1', checkKey: 'PRESENCE:LIMITATION_OF_LIABILITY' },
@@ -224,23 +272,24 @@ export const fixturePolicyMissingFindingDetail = {
       claimKind: 'OBSERVATION',
       text: 'No applicable published policy exists for this clause.',
       absence: false,
-      evidenceItemIds: ['e-clause'],
+      evidenceItemIds: ['e-contract'],
     },
     {
       ordinal: 1,
       claimKind: 'EVIDENCE_BASIS',
       text: 'Historical precedent is evidence only and does not establish organizational policy.',
       absence: false,
-      evidenceItemIds: ['e-precedent'],
+      evidenceItemIds: ['e-precedent-1'],
     },
     {
       ordinal: 2,
       claimKind: 'RECOMMENDATION',
       text: 'Human review is required because no organizational policy covers this clause.',
       absence: false,
-      evidenceItemIds: ['e-clause'],
+      evidenceItemIds: ['e-contract'],
     },
   ],
+  evidenceItems: [fixtureContractItem, fixtureCompatiblePrecedent],
 }
 
 export const fixtureAmbiguousPolicyFindingDetail = {
@@ -264,16 +313,17 @@ export const fixtureAmbiguousPolicyFindingDetail = {
       claimKind: 'OBSERVATION',
       text: 'More than one published policy applies to this clause.',
       absence: false,
-      evidenceItemIds: ['e-policy-1', 'e-policy-2'],
+      evidenceItemIds: ['e-policy', 'e-policy-2'],
     },
     {
       ordinal: 1,
       claimKind: 'POLICY_BASIS',
       text: 'The applicable policies disagree; no rule was chosen.',
       absence: false,
-      evidenceItemIds: ['e-policy-1', 'e-policy-2'],
+      evidenceItemIds: ['e-policy', 'e-policy-2'],
     },
   ],
+  evidenceItems: [fixturePolicyItem, { ...fixturePolicyItem, evidenceId: 'e-policy-2' }],
 }
 
 export const fixtureGenerativeFindingDetail = {
@@ -299,23 +349,24 @@ export const fixtureGenerativeFindingDetail = {
       claimKind: 'OBSERVATION',
       text: 'The clause cannot be compared with the published policy position.',
       absence: false,
-      evidenceItemIds: ['e-clause', 'e-policy'],
+      evidenceItemIds: ['e-contract', 'e-policy'],
     },
     {
       ordinal: 1,
       claimKind: 'GENERATIVE_EXPLANATION',
       text: 'The proposed wording introduces a mutual cap tied to fees paid in the preceding twelve months.',
       absence: false,
-      evidenceItemIds: ['e-clause', 'e-policy'],
+      evidenceItemIds: ['e-contract', 'e-policy'],
     },
     {
       ordinal: 2,
       claimKind: 'RECOMMENDATION',
       text: 'Consider the AI-proposed wording; it is machine-proposed and not approved policy.',
       absence: false,
-      evidenceItemIds: ['e-clause'],
+      evidenceItemIds: ['e-contract'],
     },
   ],
+  evidenceItems: [fixtureContractItem, fixturePolicyItem],
 }
 
 export const fixtureCrossClauseFindingDetail = {
@@ -339,8 +390,9 @@ export const fixtureCrossClauseFindingDetail = {
       claimKind: 'OBSERVATION',
       text: 'No survival provision covers the confidentiality obligations.',
       absence: false,
-      evidenceItemIds: ['e-confidentiality'],
+      evidenceItemIds: ['e-contract', 'e-related'],
     },
   ],
-  evidenceItemIds: ['e-confidentiality', 'e-termination'],
+  evidenceItems: [fixtureContractItem, fixtureRelatedContractItem],
+  evidenceItemIds: ['e-contract', 'e-related'],
 }

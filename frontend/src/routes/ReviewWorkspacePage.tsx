@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useParams, useSearchParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { useContractQuery, useContractStructureQuery } from '../api/contracts'
 import type { FindingFilters } from '../api/reviews'
 import {
@@ -15,9 +15,11 @@ import { useSemanticsQuery } from '../api/semantics'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
 import { buildRegionLabelMap, TAXONOMY_CONCEPTS } from '../lib/contractSemantics'
+import { coverageLimitations } from '../lib/reviews'
 import { subtreeNodes } from '../lib/documentTree'
 import { FindingDetailPane } from '../components/review/FindingDetailPane'
 import { FindingsPanel } from '../components/review/FindingsPanel'
+import { ReviewCoveragePanel } from '../components/review/ReviewCoveragePanel'
 import { ReviewHeader } from '../components/review/ReviewHeader'
 import { ReviewLifecyclePanel } from '../components/review/ReviewLifecyclePanel'
 
@@ -41,6 +43,7 @@ function readConcept(value: string | null): FindingFilters['concept'] {
 
 export function ReviewWorkspacePage() {
   const { contractId = '', reviewId = '' } = useParams()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const contractQuery = useContractQuery(contractId)
@@ -69,6 +72,26 @@ export function ReviewWorkspacePage() {
       ),
     [semanticsQuery.data, structureQuery.data],
   )
+
+  const clauseHeadings = useMemo(
+    () =>
+      new Map(
+        (semanticsQuery.data?.clauses ?? []).map((clause) => [clause.id, clause.headingNodeId]),
+      ),
+    [semanticsQuery.data],
+  )
+
+  const onNavigateToNode = (nodeId: string) => {
+    navigate(`/reviews/${contractId}?view=document&node=${nodeId}`)
+  }
+
+  const onOpenClauseSemantics = (headingNodeId: string) => {
+    const params = new URLSearchParams()
+    params.set('view', 'semantics')
+    params.set('section', 'clauses')
+    params.set('clause', headingNodeId)
+    navigate(`/reviews/${contractId}?${params.toString()}`)
+  }
 
   const clauseSource = useMemo(() => {
     const finding = findingQuery.data
@@ -149,6 +172,7 @@ export function ReviewWorkspacePage() {
         summary={summaryQuery.data}
         onRefresh={() => void summaryQuery.refetch()}
       />
+      <ReviewCoveragePanel coverage={summaryQuery.data.coverage} />
       <div className="review-split">
         <FindingsPanel
           findings={findingsQuery.data?.items ?? []}
@@ -159,6 +183,7 @@ export function ReviewWorkspacePage() {
           onSelect={selectFinding}
           regionLabels={regionLabels}
           reviewStatus={status ?? 'UNKNOWN'}
+          coverageLimited={coverageLimitations(summaryQuery.data.coverage).length > 0}
           isEnabled={canReadFindings}
           isStateUnrecognized={status === 'UNKNOWN'}
           isPending={findingsQuery.isPending}
@@ -172,6 +197,9 @@ export function ReviewWorkspacePage() {
           clauseSource={clauseSource}
           sourceVersion={summaryQuery.data.contractVersionNumber}
           latestVersion={latestVersion ?? null}
+          clauseHeadings={clauseHeadings}
+          onNavigateToNode={onNavigateToNode}
+          onOpenClauseSemantics={onOpenClauseSemantics}
           findingId={canReadFindings ? selectedFindingId : null}
           isPending={Boolean(selectedFindingId) && findingQuery.isPending}
           isError={findingQuery.isError}

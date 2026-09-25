@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
   createReview,
+  fetchReviewPacks,
   isReviewConflictError,
   parseFindingDetail,
   parseFindingList,
@@ -64,7 +65,7 @@ const queuedSummary = {
   contractId: 'c-1',
   contractVersionNumber: 1,
   status: 'ANALYSIS_QUEUED',
-  failureReason: null,
+  failure: null,
   createdAt: '2026-09-25T09:00:00Z',
   startedAt: null,
   completedAt: null,
@@ -76,9 +77,21 @@ const queuedSummary = {
   failedChecks: 0,
   signals: 0,
   findings: 0,
-  contractPackKey: 'MSA_PACK',
-  packVersion: 'rivell-review-pack-1',
-  knowledgePinNumber: 6,
+  snapshot: {
+    profile: {
+      contractType: 'MSA',
+      ourSideRole: 'CUSTOMER',
+      paperSource: 'COUNTERPARTY_PAPER',
+      jurisdiction: 'UK',
+      contractPackKey: 'MSA_PACK',
+    },
+    packVersion: 'rivell-review-pack-1',
+    knowledgePinNumber: 6,
+    effectiveOn: '2026-09-25',
+  },
+  coverage: [
+    { concept: 'LIMITATION_OF_LIABILITY', expectation: 'REQUIRED', coverage: 'PRESENT_PRIMARY' },
+  ],
   analysisWarnings: [],
   analysisWarningsTruncated: false,
 }
@@ -98,9 +111,32 @@ const completedSummary = {
     {
       checkKey: 'LIABILITY_CAP:LIMITATION_OF_LIABILITY',
       status: 'DEGRADED',
-      reason: 'provider_unavailable: bounded semantic decision unavailable',
+      reasonCode: 'PROVIDER_UNAVAILABLE',
+      message: 'An external analysis provider was unavailable for this check.',
     },
   ],
+}
+
+const contractEvidenceItem = {
+  evidenceId: 'e-clause',
+  authorityClass: 'CURRENT_CONTRACT',
+  sourceType: 'CURRENT_CONTRACT_CLAUSE',
+  sourceArtifactId: null,
+  sourceCandidateId: null,
+  sourceContractVersionId: 'cv-1',
+  sourceClauseId: 'cl-6',
+  legalConcept: 'LIMITATION_OF_LIABILITY',
+  text: 'The total liability of Supplier shall not exceed three times the fees paid.',
+  policyFacts: null,
+  contractFacts: [],
+  retrievalReason: 'STRUCTURED',
+  laneInfo: { lexicalRank: null, vectorRank: null, fusedRank: null, fusedScore: null },
+  semanticAssessment: null,
+  policyCompatibility: null,
+  provenanceNodeIds: ['node-6'],
+  publicationId: null,
+  publicationNumber: null,
+  applicabilityScope: null,
 }
 
 const clauseFindingDetail = {
@@ -151,6 +187,7 @@ const clauseFindingDetail = {
       evidenceItemIds: ['e-drafting'],
     },
   ],
+  evidenceItems: [contractEvidenceItem],
   evidenceItemIds: ['e-clause', 'e-policy', 'e-drafting'],
   signalIds: ['s-1', 's-2', 's-3'],
   absenceBasis: null,
@@ -184,6 +221,7 @@ const absenceFindingDetail = {
       evidenceItemIds: [],
     },
   ],
+  evidenceItems: [],
   evidenceItemIds: [],
   signalIds: ['s-4'],
   absenceBasis: { planCheckId: 'pc-1', checkKey: 'PRESENCE:LIMITATION_OF_LIABILITY' },
@@ -194,9 +232,11 @@ describe('review parsers', () => {
     const summary = parseReviewSummary(completedSummary)
     expect(summary.status).toBe('COMPLETED')
     expect(summary.activeRun?.status).toBe('COMPLETED')
-    expect(summary.contractPackKey).toBe('MSA_PACK')
-    expect(summary.knowledgePinNumber).toBe(6)
+    expect(summary.snapshot?.profile?.contractPackKey).toBe('MSA_PACK')
+    expect(summary.snapshot?.knowledgePinNumber).toBe(6)
     expect(summary.analysisWarnings[0].checkKey).toBe('LIABILITY_CAP:LIMITATION_OF_LIABILITY')
+    expect(summary.analysisWarnings[0].reasonCode).toBe('PROVIDER_UNAVAILABLE')
+    expect(summary.coverage[0].coverage).toBe('PRESENT_PRIMARY')
   })
 
   it('tolerates unknown enum-like values instead of throwing', () => {
@@ -227,6 +267,8 @@ describe('review parsers', () => {
       'RECOMMENDATION',
     ])
     expect(detail.absenceBasis).toBeNull()
+    expect(detail.evidenceItems[0].evidenceId).toBe('e-clause')
+    expect(detail.evidenceItems[0].authorityClass).toBe('CURRENT_CONTRACT')
   })
 
   it('parses absence finding detail with plan-check basis and no evidence', () => {
@@ -278,6 +320,28 @@ describe('review parsers', () => {
 })
 
 describe('review requests', () => {
+  it('parses the authoritative pack catalog', async () => {
+    const requests = stubFetch(() =>
+      jsonResponse(
+        envelope({
+          packs: [
+            {
+              key: 'MSA_PACK',
+              displayName: 'MSA pack',
+              summary: 'MSA checks',
+              version: 'rivell-review-pack-1',
+            },
+          ],
+        }),
+      ),
+    )
+    const packs = await fetchReviewPacks()
+    expect(packs).toEqual([
+      { key: 'MSA_PACK', displayName: 'MSA pack', summary: 'MSA checks', version: 'rivell-review-pack-1' },
+    ])
+    expect(requests[0].url).toContain('/api/reviews/packs')
+  })
+
   it('sends exactly one create POST with the explicit pack', async () => {
     const requests = stubFetch(() => jsonResponse(envelope(queuedSummary)))
     const summary = await createReview('c-1', 2, 'MSA_PACK')

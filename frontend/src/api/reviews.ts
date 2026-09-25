@@ -1,6 +1,8 @@
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import { createApiClient } from './client'
+import { parseEvidenceItem } from './retrieval'
+import type { EvidenceItem } from './retrieval'
 import type { paths } from './schema'
 import {
   asRecord,
@@ -37,7 +39,49 @@ export const MAX_PAGE_LIMIT = 100
 export type AnalysisWarning = {
   checkKey: string
   status: string
-  reason: string | null
+  reasonCode: string
+  message: string
+}
+
+export type ReviewFailure = {
+  code: string
+  message: string
+}
+
+export type ReviewSnapshotProfile = {
+  contractType: string | null
+  ourSideRole: string | null
+  paperSource: string | null
+  jurisdiction: string | null
+  contractPackKey: string | null
+}
+
+export type ReviewSnapshot = {
+  profile: ReviewSnapshotProfile | null
+  packVersion: string | null
+  knowledgePinNumber: number | null
+  effectiveOn: string | null
+}
+
+export const COVERAGE_STATES = [
+  'PRESENT_PRIMARY',
+  'PRESENT_SECONDARY_ONLY',
+  'ABSENT',
+  'UNKNOWN',
+] as const
+export type CoverageState = (typeof COVERAGE_STATES)[number] | 'UNKNOWN'
+
+export type ReviewCoverage = {
+  concept: string
+  expectation: string
+  coverage: CoverageState
+}
+
+export type ReviewPack = {
+  key: string
+  displayName: string
+  summary: string
+  version: string
 }
 
 export type ReviewRun = {
@@ -51,7 +95,7 @@ export type ReviewSummary = {
   contractId: string
   contractVersionNumber: number | null
   status: ReviewStatus
-  failureReason: string | null
+  failure: ReviewFailure | null
   createdAt: string
   startedAt: string | null
   completedAt: string | null
@@ -63,9 +107,8 @@ export type ReviewSummary = {
   failedChecks: number
   signals: number
   findings: number
-  contractPackKey: string | null
-  packVersion: string | null
-  knowledgePinNumber: number | null
+  snapshot: ReviewSnapshot | null
+  coverage: ReviewCoverage[]
   analysisWarnings: AnalysisWarning[]
   analysisWarningsTruncated: boolean
 }
@@ -153,6 +196,7 @@ export type FindingDetail = FindingSummary & {
   quality: FindingQuality | null
   claims: FindingClaim[]
   evidenceItemIds: string[]
+  evidenceItems: EvidenceItem[]
   signalIds: string[]
   absenceBasis: AbsenceBasis | null
 }
@@ -207,7 +251,63 @@ function parseAnalysisWarning(value: unknown, what: string): AnalysisWarning {
   return {
     checkKey: readOptionalNullableString(warning, 'checkKey', what) ?? 'UNKNOWN',
     status: readOptionalNullableString(warning, 'status', what) ?? 'UNKNOWN',
-    reason: readOptionalNullableString(warning, 'reason', what),
+    reasonCode: readOptionalNullableString(warning, 'reasonCode', what) ?? 'UNKNOWN',
+    message: readOptionalNullableString(warning, 'message', what) ?? '',
+  }
+}
+
+function parseFailure(value: unknown, what: string): ReviewFailure | null {
+  if (value === null || value === undefined) return null
+  const failure = asRecord(value, what)
+  return {
+    code: readOptionalNullableString(failure, 'code', what) ?? 'UNKNOWN',
+    message: readOptionalNullableString(failure, 'message', what) ?? '',
+  }
+}
+
+function parseSnapshotProfile(value: unknown, what: string): ReviewSnapshotProfile | null {
+  if (value === null || value === undefined) return null
+  const profile = asRecord(value, what)
+  return {
+    contractType: readOptionalNullableString(profile, 'contractType', what),
+    ourSideRole: readOptionalNullableString(profile, 'ourSideRole', what),
+    paperSource: readOptionalNullableString(profile, 'paperSource', what),
+    jurisdiction: readOptionalNullableString(profile, 'jurisdiction', what),
+    contractPackKey: readOptionalNullableString(profile, 'contractPackKey', what),
+  }
+}
+
+function parseSnapshot(value: unknown, what: string): ReviewSnapshot | null {
+  if (value === null || value === undefined) return null
+  const snapshot = asRecord(value, what)
+  return {
+    profile: parseSnapshotProfile(snapshot.profile, what),
+    packVersion: readOptionalNullableString(snapshot, 'packVersion', what),
+    knowledgePinNumber: readOptionalNullableNumber(snapshot, 'knowledgePinNumber', what),
+    effectiveOn: readOptionalNullableString(snapshot, 'effectiveOn', what),
+  }
+}
+
+function parseCoverage(value: unknown, what: string): ReviewCoverage {
+  const coverage = asRecord(value, what)
+  const state = readOptionalNullableString(coverage, 'coverage', what)
+  return {
+    concept: readOptionalNullableString(coverage, 'concept', what) ?? 'UNKNOWN',
+    expectation: readOptionalNullableString(coverage, 'expectation', what) ?? 'UNKNOWN',
+    coverage:
+      state && (COVERAGE_STATES as readonly string[]).includes(state)
+        ? (state as CoverageState)
+        : 'UNKNOWN',
+  }
+}
+
+function parseReviewPack(value: unknown, what: string): ReviewPack {
+  const pack = asRecord(value, what)
+  return {
+    key: readOptionalNullableString(pack, 'key', what) ?? '',
+    displayName: readOptionalNullableString(pack, 'displayName', what) ?? '',
+    summary: readOptionalNullableString(pack, 'summary', what) ?? '',
+    version: readOptionalNullableString(pack, 'version', what) ?? '',
   }
 }
 
@@ -228,7 +328,7 @@ export function parseReviewSummary(value: unknown, what = 'review summary'): Rev
     contractId: readString(summary, 'contractId', what),
     contractVersionNumber: readOptionalNullableNumber(summary, 'contractVersionNumber', what),
     status: readStatus(summary, 'status', REVIEW_STATUSES),
-    failureReason: readOptionalNullableString(summary, 'failureReason', what),
+    failure: parseFailure(summary.failure, what),
     createdAt: readString(summary, 'createdAt', what),
     startedAt: readOptionalNullableString(summary, 'startedAt', what),
     completedAt: readOptionalNullableString(summary, 'completedAt', what),
@@ -243,9 +343,8 @@ export function parseReviewSummary(value: unknown, what = 'review summary'): Rev
     failedChecks: readOptionalNumber(summary, 'failedChecks', what),
     signals: readOptionalNumber(summary, 'signals', what),
     findings: readOptionalNumber(summary, 'findings', what),
-    contractPackKey: readOptionalNullableString(summary, 'contractPackKey', what),
-    packVersion: readOptionalNullableString(summary, 'packVersion', what),
-    knowledgePinNumber: readOptionalNullableNumber(summary, 'knowledgePinNumber', what),
+    snapshot: parseSnapshot(summary.snapshot, what),
+    coverage: readArray(summary, 'coverage', what, parseCoverage),
     analysisWarnings: readArray(summary, 'analysisWarnings', what, parseAnalysisWarning),
     analysisWarningsTruncated: readOptionalBoolean(
       summary,
@@ -387,6 +486,7 @@ export function parseFindingDetail(value: unknown, what = 'finding detail'): Fin
     quality: parseQuality(finding.quality, what),
     claims: readArray(finding, 'claims', what, parseClaim),
     evidenceItemIds: parseOptionalStringArray(finding, 'evidenceItemIds', what),
+    evidenceItems: readArray(finding, 'evidenceItems', what, parseEvidenceItem),
     signalIds: readStringArray(finding, 'signalIds', what),
     absenceBasis: parseAbsenceBasis(finding.absenceBasis, what),
   }
@@ -435,6 +535,7 @@ function reviewRetry(failureCount: number, error: Error): boolean {
 }
 
 export const reviewKeys = {
+  packs: () => ['reviews', 'packs'] as const,
   list: (contractId: string) => ['reviews', 'list', contractId] as const,
   summary: (reviewId: string) => ['reviews', 'summary', reviewId] as const,
   progress: (reviewId: string) => ['reviews', 'progress', reviewId] as const,
@@ -449,6 +550,28 @@ export const reviewKeys = {
     ] as const,
   finding: (reviewId: string, findingId: string) =>
     ['reviews', 'finding', reviewId, findingId] as const,
+}
+
+export async function fetchReviewPacks(): Promise<ReviewPack[]> {
+  const client = createApiClient()
+  const { data, error, response } = await client.GET('/api/reviews/packs')
+  if (!data) {
+    throw new ReviewApiError(errorMessage(error, 'Review pack catalog unavailable'), response.status)
+  }
+  return parseApiResult(
+    data,
+    (value, what) => readArray(asRecord(value, what), 'packs', what, parseReviewPack),
+    'review pack catalog',
+  )
+}
+
+export function useReviewPacksQuery(): UseQueryResult<ReviewPack[]> {
+  return useQuery({
+    queryKey: reviewKeys.packs(),
+    queryFn: fetchReviewPacks,
+    staleTime: 5 * 60_000,
+    retry: reviewRetry,
+  })
 }
 
 export async function fetchReviewList(contractId: string): Promise<ReviewListResponse> {

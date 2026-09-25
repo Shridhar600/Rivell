@@ -162,7 +162,7 @@ export function ReviewLifecyclePanel({ contractId, reviewId, summary, onRefresh 
 
       {summary.status === 'FAILED' ? (
         <div className="state state--error" role="alert">
-          <p>{reviewFailureMessage(summary.failureReason)}</p>
+          <p>{reviewFailureMessage(summary.failure)}</p>
           <p>A new review creates a fresh frozen snapshot of the current policy state.</p>
           <Link className="link-button" to={`/reviews/${contractId}/analysis`}>
             Back to review history

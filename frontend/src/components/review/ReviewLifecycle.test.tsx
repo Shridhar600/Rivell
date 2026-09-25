@@ -75,9 +75,7 @@ describe('review lifecycle states', () => {
 
     expect(await screen.findByText('2 findings from 2 completed checks.')).toBeInTheDocument()
     expect(
-      screen.getByText(
-        'A bounded semantic decision was unavailable; the clause was not classified.',
-      ),
+      screen.getByText('An external analysis provider was unavailable for this check.'),
     ).toBeInTheDocument()
     const check = screen.getByTitle('LIABILITY_CAP:LIMITATION_OF_LIABILITY')
     expect(check).toHaveTextContent('Liability cap · Limitation of liability')

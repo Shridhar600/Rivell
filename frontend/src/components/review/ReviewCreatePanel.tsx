@@ -6,6 +6,7 @@ import {
   isReviewForbiddenError,
   isReviewNotFoundError,
   useCreateReview,
+  useReviewPacksQuery,
 } from '../../api/reviews'
 import type { ReviewProfile } from '../../api/semantics'
 import {
@@ -14,7 +15,6 @@ import {
   PAPER_SOURCE_LABELS,
   roleLabel,
 } from '../../lib/contractSemantics'
-import { REVIEW_PACK_OPTIONS } from '../../lib/reviews'
 import { LoadingState } from '../LoadingState'
 
 type CreateErrorCopy = { message: string; uncertain: boolean }
@@ -69,7 +69,9 @@ export function ReviewCreatePanel({
 }: Props) {
   const navigate = useNavigate()
   const create = useCreateReview(contractId, versionNumber)
+  const packsQuery = useReviewPacksQuery()
   const [packKey, setPackKey] = useState('')
+  const selectedPack = (packsQuery.data ?? []).find((pack) => pack.key === packKey) ?? null
   const [errorCopy, setErrorCopy] = useState<CreateErrorCopy | null>(null)
   const [blocked, setBlocked] = useState(false)
   const [recoveryState, setRecoveryState] = useState<
@@ -175,17 +177,31 @@ export function ReviewCreatePanel({
             aria-describedby="review-pack-hint"
           >
             <option value="">No contract pack</option>
-            {REVIEW_PACK_OPTIONS.map((option) => (
-              <option key={option.key} value={option.key}>
-                {option.label}
+            {(packsQuery.data ?? []).map((pack) => (
+              <option key={pack.key} value={pack.key}>
+                {pack.displayName}
               </option>
             ))}
           </select>
-          <p className="field__hint" id="review-pack-hint">
-            A pack adds completeness checks for that contract type. If this contract's review
-            profile declares a pack, that pack is used; otherwise only generally applicable
-            clause checks run — a valid, reduced review.
-          </p>
+          {packsQuery.isError ? (
+            <p className="state state--warning" role="status">
+              The review pack catalog could not be loaded. You can still run a review without a
+              pack.{' '}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => void packsQuery.refetch()}
+              >
+                Try again
+              </button>
+            </p>
+          ) : (
+            <p className="field__hint" id="review-pack-hint">
+              {selectedPack
+                ? `${selectedPack.summary} (catalog version ${selectedPack.version}).`
+                : "A pack adds completeness checks for that contract type. If this contract's review profile declares a pack, that pack is used; otherwise only generally applicable clause checks run — a valid, reduced review."}
+            </p>
+          )}
         </div>
 
         {create.isPending ? (

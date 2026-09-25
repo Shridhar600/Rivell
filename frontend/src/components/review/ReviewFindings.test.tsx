@@ -1,12 +1,17 @@
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { AppProviders } from '../../app/AppProviders'
 import { appRoutes } from '../../app/router'
-import { fixtureContractSummary, stubContractApi, type StubOptions } from '../contract/testFixtures'
+import {
+  fixtureContractSummary,
+  fixtureSemantics,
+  stubContractApi,
+  type StubOptions,
+} from '../contract/testFixtures'
 import {
   fixtureAbsenceFindingDetail,
   fixtureAbsenceFindingSummary,
@@ -226,7 +231,9 @@ describe('finding detail', () => {
     expect(screen.getByText('Policy basis')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Recommended action' })).toBeInTheDocument()
 
-    expect(screen.getByRole('heading', { name: 'Approved language' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Approved language' }),
+    ).toBeInTheDocument()
     expect(screen.getByText('Approved')).toBeInTheDocument()
     expect(
       screen.getByText(/two times the fees paid in the twelve months/),
@@ -361,8 +368,119 @@ describe('finding detail', () => {
     })
 
     expect(await screen.findByRole('heading', { name: 'Observation' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Approved language' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Approved')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { level: 3, name: 'Approved language' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/two times the fees paid in the twelve months/),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('finding evidence amendment', () => {
+  it('groups resolved evidence by authority and links claims to exact items', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    expect(await screen.findByRole('heading', { name: 'Evidence' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Policy' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Approved drafting' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Current contract' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Precedent' })).toBeInTheDocument()
+
+    expect(document.getElementById('finding-evidence-e-contract')).not.toBeNull()
+    expect(document.getElementById('finding-evidence-e-drafting')).not.toBeNull()
+
+    expect(document.querySelectorAll('a[href="#finding-evidence-e-policy"]').length).toBeGreaterThan(0)
+    expect(document.querySelectorAll('a[href="#finding-evidence-e-drafting"]').length).toBeGreaterThan(0)
+  })
+
+  it('navigates cross-clause counterparts from backend-provided source identity', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-6')
+
+    expect(await screen.findByRole('heading', { name: 'Related provisions' })).toBeInTheDocument()
+    const counterpart = document.querySelector(
+      'a[href="/reviews/c1?view=document&node=node-3"]',
+    )
+    expect(counterpart).not.toBeNull()
+  })
+
+  it('fails safely when a claim references evidence missing from the response', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({
+            ...fixtureClauseFindingDetail,
+            claims: fixtureClauseFindingDetail.claims.map((claim, index) =>
+              index === 1 ? { ...claim, evidenceItemIds: ['e-missing'] } : claim,
+            ),
+          }),
+        ),
+    })
+
+    expect(
+      await screen.findByText(/not available in this response; they are not shown as grounded/),
+    ).toBeInTheDocument()
+    expect(screen.getByText('unavailable in this response')).toBeInTheDocument()
+    expect(document.querySelector('a[href="#finding-evidence-e-missing"]')).toBeNull()
+  })
+
+  it('uses only resolved evidence and never rebuilds retrieval', async () => {
+    const { api } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    await screen.findByRole('heading', { name: 'Evidence' })
+    expect(api.requests.filter((request) => request.url.includes('/api/retrieval/'))).toHaveLength(0)
+    expect(
+      api.requests.filter(
+        (request) => request.method === 'POST' && request.url.includes('/api/retrieval/evidence'),
+      ),
+    ).toHaveLength(0)
+  })
+
+  it('shows the frozen review profile, not current contract profile data', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1', {
+      semantics: {
+        ...fixtureSemantics(),
+        reviewProfile: {
+          contractType: 'MSA',
+          ourSideRole: 'SUPPLIER',
+          paperSource: 'OUR_PAPER',
+          jurisdiction: 'US',
+        },
+      },
+    })
+
+    const heading = await screen.findByText('Review state')
+    const context = heading.closest('dl') as HTMLElement
+    expect(within(context).getByText('United Kingdom')).toBeInTheDocument()
+    expect(within(context).getByText('Customer')).toBeInTheDocument()
+    expect(within(context).queryByText('United States')).not.toBeInTheDocument()
+  })
+
+  it('presents every coverage state distinctly and never as clean', async () => {
+    const { api } = renderWorkspace('/reviews/c1/analysis/r-1', {
+      reviewSummary: {
+        ...fixtureCompletedReviewSummary,
+        findings: 0,
+        coverage: [
+          { concept: 'LIMITATION_OF_LIABILITY', expectation: 'REQUIRED', coverage: 'PRESENT_PRIMARY' },
+          { concept: 'CONFIDENTIALITY', expectation: 'EXPECTED', coverage: 'PRESENT_SECONDARY_ONLY' },
+          { concept: 'TERM_TERMINATION', expectation: 'REQUIRED', coverage: 'ABSENT' },
+          { concept: 'INDEMNIFICATION', expectation: 'OPTIONAL', coverage: 'UNKNOWN' },
+        ],
+      },
+      findings: { items: [], truncated: false },
+    })
+
+    expect(await screen.findByRole('heading', { name: 'Review coverage' })).toBeInTheDocument()
+    expect(screen.getByText('Reviewed as a primary clause')).toBeInTheDocument()
+    expect(screen.getByText('Detected as a secondary mention only')).toBeInTheDocument()
+    expect(screen.getByText('Not found in the contract')).toBeInTheDocument()
+    expect(screen.getByText('Coverage not established')).toBeInTheDocument()
+    expect(screen.getByText(/Review coverage is limited for:/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/recorded no findings, but review coverage is limited/),
+    ).toBeInTheDocument()
+    expect(api.requests.filter((r) => r.url.includes('/findings?')).length).toBeGreaterThan(0)
   })
 })
 
@@ -391,7 +509,7 @@ describe('review workspace authority and network guards', () => {
         />
       </AppProviders>,
     )
-    await screen.findByRole('heading', { name: 'Approved language' })
+    await screen.findByRole('heading', { level: 3, name: 'Approved language' })
     const approvedText = document.body.textContent ?? ''
     expect(approvedText).toMatch(/Approved language/)
     expect(approvedText).not.toMatch(/ApprovedChange|Mark as approved|Resolved/)
@@ -415,7 +533,7 @@ describe('review workspace authority and network guards', () => {
         />
       </AppProviders>,
     )
-    await screen.findByRole('heading', { name: 'AI-proposed language' })
+    await screen.findByRole('heading', { level: 3, name: 'AI-proposed language' })
     const generativeText = document.body.textContent ?? ''
     expect(generativeText).not.toMatch(/Approved language/)
   })
