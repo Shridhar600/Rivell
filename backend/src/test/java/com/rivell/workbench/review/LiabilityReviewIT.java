@@ -158,6 +158,9 @@ class LiabilityReviewIT {
         volatile Double verificationRiskProbability;
         volatile double liabilityTopProbability = 0.9;
         volatile boolean failLiabilityDecision;
+        volatile String deviationAnswerOverride;
+        volatile boolean failConsistencyDecision;
+        volatile String consistencyAnswerOverride;
 
         @Override
         public String id() {
@@ -183,6 +186,22 @@ class LiabilityReviewIT {
             }
             if (request.pack().questions().containsKey(M7DecisionSpecs.CONSISTENCY)) {
                 consistencyDecisions.incrementAndGet();
+                if (failConsistencyDecision) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "consistency decision provider unavailable");
+                }
+                if (consistencyAnswerOverride != null) {
+                    var override = new LinkedHashMap<String, Double>();
+                    for (var option : List.of(M7DecisionSpecs.CONSISTENT,
+                            M7DecisionSpecs.CAP_CARVEOUT_CONTRADICTS_INDEMNITY,
+                            M7DecisionSpecs.NOT_COMPARABLE_CARVE)) {
+                        override.put(option, option.equals(consistencyAnswerOverride) ? 0.9 : 0.03);
+                    }
+                    return new ProviderExecutionResult(
+                            new LinkedHashMap<>(Map.of(M7DecisionSpecs.CONSISTENCY,
+                                    new ChoiceAnswer(consistencyAnswerOverride, 0.9, override))),
+                            "fake-review-v1", new TokenUsage(140, 6));
+                }
                 var carveState = (M7DecisionSpecs.CarveOutConsistencyState)
                         request.state().payload();
                 var liability = carveState.liabilityText().toLowerCase();
@@ -228,7 +247,9 @@ class LiabilityReviewIT {
             var preferred = state.preferredPosition() == null
                     ? "" : state.preferredPosition().toLowerCase();
             String selected;
-            if (text.contains("uncapped") || text.contains("unlimited")) {
+            if (deviationAnswerOverride != null) {
+                selected = deviationAnswerOverride;
+            } else if (text.contains("uncapped") || text.contains("unlimited")) {
                 selected = M7DecisionSpecs.PROHIBITED_STRUCTURE;
             } else if (preferred.isBlank()
                     || !(preferred.contains("12 months") || preferred.contains("twelve (12)"))
@@ -269,6 +290,9 @@ class LiabilityReviewIT {
             verificationRiskProbability = null;
             liabilityTopProbability = 0.9;
             failLiabilityDecision = false;
+            deviationAnswerOverride = null;
+            failConsistencyDecision = false;
+            consistencyAnswerOverride = null;
         }
     }
 
