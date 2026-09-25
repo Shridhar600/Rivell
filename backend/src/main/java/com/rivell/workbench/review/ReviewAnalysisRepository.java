@@ -13,6 +13,9 @@ public interface ReviewAnalysisRepository {
 
     Optional<ReviewAnalysisRun> findLatestRun(UUID organizationId, UUID reviewId);
 
+    /** Active generation: the latest COMPLETED run (spec §2.2). */
+    Optional<ReviewAnalysisRun> findLatestCompletedRun(UUID organizationId, UUID reviewId);
+
     int maxRunNumber(UUID organizationId, UUID reviewId);
 
     boolean tryInsertRun(ReviewAnalysisRun run);

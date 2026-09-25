@@ -71,6 +71,12 @@ class FindingAssemblyIT {
     FindingRepository findingRepository;
 
     @Autowired
+    ReviewRepository reviewRepository;
+
+    @Autowired
+    org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
+
+    @Autowired
     LiabilityReviewIT.ReviewScriptedProvider scriptedProvider;
 
     @Autowired
@@ -270,6 +276,71 @@ class FindingAssemblyIT {
     }
 
     @Test
+    void failedRecomputeKeepsActiveFindingsAndReportsThem() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+        var initial = analysisService.analyze(organizationId, review.id());
+        var activeFindings = findingRepository.findFindings(organizationId, initial.id());
+        assertThat(activeFindings).isNotEmpty();
+
+        jdbcClient.sql("update contract_semantics set pipeline_version = '' "
+                        + "where contract_version_id = :id")
+                .param("id", review.contractVersionId()).update();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> analysisService.recompute(organizationId, review.id()))
+                .isInstanceOf(RuntimeException.class);
+
+        assertThat(reviewRepository.find(organizationId, review.id())
+                .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
+        assertThat(analysisRepository.findLatestCompletedRun(organizationId, review.id())
+                .orElseThrow().id()).isEqualTo(initial.id());
+        var progress = analysisService.progress(organizationId, review.id());
+        assertThat(progress.findings()).isEqualTo(activeFindings.size());
+        assertThat(progress.signals()).isEqualTo(analysisRepository
+                .countSignals(organizationId, initial.id()));
+        assertThat(progress.pendingChecks()).isZero();
+        assertThat(progress.latestRunStatus()).isEqualTo(RunStatus.FAILED);
+    }
+
+    @Test
+    void findingsAreOrganizationScoped() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var foreign = UUID.randomUUID();
+        assertThat(findingRepository.findFindings(foreign, run.id())).isEmpty();
+        assertThat(findingRepository.countFindings(foreign, run.id())).isZero();
+    }
+
+    @Test
+    void survivalGapFindingIsDeterministicAndActionable() throws Exception {
+        var organizationId = organizationId();
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var review = enrichedReview("m7-msa-survival-gap.docx");
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily()
+                        == IssueFamily.SURVIVAL_COVERAGE_GAP)
+                .findFirst().orElseThrow();
+        assertThat(finding.observationKind()).isEqualTo("SURVIVAL_COVERAGE_GAP");
+        assertThat(finding.observationText()).contains("not covered by a survival");
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.HIGH);
+        assertThat(finding.reviewClassification())
+                .isEqualTo(FindingClassification.REVIEW_REQUIRED);
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+        assertThat(finding.evidenceItemIds()).isNotEmpty();
+    }
+
+    @Test
     void verifiedGenerativeCandidateIsOfferedForHumanConsideration() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
@@ -330,6 +401,9 @@ class FindingAssemblyIT {
                 .hasSameSizeAs(initialFindings);
         var active = findingRepository.findFindings(organizationId, recomputed.id());
         assertThat(active).hasSameSizeAs(initialFindings);
+        assertThat(active).extracting(Finding::consolidationKey)
+                .containsExactlyElementsOf(initialFindings.stream()
+                        .map(Finding::consolidationKey).toList());
         assertThat(active).extracting(Finding::id)
                 .doesNotContainAnyElementsOf(initialFindings.stream().map(Finding::id).toList());
     }

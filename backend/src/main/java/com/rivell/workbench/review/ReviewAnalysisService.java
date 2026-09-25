@@ -70,9 +70,7 @@ public class ReviewAnalysisService {
         var review = reviewRepository.find(organizationId, reviewId)
                 .orElseThrow(() -> new ReviewNotFoundException(reviewId));
         if (review.status() == ReviewStatus.COMPLETED || review.status() == ReviewStatus.FAILED) {
-            return analysisRepository.findLatestRun(organizationId, reviewId).orElseThrow(
-                    () -> new IllegalStateException(
-                            "Terminal review has no analysis run: " + reviewId));
+            return activeOrLatestRun(organizationId, reviewId);
         }
         ReviewAnalysisRun acquiredRun = null;
         try {
@@ -103,8 +101,17 @@ public class ReviewAnalysisService {
             });
             throw e;
         }
-        return analysisRepository.findLatestRun(organizationId, reviewId)
-                .orElse(acquiredRun);
+        var fallback = acquiredRun;
+        return analysisRepository.findLatestCompletedRun(organizationId, reviewId)
+                .orElseGet(() -> fallback == null
+                        ? activeOrLatestRun(organizationId, reviewId) : fallback);
+    }
+
+    private ReviewAnalysisRun activeOrLatestRun(UUID organizationId, UUID reviewId) {
+        return analysisRepository.findLatestCompletedRun(organizationId, reviewId)
+                .or(() -> analysisRepository.findLatestRun(organizationId, reviewId))
+                .orElseThrow(() -> new IllegalStateException(
+                        "Terminal review has no analysis run: " + reviewId));
     }
 
     /**
@@ -140,8 +147,10 @@ public class ReviewAnalysisService {
             });
             throw e;
         }
-        return analysisRepository.findLatestRun(organizationId, reviewId)
-                .orElse(acquiredRun);
+        var fallback = acquiredRun;
+        return analysisRepository.findLatestCompletedRun(organizationId, reviewId)
+                .orElseGet(() -> fallback == null
+                        ? activeOrLatestRun(organizationId, reviewId) : fallback);
     }
 
     private ReviewAnalysisRun resolveRecomputeRun(UUID organizationId, UUID reviewId) {
@@ -165,10 +174,13 @@ public class ReviewAnalysisService {
                 .orElseThrow(() -> new ReviewNotFoundException(reviewId));
         var planned = reviewRepository.findPlanChecks(organizationId, reviewId).size();
         var latest = analysisRepository.findLatestRun(organizationId, reviewId);
-        if (latest.isEmpty()) {
-            return new ReviewProgress(review.status(), planned, planned, 0, 0, 0, 0, 0, 0, 0);
+        var countedRun = analysisRepository.findLatestCompletedRun(organizationId, reviewId)
+                .or(() -> latest);
+        if (countedRun.isEmpty()) {
+            return new ReviewProgress(review.status(), planned, planned, 0, 0, 0, 0, 0, 0, 0,
+                    null);
         }
-        var executions = analysisRepository.findExecutions(organizationId, latest.get().id());
+        var executions = analysisRepository.findExecutions(organizationId, countedRun.get().id());
         var pending = Math.max(0, planned - executions.size())
                 + count(executions, CheckExecutionStatus.PENDING);
         return new ReviewProgress(
@@ -178,8 +190,9 @@ public class ReviewAnalysisService {
                 count(executions, CheckExecutionStatus.DEGRADED),
                 count(executions, CheckExecutionStatus.FAILED),
                 count(executions, CheckExecutionStatus.SKIPPED),
-                analysisRepository.countSignals(organizationId, latest.get().id()),
-                findingRepository.countFindings(organizationId, latest.get().id()));
+                analysisRepository.countSignals(organizationId, countedRun.get().id()),
+                findingRepository.countFindings(organizationId, countedRun.get().id()),
+                latest.map(ReviewAnalysisRun::status).orElse(null));
     }
 
     public AnalysisEnvironment evaluateEnvironment(
@@ -280,11 +293,14 @@ public class ReviewAnalysisService {
         var executions = analysisRepository.findExecutions(organizationId, run.id());
         if (executions.size() == checks.size()
                 && executions.stream().allMatch(execution -> execution.status().terminal())) {
+            // assemble before the completion transaction: an assembly failure fails this
+            // generation terminally instead of leaving a wedged RUNNING run
+            var assembled = findingAssembler.assemble(run,
+                    analysisRepository.findSignals(organizationId, run.id()), clock.instant());
             transactionTemplate.executeWithoutResult(status -> {
                 if (analysisRepository.markRunCompleted(organizationId, run.id(), clock.instant())) {
-                    var signals = analysisRepository.findSignals(organizationId, run.id());
                     findingRepository.replaceFindings(organizationId, reviewId, run.id(),
-                            findingAssembler.assemble(run, signals, clock.instant()));
+                            assembled);
                     reviewRepository.markCompleted(organizationId, reviewId, clock.instant());
                 }
             });

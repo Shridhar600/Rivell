@@ -49,6 +49,7 @@ ALTER TABLE finding
 
 CREATE INDEX idx_finding_run ON finding (run_id);
 CREATE INDEX idx_finding_review_severity ON finding (review_id, severity);
+CREATE INDEX idx_finding_review_classification ON finding (review_id, review_classification);
 
 CREATE TABLE finding_concept (
     id UUID PRIMARY KEY,
@@ -89,7 +90,8 @@ CREATE TABLE finding_evidence (
     finding_id UUID NOT NULL,
     evidence_item_id UUID NOT NULL,
     ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-    UNIQUE (finding_id, evidence_item_id)
+    UNIQUE (finding_id, evidence_item_id),
+    UNIQUE (finding_id, ordinal)
 );
 
 ALTER TABLE finding_evidence

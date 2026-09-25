@@ -27,7 +27,8 @@ public final class FindingAssembler {
                     .add(signal);
         }
         var findings = new ArrayList<Finding>();
-        grouped.forEach((key, group) -> findings.add(build(run, key, group, now)));
+        grouped.forEach((key, group) ->
+                primary(group).ifPresent(signal -> findings.add(build(run, key, group, now))));
         return List.copyOf(findings);
     }
 
@@ -40,7 +41,13 @@ public final class FindingAssembler {
 
     private Finding build(
             ReviewAnalysisRun run, String key, List<RawReviewSignal> group, Instant now) {
-        var primary = primary(group);
+        var primary = primary(group).orElseThrow();
+        if (primary.subjectKind() == FindingSubjectKind.CLAUSE
+                && evidence(group).isEmpty()) {
+            throw new FindingAssemblyException(
+                    "Clause-subject signal without evidence: " + primary.signalType()
+                            + " for " + primary.concept());
+        }
         ApprovedDraftingPayload drafting = firstPayload(group,
                 SignalType.APPROVED_DRAFTING_AVAILABLE);
         EscalationPayload escalation = firstPayload(group, SignalType.ESCALATION_REQUIRED);
@@ -80,7 +87,8 @@ public final class FindingAssembler {
                 evidence, group.stream().map(RawReviewSignal::id).toList());
     }
 
-    private static RawReviewSignal primary(List<RawReviewSignal> group) {
+    /** The issue-bearing signal of a group; support-only groups yield no finding. */
+    private static java.util.Optional<RawReviewSignal> primary(List<RawReviewSignal> group) {
         for (var type : List.of(SignalType.POLICY_DEVIATION, SignalType.CROSS_CLAUSE_CONFLICT,
                 SignalType.MISSING_REQUIRED_CONCEPT, SignalType.EXPECTED_CONCEPT_ABSENT,
                 SignalType.POLICY_UNAVAILABLE, SignalType.POLICY_AMBIGUOUS,
@@ -89,10 +97,10 @@ public final class FindingAssembler {
             var match = group.stream().filter(signal -> signal.signalType() == type)
                     .findFirst();
             if (match.isPresent()) {
-                return match.get();
+                return match;
             }
         }
-        throw new IllegalStateException("Signal group has no issue-bearing signal");
+        return java.util.Optional.empty();
     }
 
     private record Observation(String kind, String text) {
@@ -125,15 +133,20 @@ public final class FindingAssembler {
                 && signal.payload() instanceof LiabilityDeviationPayload deviation) {
             if (M7DecisionSpecs.PROHIBITED_STRUCTURE.equals(deviation.deviationType())) {
                 return new Observation("PROHIBITED_STRUCTURE",
-                        "The limitation-of-liability clause uses a structure the policy "
-                                + "prohibits (uncapped or unlimited liability).");
+                        "The bounded classification found a structure the policy "
+                                + "prohibits (for example uncapped or unlimited liability).");
             }
             var cap = deviation.capMultiple() == null || deviation.capMultiple().isBlank()
-                    ? "an amount above the preferred position"
-                    : "a cap multiple of " + deviation.capMultiple();
+                    ? ""
+                    : " (cap multiple " + deviation.capMultiple() + ")";
             return new Observation("CAP_ABOVE_PREFERRED",
-                    "The limitation-of-liability clause caps liability at " + cap
-                            + ", above the organization's preferred position.");
+                    "The bounded classification found the liability cap above the "
+                            + "organization's preferred position" + cap + ".");
+        }
+        if (signal.signalType() == SignalType.CROSS_CLAUSE_UNCERTAIN
+                && signal.payload() instanceof DeviationUncertainPayload uncertain) {
+            return new Observation("UNCERTAINTY:" + uncertain.reason(),
+                    uncertaintyText(uncertain.reason(), signal));
         }
         if (signal.signalType() == SignalType.CROSS_CLAUSE_CONFLICT
                 && signal.payload() instanceof CrossClauseConflictPayload conflict) {
@@ -183,6 +196,11 @@ public final class FindingAssembler {
                     + "review is required.";
             case "carve_out_context_too_large" -> "The cross-clause context exceeds the "
                     + "bounded prompt; the interaction was not assessed.";
+            case "carve_out_not_comparable" -> "The bounded classifier could not determine "
+                    + "how the liability carve-out and the indemnification clause interact; "
+                    + "no conflict or consistency was asserted.";
+            case "cross_clause_classification_uncertain" -> "The cross-clause classification "
+                    + "did not reach a clear verdict; the interaction requires human review.";
             default -> "The check recorded unresolved uncertainty for "
                     + signal.concept().name() + ".";
         };
@@ -197,7 +215,7 @@ public final class FindingAssembler {
         if (primary.signalType() == SignalType.EXPECTED_CONCEPT_ABSENT) {
             return ProposedAction.NO_ACTION;
         }
-        if (drafting != null) {
+        if (drafting != null && primary.signalType() == SignalType.POLICY_DEVIATION) {
             return ProposedAction.USE_APPROVED_FALLBACK;
         }
         if (primary.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT
@@ -269,13 +287,22 @@ public final class FindingAssembler {
             claims.add(FindingClaim.of(0, ClaimKind.OBSERVATION, observation.text(),
                     false, evidence));
         }
-        if (primary.signalType() == SignalType.POLICY_UNAVAILABLE
-                || primary.signalType() == SignalType.POLICY_AMBIGUOUS
-                || primary.signalType() == SignalType.POLICY_DEVIATION) {
+        if (primary.signalType() == SignalType.POLICY_DEVIATION) {
             claims.add(FindingClaim.of(1, ClaimKind.POLICY_BASIS,
                     "The assessment is based on the applicable published organizational "
                             + "policy resolved for this review; precedent is evidence, "
                             + "never policy.",
+                    absenceSubject, evidence));
+        } else if (primary.signalType() == SignalType.POLICY_UNAVAILABLE) {
+            claims.add(FindingClaim.of(1, ClaimKind.POLICY_BASIS,
+                    "No published policy applies to this concept; the finding records "
+                            + "that absence and does not infer policy. Precedent is "
+                            + "evidence, never policy.",
+                    absenceSubject, evidence));
+        } else if (primary.signalType() == SignalType.POLICY_AMBIGUOUS) {
+            claims.add(FindingClaim.of(1, ClaimKind.POLICY_BASIS,
+                    "Multiple applicable published rules conflict for this concept; no "
+                            + "rule was selected. Precedent is evidence, never policy.",
                     absenceSubject, evidence));
         }
         if (drafting != null && action == ProposedAction.USE_APPROVED_FALLBACK) {
@@ -284,12 +311,22 @@ public final class FindingAssembler {
                             + "proposed as the acceptable second position.",
                     absenceSubject, List.of(drafting.draftingEvidenceId())));
         }
-        if (openEnded != null) {
-            claims.add(FindingClaim.of(3, ClaimKind.GENERATIVE_EXPLANATION,
+        if (openEnded != null
+                && "VERIFIED".equals(openEnded.verificationOutcome())) {
+            claims.add(FindingClaim.of(claims.size(), ClaimKind.GENERATIVE_EXPLANATION,
                     openEnded.explanation(), absenceSubject, evidence));
         }
         claims.add(FindingClaim.of(claims.size(), ClaimKind.RECOMMENDATION,
                 recommendation(action), absenceSubject, evidence));
+        var ordinals = new int[claims.size()];
+        for (var index = 0; index < claims.size(); index++) {
+            ordinals[index] = claims.get(index).ordinal();
+        }
+        for (var index = 0; index < ordinals.length; index++) {
+            if (ordinals[index] != index) {
+                throw new FindingAssemblyException("Claim ordinals are not sequential");
+            }
+        }
         return List.copyOf(claims);
     }
 

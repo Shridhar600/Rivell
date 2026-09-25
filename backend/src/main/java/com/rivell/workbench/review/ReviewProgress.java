@@ -13,7 +13,8 @@ public record ReviewProgress(
         int failedChecks,
         int skippedChecks,
         int signals,
-        int findings) {
+        int findings,
+        RunStatus latestRunStatus) {
 
     public ReviewProgress {
         Objects.requireNonNull(reviewStatus, "reviewStatus");

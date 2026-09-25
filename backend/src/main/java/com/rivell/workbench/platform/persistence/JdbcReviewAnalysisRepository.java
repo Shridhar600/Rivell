@@ -71,6 +71,24 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
     }
 
     @Override
+    public Optional<ReviewAnalysisRun> findLatestCompletedRun(
+            UUID organizationId, UUID reviewId) {
+        return jdbcClient.sql("""
+                select id, organization_id, review_id, run_number, status, trigger,
+                       pipeline_version, started_at, completed_at, failure_reason
+                from review_analysis_run
+                where review_id = :reviewId and organization_id = :organizationId
+                  and status = 'COMPLETED'
+                order by run_number desc
+                limit 1
+                """)
+                .param("reviewId", reviewId)
+                .param("organizationId", organizationId)
+                .query(JdbcReviewAnalysisRepository::mapRun)
+                .optional();
+    }
+
+    @Override
     public int maxRunNumber(UUID organizationId, UUID reviewId) {
         return jdbcClient.sql("""
                 select coalesce(max(run_number), 0) from review_analysis_run
@@ -211,6 +229,9 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 where id = :executionId and organization_id = :organizationId
                   and (status = 'PENDING'
                        or (status = 'RUNNING' and started_at < now() - interval '10 minutes'))
+                  and exists (select 1 from review_analysis_run r
+                              where r.id = review_check_execution.run_id
+                                and r.status = 'RUNNING')
                 """)
                 .param("executionId", executionId)
                 .param("organizationId", organizationId)
@@ -232,6 +253,9 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                     completed_at = :completedAt
                 where id = :executionId and organization_id = :organizationId
                   and status = 'RUNNING' and lease_id = :leaseId
+                  and exists (select 1 from review_analysis_run r
+                              where r.id = review_check_execution.run_id
+                                and r.status = 'RUNNING')
                 """)
                 .param("executionId", executionId)
                 .param("organizationId", organizationId)

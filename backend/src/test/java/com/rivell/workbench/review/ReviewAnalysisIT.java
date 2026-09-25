@@ -169,6 +169,9 @@ class ReviewAnalysisIT {
     ReviewRepository reviewRepository;
 
     @Autowired
+    FindingRepository findingRepository;
+
+    @Autowired
     M6EvidenceCorpus corpusBuilder;
 
     @Autowired
@@ -282,7 +285,10 @@ class ReviewAnalysisIT {
         var first = analysisService.analyze(organizationId, review.id());
         var executionsAfterFirst = analysisRepository.findExecutions(organizationId, first.id());
         var signalsAfterFirst = analysisRepository.countSignals(organizationId, first.id());
+        var findingKeysAfterFirst = findingRepository.findFindings(organizationId, first.id())
+                .stream().map(Finding::consolidationKey).toList();
         assertThat(signalsAfterFirst).isPositive();
+        assertThat(findingKeysAfterFirst).isNotEmpty();
         assertSignalCountParity(organizationId, first.id());
 
         var second = analysisService.analyze(organizationId, review.id());
@@ -319,6 +325,9 @@ class ReviewAnalysisIT {
         assertThat(analysisRepository.countSignals(organizationId, first.id()))
                 .isEqualTo(signalsAfterFirst);
         assertSignalCountParity(organizationId, first.id());
+        assertThat(findingRepository.findFindings(organizationId, first.id())
+                .stream().map(Finding::consolidationKey).toList())
+                .containsExactlyElementsOf(findingKeysAfterFirst);
     }
 
     private ReviewCheckExecution liabilityExecution(

@@ -306,6 +306,7 @@ class JdbcFindingRepository implements FindingRepository {
                     from finding_signal s
                     join finding f on f.id = s.finding_id
                     where f.run_id = :runId and f.organization_id = :organizationId
+                    order by s.finding_id, s.signal_id
                     """;
             default -> throw new IllegalStateException("Unknown child table " + child);
         };
