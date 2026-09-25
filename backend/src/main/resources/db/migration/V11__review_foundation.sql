@@ -17,6 +17,7 @@ CREATE TABLE review (
     status TEXT NOT NULL CHECK (status IN
         ('ANALYSIS_QUEUED', 'ANALYZING', 'COMPLETED', 'FAILED')),
     failure_reason TEXT,
+    created_by UUID NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     started_at TIMESTAMPTZ,
@@ -37,7 +38,8 @@ ALTER TABLE review
     REFERENCES contract_version (id, contract_id, version_number, organization_id);
 
 CREATE INDEX idx_review_org_contract ON review (organization_id, contract_id, created_at DESC, id);
-CREATE INDEX idx_review_org_status ON review (organization_id, status);
+CREATE INDEX idx_review_org_active ON review (organization_id, status)
+    WHERE status IN ('ANALYSIS_QUEUED', 'ANALYZING');
 
 CREATE TABLE review_snapshot (
     review_id UUID PRIMARY KEY,

@@ -198,18 +198,21 @@ class ReviewCreationIT {
         var organizationId = organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var before = LocalDate.now(ZoneOffset.UTC);
+        var operator = identityProvider.currentIdentity().userId();
 
         var review = reviewService.create(
                 corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
 
         assertThat(review.status()).isEqualTo(ReviewStatus.ANALYSIS_QUEUED);
         assertThat(review.contractVersionNumber()).isEqualTo(1);
+        assertThat(review.createdBy()).isEqualTo(operator);
 
         var persisted = reviewRepository.find(organizationId, review.id()).orElseThrow();
         assertThat(persisted.id()).isEqualTo(review.id());
         assertThat(persisted.contractId()).isEqualTo(corpus.contract().contractId());
         assertThat(persisted.contractVersionId()).isEqualTo(corpus.semantics().contractVersionId());
         assertThat(persisted.status()).isEqualTo(ReviewStatus.ANALYSIS_QUEUED);
+        assertThat(persisted.createdBy()).isEqualTo(operator);
 
         var snapshot = reviewRepository.findSnapshot(organizationId, review.id()).orElseThrow();
         assertThat(snapshot.knowledgePinNumber()).isEqualTo(corpus.latestPublicationNumber());

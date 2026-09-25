@@ -75,9 +75,9 @@ public class ReviewService {
         requireEnrichmentReady(semantics.enrichmentStatus(), contractId, versionNumber);
         var profile = semantics.reviewProfile();
         var packKey = resolvePackKey(profile.contractPackKey(), requestedPackKey);
-        if (packKey != null && packs.find(packKey).isEmpty()) {
-            throw new InvalidReviewConfigurationException("Unknown contract pack: " + packKey);
-        }
+        var pack = packKey == null ? null : packs.find(packKey)
+                .orElseThrow(() -> new InvalidReviewConfigurationException(
+                        "Unknown contract pack: " + packKey));
 
         var organizationId = identity.organizationId();
         var now = clock.instant();
@@ -87,7 +87,7 @@ public class ReviewService {
                 reviewId, organizationId, contractId, version.versionId(), versionNumber,
                 profile.contractType(), profile.ourSideRole(), profile.paperSource(),
                 profile.jurisdiction(), packKey,
-                packKey == null ? null : ReviewPackRegistry.VERSION,
+                pack == null ? null : pack.version(),
                 semantics.id(), semantics.pipelineVersion(), SemanticsDigest.of(semantics),
                 knowledgeQueryService.maxPublicationNumber(),
                 LocalDate.now(clock), ReviewPipeline.VERSION,
@@ -100,7 +100,8 @@ public class ReviewService {
                         bindings.generativeProvider().modelAlias()),
                 now);
         var review = Review.analysisQueued(
-                reviewId, organizationId, contractId, version.versionId(), versionNumber, now);
+                reviewId, organizationId, contractId, version.versionId(), versionNumber,
+                identity.userId(), now);
         reviewRepository.create(review, snapshot, planBuilder.build(reviewId, organizationId,
                 snapshot, semantics));
         return review;

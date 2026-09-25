@@ -17,6 +17,7 @@ public record Review(
         int contractVersionNumber,
         ReviewStatus status,
         String failureReason,
+        UUID createdBy,
         Instant createdAt,
         Instant updatedAt,
         Instant startedAt,
@@ -28,6 +29,7 @@ public record Review(
         Objects.requireNonNull(contractId, "contractId");
         Objects.requireNonNull(contractVersionId, "contractVersionId");
         Objects.requireNonNull(status, "status");
+        Objects.requireNonNull(createdBy, "createdBy");
         Objects.requireNonNull(createdAt, "createdAt");
         Objects.requireNonNull(updatedAt, "updatedAt");
         if (contractVersionNumber < 1) {
@@ -37,8 +39,9 @@ public record Review(
 
     public static Review analysisQueued(
             UUID id, UUID organizationId, UUID contractId, UUID contractVersionId,
-            int contractVersionNumber, Instant now) {
+            int contractVersionNumber, UUID createdBy, Instant now) {
         return new Review(id, organizationId, contractId, contractVersionId,
-                contractVersionNumber, ReviewStatus.ANALYSIS_QUEUED, null, now, now, null, null);
+                contractVersionNumber, ReviewStatus.ANALYSIS_QUEUED, null, createdBy,
+                now, now, null, null);
     }
 }
