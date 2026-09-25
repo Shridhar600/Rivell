@@ -1,15 +1,92 @@
-import { useParams } from 'react-router'
-import { useContractQuery } from '../api/contracts'
-import { isReviewNotFoundError, useReviewSummaryQuery } from '../api/reviews'
+import { useMemo } from 'react'
+import { useParams, useSearchParams } from 'react-router'
+import { useContractQuery, useContractStructureQuery } from '../api/contracts'
+import type { FindingFilters } from '../api/reviews'
+import {
+  CLASSIFICATIONS,
+  SEVERITIES,
+  isReviewNotFoundError,
+  isReviewTerminal,
+  useFindingQuery,
+  useFindingsQuery,
+  useReviewSummaryQuery,
+} from '../api/reviews'
+import { useSemanticsQuery } from '../api/semantics'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
+import { buildRegionLabelMap } from '../lib/contractSemantics'
+import { TAXONOMY_CONCEPTS } from '../lib/contractSemantics'
+import { FindingDetailPane } from '../components/review/FindingDetailPane'
+import { FindingsPanel } from '../components/review/FindingsPanel'
 import { ReviewHeader } from '../components/review/ReviewHeader'
 import { ReviewLifecyclePanel } from '../components/review/ReviewLifecyclePanel'
 
+function readSeverity(value: string | null): FindingFilters['severity'] {
+  return value && (SEVERITIES as readonly string[]).includes(value)
+    ? (value as FindingFilters['severity'])
+    : undefined
+}
+
+function readClassification(value: string | null): FindingFilters['classification'] {
+  return value && (CLASSIFICATIONS as readonly string[]).includes(value)
+    ? (value as FindingFilters['classification'])
+    : undefined
+}
+
+function readConcept(value: string | null): FindingFilters['concept'] {
+  return value && (TAXONOMY_CONCEPTS as readonly string[]).includes(value)
+    ? (value as FindingFilters['concept'])
+    : undefined
+}
+
 export function ReviewWorkspacePage() {
   const { contractId = '', reviewId = '' } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+
   const contractQuery = useContractQuery(contractId)
+  const versionNumber = contractQuery.data?.latestVersion.versionNumber
   const summaryQuery = useReviewSummaryQuery(reviewId)
+  const structureQuery = useContractStructureQuery(contractId, versionNumber)
+  const semanticsQuery = useSemanticsQuery(contractId, versionNumber)
+
+  const selectedFindingId = searchParams.get('finding')
+  const filters: FindingFilters = {
+    severity: readSeverity(searchParams.get('severity')),
+    classification: readClassification(searchParams.get('classification')),
+    concept: readConcept(searchParams.get('concept')),
+  }
+  const terminal = isReviewTerminal(summaryQuery.data?.status)
+  const findingsQuery = useFindingsQuery(reviewId, filters, terminal)
+  const findingQuery = useFindingQuery(reviewId, terminal ? selectedFindingId : null)
+
+  const regionLabels = useMemo(
+    () =>
+      buildRegionLabelMap(
+        semanticsQuery.data?.clauses ?? [],
+        structureQuery.data?.nodes ?? [],
+      ),
+    [semanticsQuery.data, structureQuery.data],
+  )
+
+  function selectFinding(findingId: string) {
+    const next = new URLSearchParams(searchParams)
+    next.set('finding', findingId)
+    setSearchParams(next)
+  }
+
+  function updateFilters(next: FindingFilters) {
+    const params = new URLSearchParams(searchParams)
+    const entries: [string, string | undefined][] = [
+      ['severity', next.severity],
+      ['classification', next.classification],
+      ['concept', next.concept],
+    ]
+    for (const [key, value] of entries) {
+      if (value) params.set(key, value)
+      else params.delete(key)
+    }
+    setSearchParams(params)
+  }
 
   if (contractQuery.isPending || summaryQuery.isPending) {
     return <LoadingState label="Loading review…" />
@@ -54,6 +131,29 @@ export function ReviewWorkspacePage() {
         summary={summaryQuery.data}
         onRefresh={() => void summaryQuery.refetch()}
       />
+      <div className="review-split">
+        <FindingsPanel
+          findings={findingsQuery.data?.items ?? []}
+          truncated={findingsQuery.data?.truncated ?? false}
+          filters={filters}
+          onFiltersChange={updateFilters}
+          selectedFindingId={selectedFindingId}
+          onSelect={selectFinding}
+          regionLabels={regionLabels}
+          isEnabled={terminal}
+          isPending={findingsQuery.isPending}
+          isError={findingsQuery.isError}
+          onRetry={() => void findingsQuery.refetch()}
+        />
+        <FindingDetailPane
+          finding={findingQuery.data}
+          regionLabels={regionLabels}
+          findingId={terminal ? selectedFindingId : null}
+          isPending={Boolean(selectedFindingId) && findingQuery.isPending}
+          isError={findingQuery.isError}
+          onRetry={() => void findingQuery.refetch()}
+        />
+      </div>
     </section>
   )
 }

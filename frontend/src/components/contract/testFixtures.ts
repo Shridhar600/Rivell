@@ -430,6 +430,12 @@ export type StubOptions = {
   reviewSummaryStatus?: number
   reviewProgress?: unknown
   reviewProgressStatus?: number
+  findings?: unknown
+  findingsStatus?: number
+  findingsResponse?: (url: string) => Response | Promise<Response>
+  findingDetail?: unknown
+  findingDetailStatus?: number
+  findingDetailResponse?: (findingId: string) => Response | Promise<Response>
   createReviewResponse?: (body: unknown) => Response | Promise<Response>
   createReviewSummary?: unknown
   createReviewStatus?: number
@@ -592,6 +598,33 @@ export function stubContractApi(options: StubOptions = {}) {
         )
       }
       return jsonResponse(envelope(options.reviewProgress ?? null))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/findings\/[^/?]+$/.test(url)) {
+      if (options.findingDetailResponse) {
+        const findingId = url.split('/findings/')[1] ?? ''
+        return await options.findingDetailResponse(findingId)
+      }
+      if (options.findingDetailStatus && options.findingDetailStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.findingDetailStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.findingDetailStatus,
+        )
+      }
+      return jsonResponse(envelope(options.findingDetail ?? null))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/findings(\?|$)/.test(url)) {
+      if (options.findingsResponse) return await options.findingsResponse(url)
+      if (options.findingsStatus && options.findingsStatus !== 200) {
+        return jsonResponse(
+          { code: String(options.findingsStatus), title: 'Error', detail: 'server detail text' },
+          options.findingsStatus,
+        )
+      }
+      return jsonResponse(envelope(options.findings ?? { items: [], truncated: false }))
     }
     if (method === 'POST' && url.includes('/versions/1/reviews')) {
       if (options.createReviewResponse) return await options.createReviewResponse(body)

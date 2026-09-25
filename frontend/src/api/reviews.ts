@@ -392,6 +392,10 @@ export function parseFindingDetail(value: unknown, what = 'finding detail'): Fin
   }
 }
 
+export function isReviewTerminal(status: ReviewStatus | undefined | null): boolean {
+  return status === 'COMPLETED' || status === 'FAILED'
+}
+
 export function isReviewPending(status: ReviewStatus | undefined | null): boolean {
   return status === 'ANALYSIS_QUEUED' || status === 'ANALYZING'
 }
@@ -591,6 +595,7 @@ export function useFindingQuery(
     queryKey: reviewKeys.finding(reviewId ?? '', findingId ?? ''),
     queryFn: reviewId && findingId ? () => fetchFindingDetail(reviewId, findingId) : skipToken,
     enabled: Boolean(reviewId) && Boolean(findingId),
+    retry: false,
   })
 }
 

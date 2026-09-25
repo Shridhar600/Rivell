@@ -95,7 +95,7 @@ export const fixtureReviewList = {
 export const fixtureClauseFindingSummary = {
   id: 'f-1',
   subjectKind: 'CLAUSE',
-  subjectHeadingNodeId: 'n6',
+  subjectHeadingNodeId: 'node-6',
   absenceConcept: null,
   concept: 'LIMITATION_OF_LIABILITY',
   secondaryConcept: null,
