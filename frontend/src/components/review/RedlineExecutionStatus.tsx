@@ -1,10 +1,13 @@
 import type { RedlineExecution } from '../../api/redline'
 import { formatBytes, formatTimestamp } from '../../lib/knowledgeLabels'
-import { redlineExecutionTitle } from '../../lib/redline'
+import { redlineExecutionTitle, redlineVerificationOutcome } from '../../lib/redline'
 
 export function RedlineExecutionStatus({ execution }: { execution: RedlineExecution }) {
   const title = redlineExecutionTitle(execution)
-  const positive = execution.status === 'COMPLETED' && execution.outcome === 'REDLINE_GENERATED'
+  const positive =
+    execution.status === 'COMPLETED' &&
+    execution.outcome === 'REDLINE_GENERATED' &&
+    redlineVerificationOutcome(execution) === 'PASSED'
   const outcomeRecorded =
     execution.status !== 'COMPLETED' ||
     execution.outcome === 'REDLINE_GENERATED' ||

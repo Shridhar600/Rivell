@@ -271,6 +271,37 @@ describe('change report rows', () => {
     expect(rows[0].placementLabel).toBe('Before the signature block')
   })
 
+  it('falls back to the frozen target label when resolvedTarget is absent', () => {
+    const execution = fixtureExecution({
+      status: 'FAILED',
+      outcome: null,
+      downloadAvailable: false,
+      changeCount: 2,
+      changes: [
+        {
+          ...fixtureExecution().changes[0],
+          status: 'NOT_APPLIED',
+          verification: null,
+          resolvedTarget: null,
+          paragraphsDeleted: null,
+          paragraphsInserted: null,
+        },
+        {
+          ...fixtureExecution().changes[0],
+          approvedChangeId: 'ch-3',
+          ordinal: 2,
+          actionType: 'DELETE',
+          status: 'NOT_APPLIED',
+          verification: null,
+          resolvedTarget: null,
+        },
+      ],
+    })
+    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels })
+    expect(rows[0].targetLabel).toBe('8. Limitation of Liability')
+    expect(rows[1].targetLabel).toBe('5. Term and Renewal')
+  })
+
   it('degrades safely when a change row is not in the frozen set or lacks labels', () => {
     const execution = fixtureExecution({
       changes: [
@@ -327,6 +358,12 @@ describe('trigger error classification', () => {
       classifyTriggerError({ status: 409, execution: null, executionStateKnown: false }),
     ).toBe('UNCONFIRMED')
     expect(
+      classifyTriggerError({ status: 500, execution: null, executionStateKnown: true }),
+    ).toBe('ENGINE_UNAVAILABLE')
+    expect(
+      classifyTriggerError({ status: 503, execution: null, executionStateKnown: true }),
+    ).toBe('ENGINE_UNAVAILABLE')
+    expect(
       classifyTriggerError({ status: null, execution: null, executionStateKnown: true }),
     ).toBe('TRANSPORT')
   })
@@ -338,6 +375,7 @@ describe('trigger error classification', () => {
       'FAILED_EXECUTION',
       'NOT_AVAILABLE',
       'UNCONFIRMED',
+      'ENGINE_UNAVAILABLE',
       'TRANSPORT',
     ] as const
     const notices = kinds.map((kind) => redlineTriggerErrorNotice(kind))

@@ -281,6 +281,7 @@ export function ReviewWorkspacePage() {
               ) : null
             ) : null}
             <RedlineExecutionPanel
+              key={reviewId}
               reviewId={reviewId}
               isFinalized={isFinalized}
               approvedChangeSet={changeSetQuery.data ?? null}

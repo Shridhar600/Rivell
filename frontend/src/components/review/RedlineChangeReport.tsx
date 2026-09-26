@@ -11,7 +11,9 @@ export function RedlineChangeReport({ rows, onSelectFinding }: Props) {
     <div className="redline__report-block">
       <h3>Change execution report</h3>
       <ol className="redline__report" aria-label="Redline change report">
-        {rows.map((row) => (
+        {rows.map((row) => {
+          const findingId = row.findingId
+          return (
           <li key={row.id} className="redline__report-row">
             <article aria-label={`${row.actionLabel}: ${row.targetLabel}`}>
               <h4>
@@ -26,18 +28,19 @@ export function RedlineChangeReport({ rows, onSelectFinding }: Props) {
               {row.failureTitle ? (
                 <p className="state state--warning">{row.failureTitle}</p>
               ) : null}
-              {row.findingId ? (
+              {findingId ? (
                 <button
                   type="button"
                   className="link-button"
-                  onClick={() => onSelectFinding(row.findingId as string)}
+                  onClick={() => onSelectFinding(findingId)}
                 >
                   Open source finding
                 </button>
               ) : null}
             </article>
           </li>
-        ))}
+          )
+        })}
       </ol>
     </div>
   )

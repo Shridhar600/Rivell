@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
   downloadRedline,
+  RedlineDownloadIntegrityError,
   fetchRedlineExecution,
   isRedlineForbiddenError,
   isRedlineNotFoundError,
@@ -226,6 +227,12 @@ describe('redline parsers', () => {
     expect(execution.changes[0].verification).toBe('UNKNOWN')
   })
 
+  it('defaults a missing downloadAvailable flag to false', () => {
+    const { downloadAvailable, ...withoutFlag } = generatedPayload
+    void downloadAvailable
+    expect(parseRedlineExecution(withoutFlag).downloadAvailable).toBe(false)
+  })
+
   it('rejects a malformed execution envelope payload', () => {
     expect(() => parseRedlineExecution({ status: 'COMPLETED' })).toThrow(
       /Malformed redline execution/,
@@ -265,6 +272,22 @@ describe('redline fetchers', () => {
     expect(requests[0].method).toBe('POST')
     expect(requests[0].url).toContain('/api/reviews/r-1/redline')
     expect(requests[0].body).toBeNull()
+  })
+
+  it('keeps execution caches isolated per review', async () => {
+    const requests = stubFetch(() => jsonResponse(envelope(generatedPayload)))
+    const { queryClient, wrapper } = createWrapper()
+    queryClient.setQueryData(redlineKeys.execution('r-9'), {
+      ...generatedPayload,
+      id: 're-9',
+      reviewId: 'r-9',
+    })
+    const { result } = renderHook(() => useRedlineExecutionQuery('r-1', true), { wrapper })
+    await waitFor(() => expect(result.current.data?.id).toBe('re-1'))
+    expect(
+      (queryClient.getQueryData<RedlineExecution>(redlineKeys.execution('r-9')) ?? null)?.id,
+    ).toBe('re-9')
+    expect(requests.filter((request) => request.url.includes('/redline'))).toHaveLength(1)
   })
 
   it('does not query before the review is finalized', async () => {
@@ -370,6 +393,28 @@ describe('redline download', () => {
     stubFetch(() => new Response(new Uint8Array([1]), { status: 200 }))
     const download = await downloadRedline('r-1')
     expect(download.filename).toBe('redline.docx')
+  })
+
+  it('rejects an empty or non-DOCX download body before it can be saved', async () => {
+    stubFetch(
+      () =>
+        new Response(new Uint8Array([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/octet-stream' },
+        }),
+    )
+    const empty = await downloadRedline('r-1').catch((error) => error)
+    expect(empty).toBeInstanceOf(RedlineDownloadIntegrityError)
+
+    stubFetch(
+      () =>
+        new Response(new Uint8Array([1, 2]), {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+    )
+    const wrongType = await downloadRedline('r-1').catch((error) => error)
+    expect(wrongType).toBeInstanceOf(RedlineDownloadIntegrityError)
   })
 
   it('reports download unavailability as a typed error, separate from execution state', async () => {

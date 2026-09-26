@@ -234,14 +234,27 @@ function filenameFromDisposition(header: string | null): string | null {
   return plain ? plain[1] : null
 }
 
+const DOCX_MEDIA_TYPE =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+
+export class RedlineDownloadIntegrityError extends Error {
+  constructor() {
+    super('The downloaded file did not match the verified redline.')
+    this.name = 'RedlineDownloadIntegrityError'
+  }
+}
+
 export async function downloadRedline(reviewId: string): Promise<RedlineDownload> {
   const response = await fetch(`${apiBaseUrl}/api/reviews/${reviewId}/redline/download`, {
-    headers: {
-      Accept: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    },
+    headers: { Accept: DOCX_MEDIA_TYPE },
   })
   if (!response.ok) throw new RedlineApiError(response.status)
+  const contentType = response.headers.get('Content-Type')
   const blob = await response.blob()
+  if (blob.size === 0) throw new RedlineDownloadIntegrityError()
+  if (contentType && !contentType.toLowerCase().startsWith(DOCX_MEDIA_TYPE)) {
+    throw new RedlineDownloadIntegrityError()
+  }
   const filename =
     filenameFromDisposition(response.headers.get('Content-Disposition')) ?? 'redline.docx'
   return { blob, filename }

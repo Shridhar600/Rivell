@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import type { RedlineExecution } from '../../api/redline'
-import { downloadRedline, isRedlineForbiddenError } from '../../api/redline'
+import {
+  downloadRedline,
+  isRedlineForbiddenError,
+  RedlineDownloadIntegrityError,
+} from '../../api/redline'
 import { redlineVerificationOutcome } from '../../lib/redline'
 
 function saveFile(blob: Blob, filename: string) {
@@ -11,7 +15,7 @@ function saveFile(blob: Blob, filename: string) {
   document.body.append(anchor)
   anchor.click()
   anchor.remove()
-  URL.revokeObjectURL(url)
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 export function RedlineDownloadAction({
@@ -35,6 +39,12 @@ export function RedlineDownloadAction({
     setDownloadError(null)
     try {
       const download = await downloadRedline(reviewId)
+      if (
+        execution.artifactSizeBytes !== null &&
+        download.blob.size !== execution.artifactSizeBytes
+      ) {
+        throw new RedlineDownloadIntegrityError()
+      }
       saveFile(download.blob, execution.artifactFilename ?? download.filename)
     } catch (error) {
       setDownloadError(

@@ -221,6 +221,7 @@ export type RedlineTriggerErrorKind =
   | 'FAILED_EXECUTION'
   | 'NOT_AVAILABLE'
   | 'UNCONFIRMED'
+  | 'ENGINE_UNAVAILABLE'
   | 'TRANSPORT'
 
 export function classifyTriggerError(input: {
@@ -235,6 +236,7 @@ export function classifyTriggerError(input: {
     if (input.execution?.status === 'FAILED') return 'FAILED_EXECUTION'
     return 'NOT_AVAILABLE'
   }
+  if (input.status === 500 || input.status === 503) return 'ENGINE_UNAVAILABLE'
   return 'TRANSPORT'
 }
 
@@ -248,6 +250,8 @@ const TRIGGER_ERROR_NOTICES: Record<RedlineTriggerErrorKind, string> = {
     'Rivell could not generate the redline from this review’s frozen source. The approved change set is unchanged.',
   UNCONFIRMED:
     'The redline request could not be confirmed. Reopen this review to check whether an execution exists.',
+  ENGINE_UNAVAILABLE:
+    'The redline engine is unavailable right now. The approved change set is unchanged; try again later.',
   TRANSPORT:
     'The redline could not be generated. Check your connection and try again.',
 }

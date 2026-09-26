@@ -159,6 +159,34 @@ describe('redline generation', () => {
     )
   })
 
+  it('does not allow a duplicate trigger while generation is in flight', async () => {
+    let resolveTrigger: (response: Response) => void = () => {}
+    const api = stubContractApi(
+      baseOptions({
+        redlineTriggerResponse: () =>
+          new Promise<Response>((resolve) => {
+            resolveTrigger = resolve
+          }),
+      }),
+    )
+    renderRouter(api)
+    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const trigger = await within(panel).findByRole('button', { name: 'Generate redline' })
+    await userEvent.click(trigger)
+    await waitFor(() => expect(trigger).toBeDisabled())
+    expect(panel).toHaveTextContent('Generating and verifying the redlined document…')
+    await userEvent.click(trigger)
+    expect(
+      api.requests.filter(
+        (request) => request.method === 'POST' && request.url.includes('/redline'),
+      ),
+    ).toHaveLength(1)
+    resolveTrigger(jsonResponse(envelope(fixtureRedlineExecution())))
+    await waitFor(() =>
+      expect(within(panel).getByText('Redline generated')).toBeInTheDocument(),
+    )
+  })
+
   it('renders INSERT with backend placement and DELETE without replacement text', async () => {
     const changeSet = fixtureChangeSet()
     const api = stubContractApi(
@@ -233,6 +261,25 @@ describe('redline generation', () => {
     ).toHaveLength(0)
   })
 
+  it('does not render a change report for a no-changes outcome', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        redline: fixtureRedlineExecution({
+          outcome: 'NO_CHANGES',
+          changeCount: 0,
+          changes: [fixtureRedlineExecution().changes[0]],
+          downloadAvailable: false,
+        }),
+      }),
+    )
+    renderRouter(api)
+    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    expect(await within(panel).findByText('No document changes')).toBeInTheDocument()
+    expect(
+      within(panel).queryByRole('list', { name: 'Redline change report' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('reloads an existing execution without regenerating', async () => {
     const api = stubContractApi(
       baseOptions({ redline: fixtureMixedRedlineExecution() }),
@@ -287,6 +334,19 @@ describe('redline generation', () => {
     renderRouter(api)
     const panel = await screen.findByRole('region', { name: 'Redline execution' })
     expect(await within(panel).findByText('Verification incomplete')).toBeInTheDocument()
+    expect(
+      within(panel).queryByRole('button', { name: 'Download redlined DOCX' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('fails closed when the server reports no verified artifact', async () => {
+    const api = stubContractApi(
+      baseOptions({ redline: fixtureRedlineExecution({ downloadAvailable: false }) }),
+    )
+    renderRouter(api)
+    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    expect(await within(panel).findByText('Redline generated')).toBeInTheDocument()
+    expect(await within(panel).findByText('Verification passed')).toBeInTheDocument()
     expect(
       within(panel).queryByRole('button', { name: 'Download redlined DOCX' }),
     ).not.toBeInTheDocument()
@@ -388,13 +448,47 @@ describe('redline failure truth', () => {
   })
 })
 
+describe('redline trigger recovery', () => {
+  it('shows an unconfirmed notice when the post-conflict re-read fails', async () => {
+    let api: ReturnType<typeof stubContractApi>
+    api = stubContractApi(
+      baseOptions({
+        redlineTriggerResponse: () => {
+          api.setRedlineStatus(500)
+          return errorResponse(409)
+        },
+      }),
+    )
+    renderRouter(api)
+    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    await userEvent.click(
+      await within(panel).findByRole('button', { name: 'Generate redline' }),
+    )
+    await waitFor(
+      () => expect(panel).toHaveTextContent('The redline request could not be confirmed.'),
+      { timeout: 5000 },
+    )
+    expect(panel).toHaveTextContent('The redline execution could not be loaded.')
+  })
+})
+
 describe('redline download', () => {
-  it('downloads the verified DOCX as a file', async () => {
+  it('downloads the verified DOCX as a file and revokes the object URL after the click', async () => {
     const clicked: { href: string; download: string }[] = []
+    let revokedDuringClickTask = false
+    const revoke = vi.fn()
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      writable: true,
+      value: revoke,
+    })
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
       this: HTMLAnchorElement,
     ) {
       clicked.push({ href: this.href, download: this.download })
+      queueMicrotask(() => {
+        revokedDuringClickTask = revoke.mock.calls.length > 0
+      })
     })
     const api = stubContractApi(
       baseOptions({ redline: fixtureRedlineExecution() }),
@@ -409,10 +503,31 @@ describe('redline download', () => {
       href: 'blob:redline',
       download: 'acme-msa-v1-redline.docx',
     })
+    expect(revokedDuringClickTask).toBe(false)
+    await waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:redline'))
     const downloads = api.requests.filter((request) =>
       request.url.includes('/redline/download'),
     )
     expect(downloads).toHaveLength(1)
+  })
+
+  it('rejects a download body that does not match the recorded artifact size', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        redline: fixtureRedlineExecution({ artifactSizeBytes: 999_999 }),
+      }),
+    )
+    renderRouter(api)
+    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    await userEvent.click(
+      await within(panel).findByRole('button', { name: 'Download redlined DOCX' }),
+    )
+    await waitFor(() =>
+      expect(panel).toHaveTextContent(
+        'The redline was generated, but the file could not be downloaded. Try again.',
+      ),
+    )
+    expect(within(panel).getByText('Redline generated')).toBeInTheDocument()
   })
 
   it('keeps execution state when the download fails', async () => {

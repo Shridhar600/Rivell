@@ -77,13 +77,15 @@ export function RedlineExecutionPanel({
               <RedlineDownloadAction reviewId={reviewId} execution={execution} />
             </>
           )}
-          <RedlineChangeReport
-            rows={buildRedlineChangeRows(execution, {
-              approvedChanges: approvedChangeSet?.changes ?? [],
-              regionLabels,
-            })}
-            onSelectFinding={onSelectFinding}
-          />
+          {execution.status === 'FAILED' || execution.outcome === 'REDLINE_GENERATED' ? (
+            <RedlineChangeReport
+              rows={buildRedlineChangeRows(execution, {
+                approvedChanges: approvedChangeSet?.changes ?? [],
+                regionLabels,
+              })}
+              onSelectFinding={onSelectFinding}
+            />
+          ) : null}
         </>
       ) : forbidden ? (
         <p className="state state--warning" role="alert">
@@ -116,16 +118,23 @@ export function RedlineExecutionPanel({
           </div>
         </>
       ) : executionQuery.isError ? (
-        <p className="state state--warning" role="alert">
-          The redline execution could not be loaded.{' '}
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => void executionQuery.refetch()}
-          >
-            Try again
-          </button>
-        </p>
+        <>
+          {triggerError ? (
+            <p className="state state--warning" role="alert">
+              {redlineTriggerErrorNotice(triggerError)}
+            </p>
+          ) : null}
+          <p className="state state--warning" role="alert">
+            The redline execution could not be loaded.{' '}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => void executionQuery.refetch()}
+            >
+              Try again
+            </button>
+          </p>
+        </>
       ) : (
         <p role="status">Loading redline execution…</p>
       )}

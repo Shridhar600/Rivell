@@ -485,6 +485,7 @@ export function stubContractApi(options: StubOptions = {}) {
   let humanReview: unknown = options.humanReview ?? null
   let changeSet: unknown = options.changeSet ?? null
   let redline: unknown = options.redline ?? null
+  let redlineStatus = options.redlineStatus ?? 200
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(String(input), init)
@@ -676,7 +677,7 @@ export function stubContractApi(options: StubOptions = {}) {
     }
     if (method === 'GET' && /\/api\/reviews\/[^/?]+\/redline\/download$/.test(url)) {
       if (options.redlineDownloadResponse) return await options.redlineDownloadResponse()
-      return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+      return new Response(new Uint8Array(4403), {
         status: 200,
         headers: {
           'Content-Type':
@@ -690,14 +691,14 @@ export function stubContractApi(options: StubOptions = {}) {
       return jsonResponse(envelope(redline))
     }
     if (method === 'GET' && /\/api\/reviews\/[^/?]+\/redline$/.test(url)) {
-      if (options.redlineStatus && options.redlineStatus !== 200) {
+      if (redlineStatus !== 200) {
         return jsonResponse(
           {
-            code: String(options.redlineStatus),
+            code: String(redlineStatus),
             title: 'Error',
             detail: 'server detail text',
           },
-          options.redlineStatus,
+          redlineStatus,
         )
       }
       if (redline === null) {
@@ -846,6 +847,9 @@ export function stubContractApi(options: StubOptions = {}) {
     },
     setRedline: (next: unknown) => {
       redline = next
+    },
+    setRedlineStatus: (status: number) => {
+      redlineStatus = status
     },
   }
 }
