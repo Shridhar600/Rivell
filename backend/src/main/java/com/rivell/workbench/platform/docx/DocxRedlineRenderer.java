@@ -446,7 +446,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
      */
     private WordprocessingMLPackage load(byte[] sourceBytes) {
         try {
-            com.rivell.workbench.platform.parsing.ZipGuard.scan(sourceBytes,
+            com.rivell.workbench.platform.parsing.ZipGuard.verify(sourceBytes,
                     properties.maxUncompressedBytes());
             return WordprocessingMLPackage.load(new ByteArrayInputStream(sourceBytes));
         } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {

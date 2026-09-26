@@ -63,10 +63,13 @@ public class DocxRedlineVerifier implements RedlineVerifier {
     private static WordprocessingMLPackage load(byte[] bytes,
             com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
         try {
-            com.rivell.workbench.platform.parsing.ZipGuard.scan(bytes,
+            com.rivell.workbench.platform.parsing.ZipGuard.verify(bytes,
                     properties.maxUncompressedBytes());
         } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {
-            throw new IllegalStateException("Package exceeds the permitted expansion", e);
+            // M10 review finding: this used to be caught by the broad handler below and reported as
+            // ROUND_TRIP_FAILED, so a size rejection looked like a verification mismatch. It is a
+            // distinct, deliberate outcome and says so.
+            throw new PackageExpansionRejectedException();
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Package could not be scanned", e);
         }
@@ -85,12 +88,20 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         WordprocessingMLPackage source;
         try {
             generated = load(generatedBytes, properties);
+        } catch (PackageExpansionRejectedException e) {
+            return VerificationReport.failed(
+                    RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED,
+                    "The package expands beyond the permitted size for verification.", List.of());
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
                     "The generated document could not be reopened.", List.of());
         }
         try {
             source = load(sourceBytes, properties);
+        } catch (PackageExpansionRejectedException e) {
+            return VerificationReport.failed(
+                    RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED,
+                    "The package expands beyond the permitted size for verification.", List.of());
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
                     "The frozen source document could not be reopened.", List.of());

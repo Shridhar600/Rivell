@@ -112,10 +112,11 @@ public final class HumanReviewResolver {
             // turn an analysis that never really ran into a clean-looking zero-change artifact.
             // Block until the environment matches the review snapshot and the review is re-analyzed.
             blockers.add(blocker(FinalizationBlockerCode.ANALYSIS_DEGRADED,
-                    "No planned check completed a trustworthy analysis, so the review has no "
-                            + "machine findings to decide on. It cannot be finalized until the "
-                            + "analysis environment matches the review snapshot and the review "
-                            + "is re-analyzed.", List.of()));
+                    "No planned check completed a trustworthy analysis, so this review has no "
+                            + "machine findings to decide on and cannot be finalized. The "
+                            + "contract semantics or model configuration changed after the review "
+                            + "was created, so its analysis can no longer be trusted. Create a new "
+                            + "review against the current semantics to continue.", List.of()));
         }
         if (!unresolvedBlocking.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.UNRESOLVED_BLOCKING_FINDINGS,

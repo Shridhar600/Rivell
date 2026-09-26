@@ -78,7 +78,6 @@ public class KnowledgePublicationService {
 
         var now = Instant.now();
         var publicationId = UUID.randomUUID();
-        var publicationNumber = repository.nextPublicationNumber(organizationId);
         var items = new ArrayList<PublicationItem>();
         for (var candidate : candidates) {
             items.add(new PublicationItem(
@@ -156,9 +155,11 @@ public class KnowledgePublicationService {
      */
     private static boolean isPublicationNumberConflict(
             DataIntegrityViolationException conflict) {
+        // The constraint is the inline UNIQUE (organization_id, publication_number) declared in V4,
+        // so PostgreSQL names it after the table and columns. There is no named constraint to match.
         var message = conflict.getMostSpecificCause().getMessage();
-        return message != null && message.contains("uq_knowledge_publication_number")
-                || message != null && message.contains("knowledge_publication_organization_id_publication_number_key");
+        return message != null
+                && message.contains("knowledge_publication_organization_id_publication_number_key");
     }
 
 }

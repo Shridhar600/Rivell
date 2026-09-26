@@ -378,7 +378,11 @@ public class RedlineExecutionService {
         var live = contractQueryService.getSemanticsForOrganization(organizationId,
                 changeSet.contractId(), changeSet.contractVersionNumber());
         if (live.isEmpty()) {
-            return false;
+            // M10 review finding: this failed open. With no live semantics there is nothing to compare,
+            // so the guard reported "not drifted" and placement proceeded with an empty concept map -
+            // exactly the unverified placement the check exists to prevent. Absence of the thing being
+            // verified is not evidence that it verified.
+            return true;
         }
         return !SemanticsDigest.of(live.get()).equals(changeSet.semanticsDigest());
     }

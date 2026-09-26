@@ -95,7 +95,16 @@ public class ReviewService {
             var replay = reviewRepository.findByClientRequestId(
                     identity.organizationId(), clientRequestId);
             if (replay.isPresent()) {
-                return replay.get();
+                var existing = replay.get();
+                // M10 review finding: the key alone is not the identity of the request. Replaying a
+                // key that was minted for a different contract would return that contract's review
+                // for a request naming this one, and the caller would poll the wrong review. A key is
+                // only reusable for the same operation.
+                if (!existing.contractId().equals(contractId)
+                        || existing.contractVersionNumber() != versionNumber) {
+                    throw new IdempotencyKeyReusedException(clientRequestId);
+                }
+                return existing;
             }
         }
         var version = contractQueryService.getVersionSummary(contractId, versionNumber);
@@ -130,11 +139,26 @@ public class ReviewService {
         var review = Review.analysisQueued(
                 reviewId, organizationId, contractId, version.versionId(), versionNumber,
                 identity.userId(), now, clientRequestId);
-        transactionTemplate.executeWithoutResult(status -> {
-            reviewRepository.create(review, snapshot, planBuilder.build(reviewId,
-                    organizationId, snapshot, semantics));
-            eventPublisher.publishEvent(new ReviewCreatedEvent(organizationId, reviewId));
-        });
+        try {
+            transactionTemplate.executeWithoutResult(status -> {
+                reviewRepository.create(review, snapshot, planBuilder.build(reviewId,
+                        organizationId, snapshot, semantics));
+                eventPublisher.publishEvent(new ReviewCreatedEvent(organizationId, reviewId));
+            });
+        } catch (org.springframework.dao.DataIntegrityViolationException conflict) {
+            // M10 review finding: the pre-check cannot see a concurrent identical request, so two
+            // simultaneous submits both missed it and the loser's insert violated the unique index.
+            // The index enforces the invariant but does not return the winner, so read it back: the
+            // client asked for an idempotent create and must get the original review, not a 500.
+            if (clientRequestId == null) {
+                throw conflict;
+            }
+            var winner = reviewRepository.findByClientRequestId(organizationId, clientRequestId);
+            if (winner.isEmpty()) {
+                throw conflict;
+            }
+            return winner.get();
+        }
         return review;
     }
 

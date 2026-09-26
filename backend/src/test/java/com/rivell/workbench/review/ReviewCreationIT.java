@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Objects;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -391,6 +392,53 @@ class ReviewCreationIT {
         assertThat(foreign.id())
                 .as("a key must never resolve another organisation's review")
                 .isNotEqualTo(first.id());
+    }
+
+    /**
+     * M10 review finding: the idempotency pre-check cannot observe a concurrent identical request, so
+     * two simultaneous submits both missed it. The unique index keeps one review, but the loser used
+     * to surface a 500 - the worst possible answer to a client that asked for idempotent creation,
+     * because it has no way to learn that the review it wanted now exists.
+     */
+    @Test
+    void concurrentIdenticalCreationsConvergeOnOneReview() throws Exception {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var key = UUID.randomUUID();
+
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        List<java.util.concurrent.Callable<Review>> tasks = List.of(
+                () -> {
+                    start.await();
+                    return reviewService.create(corpus.contract().contractId(), 1,
+                            ReviewPackRegistry.MSA_PACK, key);
+                },
+                () -> {
+                    start.await();
+                    return reviewService.create(corpus.contract().contractId(), 1,
+                            ReviewPackRegistry.MSA_PACK, key);
+                });
+        var futures = tasks.stream().map(executor::submit).toList();
+        start.countDown();
+        var reviews = new java.util.ArrayList<Review>();
+        for (var future : futures) {
+            reviews.add(future.get());
+        }
+        executor.shutdown();
+
+        assertThat(reviews.get(1).id())
+                .as("a concurrent loser must receive the winner's review, not an error")
+                .isEqualTo(reviews.get(0).id());
+        assertThat(jdbcClient.sql("""
+                select count(*) from review
+                where organization_id = :organizationId and client_request_id = :key
+                """)
+                .param("organizationId", organizationId)
+                .param("key", key)
+                .query(Integer.class).single())
+                .as("exactly one review may carry the key")
+                .isEqualTo(1);
     }
 
     @Test

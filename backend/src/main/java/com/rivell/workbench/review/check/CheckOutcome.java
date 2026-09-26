@@ -49,12 +49,23 @@ public record CheckOutcome(
                 byId.putIfAbsent(item.evidenceId(), item);
             }
         }
-        var unresolved = citedIds.stream().filter(id -> !byId.containsKey(id)).count();
-        if (unresolved > 0) {
+        var unresolved = citedIds.stream().filter(id -> !byId.containsKey(id)).toList();
+        if (!unresolved.isEmpty()) {
+            // M10 review finding: dropping every signal turned a traceability defect into a content
+            // one. A check that produced a dozen signals and mis-cited one evidence id used to leave
+            // the reviewer with nothing at all, indistinguishable from "this clause is fine". Only the
+            // signals that actually depend on an unresolvable citation are removed; the rest survive
+            // and the check is marked degraded so the loss is visible.
+            var unresolvable = new java.util.HashSet<>(unresolved);
+            var retained = signals.stream()
+                    .filter(signal -> signal.evidenceItemIds().stream()
+                            .noneMatch(unresolvable::contains))
+                    .toList();
             var reason = new java.util.LinkedHashMap<String, Object>(detail);
             reason.put("degradedReason", "unresolvable_cited_evidence");
-            reason.put("unresolvedEvidenceCount", (int) unresolved);
-            return new CheckOutcome(CheckExecutionStatus.DEGRADED, List.of(),
+            reason.put("unresolvedEvidenceCount", unresolved.size());
+            reason.put("droppedSignalCount", signals.size() - retained.size());
+            return new CheckOutcome(CheckExecutionStatus.DEGRADED, retained,
                     reason, evidenceTraceId, List.of());
         }
         var items = citedIds.stream().map(byId::get).filter(Objects::nonNull).toList();
