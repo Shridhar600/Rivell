@@ -14,18 +14,18 @@ import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
 
 /** Synthetic M1 structures and frozen artifacts for pure redline plan tests. */
-final class RedlineTestStructures {
+public final class RedlineTestStructures {
 
     private RedlineTestStructures() {
     }
 
-    record BodyElement(String text) {
+    public record BodyElement(String text) {
     }
 
-    record Table(String... cellTexts) {
+    public record Table(String... cellTexts) {
     }
 
-    static ContractStructure structure(UUID contractId, UUID versionId,
+    public static ContractStructure structure(UUID contractId, UUID versionId,
             List<Object> clauses) {
         var nodes = new ArrayList<DocumentNode>();
         var bodyId = UUID.randomUUID();
@@ -82,18 +82,18 @@ final class RedlineTestStructures {
                 ParseStatus.OK, List.of(), nodes);
     }
 
-    record Clause(String heading, List<Object> body) {
+    public record Clause(String heading, List<Object> body) {
     }
 
-    static Clause clause(String heading, Object... body) {
+    public static Clause clause(String heading, Object... body) {
         return new Clause(heading, List.of(body));
     }
 
-    static BodyElement text(String text) {
+    public static BodyElement text(String text) {
         return new BodyElement(text);
     }
 
-    static Map<UUID, LegalConcept> concepts(
+    public static Map<UUID, LegalConcept> concepts(
             ContractStructure structure, Map<String, LegalConcept> byHeadingText) {
         var byId = new LinkedHashMap<UUID, LegalConcept>();
         for (var node : structure.nodes()) {
@@ -105,7 +105,7 @@ final class RedlineTestStructures {
         return byId;
     }
 
-    static UUID headingId(ContractStructure structure, String headingText) {
+    public static UUID headingId(ContractStructure structure, String headingText) {
         return structure.nodes().stream()
                 .filter(node -> node.nodeType() == DocumentNodeType.HEADING)
                 .filter(node -> headingText.equals(node.text()))
@@ -114,7 +114,7 @@ final class RedlineTestStructures {
                 .orElseThrow();
     }
 
-    static ApprovedChange replace(UUID changeSetId, int ordinal, UUID headingNodeId,
+    public static ApprovedChange replace(UUID changeSetId, int ordinal, UUID headingNodeId,
             String language) {
         return new ApprovedChange(UUID.randomUUID(), UUID.randomUUID(), changeSetId,
                 UUID.randomUUID(), ordinal, UUID.randomUUID(), UUID.randomUUID(),
@@ -122,14 +122,14 @@ final class RedlineTestStructures {
                 language, ChangeLanguageSource.HUMAN_EDIT, null);
     }
 
-    static ApprovedChange delete(UUID changeSetId, int ordinal, UUID headingNodeId) {
+    public static ApprovedChange delete(UUID changeSetId, int ordinal, UUID headingNodeId) {
         return new ApprovedChange(UUID.randomUUID(), UUID.randomUUID(), changeSetId,
                 UUID.randomUUID(), ordinal, UUID.randomUUID(), UUID.randomUUID(),
                 ChangeActionType.DELETE, ChangeTargetKind.CLAUSE, headingNodeId, null,
                 null, ChangeLanguageSource.NONE, null);
     }
 
-    static ApprovedChange insert(UUID changeSetId, int ordinal, LegalConcept concept,
+    public static ApprovedChange insert(UUID changeSetId, int ordinal, LegalConcept concept,
             String language) {
         return new ApprovedChange(UUID.randomUUID(), UUID.randomUUID(), changeSetId,
                 UUID.randomUUID(), ordinal, UUID.randomUUID(), UUID.randomUUID(),
@@ -137,7 +137,7 @@ final class RedlineTestStructures {
                 language, ChangeLanguageSource.HUMAN_EDIT, null);
     }
 
-    static ApprovedChangeSet set(UUID organizationId, UUID contractId, UUID versionId,
+    public static ApprovedChangeSet set(UUID organizationId, UUID contractId, UUID versionId,
             int changeSetVersion, List<ApprovedChange> changes) {
         var changeSetId = changes.isEmpty()
                 ? UUID.randomUUID() : changes.get(0).changeSetId();
