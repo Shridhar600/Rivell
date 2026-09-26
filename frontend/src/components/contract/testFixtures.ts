@@ -452,6 +452,10 @@ export type StubOptions = {
   changeSetStatus?: number
   decisionResponse?: (body: unknown) => Response | Promise<Response>
   finalizeResponse?: () => Response | Promise<Response>
+  redline?: unknown
+  redlineStatus?: number
+  redlineTriggerResponse?: () => Response | Promise<Response>
+  redlineDownloadResponse?: () => Response | Promise<Response>
 }
 
 const defaultPackCatalog = {
@@ -480,6 +484,7 @@ export function stubContractApi(options: StubOptions = {}) {
   let decisionHistory: unknown = options.decisionHistory ?? { items: [], truncated: false }
   let humanReview: unknown = options.humanReview ?? null
   let changeSet: unknown = options.changeSet ?? null
+  let redline: unknown = options.redline ?? null
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(String(input), init)
@@ -669,6 +674,40 @@ export function stubContractApi(options: StubOptions = {}) {
       }
       return jsonResponse(envelope(changeSet))
     }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/redline\/download$/.test(url)) {
+      if (options.redlineDownloadResponse) return await options.redlineDownloadResponse()
+      return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+        status: 200,
+        headers: {
+          'Content-Type':
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'Content-Disposition': "attachment; filename*=UTF-8''acme-msa-v1-redline.docx",
+        },
+      })
+    }
+    if (method === 'POST' && /\/api\/reviews\/[^/?]+\/redline$/.test(url)) {
+      if (options.redlineTriggerResponse) return await options.redlineTriggerResponse()
+      return jsonResponse(envelope(redline))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/redline$/.test(url)) {
+      if (options.redlineStatus && options.redlineStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.redlineStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.redlineStatus,
+        )
+      }
+      if (redline === null) {
+        return jsonResponse(
+          { code: '404', title: 'Not found', detail: 'server detail text' },
+          404,
+        )
+      }
+      return jsonResponse(envelope(redline))
+    }
     if (method === 'PUT' && /\/api\/reviews\/[^/?]+\/findings\/[^/?]+\/decision$/.test(url)) {
       if (options.decisionResponse) return await options.decisionResponse(body)
       const requestBody = (body ?? {}) as Record<string, unknown>
@@ -804,6 +843,9 @@ export function stubContractApi(options: StubOptions = {}) {
     },
     setChangeSet: (next: unknown) => {
       changeSet = next
+    },
+    setRedline: (next: unknown) => {
+      redline = next
     },
   }
 }

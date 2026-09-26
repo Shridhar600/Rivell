@@ -30,6 +30,7 @@ import { FinalizationPanel } from '../components/review/FinalizationPanel'
 import { FindingDetailPane } from '../components/review/FindingDetailPane'
 import { FindingsPanel } from '../components/review/FindingsPanel'
 import { HumanReviewProgress } from '../components/review/HumanReviewProgress'
+import { RedlineExecutionPanel } from '../components/review/RedlineExecutionPanel'
 import { ReviewCoveragePanel } from '../components/review/ReviewCoveragePanel'
 import { ReviewHeader } from '../components/review/ReviewHeader'
 import { ReviewLifecyclePanel } from '../components/review/ReviewLifecyclePanel'
@@ -279,6 +280,13 @@ export function ReviewWorkspacePage() {
                 />
               ) : null
             ) : null}
+            <RedlineExecutionPanel
+              reviewId={reviewId}
+              isFinalized={isFinalized}
+              approvedChangeSet={changeSetQuery.data ?? null}
+              regionLabels={regionLabels}
+              onSelectFinding={selectFinding}
+            />
           </>
         </>
       ) : null}
