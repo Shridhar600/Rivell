@@ -132,6 +132,13 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, "400", "Invalid correction", e.getMessage());
     }
 
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    ResponseEntity<ErrorResponse> unreadableBody(
+            org.springframework.http.converter.HttpMessageNotReadableException e) {
+        return error(HttpStatus.BAD_REQUEST, "400", "Invalid request",
+                "The request body could not be parsed.");
+    }
+
     @ExceptionHandler(IOException.class)
     ResponseEntity<ErrorResponse> storageUnavailable(IOException e) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "500", "Document storage unavailable",

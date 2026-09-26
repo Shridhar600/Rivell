@@ -2,6 +2,7 @@ package com.rivell.workbench.platform.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -62,6 +63,15 @@ class SystemApiIT {
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    @Test
+    void malformedJsonBodiesAreBadRequestsNotStorageErrors() throws Exception {
+        mockMvc.perform(post("/api/knowledge/publications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"candidateIds\": [\"not-a-uuid]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("400"));
     }
 
     @Test
