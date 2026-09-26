@@ -13,6 +13,7 @@ import com.rivell.workbench.redline.ApprovedChangeSetRepository;
 import com.rivell.workbench.review.Finding;
 import com.rivell.workbench.review.FindingRepository;
 import com.rivell.workbench.review.Review;
+import com.rivell.workbench.review.CheckExecutionStatus;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.ReviewRepository;
@@ -63,9 +64,22 @@ public class HumanReviewService {
                 .orElse(Map.of());
         var headings = contractQueryService.headingNodeIdsForOrganization(
                 organizationId, review.contractId(), review.contractVersionNumber());
+        // DEGRADED is overloaded: it covers both a check that could not trust its inputs (the
+        // analysis environment no longer matches the review snapshot, so every check degrades and
+        // the run reports COMPLETED with nothing to show) and a check that ran fine and honestly
+        // reported partial coverage. Only the first is a finalization hazard, and it is
+        // distinguishable by whether any check completed at all. Counting every DEGRADED as a
+        // blocker would make an ordinary partially-covered review impossible to finalize.
+        var checkOutcomes = activeRun
+                .map(run -> analysisRepository.findExecutions(organizationId, run.id()))
+                .orElse(List.of());
+        var plannedChecks = reviewRepository.findPlanChecks(organizationId, reviewId).size();
+        var completedChecks = (int) checkOutcomes.stream()
+                .filter(execution -> execution.status() == CheckExecutionStatus.COMPLETED)
+                .count();
         var assessment = HumanReviewResolver.resolve(findings, decisions,
                 review.status() == ReviewStatus.COMPLETED && activeRun.isPresent(),
-                changeSet.isPresent(), headings);
+                plannedChecks > 0 && completedChecks == 0, changeSet.isPresent(), headings);
         return new HumanReviewState(review, activeRun.map(run -> run.id()).orElse(null),
                 findings, decisions, changeSet, assessment);
     }

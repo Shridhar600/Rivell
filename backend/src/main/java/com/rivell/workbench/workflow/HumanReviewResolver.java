@@ -29,6 +29,7 @@ public final class HumanReviewResolver {
             List<Finding> findings,
             Map<UUID, HumanDecision> currentDecisions,
             boolean analysisComplete,
+            boolean analysisProducedNoTrustworthyResult,
             boolean finalized,
             Set<UUID> headingNodeIds) {
         var planned = new ArrayList<PlannedChange>();
@@ -105,6 +106,16 @@ public final class HumanReviewResolver {
             blockers.add(blocker(FinalizationBlockerCode.ANALYSIS_NOT_COMPLETE,
                     "Machine analysis is not complete; decisions and finalization are "
                             + "unavailable until the review completes.", List.of()));
+        }
+        if (analysisProducedNoTrustworthyResult) {
+            // No planned check completed. The run still reports COMPLETED, so finalizing here would
+            // turn an analysis that never really ran into a clean-looking zero-change artifact.
+            // Block until the environment matches the review snapshot and the review is re-analyzed.
+            blockers.add(blocker(FinalizationBlockerCode.ANALYSIS_DEGRADED,
+                    "No planned check completed a trustworthy analysis, so the review has no "
+                            + "machine findings to decide on. It cannot be finalized until the "
+                            + "analysis environment matches the review snapshot and the review "
+                            + "is re-analyzed.", List.of()));
         }
         if (!unresolvedBlocking.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.UNRESOLVED_BLOCKING_FINDINGS,

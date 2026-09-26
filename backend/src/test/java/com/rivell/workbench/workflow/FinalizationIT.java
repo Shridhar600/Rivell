@@ -289,6 +289,46 @@ class FinalizationIT {
         assertThat(set.get("changes").size()).isZero();
     }
 
+    /**
+     * M10: a run whose checks all degraded produced a COMPLETED review with zero Findings, which
+     * was then finalizable into a zero-change ApprovedChangeSet and a NO_CHANGES redline. That is
+     * the worst possible failure for a legal tool: a clean-looking artifact from an analysis that
+     * never actually ran. A degraded analysis must be reported as a typed blocker.
+     */
+    @Test
+    void aDegradedAnalysisBlocksFinalizationInsteadOfReadingAsClean() throws Exception {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        // A human corrects a concept after the review froze: the review's analysis environment no
+        // longer matches the live semantics, so every check degrades and produces no signal.
+        var clause = enrichmentService.getSemantics(corpus.contract().contractId(), 1)
+                .clauses().get(0);
+        enrichmentService.correctClause(corpus.contract().contractId(), 1, clause.id(),
+                new com.rivell.workbench.contracts.FactCorrection(
+                        "GOVERNING_LAW", java.util.Map.of(), UUID.randomUUID()));
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()))
+                .isNotEmpty()
+                .allSatisfy(execution -> assertThat(execution.status())
+                        .isEqualTo(com.rivell.workbench.review.CheckExecutionStatus.DEGRADED));
+        assertThat(findingRepository.findFindings(organizationId, run.id())).isEmpty();
+
+        mockMvc.perform(get("/api/reviews/{id}/human-review", review.id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.readyToFinalize").value(false))
+                .andExpect(jsonPath("$.data.blockers[?(@.code == 'ANALYSIS_DEGRADED')]")
+                        .exists());
+
+        mockMvc.perform(post("/api/reviews/{id}/finalize", review.id()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("409"));
+    }
+
     @Test
     void unresolvedFindingsBlockFinalization() throws Exception {
         var fixture = analyzedMainCorpus();
