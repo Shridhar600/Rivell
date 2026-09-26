@@ -9,6 +9,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -47,6 +52,38 @@ class LocalDocumentStorageTest {
 
         try (var input = storage.open(key)) {
             assertThat(input.readAllBytes()).isEqualTo("first".getBytes(UTF_8));
+        }
+    }
+
+    @Test
+    void concurrentFirstWritesIntoANewDirectoryAllSucceed() throws Exception {
+        DocumentStorage storage = new LocalDocumentStorage(root);
+        var executor = Executors.newFixedThreadPool(8);
+        try {
+            for (var round = 0; round < 5; round++) {
+                var start = new CountDownLatch(1);
+                List<Callable<Void>> tasks = new ArrayList<>();
+                for (var worker = 0; worker < 8; worker++) {
+                    var key = new StorageKey("organizations/race" + round + "/redline/"
+                            + worker + ".docx");
+                    var payload = new byte[] {(byte) worker};
+                    tasks.add(() -> {
+                        start.await();
+                        storage.store(key, new ByteArrayInputStream(payload));
+                        return null;
+                    });
+                }
+                var futures = tasks.stream().map(executor::submit).toList();
+                start.countDown();
+                for (var future : futures) {
+                    future.get();
+                }
+            }
+        } finally {
+            executor.shutdown();
+        }
+        try (var input = storage.open(new StorageKey("organizations/race4/redline/7.docx"))) {
+            assertThat(input.readAllBytes()).isEqualTo(new byte[] {7});
         }
     }
 

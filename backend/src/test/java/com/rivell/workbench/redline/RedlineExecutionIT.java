@@ -353,24 +353,26 @@ class RedlineExecutionIT {
         var executor = Executors.newFixedThreadPool(2);
         var start = new java.util.concurrent.CountDownLatch(1);
         try {
-            List<Callable<Integer>> tasks = List.of(
+            List<Callable<MvcResult>> tasks = List.of(
                     () -> {
                         start.await();
                         return mockMvc.perform(post("/api/reviews/{id}/redline", reviewId))
-                                .andReturn().getResponse().getStatus();
+                                .andReturn();
                     },
                     () -> {
                         start.await();
                         return mockMvc.perform(post("/api/reviews/{id}/redline", reviewId))
-                                .andReturn().getResponse().getStatus();
+                                .andReturn();
                     });
             var futures = tasks.stream().map(executor::submit).toList();
             start.countDown();
-            var statuses = new ArrayList<Integer>();
+            var responses = new ArrayList<String>();
             for (var future : futures) {
-                statuses.add(future.get());
+                var result = future.get();
+                responses.add(result.getResponse().getStatus() + " "
+                        + result.getResponse().getContentAsString());
             }
-            assertThat(statuses).allMatch(status -> status == 200);
+            assertThat(responses).allMatch(response -> response.startsWith("200 "));
         } finally {
             executor.shutdown();
         }

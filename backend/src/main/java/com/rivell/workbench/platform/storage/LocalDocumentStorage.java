@@ -69,7 +69,11 @@ public final class LocalDocumentStorage implements DocumentStorage {
         for (var segment : root.relativize(parent)) {
             current = current.resolve(segment);
             if (Files.notExists(current, NOFOLLOW_LINKS)) {
-                Files.createDirectory(current);
+                try {
+                    Files.createDirectory(current);
+                } catch (java.nio.file.FileAlreadyExistsException racedByAnotherWriter) {
+                    // Another writer created this component concurrently; validated below.
+                }
             }
             rejectSymbolicLink(current);
             if (!Files.isDirectory(current, NOFOLLOW_LINKS)) {
