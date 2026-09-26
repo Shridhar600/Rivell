@@ -65,12 +65,22 @@ public final class ZipGuard {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
                 if ("word/document.xml".equals(entry.getName())) {
-                    mainDocument = zip.readAllBytes();
-                    total += mainDocument.length;
-                    if (total > maxUncompressedBytes) {
-                        throw new ZipGuardException(
-                                "Document expands beyond the maximum supported size");
+                    var collected = new java.io.ByteArrayOutputStream();
+                    // Counted read, never an unbounded one. This is the ingest path, so it is the one
+                    // that faces first-party untrusted input: readAllBytes() here would allocate the
+                    // whole entry in order to decide it was too large, which is the exact bomb the
+                    // ceiling exists to stop. The entry is only materialised after it has passed.
+                    var buffer = new byte[8192];
+                    int read;
+                    while ((read = zip.read(buffer)) > 0) {
+                        collected.write(buffer, 0, read);
+                        total += read;
+                        if (total > maxUncompressedBytes) {
+                            throw new ZipGuardException(
+                                    "Document expands beyond the maximum supported size");
+                        }
                     }
+                    mainDocument = collected.toByteArray();
                 } else {
                     total += drain(zip);
                 }

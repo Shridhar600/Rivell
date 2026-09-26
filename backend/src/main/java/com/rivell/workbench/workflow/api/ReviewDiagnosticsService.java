@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -147,12 +148,16 @@ public class ReviewDiagnosticsService {
             stalled.add("The analysis run has been in flight for " + age
                     + "s with no completion. It may be wedged.");
         }
+        // Loaded once per request, not once per check: resolving each key separately re-read the
+        // whole plan for every execution.
+        var checkKeys = checkKeys(organizationId, run.reviewId());
         var checks = new ArrayList<ReviewDiagnosticsView.CheckView>();
         for (var execution : analysisRepository.findExecutions(organizationId, run.id())) {
             var degraded = execution.detail() == null ? null
                     : (String) execution.detail().get("degradedReason");
             checks.add(new ReviewDiagnosticsView.CheckView(
-                    checkKey(organizationId, run.reviewId(), execution.planCheckId()),
+                    checkKeys.getOrDefault(execution.planCheckId(),
+                            execution.planCheckId().toString()),
                     execution.status().name(), execution.signalCount(), degraded,
                     execution.startedAt(), execution.completedAt(),
                     execution.startedAt() == null ? null
@@ -191,12 +196,11 @@ public class ReviewDiagnosticsService {
         }
     }
 
-    private String checkKey(UUID organizationId, UUID reviewId, UUID planCheckId) {
-        return reviewRepository.findPlanChecks(organizationId, reviewId).stream()
-                .filter(check -> check.id().equals(planCheckId))
-                .map(check -> check.checkKey())
-                .findFirst()
-                .orElse(planCheckId.toString());
+    private Map<UUID, String> checkKeys(UUID organizationId, UUID reviewId) {
+        var keys = new java.util.HashMap<UUID, String>();
+        reviewRepository.findPlanChecks(organizationId, reviewId)
+                .forEach(check -> keys.put(check.id(), check.checkKey()));
+        return keys;
     }
 
     private ReviewDiagnosticsView.CountsView countsView(List<Finding> findings) {
@@ -213,7 +217,16 @@ public class ReviewDiagnosticsService {
     }
 
     private ReviewDiagnosticsView.DecisionsView decisionsView(UUID organizationId, UUID reviewId) {
-        var decisions = decisionRepository.findCurrentForRun(organizationId, reviewId, null, 1000);
+        // The run id is required: the repository filters on run_id, and `run_id = NULL` is never true
+        // in SQL, so passing null returned an empty list and reported every review as having no human
+        // decisions at all. These counters are the eval-label surface, so a silent zero is worse than
+        // an absent field.
+        var runId = analysisRepository.findLatestCompletedRun(organizationId, reviewId)
+                .map(ReviewAnalysisRun::id).orElse(null);
+        if (runId == null) {
+            return new ReviewDiagnosticsView.DecisionsView(0, 0, 0, 0);
+        }
+        var decisions = decisionRepository.findCurrentForRun(organizationId, reviewId, runId, 1000);
         return new ReviewDiagnosticsView.DecisionsView(
                 (int) decisions.stream().filter(d -> d.action() == DecisionAction.ACCEPT).count(),
                 (int) decisions.stream().filter(d -> d.action() == DecisionAction.EDIT).count(),

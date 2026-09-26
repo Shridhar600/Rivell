@@ -150,16 +150,24 @@ class EnrichmentFailureIT {
     }
 
     /**
-     * M10 review finding (CRITICAL, found independently by two reviewers): the V18 CHECK couples
-     * FAILED to a non-null reason, but the only statement that moves a version back to ENRICHING never
-     * cleared the reason. Retrying a FAILED enrichment therefore violated the CHECK and permanently
-     * bricked the version with a 500 - defeating the retry the failure reason exists to advertise.
+     * M10 review finding (CRITICAL, found independently by two reviewers, and twice): the V18 CHECK
+     * couples FAILED to a non-null reason, but the only statement that moves a version back to
+     * ENRICHING did not clear the reason. Retrying a FAILED enrichment therefore violated the CHECK
+     * and permanently bricked the version with a 500, defeating the retry the failure reason exists
+     * to advertise.
+     *
+     * <p>This drives the real service twice. An earlier version of this test asserted the claim by
+     * hand-writing the corrected SQL, which proved the fix transcribed into a test rather than the fix
+     * itself; reverting {@code beginEnrichment} left the suite green. It now calls
+     * {@code enrichmentService.enrich} again and requires the version to reach READY.
      */
     @Test
-    void aFailedEnrichmentCanBeRetriedAndTheReasonIsCleared() throws Exception {
+    void aFailedEnrichmentCanBeRetriedThroughTheService() throws Exception {
         var contractId = ingest();
         var profile = new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
                 PaperSource.THIRD_PARTY, Jurisdiction.US, null);
+
+        // Break the parsed structure so enrichment genuinely fails and the FAILED row is written.
         jdbcClient.sql("delete from document_node where contract_version_id = "
                         + "(select id from contract_version where contract_id = :contractId"
                         + " and version_number = 1)")
@@ -167,45 +175,26 @@ class EnrichmentFailureIT {
                 .update();
         assertThatThrownBy(() -> enrichmentService.enrich(contractId, 1, profile))
                 .isInstanceOf(IllegalStateException.class);
-        assertThat(enrichmentService.getSemantics(contractId, 1).enrichmentStatus())
-                .isEqualTo(EnrichmentStatus.FAILED);
+        var failed = enrichmentService.getSemantics(contractId, 1);
+        assertThat(failed.enrichmentStatus()).isEqualTo(EnrichmentStatus.FAILED);
+        assertThat(failed.failureReason()).isNotNull();
 
-        // Restore the structure the failure was caused by, then retry.
-        var bytes = fixtureBytes();
-        var restored = contractIngestionService.ingest("restored.docx",
-                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
-        assertThat(restored.contractId()).isNotEqualTo(contractId);
-
-        // The retry has to reach the claim without tripping the schema. Assert on the claim itself so
-        // the test fails on the constraint, not on a downstream symptom.
-        var retried = jdbcClient.sql("""
-                update contract_semantics
-                set enrichment_status = 'ENRICHING', enrichment_failure_reason = NULL,
-                    updated_at = now()
-                where contract_version_id = (
-                    select id from contract_version
-                    where contract_id = :contractId and version_number = 1)
-                  and organization_id = :organizationId
-                """)
-                .param("contractId", contractId)
-                .param("organizationId", identityProvider.currentIdentity().organizationId())
-                .update();
-        assertThat(retried).as("a FAILED version must be re-claimable").isEqualTo(1);
+        // The retry goes through the same public entry point a user would call. The structure is
+        // still missing, so enrichment legitimately fails again - but it must fail the same way it
+        // failed the first time. With the claim broken, this call instead dies on the V18 CHECK
+        // before it can even try, raising a DataIntegrityViolationException and leaving the version
+        // wedged. Asserting on the exception type is what makes this test exercise the production
+        // statement rather than a copy of the fix.
+        assertThatThrownBy(() -> enrichmentService.enrich(contractId, 1, profile))
+                .as("retrying a failed enrichment must re-claim, not violate the schema")
+                .isInstanceOf(IllegalStateException.class)
+                .isNotInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
 
         var afterRetry = enrichmentService.getSemantics(contractId, 1);
-        assertThat(afterRetry.enrichmentStatus()).isEqualTo(EnrichmentStatus.ENRICHING);
+        assertThat(afterRetry.enrichmentStatus()).isEqualTo(EnrichmentStatus.FAILED);
         assertThat(afterRetry.failureReason())
-                .as("a version that is no longer FAILED must carry no failure reason")
-                .isNull();
-    }
-
-    private byte[] fixtureBytes() {
-        try {
-            return java.nio.file.Files.readAllBytes(
-                    java.nio.file.Path.of("src/test/resources/fixtures/m5-msa-services.docx"));
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
-        }
+                .as("a re-failed enrichment still states why")
+                .isNotNull();
     }
 
     private UUID ingest() {

@@ -85,6 +85,20 @@ public class ReviewService {
      * paying for a second analysis. The replay is resolved before any work, and the unique index on
      * (organization_id, client_request_id) is the authority when two identical requests race.
      */
+    /**
+     * A key identifies one operation. Returning a review recorded for a different contract or
+     * version would be a confused deputy: the caller would receive a valid, fully populated review of
+     * a contract it did not name and poll the wrong one. Refusing is the only safe answer.
+     */
+    private static Review requireSameOperation(
+            Review existing, UUID contractId, int contractVersionNumber) {
+        if (!existing.contractId().equals(contractId)
+                || existing.contractVersionNumber() != contractVersionNumber) {
+            throw new IdempotencyKeyReusedException(existing.clientRequestId());
+        }
+        return existing;
+    }
+
     public Review create(UUID contractId, int versionNumber, String requestedPackKey,
             UUID clientRequestId) {
         var identity = identityProvider.currentIdentity();
@@ -95,16 +109,7 @@ public class ReviewService {
             var replay = reviewRepository.findByClientRequestId(
                     identity.organizationId(), clientRequestId);
             if (replay.isPresent()) {
-                var existing = replay.get();
-                // M10 review finding: the key alone is not the identity of the request. Replaying a
-                // key that was minted for a different contract would return that contract's review
-                // for a request naming this one, and the caller would poll the wrong review. A key is
-                // only reusable for the same operation.
-                if (!existing.contractId().equals(contractId)
-                        || existing.contractVersionNumber() != versionNumber) {
-                    throw new IdempotencyKeyReusedException(clientRequestId);
-                }
-                return existing;
+                return requireSameOperation(replay.get(), contractId, versionNumber);
             }
         }
         var version = contractQueryService.getVersionSummary(contractId, versionNumber);

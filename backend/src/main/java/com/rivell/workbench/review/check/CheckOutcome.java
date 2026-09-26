@@ -61,12 +61,20 @@ public record CheckOutcome(
                     .filter(signal -> signal.evidenceItemIds().stream()
                             .noneMatch(unresolvable::contains))
                     .toList();
+            var retainedCited = new java.util.LinkedHashSet<java.util.UUID>();
+            retained.forEach(signal -> retainedCited.addAll(signal.evidenceItemIds()));
+            var retainedItems = retainedCited.stream().map(byId::get)
+                    .filter(Objects::nonNull).toList();
             var reason = new java.util.LinkedHashMap<String, Object>(detail);
             reason.put("degradedReason", "unresolvable_cited_evidence");
             reason.put("unresolvedEvidenceCount", unresolved.size());
             reason.put("droppedSignalCount", signals.size() - retained.size());
+            // The resolvable evidence for the retained signals must be carried through. Returning an
+            // empty list here would persist the retained signals' citations with nothing to resolve
+            // them against, which is precisely the dangling citation this method exists to prevent -
+            // and it surfaces much later as a 500 on the Finding read.
             return new CheckOutcome(CheckExecutionStatus.DEGRADED, retained,
-                    reason, evidenceTraceId, List.of());
+                    reason, evidenceTraceId, retainedItems);
         }
         var items = citedIds.stream().map(byId::get).filter(Objects::nonNull).toList();
         return new CheckOutcome(status, signals, detail, evidenceTraceId, items);

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -369,6 +370,101 @@ class ReviewAnalysisIT {
      * the invariant over a real analysis run rather than over a constructed check outcome, so it
      * holds for whichever checks the pipeline runs.
      */
+    /**
+     * M10 final-review finding: the degraded-citation path retained signals but returned no evidence
+     * items for them, which persisted those signals' citations with nothing to resolve them against -
+     * the exact dangling citation the change exists to prevent, surfacing much later as a 500 on the
+     * Finding read. This drives the branch directly and asserts both halves: the offending signal is
+     * gone, and every surviving citation still resolves.
+     */
+    @Test
+    void aCheckCitingUnresolvableEvidenceDropsOnlyThatSignalAndKeepsTheRestResolvable() {
+        var resolvable = UUID.randomUUID();
+        var unresolvable = UUID.randomUUID();
+        var evidence = new java.util.LinkedHashMap<java.util.UUID, com.rivell.workbench.retrieval.EvidenceItem>();
+        evidence.put(resolvable, evidenceItem(resolvable));
+
+        var signals = List.of(
+                signalWithEvidence("DEVIATION_UNCERTAIN",
+                        com.rivell.workbench.review.SignalType.DEVIATION_UNCERTAIN,
+                        List.of(resolvable)),
+                signalWithEvidence("ABSENCE_SIGNAL",
+                        com.rivell.workbench.review.SignalType.MISSING_REQUIRED_CONCEPT,
+                        List.of(unresolvable)));
+        var outcome = com.rivell.workbench.review.check.CheckOutcome
+                .completed(signals, Map.of("checked", 2))
+                .withCitedEvidence(bundles(evidence));
+
+        assertThat(outcome.status())
+                .as("a check that mis-cited must not report itself complete")
+                .isEqualTo(com.rivell.workbench.review.CheckExecutionStatus.DEGRADED);
+        assertThat(outcome.detail())
+                .containsEntry("degradedReason", "unresolvable_cited_evidence")
+                .containsEntry("unresolvedEvidenceCount", 1)
+                .containsEntry("droppedSignalCount", 1);
+        assertThat(outcome.signals())
+                .as("the signal that cited nothing resolvable must not persist")
+                .hasSize(1);
+        assertThat(outcome.evidenceItems())
+                .as("a retained signal's citation must still resolve, or the Finding read 500s")
+                .extracting(com.rivell.workbench.retrieval.EvidenceItem::evidenceId)
+                .containsExactly(resolvable);
+    }
+
+    private List<com.rivell.workbench.retrieval.EvidenceBundle> bundles(
+            Map<java.util.UUID, com.rivell.workbench.retrieval.EvidenceItem> items) {
+        var request = new com.rivell.workbench.retrieval.EvidenceRequest(organizationId(),
+                com.rivell.workbench.retrieval.RetrievalPurpose.CLAUSE_REVIEW,
+                com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY,
+                UUID.randomUUID(), 1, UUID.randomUUID(), "text",
+                com.rivell.workbench.contracts.ReviewProfile.minimal(
+                        com.rivell.workbench.contracts.ContractType.MSA),
+                java.time.LocalDate.of(2026, 1, 1), null);
+        return List.of(new com.rivell.workbench.retrieval.EvidenceBundle(UUID.randomUUID(),
+                request, List.copyOf(items.values()), List.of(), List.of(), List.of(), List.of(),
+                com.rivell.workbench.retrieval.EvidenceSufficiency.SUFFICIENT, List.of(),
+                UUID.randomUUID()));
+    }
+
+    private com.rivell.workbench.retrieval.EvidenceItem evidenceItem(
+            java.util.UUID evidenceId) {
+        // Exactly the 20 declared components: only text, retrievalReason and the provenance list
+        // carry meaning here; everything else is a structural null.
+        return new com.rivell.workbench.retrieval.EvidenceItem(
+                evidenceId,
+                com.rivell.workbench.retrieval.AuthorityClass.POLICY,
+                "PLAYBOOK_RULE",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "text",
+                null,
+                List.of(),
+                "structured",
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null);
+    }
+
+    private RawReviewSignal signalWithEvidence(String key,
+            com.rivell.workbench.review.SignalType type, List<java.util.UUID> evidence) {
+        return new RawReviewSignal(UUID.randomUUID(), organizationId(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), type,
+                com.rivell.workbench.review.FindingSubjectKind.CLAUSE, UUID.randomUUID(), null,
+                com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY, null,
+                com.rivell.workbench.review.IssueFamily.LIABILITY_CAP_UNCERTAIN,
+                new com.rivell.workbench.review.DeviationUncertainPayload("policy_not_comparable"),
+                evidence, "spec", 1, null, null, "VERIFIED", "fake", null, Map.of(), key,
+                java.time.Instant.parse("2026-09-27T00:00:00Z"));
+    }
+
     @Test
     void everyCitedEvidenceIdInACompletedRunResolvesToFrozenEvidence() {
         var organizationId = organizationId();
