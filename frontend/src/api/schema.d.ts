@@ -21,6 +21,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reviews/{id}/redline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the redline execution state and per-change report */
+        get: operations["find"];
+        put?: never;
+        /** Execute the frozen approved change set as a tracked-change DOCX */
+        post: operations["trigger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reviews/{id}/finalize": {
         parameters: {
             query?: never;
@@ -337,6 +355,23 @@ export interface paths {
         };
         /** Get a review summary with its active analysis run and counts */
         get: operations["summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/redline/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the verified tracked-change DOCX */
+        get: operations["download"];
         put?: never;
         post?: never;
         delete?: never;
@@ -736,6 +771,65 @@ export interface components {
             clientRequestId?: string;
             /** Format: uuid */
             supersedesDecisionId?: string;
+        };
+        ApiResultRedlineExecutionView: {
+            data?: components["schemas"]["RedlineExecutionView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        RedlineExecutionChangeView: {
+            /** Format: uuid */
+            approvedChangeId?: string;
+            /** Format: int32 */
+            ordinal?: number;
+            actionType?: string;
+            targetKind?: string;
+            status?: string;
+            verification?: string;
+            failureCode?: string;
+            placement?: string;
+            resolvedTarget?: string;
+            /** Format: int32 */
+            paragraphsDeleted?: number;
+            /** Format: int32 */
+            paragraphsInserted?: number;
+        };
+        RedlineExecutionView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            reviewId?: string;
+            /** Format: uuid */
+            changeSetId?: string;
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: int32 */
+            contractVersionNumber?: number;
+            /** Format: int32 */
+            changeSetVersion?: number;
+            status?: string;
+            outcome?: string;
+            failureCode?: string;
+            failureDetail?: string;
+            rendererVersion?: string;
+            placementStrategyVersion?: string;
+            sourceSha256?: string;
+            /** Format: int32 */
+            changeCount?: number;
+            /** Format: uuid */
+            requestedBy?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            artifactFilename?: string;
+            /** Format: int64 */
+            artifactSizeBytes?: number;
+            artifactSha256?: string;
+            downloadAvailable?: boolean;
+            changes?: components["schemas"]["RedlineExecutionChangeView"][];
         };
         ApiResultApprovedChangeSetView: {
             data?: components["schemas"]["ApprovedChangeSetView"];
@@ -1963,6 +2057,77 @@ export interface operations {
             };
         };
     };
+    find: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultRedlineExecutionView"];
+                };
+            };
+            /** @description No execution exists for this review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    trigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultRedlineExecutionView"];
+                };
+            };
+            /** @description Missing reviews:redline */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not finalized, or the execution failed deterministically (full report via GET) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     finalizeReview: {
         parameters: {
             query?: never;
@@ -2888,6 +3053,48 @@ export interface operations {
             };
             /** @description Unknown review */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    download: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified redline bytes */
+            200: {
+                headers: {
+                    /** @description attachment with the deterministic redline filename */
+                    "Content-Disposition"?: unknown;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                };
+            };
+            /** @description No execution exists for this review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No verified artifact is available */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
