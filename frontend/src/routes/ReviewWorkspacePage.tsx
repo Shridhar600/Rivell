@@ -13,6 +13,7 @@ import {
 } from '../api/reviews'
 import {
   isWorkflowConflictError,
+  useApprovedChangeSetQuery,
   useCurrentDecisionsQuery,
   useFinalizeReview,
   useHumanReviewQuery,
@@ -24,6 +25,7 @@ import { LoadingState } from '../components/LoadingState'
 import { buildRegionLabelMap, TAXONOMY_CONCEPTS } from '../lib/contractSemantics'
 import { coverageLimitations } from '../lib/reviews'
 import { subtreeNodes } from '../lib/documentTree'
+import { ApprovedChangeSetSummary } from '../components/review/ApprovedChangeSetSummary'
 import { FinalizationPanel } from '../components/review/FinalizationPanel'
 import { FindingDetailPane } from '../components/review/FindingDetailPane'
 import { FindingsPanel } from '../components/review/FindingsPanel'
@@ -79,6 +81,7 @@ export function ReviewWorkspacePage() {
   const humanReview = humanReviewQuery.data ?? null
   const isFinalized = humanReview?.status === 'COMPLETED'
   const finalizeMutation = useFinalizeReview(reviewId)
+  const changeSetQuery = useApprovedChangeSetQuery(reviewId, isFinalized)
   const finalizeError = finalizeMutation.isError
     ? isWorkflowConflictError(finalizeMutation.error)
       ? 'The review cannot be finalized yet. The blockers shown under Human review are current.'
@@ -226,6 +229,34 @@ export function ReviewWorkspacePage() {
               finalizeError={finalizeError}
               onFinalize={() => finalizeMutation.mutate()}
             />
+            {isFinalized ? (
+              changeSetQuery.isError ? (
+                <p className="state state--warning" role="alert">
+                  The approved change set could not be loaded.{' '}
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => void changeSetQuery.refetch()}
+                  >
+                    Try again
+                  </button>
+                </p>
+              ) : changeSetQuery.data ? (
+                <ApprovedChangeSetSummary
+                  changeSet={changeSetQuery.data}
+                  findings={findingsQuery.data?.items ?? []}
+                  decisionsByFindingId={decisionsByFindingId}
+                  regionLabels={regionLabels}
+                  contractId={contractId}
+                  canDeepLink={
+                    summaryQuery.data.contractVersionNumber !== null &&
+                    latestVersion !== undefined &&
+                    summaryQuery.data.contractVersionNumber === latestVersion
+                  }
+                  onSelectFinding={selectFinding}
+                />
+              ) : null
+            ) : null}
           </>
         ) : null
       ) : null}

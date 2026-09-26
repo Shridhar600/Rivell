@@ -114,6 +114,65 @@ export function fixtureHumanReview(overrides: Partial<HumanReview> = {}): HumanR
   }
 }
 
+export const fixtureAbsenceFindingSummaryForChangeSet = {
+  ...fixtureAcceptableFinding,
+  id: 'f-2',
+  subjectKind: 'ABSENCE',
+  subjectHeadingNodeId: null,
+  absenceConcept: 'CONFIDENTIALITY',
+  concept: 'CONFIDENTIALITY',
+  issueFamily: 'MISSING_REQUIRED_PROVISION',
+  proposedAction: 'ADD_REQUIRED_PROVISION',
+  proposedLanguageSource: 'NONE',
+} satisfies FindingSummary
+
+export function fixtureMixedChangeSet(): ApprovedChangeSet {
+  return {
+    ...fixtureChangeSet(),
+    changes: [
+      {
+        id: 'ch-1',
+        findingId: 'f-1',
+        decisionId: 'd-2',
+        ordinal: 1,
+        actionType: 'REPLACE',
+        targetKind: 'CLAUSE',
+        targetHeadingNodeId: 'node-6',
+        absenceConcept: null,
+        approvedLanguage: 'Liability is capped at two times the fees paid.',
+        languageSource: 'HUMAN_EDIT',
+        approvedDraftingEvidenceId: null,
+      },
+      {
+        id: 'ch-2',
+        findingId: 'f-2',
+        decisionId: 'd-3',
+        ordinal: 2,
+        actionType: 'INSERT',
+        targetKind: 'ABSENCE',
+        targetHeadingNodeId: null,
+        absenceConcept: 'CONFIDENTIALITY',
+        approvedLanguage: 'Confidential information shall be protected for five years.',
+        languageSource: 'GENERATIVE',
+        approvedDraftingEvidenceId: null,
+      },
+      {
+        id: 'ch-3',
+        findingId: 'f-3',
+        decisionId: 'd-4',
+        ordinal: 3,
+        actionType: 'DELETE',
+        targetKind: 'CLAUSE',
+        targetHeadingNodeId: 'node-5',
+        absenceConcept: null,
+        approvedLanguage: null,
+        languageSource: 'NONE',
+        approvedDraftingEvidenceId: null,
+      },
+    ],
+  }
+}
+
 export function fixtureChangeSet(
   overrides: Partial<ApprovedChangeSet> = {},
 ): ApprovedChangeSet {

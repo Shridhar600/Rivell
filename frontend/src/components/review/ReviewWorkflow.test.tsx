@@ -13,7 +13,13 @@ import {
   fixtureCompletedReviewSummary,
   fixtureFindingList,
 } from './testFixtures'
-import { fixtureChangeSet, fixtureDecision, fixtureHumanReview } from './workflowFixtures'
+import {
+  fixtureChangeSet,
+  fixtureDecision,
+  fixtureHumanReview,
+  fixtureMixedChangeSet,
+} from './workflowFixtures'
+import { fixtureAcceptableFinding } from './workflowFixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -348,6 +354,141 @@ describe('finalization', () => {
       'same contract location',
     )
     expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(1)
+  })
+})
+
+describe('approved change set', () => {
+  const completedReview = () =>
+    fixtureHumanReview({
+      status: 'COMPLETED',
+      accepted: 2,
+      edited: 1,
+      resolvedFindings: 3,
+      remainingFindings: 0,
+      blockers: [],
+      readyToFinalize: true,
+      changeSetId: 'cs-1',
+      finalizedAt: '2026-09-26T11:00:00Z',
+    })
+
+  const changeSetDecisions = {
+    items: [
+      fixtureDecision({ id: 'd-2', findingId: 'f-1', revision: 1, action: 'EDIT' }),
+      fixtureDecision({
+        id: 'd-3',
+        findingId: 'f-2',
+        revision: 1,
+        action: 'ACCEPT',
+        approvedAction: 'INSERT',
+        languageSource: 'GENERATIVE',
+      }),
+      fixtureDecision({
+        id: 'd-4',
+        findingId: 'f-3',
+        revision: 1,
+        action: 'EDIT',
+        approvedAction: 'DELETE',
+        approvedLanguage: null,
+        languageSource: null,
+      }),
+    ],
+    truncated: false,
+  }
+
+  function threeFindings() {
+    return {
+      items: [
+        fixtureAcceptableFinding,
+        {
+          ...fixtureAcceptableFinding,
+          id: 'f-2',
+          subjectKind: 'ABSENCE',
+          subjectHeadingNodeId: null,
+          absenceConcept: 'CONFIDENTIALITY',
+          concept: 'CONFIDENTIALITY',
+          issueFamily: 'MISSING_REQUIRED_PROVISION',
+          proposedAction: 'ADD_REQUIRED_PROVISION',
+          proposedLanguageSource: 'NONE',
+        },
+        {
+          ...fixtureAcceptableFinding,
+          id: 'f-3',
+          subjectHeadingNodeId: 'node-5',
+          concept: 'TERM_TERMINATION',
+          issueFamily: 'EXPECTED_PROVISION_ABSENT',
+        },
+      ],
+      truncated: false,
+    }
+  }
+
+  it('does not request the frozen set before finalization', async () => {
+    const api = stubContractApi(baseOptions())
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    await screen.findByRole('heading', { name: 'Human review' })
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(
+      api.requests.filter((request) => request.url.includes('/approved-change-set')),
+    ).toHaveLength(0)
+  })
+
+  it('renders the frozen set with action types, provenance and source findings', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        humanReview: completedReview(),
+        decisions: changeSetDecisions,
+        findings: threeFindings(),
+        changeSet: fixtureMixedChangeSet(),
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    const changeSet = await screen.findByRole('region', { name: 'Approved change set' })
+    expect(changeSet).toHaveTextContent('Frozen')
+    expect(changeSet).toHaveTextContent('Version 1')
+    const changes = await within(
+      screen.getByRole('list', { name: 'Approved changes' }),
+    ).findAllByRole('listitem')
+
+    expect(changes[0]).toHaveTextContent('Replace clause — 6. Limitation of Liability')
+    expect(changes[0]).toHaveTextContent('Liability is capped at two times the fees paid.')
+    expect(changes[0]).toHaveTextContent('Human-authored')
+    expect(changes[0]).toHaveTextContent('Decision: Edited · Revision 1')
+    expect(changes[0]).toHaveTextContent('From finding: 6. Limitation of Liability')
+    expect(changes[0]).toHaveTextContent('View clause in contract')
+
+    expect(changes[1]).toHaveTextContent('Insert provision — Missing provision: Confidentiality')
+    expect(changes[1]).toHaveTextContent(
+      'Confidential information shall be protected for five years.',
+    )
+    expect(changes[1]).toHaveTextContent('AI-proposed, human-approved for this contract')
+    expect(changes[1]).toHaveTextContent(
+      'The insertion location is not part of the approved change set.',
+    )
+
+    expect(changes[2]).toHaveTextContent('Delete clause — 5. Termination')
+    expect(changes[2]).toHaveTextContent('No replacement text')
+
+    expect(
+      within(changeSet).queryByRole('button', { name: /redline|apply|download/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('selects the source finding from the frozen preview', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        humanReview: completedReview(),
+        decisions: changeSetDecisions,
+        findings: threeFindings(),
+        changeSet: fixtureMixedChangeSet(),
+      }),
+    )
+    const { router } = renderRouter('/reviews/c1/analysis/r-1', api)
+    await screen.findByRole('region', { name: 'Approved change set' })
+    await userEvent.click(
+      screen.getByRole('button', { name: 'From finding: 5. Termination' }),
+    )
+    await waitFor(() => expect(router.state.location.search).toContain('finding=f-3'))
   })
 })
 
