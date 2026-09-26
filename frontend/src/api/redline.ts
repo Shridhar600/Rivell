@@ -5,7 +5,6 @@ import type { ChangeActionType, ChangeTargetKind } from './workflow'
 import { CHANGE_ACTION_TYPES, CHANGE_TARGET_KINDS } from './workflow'
 import {
   asRecord,
-  malformed,
   parseApiResult,
   readArray,
   readNumber,
