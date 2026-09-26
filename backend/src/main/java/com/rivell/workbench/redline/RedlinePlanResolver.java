@@ -96,7 +96,8 @@ public final class RedlinePlanResolver {
                     anchorText, template.bodyIndex(), template.paragraphIndex(), paragraphs);
         }
         return new PlannedDocumentOperation(change.id(), change.ordinal(),
-                ChangeActionType.REPLACE, deletionTargets, insertion, null);
+                ChangeActionType.REPLACE, deletionTargets, insertion, null,
+                label(anchorText));
     }
 
     private PlannedDocumentOperation deleteOperation(
@@ -109,7 +110,8 @@ public final class RedlinePlanResolver {
         targets.add(paragraph(change, heading(change, region, byId)));
         targets.addAll(bodyTargets(change, region, byId));
         return new PlannedDocumentOperation(change.id(), change.ordinal(),
-                ChangeActionType.DELETE, targets, null, null);
+                ChangeActionType.DELETE, targets, null, null,
+                label(heading(change, region, byId).text()));
     }
 
     private PlannedDocumentOperation insertOperation(
@@ -127,7 +129,16 @@ public final class RedlinePlanResolver {
                 placement.styleTemplateBodyIndex(), placement.styleTemplateParagraphIndex(),
                 paragraphs);
         return new PlannedDocumentOperation(change.id(), change.ordinal(),
-                ChangeActionType.INSERT, List.of(), insertion, placement.label());
+                ChangeActionType.INSERT, List.of(), insertion, placement.label(),
+                change.absenceConcept().name());
+    }
+
+    private static String label(String value) {
+        if (value == null || value.isBlank()) {
+            return "(unnamed target)";
+        }
+        var single = value.replaceAll("\\s+", " ").trim();
+        return single.length() > 120 ? single.substring(0, 120) : single;
     }
 
     private DocumentNode anchorIdentity(int afterBodyIndex, List<DocumentNode> nodes) {

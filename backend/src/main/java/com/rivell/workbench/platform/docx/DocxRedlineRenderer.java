@@ -81,7 +81,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                     ref.paragraph());
         }
 
-        var nextId = new AtomicLong(DocxRedlineSupport.maxRevisionId(wordPackage) + 1);
+        var nextId = new AtomicLong(DocxRedlineSupport.maxRevisionIdInBytes(sourceBytes) + 1);
         var date = DocxRedlineSupport.xmlDate(plan.executedAt());
 
         var resolved = new ArrayList<ResolvedOperation>();
@@ -183,6 +183,13 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                                 operation.approvedChangeId(),
                                 "Approved change " + operation.ordinal()
                                         + " cannot be resolved against the frozen document.");
+                    }
+                    if (carriesSectionProperties(anchorParagraph)) {
+                        throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
+                                operation.approvedChangeId(),
+                                "Approved change " + operation.ordinal()
+                                        + " anchors to a paragraph that carries section "
+                                        + "properties.");
                     }
                 }
                 anchorKey = rawAnchor;

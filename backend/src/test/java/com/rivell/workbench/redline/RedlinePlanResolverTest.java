@@ -63,6 +63,7 @@ class RedlinePlanResolverTest {
                 .isEqualTo(operation.deletionTargets().get(0).bodyIndex());
         assertThat(operation.insertion().styleTemplateParagraphIndex())
                 .isEqualTo(operation.deletionTargets().get(0).paragraphIndex());
+        assertThat(operation.targetLabel()).isEqualTo("2. Limitation of Liability");
     }
 
     @Test

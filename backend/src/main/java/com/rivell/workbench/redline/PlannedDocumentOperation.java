@@ -15,11 +15,13 @@ public record PlannedDocumentOperation(
         ChangeActionType actionType,
         List<PlannedParagraph> deletionTargets,
         PlannedInsertion insertion,
-        String placementLabel) {
+        String placementLabel,
+        String targetLabel) {
 
     public PlannedDocumentOperation {
         Objects.requireNonNull(approvedChangeId, "approvedChangeId");
         Objects.requireNonNull(actionType, "actionType");
+        Objects.requireNonNull(targetLabel, "targetLabel");
         deletionTargets = deletionTargets == null ? List.of() : List.copyOf(deletionTargets);
         if (ordinal < 0) {
             throw new IllegalArgumentException("ordinal must be >= 0");

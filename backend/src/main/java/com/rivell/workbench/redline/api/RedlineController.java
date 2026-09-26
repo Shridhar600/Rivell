@@ -84,6 +84,7 @@ class RedlineController {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(download.contentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .contentLength(download.content().length)
                 .body(download.content());
     }

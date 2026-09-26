@@ -471,7 +471,11 @@ public class DocxRedlineVerifier implements RedlineVerifier {
     private String structuralProblem(WordprocessingMLPackage wordPackage) {
         var problem = new String[] {null};
         walk(wordPackage, (paragraph, table) -> {
-            if (problem[0] != null || paragraph == null) {
+            if (problem[0] != null) {
+                return;
+            }
+            if (table != null) {
+                problem[0] = tableRevisionProblem(table);
                 return;
             }
             if (isDeleted(paragraph)) {
@@ -480,6 +484,41 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 problem[0] = insertedParagraphProblem(paragraph);
             }
         });
+        return problem[0];
+    }
+
+    /** M9 never mutates tables: any revision inside a table is unplanned. */
+    private String tableRevisionProblem(Tbl table) {
+        var problem = new String[] {null};
+        for (var rawRow : table.getContent()) {
+            var row = DocxRedlineSupport.unwrap(rawRow);
+            if (!(row instanceof Tr tr)) {
+                continue;
+            }
+            if (tr.getTrPr() != null && (tr.getTrPr().getIns() != null
+                    || tr.getTrPr().getDel() != null)) {
+                return "The generated document contains an unplanned revision inside a table.";
+            }
+            for (var rawCell : tr.getContent()) {
+                var cell = DocxRedlineSupport.unwrap(rawCell);
+                if (!(cell instanceof Tc tc)) {
+                    continue;
+                }
+                if (tc.getTcPr() != null && (tc.getTcPr().getCellIns() != null
+                        || tc.getTcPr().getCellDel() != null)) {
+                    return "The generated document contains an unplanned revision inside "
+                            + "a table.";
+                }
+                for (var rawCellChild : tc.getContent()) {
+                    var cellChild = DocxRedlineSupport.unwrap(rawCellChild);
+                    if (cellChild instanceof P cellParagraph
+                            && (isDeleted(cellParagraph) || isInserted(cellParagraph))) {
+                        return "The generated document contains an unplanned revision inside "
+                                + "a table.";
+                    }
+                }
+            }
+        }
         return problem[0];
     }
 
@@ -497,6 +536,9 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                     var run = DocxRedlineSupport.unwrap(wrapped);
                     if (run instanceof R inner && runHasNormalText(inner)) {
                         return "A tracked deletion carries normal text instead of delText.";
+                    }
+                    if (run instanceof RunIns) {
+                        return "A tracked deletion contains inserted run content.";
                     }
                 }
             } else if (element instanceof P.Hyperlink hyperlink) {
@@ -565,6 +607,9 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             var element = DocxRedlineSupport.unwrap(raw);
             if (element instanceof R run && runHasDeletedText(run)) {
                 return "A tracked insertion carries deleted text inside w:ins.";
+            }
+            if (element instanceof RunDel) {
+                return "A tracked insertion contains deleted run content.";
             }
         }
         return null;
@@ -737,6 +782,9 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             byte[] generatedBytes) {
         var sourceZip = zipEntries(sourceBytes);
         var generatedZip = zipEntries(generatedBytes);
+        if (sourceZip == null || generatedZip == null) {
+            return "The document packages could not be compared.";
+        }
         for (var part : source.getParts().getParts().keySet()) {
             var name = part.getName().startsWith("/")
                     ? part.getName().substring(1) : part.getName();
@@ -750,6 +798,11 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             var sourcePart = sourceZip.get(name);
             if (sourcePart != null && !Arrays.equals(sourcePart, generatedPart)) {
                 return "A frozen source document part changed during redline execution.";
+            }
+            var sourceContentType = contentType(source, name);
+            var generatedContentType = contentType(generated, name);
+            if (sourceContentType != null && !sourceContentType.equals(generatedContentType)) {
+                return "A preserved document part changed its content type.";
             }
         }
         for (var name : generatedZip.keySet()) {
@@ -772,8 +825,17 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 entries.put(entry.getName(), zip.readAllBytes());
             }
         } catch (Exception e) {
-            return Map.of();
+            return null;
         }
         return entries;
+    }
+
+    private static String contentType(WordprocessingMLPackage wordPackage, String partName) {
+        try {
+            return wordPackage.getContentTypeManager()
+                    .getContentType(new org.docx4j.openpackaging.parts.PartName("/" + partName));
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

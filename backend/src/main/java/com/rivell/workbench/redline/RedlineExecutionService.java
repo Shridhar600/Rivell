@@ -139,13 +139,16 @@ public class RedlineExecutionService {
 
         var version = versionSummary(changeSet, organizationId);
         if (version == null) {
-            return fail(changeSet, organizationId, requestedBy, startedAt,
-                    RedlineFailureCode.SOURCE_DOCUMENT_UNAVAILABLE, null, null, List.of(), null);
+            throw new RedlineSourceUnavailableException(
+                    RedlineFailureCode.SOURCE_DOCUMENT_UNAVAILABLE,
+                    "The frozen source document is unavailable "
+                            + "(SOURCE_DOCUMENT_UNAVAILABLE).");
         }
         if (!version.versionId().equals(changeSet.contractVersionId())) {
-            return fail(changeSet, organizationId, requestedBy, startedAt,
-                    RedlineFailureCode.SOURCE_VERSION_MISMATCH, null, null, List.of(),
-                    version.sha256());
+            throw new RedlineSourceUnavailableException(
+                    RedlineFailureCode.SOURCE_VERSION_MISMATCH,
+                    "The frozen source version no longer matches the approved change set "
+                            + "(SOURCE_VERSION_MISMATCH).");
         }
 
         byte[] sourceBytes;
@@ -156,14 +159,16 @@ public class RedlineExecutionService {
             sourceSha = source.sha256();
             sourceBytes = readStorage(source.storageKey());
         } catch (ContractVersionNotFoundException e) {
-            return fail(changeSet, organizationId, requestedBy, startedAt,
-                    RedlineFailureCode.SOURCE_DOCUMENT_UNAVAILABLE, null, null, List.of(),
-                    version.sha256());
+            throw new RedlineSourceUnavailableException(
+                    RedlineFailureCode.SOURCE_DOCUMENT_UNAVAILABLE,
+                    "The frozen source document is unavailable "
+                            + "(SOURCE_DOCUMENT_UNAVAILABLE).");
         }
         if (!Hashes.sha256Hex(sourceBytes).equals(sourceSha)) {
-            return fail(changeSet, organizationId, requestedBy, startedAt,
-                    RedlineFailureCode.SOURCE_INTEGRITY_MISMATCH, null, null, List.of(),
-                    sourceSha);
+            throw new RedlineSourceUnavailableException(
+                    RedlineFailureCode.SOURCE_INTEGRITY_MISMATCH,
+                    "The frozen source document failed its integrity check "
+                            + "(SOURCE_INTEGRITY_MISMATCH).");
         }
 
         DocumentExecutionPlan plan;
@@ -366,13 +371,7 @@ public class RedlineExecutionService {
     }
 
     private String resolvedTarget(PlannedDocumentOperation operation) {
-        if (operation.insertion() != null && operation.actionType() == ChangeActionType.INSERT) {
-            return operation.placementLabel();
-        }
-        if (!operation.deletionTargets().isEmpty()) {
-            return "bodyIndex=" + operation.deletionTargets().get(0).bodyIndex();
-        }
-        return null;
+        return operation.targetLabel();
     }
 
     private byte[] readStorage(String storageKey) {

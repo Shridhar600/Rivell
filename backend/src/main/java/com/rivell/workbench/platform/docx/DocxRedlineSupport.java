@@ -1,9 +1,17 @@
 package com.rivell.workbench.platform.docx;
 
+import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamReader;
 
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
@@ -181,21 +189,65 @@ final class DocxRedlineSupport {
         return revisions;
     }
 
+    private static final Set<String> REVISION_ELEMENT_NAMES = Set.of(
+            "ins", "del", "moveFrom", "moveTo", "pPrChange", "rPrChange",
+            "tblPrChange", "trPrChange", "tcPrChange", "sectPrChange",
+            "cellIns", "cellDel", "cellMerge", "numberingChange");
+
     /**
-     * Highest revision id in the main document story. Other stories (headers, footers,
-     * footnotes) are never mutated by M9 and are not inspected, because touching their
-     * JAXB trees makes docx4j re-serialize them on save, which would break the
-     * byte-preservation guarantee for untouched parts.
+     * Highest revision id across every XML part of the package, read from the raw bytes.
+     * Reading the raw entries (instead of the loaded parts) keeps untouched stories
+     * byte-identical on save: touching another part's JAXB tree would make docx4j
+     * re-serialize it. Fails closed when the package cannot be scanned, because an id
+     * collision would corrupt revision grouping.
      */
-    static long maxRevisionId(WordprocessingMLPackage wordPackage) {
-        var max = BigInteger.ZERO;
-        for (var markup : revisionElements(
-                wordPackage.getMainDocumentPart().getJaxbElement())) {
-            if (markup.getId() != null && markup.getId().compareTo(max) > 0) {
-                max = markup.getId();
+    static long maxRevisionIdInBytes(byte[] sourceBytes) {
+        long max = 0;
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(sourceBytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                var name = entry.getName();
+                if (!name.endsWith(".xml") || name.equals("[Content_Types].xml")
+                        || name.endsWith(".rels")) {
+                    continue;
+                }
+                max = Math.max(max, maxRevisionIdInXml(zip.readAllBytes()));
             }
+        } catch (Exception e) {
+            throw new IllegalStateException("The package revision ids could not be scanned", e);
         }
-        return max.longValue();
+        return max;
+    }
+
+    private static long maxRevisionIdInXml(byte[] xml) throws Exception {
+        var factory = XMLInputFactory.newInstance();
+        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+        factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        factory.setProperty(XMLInputFactory.IS_COALESCING, true);
+        var reader = factory.createXMLStreamReader(new ByteArrayInputStream(xml));
+        long max = 0;
+        try {
+            while (reader.hasNext()) {
+                if (reader.next() != XMLStreamConstants.START_ELEMENT) {
+                    continue;
+                }
+                if (!REVISION_ELEMENT_NAMES.contains(reader.getLocalName())) {
+                    continue;
+                }
+                for (var i = 0; i < reader.getAttributeCount(); i++) {
+                    if ("id".equals(reader.getAttributeLocalName(i))) {
+                        try {
+                            max = Math.max(max, Long.parseLong(reader.getAttributeValue(i)));
+                        } catch (NumberFormatException ignored) {
+                            // Non-numeric ids cannot collide with allocated revision ids.
+                        }
+                    }
+                }
+            }
+        } finally {
+            reader.close();
+        }
+        return max;
     }
 
     static boolean hasPreexistingRevisions(WordprocessingMLPackage wordPackage) {

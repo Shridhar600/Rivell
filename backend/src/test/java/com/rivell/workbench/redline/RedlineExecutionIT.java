@@ -246,7 +246,11 @@ class RedlineExecutionIT {
     @Test
     void missingProvisionInsertExecutesWithDeterministicPlacement() throws Exception {
         var fixture = analyzedNda();
-        var absence = absenceFinding(fixture);
+        var absence = fixture.findings().stream()
+                .filter(finding -> finding.subjectKind() == FindingSubjectKind.ABSENCE)
+                .filter(finding -> finding.absenceConcept()
+                        == com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY)
+                .findFirst().orElseThrow();
         assertThat(absence.absenceConcept()).isNotNull();
         var language = "Liability is capped at fees paid in the prior 12 months.";
         decide(fixture.review().id(), absence.id(), """
@@ -261,7 +265,7 @@ class RedlineExecutionIT {
         assertThat(change.get("actionType").asText()).isEqualTo("INSERT");
         assertThat(change.get("targetKind").asText()).isEqualTo("ABSENCE");
         assertThat(change.get("placement").asText()).startsWith("AFTER_CLAUSE[");
-        assertThat(change.get("resolvedTarget").asText()).startsWith("AFTER_CLAUSE[");
+        assertThat(change.get("resolvedTarget").asText()).isEqualTo("LIMITATION_OF_LIABILITY");
 
         var bytes = downloadBytes(fixture.review().id());
         assertThat(insertedTexts(bytes)).contains(language);
@@ -439,13 +443,19 @@ class RedlineExecutionIT {
         documentStorage.store(key, new ByteArrayInputStream("tampered bytes".getBytes()));
 
         mockMvc.perform(post("/api/reviews/{id}/redline", fixture.review().id()))
-                .andExpect(status().isConflict());
-
-        var view = readRedline(fixture.review().id());
-        assertThat(view.get("status").asText()).isEqualTo("FAILED");
-        assertThat(view.get("failureCode").asText())
-                .isEqualTo("SOURCE_INTEGRITY_MISMATCH");
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(
+                        org.hamcrest.Matchers.containsString("SOURCE_INTEGRITY_MISMATCH")));
+        mockMvc.perform(get("/api/reviews/{id}/redline", fixture.review().id()))
+                .andExpect(status().isNotFound());
+        assertThat(countExecutions(fixture.review().id())).isZero();
         assertThat(countArtifacts(fixture.review().id())).isZero();
+
+        documentStorage.delete(key);
+        documentStorage.store(key, new ByteArrayInputStream(
+                Files.readAllBytes(Path.of("src/test/resources/fixtures/m5-msa-services.docx"))));
+        assertThat(redline(fixture.review().id()).get("status").asText())
+                .isEqualTo("COMPLETED");
     }
 
     @Test
@@ -460,10 +470,12 @@ class RedlineExecutionIT {
                 .param("reviewId", fixture.review().id()).update();
 
         mockMvc.perform(post("/api/reviews/{id}/redline", fixture.review().id()))
-                .andExpect(status().isConflict());
-
-        var view = readRedline(fixture.review().id());
-        assertThat(view.get("failureCode").asText()).isEqualTo("SOURCE_VERSION_MISMATCH");
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value(
+                        org.hamcrest.Matchers.containsString("SOURCE_VERSION_MISMATCH")));
+        mockMvc.perform(get("/api/reviews/{id}/redline", fixture.review().id()))
+                .andExpect(status().isNotFound());
+        assertThat(countExecutions(fixture.review().id())).isZero();
     }
 
     @Test

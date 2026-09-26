@@ -35,6 +35,7 @@ import com.rivell.workbench.redline.RedlineArtifactUnavailableException;
 import com.rivell.workbench.redline.RedlineExecutionFailedException;
 import com.rivell.workbench.redline.RedlineExecutionNotFoundException;
 import com.rivell.workbench.redline.RedlineNotAvailableException;
+import com.rivell.workbench.redline.RedlineSourceUnavailableException;
 import com.rivell.workbench.redline.UnauthorizedRedlineAccessException;
 import com.rivell.workbench.review.FindingNotFoundException;
 import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
@@ -151,7 +152,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({RedlineNotAvailableException.class,
             RedlineArtifactUnavailableException.class,
-            RedlineExecutionFailedException.class})
+            RedlineExecutionFailedException.class,
+            RedlineSourceUnavailableException.class})
     ResponseEntity<ErrorResponse> redlineConflict(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }
