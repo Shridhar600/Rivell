@@ -271,6 +271,21 @@ class JdbcReviewRepository implements ReviewRepository {
 
     @Override
     @Transactional
+    public boolean lock(UUID organizationId, UUID reviewId) {
+        return jdbcClient.sql("""
+                select id from review
+                where id = :reviewId and organization_id = :organizationId
+                for update
+                """)
+                .param("reviewId", reviewId)
+                .param("organizationId", organizationId)
+                .query(UUID.class)
+                .optional()
+                .isPresent();
+    }
+
+    @Override
+    @Transactional
     public boolean markAnalyzing(UUID organizationId, UUID reviewId, java.time.Instant at) {
         return jdbcClient.sql("""
                 update review set status = 'ANALYZING', started_at = :at, updated_at = :at

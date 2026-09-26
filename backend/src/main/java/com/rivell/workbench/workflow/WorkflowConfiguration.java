@@ -51,12 +51,14 @@ class WorkflowConfiguration {
     ReviewFinalizationService reviewFinalizationService(
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
+            ReviewRepository reviewRepository,
             HumanReviewService humanReviewService,
             ApprovedChangeSetRepository changeSetRepository,
             TransactionTemplate transactionTemplate,
             Clock clock) {
         return new ReviewFinalizationService(identityProvider, authorizationService,
-                humanReviewService, changeSetRepository, transactionTemplate, clock);
+                reviewRepository, humanReviewService, changeSetRepository,
+                transactionTemplate, clock);
     }
 
     @Bean

@@ -27,6 +27,9 @@ public final class DecisionRules {
     public static void validateRequest(
             DecisionAction action, ChangeActionType approvedAction,
             String approvedLanguage, String comment) {
+        if (action == null) {
+            throw new InvalidDecisionException("action is required");
+        }
         switch (action) {
             case ACCEPT -> {
                 if (approvedAction != null || approvedLanguage != null) {

@@ -10,9 +10,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -101,6 +106,9 @@ class HumanDecisionIT {
 
     @Autowired
     FindingRepository findingRepository;
+
+    @Autowired
+    HumanDecisionService decisionService;
 
     @Autowired
     ContractIngestionService contractIngestionService;
@@ -355,6 +363,9 @@ class HumanDecisionIT {
                 {"action": "ACCEPT"}
                 """,
                 """
+                {"expectedVersion": 0}
+                """,
+                """
                 {"expectedVersion": 0, "action": "REJECT", "comment": "   "}
                 """);
         for (var body : invalidBodies) {
@@ -364,6 +375,75 @@ class HumanDecisionIT {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("400"));
         }
+    }
+
+    @Test
+    void editDeleteIsExecutableAndCarriesNoLanguage() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        var decision = decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "EDIT", "approvedAction": "DELETE"}
+                """).get("data");
+
+        assertThat(decision.get("approvedAction").asText()).isEqualTo("DELETE");
+        assertThat(decision.get("approvedLanguage").isNull()).isTrue();
+        assertThat(decision.get("languageSource").isNull()).isTrue();
+        assertThat(decision.get("approvedDraftingEvidenceId").isNull()).isTrue();
+
+        mockMvc.perform(get("/api/reviews/{id}/human-review", fixture.review().id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.edited").value(1))
+                .andExpect(jsonPath("$.data.blockers[?(@.code == 'MISSING_APPROVED_LANGUAGE')]")
+                        .doesNotExist());
+    }
+
+    @Test
+    void concurrentDecisionsOnOneFindingSerializeToOneWinner() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+        var start = new CountDownLatch(1);
+        var successes = new AtomicInteger();
+        var conflicts = new AtomicInteger();
+        var failures = new ArrayList<Throwable>();
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            var futures = new ArrayList<java.util.concurrent.Future<?>>();
+            for (int i = 0; i < 2; i++) {
+                futures.add(executor.submit(() -> {
+                    try {
+                        start.await(5, TimeUnit.SECONDS);
+                        decisionService.decide(fixture.review().id(), finding.id(),
+                                new DecisionCommand(0, null, DecisionAction.REJECT,
+                                        null, null, "Concurrent reviewer."));
+                        successes.incrementAndGet();
+                    } catch (DecisionConflictException e) {
+                        conflicts.incrementAndGet();
+                    } catch (Throwable t) {
+                        synchronized (failures) {
+                            failures.add(t);
+                        }
+                    }
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (var future : futures) {
+                future.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(failures).isEmpty();
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(conflicts.get()).isEqualTo(1);
+        mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}/decisions",
+                        fixture.review().id(), finding.id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].revision").value(1));
     }
 
     @Test

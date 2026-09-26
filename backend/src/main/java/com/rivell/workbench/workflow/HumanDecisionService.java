@@ -9,6 +9,7 @@ import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
+import com.rivell.workbench.redline.ChangeActionType;
 import com.rivell.workbench.review.FindingNotFoundException;
 import com.rivell.workbench.review.FindingRepository;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
@@ -18,8 +19,9 @@ import com.rivell.workbench.review.ReviewStatus;
 
 /**
  * Human decision writes: authorization, target validation against the active completed
- * run, typed action validation, optimistic concurrency, and idempotent replay. Revisions
- * are append-only; no M7 machine state is touched.
+ * run, typed action validation, optimistic concurrency, and idempotent replay. All writes
+ * serialize on the review row so decisions can neither race each other nor commit after a
+ * finalization. Revisions are append-only; no M7 machine state is touched.
  */
 public class HumanDecisionService {
 
@@ -62,21 +64,6 @@ public class HumanDecisionService {
         var organizationId = identity.organizationId();
         var review = reviewRepository.find(organizationId, reviewId)
                 .orElseThrow(() -> new ReviewNotFoundException(reviewId));
-
-        if (command.clientRequestId() != null) {
-            var replay = decisionRepository.findByClientRequestId(
-                    organizationId, findingId, command.clientRequestId());
-            if (replay.isPresent()) {
-                if (!replay.get().reviewId().equals(reviewId)) {
-                    throw new FindingNotFoundException(findingId);
-                }
-                return replay.get();
-            }
-        }
-        if (changeSetRepository.findByReview(organizationId, reviewId).isPresent()) {
-            throw new ReviewAlreadyFinalizedException(reviewId);
-        }
-
         requireExpectedVersion(command);
         if (review.status() != ReviewStatus.COMPLETED) {
             throw new AnalysisNotCompleteException(reviewId);
@@ -86,7 +73,6 @@ public class HumanDecisionService {
         var finding = findingRepository
                 .findFinding(organizationId, reviewId, activeRun.id(), findingId)
                 .orElseThrow(() -> new FindingNotFoundException(findingId));
-
         DecisionRules.validateRequest(command.action(), command.approvedAction(),
                 command.approvedLanguage(), command.comment());
         var decisionId = UUID.randomUUID();
@@ -97,12 +83,18 @@ public class HumanDecisionService {
                         : null;
 
         return transactionTemplate.execute(status -> {
+            if (!reviewRepository.lock(organizationId, reviewId)) {
+                throw new ReviewNotFoundException(reviewId);
+            }
             if (command.clientRequestId() != null) {
                 var replay = decisionRepository.findByClientRequestId(
                         organizationId, findingId, command.clientRequestId());
                 if (replay.isPresent()) {
                     return replay.get();
                 }
+            }
+            if (changeSetRepository.findByReview(organizationId, reviewId).isPresent()) {
+                throw new ReviewAlreadyFinalizedException(reviewId);
             }
             var current = decisionRepository.findCurrent(organizationId, reviewId, findingId);
             var currentRevision = current.map(HumanDecision::revision).orElse(0);
@@ -113,9 +105,7 @@ public class HumanDecisionService {
             var decision = new HumanDecision(decisionId, organizationId, reviewId, findingId,
                     activeRun.id(), currentRevision + 1, command.action(),
                     planned == null ? null : planned.actionType(),
-                    planned == null ? null : planned.approvedLanguage(),
-                    planned == null ? null : planned.languageSource(),
-                    planned == null ? null : planned.approvedDraftingEvidenceId(),
+                    language(planned), source(planned), draftingEvidence(planned),
                     command.comment(), identity.userId(), clock.instant(),
                     command.clientRequestId(), current.map(HumanDecision::id).orElse(null));
             if (!decisionRepository.insert(decision)) {
@@ -124,6 +114,22 @@ public class HumanDecisionService {
             }
             return decision;
         });
+    }
+
+    private static String language(PlannedChange planned) {
+        return planned == null || planned.actionType() == ChangeActionType.DELETE
+                ? null : planned.approvedLanguage();
+    }
+
+    private static com.rivell.workbench.redline.ChangeLanguageSource source(
+            PlannedChange planned) {
+        return planned == null || planned.actionType() == ChangeActionType.DELETE
+                ? null : planned.languageSource();
+    }
+
+    private static UUID draftingEvidence(PlannedChange planned) {
+        return planned == null || planned.actionType() == ChangeActionType.DELETE
+                ? null : planned.approvedDraftingEvidenceId();
     }
 
     private static void requireExpectedVersion(DecisionCommand command) {

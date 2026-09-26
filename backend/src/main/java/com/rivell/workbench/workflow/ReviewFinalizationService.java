@@ -3,7 +3,7 @@ package com.rivell.workbench.workflow;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Map;
+import java.util.HashMap;
 import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
@@ -16,16 +16,20 @@ import com.rivell.workbench.redline.ApprovedChangeSet;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
 import com.rivell.workbench.review.Finding;
 import com.rivell.workbench.review.FindingSeverity;
+import com.rivell.workbench.review.ReviewNotFoundException;
+import com.rivell.workbench.review.ReviewRepository;
 
 /**
- * Explicit review finalization: validates readiness, derives the deterministic approved
+ * Explicit review finalization: serializes with decision writes on the review row,
+ * re-validates readiness inside the transaction, derives the deterministic approved
  * changes, and freezes the immutable M8 → M9 artifact. Idempotent — a second finalize
- * returns the existing set; concurrent finalizers converge on one set.
+ * returns the existing set.
  */
 public class ReviewFinalizationService {
 
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
+    private final ReviewRepository reviewRepository;
     private final HumanReviewService humanReviewService;
     private final ApprovedChangeSetRepository changeSetRepository;
     private final TransactionTemplate transactionTemplate;
@@ -34,12 +38,14 @@ public class ReviewFinalizationService {
     public ReviewFinalizationService(
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
+            ReviewRepository reviewRepository,
             HumanReviewService humanReviewService,
             ApprovedChangeSetRepository changeSetRepository,
             TransactionTemplate transactionTemplate,
             Clock clock) {
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+        this.reviewRepository = reviewRepository;
         this.humanReviewService = humanReviewService;
         this.changeSetRepository = changeSetRepository;
         this.transactionTemplate = transactionTemplate;
@@ -52,23 +58,27 @@ public class ReviewFinalizationService {
             throw new UnauthorizedWorkflowAccessException(identity.userId());
         }
         var organizationId = identity.organizationId();
-        var existing = changeSetRepository.findByReview(organizationId, reviewId);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-        var state = humanReviewService.state(organizationId, reviewId);
-        var progress = state.assessment().progress();
-        if (!progress.readyToFinalize()) {
-            throw new ReviewNotFinalizableException(progress.blockers());
-        }
-        var set = buildSet(organizationId, state, identity.userId());
+        var finalizedBy = identity.userId();
         return transactionTemplate.execute(status -> {
-            if (changeSetRepository.freeze(set)) {
-                return set;
+            if (!reviewRepository.lock(organizationId, reviewId)) {
+                throw new ReviewNotFoundException(reviewId);
             }
-            return changeSetRepository.findByReview(organizationId, reviewId)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Finalization lost the race but no change set exists"));
+            var existing = changeSetRepository.findByReview(organizationId, reviewId);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+            var state = humanReviewService.state(organizationId, reviewId);
+            var progress = state.assessment().progress();
+            if (!progress.readyToFinalize()) {
+                throw new ReviewNotFinalizableException(progress.blockers());
+            }
+            var set = buildSet(organizationId, state, finalizedBy);
+            if (!changeSetRepository.freeze(set)) {
+                return changeSetRepository.findByReview(organizationId, reviewId)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Finalization lost the race but no change set exists"));
+            }
+            return set;
         });
     }
 
@@ -76,7 +86,7 @@ public class ReviewFinalizationService {
             UUID organizationId, HumanReviewState state, UUID finalizedBy) {
         var review = state.review();
         var changeSetId = UUID.randomUUID();
-        var severityByFinding = new java.util.HashMap<UUID, FindingSeverity>();
+        var severityByFinding = new HashMap<UUID, FindingSeverity>();
         for (Finding finding : state.findings()) {
             severityByFinding.put(finding.id(), finding.severity());
         }
