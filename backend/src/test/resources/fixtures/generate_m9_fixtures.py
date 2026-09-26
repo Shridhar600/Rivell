@@ -336,3 +336,18 @@ write('m9-sdt-clause.docx', (
     + p('2. Governing Law', 'Heading1')
     + p('This Agreement is governed by the laws of Delaware.')
 ))
+
+# T — hidden property revisions only (typed failure): numberingChange + tblGridChange
+write('m9-preexisting-hidden-revisions.docx', (
+    p('Master Services Agreement', 'Title')
+    + p('1. Limitation of Liability', 'Heading1')
+    + p('Supplier liability shall be unlimited.')
+    + '<w:p><w:pPr><w:pStyle w:val="Heading1"/><w:numPr><w:ilvl w:val="0"/>'
+    + '<w:numId w:val="1"/><w:numberingChange w:id="901" w:author="Counterparty" '
+    + 'w:date="2026-09-01T00:00:00Z"/></w:numPr></w:pPr>'
+    + '<w:r><w:t xml:space="preserve">2. Governing Law</w:t></w:r></w:p>'
+    + '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/>'
+    + '<w:tblGridChange w:id="902" w:author="Counterparty" '
+    + 'w:date="2026-09-01T00:00:00Z"/></w:tblGrid>'
+    + '<w:tr><w:tc><w:p><w:r><w:t>Delaware</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+))

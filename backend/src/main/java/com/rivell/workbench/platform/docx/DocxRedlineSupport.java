@@ -191,8 +191,8 @@ final class DocxRedlineSupport {
 
     private static final Set<String> REVISION_ELEMENT_NAMES = Set.of(
             "ins", "del", "moveFrom", "moveTo", "pPrChange", "rPrChange",
-            "tblPrChange", "trPrChange", "tcPrChange", "sectPrChange",
-            "cellIns", "cellDel", "cellMerge", "numberingChange");
+            "tblPrChange", "tblGridChange", "tblPrExChange", "trPrChange", "tcPrChange",
+            "sectPrChange", "cellIns", "cellDel", "cellMerge", "numberingChange");
 
     /**
      * Highest revision id across every XML part of the package, read from the raw bytes.
@@ -219,12 +219,24 @@ final class DocxRedlineSupport {
         return max;
     }
 
+    private static int countRevisionElementsInXml(byte[] xml) throws Exception {
+        var reader = xmlReader(xml);
+        var count = 0;
+        try {
+            while (reader.hasNext()) {
+                if (reader.next() == XMLStreamConstants.START_ELEMENT
+                        && REVISION_ELEMENT_NAMES.contains(reader.getLocalName())) {
+                    count++;
+                }
+            }
+        } finally {
+            reader.close();
+        }
+        return count;
+    }
+
     private static long maxRevisionIdInXml(byte[] xml) throws Exception {
-        var factory = XMLInputFactory.newInstance();
-        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
-        factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
-        factory.setProperty(XMLInputFactory.IS_COALESCING, true);
-        var reader = factory.createXMLStreamReader(new ByteArrayInputStream(xml));
+        var reader = xmlReader(xml);
         long max = 0;
         try {
             while (reader.hasNext()) {
@@ -250,9 +262,38 @@ final class DocxRedlineSupport {
         return max;
     }
 
-    static boolean hasPreexistingRevisions(WordprocessingMLPackage wordPackage) {
-        return !revisionElements(
-                wordPackage.getMainDocumentPart().getJaxbElement()).isEmpty();
+    private static XMLStreamReader xmlReader(byte[] xml) throws Exception {
+        var factory = XMLInputFactory.newInstance();
+        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+        factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        factory.setProperty(XMLInputFactory.IS_COALESCING, true);
+        return factory.createXMLStreamReader(new ByteArrayInputStream(xml));
+    }
+
+    /**
+     * Any revision element in the main document part fails execution. Detection scans
+     * the raw {@code word/document.xml} bytes instead of the JAXB tree, because property
+     * revisions ({@code numberingChange}, {@code cellMerge}, {@code tblGridChange}, ...)
+     * live in holders that generic traversal cannot reach.
+     */
+    static boolean hasPreexistingRevisions(byte[] sourceBytes) {
+        return revisionElementCount(sourceBytes, "word/document.xml") > 0;
+    }
+
+    /** Raw-XML revision element count of one package part; -1 when the part is absent. */
+    static int revisionElementCount(byte[] packageBytes, String partName) {
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(packageBytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (partName.equals(entry.getName())) {
+                    return countRevisionElementsInXml(zip.readAllBytes());
+                }
+            }
+            return -1;
+        } catch (Exception e) {
+            throw new IllegalStateException("The package revision elements could not be scanned",
+                    e);
+        }
     }
 
     static boolean isDocxMainPart(WordprocessingMLPackage wordPackage) {

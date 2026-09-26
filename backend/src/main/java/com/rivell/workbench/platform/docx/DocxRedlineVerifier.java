@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -95,6 +96,16 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         if (duplicateProblem != null) {
             return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
                     duplicateProblem, List.of());
+        }
+        var completenessProblem = revisionCompletenessProblem(generated, generatedBytes);
+        if (completenessProblem != null) {
+            return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
+                    completenessProblem, List.of());
+        }
+        var provenanceProblem = revisionProvenanceProblem(generated, plan);
+        if (provenanceProblem != null) {
+            return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
+                    provenanceProblem, List.of());
         }
 
         var structuralProblem = structuralProblem(generated);
@@ -808,6 +819,81 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         for (var name : generatedZip.keySet()) {
             if (!sourceZip.containsKey(name)) {
                 return "The generated redline contains unexpected package content.";
+            }
+        }
+        return relationshipProblem(source, generated);
+    }
+
+    /**
+     * Every relationship of the frozen source must survive into the generated package
+     * (targets, types, and external modes), including the regenerated relationship parts.
+     */
+    private String relationshipProblem(
+            WordprocessingMLPackage source, WordprocessingMLPackage generated) {
+        for (var entry : source.getParts().getParts().entrySet()) {
+            if (!(entry.getValue() instanceof org.docx4j.openpackaging.parts.relationships
+                    .RelationshipsPart sourceRelationships)) {
+                continue;
+            }
+            var generatedPart = generated.getParts().getParts().get(entry.getKey());
+            if (!(generatedPart instanceof org.docx4j.openpackaging.parts.relationships
+                    .RelationshipsPart generatedRelationships)) {
+                return "A frozen source relationship part is missing from the generated redline.";
+            }
+            var sourceList = sourceRelationships.getJaxbElement() == null
+                    ? List.<org.docx4j.relationships.Relationship>of()
+                    : sourceRelationships.getJaxbElement().getRelationship();
+            var generatedList = generatedRelationships.getJaxbElement() == null
+                    ? List.<org.docx4j.relationships.Relationship>of()
+                    : generatedRelationships.getJaxbElement().getRelationship();
+            for (var relationship : sourceList) {
+                var present = generatedList.stream().anyMatch(candidate ->
+                        Objects.equals(candidate.getType(), relationship.getType())
+                                && Objects.equals(candidate.getTarget(),
+                                        relationship.getTarget())
+                                && Objects.equals(candidate.getTargetMode(),
+                                        relationship.getTargetMode()));
+                if (!present) {
+                    return "A frozen source document relationship is missing from the "
+                            + "generated redline.";
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Raw-XML revision count must equal the reachable revision tree: a property mark the
+     * JAXB traversal cannot see (numberingChange, cellMerge, tblGridChange, ...) would
+     * make the counts differ.
+     */
+    private String revisionCompletenessProblem(
+            WordprocessingMLPackage generated, byte[] generatedBytes) {
+        var rawCount = DocxRedlineSupport.revisionElementCount(generatedBytes,
+                "word/document.xml");
+        var reachableCount = DocxRedlineSupport.revisionElements(
+                generated.getMainDocumentPart().getJaxbElement()).size();
+        if (rawCount != reachableCount) {
+            return "The generated document contains revision marks that cannot be "
+                    + "attributed to the approved changes.";
+        }
+        return null;
+    }
+
+    /** Every revision mark must carry the execution author and the execution timestamp. */
+    private String revisionProvenanceProblem(
+            WordprocessingMLPackage generated, DocumentExecutionPlan plan) {
+        for (var revision : DocxRedlineSupport.revisionElements(
+                generated.getMainDocumentPart().getJaxbElement())) {
+            if (!plan.author().equals(revision.getAuthor())) {
+                return "A revision mark carries an unexpected author.";
+            }
+            if (revision.getDate() == null
+                    || !revision.getDate().toGregorianCalendar().toInstant()
+                            .truncatedTo(java.time.temporal.ChronoUnit.SECONDS)
+                            .equals(plan.executedAt()
+                                    .truncatedTo(java.time.temporal.ChronoUnit.SECONDS))) {
+                return "A revision mark carries an unexpected timestamp.";
             }
         }
         return null;

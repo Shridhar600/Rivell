@@ -284,6 +284,61 @@ class DocxRedlineVerifierTest {
     }
 
     @Test
+    void hiddenRevisionMarkInTheGeneratedDocumentIsRejected() throws Exception {
+        var fixture = "m9-simple-replace.docx";
+        var plan = replacePlan(fixture, "2. Limitation of Liability",
+                "Aggregate liability shall not exceed the fees paid in the prior months.");
+        var source = RedlineFixturePipeline.fixture(fixture);
+        var rendered = renderer.render(source, plan);
+        var wordPackage = WordprocessingMLPackage.load(
+                new ByteArrayInputStream(rendered.bytes()));
+
+        var paragraph = paragraphs(wordPackage).get(0);
+        var pPr = paragraph.getPPr() != null
+                ? paragraph.getPPr() : new org.docx4j.wml.PPr();
+        paragraph.setPPr(pPr);
+        var numPr = new org.docx4j.wml.PPrBase.NumPr();
+        var numberingChange = new org.docx4j.wml.CTTrackChangeNumbering();
+        numberingChange.setId(java.math.BigInteger.valueOf(999_999L));
+        numberingChange.setAuthor("Rivell");
+        numberingChange.setDate(javax.xml.datatype.DatatypeFactory.newInstance()
+                .newXMLGregorianCalendar(RedlineFixturePipeline.EXECUTED_AT.toString()));
+        numPr.setNumberingChange(numberingChange);
+        pPr.setNumPr(numPr);
+        var output = new ByteArrayOutputStream();
+        wordPackage.save(output);
+
+        var report = verifier.verify(source, output.toByteArray(), plan,
+                rendered.changes());
+
+        assertThat(report.passed()).isFalse();
+        assertThat(report.failureCode()).isEqualTo(RedlineFailureCode.VERIFICATION_FAILED);
+    }
+
+    @Test
+    void revisionAuthorTamperingIsRejected() throws Exception {
+        var fixture = "m9-simple-replace.docx";
+        var plan = replacePlan(fixture, "2. Limitation of Liability",
+                "Aggregate liability shall not exceed the fees paid in the prior months.");
+        var source = RedlineFixturePipeline.fixture(fixture);
+        var rendered = renderer.render(source, plan);
+        var wordPackage = WordprocessingMLPackage.load(
+                new ByteArrayInputStream(rendered.bytes()));
+
+        var markup = new ArrayList<org.docx4j.wml.CTMarkup>();
+        collectMarkup(wordPackage.getMainDocumentPart().getJaxbElement(), markup);
+        ((org.docx4j.wml.CTTrackChange) markup.get(0)).setAuthor("Someone Else");
+        var output = new ByteArrayOutputStream();
+        wordPackage.save(output);
+
+        var report = verifier.verify(source, output.toByteArray(), plan,
+                rendered.changes());
+
+        assertThat(report.passed()).isFalse();
+        assertThat(report.failureCode()).isEqualTo(RedlineFailureCode.VERIFICATION_FAILED);
+    }
+
+    @Test
     void revisionIdOutsidePlannedRangesIsRejected() throws Exception {
         var fixture = "m9-simple-replace.docx";
         var plan = replacePlan(fixture, "2. Limitation of Liability",

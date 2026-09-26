@@ -68,7 +68,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             throw failure(RedlineFailureCode.PROTECTED_DOCUMENT_UNSUPPORTED, null,
                     "The source document enforces editing protection.");
         }
-        if (DocxRedlineSupport.hasPreexistingRevisions(wordPackage)) {
+        if (DocxRedlineSupport.hasPreexistingRevisions(sourceBytes)) {
             throw failure(RedlineFailureCode.PREEXISTING_REVISIONS_UNSUPPORTED, null,
                     "The source document already contains tracked revisions.");
         }
@@ -301,6 +301,9 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         pPr.setRPr(null);
         pPr.setSectPr(null);
         pPr.setPPrChange(null);
+        if (pPr.getNumPr() != null) {
+            pPr.getNumPr().setNumberingChange(null);
+        }
         var paraRPr = factory.createParaRPr();
         paraRPr.setIns(trackChange(revisionId, author, date));
         pPr.setRPr(paraRPr);
@@ -309,7 +312,9 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         if (!text.isEmpty()) {
             var run = factory.createR();
             if (runTemplate != null) {
-                run.setRPr(XmlUtils.deepCopy(runTemplate));
+                var copiedRPr = XmlUtils.deepCopy(runTemplate);
+                copiedRPr.setRPrChange(null);
+                run.setRPr(copiedRPr);
             }
             var textElement = factory.createText();
             textElement.setValue(text);

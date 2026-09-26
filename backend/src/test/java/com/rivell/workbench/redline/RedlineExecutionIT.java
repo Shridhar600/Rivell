@@ -85,13 +85,15 @@ class RedlineExecutionIT {
             .withUsername("rivell")
             .withPassword("rivell");
 
+    private static final String STORAGE_ROOT =
+            "target/test-documents/" + UUID.randomUUID();
+
     @DynamicPropertySource
     static void databaseProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("rivell.storage.local.root",
-                () -> "target/test-documents/" + UUID.randomUUID());
+        registry.add("rivell.storage.local.root", () -> STORAGE_ROOT);
     }
 
     @Autowired
@@ -132,6 +134,9 @@ class RedlineExecutionIT {
 
     @Autowired
     com.rivell.workbench.foundation.DocumentStorage documentStorage;
+
+    @org.springframework.beans.factory.annotation.Value("${rivell.storage.local.root}")
+    String storageRoot;
 
     @Autowired
     JdbcClient jdbcClient;
@@ -322,31 +327,57 @@ class RedlineExecutionIT {
     }
 
     @Test
-    void executionIsIdempotentAndConcurrentTriggersProduceOneCanonicalExecution()
-            throws Exception {
+    void executionIsIdempotent() throws Exception {
         var fixture = analyzedMainCorpus();
         acceptFallback(fixture);
         finalize(fixture.review().id());
 
         var first = redline(fixture.review().id());
         var second = redline(fixture.review().id());
+
         assertThat(second.get("id").asText()).isEqualTo(first.get("id").asText());
         assertThat(countExecutions(fixture.review().id())).isEqualTo(1);
         assertThat(countArtifacts(fixture.review().id())).isEqualTo(1);
+        assertThat(artifactFiles(fixture.review().id())).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentTriggersRaceToOneCanonicalExecutionWithoutOrphanArtifacts()
+            throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var organizationId = organizationId();
 
         var executor = Executors.newFixedThreadPool(2);
+        var start = new java.util.concurrent.CountDownLatch(1);
         try {
-            List<Callable<String>> tasks = List.of(
-                    () -> redline(fixture.review().id()).get("id").asText(),
-                    () -> redline(fixture.review().id()).get("id").asText());
-            var results = executor.invokeAll(tasks);
-            for (var result : results) {
-                assertThat(result.get()).isEqualTo(first.get("id").asText());
+            List<Callable<Integer>> tasks = List.of(
+                    () -> {
+                        start.await();
+                        return mockMvc.perform(post("/api/reviews/{id}/redline", reviewId))
+                                .andReturn().getResponse().getStatus();
+                    },
+                    () -> {
+                        start.await();
+                        return mockMvc.perform(post("/api/reviews/{id}/redline", reviewId))
+                                .andReturn().getResponse().getStatus();
+                    });
+            var futures = tasks.stream().map(executor::submit).toList();
+            start.countDown();
+            var statuses = new ArrayList<Integer>();
+            for (var future : futures) {
+                statuses.add(future.get());
             }
+            assertThat(statuses).allMatch(status -> status == 200);
         } finally {
             executor.shutdown();
         }
-        assertThat(countExecutions(fixture.review().id())).isEqualTo(1);
+
+        assertThat(countExecutions(reviewId)).isEqualTo(1);
+        assertThat(countArtifacts(reviewId)).isEqualTo(1);
+        assertThat(artifactFiles(reviewId, organizationId)).isEqualTo(1);
     }
 
     @Test
@@ -722,6 +753,22 @@ class RedlineExecutionIT {
         return jdbcClient.sql("""
                 select count(*) from redline_execution where review_id = :reviewId
                 """).param("reviewId", reviewId).query(Integer.class).single();
+    }
+
+    private long artifactFiles(UUID reviewId) {
+        return artifactFiles(reviewId, organizationId());
+    }
+
+    private long artifactFiles(UUID reviewId, UUID organizationId) {
+        var directory = Path.of(storageRoot, organizationId.toString(), "redline");
+        if (!Files.isDirectory(directory)) {
+            return 0;
+        }
+        try (var files = Files.list(directory)) {
+            return files.count();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private int countArtifacts(UUID reviewId) {
