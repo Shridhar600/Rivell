@@ -1,0 +1,262 @@
+import { useRef, useState } from 'react'
+import type { FormEvent } from 'react'
+import type { FindingDetail } from '../../api/reviews'
+import type { ChangeActionType, DecisionAction, HumanDecision } from '../../api/workflow'
+import {
+  acceptEligibility,
+  changeActionLabel,
+  changeLanguageProvenanceLabel,
+  decisionActionLabel,
+  defaultEditAction,
+  editActionsForSubject,
+  editLanguageRequired,
+  validateDecisionForm,
+} from '../../lib/workflow'
+
+export type DecisionSubmission = {
+  action: DecisionAction
+  approvedAction?: ChangeActionType
+  approvedLanguage?: string
+  comment?: string
+  clientRequestId: string
+}
+
+type Props = {
+  finding: FindingDetail
+  currentDecision: HumanDecision | null
+  isSubmitting: boolean
+  submitError: string | null
+  onSubmit: (submission: DecisionSubmission) => void
+  onCancel: () => void
+}
+
+const DECISION_ACTIONS: DecisionAction[] = ['ACCEPT', 'EDIT', 'REJECT', 'ESCALATE']
+
+function acceptedActionLabel(finding: FindingDetail): string | null {
+  if (finding.proposedAction === 'USE_APPROVED_FALLBACK') return changeActionLabel('REPLACE')
+  if (finding.proposedAction === 'CONSIDER_GENERATED_LANGUAGE') {
+    return changeActionLabel(finding.subjectKind === 'ABSENCE' ? 'INSERT' : 'REPLACE')
+  }
+  return null
+}
+
+function newRequestId(): string {
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID()
+  return `req-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
+}
+
+export function DecisionEditor({
+  finding,
+  currentDecision,
+  isSubmitting,
+  submitError,
+  onSubmit,
+  onCancel,
+}: Props) {
+  const eligibility = acceptEligibility(finding)
+  const [action, setAction] = useState<DecisionAction>(
+    eligibility.eligible ? 'ACCEPT' : 'EDIT',
+  )
+  const [approvedAction, setApprovedAction] = useState<ChangeActionType>(
+    defaultEditAction(finding.subjectKind),
+  )
+  const [language, setLanguage] = useState(
+    currentDecision?.action === 'EDIT' && currentDecision.approvedLanguage
+      ? currentDecision.approvedLanguage
+      : '',
+  )
+  const [comment, setComment] = useState('')
+  const [errors, setErrors] = useState<{ comment?: string; approvedLanguage?: string }>({})
+  const commentRef = useRef<HTMLTextAreaElement>(null)
+  const languageRef = useRef<HTMLTextAreaElement>(null)
+  const requestIdRef = useRef<{ signature: string; id: string } | null>(null)
+
+  const commentRequired = action === 'REJECT' || action === 'ESCALATE'
+  const showLanguage =
+    action === 'EDIT' && approvedAction !== undefined && editLanguageRequired(approvedAction)
+  const acceptedAction = action === 'ACCEPT' ? acceptedActionLabel(finding) : null
+
+  function signature(): string {
+    return [action, approvedAction, language, comment].join('\u0000')
+  }
+
+  function requestId(): string {
+    const currentSignature = signature()
+    if (!requestIdRef.current || requestIdRef.current.signature !== currentSignature) {
+      requestIdRef.current = { signature: currentSignature, id: newRequestId() }
+    }
+    return requestIdRef.current.id
+  }
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    const nextErrors = validateDecisionForm({
+      action,
+      approvedAction,
+      approvedLanguage: language,
+      comment,
+    })
+    setErrors(nextErrors)
+    if (nextErrors.approvedLanguage) {
+      languageRef.current?.focus()
+      return
+    }
+    if (nextErrors.comment) {
+      commentRef.current?.focus()
+      return
+    }
+    const submission: DecisionSubmission = { action, clientRequestId: requestId() }
+    if (action === 'EDIT') submission.approvedAction = approvedAction
+    if (showLanguage) submission.approvedLanguage = language
+    if (comment.trim().length > 0 || commentRequired) submission.comment = comment
+    onSubmit(submission)
+  }
+
+  return (
+    <form className="decision-editor" onSubmit={handleSubmit} aria-label="Record decision">
+      <fieldset className="decision-editor__actions">
+        <legend>Your decision</legend>
+        {DECISION_ACTIONS.map((option) => {
+          const disabled = option === 'ACCEPT' && !eligibility.eligible
+          return (
+            <label key={option} className="decision-editor__action">
+              <input
+                type="radio"
+                name="decision-action"
+                value={option}
+                checked={action === option}
+                disabled={disabled}
+                onChange={() => {
+                  setAction(option)
+                  setErrors({})
+                }}
+              />
+              <span>{decisionActionLabel(option)}</span>
+            </label>
+          )
+        })}
+      </fieldset>
+      {!eligibility.eligible ? (
+        <p className="panel__hint">{eligibility.reason}</p>
+      ) : null}
+
+      {action === 'ACCEPT' && eligibility.eligible ? (
+        <div className="decision-editor__accept-preview">
+          <p>
+            You are approving:{' '}
+            {acceptedAction ? `${acceptedAction} using the machine proposal` : 'the machine proposal'}
+          </p>
+          {finding.proposedLanguage ? (
+            <blockquote className="finding-language__text">{finding.proposedLanguage}</blockquote>
+          ) : null}
+          <p className="panel__hint">
+            {finding.proposedLanguageSource === 'APPROVED_DRAFTING'
+              ? changeLanguageProvenanceLabel('APPROVED_DRAFTING')
+              : changeLanguageProvenanceLabel('GENERATIVE')}
+          </p>
+        </div>
+      ) : null}
+
+      {action === 'EDIT' ? (
+        <>
+          <fieldset className="decision-editor__change-type">
+            <legend>Change type</legend>
+            {editActionsForSubject(finding.subjectKind).map((option) => (
+              <label key={option} className="decision-editor__action">
+                <input
+                  type="radio"
+                  name="decision-change-type"
+                  value={option}
+                  checked={approvedAction === option}
+                  onChange={() => {
+                    setApprovedAction(option)
+                    setErrors({})
+                  }}
+                />
+                <span>{changeActionLabel(option)}</span>
+              </label>
+            ))}
+          </fieldset>
+          {showLanguage ? (
+            <div className="decision-editor__field">
+              <label htmlFor="decision-language">Final approved language</label>
+              <textarea
+                id="decision-language"
+                ref={languageRef}
+                value={language}
+                onChange={(event) => setLanguage(event.target.value)}
+                aria-invalid={errors.approvedLanguage ? true : undefined}
+                aria-describedby={errors.approvedLanguage ? 'decision-language-error' : undefined}
+              />
+              {errors.approvedLanguage ? (
+                <p id="decision-language-error" className="field-error">
+                  {errors.approvedLanguage}
+                </p>
+              ) : null}
+              {finding.proposedLanguage ? (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => {
+                    setLanguage(finding.proposedLanguage ?? '')
+                    setErrors((current) => ({ ...current, approvedLanguage: undefined }))
+                  }}
+                >
+                  Copy machine-proposed wording
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {action === 'REJECT' ? (
+        <p className="panel__hint">
+          No contract change will be created from this finding.
+        </p>
+      ) : null}
+      {action === 'ESCALATE' ? (
+        <p className="panel__hint">
+          This finding remains unresolved and the review cannot be finalized while the
+          escalation is current.
+        </p>
+      ) : null}
+
+      <div className="decision-editor__field">
+        <label htmlFor="decision-comment">
+          Comment ({commentRequired ? 'required' : 'optional'})
+        </label>
+        <textarea
+          id="decision-comment"
+          ref={commentRef}
+          value={comment}
+          onChange={(event) => setComment(event.target.value)}
+          aria-required={commentRequired}
+          aria-invalid={errors.comment ? true : undefined}
+          aria-describedby={errors.comment ? 'decision-comment-error' : undefined}
+        />
+        {errors.comment ? (
+          <p id="decision-comment-error" className="field-error">
+            {errors.comment}
+          </p>
+        ) : null}
+      </div>
+
+      {submitError ? (
+        <p className="state state--warning" role="alert">
+          {submitError}
+        </p>
+      ) : null}
+
+      <div className="decision-editor__buttons">
+        <button type="submit" className="button" disabled={isSubmitting}>
+          {decisionActionLabel(action)}
+        </button>
+        <button type="button" className="link-button" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
