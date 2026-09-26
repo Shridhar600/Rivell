@@ -48,6 +48,35 @@ import com.rivell.workbench.redline.VerificationReport;
 @Component
 public class DocxRedlineVerifier implements RedlineVerifier {
 
+    private final com.rivell.workbench.platform.parsing.DocxParserProperties properties;
+
+    public DocxRedlineVerifier(
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        this.properties = properties;
+    }
+
+    /**
+     * The verifier reads both the generated and the source package, so it needs the same
+     * decompression bound the renderer applies. A verification pass must not be the cheapest way to
+     * exhaust the heap.
+     */
+    private static WordprocessingMLPackage load(byte[] bytes,
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        try {
+            com.rivell.workbench.platform.parsing.ZipGuard.scan(bytes,
+                    properties.maxUncompressedBytes());
+        } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {
+            throw new IllegalStateException("Package exceeds the permitted expansion", e);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Package could not be scanned", e);
+        }
+        try {
+            return WordprocessingMLPackage.load(new ByteArrayInputStream(bytes));
+        } catch (Exception e) {
+            throw new IllegalStateException("Package could not be loaded", e);
+        }
+    }
+
     @Override
     public VerificationReport verify(
             byte[] sourceBytes, byte[] generatedBytes, DocumentExecutionPlan plan,
@@ -55,13 +84,13 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         WordprocessingMLPackage generated;
         WordprocessingMLPackage source;
         try {
-            generated = WordprocessingMLPackage.load(new ByteArrayInputStream(generatedBytes));
+            generated = load(generatedBytes, properties);
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
                     "The generated document could not be reopened.", List.of());
         }
         try {
-            source = WordprocessingMLPackage.load(new ByteArrayInputStream(sourceBytes));
+            source = load(sourceBytes, properties);
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
                     "The frozen source document could not be reopened.", List.of());

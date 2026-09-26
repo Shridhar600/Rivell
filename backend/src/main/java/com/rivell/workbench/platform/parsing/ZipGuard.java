@@ -15,15 +15,20 @@ import org.xml.sax.helpers.DefaultHandler;
  * entries into memory without an uncompressed-size cap. Also counts true top-level body
  * children so loader-side dropping of content becomes visible.
  */
-final class ZipGuard {
+/**
+ * Uncompressed-size and entry-count bound for a DOCX package, applied before docx4j materialises
+ * it. Public because the redline renderer and verifier load packages too, and must not be the one
+ * path in the system that lets a decompression bomb reach the heap.
+ */
+public final class ZipGuard {
 
-    record ScanResult(long totalUncompressedBytes, byte[] mainDocumentXml) {
+    public record ScanResult(long totalUncompressedBytes, byte[] mainDocumentXml) {
     }
 
     private ZipGuard() {
     }
 
-    static ScanResult scan(byte[] docxBytes, long maxUncompressedBytes) throws IOException {
+    public static ScanResult scan(byte[] docxBytes, long maxUncompressedBytes) throws IOException {
         long total = 0;
         byte[] mainDocument = null;
         try (var zip = new ZipInputStream(new ByteArrayInputStream(docxBytes))) {
@@ -36,7 +41,8 @@ final class ZipGuard {
                     total += drain(zip);
                 }
                 if (total > maxUncompressedBytes) {
-                    throw new IOException("Document expands beyond the maximum supported size");
+                    throw new ZipGuardException(
+                            "Document expands beyond the maximum supported size");
                 }
             }
         }
@@ -44,6 +50,15 @@ final class ZipGuard {
             throw new IOException("The DOCX package does not contain a main document");
         }
         return new ScanResult(total, mainDocument);
+    }
+
+    /** The package exceeds the permitted uncompressed size. Distinct so callers can report it. */
+    public static final class ZipGuardException extends IOException {
+        private static final long serialVersionUID = 1L;
+
+        ZipGuardException(String message) {
+            super(message);
+        }
     }
 
     private static long drain(ZipInputStream entryStream) throws IOException {

@@ -28,8 +28,10 @@ import com.rivell.workbench.platform.docx.DocxRedlineVerifier;
 
 class DocxRedlineVerifierTest {
 
-    private final DocxRedlineRenderer renderer = new DocxRedlineRenderer();
-    private final DocxRedlineVerifier verifier = new DocxRedlineVerifier();
+    private final DocxRedlineRenderer renderer = new DocxRedlineRenderer(new com.rivell.workbench.platform.parsing.DocxParserProperties(
+                200L * 1024 * 1024));
+    private final DocxRedlineVerifier verifier = new DocxRedlineVerifier(new com.rivell.workbench.platform.parsing.DocxParserProperties(
+                200L * 1024 * 1024));
 
     @Test
     void simpleReplaceRoundTripsAndVerifiesEveryChange() {

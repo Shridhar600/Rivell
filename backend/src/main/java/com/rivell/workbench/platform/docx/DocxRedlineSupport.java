@@ -201,6 +201,11 @@ final class DocxRedlineSupport {
      * re-serialize it. Fails closed when the package cannot be scanned, because an id
      * collision would corrupt revision grouping.
      */
+     * Reads every XML part in full. This is only safe because the caller has already run
+     * {@code ZipGuard} over the same bytes, which drains each entry and enforces the total
+     * uncompressed ceiling: the sum of everything read here is bounded by that ceiling. Callers must
+     * not invoke this on unguarded bytes.
+     */
     static long maxRevisionIdInBytes(byte[] sourceBytes) {
         long max = 0;
         try (var zip = new ZipInputStream(new ByteArrayInputStream(sourceBytes))) {
