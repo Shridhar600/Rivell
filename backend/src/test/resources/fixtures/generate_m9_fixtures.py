@@ -309,3 +309,30 @@ write('m9-sectpr-paragraph.docx', (
     + p('2. Governing Law', 'Heading1')
     + p('This Agreement is governed by the laws of Delaware.')
 ))
+
+# R — property-mark revisions only (typed failure): rPrChange + paragraph-mark del
+write('m9-preexisting-property-revisions.docx', (
+    p('Master Services Agreement', 'Title')
+    + p('1. Limitation of Liability', 'Heading1')
+    + p('Supplier liability shall be unlimited.')
+    + '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>'
+    + '<w:r><w:rPr><w:b/><w:rPrChange w:id="777" w:author="Counterparty" '
+    + 'w:date="2026-09-01T00:00:00Z"><w:rPr/></w:rPrChange></w:rPr>'
+    + '<w:t xml:space="preserve">2. Governing Law</w:t></w:r></w:p>'
+    + '<w:p><w:pPr><w:rPr><w:del w:id="778" w:author="Counterparty" '
+    + 'w:date="2026-09-01T00:00:00Z"/></w:rPr></w:pPr>'
+    + '<w:r><w:t xml:space="preserve">This Agreement is governed by the laws of '
+    + 'Delaware.</w:t></w:r></w:p>'
+))
+
+# S — clause body inside a content control (SDT), followed by another clause
+write('m9-sdt-clause.docx', (
+    p('Master Services Agreement', 'Title')
+    + p('1. Services', 'Heading1')
+    + '<w:sdt><w:sdtPr><w:alias w:val="Services"/></w:sdtPr><w:sdtContent>'
+    + p('Supplier shall provide the services described in Schedule A.')
+    + p('Supplier shall perform the services with reasonable care.')
+    + '</w:sdtContent></w:sdt>'
+    + p('2. Governing Law', 'Heading1')
+    + p('This Agreement is governed by the laws of Delaware.')
+))

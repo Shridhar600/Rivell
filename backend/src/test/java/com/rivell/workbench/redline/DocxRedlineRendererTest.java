@@ -302,6 +302,19 @@ class DocxRedlineRendererTest {
     }
 
     @Test
+    void propertyMarkRevisionsFailClosed() {
+        var plan = replacePlan("m9-preexisting-property-revisions.docx",
+                "1. Limitation of Liability", "Liability is capped at the fees paid.");
+
+        assertThatThrownBy(() -> renderer.render(
+                RedlineFixturePipeline.fixture("m9-preexisting-property-revisions.docx"),
+                plan))
+                .isInstanceOf(RedlineRenderException.class)
+                .extracting(e -> ((RedlineRenderException) e).code())
+                .isEqualTo(RedlineFailureCode.PREEXISTING_REVISIONS_UNSUPPORTED);
+    }
+
+    @Test
     void protectedDocumentFailsClosed() {
         var plan = replacePlan("m9-protected.docx", "1. Limitation of Liability",
                 "Liability is capped at the fees paid.");

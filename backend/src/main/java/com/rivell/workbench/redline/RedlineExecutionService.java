@@ -190,7 +190,7 @@ public class RedlineExecutionService {
                 rendered.changes());
         if (!verification.passed()) {
             return fail(changeSet, organizationId, requestedBy, startedAt,
-                    RedlineFailureCode.VERIFICATION_FAILED, null,
+                    verification.failureCode(), null,
                     verification.failureDetail(), verification.changes(), sourceSha);
         }
 

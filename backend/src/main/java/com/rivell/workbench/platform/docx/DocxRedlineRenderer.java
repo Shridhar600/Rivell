@@ -73,7 +73,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                     "The source document already contains tracked revisions.");
         }
 
-        var body = DocxRedlineSupport.body(wordPackage);
+        var body = mainBody(wordPackage);
         var content = body.getContent();
         var paragraphByAnchor = new HashMap<String, P>();
         for (var ref : DocxRedlineSupport.paragraphs(content)) {
@@ -403,6 +403,20 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         return failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE, approvedChangeId,
                 "Approved change " + ordinal + " targets document content that cannot be "
                         + "executed deterministically.");
+    }
+
+    private org.docx4j.wml.Body mainBody(WordprocessingMLPackage wordPackage) {
+        try {
+            var document = wordPackage.getMainDocumentPart().getJaxbElement();
+            var body = document == null ? null : document.getBody();
+            if (body == null) {
+                throw new IllegalStateException("missing main document body");
+            }
+            return body;
+        } catch (RuntimeException e) {
+            throw failure(RedlineFailureCode.DOCX_LOAD_FAILED, null,
+                    "The source document could not be loaded for execution.");
+        }
     }
 
     private WordprocessingMLPackage load(byte[] sourceBytes) {

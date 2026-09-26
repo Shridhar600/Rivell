@@ -20,7 +20,11 @@ import org.docx4j.wml.P;
 import org.docx4j.wml.R;
 import org.docx4j.wml.SdtBlock;
 import org.docx4j.wml.SdtRun;
+import org.docx4j.wml.SectPr;
+import org.docx4j.wml.Tbl;
+import org.docx4j.wml.Tc;
 import org.docx4j.wml.Text;
+import org.docx4j.wml.Tr;
 
 import jakarta.xml.bind.JAXBElement;
 
@@ -90,6 +94,11 @@ final class DocxRedlineSupport {
         }
     }
 
+    /**
+     * Every revision mark in the tree, including property marks ({@code pPrChange},
+     * {@code rPrChange}, paragraph-mark {@code ins}/{@code del}) that generic traversal
+     * helpers cannot descend into.
+     */
     static List<CTMarkup> markupElements(Object root) {
         var markup = new ArrayList<CTMarkup>();
         collectMarkup(root, markup);
@@ -103,8 +112,56 @@ final class DocxRedlineSupport {
         if (node instanceof CTMarkup element) {
             markup.add(element);
         }
+        collectPropertyMarkup(node, markup);
         for (var child : children(node)) {
             collectMarkup(child, markup);
+        }
+    }
+
+    private static void collectPropertyMarkup(Object node, List<CTMarkup> markup) {
+        if (node instanceof P paragraph) {
+            var pPr = paragraph.getPPr();
+            if (pPr != null) {
+                if (pPr.getPPrChange() != null) {
+                    markup.add(pPr.getPPrChange());
+                }
+                if (pPr.getRPr() != null) {
+                    addTrackChanges(pPr.getRPr().getIns(), pPr.getRPr().getDel(),
+                            pPr.getRPr().getMoveFrom(), pPr.getRPr().getMoveTo(), markup);
+                }
+                if (pPr.getSectPr() != null && pPr.getSectPr().getSectPrChange() != null) {
+                    markup.add(pPr.getSectPr().getSectPrChange());
+                }
+            }
+        } else if (node instanceof R run) {
+            if (run.getRPr() != null && run.getRPr().getRPrChange() != null) {
+                markup.add(run.getRPr().getRPrChange());
+            }
+        } else if (node instanceof Tbl table) {
+            if (table.getTblPr() != null && table.getTblPr().getTblPrChange() != null) {
+                markup.add(table.getTblPr().getTblPrChange());
+            }
+        } else if (node instanceof Tr row) {
+            if (row.getTrPr() != null && row.getTrPr().getTrPrChange() != null) {
+                markup.add(row.getTrPr().getTrPrChange());
+            }
+        } else if (node instanceof Tc cell) {
+            if (cell.getTcPr() != null && cell.getTcPr().getTcPrChange() != null) {
+                markup.add(cell.getTcPr().getTcPrChange());
+            }
+        } else if (node instanceof SectPr section) {
+            if (section.getSectPrChange() != null) {
+                markup.add(section.getSectPrChange());
+            }
+        }
+    }
+
+    private static void addTrackChanges(CTTrackChange first, CTTrackChange second,
+            CTTrackChange third, CTTrackChange fourth, List<CTMarkup> markup) {
+        for (var change : new CTTrackChange[] {first, second, third, fourth}) {
+            if (change != null) {
+                markup.add(change);
+            }
         }
     }
 
@@ -113,9 +170,27 @@ final class DocxRedlineSupport {
         return children == null ? List.of() : children;
     }
 
+    /** Only true revision marks (not bookmarks/ranges, which share the markup base). */
+    static List<CTTrackChange> revisionElements(Object root) {
+        var revisions = new ArrayList<CTTrackChange>();
+        for (var markup : markupElements(root)) {
+            if (markup instanceof CTTrackChange change) {
+                revisions.add(change);
+            }
+        }
+        return revisions;
+    }
+
+    /**
+     * Highest revision id in the main document story. Other stories (headers, footers,
+     * footnotes) are never mutated by M9 and are not inspected, because touching their
+     * JAXB trees makes docx4j re-serialize them on save, which would break the
+     * byte-preservation guarantee for untouched parts.
+     */
     static long maxRevisionId(WordprocessingMLPackage wordPackage) {
         var max = BigInteger.ZERO;
-        for (var markup : markupElements(wordPackage.getMainDocumentPart().getJaxbElement())) {
+        for (var markup : revisionElements(
+                wordPackage.getMainDocumentPart().getJaxbElement())) {
             if (markup.getId() != null && markup.getId().compareTo(max) > 0) {
                 max = markup.getId();
             }
@@ -124,22 +199,8 @@ final class DocxRedlineSupport {
     }
 
     static boolean hasPreexistingRevisions(WordprocessingMLPackage wordPackage) {
-        return containsTrackChange(wordPackage.getMainDocumentPart().getJaxbElement());
-    }
-
-    private static boolean containsTrackChange(Object node) {
-        if (node == null) {
-            return false;
-        }
-        if (node instanceof CTTrackChange) {
-            return true;
-        }
-        for (var child : children(node)) {
-            if (containsTrackChange(child)) {
-                return true;
-            }
-        }
-        return false;
+        return !revisionElements(
+                wordPackage.getMainDocumentPart().getJaxbElement()).isEmpty();
     }
 
     static boolean isDocxMainPart(WordprocessingMLPackage wordPackage) {

@@ -15,6 +15,7 @@ import java.util.zip.ZipInputStream;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.wml.Br;
 import org.docx4j.wml.CTMarkup;
+import org.docx4j.wml.CTTrackChange;
 import org.docx4j.wml.DelText;
 import org.docx4j.wml.P;
 import org.docx4j.wml.R;
@@ -90,15 +91,10 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                     List.of());
         }
 
-        var markup = DocxRedlineSupport.markupElements(
-                generated.getMainDocumentPart().getJaxbElement());
-        var ids = new HashSet<Long>();
-        for (var element : markup) {
-            if (element.getId() != null && !ids.add(element.getId().longValue())) {
-                return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
-                        "The generated document contains duplicate revision identifiers.",
-                        List.of());
-            }
+        var duplicateProblem = duplicateRevisionIdProblem(generated);
+        if (duplicateProblem != null) {
+            return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
+                    duplicateProblem, List.of());
         }
 
         var structuralProblem = structuralProblem(generated);
@@ -213,9 +209,10 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         var entries = new ArrayList<String>();
         walk(source, (paragraph, table) -> entries.add(
                 paragraph != null ? collectText(paragraph, TextMode.ALL) : tableText(table)));
-        var bodyIndexToViewIndex = new HashMap<Integer, Integer>();
+        var anchorToViewIndex = new HashMap<String, Integer>();
         for (var anchor : viewAnchors(source)) {
-            bodyIndexToViewIndex.put(anchor.bodyIndex(), anchor.viewIndex());
+            anchorToViewIndex.put(anchor.bodyIndex() + ":" + anchor.paragraphIndex(),
+                    anchor.viewIndex());
         }
 
         var deleted = new HashSet<Integer>();
@@ -223,7 +220,8 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         var prepended = new ArrayList<String>();
         for (var operation : plan.operations()) {
             for (var target : operation.deletionTargets()) {
-                var index = bodyIndexToViewIndex.get(target.bodyIndex());
+                var index = anchorToViewIndex.get(
+                        target.bodyIndex() + ":" + target.paragraphIndex());
                 if (index != null) {
                     deleted.add(index);
                 }
@@ -233,7 +231,10 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 if (after < 0) {
                     prepended.addAll(operation.insertion().paragraphs());
                 } else {
-                    var index = bodyIndexToViewIndex.get(after);
+                    var anchorIndex = operation.insertion().anchorParagraphIndex();
+                    var index = anchorIndex == null
+                            ? anchorToViewIndex.get(after + ":null")
+                            : anchorToViewIndex.get(after + ":" + anchorIndex);
                     if (index != null) {
                         insertedAfter.computeIfAbsent(index, ignored -> new ArrayList<>())
                                 .addAll(operation.insertion().paragraphs());
@@ -260,28 +261,28 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         var anchors = new ArrayList<ViewAnchor>();
         var body = DocxRedlineSupport.body(wordPackage);
         var viewIndex = new int[] {0};
-        collectAnchors(body.getContent(), null, anchors, viewIndex);
+        collectAnchors(body.getContent(), null, anchors, viewIndex, new int[] {0});
         return anchors;
     }
 
     private void collectAnchors(
             List<Object> content, Integer anchorBodyIndex, List<ViewAnchor> anchors,
-            int[] viewIndex) {
+            int[] viewIndex, int[] paragraphOrdinal) {
         for (var i = 0; i < content.size(); i++) {
             var element = DocxRedlineSupport.unwrap(content.get(i));
             var bodyIndex = anchorBodyIndex != null ? anchorBodyIndex : i;
             if (element instanceof P) {
-                anchors.add(new ViewAnchor(bodyIndex, viewIndex[0]++));
+                anchors.add(new ViewAnchor(bodyIndex, paragraphOrdinal[0]++, viewIndex[0]++));
             } else if (element instanceof Tbl) {
-                anchors.add(new ViewAnchor(bodyIndex, viewIndex[0]++));
+                anchors.add(new ViewAnchor(bodyIndex, null, viewIndex[0]++));
             } else if (element instanceof SdtBlock sdtBlock) {
                 collectAnchors(sdtBlock.getSdtContent().getContent(), bodyIndex, anchors,
-                        viewIndex);
+                        viewIndex, paragraphOrdinal);
             }
         }
     }
 
-    private record ViewAnchor(int bodyIndex, int viewIndex) {
+    private record ViewAnchor(int bodyIndex, Integer paragraphIndex, int viewIndex) {
     }
 
     private interface EntryVisitor {
@@ -513,6 +514,9 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                             }
                         }
                     }
+                    if (linkChild instanceof RunIns) {
+                        return "A tracked deletion contains inserted run content.";
+                    }
                 }
             }
         }
@@ -528,8 +532,52 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             if (element instanceof RunDel) {
                 return "A tracked insertion contains deleted run content.";
             }
+            if (element instanceof RunIns ins) {
+                var problem = insertedWrapperProblem(ins.getCustomXmlOrSmartTagOrSdt());
+                if (problem != null) {
+                    return problem;
+                }
+            }
+            if (element instanceof P.Hyperlink hyperlink) {
+                for (var rawLinkChild : hyperlink.getContent()) {
+                    var linkChild = DocxRedlineSupport.unwrap(rawLinkChild);
+                    if (linkChild instanceof R run && runHasText(run)) {
+                        return "A tracked insertion contains text outside a w:ins wrapper.";
+                    }
+                    if (linkChild instanceof RunDel) {
+                        return "A tracked insertion contains deleted run content.";
+                    }
+                    if (linkChild instanceof RunIns ins) {
+                        var problem = insertedWrapperProblem(
+                                ins.getCustomXmlOrSmartTagOrSdt());
+                        if (problem != null) {
+                            return problem;
+                        }
+                    }
+                }
+            }
         }
         return null;
+    }
+
+    private String insertedWrapperProblem(List<Object> wrapped) {
+        for (var raw : wrapped) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof R run && runHasDeletedText(run)) {
+                return "A tracked insertion carries deleted text inside w:ins.";
+            }
+        }
+        return null;
+    }
+
+    private static boolean runHasDeletedText(R run) {
+        for (var raw : run.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof DelText) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean runHasText(R run) {
@@ -580,7 +628,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 }
             }
         }
-        for (var element : DocxRedlineSupport.markupElements(
+        for (var element : DocxRedlineSupport.revisionElements(
                 wordPackage.getMainDocumentPart().getJaxbElement())) {
             if (element.getId() == null) {
                 continue;
@@ -592,7 +640,94 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 return "The document contains a revision id outside the planned ranges.";
             }
         }
+        for (var report : reports) {
+            var planned = plan.operations().stream().anyMatch(operation ->
+                    operation.approvedChangeId().equals(report.approvedChangeId()));
+            if (!planned) {
+                return "The renderer reported a change that is not part of the plan.";
+            }
+        }
         return null;
+    }
+
+    /**
+     * One revision id per paragraph-action: the paragraph mark and all of its run
+     * wrappers share the id; ids must not repeat across paragraphs.
+     */
+    private String duplicateRevisionIdProblem(WordprocessingMLPackage wordPackage) {
+        var seen = new HashSet<Long>();
+        var problem = new String[] {null};
+        walk(wordPackage, (paragraph, table) -> {
+            if (problem[0] != null || paragraph == null) {
+                return;
+            }
+            var ids = new HashSet<Long>();
+            collectParagraphRevisionIds(paragraph, ids);
+            if (ids.size() > 1) {
+                problem[0] = "A paragraph carries more than one revision id.";
+                return;
+            }
+            for (var id : ids) {
+                if (!seen.add(id)) {
+                    problem[0] = "The generated document contains duplicate revision "
+                            + "identifiers.";
+                }
+            }
+        });
+        return problem[0];
+    }
+
+    private void collectParagraphRevisionIds(P paragraph, HashSet<Long> ids) {
+        var pPr = paragraph.getPPr();
+        if (pPr != null) {
+            if (pPr.getPPrChange() != null && pPr.getPPrChange().getId() != null) {
+                ids.add(pPr.getPPrChange().getId().longValue());
+            }
+            if (pPr.getRPr() != null) {
+                addRevisionId(pPr.getRPr().getIns(), ids);
+                addRevisionId(pPr.getRPr().getDel(), ids);
+            }
+        }
+        for (var raw : paragraph.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof R run) {
+                if (run.getRPr() != null) {
+                    addRevisionId(run.getRPr().getRPrChange(), ids);
+                }
+            } else if (element instanceof RunDel del) {
+                addRevisionId(del, ids);
+                collectWrappedRevisionIds(del.getCustomXmlOrSmartTagOrSdt(), ids);
+            } else if (element instanceof RunIns ins) {
+                addRevisionId(ins, ids);
+                collectWrappedRevisionIds(ins.getCustomXmlOrSmartTagOrSdt(), ids);
+            } else if (element instanceof P.Hyperlink hyperlink) {
+                for (var rawLinkChild : hyperlink.getContent()) {
+                    var linkChild = DocxRedlineSupport.unwrap(rawLinkChild);
+                    if (linkChild instanceof RunDel del) {
+                        addRevisionId(del, ids);
+                        collectWrappedRevisionIds(del.getCustomXmlOrSmartTagOrSdt(), ids);
+                    } else if (linkChild instanceof RunIns ins) {
+                        addRevisionId(ins, ids);
+                        collectWrappedRevisionIds(ins.getCustomXmlOrSmartTagOrSdt(), ids);
+                    }
+                }
+            }
+        }
+    }
+
+    private void collectWrappedRevisionIds(List<Object> wrapped, HashSet<Long> ids) {
+        for (var raw : wrapped) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof R run && run.getRPr() != null) {
+                addRevisionId(run.getRPr().getRPrChange(), ids);
+            }
+        }
+    }
+
+    private static void addRevisionId(CTTrackChange change, HashSet<Long> ids) {
+        if (change != null && change.getId() != null) {
+            ids.add(change.getId().longValue());
+        }
     }
 
     private String partProblem(

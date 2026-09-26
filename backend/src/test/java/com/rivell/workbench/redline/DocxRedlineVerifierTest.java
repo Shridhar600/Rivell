@@ -17,6 +17,8 @@ import org.docx4j.wml.DelText;
 import org.docx4j.wml.P;
 import org.docx4j.wml.R;
 import org.docx4j.wml.RunDel;
+import org.docx4j.wml.RunIns;
+import org.docx4j.wml.Text;
 import org.junit.jupiter.api.Test;
 
 import com.rivell.workbench.contracts.LegalConcept;
@@ -77,6 +79,84 @@ class DocxRedlineVerifierTest {
         assertThat(report.changes())
                 .allSatisfy(change -> assertThat(change.status())
                         .isEqualTo(RedlineVerificationStatus.VERIFIED));
+    }
+
+    @Test
+    void fragmentedRunReplaceRoundTrips() {
+        var fixture = "m9-fragmented-run.docx";
+        var plan = replacePlan(fixture, "2. Limitation of Liability",
+                "Liability is capped at the fees paid.");
+        var source = RedlineFixturePipeline.fixture(fixture);
+
+        var rendered = renderer.render(source, plan);
+        var report = verifier.verify(source, rendered.bytes(), plan, rendered.changes());
+
+        assertThat(report.passed()).as(String.valueOf(report.failureDetail())).isTrue();
+    }
+
+    @Test
+    void sdtNestedClauseDeleteRoundTrips() {
+        var fixture = "m9-sdt-clause.docx";
+        var contractId = UUID.randomUUID();
+        var versionId = UUID.randomUUID();
+        var structure = RedlineFixturePipeline.parse(fixture, contractId, versionId);
+        var setId = UUID.randomUUID();
+        var change = RedlineTestStructures.delete(setId, 0,
+                RedlineFixturePipeline.headingId(structure, "1. Services"));
+        var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
+                List.of(change));
+        var plan = RedlineFixturePipeline.plan(structure, set, Map.of());
+        var source = RedlineFixturePipeline.fixture(fixture);
+
+        var rendered = renderer.render(source, plan);
+        var report = verifier.verify(source, rendered.bytes(), plan, rendered.changes());
+
+        assertThat(report.passed()).as(String.valueOf(report.failureDetail())).isTrue();
+    }
+
+    @Test
+    void deletedTextInsideAnInsertedRunIsRejected() throws Exception {
+        var fixture = "m9-simple-replace.docx";
+        var plan = replacePlan(fixture, "2. Limitation of Liability",
+                "Aggregate liability shall not exceed the fees paid in the prior months.");
+        var source = RedlineFixturePipeline.fixture(fixture);
+        var rendered = renderer.render(source, plan);
+        var wordPackage = WordprocessingMLPackage.load(
+                new ByteArrayInputStream(rendered.bytes()));
+
+        for (var paragraph : paragraphs(wordPackage)) {
+            var pPr = paragraph.getPPr();
+            if (pPr == null || pPr.getRPr() == null || pPr.getRPr().getIns() == null) {
+                continue;
+            }
+            for (var raw : paragraph.getContent()) {
+                var element = org.docx4j.XmlUtils.unwrap(raw);
+                if (element instanceof RunIns ins) {
+                    for (var wrapped : ins.getCustomXmlOrSmartTagOrSdt()) {
+                        var run = org.docx4j.XmlUtils.unwrap(wrapped);
+                        if (run instanceof R inner) {
+                            for (var rawRunChild : inner.getContent()) {
+                                var runChild = org.docx4j.XmlUtils.unwrap(rawRunChild);
+                                if (runChild instanceof Text text) {
+                                    var deleted = new DelText();
+                                    deleted.setValue(text.getValue());
+                                    inner.getContent().set(
+                                            inner.getContent().indexOf(rawRunChild), deleted);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        var output = new ByteArrayOutputStream();
+        wordPackage.save(output);
+
+        var report = verifier.verify(source, output.toByteArray(), plan,
+                rendered.changes());
+
+        assertThat(report.passed()).isFalse();
+        assertThat(report.failureCode()).isEqualTo(RedlineFailureCode.VERIFICATION_FAILED);
     }
 
     @Test
