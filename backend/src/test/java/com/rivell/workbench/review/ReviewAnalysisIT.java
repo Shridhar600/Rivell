@@ -362,6 +362,59 @@ class ReviewAnalysisIT {
         }
     }
 
+    /**
+     * M10: every evidence id a persisted signal cites must resolve to a frozen evidence item stored
+     * with the same run. A citation that cannot be resolved is not a cosmetic problem: the Finding
+     * read cannot satisfy it and the review reports an unresolvable evidence reference. This asserts
+     * the invariant over a real analysis run rather than over a constructed check outcome, so it
+     * holds for whichever checks the pipeline runs.
+     */
+    @Test
+    void everyCitedEvidenceIdInACompletedRunResolvesToFrozenEvidence() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var citedIds = jdbcClient.sql("""
+                select jsonb_array_elements_text(evidence_item_ids) as evidence_id
+                from raw_review_signal
+                where run_id = :runId
+                """)
+                .param("runId", run.id())
+                .query(String.class)
+                .list();
+        assertThat(citedIds).as("the main corpus must produce cited evidence").isNotEmpty();
+
+        var unresolvableCount = jdbcClient.sql("""
+                select count(*) from (
+                  select distinct jsonb_array_elements_text(evidence_item_ids) as evidence_id
+                  from raw_review_signal
+                  where run_id = :runId
+                ) cited
+                left join review_evidence_item item
+                  on item.evidence_item_id = cited.evidence_id::uuid
+                 and item.run_id = :runId
+                where item.evidence_item_id is null
+                """)
+                .param("runId", run.id())
+                .query(Integer.class)
+                .single();
+
+        assertThat(unresolvableCount)
+                .as("every cited evidence id must resolve to a frozen item from the same run")
+                .isZero();
+
+        // A real run legitimately degrades a check that honestly reports partial coverage, so the
+        // assertion is specific to the failure this guard exists for: a check citing evidence it
+        // was never given.
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()))
+                .noneSatisfy(execution -> assertThat(execution.detail().get("degradedReason"))
+                        .isEqualTo("unresolvable_cited_evidence"));
+    }
+
     @Test
     void semanticsChangeAfterCreationDegradesAllChecks() {
         var organizationId = organizationId();

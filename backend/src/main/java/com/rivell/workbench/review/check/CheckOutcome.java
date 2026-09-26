@@ -32,7 +32,14 @@ public record CheckOutcome(
         evidenceItems = evidenceItems == null ? List.of() : List.copyOf(evidenceItems);
     }
 
-    /** Returns a copy carrying the frozen items cited by this outcome's signals. */
+    /**
+     * Returns a copy carrying the frozen items cited by this outcome's signals.
+     *
+     * <p>A cited id that no supplied bundle contains is a contract violation between the check and
+     * the evidence it was given, and it must not be dropped quietly: the signal row would keep an
+     * unresolvable citation that only fails much later, on a read. The check degrades instead, which
+     * keeps the run completable while making the defect visible and leaving no dangling citation.
+     */
     public CheckOutcome withCitedEvidence(List<EvidenceBundle> bundles) {
         var citedIds = new java.util.LinkedHashSet<java.util.UUID>();
         signals.forEach(signal -> citedIds.addAll(signal.evidenceItemIds()));
@@ -41,6 +48,14 @@ public record CheckOutcome(
             for (var item : bundle.items()) {
                 byId.putIfAbsent(item.evidenceId(), item);
             }
+        }
+        var unresolved = citedIds.stream().filter(id -> !byId.containsKey(id)).count();
+        if (unresolved > 0) {
+            var reason = new java.util.LinkedHashMap<String, Object>(detail);
+            reason.put("degradedReason", "unresolvable_cited_evidence");
+            reason.put("unresolvedEvidenceCount", (int) unresolved);
+            return new CheckOutcome(CheckExecutionStatus.DEGRADED, List.of(),
+                    reason, evidenceTraceId, List.of());
         }
         var items = citedIds.stream().map(byId::get).filter(Objects::nonNull).toList();
         return new CheckOutcome(status, signals, detail, evidenceTraceId, items);
