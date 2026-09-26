@@ -37,10 +37,12 @@ class ContractServicesConfiguration {
     @Bean
     ContractQueryService contractQueryService(
             ContractRepository contractRepository,
+            ContractSemanticsRepository semanticsRepository,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         return new ContractQueryService(
-                contractRepository, identityProvider, authorizationService);
+                contractRepository, semanticsRepository, identityProvider,
+                authorizationService);
     }
 
     @Bean

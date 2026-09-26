@@ -14,14 +14,17 @@ import com.rivell.workbench.organization.Permissions;
 public class ContractQueryService {
 
     private final ContractRepository repository;
+    private final ContractSemanticsRepository semanticsRepository;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
 
     public ContractQueryService(
             ContractRepository repository,
+            ContractSemanticsRepository semanticsRepository,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         this.repository = repository;
+        this.semanticsRepository = semanticsRepository;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
     }
@@ -78,6 +81,29 @@ public class ContractQueryService {
             UUID organizationId, UUID contractId, int versionNumber) {
         var summary = getVersionSummaryForOrganization(organizationId, contractId, versionNumber);
         return java.util.Set.copyOf(repository.findHeadingNodeIds(summary.versionId()));
+    }
+
+    /** System-level contract read for flows whose organization is already resolved. */
+    public Contract getContractForOrganization(UUID organizationId, UUID contractId) {
+        return repository
+                .findContract(contractId, organizationId)
+                .orElseThrow(() -> new ContractNotFoundException(contractId));
+    }
+
+    /** System-level source read for flows whose organization is already resolved. */
+    public ContractSource getSourceForOrganization(
+            UUID organizationId, UUID contractId, int versionNumber) {
+        var summary = getVersionSummaryForOrganization(organizationId, contractId, versionNumber);
+        return repository
+                .findSourceForVersion(summary.versionId(), organizationId)
+                .orElseThrow(() -> new ContractVersionNotFoundException(contractId, versionNumber));
+    }
+
+    /** System-level semantic read; empty when the version has no semantic layer yet. */
+    public java.util.Optional<ContractSemantics> getSemanticsForOrganization(
+            UUID organizationId, UUID contractId, int versionNumber) {
+        var summary = getVersionSummaryForOrganization(organizationId, contractId, versionNumber);
+        return semanticsRepository.find(summary.versionId(), organizationId);
     }
 
     public ContractSource getSourceForDownload(UUID contractId, int versionNumber) {

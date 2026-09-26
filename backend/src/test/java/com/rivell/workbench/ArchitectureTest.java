@@ -61,6 +61,20 @@ class ArchitectureTest {
     }
 
     @Test
+    void redlineDoesNotDependOnIntelligenceRetrievalKnowledgeReviewOrWorkflow() {
+        var classes = new ClassFileImporter()
+                .withImportOption(new ImportOption.DoNotIncludeTests())
+                .importPackages("com.rivell.workbench");
+
+        noClasses()
+                .that().resideInAPackage("com.rivell.workbench.redline..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "..intelligence..", "..retrieval..", "..knowledge..",
+                        "..review..", "..workflow..")
+                .check(classes);
+    }
+
+    @Test
     void contractModuleDoesNotTouchSqlImplementation() {
         var classes = new ClassFileImporter()
                 .withImportOption(new ImportOption.DoNotIncludeTests())

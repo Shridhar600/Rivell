@@ -1,0 +1,428 @@
+package com.rivell.workbench.redline;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import com.rivell.workbench.contracts.ContractNotFoundException;
+import com.rivell.workbench.contracts.ContractQueryService;
+import com.rivell.workbench.contracts.ContractVersionNotFoundException;
+import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.foundation.DocumentStorage;
+import com.rivell.workbench.foundation.Hashes;
+import com.rivell.workbench.foundation.StorageKey;
+import com.rivell.workbench.organization.AuthorizationService;
+import com.rivell.workbench.organization.IdentityProvider;
+import com.rivell.workbench.organization.Permissions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Deterministic redline execution: resolves the exact frozen source of the frozen
+ * approved-change set, builds an anchor plan, renders tracked changes, verifies the
+ * round trip, and persists one canonical execution per change set. Zero model calls.
+ */
+public class RedlineExecutionService {
+
+    private static final Logger log = LoggerFactory.getLogger(RedlineExecutionService.class);
+
+    public static final String AUTHOR = "Rivell";
+
+    private final IdentityProvider identityProvider;
+    private final AuthorizationService authorizationService;
+    private final ApprovedChangeSetRepository changeSetRepository;
+    private final RedlineExecutionRepository executionRepository;
+    private final ContractQueryService contractQueryService;
+    private final DocumentStorage documentStorage;
+    private final RedlineRenderer renderer;
+    private final RedlineVerifier verifier;
+    private final RedlinePlanResolver planResolver;
+    private final Clock clock;
+
+    public RedlineExecutionService(
+            IdentityProvider identityProvider,
+            AuthorizationService authorizationService,
+            ApprovedChangeSetRepository changeSetRepository,
+            RedlineExecutionRepository executionRepository,
+            ContractQueryService contractQueryService,
+            DocumentStorage documentStorage,
+            RedlineRenderer renderer,
+            RedlineVerifier verifier,
+            RedlinePlanResolver planResolver,
+            Clock clock) {
+        this.identityProvider = identityProvider;
+        this.authorizationService = authorizationService;
+        this.changeSetRepository = changeSetRepository;
+        this.executionRepository = executionRepository;
+        this.contractQueryService = contractQueryService;
+        this.documentStorage = documentStorage;
+        this.renderer = renderer;
+        this.verifier = verifier;
+        this.planResolver = planResolver;
+        this.clock = clock;
+    }
+
+    public RedlineExecution execute(UUID reviewId) {
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.REVIEW_REDLINE)) {
+            throw new UnauthorizedRedlineAccessException(identity.userId());
+        }
+        var organizationId = identity.organizationId();
+        var requestedBy = identity.userId();
+        var changeSet = changeSetRepository.findByReview(organizationId, reviewId)
+                .orElseThrow(RedlineNotAvailableException::new);
+        var existing = executionRepository.findByChangeSet(organizationId, changeSet.id());
+        if (existing.isPresent()) {
+            return requireSuccessful(existing.get());
+        }
+
+        var startedAt = clock.instant();
+        log.info("Redline execution started reviewId={} changeSetId={} organizationId={}",
+                reviewId, changeSet.id(), organizationId);
+        var execution = run(changeSet, organizationId, requestedBy, startedAt);
+        if (execution.status() == RedlineExecutionStatus.FAILED) {
+            log.info("Redline execution failed reviewId={} executionId={} code={}",
+                    reviewId, execution.id(), execution.failureCode());
+        } else {
+            log.info("Redline execution completed reviewId={} executionId={} outcome={}",
+                    reviewId, execution.id(), execution.outcome());
+        }
+        return requireSuccessful(execution);
+    }
+
+    public RedlineExecution find(UUID reviewId) {
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.REVIEW_READ)) {
+            throw new UnauthorizedRedlineAccessException(identity.userId());
+        }
+        return executionRepository.findByReview(identity.organizationId(), reviewId)
+                .orElseThrow(RedlineExecutionNotFoundException::new);
+    }
+
+    public RedlineArtifactDownload download(UUID reviewId) {
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.REVIEW_READ)) {
+            throw new UnauthorizedRedlineAccessException(identity.userId());
+        }
+        var execution = executionRepository
+                .findByReview(identity.organizationId(), reviewId)
+                .orElseThrow(RedlineExecutionNotFoundException::new);
+        if (!execution.downloadable()) {
+            throw new RedlineArtifactUnavailableException(execution.status(), execution.outcome());
+        }
+        var artifact = execution.artifact();
+        try (InputStream content = documentStorage.open(new StorageKey(artifact.storageKey()))) {
+            var bytes = content.readAllBytes();
+            if (!Hashes.sha256Hex(bytes).equals(artifact.sha256())) {
+                throw new IllegalStateException(
+                        "The stored redline artifact does not match its recorded hash");
+            }
+            return new RedlineArtifactDownload(artifact.filename(), artifact.contentType(),
+                    bytes);
+        } catch (IOException e) {
+            throw new IllegalStateException("The redline artifact could not be read", e);
+        }
+    }
+
+    private RedlineExecution run(
+            ApprovedChangeSet changeSet, UUID organizationId, UUID requestedBy,
+            java.time.Instant startedAt) {
+        if (changeSet.changes().isEmpty()) {
+            return persist(completedNoChanges(changeSet, organizationId, requestedBy, startedAt));
+        }
+
+        var version = versionSummary(changeSet, organizationId);
+        if (version == null) {
+            throw new RedlineSourceUnavailableException(
+                    RedlineFailureCode.SOURCE_DOCUMENT_UNAVAILABLE,
+                    "The frozen source document is unavailable "
+                            + "(SOURCE_DOCUMENT_UNAVAILABLE).");
+        }
+        if (!version.versionId().equals(changeSet.contractVersionId())) {
+            throw new RedlineSourceUnavailableException(
+                    RedlineFailureCode.SOURCE_VERSION_MISMATCH,
+                    "The frozen source version no longer matches the approved change set "
+                            + "(SOURCE_VERSION_MISMATCH).");
+        }
+
+        byte[] sourceBytes;
+        String sourceSha;
+        try {
+            var source = contractQueryService.getSourceForOrganization(organizationId,
+                    changeSet.contractId(), changeSet.contractVersionNumber());
+            sourceSha = source.sha256();
+            sourceBytes = readStorage(source.storageKey());
+        } catch (ContractVersionNotFoundException e) {
+            throw new RedlineSourceUnavailableException(
+                    RedlineFailureCode.SOURCE_DOCUMENT_UNAVAILABLE,
+                    "The frozen source document is unavailable "
+                            + "(SOURCE_DOCUMENT_UNAVAILABLE).");
+        }
+        if (!Hashes.sha256Hex(sourceBytes).equals(sourceSha)) {
+            throw new RedlineSourceUnavailableException(
+                    RedlineFailureCode.SOURCE_INTEGRITY_MISMATCH,
+                    "The frozen source document failed its integrity check "
+                            + "(SOURCE_INTEGRITY_MISMATCH).");
+        }
+
+        DocumentExecutionPlan plan;
+        try {
+            plan = planResolver.resolve(changeSet,
+                    contractQueryService.getStructureForOrganization(organizationId,
+                            changeSet.contractId(), changeSet.contractVersionNumber()),
+                    effectiveConcepts(organizationId, changeSet),
+                    AUTHOR, startedAt, sourceSha);
+        } catch (RedlinePlanException e) {
+            return fail(changeSet, organizationId, requestedBy, startedAt, e.code(),
+                    e.approvedChangeId(), null, List.of(), sourceSha);
+        }
+
+        RenderedRedline rendered;
+        try {
+            rendered = renderer.render(sourceBytes, plan);
+        } catch (RedlineRenderException e) {
+            return fail(changeSet, organizationId, requestedBy, startedAt, e.code(),
+                    e.approvedChangeId(), null, List.of(), sourceSha);
+        }
+
+        var verification = verifier.verify(sourceBytes, rendered.bytes(), plan,
+                rendered.changes());
+        if (!verification.passed()) {
+            return fail(changeSet, organizationId, requestedBy, startedAt,
+                    verification.failureCode(), null,
+                    verification.failureDetail(), verification.changes(), sourceSha);
+        }
+
+        var artifactId = UUID.randomUUID();
+        var storageKey = organizationId + "/redline/" + artifactId + ".docx";
+        storeArtifact(storageKey, rendered.bytes());
+        try {
+            var executionId = UUID.randomUUID();
+            var completed = completedExecution(executionId, changeSet, organizationId,
+                    requestedBy, startedAt, sourceSha, plan, rendered, verification,
+                    artifactId, storageKey);
+            if (executionRepository.insert(completed)) {
+                return completed;
+            }
+            deleteQuietly(storageKey);
+            return executionRepository.findByChangeSet(organizationId, changeSet.id())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "A concurrent redline execution won the race but could not "
+                                    + "be read back"));
+        } catch (RuntimeException e) {
+            deleteQuietly(storageKey);
+            throw e;
+        }
+    }
+
+    private RedlineExecution completedExecution(
+            UUID executionId,
+            ApprovedChangeSet changeSet,
+            UUID organizationId,
+            UUID requestedBy,
+            java.time.Instant startedAt,
+            String sourceSha,
+            DocumentExecutionPlan plan,
+            RenderedRedline rendered,
+            VerificationReport verification,
+            UUID artifactId,
+            String storageKey) {
+        var verificationByChange = new HashMap<UUID, ChangeVerification>();
+        for (var result : verification.changes()) {
+            verificationByChange.put(result.approvedChangeId(), result);
+        }
+        var operationByChange = new HashMap<UUID, PlannedDocumentOperation>();
+        for (var operation : plan.operations()) {
+            operationByChange.put(operation.approvedChangeId(), operation);
+        }
+        var changeById = new HashMap<UUID, ApprovedChange>();
+        for (var change : changeSet.changes()) {
+            changeById.put(change.id(), change);
+        }
+        var changes = new ArrayList<RedlineExecutionChange>();
+        for (var report : rendered.changes()) {
+            var operation = operationByChange.get(report.approvedChangeId());
+            var change = changeById.get(report.approvedChangeId());
+            var result = verificationByChange.get(report.approvedChangeId());
+            if (result == null || result.status() != RedlineVerificationStatus.VERIFIED) {
+                throw new IllegalStateException(
+                        "A rendered change has no verified round-trip result");
+            }
+            changes.add(new RedlineExecutionChange(UUID.randomUUID(), organizationId,
+                    executionId, report.approvedChangeId(), report.ordinal(),
+                    operation.actionType(), change.targetKind(),
+                    RedlineChangeStatus.APPLIED, result.status(), null,
+                    operation.placementLabel(), resolvedTarget(operation),
+                    report.paragraphsDeleted(), report.paragraphsInserted(),
+                    report.revisionIdStart(), report.revisionIdEnd()));
+        }
+        var artifact = new RedlineArtifact(artifactId, organizationId, executionId,
+                filename(organizationId, changeSet), RedlineArtifact.DOCX_CONTENT_TYPE,
+                rendered.bytes().length, rendered.sha256(), storageKey, clock.instant());
+        return new RedlineExecution(executionId, organizationId, changeSet.reviewId(),
+                changeSet.id(), changeSet.contractId(), changeSet.contractVersionId(),
+                changeSet.contractVersionNumber(), changeSet.changeSetVersion(),
+                RedlineExecutionStatus.COMPLETED, RedlineOutcome.REDLINE_GENERATED,
+                null, null, RedlinePlanResolver.RENDERER_VERSION,
+                InsertPlacementStrategy.VERSION, sourceSha, changeSet.changes().size(),
+                requestedBy, startedAt, clock.instant(), changes, artifact);
+    }
+
+    private RedlineExecution completedNoChanges(
+            ApprovedChangeSet changeSet, UUID organizationId, UUID requestedBy,
+            java.time.Instant startedAt) {
+        return new RedlineExecution(UUID.randomUUID(), organizationId, changeSet.reviewId(),
+                changeSet.id(), changeSet.contractId(), changeSet.contractVersionId(),
+                changeSet.contractVersionNumber(), changeSet.changeSetVersion(),
+                RedlineExecutionStatus.COMPLETED, RedlineOutcome.NO_CHANGES, null, null,
+                RedlinePlanResolver.RENDERER_VERSION, InsertPlacementStrategy.VERSION,
+                null, 0, requestedBy, startedAt, clock.instant(), List.of(), null);
+    }
+
+    private RedlineExecution fail(
+            ApprovedChangeSet changeSet,
+            UUID organizationId,
+            UUID requestedBy,
+            java.time.Instant startedAt,
+            RedlineFailureCode code,
+            UUID failedChangeId,
+            String detail,
+            List<ChangeVerification> verifications,
+            String sourceSha) {
+        var executionId = UUID.randomUUID();
+        var verificationByChange = new HashMap<UUID, ChangeVerification>();
+        for (var verification : verifications) {
+            verificationByChange.put(verification.approvedChangeId(), verification);
+        }
+        var changes = new ArrayList<RedlineExecutionChange>();
+        for (var change : changeSet.changes()) {
+            var verification = verificationByChange.get(change.id());
+            RedlineChangeStatus status;
+            RedlineVerificationStatus verificationStatus = null;
+            RedlineFailureCode changeFailure = null;
+            if (verification != null) {
+                status = RedlineChangeStatus.APPLIED;
+                verificationStatus = verification.status();
+            } else if (failedChangeId != null && failedChangeId.equals(change.id())) {
+                status = RedlineChangeStatus.FAILED;
+                changeFailure = code;
+            } else {
+                status = RedlineChangeStatus.NOT_APPLIED;
+            }
+            changes.add(new RedlineExecutionChange(UUID.randomUUID(), organizationId,
+                    executionId, change.id(), change.ordinal(), change.actionType(),
+                    change.targetKind(), status, verificationStatus, changeFailure, null,
+                    null, null, null, null, null));
+        }
+        var execution = new RedlineExecution(executionId, organizationId, changeSet.reviewId(),
+                changeSet.id(), changeSet.contractId(), changeSet.contractVersionId(),
+                changeSet.contractVersionNumber(), changeSet.changeSetVersion(),
+                RedlineExecutionStatus.FAILED, null, code, sanitized(detail),
+                RedlinePlanResolver.RENDERER_VERSION, InsertPlacementStrategy.VERSION,
+                sourceSha, changeSet.changes().size(), requestedBy, startedAt,
+                clock.instant(), changes, null);
+        return persist(execution);
+    }
+
+    private RedlineExecution persist(RedlineExecution execution) {
+        if (executionRepository.insert(execution)) {
+            return execution;
+        }
+        return executionRepository
+                .findByChangeSet(execution.organizationId(), execution.changeSetId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "A concurrent redline execution won the race but could not be "
+                                + "read back"));
+    }
+
+    private RedlineExecution requireSuccessful(RedlineExecution execution) {
+        if (execution.status() == RedlineExecutionStatus.FAILED) {
+            throw new RedlineExecutionFailedException(execution);
+        }
+        return execution;
+    }
+
+    private com.rivell.workbench.contracts.ContractVersionSummary versionSummary(
+            ApprovedChangeSet changeSet, UUID organizationId) {
+        try {
+            return contractQueryService.getVersionSummaryForOrganization(organizationId,
+                    changeSet.contractId(), changeSet.contractVersionNumber());
+        } catch (ContractVersionNotFoundException | ContractNotFoundException e) {
+            return null;
+        }
+    }
+
+    private Map<UUID, LegalConcept> effectiveConcepts(
+            UUID organizationId, ApprovedChangeSet changeSet) {
+        var concepts = new HashMap<UUID, LegalConcept>();
+        contractQueryService
+                .getSemanticsForOrganization(organizationId, changeSet.contractId(),
+                        changeSet.contractVersionNumber())
+                .ifPresent(semantics -> semantics.clauses().forEach(clause ->
+                        clause.effectivePrimaryConcept().ifPresent(
+                                concept -> concepts.put(clause.headingNodeId(), concept))));
+        return concepts;
+    }
+
+    private String resolvedTarget(PlannedDocumentOperation operation) {
+        return operation.targetLabel();
+    }
+
+    private byte[] readStorage(String storageKey) {
+        try (InputStream content = documentStorage.open(new StorageKey(storageKey))) {
+            return content.readAllBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("The frozen source document could not be read", e);
+        }
+    }
+
+    private void storeArtifact(String storageKey, byte[] bytes) {
+        try {
+            documentStorage.store(new StorageKey(storageKey), new ByteArrayInputStream(bytes));
+        } catch (IOException e) {
+            throw new IllegalStateException("The redline artifact could not be stored", e);
+        }
+    }
+
+    private void deleteQuietly(String storageKey) {
+        try {
+            documentStorage.delete(new StorageKey(storageKey));
+        } catch (IOException ignored) {
+            // Orphan cleanup is best-effort; the canonical execution is unaffected.
+        }
+    }
+
+    private String filename(UUID organizationId, ApprovedChangeSet changeSet) {
+        String title = null;
+        try {
+            title = contractQueryService
+                    .getContractForOrganization(organizationId, changeSet.contractId()).title();
+        } catch (ContractNotFoundException ignored) {
+            // fall back to the generic name
+        }
+        var base = title == null || title.isBlank() ? "contract" : title;
+        var safe = base.replaceAll("[^A-Za-z0-9._-]+", "-")
+                .replaceAll("^-+", "").replaceAll("-+$", "");
+        if (safe.isBlank()) {
+            safe = "contract";
+        }
+        if (safe.length() > 80) {
+            safe = safe.substring(0, 80);
+        }
+        return safe + "-v" + changeSet.contractVersionNumber() + "-redline.docx";
+    }
+
+    private static String sanitized(String detail) {
+        if (detail == null) {
+            return null;
+        }
+        var single = detail.replaceAll("\\s+", " ").trim();
+        return single.length() > 300 ? single.substring(0, 300) : single;
+    }
+}
