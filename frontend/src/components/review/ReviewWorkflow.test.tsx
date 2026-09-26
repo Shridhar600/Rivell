@@ -13,7 +13,7 @@ import {
   fixtureCompletedReviewSummary,
   fixtureFindingList,
 } from './testFixtures'
-import { fixtureDecision, fixtureHumanReview } from './workflowFixtures'
+import { fixtureChangeSet, fixtureDecision, fixtureHumanReview } from './workflowFixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -241,6 +241,113 @@ describe('workflow state availability and conflict truth', () => {
     renderRouter('/reviews/c1/analysis/r-1', api)
     const progress = await screen.findByRole('region', { name: 'Human review' })
     expect(progress).toHaveTextContent('and 1 more affected finding(s)')
+  })
+})
+
+describe('finalization', () => {
+  function readyReview() {
+    return fixtureHumanReview({
+      status: 'READY_FOR_COMPLETION',
+      accepted: 1,
+      resolvedFindings: 1,
+      remainingFindings: 0,
+      blockers: [],
+      readyToFinalize: true,
+    })
+  }
+
+  it('blocks finalization until the server says the review is ready', async () => {
+    const api = stubContractApi(baseOptions())
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    const panel = await screen.findByRole('region', { name: 'Finalization' })
+    expect(panel).toHaveTextContent('Accepted: 0')
+    expect(panel).toHaveTextContent('The review cannot be finalized yet.')
+    expect(
+      screen.queryByRole('button', { name: 'Finalize review' }),
+    ).not.toBeInTheDocument()
+    expect(api.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(0)
+  })
+
+  it('requires explicit confirmation and freezes exactly once', async () => {
+    const user = userEvent.setup()
+    let stub: ReturnType<typeof stubContractApi>
+    stub = stubContractApi(
+      baseOptions({
+        humanReview: readyReview(),
+        finalizeResponse: () => {
+          stub.setHumanReview(
+            fixtureHumanReview({
+              status: 'COMPLETED',
+              accepted: 1,
+              resolvedFindings: 1,
+              remainingFindings: 0,
+              blockers: [],
+              readyToFinalize: true,
+              changeSetId: 'cs-1',
+              finalizedAt: '2026-09-26T11:00:00Z',
+            }),
+          )
+          return jsonResponse(envelope(fixtureChangeSet()))
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', stub)
+
+    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
+    expect(screen.getByRole('group', { name: 'Confirm finalization' })).toHaveTextContent(
+      'cannot be undone',
+    )
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('group', { name: 'Confirm finalization' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Finalize review' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
+    const finalization = screen.getByRole('region', { name: 'Finalization' })
+    expect(
+      await within(finalization).findByText(/approved change set is frozen/),
+    ).toBeInTheDocument()
+    expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Confirm finalize' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Finalize review' })).not.toBeInTheDocument()
+  })
+
+  it('refreshes blockers and does not retry when finalization is rejected', async () => {
+    const user = userEvent.setup()
+    let stub: ReturnType<typeof stubContractApi>
+    stub = stubContractApi(
+      baseOptions({
+        humanReview: readyReview(),
+        finalizeResponse: () => {
+          stub.setHumanReview(
+            fixtureHumanReview({
+              status: 'IN_PROGRESS',
+              readyToFinalize: false,
+              blockers: [
+                {
+                  code: 'APPROVED_CHANGE_CONFLICT',
+                  message: '2 approved changes target the same contract location.',
+                  findingIds: [],
+                },
+              ],
+            }),
+          )
+          return jsonResponse(
+            { code: '409', title: 'Invalid state', detail: 'review is not finalizable' },
+            409,
+          )
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', stub)
+    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'cannot be finalized yet',
+    )
+    expect(screen.getByRole('region', { name: 'Human review' })).toHaveTextContent(
+      'same contract location',
+    )
+    expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(1)
   })
 })
 

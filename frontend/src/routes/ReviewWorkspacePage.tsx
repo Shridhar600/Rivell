@@ -11,13 +11,20 @@ import {
   useFindingsQuery,
   useReviewSummaryQuery,
 } from '../api/reviews'
-import { useCurrentDecisionsQuery, useHumanReviewQuery } from '../api/workflow'
+import {
+  isWorkflowConflictError,
+  useCurrentDecisionsQuery,
+  useFinalizeReview,
+  useHumanReviewQuery,
+  workflowErrorMessage,
+} from '../api/workflow'
 import { useSemanticsQuery } from '../api/semantics'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
 import { buildRegionLabelMap, TAXONOMY_CONCEPTS } from '../lib/contractSemantics'
 import { coverageLimitations } from '../lib/reviews'
 import { subtreeNodes } from '../lib/documentTree'
+import { FinalizationPanel } from '../components/review/FinalizationPanel'
 import { FindingDetailPane } from '../components/review/FindingDetailPane'
 import { FindingsPanel } from '../components/review/FindingsPanel'
 import { HumanReviewProgress } from '../components/review/HumanReviewProgress'
@@ -71,6 +78,12 @@ export function ReviewWorkspacePage() {
   const humanReviewQuery = useHumanReviewQuery(reviewId, analysisCompleted)
   const humanReview = humanReviewQuery.data ?? null
   const isFinalized = humanReview?.status === 'COMPLETED'
+  const finalizeMutation = useFinalizeReview(reviewId)
+  const finalizeError = finalizeMutation.isError
+    ? isWorkflowConflictError(finalizeMutation.error)
+      ? 'The review cannot be finalized yet. The blockers shown under Human review are current.'
+      : workflowErrorMessage(finalizeMutation.error)
+    : null
   const decisionsByFindingId = useMemo(
     () =>
       new Map((decisionsQuery.data?.items ?? []).map((decision) => [decision.findingId, decision])),
@@ -200,12 +213,20 @@ export function ReviewWorkspacePage() {
             </button>
           </p>
         ) : humanReview ? (
-          <HumanReviewProgress
-            review={humanReview}
-            findings={findingsQuery.data?.items ?? []}
-            regionLabels={regionLabels}
-            onSelectFinding={selectFinding}
-          />
+          <>
+            <HumanReviewProgress
+              review={humanReview}
+              findings={findingsQuery.data?.items ?? []}
+              regionLabels={regionLabels}
+              onSelectFinding={selectFinding}
+            />
+            <FinalizationPanel
+              review={humanReview}
+              isFinalizing={finalizeMutation.isPending}
+              finalizeError={finalizeError}
+              onFinalize={() => finalizeMutation.mutate()}
+            />
+          </>
         ) : null
       ) : null}
       <div className="review-split">
