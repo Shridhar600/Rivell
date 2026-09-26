@@ -389,6 +389,35 @@ class RedlineExecutionIT {
      * inputs, a later semantics correction must not invalidate it. Idempotency and the integrity of
      * an already-verified artifact both win over a fresh drift check.
      */
+    /**
+     * M10: a storage failure while writing the verified artifact surfaced as an untyped 500 with no
+     * error envelope, because the failure was wrapped in a plain IllegalStateException that no
+     * handler mapped. The client learned nothing about whether the review was safe to retry.
+     */
+    @Test
+    void artifactStorageFailureIsReportedWithTheStandardErrorEnvelope() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var organizationId = organizationId();
+
+        // A real misconfiguration: a file where the organisation's redline directory must be.
+        Files.createDirectories(Path.of(STORAGE_ROOT, organizationId.toString()));
+        Files.createFile(Path.of(STORAGE_ROOT, organizationId.toString(), "redline"));
+
+        var result = mockMvc.perform(post("/api/reviews/{id}/redline", reviewId))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("503"))
+                .andExpect(jsonPath("$.title").value("Document storage unavailable"))
+                .andReturn();
+        assertThat(result.getResponse().getContentType()).contains("application/json");
+
+        // No execution row and no artifact may be recorded for a store that never happened.
+        assertThat(countExecutions(reviewId)).isZero();
+        assertThat(countArtifacts(reviewId)).isZero();
+    }
+
     @Test
     void semanticsDriftAfterAVerifiedExecutionKeepsTheCanonicalArtifact()
             throws Exception {

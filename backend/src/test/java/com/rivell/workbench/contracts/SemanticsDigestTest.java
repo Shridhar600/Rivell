@@ -49,6 +49,6 @@ class SemanticsDigestTest {
                         PaperSource.THIRD_PARTY, Jurisdiction.US, null),
                 List.of(), List.of(), List.of(), List.of(), List.of(clause), List.of(),
                 QualityReasons.of(List.of()),
-                new Observations(1, 0, 0, 0, 0, false, false), List.of());
+                new Observations(1, 0, 0, 0, 0, false, false), List.of(), null);
     }
 }

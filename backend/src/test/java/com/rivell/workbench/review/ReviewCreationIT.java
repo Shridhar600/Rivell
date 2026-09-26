@@ -461,10 +461,13 @@ class ReviewCreationIT {
 
     private void updateEnrichmentStatus(UUID versionId, UUID organizationId, String status) {
         jdbcClient.sql("""
-                update contract_semantics set enrichment_status = :status
+                update contract_semantics set enrichment_status = :status,
+                    enrichment_failure_reason = :reason
                 where contract_version_id = :versionId and organization_id = :organizationId
                 """)
                 .param("status", status)
+                // M10: FAILED is schema-coupled to a structured reason, exactly as the service does.
+                .param("reason", "FAILED".equals(status) ? "INTERNAL" : null)
                 .param("versionId", versionId)
                 .param("organizationId", organizationId)
                 .update();

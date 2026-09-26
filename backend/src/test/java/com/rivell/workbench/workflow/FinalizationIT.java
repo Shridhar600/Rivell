@@ -303,12 +303,20 @@ class FinalizationIT {
                 corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
 
         // A human corrects a concept after the review froze: the review's analysis environment no
-        // longer matches the live semantics, so every check degrades and produces no signal.
+        // longer matches the live semantics, so every check degrades and produces no signal. The
+        // target is a clause that actually carries a concept, and the replacement is a different
+        // one, so the effective classification genuinely changes.
         var clause = enrichmentService.getSemantics(corpus.contract().contractId(), 1)
-                .clauses().get(0);
+                .clauses().stream()
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no classified clause to correct"));
+        var replacement = clause.effectivePrimaryConcept().orElseThrow()
+                == com.rivell.workbench.contracts.LegalConcept.GOVERNING_LAW
+                        ? "LIMITATION_OF_LIABILITY" : "GOVERNING_LAW";
         enrichmentService.correctClause(corpus.contract().contractId(), 1, clause.id(),
                 new com.rivell.workbench.contracts.FactCorrection(
-                        "GOVERNING_LAW", java.util.Map.of(), UUID.randomUUID()));
+                        replacement, java.util.Map.of(), UUID.randomUUID()));
 
         var run = analysisService.analyze(organizationId, review.id());
 

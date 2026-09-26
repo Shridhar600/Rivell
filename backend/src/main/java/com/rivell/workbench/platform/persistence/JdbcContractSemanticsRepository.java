@@ -110,7 +110,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 com.rivell.workbench.contracts.EnrichmentStatus.ENRICHING,
                 com.rivell.workbench.contracts.ContractSemantics.PIPELINE_VERSION,
                 profile, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                com.rivell.workbench.contracts.QualityReasons.NONE, null, List.of()));
+                com.rivell.workbench.contracts.QualityReasons.NONE, null, List.of(), null));
         return true;
     }
 
@@ -141,7 +141,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     set enrichment_status = :status, pipeline_version = :pipelineVersion,
                         review_profile = cast(:profile as jsonb), quality = cast(:quality as jsonb),
                         warnings = cast(:warnings as jsonb),
-                        observations = cast(:observations as jsonb), updated_at = now()
+                        observations = cast(:observations as jsonb),
+                        enrichment_failure_reason = :failureReason, updated_at = now()
                     where contract_version_id = :versionId and organization_id = :organizationId
                     """)
                     .param("status", semantics.enrichmentStatus().name())
@@ -150,6 +151,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     .param("quality", toJson(quality(semantics.quality())))
                     .param("warnings", toJson(semantics.warnings()))
                     .param("observations", toJson(observations(semantics.observations())))
+                    .param("failureReason", reasonName(semantics.failureReason()))
                     .param("versionId", semantics.contractVersionId())
                     .param("organizationId", semantics.organizationId())
                     .update();
@@ -158,11 +160,11 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     insert into contract_semantics
                       (id, contract_version_id, organization_id, enrichment_status,
                        pipeline_version, review_profile, quality, warnings, observations,
-                       created_at, updated_at)
+                       enrichment_failure_reason, created_at, updated_at)
                     values (:id, :versionId, :organizationId, :status, :pipelineVersion,
                             cast(:profile as jsonb), cast(:quality as jsonb),
                             cast(:warnings as jsonb), cast(:observations as jsonb),
-                            :createdAt, now())
+                            :failureReason, :createdAt, now())
                     """)
                     .param("id", semantics.id())
                     .param("versionId", semantics.contractVersionId())
@@ -173,6 +175,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     .param("quality", toJson(quality(semantics.quality())))
                     .param("warnings", toJson(semantics.warnings()))
                     .param("observations", toJson(observations(semantics.observations())))
+                    .param("failureReason", reasonName(semantics.failureReason()))
                     .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
                     .update();
         }
@@ -375,7 +378,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
     public Optional<ContractSemantics> find(UUID contractVersionId, UUID organizationId) {
         var header = jdbcClient.sql("""
                 select id, enrichment_status, pipeline_version, review_profile, quality,
-                       observations, warnings
+                       observations, warnings, enrichment_failure_reason
                 from contract_semantics
                 where contract_version_id = :versionId and organization_id = :organizationId
                 """)
@@ -388,7 +391,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                         parseProfile(rs.getString("review_profile")),
                         parseQuality(rs.getString("quality")),
                         parseObservations(rs.getString("observations")),
-                        readStrings(rs.getString("warnings"))))
+                        readStrings(rs.getString("warnings")),
+                        parseReason(rs.getString("enrichment_failure_reason"))))
                 .optional();
         if (header.isEmpty()) {
             return Optional.empty();
@@ -536,7 +540,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         return Optional.of(new ContractSemantics(semanticsId, versionId, organizationId,
                 headerValue.status(), headerValue.pipelineVersion(), headerValue.profile(),
                 metadata, parties, definedTerms, references, clauses, relationships,
-                headerValue.quality(), headerValue.observations(), headerValue.warnings()));
+                headerValue.quality(), headerValue.observations(), headerValue.warnings(),
+                headerValue.failureReason()));
     }
 
     @Override
@@ -574,10 +579,22 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 .update() == 1;
     }
 
+    private static String reasonName(
+            com.rivell.workbench.contracts.EnrichmentFailureReason reason) {
+        return reason == null ? null : reason.name();
+    }
+
+    private static com.rivell.workbench.contracts.EnrichmentFailureReason parseReason(
+            String value) {
+        return value == null ? null
+                : com.rivell.workbench.contracts.EnrichmentFailureReason.valueOf(value);
+    }
+
     private record SemanticsHeader(
             UUID id, EnrichmentStatus status, String pipelineVersion,
             ReviewProfile profile, QualityReasons quality, Observations observations,
-            List<String> warnings) {
+            List<String> warnings,
+            com.rivell.workbench.contracts.EnrichmentFailureReason failureReason) {
     }
 
     private record MetadataRow(

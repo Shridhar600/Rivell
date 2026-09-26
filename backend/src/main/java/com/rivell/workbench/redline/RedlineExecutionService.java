@@ -410,8 +410,9 @@ public class RedlineExecutionService {
     private void storeArtifact(String storageKey, byte[] bytes) {
         try {
             documentStorage.store(new StorageKey(storageKey), new ByteArrayInputStream(bytes));
-        } catch (IOException e) {
-            throw new IllegalStateException("The redline artifact could not be stored", e);
+        } catch (IOException | RuntimeException e) {
+            throw new RedlineArtifactStoreException(
+                    "The verified redline artifact could not be stored.", e);
         }
     }
 

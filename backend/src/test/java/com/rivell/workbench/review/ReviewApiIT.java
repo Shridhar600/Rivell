@@ -811,10 +811,15 @@ class ReviewApiIT {
     }
 
     private void updateEnrichmentStatus(UUID versionId, String status) {
+        // M10: a FAILED enrichment must carry its structured reason (schema-enforced), so the
+        // direct-state helper supplies the same coupling the service does.
+        var reason = "FAILED".equals(status) ? "'INTERNAL'" : "null";
         jdbcClient.sql("""
-                update contract_semantics set enrichment_status = :status
+                update contract_semantics set enrichment_status = :status,
+                    enrichment_failure_reason = :reason
                 where contract_version_id = :versionId
                 """)
+                .param("reason", "FAILED".equals(status) ? "INTERNAL" : null)
                 .param("status", status)
                 .param("versionId", versionId)
                 .update();
