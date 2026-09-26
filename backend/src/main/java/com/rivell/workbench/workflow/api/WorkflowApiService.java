@@ -58,7 +58,7 @@ public class WorkflowApiService {
     public DecisionListResponse currentDecisions(UUID reviewId, Integer limit) {
         var organizationId = requireRead();
         var bounded = boundedLimit(limit);
-        var decisions = humanReviewService.currentDecisions(organizationId, reviewId);
+        var decisions = humanReviewService.currentDecisions(organizationId, reviewId, bounded);
         var truncated = decisions.size() > bounded;
         return new DecisionListResponse(decisions.stream().limit(bounded)
                 .map(WorkflowApiService::toView).toList(), truncated);
@@ -104,8 +104,7 @@ public class WorkflowApiService {
 
     public ApprovedChangeSetView approvedChangeSet(UUID reviewId) {
         var organizationId = requireRead();
-        var state = humanReviewService.state(organizationId, reviewId);
-        return state.changeSet()
+        return humanReviewService.changeSet(organizationId, reviewId)
                 .map(WorkflowApiService::toView)
                 .orElseThrow(() -> new ApprovedChangeSetNotFoundException(reviewId));
     }

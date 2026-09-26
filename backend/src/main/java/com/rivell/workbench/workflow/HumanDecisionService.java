@@ -86,6 +86,10 @@ public class HumanDecisionService {
             if (!reviewRepository.lock(organizationId, reviewId)) {
                 throw new ReviewNotFoundException(reviewId);
             }
+            var currentRun = analysisRepository.findLatestCompletedRun(organizationId, reviewId);
+            if (currentRun.isEmpty() || !currentRun.get().id().equals(activeRun.id())) {
+                throw new AnalysisNotCompleteException(reviewId);
+            }
             if (command.clientRequestId() != null) {
                 var replay = decisionRepository.findByClientRequestId(
                         organizationId, findingId, command.clientRequestId());

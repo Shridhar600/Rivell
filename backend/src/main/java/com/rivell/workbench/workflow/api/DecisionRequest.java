@@ -5,6 +5,8 @@ import java.util.UUID;
 import com.rivell.workbench.redline.ChangeActionType;
 import com.rivell.workbench.workflow.DecisionAction;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * Decision write body. {@code expectedVersion} is required (0 when no decision exists);
  * {@code clientRequestId} optionally makes a retried submission idempotent. ACCEPT
@@ -13,9 +15,9 @@ import com.rivell.workbench.workflow.DecisionAction;
  * REJECT/ESCALATE require a comment.
  */
 public record DecisionRequest(
-        Integer expectedVersion,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Integer expectedVersion,
         UUID clientRequestId,
-        DecisionAction action,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) DecisionAction action,
         ChangeActionType approvedAction,
         String approvedLanguage,
         String comment) {

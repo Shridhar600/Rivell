@@ -1,6 +1,5 @@
 package com.rivell.workbench.workflow;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -9,8 +8,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.rivell.workbench.contracts.ContractQueryService;
-import com.rivell.workbench.contracts.ContractStructure;
-import com.rivell.workbench.contracts.DocumentNodeType;
+import com.rivell.workbench.redline.ApprovedChangeSet;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
 import com.rivell.workbench.review.Finding;
 import com.rivell.workbench.review.FindingRepository;
@@ -63,20 +61,29 @@ public class HumanReviewService {
                         .collect(Collectors.toMap(HumanDecision::findingId,
                                 decision -> decision, (first, second) -> first)))
                 .orElse(Map.of());
-        var headings = headingNodeIds(organizationId, review);
+        var headings = contractQueryService.headingNodeIdsForOrganization(
+                organizationId, review.contractId(), review.contractVersionNumber());
         var assessment = HumanReviewResolver.resolve(findings, decisions,
-                review.status() == ReviewStatus.COMPLETED, changeSet.isPresent(), headings);
+                review.status() == ReviewStatus.COMPLETED && activeRun.isPresent(),
+                changeSet.isPresent(), headings);
         return new HumanReviewState(review, activeRun.map(run -> run.id()).orElse(null),
                 findings, decisions, changeSet, assessment);
     }
 
-    public List<HumanDecision> currentDecisions(UUID organizationId, UUID reviewId) {
+    public List<HumanDecision> currentDecisions(
+            UUID organizationId, UUID reviewId, int limit) {
         var review = reviewRepository.find(organizationId, reviewId)
                 .orElseThrow(() -> new ReviewNotFoundException(reviewId));
         return analysisRepository.findLatestCompletedRun(organizationId, review.id())
                 .map(run -> decisionRepository.findCurrentForRun(
-                        organizationId, reviewId, run.id()))
+                        organizationId, reviewId, run.id(), limit))
                 .orElse(List.of());
+    }
+
+    public Optional<ApprovedChangeSet> changeSet(UUID organizationId, UUID reviewId) {
+        reviewRepository.find(organizationId, reviewId)
+                .orElseThrow(() -> new ReviewNotFoundException(reviewId));
+        return changeSetRepository.findByReview(organizationId, reviewId);
     }
 
     public List<HumanDecision> history(
@@ -93,15 +100,4 @@ public class HumanReviewService {
         return decisionRepository.findHistory(organizationId, reviewId, findingId, limit);
     }
 
-    private Set<UUID> headingNodeIds(UUID organizationId, Review review) {
-        ContractStructure structure = contractQueryService.getStructureForOrganization(
-                organizationId, review.contractId(), review.contractVersionNumber());
-        var ids = new HashSet<UUID>();
-        for (var node : structure.nodes()) {
-            if (node.nodeType() == DocumentNodeType.HEADING) {
-                ids.add(node.id());
-            }
-        }
-        return ids;
-    }
 }

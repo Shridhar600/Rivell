@@ -13,6 +13,13 @@ public interface HumanDecisionRepository {
     /** Current effective decisions for every finding of one analysis run. */
     List<HumanDecision> findCurrentForRun(UUID organizationId, UUID reviewId, UUID runId);
 
+    /**
+     * Bounded current-decision list for one run; implementations read
+     * {@code limit + 1} rows so callers can detect truncation.
+     */
+    List<HumanDecision> findCurrentForRun(
+            UUID organizationId, UUID reviewId, UUID runId, int limit);
+
     /** Revision history newest-first; implementations read {@code limit + 1} rows. */
     List<HumanDecision> findHistory(
             UUID organizationId, UUID reviewId, UUID findingId, int limit);

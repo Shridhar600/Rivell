@@ -321,7 +321,7 @@ public class LiabilityReviewIT {
             return calls.get();
         }
 
-        void reset() {
+        public void reset() {
             calls.set(0);
             failOpenEnded = false;
             openEndedProposed = null;

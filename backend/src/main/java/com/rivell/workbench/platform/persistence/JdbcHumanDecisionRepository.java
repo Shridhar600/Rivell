@@ -64,6 +64,29 @@ class JdbcHumanDecisionRepository implements HumanDecisionRepository {
     }
 
     @Override
+    public List<HumanDecision> findCurrentForRun(
+            UUID organizationId, UUID reviewId, UUID runId, int limit) {
+        return jdbcClient.sql("""
+                select distinct on (finding_id)
+                       id, organization_id, review_id, finding_id, run_id, revision, action,
+                       approved_action, approved_language, language_source,
+                       approved_drafting_evidence_id, comment, actor_id, client_request_id,
+                       decided_at, supersedes_decision_id
+                from human_decision
+                where organization_id = :organizationId and review_id = :reviewId
+                  and run_id = :runId
+                order by finding_id, revision desc
+                limit :limit
+                """)
+                .param("organizationId", organizationId)
+                .param("reviewId", reviewId)
+                .param("runId", runId)
+                .param("limit", limit + 1)
+                .query(this::map)
+                .list();
+    }
+
+    @Override
     public List<HumanDecision> findHistory(
             UUID organizationId, UUID reviewId, UUID findingId, int limit) {
         return jdbcClient.sql(SELECT + """

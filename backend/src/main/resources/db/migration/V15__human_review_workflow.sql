@@ -37,7 +37,12 @@ CREATE TABLE human_decision (
             AND approved_drafting_evidence_id IS NULL)),
     CHECK (action NOT IN ('REJECT', 'ESCALATE')
         OR (comment IS NOT NULL AND length(comment) > 0)),
+    CHECK (approved_action IS DISTINCT FROM 'DELETE'
+        OR (approved_language IS NULL AND language_source IS NULL
+            AND approved_drafting_evidence_id IS NULL)),
     UNIQUE (id, organization_id),
+    UNIQUE (id, finding_id),
+    UNIQUE (id, review_id),
     UNIQUE (finding_id, revision)
 );
 
@@ -139,6 +144,14 @@ ALTER TABLE approved_change
     ADD CONSTRAINT fk_approved_change_decision_org
     FOREIGN KEY (decision_id, organization_id)
     REFERENCES human_decision (id, organization_id);
+ALTER TABLE approved_change
+    ADD CONSTRAINT fk_approved_change_decision_finding
+    FOREIGN KEY (decision_id, finding_id)
+    REFERENCES human_decision (id, finding_id);
+ALTER TABLE approved_change
+    ADD CONSTRAINT fk_approved_change_decision_review
+    FOREIGN KEY (decision_id, review_id)
+    REFERENCES human_decision (id, review_id);
 
 CREATE UNIQUE INDEX uq_approved_change_clause_target
     ON approved_change (change_set_id, target_heading_node_id)

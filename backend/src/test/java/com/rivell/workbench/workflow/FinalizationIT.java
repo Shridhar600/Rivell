@@ -47,6 +47,7 @@ import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.redline.ApprovedChangeSet;
+import com.rivell.workbench.redline.ApprovedChangeSetRepository;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 import com.rivell.workbench.review.Finding;
 import com.rivell.workbench.review.FindingClassification;
@@ -113,6 +114,18 @@ class FinalizationIT {
 
     @Autowired
     ReviewFinalizationService finalizationService;
+
+    @Autowired
+    HumanDecisionService decisionService;
+
+    @Autowired
+    HumanDecisionRepository decisionRepository;
+
+    @Autowired
+    ApprovedChangeSetRepository changeSetRepository;
+
+    @Autowired
+    LiabilityReviewIT.ReviewGenerativeProvider generativeProvider;
 
     @Autowired
     ContractIngestionService contractIngestionService;
@@ -423,6 +436,121 @@ class FinalizationIT {
         assertThat(ids).hasSize(2);
         assertThat(Set.copyOf(ids)).hasSize(1);
         assertThat(countFinalizations(fixture.review().id())).isEqualTo(1);
+    }
+
+    @Test
+    void decideAndFinalizeInterleaveNeverFreezesAStaleRevision() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+        var first = decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "REJECT", "comment": "Initial position."}
+                """).get("data");
+
+        var start = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(2);
+        var decisionOutcome = java.util.Collections.synchronizedList(new ArrayList<String>());
+        var finalizeOutcome = java.util.Collections.synchronizedList(new ArrayList<String>());
+        try {
+            var decideFuture = executor.submit(() -> {
+                try {
+                    start.await(5, TimeUnit.SECONDS);
+                    decisionService.decide(fixture.review().id(), finding.id(),
+                            new DecisionCommand(1, null, DecisionAction.ACCEPT,
+                                    null, null, null));
+                    decisionOutcome.add("ok");
+                } catch (ReviewAlreadyFinalizedException e) {
+                    decisionOutcome.add("finalized");
+                } catch (DecisionConflictException e) {
+                    decisionOutcome.add("conflict");
+                } catch (Throwable t) {
+                    decisionOutcome.add("error:" + t.getClass().getSimpleName());
+                }
+                return null;
+            });
+            var finalizeFuture = executor.submit(() -> {
+                try {
+                    start.await(5, TimeUnit.SECONDS);
+                    finalizationService.finalizeReview(fixture.review().id());
+                    finalizeOutcome.add("ok");
+                } catch (Throwable t) {
+                    finalizeOutcome.add("error:" + t.getClass().getSimpleName());
+                }
+                return null;
+            });
+            start.countDown();
+            decideFuture.get(30, TimeUnit.SECONDS);
+            finalizeFuture.get(30, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(decisionOutcome).hasSize(1);
+        assertThat(finalizeOutcome).hasSize(1);
+        var current = decisionRepository
+                .findCurrent(fixture.review().organizationId(), fixture.review().id(),
+                        finding.id())
+                .orElseThrow();
+        var set = changeSetRepository
+                .findByReview(fixture.review().organizationId(), fixture.review().id());
+        if (finalizeOutcome.contains("ok")) {
+            assertThat(set).isPresent();
+            if (decisionOutcome.contains("ok")) {
+                assertThat(current.revision()).isEqualTo(2);
+                assertThat(set.get().changes()).hasSize(1);
+                assertThat(set.get().changes().get(0).decisionId())
+                        .isEqualTo(current.id());
+            } else {
+                assertThat(decisionOutcome).contains("finalized");
+                assertThat(current.revision()).isEqualTo(1);
+                assertThat(current.id().toString())
+                        .isEqualTo(first.get("id").asText());
+                assertThat(set.get().changes())
+                        .allSatisfy(change -> assertThat(change.decisionId())
+                                .isEqualTo(current.id()));
+            }
+        } else {
+            assertThat(decisionOutcome).contains("ok");
+            assertThat(current.revision()).isEqualTo(2);
+        }
+    }
+
+    @Test
+    void acceptGeneratedLanguageFreezesGenerativeProvenance() throws Exception {
+        generativeProvider.reset();
+        corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var bytes = Files.readAllBytes(
+                Path.of("src/test/resources/fixtures/m7-msa-exotic.docx"));
+        var ingested = contractIngestionService.ingest("m7-msa-exotic.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+        var run = analysisService.analyze(organizationId(), review.id());
+        var finding = findingRepository.findFindings(organizationId(), run.id()).stream()
+                .filter(candidate -> candidate.proposedAction()
+                        == ProposedAction.CONSIDER_GENERATED_LANGUAGE)
+                .findFirst().orElseThrow();
+        assertThat(finding.proposedLanguageSource().name()).isEqualTo("GENERATIVE");
+
+        var decision = decide(review.id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "ACCEPT"}
+                """).get("data");
+        assertThat(decision.get("languageSource").asText()).isEqualTo("GENERATIVE");
+        assertThat(decision.get("approvedLanguage").asText())
+                .isEqualTo(finding.proposedLanguage());
+        assertThat(decision.get("approvedDraftingEvidenceId").isNull()).isTrue();
+
+        var set = finalizeReview(review.id());
+        var change = set.get("changes").get(0);
+        assertThat(change.get("actionType").asText()).isEqualTo("REPLACE");
+        assertThat(change.get("languageSource").asText()).isEqualTo("GENERATIVE");
+        assertThat(change.get("approvedLanguage").asText())
+                .isEqualTo(finding.proposedLanguage());
+        assertThat(change.get("approvedDraftingEvidenceId").isNull()).isTrue();
     }
 
     @Test

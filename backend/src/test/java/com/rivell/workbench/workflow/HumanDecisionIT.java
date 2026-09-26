@@ -470,6 +470,44 @@ class HumanDecisionIT {
     }
 
     @Test
+    void decisionListsAreBoundedAndHistoryTruncationIsTruthful() throws Exception {
+        var contractId = enrichmentReadyNda();
+        var review = reviewService.create(contractId, 1, ReviewPackRegistry.MSA_PACK);
+        var run = analysisService.analyze(organizationId(), review.id());
+        var findings = findingRepository.findFindings(organizationId(), run.id());
+        assertThat(findings.size()).isGreaterThanOrEqualTo(2);
+        for (var finding : findings.subList(0, 2)) {
+            decide(review.id(), finding.id(), """
+                    {"expectedVersion": 0, "action": "REJECT", "comment": "Not applicable."}
+                    """);
+        }
+
+        mockMvc.perform(get("/api/reviews/{id}/decisions", review.id())
+                        .param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.truncated").value(true));
+        mockMvc.perform(get("/api/reviews/{id}/decisions", review.id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.truncated").value(false));
+        mockMvc.perform(get("/api/reviews/{id}/decisions", review.id())
+                        .param("limit", "0"))
+                .andExpect(status().isBadRequest());
+
+        var finding = findings.get(0);
+        decide(review.id(), finding.id(), """
+                {"expectedVersion": 1, "action": "ESCALATE", "comment": "Revisit."}
+                """);
+        mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}/decisions",
+                        review.id(), finding.id()).param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].revision").value(2))
+                .andExpect(jsonPath("$.data.truncated").value(true));
+    }
+
+    @Test
     void decisionRequiresCompletedAnalysis() throws Exception {
         var corpus = corpusBuilder.buildMainCorpus(organizationId());
         var review = reviewService.create(

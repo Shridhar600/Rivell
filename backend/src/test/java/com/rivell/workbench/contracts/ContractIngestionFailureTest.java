@@ -99,6 +99,11 @@ class ContractIngestionFailureTest {
             }
 
             @Override
+            public List<UUID> findHeadingNodeIds(UUID versionId) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public ContractStructure loadStructure(UUID versionId) {
                 throw new UnsupportedOperationException();
             }

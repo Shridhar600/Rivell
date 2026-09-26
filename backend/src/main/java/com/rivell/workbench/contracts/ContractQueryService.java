@@ -73,6 +73,13 @@ public class ContractQueryService {
         return repository.loadStructure(summary.versionId());
     }
 
+    /** System-level heading-id read: the cheap subset readiness validation needs. */
+    public java.util.Set<UUID> headingNodeIdsForOrganization(
+            UUID organizationId, UUID contractId, int versionNumber) {
+        var summary = getVersionSummaryForOrganization(organizationId, contractId, versionNumber);
+        return java.util.Set.copyOf(repository.findHeadingNodeIds(summary.versionId()));
+    }
+
     public ContractSource getSourceForDownload(UUID contractId, int versionNumber) {
         var summary = getVersionSummary(contractId, versionNumber);
         return repository
