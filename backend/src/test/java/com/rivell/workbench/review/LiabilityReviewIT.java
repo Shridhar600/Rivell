@@ -53,7 +53,7 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 @SpringBootTest
 @Testcontainers
-class LiabilityReviewIT {
+public class LiabilityReviewIT {
 
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName
             .parse("pgvector/pgvector:0.8.6-pg17-trixie")
@@ -75,7 +75,7 @@ class LiabilityReviewIT {
     }
 
     @TestConfiguration(proxyBeanMethods = false)
-    static class FakeIntelligenceConfiguration {
+    public static class FakeIntelligenceConfiguration {
 
         @Bean
         @Primary
@@ -107,7 +107,7 @@ class LiabilityReviewIT {
     }
 
     @TestConfiguration(proxyBeanMethods = false)
-    static class CorpusConfiguration {
+    public static class CorpusConfiguration {
 
         @Bean
         M6EvidenceCorpus m6EvidenceCorpus(
@@ -123,7 +123,7 @@ class LiabilityReviewIT {
     }
 
     @TestConfiguration(proxyBeanMethods = false)
-    static class MutableIdentityConfiguration {
+    public static class MutableIdentityConfiguration {
 
         @Bean
         @Primary
@@ -132,12 +132,12 @@ class LiabilityReviewIT {
         }
     }
 
-    static final class MutableIdentity implements IdentityProvider {
+    public static final class MutableIdentity implements IdentityProvider {
 
         volatile UserIdentity current = new UserIdentity(
                 UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN"));
 
-        void use(UserIdentity identity) {
+        public void use(UserIdentity identity) {
             current = identity;
         }
 

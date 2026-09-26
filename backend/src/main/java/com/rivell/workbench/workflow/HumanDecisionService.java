@@ -1,0 +1,135 @@
+package com.rivell.workbench.workflow;
+
+import java.time.Clock;
+import java.util.UUID;
+
+import org.springframework.transaction.support.TransactionTemplate;
+
+import com.rivell.workbench.organization.AuthorizationService;
+import com.rivell.workbench.organization.IdentityProvider;
+import com.rivell.workbench.organization.Permissions;
+import com.rivell.workbench.redline.ApprovedChangeSetRepository;
+import com.rivell.workbench.review.FindingNotFoundException;
+import com.rivell.workbench.review.FindingRepository;
+import com.rivell.workbench.review.ReviewAnalysisRepository;
+import com.rivell.workbench.review.ReviewNotFoundException;
+import com.rivell.workbench.review.ReviewRepository;
+import com.rivell.workbench.review.ReviewStatus;
+
+/**
+ * Human decision writes: authorization, target validation against the active completed
+ * run, typed action validation, optimistic concurrency, and idempotent replay. Revisions
+ * are append-only; no M7 machine state is touched.
+ */
+public class HumanDecisionService {
+
+    private final IdentityProvider identityProvider;
+    private final AuthorizationService authorizationService;
+    private final ReviewRepository reviewRepository;
+    private final ReviewAnalysisRepository analysisRepository;
+    private final FindingRepository findingRepository;
+    private final HumanDecisionRepository decisionRepository;
+    private final ApprovedChangeSetRepository changeSetRepository;
+    private final TransactionTemplate transactionTemplate;
+    private final Clock clock;
+
+    public HumanDecisionService(
+            IdentityProvider identityProvider,
+            AuthorizationService authorizationService,
+            ReviewRepository reviewRepository,
+            ReviewAnalysisRepository analysisRepository,
+            FindingRepository findingRepository,
+            HumanDecisionRepository decisionRepository,
+            ApprovedChangeSetRepository changeSetRepository,
+            TransactionTemplate transactionTemplate,
+            Clock clock) {
+        this.identityProvider = identityProvider;
+        this.authorizationService = authorizationService;
+        this.reviewRepository = reviewRepository;
+        this.analysisRepository = analysisRepository;
+        this.findingRepository = findingRepository;
+        this.decisionRepository = decisionRepository;
+        this.changeSetRepository = changeSetRepository;
+        this.transactionTemplate = transactionTemplate;
+        this.clock = clock;
+    }
+
+    public HumanDecision decide(UUID reviewId, UUID findingId, DecisionCommand command) {
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.REVIEW_DECIDE)) {
+            throw new UnauthorizedWorkflowAccessException(identity.userId());
+        }
+        var organizationId = identity.organizationId();
+        var review = reviewRepository.find(organizationId, reviewId)
+                .orElseThrow(() -> new ReviewNotFoundException(reviewId));
+
+        if (command.clientRequestId() != null) {
+            var replay = decisionRepository.findByClientRequestId(
+                    organizationId, findingId, command.clientRequestId());
+            if (replay.isPresent()) {
+                if (!replay.get().reviewId().equals(reviewId)) {
+                    throw new FindingNotFoundException(findingId);
+                }
+                return replay.get();
+            }
+        }
+        if (changeSetRepository.findByReview(organizationId, reviewId).isPresent()) {
+            throw new ReviewAlreadyFinalizedException(reviewId);
+        }
+
+        requireExpectedVersion(command);
+        if (review.status() != ReviewStatus.COMPLETED) {
+            throw new AnalysisNotCompleteException(reviewId);
+        }
+        var activeRun = analysisRepository.findLatestCompletedRun(organizationId, reviewId)
+                .orElseThrow(() -> new AnalysisNotCompleteException(reviewId));
+        var finding = findingRepository
+                .findFinding(organizationId, reviewId, activeRun.id(), findingId)
+                .orElseThrow(() -> new FindingNotFoundException(findingId));
+
+        DecisionRules.validateRequest(command.action(), command.approvedAction(),
+                command.approvedLanguage(), command.comment());
+        var decisionId = UUID.randomUUID();
+        var planned = command.action() == DecisionAction.ACCEPT
+                || command.action() == DecisionAction.EDIT
+                        ? DecisionRules.plan(finding, command.action(),
+                                command.approvedAction(), command.approvedLanguage(), decisionId)
+                        : null;
+
+        return transactionTemplate.execute(status -> {
+            if (command.clientRequestId() != null) {
+                var replay = decisionRepository.findByClientRequestId(
+                        organizationId, findingId, command.clientRequestId());
+                if (replay.isPresent()) {
+                    return replay.get();
+                }
+            }
+            var current = decisionRepository.findCurrent(organizationId, reviewId, findingId);
+            var currentRevision = current.map(HumanDecision::revision).orElse(0);
+            if (command.expectedVersion() != currentRevision) {
+                throw new DecisionConflictException(findingId, command.expectedVersion(),
+                        currentRevision);
+            }
+            var decision = new HumanDecision(decisionId, organizationId, reviewId, findingId,
+                    activeRun.id(), currentRevision + 1, command.action(),
+                    planned == null ? null : planned.actionType(),
+                    planned == null ? null : planned.approvedLanguage(),
+                    planned == null ? null : planned.languageSource(),
+                    planned == null ? null : planned.approvedDraftingEvidenceId(),
+                    command.comment(), identity.userId(), clock.instant(),
+                    command.clientRequestId(), current.map(HumanDecision::id).orElse(null));
+            if (!decisionRepository.insert(decision)) {
+                throw new DecisionConflictException(findingId, command.expectedVersion(),
+                        currentRevision);
+            }
+            return decision;
+        });
+    }
+
+    private static void requireExpectedVersion(DecisionCommand command) {
+        if (command.expectedVersion() == null || command.expectedVersion() < 0) {
+            throw new InvalidDecisionException(
+                    "expectedVersion is required and must be >= 0 (0 when no decision exists)");
+        }
+    }
+}

@@ -66,6 +66,13 @@ public class ContractQueryService {
                 .orElseThrow(() -> new ContractVersionNotFoundException(contractId, versionNumber));
     }
 
+    /** System-level structure read for flows whose organization is already resolved. */
+    public ContractStructure getStructureForOrganization(
+            UUID organizationId, UUID contractId, int versionNumber) {
+        var summary = getVersionSummaryForOrganization(organizationId, contractId, versionNumber);
+        return repository.loadStructure(summary.versionId());
+    }
+
     public ContractSource getSourceForDownload(UUID contractId, int versionNumber) {
         var summary = getVersionSummary(contractId, versionNumber);
         return repository
