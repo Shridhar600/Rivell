@@ -242,6 +242,9 @@ export function ReviewWorkspacePage() {
           humanReview={humanReview}
           isFinalized={isFinalized}
           showDecisionControls={analysisCompleted}
+          canDecide={analysisCompleted && humanReview !== null}
+          analysisComplete={analysisCompleted}
+          decisionsTruncated={decisionsQuery.data?.truncated ?? false}
           findingId={canReadFindings ? selectedFindingId : null}
           isPending={Boolean(selectedFindingId) && findingQuery.isPending}
           isError={findingQuery.isError}

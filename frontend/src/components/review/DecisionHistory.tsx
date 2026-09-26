@@ -20,7 +20,10 @@ export function DecisionHistory({
         <p className="panel__hint">Loading decision history…</p>
       ) : query.isError ? (
         <p className="panel__hint" role="alert">
-          Decision history could not be loaded.
+          Decision history could not be loaded.{' '}
+          <button type="button" className="link-button" onClick={() => void query.refetch()}>
+            Try again
+          </button>
         </p>
       ) : query.data.items.length === 0 ? (
         <p className="panel__hint">No decision revisions recorded.</p>

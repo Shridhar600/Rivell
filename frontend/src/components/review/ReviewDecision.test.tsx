@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
@@ -31,7 +31,10 @@ function renderControls(
     ...overrides.api,
   })
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false, retryDelay: 0 },
+      mutations: { retry: false },
+    },
   })
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -43,10 +46,25 @@ function renderControls(
       currentDecision={overrides.currentDecision ?? null}
       humanReview={overrides.humanReview ?? fixtureHumanReview()}
       isFinalized={overrides.isFinalized ?? false}
+      canDecide
+      analysisComplete
+      decisionsTruncated={false}
     />,
     { wrapper },
   )
   return { api, view }
+}
+
+function wrapperFor() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, retryDelay: 0 },
+      mutations: { retry: false },
+    },
+  })
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  )
 }
 
 afterEach(() => {
@@ -67,7 +85,9 @@ describe('human decision controls — ACCEPT', () => {
     const body = put?.body as Record<string, unknown>
     expect(body.action).toBe('ACCEPT')
     expect(body.expectedVersion).toBe(0)
-    expect(typeof body.clientRequestId).toBe('string')
+    expect(body.clientRequestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    )
     expect(body).not.toHaveProperty('approvedAction')
     expect(body).not.toHaveProperty('approvedLanguage')
     expect(await screen.findByRole('status')).toHaveTextContent('Decision recorded')
@@ -103,7 +123,7 @@ describe('human decision controls — EDIT', () => {
     expect(await screen.findByText(/Enter the final approved language/)).toBeInTheDocument()
     expect(api.requests.filter((request) => request.method === 'PUT')).toHaveLength(0)
     await user.type(
-      screen.getByLabelText('Final approved language'),
+      screen.getByLabelText(/Final approved language/),
       'Human-authored liability cap text.',
     )
     await user.click(screen.getByRole('button', { name: 'Edit change' }))
@@ -122,9 +142,9 @@ describe('human decision controls — EDIT', () => {
     renderControls()
     await user.click(screen.getByRole('button', { name: 'Record decision' }))
     await user.click(screen.getByRole('radio', { name: 'Edit change' }))
-    expect(screen.getByLabelText('Final approved language')).toHaveValue('')
+    expect(screen.getByLabelText(/Final approved language/)).toHaveValue('')
     await user.click(screen.getByRole('button', { name: 'Copy machine-proposed wording' }))
-    expect(screen.getByLabelText('Final approved language')).toHaveValue(
+    expect(screen.getByLabelText(/Final approved language/)).toHaveValue(
       'Liability is capped at two times the fees paid.',
     )
   })
@@ -151,7 +171,7 @@ describe('human decision controls — EDIT', () => {
     await user.click(screen.getByRole('button', { name: 'Record decision' }))
     await user.click(screen.getByRole('radio', { name: 'Edit change' }))
     expect(screen.getByRole('radio', { name: 'Insert provision' })).toBeChecked()
-    await user.type(screen.getByLabelText('Final approved language'), 'Inserted text.')
+    await user.type(screen.getByLabelText(/Final approved language/), 'Inserted text.')
     await user.click(screen.getByRole('button', { name: 'Edit change' }))
     const body = api.requests.find((request) => request.method === 'PUT')?.body as Record<
       string,
@@ -214,7 +234,7 @@ describe('human decision controls — current decision and revision', () => {
     expect(screen.getByText('Signed-in reviewer')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Change decision' }))
     await user.click(screen.getByRole('radio', { name: 'Edit change' }))
-    await user.type(screen.getByLabelText('Final approved language'), 'Revised human text.')
+    await user.type(screen.getByLabelText(/Final approved language/), 'Revised human text.')
     await user.click(screen.getByRole('button', { name: 'Edit change' }))
     const body = api.requests.find((request) => request.method === 'PUT')?.body as Record<
       string,
@@ -268,6 +288,25 @@ describe('human decision controls — current decision and revision', () => {
   })
 })
 
+describe('decision surface honesty', () => {
+  it('discloses a truncated decision set instead of implying no decision exists', () => {
+    render(
+      <HumanDecisionControls
+        reviewId="r-1"
+        finding={fixtureAcceptableFindingDetail}
+        currentDecision={null}
+        humanReview={fixtureHumanReview()}
+        isFinalized={false}
+        canDecide
+        analysisComplete
+        decisionsTruncated
+      />,
+      { wrapper: wrapperFor() },
+    )
+    expect(screen.getByText(/may\s+not be shown here/)).toBeInTheDocument()
+  })
+})
+
 describe('human decision history', () => {
   it('loads revisions only when the disclosure is opened', async () => {
     const user = userEvent.setup()
@@ -297,5 +336,27 @@ describe('human decision history', () => {
     expect(items[0]).toHaveTextContent('Edited')
     expect(items[1]).toHaveTextContent('Revision 1')
     expect(items[1]).toHaveTextContent('Accepted')
+  })
+
+  it('offers a retry when history fails that refetches', async () => {
+    const user = userEvent.setup()
+    const { api } = renderControls({
+      currentDecision: fixtureDecision(),
+      api: { decisionHistoryStatus: 500 },
+    })
+    await user.click(screen.getByText('Decision history'))
+    expect(
+      await screen.findByText(/Decision history could not be loaded/),
+    ).toBeInTheDocument()
+    const beforeRetry = api.requests.filter((request) =>
+      /\/findings\/f-1\/decisions/.test(request.url),
+    ).length
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() =>
+      expect(
+        api.requests.filter((request) => /\/findings\/f-1\/decisions/.test(request.url))
+          .length,
+      ).toBeGreaterThan(beforeRetry),
+    )
   })
 })

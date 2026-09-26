@@ -77,7 +77,10 @@ export function HumanReviewProgress({ review, findings, regionLabels, onSelectFi
           <ul>
             {review.blockers.map((blocker) => (
               <li key={blocker.code}>
-                <p>{blocker.message || blockerLabel(blocker.code)}</p>
+                <p>{blockerLabel(blocker.code)}</p>
+                {blocker.message && blocker.message !== blockerLabel(blocker.code) ? (
+                  <p className="panel__hint">{blocker.message}</p>
+                ) : null}
                 {blocker.findingIds.length > 0 ? (
                   <ul className="human-review__blocker-findings">
                     {blocker.findingIds.slice(0, MAX_BLOCKER_FINDING_LINKS).map((findingId) => {
@@ -96,6 +99,12 @@ export function HumanReviewProgress({ review, findings, regionLabels, onSelectFi
                         </li>
                       )
                     })}
+                    {blocker.findingIds.length > MAX_BLOCKER_FINDING_LINKS ? (
+                      <li className="panel__hint">
+                        and {blocker.findingIds.length - MAX_BLOCKER_FINDING_LINKS} more affected
+                        finding(s)
+                      </li>
+                    ) : null}
                   </ul>
                 ) : null}
               </li>

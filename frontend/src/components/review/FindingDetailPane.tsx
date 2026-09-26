@@ -50,6 +50,9 @@ type Props = {
   humanReview: HumanReview | null
   isFinalized: boolean
   showDecisionControls: boolean
+  canDecide: boolean
+  analysisComplete: boolean
+  decisionsTruncated: boolean
 }
 
 function ClaimEvidenceRefs({
@@ -95,6 +98,9 @@ export function FindingDetailView({
   humanReview,
   isFinalized,
   showDecisionControls,
+  canDecide,
+  analysisComplete,
+  decisionsTruncated,
 }: Props) {
   const headingRef = useHeadingFocus<HTMLHeadingElement>(finding.id)
   const why = whyClaims(finding.claims)
@@ -307,6 +313,9 @@ export function FindingDetailView({
           currentDecision={currentDecision}
           humanReview={humanReview}
           isFinalized={isFinalized}
+          canDecide={canDecide}
+          analysisComplete={analysisComplete}
+          decisionsTruncated={decisionsTruncated}
         />
       ) : null}
 
@@ -354,6 +363,9 @@ export function FindingDetailPane({
   humanReview,
   isFinalized,
   showDecisionControls,
+  canDecide,
+  analysisComplete,
+  decisionsTruncated,
   findingId,
   isPending,
   isError,
@@ -373,6 +385,9 @@ export function FindingDetailPane({
   humanReview: HumanReview | null
   isFinalized: boolean
   showDecisionControls: boolean
+  canDecide: boolean
+  analysisComplete: boolean
+  decisionsTruncated: boolean
   findingId: string | null
   isPending: boolean
   isError: boolean
@@ -408,6 +423,9 @@ export function FindingDetailPane({
       humanReview={humanReview}
       isFinalized={isFinalized}
       showDecisionControls={showDecisionControls}
+      canDecide={canDecide}
+      analysisComplete={analysisComplete}
+      decisionsTruncated={decisionsTruncated}
     />
   )
 }

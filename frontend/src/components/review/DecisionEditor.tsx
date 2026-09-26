@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { FindingDetail } from '../../api/reviews'
 import type { ChangeActionType, DecisionAction, HumanDecision } from '../../api/workflow'
@@ -18,7 +18,7 @@ export type DecisionSubmission = {
   approvedAction?: ChangeActionType
   approvedLanguage?: string
   comment?: string
-  clientRequestId: string
+  clientRequestId?: string
 }
 
 type Props = {
@@ -40,10 +40,17 @@ function acceptedActionLabel(finding: FindingDetail): string | null {
   return null
 }
 
-function newRequestId(): string {
+function newRequestId(): string | null {
   const cryptoApi = globalThis.crypto
   if (cryptoApi && typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID()
-  return `req-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`
+  if (cryptoApi && typeof cryptoApi.getRandomValues === 'function') {
+    const bytes = cryptoApi.getRandomValues(new Uint8Array(16))
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+  return null
 }
 
 export function DecisionEditor({
@@ -55,9 +62,8 @@ export function DecisionEditor({
   onCancel,
 }: Props) {
   const eligibility = acceptEligibility(finding)
-  const [action, setAction] = useState<DecisionAction>(
-    eligibility.eligible ? 'ACCEPT' : 'EDIT',
-  )
+  const initialAction: DecisionAction = eligibility.eligible ? 'ACCEPT' : 'EDIT'
+  const [action, setAction] = useState<DecisionAction>(initialAction)
   const [approvedAction, setApprovedAction] = useState<ChangeActionType>(
     defaultEditAction(finding.subjectKind),
   )
@@ -70,9 +76,15 @@ export function DecisionEditor({
   const [errors, setErrors] = useState<{ comment?: string; approvedLanguage?: string }>({})
   const commentRef = useRef<HTMLTextAreaElement>(null)
   const languageRef = useRef<HTMLTextAreaElement>(null)
+  const initialRadioRef = useRef<HTMLInputElement>(null)
   const requestIdRef = useRef<{ signature: string; id: string } | null>(null)
 
+  useEffect(() => {
+    initialRadioRef.current?.focus()
+  }, [])
+
   const commentRequired = action === 'REJECT' || action === 'ESCALATE'
+  const editableActions = editActionsForSubject(finding.subjectKind)
   const showLanguage =
     action === 'EDIT' && approvedAction !== undefined && editLanguageRequired(approvedAction)
   const acceptedAction = action === 'ACCEPT' ? acceptedActionLabel(finding) : null
@@ -81,12 +93,13 @@ export function DecisionEditor({
     return [action, approvedAction, language, comment].join('\u0000')
   }
 
-  function requestId(): string {
+  function requestId(): string | undefined {
     const currentSignature = signature()
     if (!requestIdRef.current || requestIdRef.current.signature !== currentSignature) {
-      requestIdRef.current = { signature: currentSignature, id: newRequestId() }
+      const id = newRequestId()
+      requestIdRef.current = id ? { signature: currentSignature, id } : null
     }
-    return requestIdRef.current.id
+    return requestIdRef.current?.id
   }
 
   function handleSubmit(event: FormEvent) {
@@ -106,7 +119,9 @@ export function DecisionEditor({
       commentRef.current?.focus()
       return
     }
-    const submission: DecisionSubmission = { action, clientRequestId: requestId() }
+    const submission: DecisionSubmission = { action }
+    const id = requestId()
+    if (id) submission.clientRequestId = id
     if (action === 'EDIT') submission.approvedAction = approvedAction
     if (showLanguage) submission.approvedLanguage = language
     if (comment.trim().length > 0 || commentRequired) submission.comment = comment
@@ -127,6 +142,7 @@ export function DecisionEditor({
                 value={option}
                 checked={action === option}
                 disabled={disabled}
+                ref={option === initialAction ? initialRadioRef : undefined}
                 onChange={() => {
                   setAction(option)
                   setErrors({})
@@ -153,7 +169,9 @@ export function DecisionEditor({
           <p className="panel__hint">
             {finding.proposedLanguageSource === 'APPROVED_DRAFTING'
               ? changeLanguageProvenanceLabel('APPROVED_DRAFTING')
-              : changeLanguageProvenanceLabel('GENERATIVE')}
+              : finding.proposedLanguageSource === 'GENERATIVE'
+                ? changeLanguageProvenanceLabel('GENERATIVE')
+                : changeLanguageProvenanceLabel('UNKNOWN')}
           </p>
         </div>
       ) : null}
@@ -162,7 +180,7 @@ export function DecisionEditor({
         <>
           <fieldset className="decision-editor__change-type">
             <legend>Change type</legend>
-            {editActionsForSubject(finding.subjectKind).map((option) => (
+            {editableActions.map((option) => (
               <label key={option} className="decision-editor__action">
                 <input
                   type="radio"
@@ -180,12 +198,13 @@ export function DecisionEditor({
           </fieldset>
           {showLanguage ? (
             <div className="decision-editor__field">
-              <label htmlFor="decision-language">Final approved language</label>
+              <label htmlFor="decision-language">Final approved language (required)</label>
               <textarea
                 id="decision-language"
                 ref={languageRef}
                 value={language}
                 onChange={(event) => setLanguage(event.target.value)}
+                aria-required
                 aria-invalid={errors.approvedLanguage ? true : undefined}
                 aria-describedby={errors.approvedLanguage ? 'decision-language-error' : undefined}
               />
@@ -249,8 +268,19 @@ export function DecisionEditor({
         </p>
       ) : null}
 
+      {action === 'EDIT' && editableActions.length === 0 ? (
+        <p className="state state--warning" role="alert">
+          This finding's subject type is not recognized, so a change cannot be authored here.
+          Reject or escalate it instead.
+        </p>
+      ) : null}
+
       <div className="decision-editor__buttons">
-        <button type="submit" className="button" disabled={isSubmitting}>
+        <button
+          type="submit"
+          className="button"
+          disabled={isSubmitting || (action === 'EDIT' && editableActions.length === 0)}
+        >
           {decisionActionLabel(action)}
         </button>
         <button type="button" className="link-button" onClick={onCancel}>

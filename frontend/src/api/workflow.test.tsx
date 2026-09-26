@@ -387,6 +387,34 @@ describe('workflow hooks', () => {
     expect(requests).toHaveLength(0)
   })
 
+  it('seeds the current decisions cache from a successful submission', async () => {
+    const requests = stubFetch((request) =>
+      request.method === 'PUT'
+        ? jsonResponse(envelope(decisionPayload))
+        : jsonResponse(envelope({ items: [], truncated: false })),
+    )
+    const { wrapper, queryClient } = createWrapper()
+    queryClient.setQueryData(workflowKeys.decisions('r-1'), {
+      items: [{ ...decisionPayload, id: 'd-old', revision: 1 }],
+      truncated: false,
+    })
+    const { result } = renderHook(() => useSubmitDecision('r-1'), { wrapper })
+    result.current.mutate({
+      findingId: 'f-1',
+      expectedVersion: 1,
+      action: 'EDIT',
+      approvedAction: 'REPLACE',
+      approvedLanguage: 'Human text.',
+    })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    const cached = queryClient.getQueryData<{ items: { id: string }[] }>(
+      workflowKeys.decisions('r-1'),
+    )
+    expect(cached?.items[0]?.id).toBe('d-2')
+    expect(cached?.items).toHaveLength(1)
+    expect(requests.length).toBeGreaterThan(0)
+  })
+
   it('fetches the change set only when enabled', async () => {
     const requests = stubFetch(() => jsonResponse(envelope(changeSetPayload)))
     const { wrapper } = createWrapper()

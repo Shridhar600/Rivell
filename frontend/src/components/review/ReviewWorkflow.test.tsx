@@ -172,6 +172,78 @@ describe('recording a decision in the workspace', () => {
   })
 })
 
+describe('workflow state availability and conflict truth', () => {
+  it('hides decision controls and explains when human-review state cannot be loaded', async () => {
+    const api = stubContractApi(baseOptions({ humanReviewStatus: 500 }))
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    expect(
+      await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
+    )
+    await screen.findByRole('heading', { name: 'Human decision' })
+    expect(screen.getByText(/Decision controls are unavailable/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Change decision' })).not.toBeInTheDocument()
+  })
+
+  it('reports a stale revision as changed elsewhere after refetching server state', async () => {
+    let stub: ReturnType<typeof stubContractApi>
+    stub = stubContractApi(
+      baseOptions({
+        decisions: {
+          items: [fixtureDecision({ id: 'd-2', revision: 2 })],
+          truncated: false,
+        },
+        decisionResponse: () => {
+          stub.setDecisions({
+            items: [fixtureDecision({ id: 'd-3', revision: 3, action: 'ACCEPT' })],
+            truncated: false,
+          })
+          return jsonResponse(
+            {
+              code: '409',
+              title: 'Invalid state',
+              detail: 'Finding f-1 decision expected version 2 but the current revision is 3',
+            },
+            409,
+          )
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', stub)
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Change decision' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Reject recommendation' }))
+    await userEvent.type(screen.getByLabelText(/Comment/), 'Second opinion.')
+    await userEvent.click(screen.getByRole('button', { name: 'Reject recommendation' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/changed elsewhere/)
+    expect(screen.queryByText(/expected version/)).not.toBeInTheDocument()
+  })
+
+  it('discloses blocker findings beyond the first three links', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        humanReview: fixtureHumanReview({
+          blockers: [
+            {
+              code: 'UNRESOLVED_REVIEW_REQUIRED_FINDINGS',
+              message: '4 findings that require review still need decisions.',
+              findingIds: ['f-1', 'f-2', 'f-3', 'f-4'],
+            },
+          ],
+        }),
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    const progress = await screen.findByRole('region', { name: 'Human review' })
+    expect(progress).toHaveTextContent('and 1 more affected finding(s)')
+  })
+})
+
 describe('workflow request scoping', () => {
   it('does not request decisions or human review while analysis is incomplete', async () => {
     const api = stubContractApi(

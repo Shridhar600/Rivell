@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FindingDetail } from '../../api/reviews'
 import type { HumanDecision, HumanReview } from '../../api/workflow'
-import { isWorkflowConflictError, useSubmitDecision } from '../../api/workflow'
+import { isWorkflowConflictError, useSubmitDecision, workflowErrorMessage } from '../../api/workflow'
 import { classifyDecisionConflict, decisionConflictNotice } from '../../lib/workflow'
 import type { DecisionConflictKind } from '../../lib/workflow'
 import { DecisionEditor } from './DecisionEditor'
@@ -15,6 +15,9 @@ type Props = {
   currentDecision: HumanDecision | null
   humanReview: HumanReview | null
   isFinalized: boolean
+  canDecide: boolean
+  analysisComplete: boolean
+  decisionsTruncated: boolean
 }
 
 export function HumanDecisionControls({
@@ -23,6 +26,9 @@ export function HumanDecisionControls({
   currentDecision,
   humanReview,
   isFinalized,
+  canDecide,
+  analysisComplete,
+  decisionsTruncated,
 }: Props) {
   const mutation = useSubmitDecision(reviewId)
   const [isOpen, setOpen] = useState(false)
@@ -44,14 +50,14 @@ export function HumanDecisionControls({
         expectedVersion: conflictAttempt.expectedVersion,
         currentDecision,
         humanReview,
-        analysisComplete: humanReview?.analysisStatus === 'COMPLETED',
+        analysisComplete,
       })
     : null
 
   const submitError = conflictKind
     ? decisionConflictNotice(conflictKind)
     : mutation.isError
-      ? mutation.error.message
+      ? workflowErrorMessage(mutation.error)
       : null
 
   function handleSubmit(submission: DecisionSubmission) {
@@ -81,11 +87,21 @@ export function HumanDecisionControls({
           Decision recorded.
         </p>
       ) : null}
+      {decisionsTruncated ? (
+        <p className="panel__hint">
+          Only the most recent decisions of this review are loaded, so an earlier decision may
+          not be shown here.
+        </p>
+      ) : null}
       <DecisionSummary decision={currentDecision} />
       {isFinalized ? (
         <p className="panel__hint">
           This review was finalized. Decisions are locked; the recorded decision stays visible
           for audit.
+        </p>
+      ) : !canDecide ? (
+        <p className="panel__hint">
+          Decision controls are unavailable until the human review state is available.
         </p>
       ) : editorVisible ? (
         <DecisionEditor

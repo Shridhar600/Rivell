@@ -303,6 +303,11 @@ export function isWorkflowConflictError(error: unknown): boolean {
   return isWorkflowStatusError(error, 409)
 }
 
+export function workflowErrorMessage(error: unknown): string {
+  if (error instanceof WorkflowApiError) return error.message
+  return 'The decision could not be saved. Check your connection and try again.'
+}
+
 function workflowRetry(failureCount: number, error: Error): boolean {
   return failureCount < 1 && !isWorkflowNotFoundError(error)
 }
@@ -450,7 +455,20 @@ export function useSubmitDecision(
     mutationFn: (input: DecisionInput) => submitDecision(reviewId, input),
     retry: false,
     networkMode: 'always',
-    onSuccess: () => {
+    onSuccess: (decision) => {
+      queryClient.setQueryData(
+        workflowKeys.decisions(reviewId),
+        (previous: DecisionListResponse | undefined) =>
+          previous
+            ? {
+                items: [
+                  decision,
+                  ...previous.items.filter((item) => item.findingId !== decision.findingId),
+                ],
+                truncated: previous.truncated,
+              }
+            : previous,
+      )
       void queryClient.invalidateQueries({ queryKey: workflowKeys.decisions(reviewId) })
       void queryClient.invalidateQueries({ queryKey: workflowKeys.humanReview(reviewId) })
     },
