@@ -38,7 +38,8 @@ class RedlinePlanResolverTest {
         var structure = structure(contractId, versionId, List.of(
                 clause("1. Services", text("Services body")),
                 clause("2. Limitation of Liability", text("Old cap text."),
-                        text("Old cap continuation."))));
+                        text("Old cap continuation.")),
+                clause("3. Governing Law", text("Delaware law."))));
         var conceptByHeading = concepts(structure, Map.of(
                 "1. Services", LegalConcept.GOVERNING_LAW,
                 "2. Limitation of Liability", LegalConcept.LIMITATION_OF_LIABILITY));
@@ -70,7 +71,8 @@ class RedlinePlanResolverTest {
         var versionId = UUID.randomUUID();
         var structure = structure(contractId, versionId, List.of(
                 clause("1. Services", text("Services body")),
-                clause("2. Limitation of Liability", text("Cap text."))));
+                clause("2. Limitation of Liability", text("Cap text.")),
+                clause("3. Governing Law", text("Delaware law."))));
         var changeSetId = UUID.randomUUID();
         var change = delete(changeSetId, 0,
                 headingId(structure, "2. Limitation of Liability"));
@@ -217,6 +219,46 @@ class RedlinePlanResolverTest {
     }
 
     @Test
+    void failsClosedWhenTheDocumentFinalParagraphIsDeleted() {
+        var contractId = UUID.randomUUID();
+        var versionId = UUID.randomUUID();
+        var structure = structure(contractId, versionId, List.of(
+                clause("1. Services", text("Services body"))));
+        var changeSetId = UUID.randomUUID();
+        var delete = delete(changeSetId, 0, headingId(structure, "1. Services"));
+        var set = set(UUID.randomUUID(), contractId, versionId, 1, List.of(delete));
+
+        assertThatThrownBy(() -> resolver.resolve(set, structure, Map.of(), AUTHOR,
+                EXECUTED_AT, SOURCE_SHA))
+                .isInstanceOf(RedlinePlanException.class)
+                .extracting(e -> ((RedlinePlanException) e).code())
+                .isEqualTo(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE);
+    }
+
+    @Test
+    void insertionCarriesTheResolvedAnchorIdentity() {
+        var contractId = UUID.randomUUID();
+        var versionId = UUID.randomUUID();
+        var structure = structure(contractId, versionId, List.of(
+                clause("1. Indemnification", text("Indemnity body")),
+                clause("2. Confidentiality", text("Confidentiality body"))));
+        var conceptByHeading = concepts(structure, Map.of(
+                "1. Indemnification", LegalConcept.INDEMNIFICATION,
+                "2. Confidentiality", LegalConcept.CONFIDENTIALITY));
+        var changeSetId = UUID.randomUUID();
+        var change = insert(changeSetId, 0, LegalConcept.LIMITATION_OF_LIABILITY,
+                "Approved cap text.");
+        var set = set(UUID.randomUUID(), contractId, versionId, 1, List.of(change));
+
+        var plan = resolver.resolve(set, structure, conceptByHeading, AUTHOR, EXECUTED_AT,
+                SOURCE_SHA);
+
+        var insertion = plan.operations().get(0).insertion();
+        assertThat(insertion.anchorExpectedText()).isEqualTo("Indemnity body");
+        assertThat(insertion.anchorParagraphIndex()).isNotNull();
+    }
+
+    @Test
     void failsClosedWhenTwoChangesDeleteTheSameParagraph() {
         var contractId = UUID.randomUUID();
         var versionId = UUID.randomUUID();
@@ -241,7 +283,8 @@ class RedlinePlanResolverTest {
         var versionId = UUID.randomUUID();
         var structure = structure(contractId, versionId, List.of(
                 clause("1. Services", text("Services body")),
-                clause("2. Confidentiality", text("Confidentiality body"))));
+                clause("2. Confidentiality", text("Confidentiality body")),
+                clause("3. Governing Law", text("Delaware law."))));
         var changeSetId = UUID.randomUUID();
         var later = replace(changeSetId, 1,
                 headingId(structure, "2. Confidentiality"), "New confidentiality.");

@@ -263,6 +263,8 @@ write('m9-protected.docx', (
     p('Master Services Agreement', 'Title')
     + p('1. Limitation of Liability', 'Heading1')
     + p('Supplier liability shall be unlimited.')
+    + p('2. Governing Law', 'Heading1')
+    + p('This Agreement is governed by the laws of Delaware.')
 ), extra_content_types=(
     '  <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>\n'
 ), extra_rels=(
@@ -274,6 +276,8 @@ write('m9-macro.docx', (
     p('Master Services Agreement', 'Title')
     + p('1. Limitation of Liability', 'Heading1')
     + p('Supplier liability shall be unlimited.')
+    + p('2. Governing Law', 'Heading1')
+    + p('This Agreement is governed by the laws of Delaware.')
 ), main_content_type=MACRO_MAIN)
 
 # P — M9 multi-change source: liability deviation + survival gap + missing
@@ -294,4 +298,14 @@ write('m9-multi-change-source.docx', (
         'days prior written notice to the other Party.')
     + p('4. Governing Law', 'Heading1')
     + p('This Agreement is governed by the laws of the State of Delaware.')
+))
+
+# Q — target paragraph carries section properties (typed failure)
+write('m9-sectpr-paragraph.docx', (
+    p('Master Services Agreement', 'Title')
+    + p('1. Services', 'Heading1')
+    + '<w:p><w:pPr><w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr></w:pPr>'
+    + '<w:r><w:t xml:space="preserve">Supplier shall provide the services.</w:t></w:r></w:p>'
+    + p('2. Governing Law', 'Heading1')
+    + p('This Agreement is governed by the laws of Delaware.')
 ))

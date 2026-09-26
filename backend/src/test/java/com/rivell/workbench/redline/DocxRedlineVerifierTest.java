@@ -37,7 +37,7 @@ class DocxRedlineVerifierTest {
         var source = RedlineFixturePipeline.fixture(fixture);
 
         var rendered = renderer.render(source, plan);
-        var report = verifier.verify(source, rendered.bytes(), plan);
+        var report = verifier.verify(source, rendered.bytes(), plan, rendered.changes());
 
         assertThat(report.passed()).as(String.valueOf(report.failureDetail())).isTrue();
         assertThat(report.changes()).hasSize(1);
@@ -70,7 +70,7 @@ class DocxRedlineVerifierTest {
         var source = RedlineFixturePipeline.fixture(fixture);
 
         var rendered = renderer.render(source, plan);
-        var report = verifier.verify(source, rendered.bytes(), plan);
+        var report = verifier.verify(source, rendered.bytes(), plan, rendered.changes());
 
         assertThat(report.passed()).as(String.valueOf(report.failureDetail())).isTrue();
         assertThat(report.changes()).hasSize(3);
@@ -89,7 +89,7 @@ class DocxRedlineVerifierTest {
                 "A completely different approved replacement.");
 
         var rendered = renderer.render(source, honestPlan);
-        var report = verifier.verify(source, rendered.bytes(), differentPlan);
+        var report = verifier.verify(source, rendered.bytes(), differentPlan, rendered.changes());
 
         assertThat(report.passed()).isFalse();
         assertThat(report.failureCode()).isEqualTo(RedlineFailureCode.VERIFICATION_FAILED);
@@ -130,7 +130,7 @@ class DocxRedlineVerifierTest {
         var output = new ByteArrayOutputStream();
         wordPackage.save(output);
 
-        var report = verifier.verify(source, output.toByteArray(), plan);
+        var report = verifier.verify(source, output.toByteArray(), plan, rendered.changes());
 
         assertThat(report.passed()).isFalse();
         assertThat(report.failureCode()).isEqualTo(RedlineFailureCode.VERIFICATION_FAILED);
@@ -145,10 +145,113 @@ class DocxRedlineVerifierTest {
         var rendered = renderer.render(source, plan);
 
         var stripped = stripPart(rendered.bytes(), "word/header1.xml");
-        var report = verifier.verify(source, stripped, plan);
+        var report = verifier.verify(source, stripped, plan, rendered.changes());
 
         assertThat(report.passed()).isFalse();
         assertThat(report.failureCode()).isEqualTo(RedlineFailureCode.VERIFICATION_FAILED);
+    }
+
+    @Test
+    void unwrappedDeletionRunsAreRejected() throws Exception {
+        var fixture = "m9-simple-replace.docx";
+        var plan = replacePlan(fixture, "2. Limitation of Liability",
+                "Aggregate liability shall not exceed the fees paid in the prior months.");
+        var source = RedlineFixturePipeline.fixture(fixture);
+        var rendered = renderer.render(source, plan);
+        var wordPackage = WordprocessingMLPackage.load(
+                new ByteArrayInputStream(rendered.bytes()));
+
+        for (var paragraph : paragraphs(wordPackage)) {
+            var pPr = paragraph.getPPr();
+            if (pPr == null || pPr.getRPr() == null || pPr.getRPr().getDel() == null) {
+                continue;
+            }
+            var unwrapped = new ArrayList<Object>();
+            for (var raw : paragraph.getContent()) {
+                var element = org.docx4j.XmlUtils.unwrap(raw);
+                if (element instanceof RunDel del) {
+                    for (var wrapped : del.getCustomXmlOrSmartTagOrSdt()) {
+                        var run = org.docx4j.XmlUtils.unwrap(wrapped);
+                        if (run instanceof R inner) {
+                            for (var rawRunChild : inner.getContent()) {
+                                var runChild = org.docx4j.XmlUtils.unwrap(rawRunChild);
+                                if (runChild instanceof DelText delText) {
+                                    var text = new org.docx4j.wml.Text();
+                                    text.setValue(delText.getValue());
+                                    text.setSpace(delText.getSpace());
+                                    inner.getContent().set(
+                                            inner.getContent().indexOf(rawRunChild), text);
+                                }
+                            }
+                            unwrapped.add(inner);
+                        }
+                    }
+                } else {
+                    unwrapped.add(raw);
+                }
+            }
+            paragraph.getContent().clear();
+            paragraph.getContent().addAll(unwrapped);
+        }
+        var output = new ByteArrayOutputStream();
+        wordPackage.save(output);
+
+        var report = verifier.verify(source, output.toByteArray(), plan,
+                rendered.changes());
+
+        assertThat(report.passed()).isFalse();
+        assertThat(report.failureCode()).isEqualTo(RedlineFailureCode.VERIFICATION_FAILED);
+    }
+
+    @Test
+    void revisionIdOutsidePlannedRangesIsRejected() throws Exception {
+        var fixture = "m9-simple-replace.docx";
+        var plan = replacePlan(fixture, "2. Limitation of Liability",
+                "Aggregate liability shall not exceed the fees paid in the prior months.");
+        var source = RedlineFixturePipeline.fixture(fixture);
+        var rendered = renderer.render(source, plan);
+        var wordPackage = WordprocessingMLPackage.load(
+                new ByteArrayInputStream(rendered.bytes()));
+
+        var markup = new ArrayList<org.docx4j.wml.CTMarkup>();
+        collectMarkup(wordPackage.getMainDocumentPart().getJaxbElement(), markup);
+        markup.get(0).setId(java.math.BigInteger.valueOf(9_000_000L));
+        var output = new ByteArrayOutputStream();
+        wordPackage.save(output);
+
+        var report = verifier.verify(source, output.toByteArray(), plan,
+                rendered.changes());
+
+        assertThat(report.passed()).isFalse();
+        assertThat(report.failureCode()).isEqualTo(RedlineFailureCode.VERIFICATION_FAILED);
+    }
+
+    private static List<P> paragraphs(WordprocessingMLPackage wordPackage) {
+        var paragraphs = new ArrayList<P>();
+        for (var raw : wordPackage.getMainDocumentPart().getJaxbElement().getBody()
+                .getContent()) {
+            var element = org.docx4j.XmlUtils.unwrap(raw);
+            if (element instanceof P paragraph) {
+                paragraphs.add(paragraph);
+            }
+        }
+        return paragraphs;
+    }
+
+    private static void collectMarkup(Object node, List<org.docx4j.wml.CTMarkup> markup) {
+        if (node == null) {
+            return;
+        }
+        if (node instanceof org.docx4j.wml.CTMarkup element) {
+            markup.add(element);
+        }
+        var children = org.docx4j.TraversalUtil.getChildrenImpl(node);
+        if (children == null) {
+            return;
+        }
+        for (var child : children) {
+            collectMarkup(child, markup);
+        }
     }
 
     private DocumentExecutionPlan replacePlan(String fixture, String headingText,

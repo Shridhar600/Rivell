@@ -137,6 +137,14 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                         "Approved change " + operation.ordinal() + " (" + operation.actionType()
                                 + ") cannot be resolved against the frozen document.");
             }
+            if (isBodyFinalParagraph(paragraph, content)
+                    || carriesSectionProperties(paragraph)) {
+                throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
+                        operation.approvedChangeId(),
+                        "Approved change " + operation.ordinal()
+                                + " would delete a paragraph whose mark cannot be removed "
+                                + "as a tracked change.");
+            }
             validateSupportedInline(paragraph, operation.approvedChangeId(),
                     operation.ordinal());
             targets.add(paragraph);
@@ -165,6 +173,18 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                             "Approved change " + operation.ordinal()
                                     + " anchors to unsupported document content.");
                 }
+                if (operation.insertion().anchorExpectedText() != null) {
+                    var anchorParagraph = paragraphByAnchor.get(anchorKey(after,
+                            operation.insertion().anchorParagraphIndex()));
+                    if (!(element instanceof P) || anchorParagraph == null
+                            || !DocxRedlineSupport.paragraphText(anchorParagraph)
+                                    .equals(operation.insertion().anchorExpectedText())) {
+                        throw failure(RedlineFailureCode.TARGET_NOT_FOUND,
+                                operation.approvedChangeId(),
+                                "Approved change " + operation.ordinal()
+                                        + " cannot be resolved against the frozen document.");
+                    }
+                }
                 anchorKey = rawAnchor;
             }
             if (operation.insertion().styleTemplateBodyIndex() != null) {
@@ -189,6 +209,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
 
     private void markDeleted(
             P paragraph, AtomicLong nextId, String author, XMLGregorianCalendar date) {
+        var revisionId = nextId.getAndIncrement();
         var pPr = paragraph.getPPr();
         if (pPr == null) {
             pPr = factory.createPPr();
@@ -199,7 +220,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             paraRPr = factory.createParaRPr();
             pPr.setRPr(paraRPr);
         }
-        paraRPr.setDel(trackChange(nextId, author, date));
+        paraRPr.setDel(trackChange(revisionId, author, date));
 
         var rewritten = new ArrayList<Object>(paragraph.getContent().size());
         for (var raw : paragraph.getContent()) {
@@ -207,9 +228,9 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             if (element == pPr) {
                 rewritten.add(raw);
             } else if (element instanceof R run) {
-                rewritten.add(deletedRun(run, nextId, author, date));
+                rewritten.add(deletedRun(run, revisionId, author, date));
             } else if (element instanceof P.Hyperlink hyperlink) {
-                rewritten.add(deletedHyperlink(hyperlink, nextId, author, date));
+                rewritten.add(deletedHyperlink(hyperlink, revisionId, author, date));
             } else {
                 rewritten.add(raw);
             }
@@ -219,11 +240,11 @@ public class DocxRedlineRenderer implements RedlineRenderer {
     }
 
     private RunDel deletedRun(
-            R run, AtomicLong nextId, String author, XMLGregorianCalendar date) {
+            R run, long revisionId, String author, XMLGregorianCalendar date) {
         var copy = XmlUtils.deepCopy(run);
         convertToDeletedText(copy.getContent());
         var del = factory.createRunDel();
-        del.setId(BigInteger.valueOf(nextId.getAndIncrement()));
+        del.setId(BigInteger.valueOf(revisionId));
         del.setAuthor(author);
         del.setDate(date);
         del.getCustomXmlOrSmartTagOrSdt().add(copy);
@@ -231,13 +252,13 @@ public class DocxRedlineRenderer implements RedlineRenderer {
     }
 
     private P.Hyperlink deletedHyperlink(
-            P.Hyperlink hyperlink, AtomicLong nextId, String author, XMLGregorianCalendar date) {
+            P.Hyperlink hyperlink, long revisionId, String author, XMLGregorianCalendar date) {
         var copy = XmlUtils.deepCopy(hyperlink);
         var rewritten = new ArrayList<Object>(copy.getContent().size());
         for (var raw : copy.getContent()) {
             var element = DocxRedlineSupport.unwrap(raw);
             if (element instanceof R run) {
-                rewritten.add(deletedRun(run, nextId, author, date));
+                rewritten.add(deletedRun(run, revisionId, author, date));
             } else {
                 rewritten.add(raw);
             }
@@ -266,6 +287,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             XMLGregorianCalendar date,
             PPr paragraphTemplate,
             RPr runTemplate) {
+        var revisionId = nextId.getAndIncrement();
         var paragraph = factory.createP();
         var pPr = paragraphTemplate == null
                 ? factory.createPPr() : XmlUtils.deepCopy(paragraphTemplate);
@@ -273,7 +295,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         pPr.setSectPr(null);
         pPr.setPPrChange(null);
         var paraRPr = factory.createParaRPr();
-        paraRPr.setIns(trackChange(nextId, author, date));
+        paraRPr.setIns(trackChange(revisionId, author, date));
         pPr.setRPr(paraRPr);
         paragraph.setPPr(pPr);
 
@@ -287,7 +309,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             textElement.setSpace("preserve");
             run.getContent().add(textElement);
             var ins = factory.createRunIns();
-            ins.setId(BigInteger.valueOf(nextId.getAndIncrement()));
+            ins.setId(BigInteger.valueOf(revisionId));
             ins.setAuthor(author);
             ins.setDate(date);
             ins.getCustomXmlOrSmartTagOrSdt().add(run);
@@ -297,12 +319,22 @@ public class DocxRedlineRenderer implements RedlineRenderer {
     }
 
     private CTTrackChange trackChange(
-            AtomicLong nextId, String author, XMLGregorianCalendar date) {
+            long revisionId, String author, XMLGregorianCalendar date) {
         var change = factory.createCTTrackChange();
-        change.setId(BigInteger.valueOf(nextId.getAndIncrement()));
+        change.setId(BigInteger.valueOf(revisionId));
         change.setAuthor(author);
         change.setDate(date);
         return change;
+    }
+
+    private boolean isBodyFinalParagraph(P paragraph, List<Object> content) {
+        var refs = DocxRedlineSupport.paragraphs(content);
+        return refs.stream().anyMatch(ref -> ref.paragraph() == paragraph
+                && ref.paragraphIndex() == refs.size() - 1);
+    }
+
+    private boolean carriesSectionProperties(P paragraph) {
+        return paragraph.getPPr() != null && paragraph.getPPr().getSectPr() != null;
     }
 
     private RPr firstRunProperties(P paragraph) {

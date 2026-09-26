@@ -25,14 +25,20 @@ CREATE TABLE redline_execution (
     CHECK ((status = 'COMPLETED') = (outcome IS NOT NULL)),
     CHECK ((status = 'FAILED') = (failure_code IS NOT NULL)),
     CHECK (status <> 'COMPLETED' OR outcome <> 'NO_CHANGES' OR change_count = 0),
+    CHECK (outcome <> 'REDLINE_GENERATED' OR source_sha256 IS NOT NULL),
+    CHECK (status <> 'COMPLETED' OR failure_detail IS NULL),
     UNIQUE (id, organization_id),
     UNIQUE (change_set_id)
 );
 
+ALTER TABLE review_finalization
+    ADD CONSTRAINT uq_review_finalization_id_review_org
+    UNIQUE (id, review_id, organization_id);
+
 ALTER TABLE redline_execution
-    ADD CONSTRAINT fk_redline_execution_set_org
-    FOREIGN KEY (change_set_id, organization_id)
-    REFERENCES review_finalization (id, organization_id);
+    ADD CONSTRAINT fk_redline_execution_set_review_org
+    FOREIGN KEY (change_set_id, review_id, organization_id)
+    REFERENCES review_finalization (id, review_id, organization_id);
 ALTER TABLE redline_execution
     ADD CONSTRAINT fk_redline_execution_review_org
     FOREIGN KEY (review_id, organization_id) REFERENCES review (id, organization_id);
@@ -57,7 +63,7 @@ CREATE TABLE redline_execution_change (
     paragraphs_inserted INTEGER CHECK (paragraphs_inserted IS NULL OR paragraphs_inserted >= 0),
     revision_id_start BIGINT,
     revision_id_end BIGINT,
-    CHECK (status = 'APPLIED' OR verification IS NULL),
+    CHECK ((status = 'APPLIED') = (verification IS NOT NULL)),
     CHECK (status <> 'FAILED' OR failure_code IS NOT NULL),
     UNIQUE (id, organization_id),
     UNIQUE (execution_id, approved_change_id),

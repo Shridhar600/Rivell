@@ -131,6 +131,9 @@ class RedlineExecutionIT {
     ContractEnrichmentService enrichmentService;
 
     @Autowired
+    com.rivell.workbench.foundation.DocumentStorage documentStorage;
+
+    @Autowired
     JdbcClient jdbcClient;
 
     @BeforeEach
@@ -417,6 +420,78 @@ class RedlineExecutionIT {
                 .isEqualTo(changesBefore);
         assertThat(readApprovedChangeSet(fixture.review().id())).isEqualTo(setBefore);
         assertThat(view.get("contractVersionNumber").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void tamperedSourceBytesFailClosedWithAnIntegrityMismatch() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+
+        var storageKey = jdbcClient.sql("""
+                select sa.storage_key from source_artifact sa
+                join contract_version cv on cv.source_artifact_id = sa.id
+                where cv.contract_id = :contractId and cv.version_number = 1
+                """).param("contractId", fixture.review().contractId())
+                .query(String.class).single();
+        var key = new com.rivell.workbench.foundation.StorageKey(storageKey);
+        documentStorage.delete(key);
+        documentStorage.store(key, new ByteArrayInputStream("tampered bytes".getBytes()));
+
+        mockMvc.perform(post("/api/reviews/{id}/redline", fixture.review().id()))
+                .andExpect(status().isConflict());
+
+        var view = readRedline(fixture.review().id());
+        assertThat(view.get("status").asText()).isEqualTo("FAILED");
+        assertThat(view.get("failureCode").asText())
+                .isEqualTo("SOURCE_INTEGRITY_MISMATCH");
+        assertThat(countArtifacts(fixture.review().id())).isZero();
+    }
+
+    @Test
+    void frozenSourceVersionMismatchFailsClosed() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        jdbcClient.sql("""
+                update review_finalization set contract_version_id = :versionId
+                where review_id = :reviewId
+                """).param("versionId", UUID.randomUUID())
+                .param("reviewId", fixture.review().id()).update();
+
+        mockMvc.perform(post("/api/reviews/{id}/redline", fixture.review().id()))
+                .andExpect(status().isConflict());
+
+        var view = readRedline(fixture.review().id());
+        assertThat(view.get("failureCode").asText()).isEqualTo("SOURCE_VERSION_MISMATCH");
+    }
+
+    @Test
+    void crossOrganizationReadsAndDownloadsAreNotFound() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        redline(fixture.review().id());
+
+        identityProvider.use(new UserIdentity(UUID.randomUUID(), UUID.randomUUID(),
+                Set.of("ADMIN")));
+        mockMvc.perform(get("/api/reviews/{id}/redline", fixture.review().id()))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/reviews/{id}/redline/download", fixture.review().id()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void downloadCarriesADeterministicFilenameAndDisposition() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        redline(fixture.review().id());
+
+        mockMvc.perform(get("/api/reviews/{id}/redline/download", fixture.review().id()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("-v1-redline.docx")));
     }
 
     @Test

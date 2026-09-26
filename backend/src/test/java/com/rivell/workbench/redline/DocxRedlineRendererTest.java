@@ -207,6 +207,52 @@ class DocxRedlineRendererTest {
     }
 
     @Test
+    void deletingTheFinalClauseFailsClosed() {
+        var contractId = UUID.randomUUID();
+        var versionId = UUID.randomUUID();
+        var structure = RedlineFixturePipeline.parse("m9-simple-replace.docx", contractId,
+                versionId);
+        var setId = UUID.randomUUID();
+        var change = RedlineTestStructures.delete(setId, 0,
+                RedlineFixturePipeline.headingId(structure, "4. Governing Law"));
+        var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
+                List.of(change));
+
+        assertThatThrownBy(() -> RedlineFixturePipeline.plan(structure, set, Map.of()))
+                .isInstanceOf(RedlinePlanException.class)
+                .extracting(e -> ((RedlinePlanException) e).code())
+                .isEqualTo(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE);
+    }
+
+    @Test
+    void paragraphCarryingSectionPropertiesFailsClosed() {
+        var plan = replacePlan("m9-sectpr-paragraph.docx", "1. Services",
+                "Replacement services language.");
+
+        assertThatThrownBy(() -> renderer.render(
+                RedlineFixturePipeline.fixture("m9-sectpr-paragraph.docx"), plan))
+                .isInstanceOf(RedlineRenderException.class)
+                .extracting(e -> ((RedlineRenderException) e).code())
+                .isEqualTo(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE);
+    }
+
+    @Test
+    void paragraphMarkAndRunWrappersShareOneRevisionIdPerParagraph() {
+        var plan = replacePlan("m9-simple-replace.docx", "2. Limitation of Liability",
+                "Liability is capped at the fees paid.");
+        var rendered = renderer.render(
+                RedlineFixturePipeline.fixture("m9-simple-replace.docx"), plan);
+        var paragraphs = paragraphs(RedlineFixturePipeline.load(rendered.bytes()));
+
+        var deleted = paragraphWithText(paragraphs, "Supplier liability shall be unlimited.");
+        assertThat(deleted.getPPr().getRPr().getDel().getId().longValue())
+                .isEqualTo(deletedElements(deleted).get(0).getId().longValue());
+        var inserted = paragraphWithText(paragraphs, "Liability is capped at the fees paid.");
+        assertThat(inserted.getPPr().getRPr().getIns().getId().longValue())
+                .isEqualTo(allRunIns(List.of(inserted)).get(0).getId().longValue());
+    }
+
+    @Test
     void tableBodyTargetsFailClosedAtPlanTime() {
         var contractId = UUID.randomUUID();
         var versionId = UUID.randomUUID();

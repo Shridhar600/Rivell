@@ -8,5 +8,5 @@ package com.rivell.workbench.redline;
 public interface RedlineVerifier {
 
     VerificationReport verify(byte[] sourceBytes, byte[] generatedBytes,
-            DocumentExecutionPlan plan);
+            DocumentExecutionPlan plan, java.util.List<AppliedChangeReport> appliedReports);
 }

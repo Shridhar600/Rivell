@@ -27,6 +27,7 @@ import org.docx4j.wml.Text;
 import org.docx4j.wml.Tr;
 import org.springframework.stereotype.Component;
 
+import com.rivell.workbench.redline.AppliedChangeReport;
 import com.rivell.workbench.redline.ChangeVerification;
 import com.rivell.workbench.redline.DocumentExecutionPlan;
 import com.rivell.workbench.redline.PlannedDocumentOperation;
@@ -47,7 +48,8 @@ public class DocxRedlineVerifier implements RedlineVerifier {
 
     @Override
     public VerificationReport verify(
-            byte[] sourceBytes, byte[] generatedBytes, DocumentExecutionPlan plan) {
+            byte[] sourceBytes, byte[] generatedBytes, DocumentExecutionPlan plan,
+            List<AppliedChangeReport> appliedReports) {
         WordprocessingMLPackage generated;
         WordprocessingMLPackage source;
         try {
@@ -99,6 +101,12 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             }
         }
 
+        var structuralProblem = structuralProblem(generated);
+        if (structuralProblem != null) {
+            return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
+                    structuralProblem, List.of());
+        }
+
         var deletedParagraphs = deletedParagraphTexts(generated);
         var insertedParagraphs = insertedParagraphTexts(generated);
         var expectedDeleted = new ArrayList<String>();
@@ -118,6 +126,12 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         if (!sameMultiset(insertedParagraphs, expectedInserted)) {
             return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
                     "Tracked insertions do not match the approved changes exactly.", List.of());
+        }
+
+        var rangeProblem = rangeProblem(generated, plan, appliedReports);
+        if (rangeProblem != null) {
+            return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
+                    rangeProblem, List.of());
         }
 
         var changeResults = new ArrayList<ChangeVerification>();
@@ -448,6 +462,139 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         return true;
     }
 
+    /**
+     * Layer C: deleted paragraphs must carry their text inside RunDel-wrapped runs as
+     * delText; inserted paragraphs must carry theirs inside RunIns-wrapped runs as
+     * normal text. Text outside those wrappers would not be tracked in Word.
+     */
+    private String structuralProblem(WordprocessingMLPackage wordPackage) {
+        var problem = new String[] {null};
+        walk(wordPackage, (paragraph, table) -> {
+            if (problem[0] != null || paragraph == null) {
+                return;
+            }
+            if (isDeleted(paragraph)) {
+                problem[0] = deletedParagraphProblem(paragraph);
+            } else if (isInserted(paragraph)) {
+                problem[0] = insertedParagraphProblem(paragraph);
+            }
+        });
+        return problem[0];
+    }
+
+    private String deletedParagraphProblem(P paragraph) {
+        for (var raw : paragraph.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof R run) {
+                if (runHasText(run)) {
+                    return "A tracked deletion contains text outside a w:del wrapper.";
+                }
+            } else if (element instanceof RunIns) {
+                return "A tracked deletion contains inserted run content.";
+            } else if (element instanceof RunDel del) {
+                for (var wrapped : del.getCustomXmlOrSmartTagOrSdt()) {
+                    var run = DocxRedlineSupport.unwrap(wrapped);
+                    if (run instanceof R inner && runHasNormalText(inner)) {
+                        return "A tracked deletion carries normal text instead of delText.";
+                    }
+                }
+            } else if (element instanceof P.Hyperlink hyperlink) {
+                for (var rawLinkChild : hyperlink.getContent()) {
+                    var linkChild = DocxRedlineSupport.unwrap(rawLinkChild);
+                    if (linkChild instanceof R run && runHasText(run)) {
+                        return "A tracked deletion contains text outside a w:del wrapper.";
+                    }
+                    if (linkChild instanceof RunDel del) {
+                        for (var wrapped : del.getCustomXmlOrSmartTagOrSdt()) {
+                            var run = DocxRedlineSupport.unwrap(wrapped);
+                            if (run instanceof R inner && runHasNormalText(inner)) {
+                                return "A tracked deletion carries normal text instead "
+                                        + "of delText.";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private String insertedParagraphProblem(P paragraph) {
+        for (var raw : paragraph.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof R run && runHasText(run)) {
+                return "A tracked insertion contains text outside a w:ins wrapper.";
+            }
+            if (element instanceof RunDel) {
+                return "A tracked insertion contains deleted run content.";
+            }
+        }
+        return null;
+    }
+
+    private static boolean runHasText(R run) {
+        for (var raw : run.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof Text || element instanceof DelText) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean runHasNormalText(R run) {
+        for (var raw : run.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof Text) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Layer D: every revision id in the document must belong to exactly one reported
+     * per-change range; ranges must be disjoint and must cover the document's ids.
+     */
+    private String rangeProblem(
+            WordprocessingMLPackage wordPackage,
+            DocumentExecutionPlan plan,
+            List<AppliedChangeReport> appliedReports) {
+        var reportByChange = new HashMap<UUID, AppliedChangeReport>();
+        for (var report : appliedReports) {
+            reportByChange.put(report.approvedChangeId(), report);
+        }
+        for (var operation : plan.operations()) {
+            if (!reportByChange.containsKey(operation.approvedChangeId())) {
+                return "The renderer did not report an applied change.";
+            }
+        }
+        var reports = new ArrayList<>(reportByChange.values());
+        for (var i = 0; i < reports.size(); i++) {
+            for (var j = i + 1; j < reports.size(); j++) {
+                var first = reports.get(i);
+                var second = reports.get(j);
+                if (first.revisionIdStart() <= second.revisionIdEnd()
+                        && second.revisionIdStart() <= first.revisionIdEnd()) {
+                    return "Per-change revision id ranges are not disjoint.";
+                }
+            }
+        }
+        for (var element : DocxRedlineSupport.markupElements(
+                wordPackage.getMainDocumentPart().getJaxbElement())) {
+            if (element.getId() == null) {
+                continue;
+            }
+            var id = element.getId().longValue();
+            var covered = reports.stream().anyMatch(report ->
+                    id >= report.revisionIdStart() && id <= report.revisionIdEnd());
+            if (!covered) {
+                return "The document contains a revision id outside the planned ranges.";
+            }
+        }
+        return null;
+    }
+
     private String partProblem(
             WordprocessingMLPackage source,
             WordprocessingMLPackage generated,
@@ -463,13 +610,11 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             }
             var generatedPart = generatedZip.get(name);
             if (generatedPart == null) {
-                return "A frozen source document part is missing from the generated redline ("
-                        + name + ").";
+                return "A frozen source document part is missing from the generated redline.";
             }
             var sourcePart = sourceZip.get(name);
             if (sourcePart != null && !Arrays.equals(sourcePart, generatedPart)) {
-                return "A frozen source document part changed during redline execution ("
-                        + name + ").";
+                return "A frozen source document part changed during redline execution.";
             }
         }
         for (var name : generatedZip.keySet()) {

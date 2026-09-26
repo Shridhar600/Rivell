@@ -61,13 +61,15 @@ public final class RedlinePlanResolver {
         var operations = new ArrayList<PlannedDocumentOperation>();
         for (var change : ordered) {
             operations.add(switch (change.actionType()) {
-                case REPLACE -> replaceOperation(change, byId, regionByHeading);
-                case DELETE -> deleteOperation(change, byId, regionByHeading);
-                case INSERT -> insertOperation(change, structure, effectivePrimaryConcepts);
+                case REPLACE -> replaceOperation(change, byId, regionByHeading, nodes);
+                case DELETE -> deleteOperation(change, byId, regionByHeading, nodes);
+                case INSERT -> insertOperation(change, structure, effectivePrimaryConcepts,
+                        nodes);
             });
         }
 
         validateNoOverlap(operations);
+        validateFinalParagraphUntouched(operations, nodes);
         return new DocumentExecutionPlan(set.id(), set.changeSetVersion(),
                 RENDERER_VERSION, InsertPlacementStrategy.VERSION, author, executedAt,
                 sourceSha256, operations);
@@ -76,19 +78,22 @@ public final class RedlinePlanResolver {
     private PlannedDocumentOperation replaceOperation(
             ApprovedChange change,
             Map<UUID, DocumentNode> byId,
-            Map<UUID, ContractRegionSegmenter.Region> regionByHeading) {
+            Map<UUID, ContractRegionSegmenter.Region> regionByHeading,
+            List<DocumentNode> nodes) {
         var region = clauseRegion(change, byId, regionByHeading);
         var deletionTargets = bodyTargets(change, region, byId);
         var paragraphs = splitParagraphs(change.approvedLanguage(), change);
+        var heading = heading(change, region, byId);
+        var anchorIndex = heading.sourceSpan().paragraphIndex();
+        var anchorText = heading.text() == null ? "" : heading.text();
         PlannedInsertion insertion;
         if (deletionTargets.isEmpty()) {
-            insertion = new PlannedInsertion(heading(change, region, byId)
-                    .sourceSpan().bodyIndex(), null, null, paragraphs);
+            insertion = new PlannedInsertion(heading.sourceSpan().bodyIndex(), anchorIndex,
+                    anchorText, null, null, paragraphs);
         } else {
             var template = deletionTargets.get(0);
-            insertion = new PlannedInsertion(
-                    heading(change, region, byId).sourceSpan().bodyIndex(),
-                    template.bodyIndex(), template.paragraphIndex(), paragraphs);
+            insertion = new PlannedInsertion(heading.sourceSpan().bodyIndex(), anchorIndex,
+                    anchorText, template.bodyIndex(), template.paragraphIndex(), paragraphs);
         }
         return new PlannedDocumentOperation(change.id(), change.ordinal(),
                 ChangeActionType.REPLACE, deletionTargets, insertion, null);
@@ -97,7 +102,8 @@ public final class RedlinePlanResolver {
     private PlannedDocumentOperation deleteOperation(
             ApprovedChange change,
             Map<UUID, DocumentNode> byId,
-            Map<UUID, ContractRegionSegmenter.Region> regionByHeading) {
+            Map<UUID, ContractRegionSegmenter.Region> regionByHeading,
+            List<DocumentNode> nodes) {
         var region = clauseRegion(change, byId, regionByHeading);
         var targets = new ArrayList<PlannedParagraph>();
         targets.add(paragraph(change, heading(change, region, byId)));
@@ -109,15 +115,32 @@ public final class RedlinePlanResolver {
     private PlannedDocumentOperation insertOperation(
             ApprovedChange change,
             ContractStructure structure,
-            Map<UUID, LegalConcept> effectivePrimaryConcepts) {
+            Map<UUID, LegalConcept> effectivePrimaryConcepts,
+            List<DocumentNode> nodes) {
         var placement = placementStrategy.resolve(change.absenceConcept(), structure,
                 effectivePrimaryConcepts);
         var paragraphs = splitParagraphs(change.approvedLanguage(), change);
+        var anchor = anchorIdentity(placement.afterBodyIndex(), nodes);
         var insertion = new PlannedInsertion(placement.afterBodyIndex(),
+                anchor == null ? null : anchor.sourceSpan().paragraphIndex(),
+                anchor == null ? null : (anchor.text() == null ? "" : anchor.text()),
                 placement.styleTemplateBodyIndex(), placement.styleTemplateParagraphIndex(),
                 paragraphs);
         return new PlannedDocumentOperation(change.id(), change.ordinal(),
                 ChangeActionType.INSERT, List.of(), insertion, placement.label());
+    }
+
+    private DocumentNode anchorIdentity(int afterBodyIndex, List<DocumentNode> nodes) {
+        if (afterBodyIndex < 0) {
+            return null;
+        }
+        return nodes.stream()
+                .filter(node -> node.sourceSpan().bodyIndex() == afterBodyIndex)
+                .filter(node -> node.nodeType() == DocumentNodeType.PARAGRAPH
+                        || node.nodeType() == DocumentNodeType.HEADING
+                        || node.nodeType() == DocumentNodeType.TITLE)
+                .findFirst()
+                .orElse(null);
     }
 
     private ContractRegionSegmenter.Region clauseRegion(
@@ -196,14 +219,44 @@ public final class RedlinePlanResolver {
      * allowed — its position stays deterministic (after that paragraph's slot).
      */
     private void validateNoOverlap(List<PlannedDocumentOperation> operations) {
-        var deleted = new HashMap<Integer, UUID>();
+        var deleted = new HashMap<String, UUID>();
         for (var operation : operations) {
             for (var target : operation.deletionTargets()) {
-                var previous = deleted.put(target.bodyIndex(), operation.approvedChangeId());
+                var key = target.bodyIndex() + ":" + target.paragraphIndex();
+                var previous = deleted.put(key, operation.approvedChangeId());
                 if (previous != null) {
                     throw new RedlinePlanException(RedlineFailureCode.CHANGE_OVERLAP,
                             operation.approvedChangeId(),
                             "Approved changes target overlapping document content.");
+                }
+            }
+        }
+    }
+
+    /**
+     * The body's final paragraph mark is never deleted: Word cannot represent deleting
+     * the terminal mark (and the paragraph may carry the section properties). A target
+     * containing it fails closed before any rendering.
+     */
+    private void validateFinalParagraphUntouched(
+            List<PlannedDocumentOperation> operations, List<DocumentNode> nodes) {
+        var lastParagraphOrdinal = nodes.stream()
+                .filter(node -> node.sourceSpan().paragraphIndex() != null)
+                .mapToInt(node -> node.sourceSpan().paragraphIndex())
+                .max()
+                .orElse(-1);
+        if (lastParagraphOrdinal < 0) {
+            return;
+        }
+        for (var operation : operations) {
+            for (var target : operation.deletionTargets()) {
+                if (target.paragraphIndex() == lastParagraphOrdinal) {
+                    throw new RedlinePlanException(
+                            RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
+                            operation.approvedChangeId(),
+                            "Approved change " + operation.ordinal()
+                                    + " would delete the document's final paragraph, "
+                                    + "which cannot be represented as a tracked change.");
                 }
             }
         }

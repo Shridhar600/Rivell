@@ -36,8 +36,9 @@ public record RedlineExecutionChange(
         if (ordinal < 0) {
             throw new IllegalArgumentException("ordinal must be >= 0");
         }
-        if (status == RedlineChangeStatus.APPLIED && verification == null) {
-            throw new IllegalArgumentException("applied changes carry a verification state");
+        if ((status == RedlineChangeStatus.APPLIED) != (verification != null)) {
+            throw new IllegalArgumentException(
+                    "only applied changes carry a verification state");
         }
         if (status == RedlineChangeStatus.FAILED && failureCode == null) {
             throw new IllegalArgumentException("failed changes carry a failure code");

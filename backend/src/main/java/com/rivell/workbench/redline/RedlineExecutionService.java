@@ -20,6 +20,8 @@ import com.rivell.workbench.foundation.StorageKey;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Deterministic redline execution: resolves the exact frozen source of the frozen
@@ -27,6 +29,8 @@ import com.rivell.workbench.organization.Permissions;
  * round trip, and persists one canonical execution per change set. Zero model calls.
  */
 public class RedlineExecutionService {
+
+    private static final Logger log = LoggerFactory.getLogger(RedlineExecutionService.class);
 
     public static final String AUTHOR = "Rivell";
 
@@ -79,7 +83,16 @@ public class RedlineExecutionService {
         }
 
         var startedAt = clock.instant();
+        log.info("Redline execution started reviewId={} changeSetId={} organizationId={}",
+                reviewId, changeSet.id(), organizationId);
         var execution = run(changeSet, organizationId, requestedBy, startedAt);
+        if (execution.status() == RedlineExecutionStatus.FAILED) {
+            log.info("Redline execution failed reviewId={} executionId={} code={}",
+                    reviewId, execution.id(), execution.failureCode());
+        } else {
+            log.info("Redline execution completed reviewId={} executionId={} outcome={}",
+                    reviewId, execution.id(), execution.outcome());
+        }
         return requireSuccessful(execution);
     }
 
@@ -105,8 +118,13 @@ public class RedlineExecutionService {
         }
         var artifact = execution.artifact();
         try (InputStream content = documentStorage.open(new StorageKey(artifact.storageKey()))) {
+            var bytes = content.readAllBytes();
+            if (!Hashes.sha256Hex(bytes).equals(artifact.sha256())) {
+                throw new IllegalStateException(
+                        "The stored redline artifact does not match its recorded hash");
+            }
             return new RedlineArtifactDownload(artifact.filename(), artifact.contentType(),
-                    content.readAllBytes());
+                    bytes);
         } catch (IOException e) {
             throw new IllegalStateException("The redline artifact could not be read", e);
         }
@@ -168,7 +186,8 @@ public class RedlineExecutionService {
                     e.approvedChangeId(), null, List.of(), sourceSha);
         }
 
-        var verification = verifier.verify(sourceBytes, rendered.bytes(), plan);
+        var verification = verifier.verify(sourceBytes, rendered.bytes(), plan,
+                rendered.changes());
         if (!verification.passed()) {
             return fail(changeSet, organizationId, requestedBy, startedAt,
                     RedlineFailureCode.VERIFICATION_FAILED, null,
@@ -178,17 +197,23 @@ public class RedlineExecutionService {
         var artifactId = UUID.randomUUID();
         var storageKey = organizationId + "/redline/" + artifactId + ".docx";
         storeArtifact(storageKey, rendered.bytes());
-        var executionId = UUID.randomUUID();
-        var completed = completedExecution(executionId, changeSet, organizationId, requestedBy,
-                startedAt, sourceSha, plan, rendered, artifactId, storageKey);
-        var persisted = executionRepository.insert(completed)
-                ? completed
-                : executionRepository.findByChangeSet(organizationId, changeSet.id())
-                        .orElse(completed);
-        if (persisted != completed) {
+        try {
+            var executionId = UUID.randomUUID();
+            var completed = completedExecution(executionId, changeSet, organizationId,
+                    requestedBy, startedAt, sourceSha, plan, rendered, verification,
+                    artifactId, storageKey);
+            if (executionRepository.insert(completed)) {
+                return completed;
+            }
             deleteQuietly(storageKey);
+            return executionRepository.findByChangeSet(organizationId, changeSet.id())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "A concurrent redline execution won the race but could not "
+                                    + "be read back"));
+        } catch (RuntimeException e) {
+            deleteQuietly(storageKey);
+            throw e;
         }
-        return persisted;
     }
 
     private RedlineExecution completedExecution(
@@ -200,8 +225,13 @@ public class RedlineExecutionService {
             String sourceSha,
             DocumentExecutionPlan plan,
             RenderedRedline rendered,
+            VerificationReport verification,
             UUID artifactId,
             String storageKey) {
+        var verificationByChange = new HashMap<UUID, ChangeVerification>();
+        for (var result : verification.changes()) {
+            verificationByChange.put(result.approvedChangeId(), result);
+        }
         var operationByChange = new HashMap<UUID, PlannedDocumentOperation>();
         for (var operation : plan.operations()) {
             operationByChange.put(operation.approvedChangeId(), operation);
@@ -214,10 +244,15 @@ public class RedlineExecutionService {
         for (var report : rendered.changes()) {
             var operation = operationByChange.get(report.approvedChangeId());
             var change = changeById.get(report.approvedChangeId());
+            var result = verificationByChange.get(report.approvedChangeId());
+            if (result == null || result.status() != RedlineVerificationStatus.VERIFIED) {
+                throw new IllegalStateException(
+                        "A rendered change has no verified round-trip result");
+            }
             changes.add(new RedlineExecutionChange(UUID.randomUUID(), organizationId,
                     executionId, report.approvedChangeId(), report.ordinal(),
                     operation.actionType(), change.targetKind(),
-                    RedlineChangeStatus.APPLIED, RedlineVerificationStatus.VERIFIED, null,
+                    RedlineChangeStatus.APPLIED, result.status(), null,
                     operation.placementLabel(), resolvedTarget(operation),
                     report.paragraphsDeleted(), report.paragraphsInserted(),
                     report.revisionIdStart(), report.revisionIdEnd()));
@@ -296,7 +331,9 @@ public class RedlineExecutionService {
         }
         return executionRepository
                 .findByChangeSet(execution.organizationId(), execution.changeSetId())
-                .orElse(execution);
+                .orElseThrow(() -> new IllegalStateException(
+                        "A concurrent redline execution won the race but could not be "
+                                + "read back"));
     }
 
     private RedlineExecution requireSuccessful(RedlineExecution execution) {
