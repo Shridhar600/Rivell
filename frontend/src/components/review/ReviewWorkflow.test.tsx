@@ -205,6 +205,23 @@ describe('workflow state availability and conflict truth', () => {
     expect(screen.queryByRole('button', { name: 'Change decision' })).not.toBeInTheDocument()
   })
 
+  it('never claims no decision and disables controls when decisions cannot be loaded', async () => {
+    const api = stubContractApi(baseOptions({ decisionsStatus: 500 }))
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    expect(
+      await screen.findByText(/Decisions could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
+    )
+    await screen.findByRole('heading', { name: 'Human decision' })
+    expect(screen.queryByText(/No human decision recorded yet/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Decision state could not be loaded/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
+    const findingsPanel = screen.getByRole('region', { name: 'Findings' })
+    expect(within(findingsPanel).queryByText('No decision')).not.toBeInTheDocument()
+  })
+
   it('reports a stale revision as changed elsewhere after refetching server state', async () => {
     let stub: ReturnType<typeof stubContractApi>
     stub = stubContractApi(
@@ -326,6 +343,41 @@ describe('finalization', () => {
     expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'Confirm finalize' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Finalize review' })).not.toBeInTheDocument()
+  })
+
+  it('clears a finalize conflict notice once the review becomes ready', async () => {
+    const user = userEvent.setup()
+    let stub: ReturnType<typeof stubContractApi>
+    stub = stubContractApi(
+      baseOptions({
+        humanReview: readyReview(),
+        finalizeResponse: () => {
+          stub.setHumanReview(readyReview())
+          return jsonResponse(
+            { code: '409', title: 'Invalid state', detail: 'review is not finalizable' },
+            409,
+          )
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', stub)
+    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Confirm finalize' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Finalization' })).toHaveTextContent(
+      'All required decisions are recorded',
+    )
+  })
+
+  it('moves focus into the confirmation and back to the trigger', async () => {
+    const user = userEvent.setup()
+    const api = stubContractApi(baseOptions({ humanReview: readyReview() }))
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
+    expect(screen.getByRole('button', { name: 'Confirm finalize' })).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Finalize review' })).toHaveFocus()
   })
 
   it('refreshes blockers and does not retry when finalization is rejected', async () => {
@@ -479,6 +531,7 @@ describe('approved change set', () => {
 
     expect(changes[2]).toHaveTextContent('Delete clause — 5. Termination')
     expect(changes[2]).toHaveTextContent('No replacement text')
+    expect(changes[2]).toHaveTextContent('View clause in contract')
 
     expect(
       within(changeSet).queryByRole('button', { name: /redline|apply|download/i }),

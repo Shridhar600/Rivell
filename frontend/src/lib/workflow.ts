@@ -39,14 +39,6 @@ export function decisionStateLabel(decision: HumanDecision | null | undefined): 
   }
 }
 
-export function decisionResolved(decision: HumanDecision | null | undefined): boolean {
-  return (
-    decision !== null &&
-    decision !== undefined &&
-    (decision.action === 'ACCEPT' || decision.action === 'EDIT' || decision.action === 'REJECT')
-  )
-}
-
 export function humanStatusLabel(status: HumanReviewStatus): string {
   switch (status) {
     case 'NOT_STARTED':
@@ -175,8 +167,8 @@ export function validateDecisionForm(values: DecisionFormValues): DecisionFormEr
   } else if (comment.length > 2000) {
     errors.comment = 'Keep the comment under 2000 characters.'
   }
-  if (values.action === 'EDIT' && values.approvedAction) {
-    if (editLanguageRequired(values.approvedAction) && language.trim() === '') {
+  if (values.action === 'EDIT' && editLanguageRequired(values.approvedAction)) {
+    if (language.trim() === '') {
       errors.approvedLanguage = 'Enter the final approved language for this change.'
     } else if (language.length > 20000) {
       errors.approvedLanguage = 'Keep the approved language under 20000 characters.'
@@ -196,6 +188,7 @@ export function classifyDecisionConflict(input: {
   attemptedAction: DecisionAction
   expectedVersion: number
   currentDecision: HumanDecision | null | undefined
+  decisionStateKnown: boolean
   humanReview: HumanReview | null | undefined
   analysisComplete: boolean
 }): DecisionConflictKind {
@@ -206,6 +199,7 @@ export function classifyDecisionConflict(input: {
   ) {
     return 'STALE'
   }
+  if (!input.decisionStateKnown) return 'UNKNOWN'
   if (!input.analysisComplete) return 'ANALYSIS_INCOMPLETE'
   if (input.attemptedAction === 'ACCEPT') return 'NOT_ACTIONABLE'
   return 'UNKNOWN'

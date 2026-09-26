@@ -35,17 +35,15 @@ export function ApprovedChangePreview({
         <h3>
           {changeActionLabel(change.actionType)} — {targetLabel}
         </h3>
-        {finding ? (
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => onSelectFinding(finding.id)}
-          >
-            From finding: {findingSubjectLabel(finding, regionLabels)}
-          </button>
-        ) : (
-          <p className="panel__hint">Source finding is not in the loaded list.</p>
-        )}
+        <button
+          type="button"
+          className="link-button"
+          onClick={() => onSelectFinding(change.findingId)}
+        >
+          {finding
+            ? `From finding: ${findingSubjectLabel(finding, regionLabels)}`
+            : 'Open source finding'}
+        </button>
         {decision ? (
           <p className="panel__hint">
             Decision: {decisionStateLabel(decision)} · Revision {decision.revision}
@@ -73,7 +71,7 @@ export function ApprovedChangePreview({
           The insertion location is not part of the approved change set.
         </p>
       ) : null}
-      {change.actionType === 'REPLACE' &&
+      {(change.actionType === 'REPLACE' || change.actionType === 'DELETE') &&
       change.targetKind === 'CLAUSE' &&
       change.targetHeadingNodeId &&
       canDeepLink ? (

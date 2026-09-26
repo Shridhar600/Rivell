@@ -75,8 +75,8 @@ export function HumanReviewProgress({ review, findings, regionLabels, onSelectFi
         <div className="human-review__blockers">
           <h3>Before this review can be finalized</h3>
           <ul>
-            {review.blockers.map((blocker) => (
-              <li key={blocker.code}>
+            {review.blockers.map((blocker, blockerIndex) => (
+              <li key={`${blocker.code}-${blockerIndex}`}>
                 <p>{blockerLabel(blocker.code)}</p>
                 {blocker.message && blocker.message !== blockerLabel(blocker.code) ? (
                   <p className="panel__hint">{blocker.message}</p>

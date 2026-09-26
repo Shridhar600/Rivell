@@ -82,9 +82,12 @@ export function ReviewWorkspacePage() {
   const isFinalized = humanReview?.status === 'COMPLETED'
   const finalizeMutation = useFinalizeReview(reviewId)
   const changeSetQuery = useApprovedChangeSetQuery(reviewId, isFinalized)
+  const decisionsLoaded = decisionsQuery.isSuccess
   const finalizeError = finalizeMutation.isError
     ? isWorkflowConflictError(finalizeMutation.error)
-      ? 'The review cannot be finalized yet. The blockers shown under Human review are current.'
+      ? humanReview?.readyToFinalize
+        ? null
+        : 'The review cannot be finalized yet. The blockers shown under Human review are current.'
       : workflowErrorMessage(finalizeMutation.error)
     : null
   const decisionsByFindingId = useMemo(
@@ -215,6 +218,17 @@ export function ReviewWorkspacePage() {
               Try again
             </button>
           </p>
+        ) : decisionsQuery.isError ? (
+          <p className="state state--warning" role="alert">
+            Decisions could not be loaded.{' '}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => void decisionsQuery.refetch()}
+            >
+              Try again
+            </button>
+          </p>
         ) : humanReview ? (
           <>
             <HumanReviewProgress
@@ -224,6 +238,7 @@ export function ReviewWorkspacePage() {
               onSelectFinding={selectFinding}
             />
             <FinalizationPanel
+              key={reviewId}
               review={humanReview}
               isFinalizing={finalizeMutation.isPending}
               finalizeError={finalizeError}
@@ -271,6 +286,8 @@ export function ReviewWorkspacePage() {
           regionLabels={regionLabels}
           decisionsByFindingId={decisionsByFindingId}
           showDecisionState={analysisCompleted && humanReview !== null}
+          decisionsTruncated={decisionsQuery.data?.truncated ?? false}
+          decisionsLoaded={decisionsLoaded}
           reviewStatus={status ?? 'UNKNOWN'}
           coverageLimited={coverageLimitations(summaryQuery.data.coverage).length > 0}
           isEnabled={canReadFindings}
@@ -298,6 +315,7 @@ export function ReviewWorkspacePage() {
           showDecisionControls={analysisCompleted}
           canDecide={analysisCompleted && humanReview !== null}
           analysisComplete={analysisCompleted}
+          decisionsLoaded={decisionsLoaded}
           decisionsTruncated={decisionsQuery.data?.truncated ?? false}
           findingId={canReadFindings ? selectedFindingId : null}
           isPending={Boolean(selectedFindingId) && findingQuery.isPending}

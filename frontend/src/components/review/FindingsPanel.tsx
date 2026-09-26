@@ -24,6 +24,8 @@ type Props = {
   regionLabels: Map<string, string>
   decisionsByFindingId: Map<string, HumanDecision>
   showDecisionState: boolean
+  decisionsLoaded: boolean
+  decisionsTruncated: boolean
   reviewStatus: ReviewStatus
   coverageLimited: boolean
   isEnabled: boolean
@@ -47,6 +49,8 @@ export function FindingsPanel({
   regionLabels,
   decisionsByFindingId,
   showDecisionState,
+  decisionsLoaded,
+  decisionsTruncated,
   reviewStatus,
   coverageLimited,
   isEnabled,
@@ -203,7 +207,7 @@ export function FindingsPanel({
                       {classificationLabel(finding.reviewClassification)}
                     </span>
                   </span>
-                  {showDecisionState ? (
+                  {showDecisionState && decisionsLoaded ? (
                     <span className="finding-list__decision">
                       {decisionStateLabel(decisionsByFindingId.get(finding.id) ?? null)}
                     </span>
@@ -214,6 +218,11 @@ export function FindingsPanel({
           </ul>
           {truncated ? (
             <p className="panel__hint">Showing the first findings only.</p>
+          ) : null}
+          {showDecisionState && decisionsTruncated ? (
+            <p className="panel__hint">
+              Only the most recent decisions are loaded; some findings may show no decision here.
+            </p>
           ) : null}
         </>
       ) : null}

@@ -52,6 +52,7 @@ type Props = {
   showDecisionControls: boolean
   canDecide: boolean
   analysisComplete: boolean
+  decisionsLoaded: boolean
   decisionsTruncated: boolean
 }
 
@@ -100,6 +101,7 @@ export function FindingDetailView({
   showDecisionControls,
   canDecide,
   analysisComplete,
+  decisionsLoaded,
   decisionsTruncated,
 }: Props) {
   const headingRef = useHeadingFocus<HTMLHeadingElement>(finding.id)
@@ -315,6 +317,7 @@ export function FindingDetailView({
           isFinalized={isFinalized}
           canDecide={canDecide}
           analysisComplete={analysisComplete}
+          decisionsLoaded={decisionsLoaded}
           decisionsTruncated={decisionsTruncated}
         />
       ) : null}
@@ -365,6 +368,7 @@ export function FindingDetailPane({
   showDecisionControls,
   canDecide,
   analysisComplete,
+  decisionsLoaded,
   decisionsTruncated,
   findingId,
   isPending,
@@ -387,6 +391,7 @@ export function FindingDetailPane({
   showDecisionControls: boolean
   canDecide: boolean
   analysisComplete: boolean
+  decisionsLoaded: boolean
   decisionsTruncated: boolean
   findingId: string | null
   isPending: boolean
@@ -425,6 +430,7 @@ export function FindingDetailPane({
       showDecisionControls={showDecisionControls}
       canDecide={canDecide}
       analysisComplete={analysisComplete}
+      decisionsLoaded={decisionsLoaded}
       decisionsTruncated={decisionsTruncated}
     />
   )

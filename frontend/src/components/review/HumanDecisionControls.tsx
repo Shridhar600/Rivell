@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FindingDetail } from '../../api/reviews'
 import type { HumanDecision, HumanReview } from '../../api/workflow'
-import { isWorkflowConflictError, useSubmitDecision, workflowErrorMessage } from '../../api/workflow'
+import {
+  isWorkflowConflictError,
+  isWorkflowForbiddenError,
+  useSubmitDecision,
+  workflowErrorMessage,
+} from '../../api/workflow'
 import { classifyDecisionConflict, decisionConflictNotice } from '../../lib/workflow'
 import type { DecisionConflictKind } from '../../lib/workflow'
 import { DecisionEditor } from './DecisionEditor'
@@ -17,6 +22,7 @@ type Props = {
   isFinalized: boolean
   canDecide: boolean
   analysisComplete: boolean
+  decisionsLoaded: boolean
   decisionsTruncated: boolean
 }
 
@@ -28,6 +34,7 @@ export function HumanDecisionControls({
   isFinalized,
   canDecide,
   analysisComplete,
+  decisionsLoaded,
   decisionsTruncated,
 }: Props) {
   const mutation = useSubmitDecision(reviewId)
@@ -49,10 +56,12 @@ export function HumanDecisionControls({
         attemptedAction: conflictAttempt.action,
         expectedVersion: conflictAttempt.expectedVersion,
         currentDecision,
+        decisionStateKnown: decisionsLoaded,
         humanReview,
         analysisComplete,
       })
     : null
+  const lacksPermission = mutation.isError && isWorkflowForbiddenError(mutation.error)
 
   const submitError = conflictKind
     ? decisionConflictNotice(conflictKind)
@@ -93,15 +102,28 @@ export function HumanDecisionControls({
           not be shown here.
         </p>
       ) : null}
-      <DecisionSummary decision={currentDecision} />
+      {!decisionsLoaded ? (
+        <p className="panel__hint" role="alert">
+          Decision state could not be loaded, so any existing decision is not shown.
+        </p>
+      ) : (
+        <DecisionSummary decision={currentDecision} />
+      )}
+      {lacksPermission ? (
+        <p className="state state--warning" role="alert">
+          {workflowErrorMessage(mutation.error)}
+        </p>
+      ) : null}
       {isFinalized ? (
         <p className="panel__hint">
           This review was finalized. Decisions are locked; the recorded decision stays visible
           for audit.
         </p>
-      ) : !canDecide ? (
+      ) : lacksPermission ? (
+        <p className="panel__hint">Decision controls are read-only for this account.</p>
+      ) : !canDecide || !decisionsLoaded ? (
         <p className="panel__hint">
-          Decision controls are unavailable until the human review state is available.
+          Decision controls are unavailable until the review workflow state is available.
         </p>
       ) : editorVisible ? (
         <DecisionEditor

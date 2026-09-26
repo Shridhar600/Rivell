@@ -477,6 +477,7 @@ export function stubContractApi(options: StubOptions = {}) {
   let semanticsStatus = options.semanticsStatus ?? 200
   let reviews = options.reviews ?? { items: [], truncated: false }
   let decisions: unknown = options.decisions ?? { items: [], truncated: false }
+  let decisionHistory: unknown = options.decisionHistory ?? { items: [], truncated: false }
   let humanReview: unknown = options.humanReview ?? null
   let changeSet: unknown = options.changeSet ?? null
 
@@ -621,9 +622,7 @@ export function stubContractApi(options: StubOptions = {}) {
           options.decisionHistoryStatus,
         )
       }
-      return jsonResponse(
-        envelope(options.decisionHistory ?? { items: [], truncated: false }),
-      )
+      return jsonResponse(envelope(decisionHistory))
     }
     if (method === 'GET' && /\/api\/reviews\/[^/?]+\/decisions(\?|$)/.test(url)) {
       if (options.decisionsStatus && options.decisionsStatus !== 200) {
@@ -796,6 +795,9 @@ export function stubContractApi(options: StubOptions = {}) {
     },
     setDecisions: (next: unknown) => {
       decisions = next as typeof decisions
+    },
+    setDecisionHistory: (next: unknown) => {
+      decisionHistory = next
     },
     setHumanReview: (next: unknown) => {
       humanReview = next

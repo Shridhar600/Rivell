@@ -34,7 +34,7 @@ export function DecisionHistory({
               <p>
                 Revision {revision.revision} — {decisionStateLabel(revision)}
               </p>
-              {revision.action === 'EDIT' && revision.approvedAction ? (
+              {revision.approvedAction && revision.approvedAction !== 'UNKNOWN' ? (
                 <p className="panel__hint">{changeActionLabel(revision.approvedAction)}</p>
               ) : null}
               {revision.approvedLanguage ? (

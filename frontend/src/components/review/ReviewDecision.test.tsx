@@ -48,11 +48,23 @@ function renderControls(
       isFinalized={overrides.isFinalized ?? false}
       canDecide
       analysisComplete
+      decisionsLoaded
       decisionsTruncated={false}
     />,
     { wrapper },
   )
   return { api, view }
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function envelope(data: unknown) {
+  return { data, status: 200, timestamp: '2026-09-26T10:00:00Z' }
 }
 
 function wrapperFor() {
@@ -299,6 +311,7 @@ describe('decision surface honesty', () => {
         isFinalized={false}
         canDecide
         analysisComplete
+        decisionsLoaded
         decisionsTruncated
       />,
       { wrapper: wrapperFor() },
@@ -336,6 +349,132 @@ describe('human decision history', () => {
     expect(items[0]).toHaveTextContent('Edited')
     expect(items[1]).toHaveTextContent('Revision 1')
     expect(items[1]).toHaveTextContent('Accepted')
+  })
+
+  it('refreshes an open history after a new revision is recorded', async () => {
+    const user = userEvent.setup()
+    let stub: ReturnType<typeof stubContractApi>
+    stub = stubContractApi({
+      decisions: { items: [], truncated: false },
+      humanReview: fixtureHumanReview(),
+      decisionHistory: {
+        items: [fixtureDecision({ id: 'd-1', revision: 1, action: 'ACCEPT' })],
+        truncated: false,
+      },
+      decisionResponse: () => {
+        stub.setDecisionHistory({
+          items: [
+            fixtureDecision({ id: 'd-2', revision: 2, action: 'REJECT' }),
+            fixtureDecision({ id: 'd-1', revision: 1, action: 'ACCEPT' }),
+          ],
+          truncated: false,
+        })
+        return jsonResponse(
+          envelope(fixtureDecision({ id: 'd-2', revision: 2, action: 'REJECT' })),
+        )
+      },
+    })
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } },
+    })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    )
+    render(
+      <HumanDecisionControls
+        reviewId="r-1"
+        finding={fixtureAcceptableFindingDetail}
+        currentDecision={null}
+        humanReview={fixtureHumanReview()}
+        isFinalized={false}
+        canDecide
+        analysisComplete
+        decisionsLoaded
+        decisionsTruncated={false}
+      />,
+      { wrapper },
+    )
+    await user.click(screen.getByText('Decision history'))
+    const list = await screen.findByRole('list', { name: 'Decision revisions' })
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Record decision' }))
+    await user.click(screen.getByRole('radio', { name: 'Reject recommendation' }))
+    await user.type(screen.getByLabelText(/Comment/), 'Reason.')
+    await user.click(screen.getByRole('button', { name: 'Reject recommendation' }))
+    await waitFor(() =>
+      expect(within(list).getAllByRole('listitem')).toHaveLength(2),
+    )
+    expect(within(list).getAllByRole('listitem')[0]).toHaveTextContent('Revision 2')
+  })
+
+  it('submits DELETE even when a stale oversized language draft exists', async () => {
+    const user = userEvent.setup()
+    const { api } = renderControls()
+    await user.click(screen.getByRole('button', { name: 'Record decision' }))
+    await user.click(screen.getByRole('radio', { name: 'Edit change' }))
+    const language = screen.getByLabelText(/Final approved language/)
+    await user.click(language)
+    await user.paste('x'.repeat(20001))
+    await user.click(screen.getByRole('radio', { name: 'Delete clause' }))
+    await user.click(screen.getByRole('button', { name: 'Edit change' }))
+    const body = api.requests.find((request) => request.method === 'PUT')?.body as Record<
+      string,
+      unknown
+    >
+    expect(body.approvedAction).toBe('DELETE')
+    expect(body).not.toHaveProperty('approvedLanguage')
+  })
+
+  it('reuses the idempotency key for an unchanged retry and regenerates it on a change', async () => {
+    const user = userEvent.setup()
+    const { api } = renderControls({
+      api: {
+        decisionResponse: () =>
+          jsonResponse({ code: '500', title: 'Error', detail: 'x' }, 500),
+      },
+    })
+    await user.click(screen.getByRole('button', { name: 'Record decision' }))
+    await user.click(screen.getByRole('button', { name: 'Accept recommendation' }))
+    await screen.findByText(/unavailable right now|could not be saved/)
+    await user.click(screen.getByRole('button', { name: 'Accept recommendation' }))
+    await waitFor(() =>
+      expect(api.requests.filter((request) => request.method === 'PUT')).toHaveLength(2),
+    )
+    const bodies = api.requests
+      .filter((request) => request.method === 'PUT')
+      .map((request) => (request.body as { clientRequestId?: string }).clientRequestId)
+    expect(bodies[1]).toBe(bodies[0])
+    await user.click(screen.getByRole('radio', { name: 'Edit change' }))
+    await user.type(screen.getByLabelText(/Final approved language/), 'New text.')
+    await user.click(screen.getByRole('button', { name: 'Edit change' }))
+    await waitFor(() =>
+      expect(api.requests.filter((request) => request.method === 'PUT')).toHaveLength(3),
+    )
+    const third = api.requests.filter((request) => request.method === 'PUT')[2]
+    expect((third.body as { clientRequestId?: string }).clientRequestId).not.toBe(bodies[0])
+  })
+
+  it('goes read-only when the server denies permission', async () => {
+    const user = userEvent.setup()
+    const { api } = renderControls({
+      api: {
+        decisionResponse: () =>
+          new Response(
+            JSON.stringify({
+              code: '403',
+              title: 'Forbidden',
+              detail: 'Not authorized for this operation.',
+            }),
+            { status: 403, headers: { 'Content-Type': 'application/json' } },
+          ),
+      },
+    })
+    await user.click(screen.getByRole('button', { name: 'Record decision' }))
+    await user.click(screen.getByRole('button', { name: 'Accept recommendation' }))
+    expect(await screen.findByText(/do not have permission/)).toBeInTheDocument()
+    expect(screen.getByText('Decision controls are read-only for this account.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Accept recommendation' })).not.toBeInTheDocument()
+    expect(api.requests.filter((request) => request.method === 'PUT')).toHaveLength(1)
   })
 
   it('offers a retry when history fails that refetches', async () => {

@@ -12,7 +12,7 @@ export function DecisionSummary({ decision }: { decision: HumanDecision | null }
         <strong>{decisionStateLabel(decision)}</strong>
         <span className="decision-summary__revision"> — Revision {decision.revision}</span>
       </p>
-      {decision.action === 'EDIT' && decision.approvedAction ? (
+      {decision.approvedAction && decision.approvedAction !== 'UNKNOWN' ? (
         <p className="decision-summary__change">
           Change: {changeActionLabel(decision.approvedAction)}
         </p>

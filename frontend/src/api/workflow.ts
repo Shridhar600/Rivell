@@ -7,9 +7,9 @@ import {
   malformed,
   parseApiResult,
   readArray,
+  readNumber,
   readOptionalBoolean,
   readOptionalNullableString,
-  readOptionalNumber,
   readString,
 } from './envelope'
 
@@ -167,7 +167,7 @@ export function parseDecision(value: unknown, what = 'decision'): HumanDecision 
   return {
     id: readString(decision, 'id', what),
     findingId: readString(decision, 'findingId', what),
-    revision: readOptionalNumber(decision, 'revision', what),
+    revision: readNumber(decision, 'revision', what),
     action: readStatus(decision, 'action', DECISION_ACTIONS),
     approvedAction: readNullableStatus(decision, 'approvedAction', CHANGE_ACTION_TYPES),
     approvedLanguage: readOptionalNullableString(decision, 'approvedLanguage', what),
@@ -208,15 +208,15 @@ export function parseHumanReview(value: unknown, what = 'human review'): HumanRe
     reviewId: readOptionalNullableString(review, 'reviewId', what) ?? '',
     status: readStatus(review, 'status', HUMAN_REVIEW_STATUSES),
     analysisStatus: readOptionalNullableString(review, 'analysisStatus', what) ?? 'UNKNOWN',
-    actionableFindings: readOptionalNumber(review, 'actionableFindings', what),
-    resolvedFindings: readOptionalNumber(review, 'resolvedFindings', what),
-    remainingFindings: readOptionalNumber(review, 'remainingFindings', what),
-    accepted: readOptionalNumber(review, 'accepted', what),
-    edited: readOptionalNumber(review, 'edited', what),
-    rejected: readOptionalNumber(review, 'rejected', what),
-    escalated: readOptionalNumber(review, 'escalated', what),
-    informationalFindings: readOptionalNumber(review, 'informationalFindings', what),
-    informationalDecided: readOptionalNumber(review, 'informationalDecided', what),
+    actionableFindings: readNumber(review, 'actionableFindings', what),
+    resolvedFindings: readNumber(review, 'resolvedFindings', what),
+    remainingFindings: readNumber(review, 'remainingFindings', what),
+    accepted: readNumber(review, 'accepted', what),
+    edited: readNumber(review, 'edited', what),
+    rejected: readNumber(review, 'rejected', what),
+    escalated: readNumber(review, 'escalated', what),
+    informationalFindings: readNumber(review, 'informationalFindings', what),
+    informationalDecided: readNumber(review, 'informationalDecided', what),
     readyToFinalize: readOptionalBoolean(review, 'readyToFinalize', what),
     blockers: readArray(review, 'blockers', what, parseBlocker),
     changeSetId: readOptionalNullableString(review, 'changeSetId', what),
@@ -231,7 +231,7 @@ function parseApprovedChange(value: unknown, what: string): ApprovedChange {
     id: readString(change, 'id', what),
     findingId: readString(change, 'findingId', what),
     decisionId: readString(change, 'decisionId', what),
-    ordinal: readOptionalNumber(change, 'ordinal', what),
+    ordinal: readNumber(change, 'ordinal', what),
     actionType: readStatus(change, 'actionType', CHANGE_ACTION_TYPES),
     targetKind: readStatus(change, 'targetKind', CHANGE_TARGET_KINDS),
     targetHeadingNodeId: readOptionalNullableString(change, 'targetHeadingNodeId', what),
@@ -255,9 +255,9 @@ export function parseApprovedChangeSet(
     id: readString(changeSet, 'id', what),
     reviewId: readString(changeSet, 'reviewId', what),
     contractId: readString(changeSet, 'contractId', what),
-    contractVersionNumber: readOptionalNumber(changeSet, 'contractVersionNumber', what),
+    contractVersionNumber: readNumber(changeSet, 'contractVersionNumber', what),
     runId: readOptionalNullableString(changeSet, 'runId', what) ?? '',
-    changeSetVersion: readOptionalNumber(changeSet, 'changeSetVersion', what),
+    changeSetVersion: readNumber(changeSet, 'changeSetVersion', what),
     finalizedBy: readOptionalNullableString(changeSet, 'finalizedBy', what) ?? '',
     finalizedAt: readOptionalNullableString(changeSet, 'finalizedAt', what) ?? '',
     changes: readArray(changeSet, 'changes', what, parseApprovedChange),
@@ -471,6 +471,9 @@ export function useSubmitDecision(
       )
       void queryClient.invalidateQueries({ queryKey: workflowKeys.decisions(reviewId) })
       void queryClient.invalidateQueries({ queryKey: workflowKeys.humanReview(reviewId) })
+      void queryClient.invalidateQueries({
+        queryKey: ['reviews', 'decision-history', reviewId],
+      })
     },
     onError: (error) => {
       void queryClient.invalidateQueries({ queryKey: workflowKeys.decisions(reviewId) })

@@ -213,6 +213,7 @@ describe('decision conflict classification', () => {
         attemptedAction: 'ACCEPT',
         expectedVersion: 1,
         currentDecision: decision({ revision: 2 }),
+        decisionStateKnown: true,
         humanReview: humanReview({ status: 'COMPLETED' }),
         analysisComplete: true,
       }),
@@ -225,6 +226,7 @@ describe('decision conflict classification', () => {
         attemptedAction: 'EDIT',
         expectedVersion: 1,
         currentDecision: decision({ revision: 2 }),
+        decisionStateKnown: true,
         humanReview: humanReview(),
         analysisComplete: true,
       }),
@@ -234,6 +236,7 @@ describe('decision conflict classification', () => {
         attemptedAction: 'EDIT',
         expectedVersion: 0,
         currentDecision: decision({ revision: 1 }),
+        decisionStateKnown: true,
         humanReview: humanReview(),
         analysisComplete: true,
       }),
@@ -246,6 +249,7 @@ describe('decision conflict classification', () => {
         attemptedAction: 'EDIT',
         expectedVersion: 0,
         currentDecision: null,
+        decisionStateKnown: true,
         humanReview: humanReview({ status: 'NOT_STARTED' }),
         analysisComplete: false,
       }),
@@ -255,6 +259,7 @@ describe('decision conflict classification', () => {
         attemptedAction: 'ACCEPT',
         expectedVersion: 0,
         currentDecision: null,
+        decisionStateKnown: true,
         humanReview: humanReview(),
         analysisComplete: true,
       }),
@@ -267,6 +272,20 @@ describe('decision conflict classification', () => {
         attemptedAction: 'EDIT',
         expectedVersion: 0,
         currentDecision: null,
+        decisionStateKnown: true,
+        humanReview: humanReview(),
+        analysisComplete: true,
+      }),
+    ).toBe('UNKNOWN')
+  })
+
+  it('never claims not-actionable when the decision state is unknown', () => {
+    expect(
+      classifyDecisionConflict({
+        attemptedAction: 'ACCEPT',
+        expectedVersion: 0,
+        currentDecision: null,
+        decisionStateKnown: false,
         humanReview: humanReview(),
         analysisComplete: true,
       }),

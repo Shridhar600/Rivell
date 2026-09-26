@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { HumanReview } from '../../api/workflow'
 import { formatTimestamp } from '../../lib/knowledgeLabels'
 
@@ -12,6 +12,17 @@ type Props = {
 export function FinalizationPanel({ review, isFinalizing, finalizeError, onFinalize }: Props) {
   const [isConfirming, setConfirming] = useState(false)
   const confirmRef = useRef<HTMLButtonElement>(null)
+  const finalizeRef = useRef<HTMLButtonElement>(null)
+  const restoreFocusRef = useRef(false)
+
+  useEffect(() => {
+    if (isConfirming) {
+      confirmRef.current?.focus()
+    } else if (restoreFocusRef.current) {
+      restoreFocusRef.current = false
+      finalizeRef.current?.focus()
+    }
+  }, [isConfirming])
 
   if (review.status === 'COMPLETED') {
     return (
@@ -61,7 +72,10 @@ export function FinalizationPanel({ review, isFinalizing, finalizeError, onFinal
               <button
                 type="button"
                 className="link-button"
-                onClick={() => setConfirming(false)}
+                onClick={() => {
+                  restoreFocusRef.current = true
+                  setConfirming(false)
+                }}
               >
                 Cancel
               </button>
@@ -70,6 +84,7 @@ export function FinalizationPanel({ review, isFinalizing, finalizeError, onFinal
             <button
               type="button"
               className="button"
+              ref={finalizeRef}
               onClick={() => setConfirming(true)}
             >
               Finalize review
