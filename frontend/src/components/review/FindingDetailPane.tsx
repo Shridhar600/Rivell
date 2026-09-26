@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import type { EvidenceItem } from '../../api/retrieval'
 import type { FindingClaim, FindingDetail } from '../../api/reviews'
+import type { HumanDecision, HumanReview } from '../../api/workflow'
 import { conceptLabel } from '../../lib/contractSemantics'
 import type { StructureNode } from '../../lib/documentTree'
 import {
@@ -26,6 +27,7 @@ import { LoadingState } from '../LoadingState'
 import { StructuralRenderer } from '../StructuralRenderer'
 import { authorityLabel } from '../../lib/evidence'
 import { FindingEvidencePanel, type RelatedProvision } from './FindingEvidencePanel'
+import { HumanDecisionControls } from './HumanDecisionControls'
 
 type ClauseSource = {
   nodeId: string
@@ -43,6 +45,11 @@ type Props = {
   clauseHeadings: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
   onOpenClauseSemantics: (headingNodeId: string) => void
+  reviewId: string
+  currentDecision: HumanDecision | null
+  humanReview: HumanReview | null
+  isFinalized: boolean
+  showDecisionControls: boolean
 }
 
 function ClaimEvidenceRefs({
@@ -83,6 +90,11 @@ export function FindingDetailView({
   clauseHeadings,
   onNavigateToNode,
   onOpenClauseSemantics,
+  reviewId,
+  currentDecision,
+  humanReview,
+  isFinalized,
+  showDecisionControls,
 }: Props) {
   const headingRef = useHeadingFocus<HTMLHeadingElement>(finding.id)
   const why = whyClaims(finding.claims)
@@ -287,6 +299,17 @@ export function FindingDetailView({
         </section>
       ) : null}
 
+      {showDecisionControls ? (
+        <HumanDecisionControls
+          key={finding.id}
+          reviewId={reviewId}
+          finding={finding}
+          currentDecision={currentDecision}
+          humanReview={humanReview}
+          isFinalized={isFinalized}
+        />
+      ) : null}
+
       {finding.evidenceItems.length > 0 ? (
         <FindingEvidencePanel
           items={finding.evidenceItems}
@@ -326,6 +349,11 @@ export function FindingDetailPane({
   clauseHeadings,
   onNavigateToNode,
   onOpenClauseSemantics,
+  reviewId,
+  currentDecision,
+  humanReview,
+  isFinalized,
+  showDecisionControls,
   findingId,
   isPending,
   isError,
@@ -340,6 +368,11 @@ export function FindingDetailPane({
   clauseHeadings: Map<string, string>
   onNavigateToNode: (nodeId: string) => void
   onOpenClauseSemantics: (headingNodeId: string) => void
+  reviewId: string
+  currentDecision: HumanDecision | null
+  humanReview: HumanReview | null
+  isFinalized: boolean
+  showDecisionControls: boolean
   findingId: string | null
   isPending: boolean
   isError: boolean
@@ -370,6 +403,11 @@ export function FindingDetailPane({
       clauseHeadings={clauseHeadings}
       onNavigateToNode={onNavigateToNode}
       onOpenClauseSemantics={onOpenClauseSemantics}
+      reviewId={reviewId}
+      currentDecision={currentDecision}
+      humanReview={humanReview}
+      isFinalized={isFinalized}
+      showDecisionControls={showDecisionControls}
     />
   )
 }

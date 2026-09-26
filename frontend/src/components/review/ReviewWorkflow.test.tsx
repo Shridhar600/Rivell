@@ -1,0 +1,192 @@
+import { StrictMode } from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { createMemoryRouter } from 'react-router'
+import { RouterProvider } from 'react-router/dom'
+import { AppProviders } from '../../app/AppProviders'
+import { appRoutes } from '../../app/router'
+import { stubContractApi, type StubOptions } from '../contract/testFixtures'
+import {
+  fixtureAnalyzingReviewSummary,
+  fixtureClauseFindingDetail,
+  fixtureCompletedReviewSummary,
+  fixtureFindingList,
+} from './testFixtures'
+import { fixtureDecision, fixtureHumanReview } from './workflowFixtures'
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function envelope(data: unknown) {
+  return { data, status: 200, timestamp: '2026-09-26T10:00:00Z' }
+}
+
+function renderRouter(
+  initialEntry: string,
+  api: ReturnType<typeof stubContractApi>,
+) {
+  void api
+  const router = createMemoryRouter(appRoutes, { initialEntries: [initialEntry] })
+  render(
+    <StrictMode>
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>
+    </StrictMode>,
+  )
+  return { router }
+}
+
+function baseOptions(options: StubOptions = {}): StubOptions {
+  return {
+    reviewSummary: fixtureCompletedReviewSummary,
+    findings: fixtureFindingList,
+    findingDetailResponse: (findingId: string) => {
+      const details: Record<string, unknown> = {
+        'f-1': fixtureClauseFindingDetail,
+      }
+      return jsonResponse(envelope(details[findingId] ?? null))
+    },
+    decisions: { items: [], truncated: false },
+    humanReview: fixtureHumanReview(),
+    ...options,
+  }
+}
+
+beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
+
+describe('human review progress in the workspace', () => {
+  it('renders server-owned status, counts and blockers with finding navigation', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        humanReview: fixtureHumanReview({
+          accepted: 1,
+          resolvedFindings: 1,
+          remainingFindings: 1,
+          actionableFindings: 2,
+          informationalFindings: 2,
+          informationalDecided: 1,
+          blockers: [
+            {
+              code: 'UNRESOLVED_REVIEW_REQUIRED_FINDINGS',
+              message: '1 finding that requires review still needs a decision.',
+              findingIds: ['f-1'],
+            },
+          ],
+        }),
+      }),
+    )
+    const { router } = renderRouter('/reviews/c1/analysis/r-1', api)
+
+    const progress = await screen.findByRole('region', { name: 'Human review' })
+    expect(progress).toHaveTextContent('Human review in progress')
+    expect(progress).toHaveTextContent('Findings needing a decision')
+    expect(progress).toHaveTextContent('Informational findings decided')
+    expect(progress).toHaveTextContent('1 of 2')
+    expect(progress).toHaveTextContent(
+      '1 finding that requires review still needs a decision.',
+    )
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Open finding: 6. Limitation of Liability',
+      }),
+    )
+    await waitFor(() => expect(router.state.location.search).toContain('finding=f-1'))
+  })
+
+  it('shows the machine analysis and human review states separately', async () => {
+    const api = stubContractApi(baseOptions())
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    expect(await screen.findByRole('heading', { name: 'Human review' })).toBeInTheDocument()
+    expect(screen.queryByText('Human review completed')).not.toBeInTheDocument()
+  })
+})
+
+describe('recording a decision in the workspace', () => {
+  it('saves the decision, shows it as current and refreshes human review progress', async () => {
+    let stub: ReturnType<typeof stubContractApi>
+    stub = stubContractApi(
+      baseOptions({
+        decisionResponse: (body) => {
+          const request = body as { clientRequestId?: string }
+          const decision = fixtureDecision({
+            id: 'd-9',
+            revision: 1,
+            clientRequestId: request.clientRequestId ?? null,
+          })
+          stub.setDecisions({ items: [decision], truncated: false })
+          stub.setHumanReview(
+            fixtureHumanReview({
+              status: 'READY_FOR_COMPLETION',
+              accepted: 1,
+              resolvedFindings: 1,
+              remainingFindings: 0,
+              blockers: [],
+              readyToFinalize: true,
+            }),
+          )
+          return jsonResponse(envelope(decision))
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', stub)
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
+    )
+    await screen.findByRole('heading', { name: 'Human decision' })
+    await userEvent.click(screen.getByRole('button', { name: 'Record decision' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Accept recommendation' }))
+
+    expect(await screen.findByText('Decision recorded.')).toBeInTheDocument()
+    const put = stub.requests.find((request) => request.method === 'PUT')
+    const body = put?.body as Record<string, unknown>
+    expect(body).toMatchObject({ action: 'ACCEPT', expectedVersion: 0 })
+    const decisionSection = screen.getByRole('region', { name: 'Human decision' })
+    expect(await within(decisionSection).findByText('Accepted')).toBeInTheDocument()
+    expect(await screen.findByText('Ready to finalize')).toBeInTheDocument()
+    const progress = screen.getByRole('region', { name: 'Human review' })
+    const openLabel = within(progress).getByText('Still open')
+    expect(openLabel.parentElement).toHaveTextContent('0')
+  })
+
+  it('checks the evidence endpoint is never called from decision surfaces', async () => {
+    const api = stubContractApi(baseOptions())
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    await screen.findByRole('heading', { name: 'Human review' })
+    expect(
+      api.requests.filter((request) => request.url.includes('/api/retrieval/')),
+    ).toHaveLength(0)
+  })
+})
+
+describe('workflow request scoping', () => {
+  it('does not request decisions or human review while analysis is incomplete', async () => {
+    const api = stubContractApi(
+      baseOptions({ reviewSummary: fixtureAnalyzingReviewSummary }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    await screen.findByRole('heading', { name: 'Analysis state' })
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(
+      api.requests.filter(
+        (request) =>
+          request.url.includes('/human-review') ||
+          /\/decisions/.test(request.url) ||
+          request.url.includes('/approved-change-set'),
+      ),
+    ).toHaveLength(0)
+  })
+})

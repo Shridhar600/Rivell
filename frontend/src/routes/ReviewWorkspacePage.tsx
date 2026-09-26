@@ -11,6 +11,7 @@ import {
   useFindingsQuery,
   useReviewSummaryQuery,
 } from '../api/reviews'
+import { useCurrentDecisionsQuery, useHumanReviewQuery } from '../api/workflow'
 import { useSemanticsQuery } from '../api/semantics'
 import { ErrorState } from '../components/ErrorState'
 import { LoadingState } from '../components/LoadingState'
@@ -19,6 +20,7 @@ import { coverageLimitations } from '../lib/reviews'
 import { subtreeNodes } from '../lib/documentTree'
 import { FindingDetailPane } from '../components/review/FindingDetailPane'
 import { FindingsPanel } from '../components/review/FindingsPanel'
+import { HumanReviewProgress } from '../components/review/HumanReviewProgress'
 import { ReviewCoveragePanel } from '../components/review/ReviewCoveragePanel'
 import { ReviewHeader } from '../components/review/ReviewHeader'
 import { ReviewLifecyclePanel } from '../components/review/ReviewLifecyclePanel'
@@ -63,6 +65,17 @@ export function ReviewWorkspacePage() {
   const canReadFindings = isReviewTerminal(status) || status === 'UNKNOWN'
   const findingsQuery = useFindingsQuery(reviewId, filters, canReadFindings)
   const findingQuery = useFindingQuery(reviewId, canReadFindings ? selectedFindingId : null)
+
+  const analysisCompleted = status === 'COMPLETED'
+  const decisionsQuery = useCurrentDecisionsQuery(reviewId, analysisCompleted)
+  const humanReviewQuery = useHumanReviewQuery(reviewId, analysisCompleted)
+  const humanReview = humanReviewQuery.data ?? null
+  const isFinalized = humanReview?.status === 'COMPLETED'
+  const decisionsByFindingId = useMemo(
+    () =>
+      new Map((decisionsQuery.data?.items ?? []).map((decision) => [decision.findingId, decision])),
+    [decisionsQuery.data],
+  )
 
   const regionLabels = useMemo(
     () =>
@@ -174,6 +187,27 @@ export function ReviewWorkspacePage() {
         onRefresh={() => void summaryQuery.refetch()}
       />
       <ReviewCoveragePanel coverage={summaryQuery.data.coverage} />
+      {analysisCompleted ? (
+        humanReviewQuery.isError ? (
+          <p className="state state--warning" role="alert">
+            Human review state could not be loaded.{' '}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => void humanReviewQuery.refetch()}
+            >
+              Try again
+            </button>
+          </p>
+        ) : humanReview ? (
+          <HumanReviewProgress
+            review={humanReview}
+            findings={findingsQuery.data?.items ?? []}
+            regionLabels={regionLabels}
+            onSelectFinding={selectFinding}
+          />
+        ) : null
+      ) : null}
       <div className="review-split">
         <FindingsPanel
           findings={findingsQuery.data?.items ?? []}
@@ -201,6 +235,13 @@ export function ReviewWorkspacePage() {
           clauseHeadings={clauseHeadings}
           onNavigateToNode={onNavigateToNode}
           onOpenClauseSemantics={onOpenClauseSemantics}
+          reviewId={reviewId}
+          currentDecision={
+            selectedFindingId ? (decisionsByFindingId.get(selectedFindingId) ?? null) : null
+          }
+          humanReview={humanReview}
+          isFinalized={isFinalized}
+          showDecisionControls={analysisCompleted}
           findingId={canReadFindings ? selectedFindingId : null}
           isPending={Boolean(selectedFindingId) && findingQuery.isPending}
           isError={findingQuery.isError}
