@@ -152,6 +152,9 @@ describe('recording a decision in the workspace', () => {
     await userEvent.click(
       await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
     )
+    const findingListRequestsBeforeSave = stub.requests.filter((request) =>
+      /\/findings\?/.test(request.url),
+    ).length
     await screen.findByRole('heading', { name: 'Human decision' })
     await userEvent.click(screen.getByRole('button', { name: 'Record decision' }))
     await userEvent.click(screen.getByRole('button', { name: 'Accept recommendation' }))
@@ -166,6 +169,14 @@ describe('recording a decision in the workspace', () => {
     const progress = screen.getByRole('region', { name: 'Human review' })
     const openLabel = within(progress).getByText('Still open')
     expect(openLabel.parentElement).toHaveTextContent('0')
+    const findingRow = within(screen.getByRole('region', { name: 'Findings' })).getByRole(
+      'button',
+      { name: /^6\. Limitation of Liability/ },
+    )
+    expect(findingRow).toHaveTextContent('Accepted')
+    expect(
+      stub.requests.filter((request) => /\/findings\?/.test(request.url)),
+    ).toHaveLength(findingListRequestsBeforeSave)
   })
 
   it('checks the evidence endpoint is never called from decision surfaces', async () => {

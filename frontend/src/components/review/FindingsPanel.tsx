@@ -1,6 +1,8 @@
 import type { FindingFilters, FindingSummary, ReviewStatus } from '../../api/reviews'
 import { CLASSIFICATIONS, SEVERITIES } from '../../api/reviews'
+import type { HumanDecision } from '../../api/workflow'
 import { TAXONOMY_CONCEPTS, conceptLabel } from '../../lib/contractSemantics'
+import { decisionStateLabel } from '../../lib/workflow'
 import {
   classificationLabel,
   findingSubjectLabel,
@@ -20,6 +22,8 @@ type Props = {
   selectedFindingId: string | null
   onSelect: (findingId: string) => void
   regionLabels: Map<string, string>
+  decisionsByFindingId: Map<string, HumanDecision>
+  showDecisionState: boolean
   reviewStatus: ReviewStatus
   coverageLimited: boolean
   isEnabled: boolean
@@ -41,6 +45,8 @@ export function FindingsPanel({
   selectedFindingId,
   onSelect,
   regionLabels,
+  decisionsByFindingId,
+  showDecisionState,
   reviewStatus,
   coverageLimited,
   isEnabled,
@@ -197,6 +203,11 @@ export function FindingsPanel({
                       {classificationLabel(finding.reviewClassification)}
                     </span>
                   </span>
+                  {showDecisionState ? (
+                    <span className="finding-list__decision">
+                      {decisionStateLabel(decisionsByFindingId.get(finding.id) ?? null)}
+                    </span>
+                  ) : null}
                 </button>
               </li>
             ))}

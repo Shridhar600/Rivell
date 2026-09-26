@@ -2101,3 +2101,238 @@ blockquote.evidence-card__text {
   color: var(--color-muted);
   font-size: 0.875rem;
 }
+
+/* M8 — Human review workflow */
+
+.status-badge {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+}
+
+.status-badge--neutral {
+  color: var(--color-muted);
+}
+
+.status-badge--positive {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.status-badge--complete {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.human-review,
+.finalization,
+.change-set {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.human-review__header,
+.change-set__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.human-review__header h2,
+.finalization h2,
+.change-set__header h2 {
+  margin: 0;
+}
+
+.human-review__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.human-review__count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.human-review__count dt {
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+.human-review__count dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.human-review__readiness {
+  margin: 0;
+}
+
+.human-review__blockers h3 {
+  margin: 0 0 var(--space-1);
+}
+
+.human-review__blockers ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-3);
+}
+
+.human-review__blocker-findings {
+  padding-left: var(--space-3);
+}
+
+.finalization__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.finalization__confirm {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-warning);
+}
+
+.finalization__complete {
+  margin: 0;
+  color: var(--color-success);
+}
+
+.finding-decision {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.decision-summary {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.decision-summary--empty {
+  color: var(--color-muted);
+}
+
+.decision-summary__state {
+  margin: 0;
+}
+
+.decision-summary__revision {
+  color: var(--color-muted);
+}
+
+.decision-summary__language,
+.approved-change__language {
+  margin: 0;
+  padding: var(--space-2);
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-bg);
+  white-space: pre-wrap;
+}
+
+.decision-editor {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.decision-editor__actions,
+.decision-editor__change-type {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+}
+
+.decision-editor__action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.decision-editor__field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.decision-editor__field textarea {
+  min-height: 5rem;
+  font-family: var(--font-sans);
+}
+
+.decision-editor__accept-preview {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.decision-editor__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.field-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 0.875rem;
+}
+
+.decision-history {
+  margin-top: var(--space-1);
+}
+
+.decision-history__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-3);
+}
+
+.finding-list__decision {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.change-set__counts {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.change-set__list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.approved-change {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+}
+
+.approved-change__header h3 {
+  margin: 0 0 var(--space-1);
+}

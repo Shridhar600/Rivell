@@ -269,6 +269,8 @@ export function ReviewWorkspacePage() {
           selectedFindingId={selectedFindingId}
           onSelect={selectFinding}
           regionLabels={regionLabels}
+          decisionsByFindingId={decisionsByFindingId}
+          showDecisionState={analysisCompleted && humanReview !== null}
           reviewStatus={status ?? 'UNKNOWN'}
           coverageLimited={coverageLimitations(summaryQuery.data.coverage).length > 0}
           isEnabled={canReadFindings}
