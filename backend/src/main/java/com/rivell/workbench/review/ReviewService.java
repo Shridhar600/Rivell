@@ -76,9 +76,27 @@ public class ReviewService {
     }
 
     public Review create(UUID contractId, int versionNumber, String requestedPackKey) {
+        return create(contractId, versionNumber, requestedPackKey, null);
+    }
+
+    /**
+     * M10 / DW-020: with a client-supplied key, creation is idempotent. A retry or a double-click
+     * returns the original review instead of freezing a second snapshot, planning a second run and
+     * paying for a second analysis. The replay is resolved before any work, and the unique index on
+     * (organization_id, client_request_id) is the authority when two identical requests race.
+     */
+    public Review create(UUID contractId, int versionNumber, String requestedPackKey,
+            UUID clientRequestId) {
         var identity = identityProvider.currentIdentity();
         if (!authorizationService.isAuthorized(identity, Permissions.REVIEW_CREATE)) {
             throw new UnauthorizedReviewAccessException(identity.userId());
+        }
+        if (clientRequestId != null) {
+            var replay = reviewRepository.findByClientRequestId(
+                    identity.organizationId(), clientRequestId);
+            if (replay.isPresent()) {
+                return replay.get();
+            }
         }
         var version = contractQueryService.getVersionSummary(contractId, versionNumber);
         var semantics = contractEnrichmentService.getSemantics(contractId, versionNumber);
@@ -111,7 +129,7 @@ public class ReviewService {
                 now);
         var review = Review.analysisQueued(
                 reviewId, organizationId, contractId, version.versionId(), versionNumber,
-                identity.userId(), now);
+                identity.userId(), now, clientRequestId);
         transactionTemplate.executeWithoutResult(status -> {
             reviewRepository.create(review, snapshot, planBuilder.build(reviewId,
                     organizationId, snapshot, semantics));

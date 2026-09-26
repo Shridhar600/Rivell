@@ -82,8 +82,10 @@ public class ReviewApiService {
     }
 
     public ReviewSummaryView create(
-            UUID contractId, int versionNumber, String requestedPackKey) {
-        var review = reviewService.create(contractId, versionNumber, requestedPackKey);
+            UUID contractId, int versionNumber, String requestedPackKey,
+            java.util.UUID clientRequestId) {
+        var review = reviewService.create(contractId, versionNumber, requestedPackKey,
+                clientRequestId);
         return summaryFor(review.organizationId(), review.id());
     }
 

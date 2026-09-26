@@ -21,7 +21,8 @@ public record Review(
         Instant createdAt,
         Instant updatedAt,
         Instant startedAt,
-        Instant completedAt) {
+        Instant completedAt,
+        UUID clientRequestId) {
 
     public Review {
         Objects.requireNonNull(id, "id");
@@ -48,8 +49,15 @@ public record Review(
     public static Review analysisQueued(
             UUID id, UUID organizationId, UUID contractId, UUID contractVersionId,
             int contractVersionNumber, UUID createdBy, Instant now) {
+        return analysisQueued(id, organizationId, contractId, contractVersionId,
+                contractVersionNumber, createdBy, now, null);
+    }
+
+    public static Review analysisQueued(
+            UUID id, UUID organizationId, UUID contractId, UUID contractVersionId,
+            int contractVersionNumber, UUID createdBy, Instant now, UUID clientRequestId) {
         return new Review(id, organizationId, contractId, contractVersionId,
                 contractVersionNumber, ReviewStatus.ANALYSIS_QUEUED, null, createdBy,
-                now, now, null, null);
+                now, now, null, null, clientRequestId);
     }
 }

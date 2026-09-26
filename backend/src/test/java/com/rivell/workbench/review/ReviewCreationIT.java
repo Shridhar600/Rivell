@@ -349,6 +349,50 @@ class ReviewCreationIT {
                 .isInstanceOf(InvalidReviewConfigurationException.class);
     }
 
+    /**
+     * M10 / DW-020: review creation had no client-supplied key, so a retried creation produced a
+     * second review with a second frozen snapshot and a second full analysis. The retry must return
+     * the original review, and the key must never resolve another organisation's review.
+     */
+    @Test
+    void aRetriedCreationWithTheSameClientRequestIdReturnsTheOriginalReview() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var key = UUID.randomUUID();
+
+        var first = reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key);
+        var second = reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key);
+
+        assertThat(second.id()).as("a retried creation must not produce a second review")
+                .isEqualTo(first.id());
+        assertThat(jdbcClient.sql("""
+                select count(*) from review
+                where organization_id = :organizationId and contract_id = :contractId
+                """)
+                .param("organizationId", organizationId)
+                .param("contractId", corpus.contract().contractId())
+                .query(Integer.class).single())
+                .as("exactly one review row must exist for the contract")
+                .isEqualTo(1);
+
+        // Without a key, two creations are two independent reviews: the key is opt-in.
+        var unkeyed = reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, null);
+        assertThat(unkeyed.id()).isNotEqualTo(first.id());
+
+        // The same key in another organisation must not resolve to this review.
+        identityProvider.use(new UserIdentity(UUID.randomUUID(), UUID.randomUUID(),
+                Set.of("ADMIN")));
+        var foreignCorpus = corpusBuilder.buildMainCorpus(organizationId());
+        var foreign = reviewService.create(foreignCorpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key);
+        assertThat(foreign.id())
+                .as("a key must never resolve another organisation's review")
+                .isNotEqualTo(first.id());
+    }
+
     @Test
     void reviewCreationRejectsEnrichmentThatIsNotReady() {
         var organizationId = organizationId();
