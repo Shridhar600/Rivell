@@ -2336,3 +2336,93 @@ blockquote.evidence-card__text {
 .approved-change__header h3 {
   margin: 0 0 var(--space-1);
 }
+
+/* M9 — Redline execution and verified download */
+
+.redline {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.redline h2 {
+  margin: 0;
+}
+
+.redline__status {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.redline__verification {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+}
+
+.redline__verification--passed {
+  border-color: var(--color-success);
+}
+
+.redline__verification-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.redline__actions,
+.redline__download {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.redline__failure {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.redline__failure-title {
+  margin: 0;
+}
+
+.redline__report-block {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.redline__report-block h3 {
+  margin: 0;
+}
+
+.redline__report {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.redline__report-row article {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+}
+
+.redline__report-row h4 {
+  margin: 0;
+}
+
+.redline__report-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding-left: var(--space-3);
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
