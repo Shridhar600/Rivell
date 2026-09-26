@@ -88,7 +88,10 @@ export function ReviewWorkspacePage() {
       ? humanReview?.readyToFinalize
         ? null
         : 'The review cannot be finalized yet. The blockers shown under Human review are current.'
-      : workflowErrorMessage(finalizeMutation.error)
+      : workflowErrorMessage(
+          finalizeMutation.error,
+          'The review could not be finalized. Check your connection and try again.',
+        )
     : null
   const decisionsByFindingId = useMemo(
     () =>
@@ -218,18 +221,22 @@ export function ReviewWorkspacePage() {
               Try again
             </button>
           </p>
-        ) : decisionsQuery.isError ? (
-          <p className="state state--warning" role="alert">
-            Decisions could not be loaded.{' '}
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => void decisionsQuery.refetch()}
-            >
-              Try again
-            </button>
-          </p>
-        ) : humanReview ? (
+        ) : null
+      ) : null}
+      {analysisCompleted && humanReview ? (
+        <>
+          {decisionsQuery.isError ? (
+            <p className="state state--warning" role="alert">
+              Decisions could not be loaded.{' '}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => void decisionsQuery.refetch()}
+              >
+                Try again
+              </button>
+            </p>
+          ) : null}
           <>
             <HumanReviewProgress
               review={humanReview}
@@ -273,7 +280,7 @@ export function ReviewWorkspacePage() {
               ) : null
             ) : null}
           </>
-        ) : null
+        </>
       ) : null}
       <div className="review-split">
         <FindingsPanel

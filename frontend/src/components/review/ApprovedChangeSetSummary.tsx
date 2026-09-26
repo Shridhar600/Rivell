@@ -20,6 +20,8 @@ function countsLabel(changeSet: ApprovedChangeSet): string {
   if (counts.replace > 0) parts.push(`${counts.replace} replacement(s)`)
   if (counts.insert > 0) parts.push(`${counts.insert} insertion(s)`)
   if (counts.delete > 0) parts.push(`${counts.delete} deletion(s)`)
+  const recognised = counts.replace + counts.insert + counts.delete
+  if (counts.total > recognised) parts.push(`${counts.total - recognised} other change(s)`)
   return parts.length > 0 ? parts.join(' · ') : 'No changes'
 }
 

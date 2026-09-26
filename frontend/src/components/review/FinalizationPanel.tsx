@@ -13,7 +13,9 @@ export function FinalizationPanel({ review, isFinalizing, finalizeError, onFinal
   const [isConfirming, setConfirming] = useState(false)
   const confirmRef = useRef<HTMLButtonElement>(null)
   const finalizeRef = useRef<HTMLButtonElement>(null)
+  const completionRef = useRef<HTMLParagraphElement>(null)
   const restoreFocusRef = useRef(false)
+  const previousStatusRef = useRef(review.status)
 
   useEffect(() => {
     if (isConfirming) {
@@ -24,11 +26,19 @@ export function FinalizationPanel({ review, isFinalizing, finalizeError, onFinal
     }
   }, [isConfirming])
 
+  useEffect(() => {
+    const wasCompleted = previousStatusRef.current === 'COMPLETED'
+    previousStatusRef.current = review.status
+    if (!wasCompleted && review.status === 'COMPLETED') {
+      completionRef.current?.focus()
+    }
+  }, [review.status])
+
   if (review.status === 'COMPLETED') {
     return (
       <section className="finalization" aria-labelledby="finalization-heading">
         <h2 id="finalization-heading">Finalization</h2>
-        <p className="finalization__complete" role="status">
+        <p className="finalization__complete" role="status" tabIndex={-1} ref={completionRef}>
           Human review completed. The approved change set is frozen and decisions are read-only.
         </p>
         <p className="panel__hint">
@@ -91,6 +101,10 @@ export function FinalizationPanel({ review, isFinalizing, finalizeError, onFinal
             </button>
           )}
         </>
+      ) : review.status === 'UNKNOWN' ? (
+        <p className="panel__hint">
+          The human review state is unavailable, so finalization is unavailable.
+        </p>
       ) : (
         <p className="panel__hint">
           The review cannot be finalized yet. The items that must be resolved are listed under

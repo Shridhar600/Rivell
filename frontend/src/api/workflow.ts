@@ -287,10 +287,6 @@ export function isWorkflowStatusError(error: unknown, status: number): boolean {
   return error instanceof WorkflowApiError && error.status === status
 }
 
-export function isWorkflowBadRequestError(error: unknown): boolean {
-  return isWorkflowStatusError(error, 400)
-}
-
 export function isWorkflowForbiddenError(error: unknown): boolean {
   return isWorkflowStatusError(error, 403)
 }
@@ -303,13 +299,18 @@ export function isWorkflowConflictError(error: unknown): boolean {
   return isWorkflowStatusError(error, 409)
 }
 
-export function workflowErrorMessage(error: unknown): string {
+export function workflowErrorMessage(
+  error: unknown,
+  fallback = 'The decision could not be saved. Check your connection and try again.',
+): string {
   if (error instanceof WorkflowApiError) return error.message
-  return 'The decision could not be saved. Check your connection and try again.'
+  return fallback
 }
 
 function workflowRetry(failureCount: number, error: Error): boolean {
-  return failureCount < 1 && !isWorkflowNotFoundError(error)
+  return (
+    failureCount < 1 && !isWorkflowNotFoundError(error) && !isWorkflowForbiddenError(error)
+  )
 }
 
 export const workflowKeys = {

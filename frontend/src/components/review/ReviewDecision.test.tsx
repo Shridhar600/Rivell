@@ -114,6 +114,58 @@ describe('human decision controls — ACCEPT', () => {
     expect(screen.getByRole('radio', { name: 'Edit change' })).toBeChecked()
   })
 
+  it('refuses ACCEPT when the action is not executable even if language exists', async () => {
+    const user = userEvent.setup()
+    renderControls({
+      finding: {
+        ...fixtureAcceptableFindingDetail,
+        proposedAction: 'ADD_REQUIRED_PROVISION',
+        proposedLanguage: 'Some language that must not be acceptable as-is.',
+      },
+    })
+    await user.click(screen.getByRole('button', { name: 'Record decision' }))
+    expect(screen.getByRole('radio', { name: 'Accept recommendation' })).toBeDisabled()
+  })
+
+  it('submits human language byte-exact without trimming', async () => {
+    const user = userEvent.setup()
+    const { api } = renderControls()
+    await user.click(screen.getByRole('button', { name: 'Record decision' }))
+    await user.click(screen.getByRole('radio', { name: 'Edit change' }))
+    const language = screen.getByLabelText(/Final approved language/)
+    await user.click(language)
+    await user.paste('  Padded clause text.\n\nSecond paragraph.  ')
+    await user.click(screen.getByRole('button', { name: 'Edit change' }))
+    const body = api.requests.find((request) => request.method === 'PUT')?.body as Record<
+      string,
+      unknown
+    >
+    expect(body.approvedLanguage).toBe('  Padded clause text.\n\nSecond paragraph.  ')
+  })
+
+  it('marks the required language field and focuses the initial action on open', async () => {
+    const user = userEvent.setup()
+    renderControls()
+    await user.click(screen.getByRole('button', { name: 'Record decision' }))
+    expect(screen.getByRole('radio', { name: 'Accept recommendation' })).toHaveFocus()
+    await user.click(screen.getByRole('radio', { name: 'Edit change' }))
+    expect(screen.getByLabelText(/Final approved language/)).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
+  })
+
+  it('moves focus to the decision heading after a successful save', async () => {
+    const user = userEvent.setup()
+    renderControls()
+    await user.click(screen.getByRole('button', { name: 'Record decision' }))
+    await user.click(screen.getByRole('button', { name: 'Accept recommendation' }))
+    expect(await screen.findByText('Decision recorded.')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Human decision' })).toHaveFocus(),
+    )
+  })
+
   it('labels generative acceptance honestly and never as approved language', async () => {
     const user = userEvent.setup()
     renderControls({ finding: fixtureGeneratedFindingDetail })

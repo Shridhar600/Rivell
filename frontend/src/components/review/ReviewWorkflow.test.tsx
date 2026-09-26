@@ -278,18 +278,18 @@ describe('workflow state availability and conflict truth', () => {
   })
 })
 
-describe('finalization', () => {
-  function readyReview() {
-    return fixtureHumanReview({
-      status: 'READY_FOR_COMPLETION',
-      accepted: 1,
-      resolvedFindings: 1,
-      remainingFindings: 0,
-      blockers: [],
-      readyToFinalize: true,
-    })
-  }
+function readyReview() {
+  return fixtureHumanReview({
+    status: 'READY_FOR_COMPLETION',
+    accepted: 1,
+    resolvedFindings: 1,
+    remainingFindings: 0,
+    blockers: [],
+    readyToFinalize: true,
+  })
+}
 
+describe('finalization', () => {
   it('blocks finalization until the server says the review is ready', async () => {
     const api = stubContractApi(baseOptions())
     renderRouter('/reviews/c1/analysis/r-1', api)
@@ -536,6 +536,106 @@ describe('approved change set', () => {
     expect(
       within(changeSet).queryByRole('button', { name: /redline|apply|download/i }),
     ).not.toBeInTheDocument()
+  })
+
+  it('renders an available frozen set even when the decisions read fails', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        humanReview: completedReview(),
+        decisionsStatus: 500,
+        changeSet: fixtureMixedChangeSet(),
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    expect(
+      await screen.findByRole('region', { name: 'Approved change set' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Decisions could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: 'Human review' }),
+    ).toBeInTheDocument()
+  })
+
+  it('renders the frozen set from the finalize response without refetching it', async () => {
+    const user = userEvent.setup()
+    let stub: ReturnType<typeof stubContractApi>
+    stub = stubContractApi(
+      baseOptions({
+        humanReview: readyReview(),
+        changeSet: fixtureMixedChangeSet(),
+        finalizeResponse: () => {
+          stub.setHumanReview(
+            fixtureHumanReview({
+              status: 'COMPLETED',
+              readyToFinalize: true,
+              blockers: [],
+              changeSetId: 'cs-1',
+              finalizedAt: '2026-09-26T11:00:00Z',
+            }),
+          )
+          return jsonResponse(envelope(fixtureMixedChangeSet()))
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', stub)
+    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
+    expect(
+      await screen.findByRole('region', { name: 'Approved change set' }),
+    ).toBeInTheDocument()
+    expect(
+      stub.requests.filter((request) => request.url.includes('/approved-change-set')),
+    ).toHaveLength(0)
+  })
+
+  it('uses finalization-specific copy for transport failures', async () => {
+    const user = userEvent.setup()
+    const api = stubContractApi(
+      baseOptions({
+        humanReview: readyReview(),
+        finalizeResponse: () => {
+          throw new TypeError('Failed to fetch')
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not be finalized/)
+    expect(screen.queryByText(/Failed to fetch/)).not.toBeInTheDocument()
+  })
+
+  it('moves focus to the completion status after finalization', async () => {
+    const user = userEvent.setup()
+    let stub: ReturnType<typeof stubContractApi>
+    stub = stubContractApi(
+      baseOptions({
+        humanReview: readyReview(),
+        finalizeResponse: () => {
+          stub.setHumanReview(
+            fixtureHumanReview({
+              status: 'COMPLETED',
+              readyToFinalize: true,
+              blockers: [],
+              changeSetId: 'cs-1',
+              finalizedAt: '2026-09-26T11:00:00Z',
+            }),
+          )
+          return jsonResponse(envelope(fixtureChangeSet()))
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', stub)
+    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
+    const finalization = screen.getByRole('region', { name: 'Finalization' })
+    await waitFor(() =>
+      expect(
+        within(finalization).getByText(/approved change set is frozen/),
+      ).toHaveFocus(),
+    )
   })
 
   it('selects the source finding from the frozen preview', async () => {
