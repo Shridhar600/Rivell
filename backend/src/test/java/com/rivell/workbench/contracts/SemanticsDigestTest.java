@@ -1,4 +1,4 @@
-package com.rivell.workbench.review;
+package com.rivell.workbench.contracts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -8,20 +8,6 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
-import com.rivell.workbench.contracts.ClauseSemantics;
-import com.rivell.workbench.contracts.ConceptClassification;
-import com.rivell.workbench.contracts.ContractRegionSegmenter;
-import com.rivell.workbench.contracts.ContractSemantics;
-import com.rivell.workbench.contracts.ContractType;
-import com.rivell.workbench.contracts.EnrichmentStatus;
-import com.rivell.workbench.contracts.FactCorrection;
-import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
-import com.rivell.workbench.contracts.Observations;
-import com.rivell.workbench.contracts.PaperSource;
-import com.rivell.workbench.contracts.PartyRole;
-import com.rivell.workbench.contracts.QualityReasons;
-import com.rivell.workbench.contracts.ReviewProfile;
 
 class SemanticsDigestTest {
 

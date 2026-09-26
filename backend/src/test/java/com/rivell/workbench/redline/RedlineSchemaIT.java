@@ -151,6 +151,72 @@ class RedlineSchemaIT {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    /**
+     * M10: V16 left redline_execution.contract_id / contract_version_id unconstrained while every
+     * other M9 table carried an organisation-scoped composite key. This proves a contract reference
+     * that does not belong to the execution's own organisation is now rejected by the schema, not
+     * merely absent from the application code.
+     */
+    @Test
+    void aContractReferenceFromAnotherOrganizationIsRejectedByTheSchema() throws Exception {
+        var seeded = finalizedSet();
+
+        // A real, well-formed contract version belonging to a different organisation. The corpus
+        // builder scopes by the current identity, so the identity has to move to create one.
+        var seededOrganization = seeded.organizationId();
+        identityProvider.use(new UserIdentity(UUID.randomUUID(), UUID.randomUUID(),
+                Set.of("ADMIN")));
+        var foreign = corpusBuilder.buildMainCorpus(
+                identityProvider.currentIdentity().organizationId()).contract();
+        identityProvider.use(new UserIdentity(UUID.randomUUID(), seededOrganization,
+                Set.of("ADMIN")));
+        assertThat(foreign.contractId()).isNotEqualTo(seeded.contractId());
+        assertThat(jdbcClient.sql("""
+                select count(*) from contract_version
+                where id = :version and organization_id = :organization
+                """)
+                .param("version", foreign.contractVersionId())
+                .param("organization", seeded.organizationId())
+                .query(Integer.class).single())
+                .as("the foreign contract version must belong to another organisation")
+                .isZero();
+
+        assertThatThrownBy(() -> insertExecutionWithForeignContract(seeded,
+                foreign.contractId(), foreign.contractVersionId()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        // The organisation-consistent insert still succeeds, so the constraint rejects the
+        // cross-tenant reference rather than the shape of a valid row.
+        assertThat(insertExecution(seeded)).isNotNull();
+    }
+
+    private void insertExecutionWithForeignContract(Seeded seeded, UUID contractId,
+            UUID contractVersionId) {
+        jdbcClient.sql("""
+                insert into redline_execution
+                  (id, organization_id, review_id, change_set_id, contract_id,
+                   contract_version_id, contract_version_number, change_set_version,
+                   status, outcome, failure_code, failure_detail, renderer_version,
+                   placement_strategy_version, source_sha256, semantics_digest, change_count,
+                   requested_by, started_at, completed_at)
+                values (:id, :organizationId, :reviewId, :changeSetId, :contractId,
+                   :contractVersionId, 1, 1,
+                   'COMPLETED', 'REDLINE_GENERATED', null, null, 'test-renderer',
+                   'test-placement', repeat('a', 64), repeat('b', 64), 1,
+                   :requestedBy, :startedAt, :completedAt)
+                """)
+                .param("id", UUID.randomUUID())
+                .param("organizationId", seeded.organizationId())
+                .param("reviewId", seeded.reviewId())
+                .param("changeSetId", seeded.changeSetId())
+                .param("contractId", contractId)
+                .param("contractVersionId", contractVersionId)
+                .param("requestedBy", UUID.randomUUID())
+                .param("startedAt", timestamp())
+                .param("completedAt", timestamp())
+                .update();
+    }
+
     private record Seeded(UUID organizationId, UUID reviewId, UUID changeSetId,
             UUID contractId, UUID contractVersionId, int contractVersionNumber,
             ApprovedChange change) {
@@ -193,12 +259,12 @@ class RedlineSchemaIT {
                   (id, organization_id, review_id, change_set_id, contract_id,
                    contract_version_id, contract_version_number, change_set_version,
                    status, outcome, failure_code, failure_detail, renderer_version,
-                   placement_strategy_version, source_sha256, change_count, requested_by,
-                   started_at, completed_at)
+                   placement_strategy_version, source_sha256, semantics_digest, change_count,
+                   requested_by, started_at, completed_at)
                 values (:id, :organizationId, :reviewId, :changeSetId, :contractId,
                    :contractVersionId, :contractVersionNumber, 1,
                    :status, :outcome, :failureCode, null, 'test-renderer',
-                   'test-placement', repeat('a', 64), 1, :requestedBy,
+                   'test-placement', repeat('a', 64), repeat('b', 64), 1, :requestedBy,
                    :startedAt, :completedAt)
                 """)
                 .param("id", id)

@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -339,6 +340,85 @@ class RedlineExecutionIT {
         assertThat(countExecutions(fixture.review().id())).isEqualTo(1);
         assertThat(countArtifacts(fixture.review().id())).isEqualTo(1);
         assertThat(artifactFiles(fixture.review().id())).isEqualTo(1);
+    }
+
+    /**
+     * M10: redline placement must be derived from the semantics frozen at finalization, not from
+     * whatever the contract semantics say at execution time. A human concept correction after
+     * finalization changes the effective concepts the INSERT placement strategy reads, so a
+     * placement computed from post-freeze classification is not reproducible from the approved
+     * review. Executing after that correction must fail closed with a typed reason and store no
+     * artifact.
+     */
+    @Test
+    void semanticsDriftAfterFinalizationFailsClosedBeforeAnyArtifactExists()
+            throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var contractId = changeSetRepository.findByReview(organizationId(), reviewId)
+                .orElseThrow().contractId();
+        var headingNodeId = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK)
+                .subjectHeadingNodeId();
+        assertThat(headingNodeId).isNotNull();
+
+        var clauseSemanticsId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(clause -> headingNodeId.equals(clause.headingNodeId()))
+                .map(com.rivell.workbench.contracts.ClauseSemantics::id)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no clause semantics for heading "
+                        + headingNodeId));
+
+        // A human corrects the concept the placement strategy would read, after the review froze.
+        enrichmentService.correctClause(contractId, 1, clauseSemanticsId,
+                new com.rivell.workbench.contracts.FactCorrection(
+                        "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
+
+        var drifted = redlineExpectingFailure(reviewId);
+        assertThat(drifted.get("status").asText()).isEqualTo("FAILED");
+        assertThat(drifted.get("failureCode").asText()).isEqualTo("APPROVED_SEMANTICS_DRIFT");
+        assertThat(drifted.get("downloadAvailable").asBoolean()).isFalse();
+        assertThat(countArtifacts(reviewId)).as("a drifted execution must store no artifact")
+                .isZero();
+        assertThat(artifactFiles(reviewId)).isZero();
+    }
+
+    /**
+     * The mirror of the invariant above: once a verified artifact has been produced from frozen
+     * inputs, a later semantics correction must not invalidate it. Idempotency and the integrity of
+     * an already-verified artifact both win over a fresh drift check.
+     */
+    @Test
+    void semanticsDriftAfterAVerifiedExecutionKeepsTheCanonicalArtifact()
+            throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var contractId = changeSetRepository.findByReview(organizationId(), reviewId)
+                .orElseThrow().contractId();
+        var headingNodeId = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK)
+                .subjectHeadingNodeId();
+
+        var first = redline(reviewId);
+        assertThat(first.get("outcome").asText()).isEqualTo("REDLINE_GENERATED");
+        var artifactSha = first.get("artifactSha256").asText();
+
+        var clauseSemanticsId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(clause -> headingNodeId.equals(clause.headingNodeId()))
+                .map(com.rivell.workbench.contracts.ClauseSemantics::id)
+                .findFirst()
+                .orElseThrow();
+        enrichmentService.correctClause(contractId, 1, clauseSemanticsId,
+                new com.rivell.workbench.contracts.FactCorrection(
+                        "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
+
+        var second = redline(reviewId);
+        assertThat(second.get("id").asText()).isEqualTo(first.get("id").asText());
+        assertThat(second.get("artifactSha256").asText()).isEqualTo(artifactSha);
+        assertThat(countArtifacts(reviewId)).isEqualTo(1);
+        assertThat(downloadBytes(reviewId)).isNotEmpty();
     }
 
     @Test
@@ -722,6 +802,15 @@ class RedlineExecutionIT {
     private void finalize(UUID reviewId) throws Exception {
         mockMvc.perform(post("/api/reviews/{id}/finalize", reviewId))
                 .andExpect(status().isOk());
+    }
+
+    private JsonNode redlineExpectingFailure(UUID reviewId) throws Exception {
+        mockMvc.perform(post("/api/reviews/{id}/redline", reviewId))
+                .andExpect(status().isConflict());
+        var state = mockMvc.perform(get("/api/reviews/{id}/redline", reviewId))
+                .andExpect(status().isOk())
+                .andReturn();
+        return json(state).get("data");
     }
 
     private JsonNode redline(UUID reviewId) throws Exception {

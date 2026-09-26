@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.EnrichmentFailedException;

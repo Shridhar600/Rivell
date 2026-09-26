@@ -34,7 +34,7 @@ class JdbcApprovedChangeSetRepository implements ApprovedChangeSetRepository {
         var header = jdbcClient.sql("""
                 select id, organization_id, review_id, run_id, contract_id,
                        contract_version_id, contract_version_number, change_set_version,
-                       finalized_by, finalized_at
+                       semantics_digest, finalized_by, finalized_at
                 from review_finalization
                 where organization_id = :organizationId and review_id = :reviewId
                 """)
@@ -49,6 +49,7 @@ class JdbcApprovedChangeSetRepository implements ApprovedChangeSetRepository {
                         rs.getObject("contract_version_id", UUID.class),
                         rs.getInt("contract_version_number"),
                         rs.getInt("change_set_version"),
+                        rs.getString("semantics_digest"),
                         rs.getObject("finalized_by", UUID.class),
                         rs.getTimestamp("finalized_at").toInstant()))
                 .optional();
@@ -64,10 +65,11 @@ class JdbcApprovedChangeSetRepository implements ApprovedChangeSetRepository {
         var inserted = jdbcClient.sql("""
                 insert into review_finalization
                   (id, organization_id, review_id, run_id, contract_id, contract_version_id,
-                   contract_version_number, change_set_version, finalized_by, finalized_at)
+                   contract_version_number, change_set_version, semantics_digest,
+                   finalized_by, finalized_at)
                 values (:id, :organizationId, :reviewId, :runId, :contractId,
                    :contractVersionId, :contractVersionNumber, :changeSetVersion,
-                   :finalizedBy, :finalizedAt)
+                   :semanticsDigest, :finalizedBy, :finalizedAt)
                 on conflict (review_id) do nothing
                 """)
                 .param("id", set.id())
@@ -78,6 +80,7 @@ class JdbcApprovedChangeSetRepository implements ApprovedChangeSetRepository {
                 .param("contractVersionId", set.contractVersionId())
                 .param("contractVersionNumber", set.contractVersionNumber())
                 .param("changeSetVersion", set.changeSetVersion())
+                .param("semanticsDigest", set.semanticsDigest())
                 .param("finalizedBy", set.finalizedBy())
                 .param("finalizedAt", timestamp(set.finalizedAt()))
                 .update();
@@ -155,13 +158,14 @@ class JdbcApprovedChangeSetRepository implements ApprovedChangeSetRepository {
         return new ApprovedChangeSet(header.id(), header.organizationId(), header.reviewId(),
                 header.runId(), header.contractId(), header.contractVersionId(),
                 header.contractVersionNumber(), header.changeSetVersion(),
+                header.semanticsDigest(),
                 header.finalizedBy(), header.finalizedAt(), new ArrayList<>(changes));
     }
 
     private record Header(
             UUID id, UUID organizationId, UUID reviewId, UUID runId, UUID contractId,
             UUID contractVersionId, int contractVersionNumber, int changeSetVersion,
-            UUID finalizedBy, Instant finalizedAt) {
+            String semanticsDigest, UUID finalizedBy, Instant finalizedAt) {
     }
 
     private static OffsetDateTime timestamp(Instant instant) {

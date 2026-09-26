@@ -27,6 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
