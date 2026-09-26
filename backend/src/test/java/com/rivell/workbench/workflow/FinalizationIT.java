@@ -290,6 +290,52 @@ class FinalizationIT {
     }
 
     /**
+     * M10: the product's hardest failure to diagnose is a review that stops. With the default
+     * configuration there is no background worker, so an enqueued analysis is never picked up and the
+     * review sits in ANALYSIS_QUEUED with nothing to indicate why. The diagnostics surface has to
+     * say so plainly, and it has to say it without exposing contract text.
+     */
+    @Test
+    void diagnosticsExplainAQueuedAnalysisThatNoWorkerHasPickedUp() throws Exception {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        // No analysis is driven: the review is created, its job is enqueued, and with the default
+        // configuration nothing will ever run it.
+        var result = mockMvc.perform(get("/api/reviews/{id}/diagnostics", review.id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("ANALYSIS_QUEUED"))
+                .andExpect(jsonPath("$.data.backgroundWorkerEnabled").value(false))
+                .andExpect(jsonPath("$.data.analysis").doesNotExist())
+                .andExpect(jsonPath("$.data.stalled[0]")
+                        .value("No analysis run has been created for this review."))
+                .andReturn();
+
+        var body = result.getResponse().getContentAsString();
+        assertThat(body)
+                .as("diagnostics must not echo contract text")
+                .doesNotContain("limitation of liability")
+                .doesNotContain("Liability is capped");
+    }
+
+    @Test
+    void diagnosticsReportACompletedRunWithItsChecksAndOutcomes() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var reviewId = fixture.review().id();
+
+        mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.analysis.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.analysis.checks").isNotEmpty())
+                .andExpect(jsonPath("$.data.findings.total").isNumber())
+                .andExpect(jsonPath("$.data.analysis.environmentMatchesSnapshot").value(true))
+                .andExpect(jsonPath("$.data.stalled").isEmpty());
+    }
+
+    /**
      * M10: a run whose checks all degraded produced a COMPLETED review with zero Findings, which
      * was then finalizable into a zero-change ApprovedChangeSet and a NO_CHANGES redline. That is
      * the worst possible failure for a legal tool: a clean-looking artifact from an analysis that

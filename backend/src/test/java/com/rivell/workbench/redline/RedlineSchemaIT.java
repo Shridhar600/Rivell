@@ -190,6 +190,52 @@ class RedlineSchemaIT {
         assertThat(insertExecution(seeded)).isNotNull();
     }
 
+    /**
+     * The foreign key binds the version number as well as the contract and the organisation, so an
+     * execution cannot claim one version while pointing at another. Reusing a real contract version
+     * with a different version number is the discriminating case: a weaker foreign key would accept
+     * it, because the contract and the organisation both match.
+     */
+    @Test
+    void aContractReferenceWithTheWrongVersionNumberIsRejectedByTheSchema() throws Exception {
+        var seeded = finalizedSet();
+        var other = corpusBuilder.buildMainCorpus(
+                identityProvider.currentIdentity().organizationId()).contract();
+
+        assertThatThrownBy(() -> insertExecutionWithVersionNumbers(seeded, other.contractId(),
+                other.contractVersionId(), 7))
+                .as("the version number is part of the referenced identity")
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private void insertExecutionWithVersionNumbers(Seeded seeded, UUID contractId,
+            UUID contractVersionId, int contractVersionNumber) {
+        jdbcClient.sql("""
+                insert into redline_execution
+                  (id, organization_id, review_id, change_set_id, contract_id,
+                   contract_version_id, contract_version_number, change_set_version,
+                   status, outcome, failure_code, failure_detail, renderer_version,
+                   placement_strategy_version, source_sha256, semantics_digest, change_count,
+                   requested_by, started_at, completed_at)
+                values (:id, :organizationId, :reviewId, :changeSetId, :contractId,
+                   :contractVersionId, :contractVersionNumber, 1,
+                   'COMPLETED', 'REDLINE_GENERATED', null, null, 'test-renderer',
+                   'test-placement', repeat('a', 64), repeat('b', 64), 1,
+                   :requestedBy, :startedAt, :completedAt)
+                """)
+                .param("id", UUID.randomUUID())
+                .param("organizationId", seeded.organizationId())
+                .param("reviewId", seeded.reviewId())
+                .param("changeSetId", seeded.changeSetId())
+                .param("contractId", contractId)
+                .param("contractVersionId", contractVersionId)
+                .param("contractVersionNumber", contractVersionNumber)
+                .param("requestedBy", UUID.randomUUID())
+                .param("startedAt", timestamp())
+                .param("completedAt", timestamp())
+                .update();
+    }
+
     private void insertExecutionWithForeignContract(Seeded seeded, UUID contractId,
             UUID contractVersionId) {
         jdbcClient.sql("""

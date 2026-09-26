@@ -130,8 +130,8 @@ class EnrichmentFailureIT {
 
         assertThat(semantics.enrichmentStatus()).isEqualTo(EnrichmentStatus.FAILED);
         assertThat(semantics.failureReason())
-                .as("a failed enrichment must state why, as a code")
-                .isIn(EnrichmentFailureReason.values());
+                .as("a failure outside the provider guard is reported precisely, not as a wildcard")
+                .isEqualTo(EnrichmentFailureReason.INTERNAL);
         assertThat(semantics.warnings())
                 .as("the legacy warning string must not be the only trace")
                 .allSatisfy(warning -> assertThat(warning).doesNotContain("Exception"));

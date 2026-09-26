@@ -105,6 +105,7 @@ class SystemApiIT {
                         "/api/reviews/{id}/findings/{findingId}/decisions",
                         "/api/reviews/{id}/decisions",
                         "/api/reviews/{id}/human-review",
+                        "/api/reviews/{id}/diagnostics",
                         "/api/reviews/{id}/finalize",
                         "/api/reviews/{id}/approved-change-set",
                         "/api/reviews/{id}/redline",
