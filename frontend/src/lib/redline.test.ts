@@ -6,7 +6,6 @@ import {
   buildRedlineChangeRows,
   classifyTriggerError,
   redlineChangeStatusLabel,
-  redlineCounts,
   redlineExecutionTitle,
   redlineFailureTitle,
   redlinePlacementLabel,
@@ -168,6 +167,13 @@ describe('verification and counts', () => {
       ],
     })
     expect(redlineVerificationOutcome(partiallyVerified)).toBe('INCOMPLETE')
+    const mismatched = fixtureExecution({
+      changeCount: 3,
+      changes: [fixtureExecution().changes[0]],
+    })
+    expect(redlineVerificationOutcome(mismatched)).toBe('INCOMPLETE')
+    const noRows = fixtureExecution({ changeCount: 1, changes: [] })
+    expect(redlineVerificationOutcome(noRows)).toBe('INCOMPLETE')
     expect(
       redlineVerificationOutcome(
         fixtureExecution({ outcome: 'NO_CHANGES', downloadAvailable: false, changes: [] }),
@@ -180,23 +186,6 @@ describe('verification and counts', () => {
     ).toBe('NOT_APPLICABLE')
   })
 
-  it('counts applied, verified, failed and not-applied changes from server truth', () => {
-    const execution = fixtureExecution({
-      changeCount: 3,
-      changes: [
-        fixtureExecution().changes[0],
-        { ...fixtureExecution().changes[0], approvedChangeId: 'ch-2', status: 'NOT_APPLIED', verification: null },
-        { ...fixtureExecution().changes[0], approvedChangeId: 'ch-3', status: 'FAILED', verification: null },
-      ],
-    })
-    expect(redlineCounts(execution)).toEqual({
-      total: 3,
-      applied: 1,
-      verified: 1,
-      failed: 1,
-      notApplied: 1,
-    })
-  })
 })
 
 describe('change report rows', () => {
@@ -261,6 +250,25 @@ describe('change report rows', () => {
       paragraphSummary: '3 paragraphs deleted',
       findingId: 'f-3',
     })
+  })
+
+  it('prefers the frozen approved target label for INSERT over the raw resolved concept', () => {
+    const execution = fixtureExecution({
+      changeCount: 1,
+      changes: [
+        {
+          ...fixtureExecution().changes[0],
+          approvedChangeId: 'ch-2',
+          actionType: 'INSERT',
+          targetKind: 'ABSENCE',
+          resolvedTarget: 'TERMINATION',
+          placement: 'BEFORE_SIGNATURE_BLOCK',
+        },
+      ],
+    })
+    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels })
+    expect(rows[0].targetLabel).toBe('Missing provision: Confidentiality')
+    expect(rows[0].placementLabel).toBe('Before the signature block')
   })
 
   it('degrades safely when a change row is not in the frozen set or lacks labels', () => {

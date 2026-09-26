@@ -253,6 +253,45 @@ describe('redline generation', () => {
     ).toHaveLength(0)
   })
 
+  it('fails closed when a completed execution has no recorded outcome', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        redline: {
+          ...fixtureRedlineExecution(),
+          outcome: null,
+          downloadAvailable: true,
+        } as unknown as RedlineExecution,
+      }),
+    )
+    renderRouter(api)
+    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    expect(
+      await within(panel).findByText('Redline execution completed'),
+    ).toBeInTheDocument()
+    expect(panel).toHaveTextContent('The outcome was not recorded for this execution.')
+    expect(
+      within(panel).queryByRole('button', { name: 'Download redlined DOCX' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('fails closed when verification is incomplete despite a reported artifact', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        redline: fixtureRedlineExecution({
+          changes: [],
+          changeCount: 1,
+          downloadAvailable: true,
+        }),
+      }),
+    )
+    renderRouter(api)
+    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    expect(await within(panel).findByText('Verification incomplete')).toBeInTheDocument()
+    expect(
+      within(panel).queryByRole('button', { name: 'Download redlined DOCX' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('keeps unknown execution states safe', async () => {
     const api = stubContractApi(
       baseOptions({
@@ -272,6 +311,27 @@ describe('redline generation', () => {
 })
 
 describe('redline failure truth', () => {
+  it('moves focus to the failure notice after a failed trigger', async () => {
+    let api: ReturnType<typeof stubContractApi>
+    api = stubContractApi(
+      baseOptions({
+        redlineTriggerResponse: () => {
+          api.setRedline(fixtureFailedRedlineExecution())
+          return errorResponse(409)
+        },
+      }),
+    )
+    renderRouter(api)
+    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    await userEvent.click(
+      await within(panel).findByRole('button', { name: 'Generate redline' }),
+    )
+    const failureTitle = await within(panel).findByRole('heading', {
+      name: 'Redline could not be generated',
+    })
+    await waitFor(() => expect(failureTitle).toHaveFocus())
+  })
+
   it('shows a safe failure and keeps the approved change set visible', async () => {
     const api = stubContractApi(
       baseOptions({ redline: fixtureFailedRedlineExecution() }),

@@ -7,8 +7,11 @@ import {
   useRedlineExecutionQuery,
   useTriggerRedline,
 } from '../../api/redline'
-import { classifyTriggerError, redlineTriggerErrorNotice } from '../../lib/redline'
-import { buildRedlineChangeRows } from '../../lib/redline'
+import {
+  buildRedlineChangeRows,
+  classifyTriggerError,
+  redlineTriggerErrorNotice,
+} from '../../lib/redline'
 import { RedlineChangeReport } from './RedlineChangeReport'
 import { RedlineDownloadAction } from './RedlineDownloadAction'
 import { RedlineExecutionStatus } from './RedlineExecutionStatus'
@@ -33,14 +36,18 @@ export function RedlineExecutionPanel({
   const executionQuery = useRedlineExecutionQuery(reviewId, isFinalized)
   const trigger = useTriggerRedline(reviewId)
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const failureRef = useRef<HTMLHeadingElement>(null)
+  const execution = executionQuery.data ?? null
 
   useEffect(() => {
     if (trigger.isSuccess) headingRef.current?.focus()
   }, [trigger.isSuccess])
 
-  if (!isFinalized) return null
+  useEffect(() => {
+    if (trigger.isError && execution?.status === 'FAILED') failureRef.current?.focus()
+  }, [trigger.isError, execution?.status])
 
-  const execution = executionQuery.data ?? null
+  if (!isFinalized) return null
   const notStarted = executionQuery.isError && isRedlineNotFoundError(executionQuery.error)
   const forbidden = executionQuery.isError && isRedlineForbiddenError(executionQuery.error)
   const triggerError = trigger.isError
@@ -59,7 +66,7 @@ export function RedlineExecutionPanel({
       {execution ? (
         <>
           {execution.status === 'FAILED' ? (
-            <RedlineFailureNotice execution={execution} />
+            <RedlineFailureNotice execution={execution} titleRef={failureRef} />
           ) : (
             <>
               <RedlineExecutionStatus execution={execution} />

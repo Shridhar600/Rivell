@@ -5,11 +5,21 @@ import { redlineExecutionTitle } from '../../lib/redline'
 export function RedlineExecutionStatus({ execution }: { execution: RedlineExecution }) {
   const title = redlineExecutionTitle(execution)
   const positive = execution.status === 'COMPLETED' && execution.outcome === 'REDLINE_GENERATED'
+  const outcomeRecorded =
+    execution.status !== 'COMPLETED' ||
+    execution.outcome === 'REDLINE_GENERATED' ||
+    execution.outcome === 'NO_CHANGES'
   return (
     <div className="redline__status">
       <span className={`status-badge ${positive ? 'status-badge--positive' : 'status-badge--neutral'}`}>
         {title}
       </span>
+      {outcomeRecorded ? null : (
+        <p className="panel__hint">
+          The outcome was not recorded for this execution. Download and verification are
+          unavailable.
+        </p>
+      )}
       <p className="panel__hint">
         Based on contract v{execution.contractVersionNumber} · change set version{' '}
         {execution.changeSetVersion}

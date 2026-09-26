@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import type { RedlineExecution } from '../../api/redline'
-import {
-  downloadRedline,
-  isRedlineForbiddenError,
-} from '../../api/redline'
+import { downloadRedline, isRedlineForbiddenError } from '../../api/redline'
+import { redlineVerificationOutcome } from '../../lib/redline'
 
 function saveFile(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -28,7 +26,8 @@ export function RedlineDownloadAction({
   const canDownload =
     execution.downloadAvailable &&
     execution.status === 'COMPLETED' &&
-    execution.outcome === 'REDLINE_GENERATED'
+    execution.outcome === 'REDLINE_GENERATED' &&
+    redlineVerificationOutcome(execution) === 'PASSED'
   if (!canDownload) return null
 
   async function onDownload() {

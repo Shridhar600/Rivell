@@ -184,28 +184,12 @@ export class RedlineApiError extends Error {
   }
 }
 
-export function isRedlineStatusError(error: unknown, status: number): boolean {
-  return error instanceof RedlineApiError && error.status === status
-}
-
 export function isRedlineForbiddenError(error: unknown): boolean {
-  return isRedlineStatusError(error, 403)
+  return error instanceof RedlineApiError && error.status === 403
 }
 
 export function isRedlineNotFoundError(error: unknown): boolean {
-  return isRedlineStatusError(error, 404)
-}
-
-export function isRedlineConflictError(error: unknown): boolean {
-  return isRedlineStatusError(error, 409)
-}
-
-export function redlineErrorMessage(
-  error: unknown,
-  fallback = 'The redline request failed. Check your connection and try again.',
-): string {
-  if (error instanceof RedlineApiError) return error.message
-  return fallback
+  return error instanceof RedlineApiError && error.status === 404
 }
 
 export const redlineKeys = {

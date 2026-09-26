@@ -108,6 +108,7 @@ export function redlineVerificationOutcome(
   if (execution.outcome === 'NO_CHANGES') return 'NOT_APPLICABLE'
   if (execution.outcome !== 'REDLINE_GENERATED') return 'UNKNOWN'
   if (execution.changes.length === 0) return 'INCOMPLETE'
+  if (execution.changes.length !== execution.changeCount) return 'INCOMPLETE'
   const allVerified = execution.changes.every(
     (change) => change.status === 'APPLIED' && change.verification === 'VERIFIED',
   )
@@ -125,30 +126,6 @@ export function redlineVerificationSentence(outcome: RedlineVerificationOutcome)
     default:
       return 'Verification state is not known for this execution.'
   }
-}
-
-export function redlineCounts(execution: RedlineExecution): {
-  total: number
-  applied: number
-  verified: number
-  failed: number
-  notApplied: number
-} {
-  let applied = 0
-  let verified = 0
-  let failed = 0
-  let notApplied = 0
-  for (const change of execution.changes) {
-    if (change.status === 'APPLIED') {
-      applied += 1
-      if (change.verification === 'VERIFIED') verified += 1
-    } else if (change.status === 'FAILED') {
-      failed += 1
-    } else if (change.status === 'NOT_APPLIED') {
-      notApplied += 1
-    }
-  }
-  return { total: execution.changeCount, applied, verified, failed, notApplied }
 }
 
 function paragraphSummary(change: RedlineExecutionChange): string | null {

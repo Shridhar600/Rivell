@@ -5,10 +5,10 @@ import type { ReactNode } from 'react'
 import {
   downloadRedline,
   fetchRedlineExecution,
-  isRedlineConflictError,
   isRedlineForbiddenError,
   isRedlineNotFoundError,
   parseRedlineExecution,
+  RedlineApiError,
   redlineKeys,
   triggerRedline,
   useRedlineExecutionQuery,
@@ -246,7 +246,7 @@ describe('redline fetchers', () => {
     stubFetch(() => errorResponse(404))
     const notFound = await fetchRedlineExecution('r-1').catch((error) => error)
     expect(isRedlineNotFoundError(notFound)).toBe(true)
-    expect(isRedlineConflictError(notFound)).toBe(false)
+    expect(notFound).toMatchObject({ status: 404 })
 
     stubFetch(() => errorResponse(403))
     const forbidden = await fetchRedlineExecution('r-1').catch((error) => error)
@@ -254,7 +254,8 @@ describe('redline fetchers', () => {
 
     stubFetch(() => errorResponse(409))
     const conflict = await fetchRedlineExecution('r-1').catch((error) => error)
-    expect(isRedlineConflictError(conflict)).toBe(true)
+    expect(conflict).toBeInstanceOf(RedlineApiError)
+    expect(conflict).toMatchObject({ status: 409 })
   })
 
   it('triggers synchronous generation with an empty POST', async () => {
@@ -297,15 +298,24 @@ describe('trigger mutation state', () => {
     expect(gets).toHaveLength(1)
   })
 
-  it('re-syncs only the redline execution after a trigger failure', async () => {
-    let failTrigger = true
+  it('refetches the canonical failed execution after a 409 and never touches other keys', async () => {
+    let getCount = 0
+    const failedPayload = {
+      ...generatedPayload,
+      status: 'FAILED',
+      outcome: null,
+      failureCode: 'PREEXISTING_REVISIONS_UNSUPPORTED',
+      artifactFilename: null,
+      artifactSizeBytes: null,
+      artifactSha256: null,
+      downloadAvailable: false,
+    }
     const requests = stubFetch((request) => {
       if (request.method === 'POST') return errorResponse(409)
-      if (failTrigger) {
-        failTrigger = false
-        return errorResponse(404)
-      }
-      return jsonResponse(envelope(generatedPayload))
+      getCount += 1
+      return getCount === 1
+        ? errorResponse(404)
+        : jsonResponse(envelope(failedPayload))
     })
     const { queryClient, wrapper } = createWrapper()
     queryClient.setQueryData(['reviews', 'decisions', 'r-1'], { items: [], truncated: false })
@@ -319,8 +329,12 @@ describe('trigger mutation state', () => {
     act(() => result.current.trigger.mutate())
     await waitFor(() => expect(result.current.trigger.isError).toBe(true))
     await waitFor(() =>
-      expect(queryClient.getQueryState(redlineKeys.execution('r-1'))?.fetchStatus).toBe('idle'),
+      expect(
+        queryClient.getQueryData<RedlineExecution>(redlineKeys.execution('r-1'))?.status,
+      ).toBe('FAILED'),
     )
+    const gets = requests.filter((request) => request.method === 'GET')
+    expect(gets).toHaveLength(2)
     const otherReads = requests.filter(
       (request) =>
         request.method === 'GET' &&
@@ -361,7 +375,8 @@ describe('redline download', () => {
   it('reports download unavailability as a typed error, separate from execution state', async () => {
     stubFetch(() => errorResponse(409))
     const conflict = await downloadRedline('r-1').catch((error) => error)
-    expect(isRedlineConflictError(conflict)).toBe(true)
+    expect(conflict).toBeInstanceOf(RedlineApiError)
+    expect(conflict).toMatchObject({ status: 409 })
 
     stubFetch(() => errorResponse(403))
     const forbidden = await downloadRedline('r-1').catch((error) => error)

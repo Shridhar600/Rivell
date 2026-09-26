@@ -1,10 +1,16 @@
+import type { Ref } from 'react'
 import type { RedlineExecution } from '../../api/redline'
 import { redlineExecutionTitle, redlineFailureTitle } from '../../lib/redline'
 
-export function RedlineFailureNotice({ execution }: { execution: RedlineExecution }) {
+type Props = {
+  execution: RedlineExecution
+  titleRef?: Ref<HTMLHeadingElement>
+}
+
+export function RedlineFailureNotice({ execution, titleRef }: Props) {
   return (
-    <div className="redline__failure">
-      <h3 className="redline__failure-title" role="alert">
+    <div className="redline__failure" role="alert">
+      <h3 className="redline__failure-title" tabIndex={-1} ref={titleRef}>
         {redlineExecutionTitle(execution)}
       </h3>
       <p>{redlineFailureTitle(execution.failureCode ?? 'UNKNOWN')}</p>
