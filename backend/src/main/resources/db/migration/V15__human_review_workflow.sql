@@ -1,6 +1,11 @@
 -- M8 human review workflow: append-only human decisions, one finalization per review,
 -- and the frozen approved-change set consumed by M9. M7 machine state is never mutated.
 
+ALTER TABLE finding
+    ADD CONSTRAINT uq_finding_id_review UNIQUE (id, review_id);
+ALTER TABLE finding
+    ADD CONSTRAINT uq_finding_id_run UNIQUE (id, run_id);
+
 CREATE TABLE human_decision (
     id UUID PRIMARY KEY,
     organization_id UUID NOT NULL,
@@ -50,6 +55,12 @@ ALTER TABLE human_decision
 ALTER TABLE human_decision
     ADD CONSTRAINT fk_human_decision_finding_org
     FOREIGN KEY (finding_id, organization_id) REFERENCES finding (id, organization_id);
+ALTER TABLE human_decision
+    ADD CONSTRAINT fk_human_decision_finding_review
+    FOREIGN KEY (finding_id, review_id) REFERENCES finding (id, review_id);
+ALTER TABLE human_decision
+    ADD CONSTRAINT fk_human_decision_finding_run
+    FOREIGN KEY (finding_id, run_id) REFERENCES finding (id, run_id);
 ALTER TABLE human_decision
     ADD CONSTRAINT fk_human_decision_supersedes_org
     FOREIGN KEY (supersedes_decision_id, organization_id)
@@ -121,6 +132,9 @@ ALTER TABLE approved_change
 ALTER TABLE approved_change
     ADD CONSTRAINT fk_approved_change_finding_org
     FOREIGN KEY (finding_id, organization_id) REFERENCES finding (id, organization_id);
+ALTER TABLE approved_change
+    ADD CONSTRAINT fk_approved_change_finding_review
+    FOREIGN KEY (finding_id, review_id) REFERENCES finding (id, review_id);
 ALTER TABLE approved_change
     ADD CONSTRAINT fk_approved_change_decision_org
     FOREIGN KEY (decision_id, organization_id)
