@@ -87,6 +87,17 @@ class JdbcContractRepository implements ContractRepository {
     }
 
     @Override
+    public java.util.List<UUID> findHeadingNodeIds(UUID versionId) {
+        return jdbcClient.sql("""
+                select id from document_node
+                where contract_version_id = :versionId and node_type = 'HEADING'
+                """)
+                .param("versionId", versionId)
+                .query(UUID.class)
+                .list();
+    }
+
+    @Override
     public ContractStructure loadStructure(UUID versionId) {
         var versionMeta = jdbcClient.sql("""
                         select cv.contract_id, cv.version_number, cv.parser_version, cv.parse_status, cv.parse_warnings

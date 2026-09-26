@@ -20,6 +20,9 @@ public interface ContractRepository {
 
     ContractStructure loadStructure(UUID versionId);
 
+    /** Heading node ids of one immutable contract version (cheap readiness reads). */
+    java.util.List<UUID> findHeadingNodeIds(UUID versionId);
+
     Optional<ContractSource> findSourceForVersion(UUID versionId, UUID organizationId);
 
     void insertSourceArtifact(

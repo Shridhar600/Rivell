@@ -25,6 +25,12 @@ public interface ReviewRepository {
 
     List<ReviewPlanCheck> findPlanChecks(UUID organizationId, UUID reviewId);
 
+    /**
+     * Pessimistic row lock serializing human decision writes and finalization for one
+     * review; false when the review does not exist in the organization.
+     */
+    boolean lock(UUID organizationId, UUID reviewId);
+
     boolean markAnalyzing(UUID organizationId, UUID reviewId, java.time.Instant at);
 
     boolean markCompleted(UUID organizationId, UUID reviewId, java.time.Instant at);

@@ -30,11 +30,19 @@ import com.rivell.workbench.retrieval.ClauseNotClassifiedException;
 import com.rivell.workbench.retrieval.EnrichmentNotReadyException;
 import com.rivell.workbench.retrieval.TraceNotFoundException;
 import com.rivell.workbench.retrieval.UnauthorizedEvidenceAccessException;
+import com.rivell.workbench.redline.ApprovedChangeSetNotFoundException;
 import com.rivell.workbench.review.FindingNotFoundException;
 import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
 import com.rivell.workbench.review.InvalidReviewConfigurationException;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.UnauthorizedReviewAccessException;
+import com.rivell.workbench.workflow.AnalysisNotCompleteException;
+import com.rivell.workbench.workflow.DecisionConflictException;
+import com.rivell.workbench.workflow.FindingNotActionableException;
+import com.rivell.workbench.workflow.InvalidDecisionException;
+import com.rivell.workbench.workflow.ReviewAlreadyFinalizedException;
+import com.rivell.workbench.workflow.ReviewNotFinalizableException;
+import com.rivell.workbench.workflow.UnauthorizedWorkflowAccessException;
 import com.rivell.workbench.foundation.ErrorResponse;
 
 /**
@@ -57,6 +65,7 @@ public class GlobalExceptionHandler {
             KnowledgeUnitNotFoundException.class, SemanticsNotFoundException.class,
             ClauseNotFoundException.class, TraceNotFoundException.class,
             ReviewNotFoundException.class, FindingNotFoundException.class,
+            ApprovedChangeSetNotFoundException.class,
             NoSuchElementException.class})
     ResponseEntity<ErrorResponse> notFound(RuntimeException e) {
         return error(HttpStatus.NOT_FOUND, "404", "Not found",
@@ -72,7 +81,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({UnauthorizedContractAccessException.class,
             UnauthorizedKnowledgeAccessException.class,
             UnauthorizedEvidenceAccessException.class,
-            UnauthorizedReviewAccessException.class})
+            UnauthorizedReviewAccessException.class,
+            UnauthorizedWorkflowAccessException.class})
     ResponseEntity<ErrorResponse> forbidden(RuntimeException e) {
         return error(HttpStatus.FORBIDDEN, "403", "Forbidden", "Not authorized for this operation.");
     }
@@ -82,6 +92,18 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "500",
                 "Finding evidence unavailable",
                 "The finding evidence could not be resolved; internal diagnostics were recorded.");
+    }
+
+    @ExceptionHandler(InvalidDecisionException.class)
+    ResponseEntity<ErrorResponse> invalidDecision(InvalidDecisionException e) {
+        return error(HttpStatus.BAD_REQUEST, "400", "Invalid decision", e.getMessage());
+    }
+
+    @ExceptionHandler({DecisionConflictException.class, FindingNotActionableException.class,
+            AnalysisNotCompleteException.class, ReviewAlreadyFinalizedException.class,
+            ReviewNotFinalizableException.class})
+    ResponseEntity<ErrorResponse> decisionConflict(RuntimeException e) {
+        return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }
 
     @ExceptionHandler(InvalidReviewConfigurationException.class)
