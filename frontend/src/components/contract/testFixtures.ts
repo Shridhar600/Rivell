@@ -442,6 +442,16 @@ export type StubOptions = {
   createReviewResponse?: (body: unknown) => Response | Promise<Response>
   createReviewSummary?: unknown
   createReviewStatus?: number
+  decisions?: unknown
+  decisionsStatus?: number
+  decisionHistory?: unknown
+  decisionHistoryStatus?: number
+  humanReview?: unknown
+  humanReviewStatus?: number
+  changeSet?: unknown
+  changeSetStatus?: number
+  decisionResponse?: (body: unknown) => Response | Promise<Response>
+  finalizeResponse?: () => Response | Promise<Response>
 }
 
 const defaultPackCatalog = {
@@ -466,6 +476,10 @@ export function stubContractApi(options: StubOptions = {}) {
   let semantics = options.semantics === undefined ? fixtureSemantics() : options.semantics
   let semanticsStatus = options.semanticsStatus ?? 200
   let reviews = options.reviews ?? { items: [], truncated: false }
+  let decisions: unknown = options.decisions ?? { items: [], truncated: false }
+  let decisionHistory: unknown = options.decisionHistory ?? { items: [], truncated: false }
+  let humanReview: unknown = options.humanReview ?? null
+  let changeSet: unknown = options.changeSet ?? null
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(String(input), init)
@@ -594,6 +608,98 @@ export function stubContractApi(options: StubOptions = {}) {
       }
       return jsonResponse(envelope(options.packs ?? defaultPackCatalog))
     }
+    if (
+      method === 'GET' &&
+      /\/api\/reviews\/[^/?]+\/findings\/[^/?]+\/decisions(\?|$)/.test(url)
+    ) {
+      if (options.decisionHistoryStatus && options.decisionHistoryStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.decisionHistoryStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.decisionHistoryStatus,
+        )
+      }
+      return jsonResponse(envelope(decisionHistory))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/decisions(\?|$)/.test(url)) {
+      if (options.decisionsStatus && options.decisionsStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.decisionsStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.decisionsStatus,
+        )
+      }
+      return jsonResponse(envelope(decisions))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/human-review$/.test(url)) {
+      if (options.humanReviewStatus && options.humanReviewStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.humanReviewStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.humanReviewStatus,
+        )
+      }
+      return jsonResponse(envelope(humanReview))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/approved-change-set$/.test(url)) {
+      if (options.changeSetStatus && options.changeSetStatus !== 200) {
+        return jsonResponse(
+          {
+            code: String(options.changeSetStatus),
+            title: 'Error',
+            detail: 'server detail text',
+          },
+          options.changeSetStatus,
+        )
+      }
+      if (changeSet === null) {
+        return jsonResponse(
+          { code: '404', title: 'Not found', detail: 'server detail text' },
+          404,
+        )
+      }
+      return jsonResponse(envelope(changeSet))
+    }
+    if (method === 'PUT' && /\/api\/reviews\/[^/?]+\/findings\/[^/?]+\/decision$/.test(url)) {
+      if (options.decisionResponse) return await options.decisionResponse(body)
+      const requestBody = (body ?? {}) as Record<string, unknown>
+      const findingId = url.split('/findings/')[1]?.split('/')[0] ?? ''
+      return jsonResponse(
+        envelope({
+          id: `d-${String(requestBody.expectedVersion ?? 0) + 1}`,
+          findingId,
+          revision: Number(requestBody.expectedVersion ?? 0) + 1,
+          action: requestBody.action ?? 'ACCEPT',
+          approvedAction: requestBody.approvedAction ?? null,
+          approvedLanguage: requestBody.approvedLanguage ?? null,
+          languageSource:
+            requestBody.action === 'EDIT'
+              ? 'HUMAN_EDIT'
+              : requestBody.action === 'ACCEPT'
+                ? 'APPROVED_DRAFTING'
+                : null,
+          approvedDraftingEvidenceId: null,
+          comment: requestBody.comment ?? null,
+          actorId: 'u-1',
+          decidedAt: '2026-09-26T09:20:00Z',
+          clientRequestId: requestBody.clientRequestId ?? null,
+          supersedesDecisionId: null,
+        }),
+      )
+    }
+    if (method === 'POST' && /\/api\/reviews\/[^/?]+\/finalize$/.test(url)) {
+      if (options.finalizeResponse) return await options.finalizeResponse()
+      return jsonResponse(envelope(null))
+    }
     if (method === 'GET' && /\/api\/reviews\?(.*)contractId=/.test(url)) {
       if (options.reviewsStatus && options.reviewsStatus !== 200) {
         return jsonResponse(
@@ -686,6 +792,18 @@ export function stubContractApi(options: StubOptions = {}) {
     },
     setReviews: (next: unknown) => {
       reviews = next as typeof reviews
+    },
+    setDecisions: (next: unknown) => {
+      decisions = next as typeof decisions
+    },
+    setDecisionHistory: (next: unknown) => {
+      decisionHistory = next
+    },
+    setHumanReview: (next: unknown) => {
+      humanReview = next
+    },
+    setChangeSet: (next: unknown) => {
+      changeSet = next
     },
   }
 }
