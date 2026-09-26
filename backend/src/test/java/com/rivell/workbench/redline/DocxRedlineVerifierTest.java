@@ -21,8 +21,8 @@ import org.junit.jupiter.api.Test;
 
 import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.platform.parsing.RedlineFixturePipeline;
-import com.rivell.workbench.platform.redline.DocxRedlineRenderer;
-import com.rivell.workbench.platform.redline.DocxRedlineVerifier;
+import com.rivell.workbench.platform.docx.DocxRedlineRenderer;
+import com.rivell.workbench.platform.docx.DocxRedlineVerifier;
 
 class DocxRedlineVerifierTest {
 

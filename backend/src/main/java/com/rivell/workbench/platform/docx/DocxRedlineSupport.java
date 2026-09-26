@@ -1,4 +1,4 @@
-package com.rivell.workbench.platform.redline;
+package com.rivell.workbench.platform.docx;
 
 import java.math.BigInteger;
 import java.time.Instant;

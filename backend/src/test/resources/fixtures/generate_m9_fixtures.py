@@ -215,10 +215,10 @@ write('m9-hyperlink-target.docx', (
 write('m9-preexisting-revisions.docx', (
     p('Master Services Agreement', 'Title')
     + p('1. Limitation of Liability', 'Heading1')
-    + '<w:p><w:ins w:id="900" w:author="Counterparty" w:date="2026-09-01T00:00:00Z">'
-    + '<w:r><w:t>Supplier liability shall be unlimited.</w:t></w:r></w:ins></w:p>'
+    + p('Supplier liability shall be unlimited.')
     + p('2. Governing Law', 'Heading1')
-    + p('This Agreement is governed by the laws of Delaware.')
+    + '<w:p><w:ins w:id="900" w:author="Counterparty" w:date="2026-09-01T00:00:00Z">'
+    + '<w:r><w:t>This Agreement is governed by the laws of Delaware.</w:t></w:r></w:ins></w:p>'
 ))
 
 # M — relationship-complete package with header/footer/image -------------------
@@ -275,3 +275,23 @@ write('m9-macro.docx', (
     + p('1. Limitation of Liability', 'Heading1')
     + p('Supplier liability shall be unlimited.')
 ), main_content_type=MACRO_MAIN)
+
+# P — M9 multi-change source: liability deviation + survival gap + missing
+# indemnification in one review (REPLACE + DELETE + INSERT).
+write('m9-multi-change-source.docx', (
+    p('Master Services Agreement', 'Title')
+    + p('This Master Services Agreement is entered into as of January 1, 2026 by and '
+        'between Northwind Customer Group LLC ("Customer") and Pallas Cloud Services '
+        'GmbH ("Supplier").')
+    + p('1. Limitation of Liability', 'Heading1')
+    + p("Supplier's aggregate liability shall not exceed two times the fees paid in "
+        "the preceding 12 months.")
+    + p('2. Confidentiality', 'Heading1')
+    + p('Each Party shall protect the other Party\'s confidential information with '
+        'reasonable care and use it only for the purposes of this Agreement.')
+    + p('3. Termination', 'Heading1')
+    + p('Either Party may terminate this Agreement for convenience upon sixty (60) '
+        'days prior written notice to the other Party.')
+    + p('4. Governing Law', 'Heading1')
+    + p('This Agreement is governed by the laws of the State of Delaware.')
+))

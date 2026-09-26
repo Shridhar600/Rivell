@@ -150,6 +150,7 @@ public class LiabilityReviewIT {
     public static final class ReviewScriptedProvider implements SemanticDecisionProvider {
 
         private final CorpusScriptedProvider base = new CorpusScriptedProvider();
+        private final AtomicInteger totalDecisions = new AtomicInteger();
         private final AtomicInteger liabilityDecisions = new AtomicInteger();
         private final AtomicInteger consistencyDecisions = new AtomicInteger();
         volatile boolean verificationSatisfies = true;
@@ -170,6 +171,7 @@ public class LiabilityReviewIT {
 
         @Override
         public ProviderExecutionResult execute(DecisionExecutionRequest request) {
+            totalDecisions.incrementAndGet();
             if (request.pack().questions().containsKey(M7DecisionSpecs.SATISFIES_POLICY)) {
                 var verificationAnswers = new LinkedHashMap<String, SemanticAnswer>();
                 verificationAnswers.put(M7DecisionSpecs.SATISFIES_POLICY,
@@ -287,7 +289,12 @@ public class LiabilityReviewIT {
             return liabilityDecisions.get();
         }
 
-        void reset() {
+        public int totalDecisions() {
+            return totalDecisions.get();
+        }
+
+        public void reset() {
+            totalDecisions.set(0);
             liabilityDecisions.set(0);
             consistencyDecisions.set(0);
             verificationSatisfies = true;
@@ -318,6 +325,10 @@ public class LiabilityReviewIT {
         }
 
         int calls() {
+            return calls.get();
+        }
+
+        public int generations() {
             return calls.get();
         }
 

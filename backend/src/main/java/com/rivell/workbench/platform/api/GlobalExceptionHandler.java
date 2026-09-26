@@ -31,6 +31,11 @@ import com.rivell.workbench.retrieval.EnrichmentNotReadyException;
 import com.rivell.workbench.retrieval.TraceNotFoundException;
 import com.rivell.workbench.retrieval.UnauthorizedEvidenceAccessException;
 import com.rivell.workbench.redline.ApprovedChangeSetNotFoundException;
+import com.rivell.workbench.redline.RedlineArtifactUnavailableException;
+import com.rivell.workbench.redline.RedlineExecutionFailedException;
+import com.rivell.workbench.redline.RedlineExecutionNotFoundException;
+import com.rivell.workbench.redline.RedlineNotAvailableException;
+import com.rivell.workbench.redline.UnauthorizedRedlineAccessException;
 import com.rivell.workbench.review.FindingNotFoundException;
 import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
 import com.rivell.workbench.review.InvalidReviewConfigurationException;
@@ -130,6 +135,25 @@ public class GlobalExceptionHandler {
     ResponseEntity<ErrorResponse> storageUnavailable(IOException e) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "500", "Document storage unavailable",
                 "The original document could not be stored or read.");
+    }
+
+    @ExceptionHandler({UnauthorizedRedlineAccessException.class})
+    ResponseEntity<ErrorResponse> redlineForbidden(RuntimeException e) {
+        return error(HttpStatus.FORBIDDEN, "403", "Forbidden",
+                "Not authorized for this operation.");
+    }
+
+    @ExceptionHandler(RedlineExecutionNotFoundException.class)
+    ResponseEntity<ErrorResponse> redlineNotFound(RuntimeException e) {
+        return error(HttpStatus.NOT_FOUND, "404", "Not found",
+                "No redline execution exists for this review.");
+    }
+
+    @ExceptionHandler({RedlineNotAvailableException.class,
+            RedlineArtifactUnavailableException.class,
+            RedlineExecutionFailedException.class})
+    ResponseEntity<ErrorResponse> redlineConflict(RuntimeException e) {
+        return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }
 
     @ExceptionHandler(ConceptClassificationUnavailableException.class)

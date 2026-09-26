@@ -190,6 +190,11 @@ public final class RedlinePlanResolver {
         return node;
     }
 
+    /**
+     * Defense in depth beyond M8 target-level conflicts: no paragraph may be deleted by
+     * two changes. An insertion anchored after a paragraph deleted by another change is
+     * allowed — its position stays deterministic (after that paragraph's slot).
+     */
     private void validateNoOverlap(List<PlannedDocumentOperation> operations) {
         var deleted = new HashMap<Integer, UUID>();
         for (var operation : operations) {
@@ -200,14 +205,6 @@ public final class RedlinePlanResolver {
                             operation.approvedChangeId(),
                             "Approved changes target overlapping document content.");
                 }
-            }
-        }
-        for (var operation : operations) {
-            if (operation.insertion() != null
-                    && deleted.containsKey(operation.insertion().afterBodyIndex())) {
-                throw new RedlinePlanException(RedlineFailureCode.CHANGE_OVERLAP,
-                        operation.approvedChangeId(),
-                        "An approved insertion anchors to content deleted by another change.");
             }
         }
     }

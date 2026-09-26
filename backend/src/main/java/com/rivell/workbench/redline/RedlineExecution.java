@@ -42,7 +42,6 @@ public record RedlineExecution(
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(rendererVersion, "rendererVersion");
         Objects.requireNonNull(placementStrategyVersion, "placementStrategyVersion");
-        Objects.requireNonNull(sourceSha256, "sourceSha256");
         Objects.requireNonNull(requestedBy, "requestedBy");
         Objects.requireNonNull(startedAt, "startedAt");
         Objects.requireNonNull(completedAt, "completedAt");
@@ -55,6 +54,9 @@ public record RedlineExecution(
         }
         if ((status == RedlineExecutionStatus.COMPLETED) != (outcome != null)) {
             throw new IllegalArgumentException("only completed executions carry an outcome");
+        }
+        if (outcome == RedlineOutcome.REDLINE_GENERATED && sourceSha256 == null) {
+            throw new IllegalArgumentException("generated redlines carry the source hash");
         }
         if ((status == RedlineExecutionStatus.FAILED) != (failureCode != null)) {
             throw new IllegalArgumentException("failed executions carry a failure code");

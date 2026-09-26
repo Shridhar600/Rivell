@@ -1,4 +1,4 @@
-package com.rivell.workbench.platform.redline;
+package com.rivell.workbench.platform.docx;
 
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;

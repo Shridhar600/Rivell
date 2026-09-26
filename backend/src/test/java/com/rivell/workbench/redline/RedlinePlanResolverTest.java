@@ -194,7 +194,7 @@ class RedlinePlanResolverTest {
     }
 
     @Test
-    void failsClosedWhenAnInsertionAnchorWouldBeDeletedByAnotherChange() {
+    void allowsAnInsertionAnchoredAfterAParagraphDeletedByAnotherChange() {
         var contractId = UUID.randomUUID();
         var versionId = UUID.randomUUID();
         var structure = structure(contractId, versionId, List.of(
@@ -210,7 +210,25 @@ class RedlinePlanResolverTest {
                 "Approved cap text.");
         var set = set(UUID.randomUUID(), contractId, versionId, 1, List.of(deleteConfidentiality, insertLiability));
 
-        assertThatThrownBy(() -> resolver.resolve(set, structure, conceptByHeading, AUTHOR,
+        var plan = resolver.resolve(set, structure, conceptByHeading, AUTHOR, EXECUTED_AT,
+                SOURCE_SHA);
+
+        assertThat(plan.operations()).hasSize(2);
+    }
+
+    @Test
+    void failsClosedWhenTwoChangesDeleteTheSameParagraph() {
+        var contractId = UUID.randomUUID();
+        var versionId = UUID.randomUUID();
+        var structure = structure(contractId, versionId, List.of(
+                clause("1. Services", text("Services body"))));
+        var changeSetId = UUID.randomUUID();
+        var delete = delete(changeSetId, 0, headingId(structure, "1. Services"));
+        var replace = replace(changeSetId, 1, headingId(structure, "1. Services"),
+                "Replacement text.");
+        var set = set(UUID.randomUUID(), contractId, versionId, 1, List.of(delete, replace));
+
+        assertThatThrownBy(() -> resolver.resolve(set, structure, Map.of(), AUTHOR,
                 EXECUTED_AT, SOURCE_SHA))
                 .isInstanceOf(RedlinePlanException.class)
                 .extracting(e -> ((RedlinePlanException) e).code())

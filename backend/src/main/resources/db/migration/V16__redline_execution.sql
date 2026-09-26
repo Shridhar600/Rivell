@@ -17,7 +17,7 @@ CREATE TABLE redline_execution (
     failure_detail TEXT,
     renderer_version TEXT NOT NULL,
     placement_strategy_version TEXT NOT NULL,
-    source_sha256 CHAR(64) NOT NULL,
+    source_sha256 CHAR(64),
     change_count INTEGER NOT NULL CHECK (change_count >= 0),
     requested_by UUID NOT NULL,
     started_at TIMESTAMPTZ NOT NULL,
