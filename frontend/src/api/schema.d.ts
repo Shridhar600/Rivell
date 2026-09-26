@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/reviews/{id}/findings/{findingId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Write or revise the current human decision for a finding */
+        put: operations["decide"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finalize the review and freeze the approved change set for redline */
+        post: operations["finalizeReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/retrieval/evidence": {
         parameters: {
             query?: never;
@@ -328,6 +362,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reviews/{id}/human-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the derived human-review state, counts, and readiness */
+        get: operations["humanReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reviews/{id}/findings": {
         parameters: {
             query?: never;
@@ -354,6 +405,57 @@ export interface paths {
         };
         /** Get one finding's detail with claims, evidence, and absence basis */
         get: operations["finding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/findings/{findingId}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List one finding's decision revisions, newest first */
+        get: operations["history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the current effective decisions of a review's active run */
+        get: operations["currentDecisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/approved-change-set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the frozen approved change set of a finalized review */
+        get: operations["approvedChangeSet"];
         put?: never;
         post?: never;
         delete?: never;
@@ -587,6 +689,100 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        DecisionRequest: {
+            /** Format: int32 */
+            expectedVersion: number;
+            /** Format: uuid */
+            clientRequestId?: string;
+            /** @enum {string} */
+            action: "ACCEPT" | "EDIT" | "REJECT" | "ESCALATE";
+            /** @enum {string} */
+            approvedAction?: "REPLACE" | "INSERT" | "DELETE";
+            approvedLanguage?: string;
+            comment?: string;
+        };
+        /** @description Error returned by contract API failures */
+        ErrorResponse: {
+            code: string;
+            title: string;
+            detail: string;
+        };
+        ApiResultDecisionView: {
+            data?: components["schemas"]["DecisionView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        DecisionView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            findingId?: string;
+            /** Format: int32 */
+            revision?: number;
+            action?: string;
+            approvedAction?: string;
+            approvedLanguage?: string;
+            languageSource?: string;
+            /** Format: uuid */
+            approvedDraftingEvidenceId?: string;
+            comment?: string;
+            /** Format: uuid */
+            actorId?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            /** Format: uuid */
+            clientRequestId?: string;
+            /** Format: uuid */
+            supersedesDecisionId?: string;
+        };
+        ApiResultApprovedChangeSetView: {
+            data?: components["schemas"]["ApprovedChangeSetView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ApprovedChangeSetView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            reviewId?: string;
+            /** Format: uuid */
+            contractId?: string;
+            /** Format: int32 */
+            contractVersionNumber?: number;
+            /** Format: uuid */
+            runId?: string;
+            /** Format: int32 */
+            changeSetVersion?: number;
+            /** Format: uuid */
+            finalizedBy?: string;
+            /** Format: date-time */
+            finalizedAt?: string;
+            changes?: components["schemas"]["ApprovedChangeView"][];
+        };
+        ApprovedChangeView: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            findingId?: string;
+            /** Format: uuid */
+            decisionId?: string;
+            /** Format: int32 */
+            ordinal?: number;
+            actionType?: string;
+            targetKind?: string;
+            /** Format: uuid */
+            targetHeadingNodeId?: string;
+            /** @enum {string} */
+            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            approvedLanguage?: string;
+            languageSource?: string;
+            /** Format: uuid */
+            approvedDraftingEvidenceId?: string;
+        };
         EvidenceBuildRequest: {
             /** Format: uuid */
             contractId: string;
@@ -701,12 +897,6 @@ export interface components {
                 [key: string]: string;
             };
             note?: string;
-        };
-        /** @description Error returned by contract API failures */
-        ErrorResponse: {
-            code: string;
-            title: string;
-            detail: string;
         };
         ApiResultPublicationView: {
             data?: components["schemas"]["PublicationView"];
@@ -1294,6 +1484,50 @@ export interface components {
             analysisWarnings?: components["schemas"]["AnalysisWarningView"][];
             analysisWarningsTruncated?: boolean;
         };
+        ApiResultHumanReviewView: {
+            data?: components["schemas"]["HumanReviewView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        BlockerView: {
+            code?: string;
+            message?: string;
+            findingIds?: string[];
+        };
+        HumanReviewView: {
+            /** Format: uuid */
+            reviewId?: string;
+            status?: string;
+            analysisStatus?: string;
+            /** Format: int32 */
+            actionableFindings?: number;
+            /** Format: int32 */
+            resolvedFindings?: number;
+            /** Format: int32 */
+            remainingFindings?: number;
+            /** Format: int32 */
+            accepted?: number;
+            /** Format: int32 */
+            edited?: number;
+            /** Format: int32 */
+            rejected?: number;
+            /** Format: int32 */
+            escalated?: number;
+            /** Format: int32 */
+            informationalFindings?: number;
+            /** Format: int32 */
+            informationalDecided?: number;
+            readyToFinalize?: boolean;
+            blockers?: components["schemas"]["BlockerView"][];
+            /** Format: uuid */
+            changeSetId?: string;
+            /** Format: uuid */
+            finalizedBy?: string;
+            /** Format: date-time */
+            finalizedAt?: string;
+        };
         ApiResultFindingListResponse: {
             data?: components["schemas"]["FindingListResponse"];
             /** Format: int32 */
@@ -1396,6 +1630,17 @@ export interface components {
             absenceBasis?: components["schemas"]["AbsenceBasisView"];
             /** Format: date-time */
             createdAt?: string;
+        };
+        ApiResultDecisionListResponse: {
+            data?: components["schemas"]["DecisionListResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        DecisionListResponse: {
+            items?: components["schemas"]["DecisionView"][];
+            truncated?: boolean;
         };
         ApiResultReviewPackCatalogView: {
             data?: components["schemas"]["ReviewPackCatalogView"];
@@ -1655,6 +1900,118 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    decide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                findingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultDecisionView"];
+                };
+            };
+            /** @description Invalid decision */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing reviews:decide */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown review or finding */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Stale version, not actionable, analysis incomplete, or already finalized */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    finalizeReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultApprovedChangeSetView"];
+                };
+            };
+            /** @description Missing reviews:decide */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The review is not finalizable */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     build: {
         parameters: {
             query?: never;
@@ -2571,6 +2928,37 @@ export interface operations {
             };
         };
     };
+    humanReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultHumanReviewView"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     findings: {
         parameters: {
             query?: {
@@ -2629,6 +3017,104 @@ export interface operations {
                 };
             };
             /** @description Unknown finding */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    history: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+                findingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultDecisionListResponse"];
+                };
+            };
+            /** @description Unknown review or finding */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    currentDecisions: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultDecisionListResponse"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    approvedChangeSet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultApprovedChangeSetView"];
+                };
+            };
+            /** @description Unknown review or not finalized */
             404: {
                 headers: {
                     [name: string]: unknown;
