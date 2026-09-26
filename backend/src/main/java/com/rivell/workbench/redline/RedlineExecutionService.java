@@ -375,6 +375,17 @@ public class RedlineExecutionService {
      * execution is returned above, before this check runs.
      */
     private boolean semanticallyDrifted(ApprovedChangeSet changeSet, UUID organizationId) {
+        // Scoped to the change types that actually consume effective concepts. A REPLACE or DELETE
+        // resolves against the document structure and the approved language alone, so a routine
+        // post-approval correction such as fixing a party role would otherwise permanently block a
+        // legitimate redline for a reason that cannot affect it. The failed execution is also a
+        // permanent record, which made an over-broad guard an availability dead end rather than a
+        // safety property.
+        var dependsOnConcepts = changeSet.changes().stream()
+                .anyMatch(change -> change.actionType() == ChangeActionType.INSERT);
+        if (!dependsOnConcepts) {
+            return false;
+        }
         var live = contractQueryService.getSemanticsForOrganization(organizationId,
                 changeSet.contractId(), changeSet.contractVersionNumber());
         if (live.isEmpty()) {

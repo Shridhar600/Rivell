@@ -353,24 +353,26 @@ class RedlineExecutionIT {
     @Test
     void semanticsDriftAfterFinalizationFailsClosedBeforeAnyArtifactExists()
             throws Exception {
-        var fixture = analyzedMainCorpus();
-        acceptFallback(fixture);
+        var fixture = analyzedNdaWithAbsenceFindings();
+        // An INSERT is the only change type that consumes the effective concepts, so this is the case
+        // the drift guard exists for. Each absence Finding becomes an INSERT.
+        resolveAllActionable(fixture);
         finalize(fixture.review().id());
         var reviewId = fixture.review().id();
-        var contractId = changeSetRepository.findByReview(organizationId(), reviewId)
-                .orElseThrow().contractId();
-        var headingNodeId = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK)
-                .subjectHeadingNodeId();
-        assertThat(headingNodeId).isNotNull();
+        var changeSet = changeSetRepository.findByReview(organizationId(), reviewId).orElseThrow();
+        assertThat(changeSet.changes())
+                .as("this test is only meaningful with an INSERT in the set")
+                .anyMatch(change -> change.actionType()
+                        == com.rivell.workbench.redline.ChangeActionType.INSERT);
+        var contractId = changeSet.contractId();
 
         var clauseSemanticsId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
-                .filter(clause -> headingNodeId.equals(clause.headingNodeId()))
-                .map(com.rivell.workbench.contracts.ClauseSemantics::id)
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("no clause semantics for heading "
-                        + headingNodeId));
+                .orElseThrow(() -> new AssertionError("no classified clause to correct"))
+                .id();
 
-        // A human corrects the concept the placement strategy would read, after the review froze.
+        // A human corrects a concept after the review froze: the placement inputs no longer match.
         enrichmentService.correctClause(contractId, 1, clauseSemanticsId,
                 new com.rivell.workbench.contracts.FactCorrection(
                         "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
@@ -384,16 +386,31 @@ class RedlineExecutionIT {
         assertThat(artifactFiles(reviewId)).isZero();
     }
 
-    /**
-     * The mirror of the invariant above: once a verified artifact has been produced from frozen
-     * inputs, a later semantics correction must not invalidate it. Idempotency and the integrity of
-     * an already-verified artifact both win over a fresh drift check.
-     */
-    /**
-     * M10: a storage failure while writing the verified artifact surfaced as an untyped 500 with no
-     * error envelope, because the failure was wrapped in a plain IllegalStateException that no
-     * handler mapped. The client learned nothing about whether the review was safe to retry.
-     */
+    @Test
+    void aCorrectionUnrelatedToPlacementDoesNotBlockAReplaceOnlyRedline() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var contractId = changeSetRepository.findByReview(organizationId(), reviewId)
+                .orElseThrow().contractId();
+
+        // Correct an unrelated clause's concept, after the review froze.
+        var clause = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
+                .findFirst()
+                .orElseThrow();
+        enrichmentService.correctClause(contractId, 1, clause.id(),
+                new com.rivell.workbench.contracts.FactCorrection("GOVERNING_LAW",
+                        Map.of(), UUID.randomUUID()));
+
+        // This change set is a REPLACE, which resolves from the document structure and the approved
+        // language. A concept change cannot move it, so the execution must still succeed.
+        var execution = redline(reviewId);
+        assertThat(execution.get("outcome").asText()).isEqualTo("REDLINE_GENERATED");
+        assertThat(execution.get("downloadAvailable").asBoolean()).isTrue();
+    }
+
     @Test
     void artifactStorageFailureIsReportedWithTheStandardErrorEnvelope() throws Exception {
         var fixture = analyzedMainCorpus();
@@ -421,24 +438,22 @@ class RedlineExecutionIT {
     @Test
     void semanticsDriftAfterAVerifiedExecutionKeepsTheCanonicalArtifact()
             throws Exception {
-        var fixture = analyzedMainCorpus();
-        acceptFallback(fixture);
+        var fixture = analyzedNdaWithAbsenceFindings();
+        resolveAllActionable(fixture);
         finalize(fixture.review().id());
         var reviewId = fixture.review().id();
         var contractId = changeSetRepository.findByReview(organizationId(), reviewId)
                 .orElseThrow().contractId();
-        var headingNodeId = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK)
-                .subjectHeadingNodeId();
 
         var first = redline(reviewId);
         assertThat(first.get("outcome").asText()).isEqualTo("REDLINE_GENERATED");
         var artifactSha = first.get("artifactSha256").asText();
 
         var clauseSemanticsId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
-                .filter(clause -> headingNodeId.equals(clause.headingNodeId()))
-                .map(com.rivell.workbench.contracts.ClauseSemantics::id)
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
                 .findFirst()
-                .orElseThrow();
+                .orElseThrow()
+                .id();
         enrichmentService.correctClause(contractId, 1, clauseSemanticsId,
                 new com.rivell.workbench.contracts.FactCorrection(
                         "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
@@ -710,6 +725,28 @@ class RedlineExecutionIT {
         var run = analysisService.analyze(organizationId(), review.id());
         return new Fixture(review, run,
                 findingRepository.findFindings(organizationId(), run.id()));
+    }
+
+    /**
+     * A review whose Findings are absence Findings, so resolving them produces INSERTs - the only
+     * change type whose placement consumes the effective concepts.
+     */
+    private Fixture analyzedNdaWithAbsenceFindings() throws Exception {
+        var bytes = Files.readAllBytes(Path.of(
+                "src/test/resources/fixtures/m5-nda-counterparty.docx"));
+        var ingested = contractIngestionService.ingest("m5-nda-counterparty.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.NDA, PartyRole.RECEIVING_PARTY,
+                        PaperSource.COUNTERPARTY_PAPER, Jurisdiction.US,
+                        ReviewPackRegistry.MSA_PACK));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+        var run = analysisService.analyze(organizationId(), review.id());
+        var findings = findingRepository.findFindings(organizationId(), run.id());
+        assertThat(findings).as("this fixture must produce absence findings to insert for")
+                .isNotEmpty()
+                .allMatch(f -> f.subjectKind() == FindingSubjectKind.ABSENCE);
+        return new Fixture(review, run, findings);
     }
 
     private Fixture analyzedSource(String fixtureName) throws Exception {

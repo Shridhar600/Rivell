@@ -183,6 +183,15 @@ print("worker enabled:", d["backgroundWorkerEnabled"])
 print("run:", d["analysis"]["status"], "checks:", len(d["analysis"]["checks"]))
 print("findings:", d["findings"])
 print("stalled:", d["stalled"])
+# Assertions, not just prints. Without these a run whose analysis produced nothing at all still
+# "succeeds" further down the script, because zero findings means zero decisions means a
+# zero-change set means NO_CHANGES - which the redline step treats as a valid outcome.
+assert d["backgroundWorkerEnabled"] is True, "the background worker is not running"
+assert d["analysis"]["status"] == "COMPLETED", d["analysis"]["status"]
+assert d["stalled"] == [], d["stalled"]
+assert d["analysis"]["environmentMatchesSnapshot"] is True, \
+    "the review no longer matches the live contract semantics or model configuration"
+assert d["findings"]["total"] > 0, "the analysis produced no findings at all"
 PY
 
 step "7. read findings"
@@ -193,6 +202,8 @@ d=json.load(open(sys.argv[1]))["data"]
 print("findings:", len(d["items"]))
 for i in d["items"]:
     print(" -", i["issueFamily"], i["reviewClassification"], i["proposedAction"])
+actionable=[i for i in d["items"] if i["reviewClassification"]!="INFORMATIONAL"]
+assert actionable, "no actionable finding: the run cannot demonstrate the human step"
 PY
 
 step "8. decide on every actionable finding, then finalize"
@@ -203,8 +214,14 @@ def call(method, path, body=None):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(base+path, data=data, method=method,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as r:
-        return json.load(r)
+    try:
+        with urllib.request.urlopen(req) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        # Surface the product's own error body. A bare "HTTP Error 409" says nothing about which
+        # readiness rule refused the step, which is the whole point of running this live.
+        raw = e.read().decode(errors="replace")
+        raise SystemExit(f"{method} {path} failed with {e.code}: {raw[:500]}")
 findings = call("GET", f"/api/reviews/{review}/findings")["data"]["items"]
 REVISED = False
 
@@ -228,12 +245,15 @@ def decide(f):
                 "approvedLanguage": "Liability is capped at the fees paid in the preceding 12 months."}
     return {"expectedVersion": 0, "action": "ACCEPT"}
 
+decided = 0
 for f in findings:
     if f["reviewClassification"] == "INFORMATIONAL":
         continue
     body = decide(f)
     call("PUT", f"/api/reviews/{review}/findings/{f['id']}/decision", body)
     print("  decided", f["issueFamily"], body["action"])
+    decided += 1
+assert decided > 0, "no decision was recorded, so nothing downstream is meaningful"
 set_ = call("POST", f"/api/reviews/{review}/finalize")["data"]
 print("finalized with", len(set_["changes"]), "approved change(s)")
 json.dump(set_, open(work+"/change-set.json","w"), indent=2)

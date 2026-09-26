@@ -324,6 +324,14 @@ class FinalizationIT {
     void diagnosticsReportACompletedRunWithItsChecksAndOutcomes() throws Exception {
         var fixture = analyzedMainCorpus();
         var reviewId = fixture.review().id();
+        var actionable = fixture.findings().stream()
+                .filter(f -> f.reviewClassification()
+                        != FindingClassification.INFORMATIONAL)
+                .toList();
+        assertThat(actionable).as("the corpus must offer a decision to record").isNotEmpty();
+        decide(reviewId, actionable.get(0).id(),
+                "{\"expectedVersion\": 0, \"action\": \"REJECT\","
+                        + " \"comment\": \"Counterparty position accepted.\"}");
 
         mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
                 .andExpect(status().isOk())
@@ -332,7 +340,11 @@ class FinalizationIT {
                 .andExpect(jsonPath("$.data.analysis.checks").isNotEmpty())
                 .andExpect(jsonPath("$.data.findings.total").isNumber())
                 .andExpect(jsonPath("$.data.analysis.environmentMatchesSnapshot").value(true))
-                .andExpect(jsonPath("$.data.stalled").isEmpty());
+                .andExpect(jsonPath("$.data.stalled").isEmpty())
+                // The eval-label surface. This counts real decisions: the query filters on run_id, and
+                // passing null there returned nothing, so the field read zero for every review.
+                .andExpect(jsonPath("$.data.decisions.rejected").value(1))
+                .andExpect(jsonPath("$.data.decisions.accepted").value(0));
     }
 
     /**
