@@ -97,7 +97,7 @@ describe('semantic analysis lifecycle', () => {
     )
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('The semantic analysis service is unavailable right now.')
+    expect(alert).toHaveTextContent('The semantic analysis could not be started.')
     expect(alert).not.toHaveTextContent(/no parsed structure/i)
   })
 

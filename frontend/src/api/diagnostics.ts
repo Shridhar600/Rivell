@@ -11,6 +11,7 @@ import {
   readClosedString,
   readNumber,
   readOptionalBoolean,
+  malformed,
   readBoolean,
   readOptionalNullableBoolean,
   readOptionalNullableNumber,
@@ -42,10 +43,21 @@ export type DiagnosticsRedlineOutcome = (typeof DIAGNOSTICS_REDLINE_OUTCOMES)[nu
  * The diagnostics response carries three free-text fields that hold backend internals: a review
  * failure string, an analysis failure string, and a per-check degraded reason. Those are reduced to
  * a presence flag here and the text is discarded, so no component can render it.
+ *
+ * `ABSENT` means the server did not report the field at all, which is not the same as reporting
+ * that there was no failure. Only `NONE` supports a "nothing failed" reading.
+ *
+ * Note for consumers: a `FAILED` or `SKIPPED` check also reports `NONE` here, because the backend
+ * writes its reason under a different detail key and the diagnostics response does not carry it.
+ * The reason for a failed check is available only through the M9 analysis-warnings read.
  */
-export type InternalDetail = 'NONE' | 'RECORDED'
+export type InternalDetail = 'ABSENT' | 'NONE' | 'RECORDED'
 
 export type DiagnosticsCheck = {
+  /**
+   * The backend's composite plan-check key, e.g. `PRESENCE:CONFIDENTIALITY`. It falls back to a
+   * bare UUID string when the plan row cannot be resolved, so a key is not guaranteed to be a code.
+   */
   key: string
   status: DiagnosticsCheckStatus
   signalCount: number | null
@@ -63,9 +75,26 @@ export type DiagnosticsRun = {
   pipelineVersion: string
   startedAt: string | null
   completedAt: string | null
+  /**
+   * Renamed from the server's `ageSeconds`, which is not an age: the backend computes
+   * `startedAt -> completion()`, and its completion helper returns `startedAt` when the run has not
+   * finished, so an in-flight run always reports `0`. Read it as a duration and do not present it as
+   * elapsed time; when `completedAt` is null there is no meaningful duration to show.
+   */
   runDurationSeconds: number | null
   failureDetail: InternalDetail
+  /**
+   * Renamed from `environmentMatchesSnapshot`. It compares **only** the semantics digest, while the
+   * analysis itself checks four environment inputs, so `true` does not mean the analysis ran on
+   * fully matching inputs. A changed embedding index or model binding still degrades every check
+   * while this reports `true`.
+   */
   semanticsMatchFrozenSnapshot: boolean | null
+  /**
+   * Execution rows, not plan rows. The backend seeds a PENDING execution per plan check before
+   * running any, so a started run is normally complete — but a run with no executions has a full
+   * plan behind it, so this list must not be described as the plan.
+   */
   checks: DiagnosticsCheck[]
 }
 
@@ -105,12 +134,24 @@ export type ReviewDiagnostics = {
   contractVersionNumber: number
   reviewStatus: (typeof REVIEW_STATUSES)[number] | 'UNKNOWN'
   reviewFailureDetail: InternalDetail
+  /**
+   * The only worker signal in the whole API: the background worker is opt-in per deployment and
+   * defaults to off, in which case a queued analysis is never picked up. `GET /system/status` does
+   * not report it. Always present on the wire, so a missing value is a contract violation.
+   */
   backgroundWorkerEnabled: boolean
   analysis: DiagnosticsRun | null
+  /**
+   * Counted from the latest **completed** run, which is not necessarily the run in `analysis` (that
+   * one is the latest run of any status). After a recompute these counts can describe an earlier run
+   * than the one reported above, so do not present them as belonging to it.
+   */
   findings: DiagnosticsFindingCounts
+  /** Counted from the latest completed run, on the same basis as `findings`. */
   decisions: DiagnosticsDecisionCounts
   finalization: DiagnosticsFinalization
   redline: DiagnosticsRedline | null
+  /** Server-owned stall reasons, in the server's own words. See `readStalled`. */
   stalled: string[]
 }
 
@@ -122,16 +163,28 @@ function readInternalDetail(
   key: string,
   what: string,
 ): InternalDetail {
-  return readOptionalNullableString(source, key, what) === null ? 'NONE' : 'RECORDED'
+  const value = source[key]
+  if (value === undefined) return 'ABSENT'
+  if (value === null) return 'NONE'
+  if (typeof value !== 'string') throw malformed(what)
+  return 'RECORDED'
 }
 
-function readStalled(source: Record<string, unknown>): string[] {
+/**
+ * The only diagnostics field whose server text is passed through rather than reduced to a flag.
+ * Every entry is built by the backend from a fixed literal plus an integer, so it carries no
+ * internals; the list is still bounded here so a future change cannot flood the client. This is the
+ * one place to revisit if the backend ever stops building these server-side.
+ */
+function readStalled(source: Record<string, unknown>, what: string): string[] {
   const value = source['stalled']
-  if (!Array.isArray(value)) return []
+  if (!Array.isArray(value)) throw malformed(what)
   return value
     .filter((entry): entry is string => typeof entry === 'string')
     .slice(0, MAX_STALLED_ENTRIES)
-    .map((entry) => entry.slice(0, MAX_STALLED_LENGTH))
+    .map((entry) =>
+      entry.length > MAX_STALLED_LENGTH ? `${entry.slice(0, MAX_STALLED_LENGTH)}…` : entry,
+    )
 }
 
 function parseCheck(value: unknown, what: string): DiagnosticsCheck {
@@ -229,7 +282,7 @@ export function parseReviewDiagnostics(value: unknown, what = 'review diagnostic
       source['redline'] === null || source['redline'] === undefined
         ? null
         : parseRedline(source['redline'], what),
-    stalled: readStalled(source),
+    stalled: readStalled(source, what),
   }
 }
 

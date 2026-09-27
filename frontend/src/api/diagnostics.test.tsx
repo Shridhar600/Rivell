@@ -246,21 +246,51 @@ describe('parseReviewDiagnostics', () => {
 
     expect(parsed.analysis).toBeNull()
     expect(parsed.redline).toBeNull()
-    expect(parsed.reviewFailureDetail).toBe('NONE')
+    expect(parsed.reviewFailureDetail).toBe('ABSENT')
     expect(parsed.findings.total).toBe(0)
     expect(parsed.finalization.finalized).toBe(false)
     expect(parsed.stalled).toEqual(['No analysis run has been created for this review.'])
   })
 
+  it('distinguishes an absent internal field from one the server reported as empty', () => {
+    const { reviewFailure, ...withoutReviewFailure } = completedPayload
+    void reviewFailure
+    const absent = parseReviewDiagnostics(withoutReviewFailure)
+    const explicitNull = parseReviewDiagnostics({ ...completedPayload, reviewFailure: null })
+
+    expect(absent.reviewFailureDetail).toBe('ABSENT')
+    expect(explicitNull.reviewFailureDetail).toBe('NONE')
+    expect(parseReviewDiagnostics(completedPayload).reviewFailureDetail).toBe('NONE')
+  })
+
+  it('fails closed when the stall list is not a list', () => {
+    expect(() => parseReviewDiagnostics({ ...completedPayload, stalled: 'none' })).toThrow(
+      /malformed/i,
+    )
+    expect(() => parseReviewDiagnostics({ ...completedPayload, stalled: null })).toThrow(/malformed/i)
+    const { stalled, ...withoutStalled } = completedPayload
+    void stalled
+    expect(() => parseReviewDiagnostics(withoutStalled)).toThrow(/malformed/i)
+  })
+
+  it('marks a truncated stall line instead of cutting it mid-word', () => {
+    const parsed = parseReviewDiagnostics({
+      ...completedPayload,
+      stalled: ['a'.repeat(260), 'b'.repeat(200)],
+    })
+
+    expect(parsed.stalled[0]).toBe(`${'a'.repeat(200)}…`)
+    expect(parsed.stalled[1]).toBe('b'.repeat(200))
+  })
+
   it('bounds the stall list', () => {
     const parsed = parseReviewDiagnostics({
       ...completedPayload,
-      stalled: ['a'.repeat(500), 'b', 7, null, 'c', 'd', 'e'],
+      stalled: [`${'a'.repeat(500)}…`, 'b', 7, null, 'c', 'd', 'e'],
     })
 
     expect(parsed.stalled).toHaveLength(4)
-    expect(parsed.stalled[0]).toHaveLength(200)
-    expect(parsed.stalled).toEqual(['a'.repeat(200), 'b', 'c', 'd'])
+    expect(parsed.stalled).toEqual([`${'a'.repeat(200)}…`, 'b', 'c', 'd'])
   })
 
   it('rejects a payload with no review identity', () => {

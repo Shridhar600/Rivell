@@ -1,10 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, renderHook } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createElement } from 'react'
+import type { ReactNode } from 'react'
 import {
   SemanticApiError,
   fetchSemantics,
   parseSemanticContract,
   semanticsKeys,
+  useEnrichContract,
 } from './semantics'
+
+function createWrapper() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children)
+  return { wrapper }
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -338,27 +350,74 @@ describe('fetchSemantics', () => {
     expect(result?.enrichmentStatus).toBe('READY')
   })
 
+  it('gives the enrichment endpoint messages that match its own failures', async () => {
+    stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({ code: '409', title: 'Invalid state', detail: 'Enrichment already running' }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        ),
+    )
+
+    const { wrapper } = createWrapper()
+    const enrich = renderHook(() => useEnrichContract('c1', 1), { wrapper })
+    let error: unknown = null
+    await act(async () => {
+      await enrich.result.current
+        .mutateAsync({ contractType: 'NDA' } as never)
+        .catch((thrown: unknown) => {
+          error = thrown
+        })
+    })
+
+    expect((error as SemanticApiError).status).toBe(409)
+    expect((error as Error).message).toMatch(/already running/i)
+    expect((error as Error).message).not.toMatch(/correction/i)
+  })
+
+  it('does not tell the user a correction failed when the profile was rejected', async () => {
+    stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({ code: '400', title: 'Invalid request', detail: 'contractType is required' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        ),
+    )
+
+    const { wrapper } = createWrapper()
+    const enrich = renderHook(() => useEnrichContract('c1', 1), { wrapper })
+    let error: unknown = null
+    await act(async () => {
+      await enrich.result.current
+        .mutateAsync({ contractType: '' } as never)
+        .catch((thrown: unknown) => {
+          error = thrown
+        })
+    })
+
+    expect((error as Error).message).toMatch(/profile/i)
+    expect((error as Error).message).not.toMatch(/correction/i)
+  })
+
   it('reports a status-mapped message and never the server body', async () => {
     stubFetch(
       () =>
         new Response(
           JSON.stringify({
-            code: '409',
-            title: 'Invalid state',
-            detail: 'Enrichment already running for contract 8f0e at com.rivell.Foo.bar:12',
+            code: '500',
+            title: 'Internal server error',
+            detail: 'Failed at com.rivell.workbench.contracts.ContractSemanticsController.read:88',
           }),
-          { status: 409, headers: { 'Content-Type': 'application/json' } },
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
         ),
     )
 
     const error = await fetchSemantics('c1', 1).catch((thrown: unknown) => thrown)
 
     expect(error).toBeInstanceOf(SemanticApiError)
-    expect((error as SemanticApiError).status).toBe(409)
-    expect((error as Error).message).toBe(
-      'The semantic analysis changed and this request no longer applies.',
-    )
-    expect((error as Error).message).not.toMatch(/already running|8f0e|com\.rivell/)
+    expect((error as SemanticApiError).status).toBe(500)
+    expect((error as Error).message).toBe('The semantic analysis could not be loaded.')
+    expect((error as Error).message).not.toMatch(/com\.rivell|Controller\.read/)
   })
 })
 

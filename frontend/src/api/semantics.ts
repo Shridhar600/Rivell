@@ -333,21 +333,38 @@ export function parseSemanticContract(
   }
 }
 
-const SEMANTIC_ERROR_MESSAGES: Record<number, string> = {
-  400: 'The semantic correction request was not valid.',
-  403: 'You do not have permission to change this semantic analysis.',
+// Each semantics endpoint has its own failures, so each carries its own messages. One shared table
+// produced statements that were false for the endpoint rendering them.
+const SEMANTICS_READ_MESSAGES: Record<number, string> = {
+  403: 'You do not have permission to read this semantic analysis.',
   404: 'This contract version has no semantic analysis.',
-  409: 'The semantic analysis changed and this request no longer applies.',
-  413: 'The uploaded file is larger than this Rivell deployment accepts.',
-  500: 'The semantic analysis service is unavailable right now.',
+  500: 'The semantic analysis could not be loaded.',
+  503: 'The semantic analysis service is unavailable right now.',
+}
+
+const ENRICHMENT_MESSAGES: Record<number, string> = {
+  400: 'The review profile Rivell received was not valid. Check the contract type and try again.',
+  403: 'You do not have permission to run semantic analysis for this contract.',
+  404: 'This contract version could not be found.',
+  409: 'A semantic analysis is already running for this contract version.',
+  500: 'The semantic analysis could not be started.',
+  503: 'The semantic analysis service is unavailable right now.',
+}
+
+const CORRECTION_MESSAGES: Record<number, string> = {
+  400: 'That correction was not valid for this interpretation.',
+  403: 'You do not have permission to change this semantic analysis.',
+  404: 'That part of the contract could not be found.',
+  409: 'The semantic analysis changed and this correction no longer applies.',
+  500: 'The correction could not be saved.',
   503: 'The semantic analysis service is unavailable right now.',
 }
 
 export class SemanticApiError extends Error {
   readonly status: number
 
-  constructor(status: number) {
-    super(SEMANTIC_ERROR_MESSAGES[status] ?? 'The semantic analysis could not be loaded.')
+  constructor(status: number, messages: Record<number, string> = SEMANTICS_READ_MESSAGES) {
+    super(messages[status] ?? 'The semantic analysis request could not be completed.')
     this.name = 'SemanticApiError'
     this.status = status
   }
@@ -431,7 +448,7 @@ export function useEnrichContract(
       { params: { path: { id: contractId, versionNumber } }, body: profile },
     )
     if (!data) {
-      throw new SemanticApiError(response.status)
+      throw new SemanticApiError(response.status, ENRICHMENT_MESSAGES)
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
@@ -455,7 +472,7 @@ export function useCorrectPartyRole(
       },
     )
     if (!data) {
-      throw new SemanticApiError(response.status)
+      throw new SemanticApiError(response.status, CORRECTION_MESSAGES)
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
@@ -479,7 +496,7 @@ export function useCorrectClauseConcept(
       },
     )
     if (!data) {
-      throw new SemanticApiError(response.status)
+      throw new SemanticApiError(response.status, CORRECTION_MESSAGES)
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
@@ -503,7 +520,7 @@ export function useCorrectClauseFacts(
       },
     )
     if (!data) {
-      throw new SemanticApiError(response.status)
+      throw new SemanticApiError(response.status, CORRECTION_MESSAGES)
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
