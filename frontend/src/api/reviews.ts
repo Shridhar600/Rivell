@@ -504,10 +504,17 @@ export function isReviewPending(status: ReviewStatus | undefined | null): boolea
 // A review whose background worker is not running stays queued forever, so the poll is bounded
 // rather than running for the life of the page. The review read is the only way to notice a
 // completion, so this is a cap on patience, not a limit on correctness.
-export const MAX_POLL_ATTEMPTS = 80
+//
+// The budget has to cover the project's own reference happy path: scripts/demo-reproduction.sh
+// waits 90 x 4s = 360s for the same run. A shorter cap let the UI give up while the reference path
+// was still working, and the pending states carry no refresh control, so the page then sat on a
+// stale "analysing" view until a full reload.
+export const REVIEW_POLL_INTERVAL_MS = 2500
+export const POLL_BUDGET_MS = 360_000
+export const MAX_POLL_ATTEMPTS = Math.ceil(POLL_BUDGET_MS / REVIEW_POLL_INTERVAL_MS)
 
 export function reviewPollInterval(status: ReviewStatus | undefined | null): number | false {
-  return isReviewPending(status) ? 2500 : false
+  return isReviewPending(status) ? REVIEW_POLL_INTERVAL_MS : false
 }
 
 const REVIEW_MESSAGES: Partial<Record<number, string>> = {

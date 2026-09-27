@@ -13,6 +13,8 @@ import {
   reviewErrorStatus,
   reviewKeys,
   reviewPollInterval,
+  MAX_POLL_ATTEMPTS,
+  REVIEW_POLL_INTERVAL_MS,
   useCreateReview,
   useFindingsQuery,
   useReviewProgressQuery,
@@ -310,12 +312,19 @@ describe('review parsers', () => {
   })
 
   it('polls only while a review is queued or analyzing', () => {
-    expect(reviewPollInterval('ANALYSIS_QUEUED')).toBe(2500)
-    expect(reviewPollInterval('ANALYZING')).toBe(2500)
+    expect(reviewPollInterval('ANALYSIS_QUEUED')).toBe(REVIEW_POLL_INTERVAL_MS)
+    expect(reviewPollInterval('ANALYZING')).toBe(REVIEW_POLL_INTERVAL_MS)
     expect(reviewPollInterval('COMPLETED')).toBe(false)
     expect(reviewPollInterval('FAILED')).toBe(false)
     expect(reviewPollInterval('UNKNOWN')).toBe(false)
     expect(reviewPollInterval(undefined)).toBe(false)
+  })
+
+  it('keeps polling patience at least as long as the reference reproduction waits', () => {
+    // scripts/demo-reproduction.sh waits 90 x 4s = 360s for the same run. A shorter budget let the
+    // UI give up first, and the pending states have no refresh control, so the page then showed a
+    // stale "analysing" view until a full reload.
+    expect(MAX_POLL_ATTEMPTS * REVIEW_POLL_INTERVAL_MS).toBeGreaterThanOrEqual(360_000)
   })
 })
 

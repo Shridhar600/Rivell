@@ -2,6 +2,7 @@ package com.rivell.workbench.review;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -86,14 +87,22 @@ public class ReviewService {
      * (organization_id, client_request_id) is the authority when two identical requests race.
      */
     /**
-     * A key identifies one operation. Returning a review recorded for a different contract or
-     * version would be a confused deputy: the caller would receive a valid, fully populated review of
-     * a contract it did not name and poll the wrong one. Refusing is the only safe answer.
+     * A key identifies one operation. Returning a review recorded for a different contract, version
+     * or contract pack would be a confused deputy: the caller would receive a valid, fully populated
+     * review built from a playbook it did not select, and would then decide, finalise and redline
+     * against the wrong pack. Refusing is the only safe answer.
      */
-    private static Review requireSameOperation(
-            Review existing, UUID contractId, int contractVersionNumber) {
+    private Review requireSameOperation(
+            Review existing, UUID contractId, int contractVersionNumber,
+            String resolvedPackKey, UUID organizationId) {
         if (!existing.contractId().equals(contractId)
                 || existing.contractVersionNumber() != contractVersionNumber) {
+            throw new IdempotencyKeyReusedException(existing.clientRequestId());
+        }
+        var frozenPackKey = reviewRepository.findSnapshot(organizationId, existing.id())
+                .map(ReviewSnapshot::contractPackKey)
+                .orElse(null);
+        if (!Objects.equals(normalize(frozenPackKey), normalize(resolvedPackKey))) {
             throw new IdempotencyKeyReusedException(existing.clientRequestId());
         }
         return existing;
@@ -105,18 +114,23 @@ public class ReviewService {
         if (!authorizationService.isAuthorized(identity, Permissions.REVIEW_CREATE)) {
             throw new UnauthorizedReviewAccessException(identity.userId());
         }
+        var version = contractQueryService.getVersionSummary(contractId, versionNumber);
+        var semantics = contractEnrichmentService.getSemantics(contractId, versionNumber);
+        var profile = semantics.reviewProfile();
+        // Resolved before the replay check, because a key identifies one operation only when the
+        // pack matches too. The pack a request resolves to is the profile's when the caller omits
+        // it, so the comparison has to use the resolved value: comparing the raw request field
+        // would refuse a legitimate replay of a request that relied on the profile.
+        var packKey = resolvePackKey(profile.contractPackKey(), requestedPackKey);
         if (clientRequestId != null) {
             var replay = reviewRepository.findByClientRequestId(
                     identity.organizationId(), clientRequestId);
             if (replay.isPresent()) {
-                return requireSameOperation(replay.get(), contractId, versionNumber);
+                return requireSameOperation(replay.get(), contractId, versionNumber, packKey,
+                        identity.organizationId());
             }
         }
-        var version = contractQueryService.getVersionSummary(contractId, versionNumber);
-        var semantics = contractEnrichmentService.getSemantics(contractId, versionNumber);
         requireEnrichmentReady(semantics.enrichmentStatus(), contractId, versionNumber);
-        var profile = semantics.reviewProfile();
-        var packKey = resolvePackKey(profile.contractPackKey(), requestedPackKey);
         var pack = packKey == null ? null : packs.find(packKey)
                 .orElseThrow(() -> new InvalidReviewConfigurationException(
                         "Unknown contract pack: " + packKey));
@@ -162,7 +176,11 @@ public class ReviewService {
             if (winner.isEmpty()) {
                 throw conflict;
             }
-            return winner.get();
+            // The read-back is a replay like any other, so it goes through the same check: two
+            // racing requests can carry different packs, and the loser must not be handed the
+            // winner's review as if it had asked for it.
+            return requireSameOperation(winner.get(), contractId, versionNumber, packKey,
+                    organizationId);
         }
         return review;
     }

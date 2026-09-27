@@ -49,11 +49,35 @@ require TYPESAFE_API_KEY OPENAI_API_KEY
 
 cleanup() {
   if [[ ${KEEP} -eq 0 ]]; then
-    [[ -n "${APP_PID:-}" ]] && kill "${APP_PID}" 2>/dev/null || true
+    stop_backend
     docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
   else
     echo "kept: container=${CONTAINER} log=${LOG}"
   fi
+}
+
+# The backend is started inside a backgrounded compound command, so the recorded $! is the
+# subshell rather than the JVM, and killing it leaves the JVM holding port 8080 against a
+# database this script is about to delete. Stop by recorded pid, then fall back to whatever holds
+# the port, and do not return until the port is actually free.
+stop_backend() {
+  if [[ -n "${APP_PID:-}" ]]; then
+    kill "${APP_PID}" 2>/dev/null || true
+  fi
+  for _ in $(seq 1 15); do
+    lsof -ti tcp:8080 >/dev/null 2>&1 || return 0
+    sleep 1
+  done
+  local holders
+  holders="$(lsof -ti tcp:8080 2>/dev/null || true)"
+  if [[ -n "${holders}" ]]; then
+    echo "warning: killing leftover process(es) still holding port 8080: ${holders}" >&2
+    kill ${holders} 2>/dev/null || true
+    sleep 2
+  fi
+  lsof -ti tcp:8080 >/dev/null 2>&1 \
+    && echo "warning: port 8080 is still held after cleanup; the next run will refuse to start" >&2
+  return 0
 }
 trap cleanup EXIT
 
@@ -75,10 +99,11 @@ step "build"
   ./mvnw -q -DskipTests package) || fail "build"
 
 step "start backend with the background worker enabled"
-# Run the packaged jar, not `mvn spring-boot:run`. The Maven wrapper forks a child JVM, so killing
-# the recorded PID leaves the application running and holding port 8080; the next run then silently
-# talks to a stale process that has whatever configuration it was started with - which is exactly how
-# a "the worker is on" run ends up reporting a review that never analyses.
+# Run the packaged jar, not `mvn spring-boot:run`, and exec it so the recorded pid is the JVM rather
+# than a wrapper. A leaked process is the failure this guards against: it holds port 8080 against a
+# database this script deletes, so the next run either refuses to start or, worse, is talked to by a
+# stale process running whatever configuration it was launched with - which is exactly how a "the
+# worker is on" run ends up reporting a review that never analyses.
 JAR="$(ls "${BACKEND}"/target/rivell-backend-*.jar 2>/dev/null | grep -v original | head -1)"
 [[ -n "${JAR}" ]] || fail "packaged jar not found"
 if lsof -ti tcp:8080 >/dev/null 2>&1; then
@@ -86,18 +111,22 @@ if lsof -ti tcp:8080 >/dev/null 2>&1; then
   fail "port 8080 busy"
 fi
 (
-  cd "${BACKEND}" && \
-  RIVELL_JOB_WORKER_ENABLED=true \
-  RIVELL_DOCUMENT_STORAGE_ROOT="${WORK_DIR}/documents" \
-  RIVELL_EMBEDDINGS_PROVIDER=openai-compatible \
-  RIVELL_EMBEDDINGS_MODEL="${RIVELL_EMBEDDINGS_MODEL:-text-embedding-3-small}" \
-  RIVELL_RETRIEVAL_INDEXING_ENABLED=true \
-  JOBRUNJ_BACKGROUNDJOBSERVER_POLLINTERVALINSECONDS=3 \
-  JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home}" \
-  nohup "${JAVA_HOME:-/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home}/bin/java" \
-    -jar "${JAR}" > "${LOG}" 2>&1 &
-  echo $! > "${WORK_DIR}/app.pid"
-)
+  cd "${BACKEND}" || exit 1
+  export RIVELL_JOB_WORKER_ENABLED=true
+  export RIVELL_DOCUMENT_STORAGE_ROOT="${WORK_DIR}/documents"
+  export RIVELL_EMBEDDINGS_PROVIDER=openai-compatible
+  export RIVELL_EMBEDDINGS_MODEL="${RIVELL_EMBEDDINGS_MODEL:-text-embedding-3-small}"
+  export RIVELL_RETRIEVAL_INDEXING_ENABLED=true
+  # The property is jobrunr.background-job-server.poll-interval-in-seconds, so the bound variable
+  # is JOBRUNR_BACKGROUNDJOBSERVER_POLLINTERVALINSECONDS. The previous JOBRUNJ_ spelling never
+  # bound, so the interval silently stayed at the 15s default; and JobRunr rejects anything under
+  # 5s at startup, so the stale value of 3 would have stopped the application booting.
+  export JOBRUNR_BACKGROUNDJOBSERVER_POLLINTERVALINSECONDS=5
+  export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home}"
+  # exec so this subshell is replaced by the JVM: $! below is then the JVM's own pid.
+  exec "${JAVA_HOME}/bin/java" -jar "${JAR}" > "${LOG}" 2>&1
+) &
+echo $! > "${WORK_DIR}/app.pid"
 APP_PID="$(cat "${WORK_DIR}/app.pid")"
 
 for _ in $(seq 1 120); do
@@ -190,7 +219,7 @@ assert d["backgroundWorkerEnabled"] is True, "the background worker is not runni
 assert d["analysis"]["status"] == "COMPLETED", d["analysis"]["status"]
 assert d["stalled"] == [], d["stalled"]
 assert d["analysis"]["environmentMatchesSnapshot"] is True, \
-    "the review no longer matches the live contract semantics or model configuration"
+    "the frozen semantics digest no longer matches the live contract semantics"
 assert d["findings"]["total"] > 0, "the analysis produced no findings at all"
 PY
 

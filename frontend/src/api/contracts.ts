@@ -106,6 +106,24 @@ export function parseStructureResponse(
   }
 }
 
+export class ContractApiError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ContractApiError'
+    this.status = status
+  }
+}
+
+export function isContractNotFoundError(error: unknown): boolean {
+  return error instanceof ContractApiError && error.status === 404
+}
+
+export function isContractForbiddenError(error: unknown): boolean {
+  return error instanceof ContractApiError && error.status === 403
+}
+
 export async function fetchContract(contractId: string): Promise<ContractSummary> {
   const client = createApiClient()
   const { data, response } = await client.GET('/api/contracts/{id}', {
@@ -113,8 +131,9 @@ export async function fetchContract(contractId: string): Promise<ContractSummary
   })
 
   if (!data) {
-    throw new Error(
+    throw new ContractApiError(
       boundedErrorMessage(response.status, CONTRACT_MESSAGES, 'The contract could not be loaded.'),
+      response.status,
     )
   }
   return parseApiResult(data, parseContractSummary, 'contract')

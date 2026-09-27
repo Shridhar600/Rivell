@@ -23,7 +23,7 @@ export class AppErrorBoundary extends Component<Props, State> {
           <h1>Something went wrong</h1>
           <p>
             Rivell could not continue because of an unexpected error. Reload the page; if it keeps
-            happening, the error class is {this.state.error.name}.
+            happening, contact an administrator.
           </p>
           <button type="button" onClick={() => window.location.reload()}>
             Reload

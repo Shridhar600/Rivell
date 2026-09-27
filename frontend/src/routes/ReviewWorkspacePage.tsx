@@ -1,6 +1,11 @@
 import { useMemo } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
-import { useContractQuery, useContractStructureQuery } from '../api/contracts'
+import {
+  isContractForbiddenError,
+  isContractNotFoundError,
+  useContractQuery,
+  useContractStructureQuery,
+} from '../api/contracts'
 import type { FindingFilters } from '../api/reviews'
 import {
   CLASSIFICATIONS,
@@ -183,19 +188,25 @@ export function ReviewWorkspacePage() {
 
   if (
     isReviewNotFoundError(summaryQuery.error) ||
-    isReviewNotFoundError(contractQuery.error) ||
+    isContractNotFoundError(contractQuery.error) ||
     (summaryQuery.data !== undefined && !matchesRoute)
   ) {
+    // Permanent: an identical retry cannot make a missing contract or review appear.
     return (
-      <ErrorState
-        message="This review could not be found. It may not exist, or you may not have access to it."
-        onRetry={() => void summaryQuery.refetch()}
-      />
+      <ErrorState message="This review could not be found. It may not exist, or you may not have access to it." />
     )
   }
 
-  if (isReviewForbiddenError(summaryQuery.error) || isReviewForbiddenError(contractQuery.error)) {
+  if (isReviewForbiddenError(summaryQuery.error)) {
     return <ErrorState message="You do not have permission to read this review." />
+  }
+
+  // contracts:read is a separate permission from reviews:read, so a refused contract read is a
+  // contract problem and must not be reported as a refused review.
+  if (isContractForbiddenError(contractQuery.error)) {
+    return (
+      <ErrorState message="You do not have permission to read the contract this review belongs to." />
+    )
   }
 
   if (summaryQuery.isError || !summaryQuery.data || contractQuery.isError) {

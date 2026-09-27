@@ -351,6 +351,39 @@ class ReviewCreationIT {
     }
 
     /**
+     * M10A integration review: the key identifies one operation, and the pack is part of that
+     * operation. Replaying a key with a different pack used to return the original review, which
+     * handed the caller a review frozen against a playbook it did not select, and skipped pack
+     * validation entirely. The replay must be refused.
+     */
+    @Test
+    void aReplayWithADifferentContractPackIsRefused() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var key = UUID.randomUUID();
+
+        var first = reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key);
+
+        assertThatThrownBy(() -> reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.NDA_PACK, key))
+                .as("a key replayed against a different pack must not return the original review")
+                .isInstanceOf(IdempotencyKeyReusedException.class);
+
+        // The refusal must not have created a second review, and the canonical one must be intact.
+        assertThat(reviewRepository.findByClientRequestId(organizationId, key))
+                .get()
+                .extracting(Review::id)
+                .isEqualTo(first.id());
+        assertThat(reviewRepository.findSnapshot(organizationId, first.id()).orElseThrow()
+                .contractPackKey()).isEqualTo(ReviewPackRegistry.MSA_PACK);
+
+        // Replaying the original pack unchanged still returns the canonical review.
+        assertThat(reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key).id()).isEqualTo(first.id());
+    }
+
+    /**
      * M10 / DW-020: review creation had no client-supplied key, so a retried creation produced a
      * second review with a second frozen snapshot and a second full analysis. The retry must return
      * the original review, and the key must never resolve another organisation's review.

@@ -170,8 +170,9 @@ public class GlobalExceptionHandler {
     ResponseEntity<ErrorResponse> idempotencyKeyReused(
             com.rivell.workbench.review.IdempotencyKeyReusedException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state",
-                "The supplied request id was already used for a different contract version. "
-                        + "Use a new request id, or repeat the original request unchanged.");
+                "The supplied request id was already used for a different contract version or "
+                        + "contract pack. Use a new request id, or repeat the original request "
+                        + "unchanged.");
     }
 
     @ExceptionHandler(RedlineArtifactStoreException.class)
