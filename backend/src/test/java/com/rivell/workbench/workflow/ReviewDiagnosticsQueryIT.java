@@ -164,11 +164,18 @@ class ReviewDiagnosticsQueryIT {
         // Decision history on the first run: eight of the nine findings decided, three of them with
         // a superseded revision. The latest-revision totals differ from the all-row totals, so a
         // regression to "count every row" is detectable by value and not only by SQL shape.
-        //   latest only (correct):  ACCEPT 1  REJECT 4  ESCALATE 2  EDIT 1  =  8 decided findings
-        //   earliest only:           ACCEPT 3  REJECT 2  ESCALATE 1  EDIT 2  =  8 rows, wrong action
-        //   every historical row:    ACCEPT 4  REJECT 4  ESCALATE 2  EDIT 2  = 12 rows, double counted
-        // Both wrong shapes differ from the correct one in at least two actions, so either
-        // regression - reversing the revision order, or dropping `distinct on` - is caught by value.
+        // Every figure below was read off a mutation of the production query, not counted by hand.
+        // An earlier version of this comment hand-counted them and got two of eight wrong, so the
+        // numbers are recorded with the mutation that produced each one.
+        //
+        //   correct (revision desc, distinct on):  accepted 1  edited 1  rejected 4  escalated 2
+        //   MUT-E  revision asc:                  accepted 3  edited 2  rejected 1  escalated 2
+        //   MUT-F  distinct on removed:            accepted 4  edited 2  rejected 4  escalated 2
+        //
+        // Both regressions are caught by value, and each differs from the correct result in at least
+        // three of the four actions. `rejected` alone discriminates neither: it is 4 in both the
+        // correct query and MUT-F, which is exactly why the assertions are per action and not a
+        // total. (Totals: 8 decided findings, 12 decision rows.)
         seedDecisions(organizationId, review.id(), firstRun.id(), findings, 0, 8);
         assertThat(decisionRepository.findCurrentForRun(organizationId, review.id(), firstRun.id()))
                 .as("the fixture must really hold superseded revisions, or the totals prove nothing")

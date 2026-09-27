@@ -306,8 +306,15 @@ describe('enrichment failure reasons', () => {
   })
 
   it('renders nothing from a provider reason that arrives anyway', () => {
-    // A stale response, a rolled-back backend or a proxied older deployment can still put one of
-    // these on the wire. It must degrade to the unrecognised-reason sentence, never to itself.
+    // Defence in depth at the note layer. A stale response, a rolled-back backend or a proxied older
+    // deployment could put one of these on the wire, and this function must still degrade rather
+    // than render it.
+    //
+    // This is NOT the mechanism that actually protects the UI today: the API parser closes the
+    // vocabulary first and rewrites anything unrecognised to 'UNKNOWN', so this function is never
+    // reached with a provider reason. The reachable path is covered by
+    // `semantics.test.ts`, which drives the parser with a provider value. What this test guards is
+    // that the note layer stays safe if the parser's behaviour ever changes.
     for (const provider of providerReasons) {
       const note = enrichmentFailureNote(provider as EnrichmentFailureReason)
 

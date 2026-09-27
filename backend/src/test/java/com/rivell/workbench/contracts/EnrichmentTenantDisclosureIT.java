@@ -131,6 +131,17 @@ class EnrichmentTenantDisclosureIT {
             "api key", "api_key", "apikey", "x-api-key", "authorization:", "bearer ",
             "password", "sk-", "private key", "-----begin");
 
+    /**
+     * The FAILED side of the walk, and an honest statement of how much it covers.
+     *
+     * <p>Measured: this fixture yields 18 field names and 9 string values, because
+     * {@code failingVersion()} deletes the version's document nodes and the response therefore
+     * carries no clauses, parties, defined terms or regions at all. The degraded fixture yields 328
+     * names and 225 strings including ten clauses. So the free-text and nested-structure coverage
+     * comes from the degraded fixture; this one covers the FAILED shape, which is where
+     * {@code failureReason} and the unconditional quality note appear. Both are needed and neither
+     * substitutes for the other.
+     */
     @Test
     void aFailedResponseCarriesNoSuppressedOperatorReasonAnywhereInTheDocument() throws Exception {
         var contractId = failingVersion();

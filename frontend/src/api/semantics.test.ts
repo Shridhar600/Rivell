@@ -288,6 +288,26 @@ describe('parseSemanticContract', () => {
       failureReason: 'A_FUTURE_REASON',
     })
     expect(unknown.failureReason).toBe('UNKNOWN')
+
+    // This closed set is what actually protects the tenant surface, and the provider reasons are the
+    // case that matters: a stale response, a rolled-back backend or an older proxied deployment can
+    // still put one on the wire, and the parser must rewrite it rather than hand it to a view model
+    // that would render it.
+    for (const providerReason of [
+      'NO_PROVIDER_CONFIGURED',
+      'PROVIDER_TIMEOUT',
+      'PROVIDER_UNAVAILABLE',
+      'PROVIDER_REJECTED',
+      'PROVIDER_PROTOCOL',
+    ]) {
+      const providerParsed = parseSemanticContract({
+        ...readyContract,
+        enrichmentStatus: 'FAILED',
+        failureReason: providerReason,
+      })
+      expect(providerParsed.failureReason).toBe('UNKNOWN')
+      expect(JSON.stringify(providerParsed)).not.toContain(providerReason)
+    }
   })
 
   it('keeps unknown enum-like codes instead of failing the page', () => {

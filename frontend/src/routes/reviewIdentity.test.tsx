@@ -98,6 +98,16 @@ describe('missing route identity', () => {
     expect(api.requests).toEqual([])
   })
 
+  /**
+   * This covers the ErrorState render only. It is NOT guard coverage, and it is worth saying so
+   * because the assertion looks like one: the page returns the error state before it renders
+   * EvidenceInspector, which is what owns the contract and semantics reads, so `api.requests` is
+   * empty by construction. Removing all three id guards leaves this test green.
+   *
+   * The guard evidence is the review-workspace test above, whose hooks genuinely run before its own
+   * early return, and the useContractQuery test, which exercises the hook directly. Both were
+   * confirmed to fail when the guards are removed; this one was not, so it is not credited.
+   */
   it('shows a local error state on the evidence inspector when the route carries no identity', async () => {
     const api = stubContractApi({})
 
