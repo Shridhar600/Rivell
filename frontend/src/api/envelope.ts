@@ -267,3 +267,25 @@ export function errorMessage(error: unknown, fallback: string): string {
   }
   return fallback
 }
+
+export function readClosedString<T extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  values: readonly T[],
+): T | 'UNKNOWN' {
+  const value = source[key]
+  if (value === null || value === undefined) return 'UNKNOWN'
+  if (typeof value !== 'string' || !(values as readonly string[]).includes(value)) return 'UNKNOWN'
+  return value as T
+}
+
+export function readNullableClosedString<T extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  values: readonly T[],
+): T | 'UNKNOWN' | null {
+  const value = source[key]
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string' || !(values as readonly string[]).includes(value)) return 'UNKNOWN'
+  return value as T
+}

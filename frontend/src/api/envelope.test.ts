@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   errorMessage,
   parseApiResult,
+  readClosedString,
   readEnum,
+  readNullableClosedString,
   readNullableNumber,
   readNullableString,
   readNumber,
@@ -123,5 +125,23 @@ describe('errorMessage', () => {
   it('falls back for empty or non-object errors', () => {
     expect(errorMessage(null, 'fallback')).toBe('fallback')
     expect(errorMessage({ detail: '  ' }, 'fallback')).toBe('fallback')
+  })
+})
+
+const CLOSED = ['A', 'B'] as const
+
+describe('closed-string readers', () => {
+  it('degrades an unrecognised, non-string or absent value to UNKNOWN instead of throwing', () => {
+    expect(readClosedString({ k: 'A' }, 'k', CLOSED)).toBe('A')
+    expect(readClosedString({ k: 'C' }, 'k', CLOSED)).toBe('UNKNOWN')
+    expect(readClosedString({ k: 7 }, 'k', CLOSED)).toBe('UNKNOWN')
+    expect(readClosedString({}, 'k', CLOSED)).toBe('UNKNOWN')
+  })
+
+  it('treats an absent or null value as no value for the nullable reader', () => {
+    expect(readNullableClosedString({ k: null }, 'k', CLOSED)).toBeNull()
+    expect(readNullableClosedString({}, 'k', CLOSED)).toBeNull()
+    expect(readNullableClosedString({ k: 'C' }, 'k', CLOSED)).toBe('UNKNOWN')
+    expect(readNullableClosedString({ k: 'B' }, 'k', CLOSED)).toBe('B')
   })
 })
