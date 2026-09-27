@@ -190,6 +190,70 @@ describe('recording a decision in the workspace', () => {
 })
 
 describe('workflow state availability and conflict truth', () => {
+  it('keeps the approved change set and redline reachable when the human-review read fails', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        humanReviewStatus: 500,
+        changeSet: fixtureChangeSet(),
+        redlineStatus: 404,
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    expect(
+      await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('region', { name: 'Redline execution' }, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: /Generate redline/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Frozen when this review was created')).toBeInTheDocument()
+
+    const changeSetCalls = api.requests.filter((r) => r.url.includes('/approved-change-set'))
+    expect(changeSetCalls).toHaveLength(1)
+  })
+
+  it('invents nothing when the human-review read fails and no change set exists', async () => {
+    const api = stubContractApi(
+      baseOptions({ humanReviewStatus: 500, changeSetStatus: 404 }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    expect(
+      await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Redline execution' })).not.toBeInTheDocument()
+    expect(
+      await screen.findByText(/The approved change set could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not read the change set when human-review state loads and the review is not finalized', async () => {
+    const api = stubContractApi(
+      baseOptions({ humanReview: fixtureHumanReview({ status: 'IN_PROGRESS' }) }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    await screen.findByRole('region', { name: 'Human review' })
+    expect(api.requests.filter((r) => r.url.includes('/approved-change-set'))).toHaveLength(0)
+  })
+
+  it('states that the change set and redline are unavailable for the same reason', async () => {
+    const api = stubContractApi(
+      baseOptions({ humanReviewStatus: 500, changeSetStatus: 404 }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    const banner = await screen.findByText(/Human review state could not be loaded/, {}, {
+      timeout: 3000,
+    })
+    expect(banner.parentElement).toHaveTextContent(
+      /approved change set and redline/i,
+    )
+  })
+
   it('hides decision controls and explains when human-review state cannot be loaded', async () => {
     const api = stubContractApi(baseOptions({ humanReviewStatus: 500 }))
     renderRouter('/reviews/c1/analysis/r-1', api)

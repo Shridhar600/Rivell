@@ -80,9 +80,13 @@ export function ReviewWorkspacePage() {
   const decisionsQuery = useCurrentDecisionsQuery(reviewId, analysisCompleted)
   const humanReviewQuery = useHumanReviewQuery(reviewId, analysisCompleted)
   const humanReview = humanReviewQuery.data ?? null
-  const isFinalized = humanReview?.status === 'COMPLETED'
   const finalizeMutation = useFinalizeReview(reviewId)
-  const changeSetQuery = useApprovedChangeSetQuery(reviewId, isFinalized)
+  const humanReviewUnavailable = analysisCompleted && humanReviewQuery.isError
+  const changeSetQuery = useApprovedChangeSetQuery(
+    reviewId,
+    analysisCompleted && (humanReview?.status === 'COMPLETED' || humanReviewUnavailable),
+  )
+  const isFinalized = humanReview?.status === 'COMPLETED' || changeSetQuery.isSuccess
   const decisionsLoaded = decisionsQuery.isSuccess
   const finalizeError = finalizeMutation.isError
     ? isWorkflowConflictError(finalizeMutation.error)
@@ -213,7 +217,8 @@ export function ReviewWorkspacePage() {
       {analysisCompleted ? (
         humanReviewQuery.isError ? (
           <p className="state state--warning" role="alert">
-            Human review state could not be loaded.{' '}
+            Human review state could not be loaded, so the approved change set and redline
+            cannot be confirmed from it.{' '}
             <button
               type="button"
               className="link-button"
@@ -238,58 +243,58 @@ export function ReviewWorkspacePage() {
               </button>
             </p>
           ) : null}
-          <>
-            <HumanReviewProgress
-              review={humanReview}
-              findings={findingsQuery.data?.items ?? []}
-              regionLabels={regionLabels}
-              onSelectFinding={selectFinding}
-            />
-            <FinalizationPanel
-              key={reviewId}
-              review={humanReview}
-              isFinalizing={finalizeMutation.isPending}
-              finalizeError={finalizeError}
-              onFinalize={() => finalizeMutation.mutate()}
-            />
-            {isFinalized ? (
-              changeSetQuery.isError ? (
-                <p className="state state--warning" role="alert">
-                  The approved change set could not be loaded.{' '}
-                  <button
-                    type="button"
-                    className="link-button"
-                    onClick={() => void changeSetQuery.refetch()}
-                  >
-                    Try again
-                  </button>
-                </p>
-              ) : changeSetQuery.data ? (
-                <ApprovedChangeSetSummary
-                  changeSet={changeSetQuery.data}
-                  findings={findingsQuery.data?.items ?? []}
-                  decisionsByFindingId={decisionsByFindingId}
-                  regionLabels={regionLabels}
-                  contractId={contractId}
-                  canDeepLink={
-                    summaryQuery.data.contractVersionNumber !== null &&
-                    latestVersion !== undefined &&
-                    summaryQuery.data.contractVersionNumber === latestVersion
-                  }
-                  onSelectFinding={selectFinding}
-                />
-              ) : null
-            ) : null}
-            <RedlineExecutionPanel
-              key={reviewId}
-              reviewId={reviewId}
-              isFinalized={isFinalized}
-              approvedChangeSet={changeSetQuery.data ?? null}
-              regionLabels={regionLabels}
-              onSelectFinding={selectFinding}
-            />
-          </>
+          <HumanReviewProgress
+            review={humanReview}
+            findings={findingsQuery.data?.items ?? []}
+            regionLabels={regionLabels}
+            onSelectFinding={selectFinding}
+          />
+          <FinalizationPanel
+            key={reviewId}
+            review={humanReview}
+            isFinalizing={finalizeMutation.isPending}
+            finalizeError={finalizeError}
+            onFinalize={() => finalizeMutation.mutate()}
+          />
         </>
+      ) : null}
+      {isFinalized || changeSetQuery.isError ? (
+        changeSetQuery.isError ? (
+          <p className="state state--warning" role="alert">
+            The approved change set could not be loaded.{' '}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => void changeSetQuery.refetch()}
+            >
+              Try again
+            </button>
+          </p>
+        ) : changeSetQuery.data ? (
+          <ApprovedChangeSetSummary
+            changeSet={changeSetQuery.data}
+            findings={findingsQuery.data?.items ?? []}
+            decisionsByFindingId={decisionsByFindingId}
+            regionLabels={regionLabels}
+            contractId={contractId}
+            canDeepLink={
+              summaryQuery.data.contractVersionNumber !== null &&
+              latestVersion !== undefined &&
+              summaryQuery.data.contractVersionNumber === latestVersion
+            }
+            onSelectFinding={selectFinding}
+          />
+        ) : null
+      ) : null}
+      {analysisCompleted ? (
+        <RedlineExecutionPanel
+          key={reviewId}
+          reviewId={reviewId}
+          isFinalized={isFinalized}
+          approvedChangeSet={changeSetQuery.data ?? null}
+          regionLabels={regionLabels}
+          onSelectFinding={selectFinding}
+        />
       ) : null}
       <div className="review-split">
         <FindingsPanel
