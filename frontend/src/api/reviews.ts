@@ -1,12 +1,13 @@
+import { useRef } from 'react'
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import { createApiClient } from './client'
 import { parseEvidenceItem } from './retrieval'
 import type { EvidenceItem } from './retrieval'
-import type { paths } from './schema'
+import type { components, paths } from './schema'
+import { boundedErrorMessage } from './errorMessage'
 import {
   asRecord,
-  errorMessage,
   malformed,
   parseApiResult,
   readArray,
@@ -500,8 +501,26 @@ export function isReviewPending(status: ReviewStatus | undefined | null): boolea
   return status === 'ANALYSIS_QUEUED' || status === 'ANALYZING'
 }
 
+// A review whose background worker is not running stays queued forever, so the poll is bounded
+// rather than running for the life of the page. The review read is the only way to notice a
+// completion, so this is a cap on patience, not a limit on correctness.
+export const MAX_POLL_ATTEMPTS = 80
+
 export function reviewPollInterval(status: ReviewStatus | undefined | null): number | false {
   return isReviewPending(status) ? 2500 : false
+}
+
+const REVIEW_MESSAGES: Partial<Record<number, string>> = {
+  403: 'You do not have permission to read this review.',
+  404: 'That review could not be found.',
+  409: 'That review request does not apply in the current state.',
+  500: 'The review could not be loaded.',
+  503: 'The review service is unavailable right now.',
+}
+
+const REVIEW_PACK_MESSAGES: Partial<Record<number, string>> = {
+  500: 'The review pack catalog could not be loaded.',
+  503: 'The review pack catalog service is unavailable right now.',
 }
 
 class ReviewApiError extends Error {
@@ -514,14 +533,6 @@ class ReviewApiError extends Error {
   }
 }
 
-export function isReviewBadRequestError(error: unknown): boolean {
-  return error instanceof ReviewApiError && error.status === 400
-}
-
-export function isReviewConflictError(error: unknown): boolean {
-  return error instanceof ReviewApiError && error.status === 409
-}
-
 export function isReviewNotFoundError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 404
 }
@@ -530,8 +541,13 @@ export function isReviewForbiddenError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 403
 }
 
+export function reviewErrorStatus(error: unknown): number | null {
+  return error instanceof ReviewApiError ? error.status : null
+}
+
 function reviewRetry(failureCount: number, error: Error): boolean {
-  return failureCount < 1 && !isReviewNotFoundError(error)
+  // A permission denial or a missing resource cannot become true on a second identical request.
+  return failureCount < 1 && !isReviewNotFoundError(error) && !isReviewForbiddenError(error)
 }
 
 export const reviewKeys = {
@@ -554,9 +570,12 @@ export const reviewKeys = {
 
 export async function fetchReviewPacks(): Promise<ReviewPack[]> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/packs')
+  const { data, response } = await client.GET('/api/reviews/packs')
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review pack catalog unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_PACK_MESSAGES, 'Review pack catalog unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(
     data,
@@ -576,33 +595,42 @@ export function useReviewPacksQuery(): UseQueryResult<ReviewPack[]> {
 
 export async function fetchReviewList(contractId: string): Promise<ReviewListResponse> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews', {
+  const { data, response } = await client.GET('/api/reviews', {
     params: { query: { contractId, limit: MAX_PAGE_LIMIT } },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review list unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review list unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewList, 'review list')
 }
 
 export async function fetchReviewSummary(reviewId: string): Promise<ReviewSummary> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/{id}', {
+  const { data, response } = await client.GET('/api/reviews/{id}', {
     params: { path: { id: reviewId } },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewSummary, 'review summary')
 }
 
 export async function fetchReviewProgress(reviewId: string): Promise<ReviewProgress> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/{id}/progress', {
+  const { data, response } = await client.GET('/api/reviews/{id}/progress', {
     params: { path: { id: reviewId } },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review progress unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review progress unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewProgress, 'review progress')
 }
@@ -612,7 +640,7 @@ export async function fetchFindingList(
   filters: FindingFilters,
 ): Promise<FindingListResponse> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/{id}/findings', {
+  const { data, response } = await client.GET('/api/reviews/{id}/findings', {
     params: {
       path: { id: reviewId },
       query: {
@@ -624,7 +652,10 @@ export async function fetchFindingList(
     },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Findings unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Findings unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseFindingList, 'finding list')
 }
@@ -634,12 +665,15 @@ export async function fetchFindingDetail(
   findingId: string,
 ): Promise<FindingDetail> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET(
+  const { data, response } = await client.GET(
     '/api/reviews/{id}/findings/{findingId}',
     { params: { path: { id: reviewId, findingId } } },
   )
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Finding unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Finding unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseFindingDetail, 'finding detail')
 }
@@ -648,17 +682,23 @@ export async function createReview(
   contractId: string,
   versionNumber: number,
   contractPackKey?: string | null,
+  clientRequestId?: string | null,
 ): Promise<ReviewSummary> {
   const client = createApiClient()
-  const { data, error, response } = await client.POST(
+  const body: components['schemas']['CreateReviewRequest'] = {}
+  if (contractPackKey) body.contractPackKey = contractPackKey
+  if (clientRequestId) body.clientRequestId = clientRequestId
+  const { data, response } = await client.POST(
     '/api/contracts/{contractId}/versions/{versionNumber}/reviews',
     {
       params: { path: { contractId, versionNumber } },
-      body: contractPackKey ? { contractPackKey } : {},
+      body,
     },
   )
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review creation failed'), response.status)
+    // The create panel classifies this by status, so this message is never rendered. It exists only
+    // so the thrown error is still readable in a log or a test.
+    throw new ReviewApiError('Review creation failed.', response.status)
   }
   return parseApiResult(data, parseReviewSummary, 'review summary')
 }
@@ -673,12 +713,21 @@ export function useContractReviewsQuery(contractId: string): UseQueryResult<Revi
 }
 
 export function useReviewSummaryQuery(reviewId: string | undefined): UseQueryResult<ReviewSummary> {
+  const pollAttempts = useRef(0)
   return useQuery({
     queryKey: reviewKeys.summary(reviewId ?? ''),
     queryFn: reviewId ? () => fetchReviewSummary(reviewId) : skipToken,
     enabled: Boolean(reviewId),
     retry: reviewRetry,
-    refetchInterval: (query) => reviewPollInterval(query.state.data?.status),
+    refetchInterval: (query) => {
+      if (query.state.data?.status !== 'ANALYSIS_QUEUED' && query.state.data?.status !== 'ANALYZING') {
+        pollAttempts.current = 0
+        return false
+      }
+      if (pollAttempts.current >= MAX_POLL_ATTEMPTS) return false
+      pollAttempts.current += 1
+      return reviewPollInterval(query.state.data?.status)
+    },
   })
 }
 
@@ -724,10 +773,15 @@ export function useFindingQuery(
 export function useCreateReview(
   contractId: string,
   versionNumber: number,
-): UseMutationResult<ReviewSummary, Error, { contractPackKey?: string | null }> {
+): UseMutationResult<
+  ReviewSummary,
+  Error,
+  { contractPackKey?: string | null; clientRequestId?: string | null }
+> {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ contractPackKey }) => createReview(contractId, versionNumber, contractPackKey),
+    mutationFn: ({ contractPackKey, clientRequestId }) =>
+      createReview(contractId, versionNumber, contractPackKey, clientRequestId),
     retry: false,
     networkMode: 'always',
     onSuccess: (summary) => {

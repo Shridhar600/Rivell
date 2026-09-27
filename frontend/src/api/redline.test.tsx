@@ -227,6 +227,22 @@ describe('redline parsers', () => {
     expect(execution.changes[0].verification).toBe('UNKNOWN')
   })
 
+  it('accepts the two M10 failure codes and still degrades anything unknown', () => {
+    for (const code of ['APPROVED_SEMANTICS_DRIFT', 'SOURCE_EXPANSION_LIMIT_EXCEEDED'] as const) {
+      expect(parseRedlineExecution({ ...generatedPayload, failureCode: code }).failureCode).toBe(code)
+    }
+    expect(
+      parseRedlineExecution({ ...generatedPayload, failureCode: 'A_FUTURE_CODE' }).failureCode,
+    ).toBe('UNKNOWN')
+  })
+
+  it('names document storage, not the engine, for a storage failure', () => {
+    const storage = new RedlineApiError(503).message
+    expect(storage).toMatch(/storage/i)
+    expect(storage).not.toMatch(/engine/i)
+    expect(new RedlineApiError(500).message).toMatch(/engine/i)
+  })
+
   it('defaults a missing downloadAvailable flag to false', () => {
     const { downloadAvailable, ...withoutFlag } = generatedPayload
     void downloadAvailable

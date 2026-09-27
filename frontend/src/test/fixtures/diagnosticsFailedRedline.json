@@ -1,0 +1,98 @@
+{
+  "data": {
+    "reviewId": "113ca24e-2f43-4d46-b2ed-ae9d54163720",
+    "contractId": "21eac5e6-0224-4e02-b14f-bca768c06696",
+    "contractVersionNumber": 1,
+    "reviewStatus": "COMPLETED",
+    "reviewFailure": null,
+    "backgroundWorkerEnabled": true,
+    "analysis": {
+      "runId": "7192eb48-8704-4d14-a1bc-3bdf982e47a1",
+      "runNumber": 1,
+      "status": "COMPLETED",
+      "trigger": "INITIAL",
+      "pipelineVersion": "rivell-review-pipeline-1",
+      "startedAt": "2026-09-27T08:42:41.397147Z",
+      "completedAt": "2026-09-27T08:42:41.439509Z",
+      "ageSeconds": 0,
+      "failureReason": null,
+      "environmentMatchesSnapshot": false,
+      "checks": [
+        {
+          "key": "PRESENCE:CONFIDENTIALITY",
+          "status": "COMPLETED",
+          "signalCount": 1,
+          "degradedReason": null,
+          "startedAt": "2026-09-27T08:42:41.411335Z",
+          "completedAt": "2026-09-27T08:42:41.414019Z",
+          "durationMillis": 2
+        },
+        {
+          "key": "PRESENCE:TERM_TERMINATION",
+          "status": "COMPLETED",
+          "signalCount": 1,
+          "degradedReason": null,
+          "startedAt": "2026-09-27T08:42:41.418483Z",
+          "completedAt": "2026-09-27T08:42:41.420647Z",
+          "durationMillis": 2
+        },
+        {
+          "key": "PRESENCE:LIMITATION_OF_LIABILITY",
+          "status": "COMPLETED",
+          "signalCount": 0,
+          "degradedReason": null,
+          "startedAt": "2026-09-27T08:42:41.423907Z",
+          "completedAt": "2026-09-27T08:42:41.426021Z",
+          "durationMillis": 2
+        },
+        {
+          "key": "PRESENCE:INDEMNIFICATION",
+          "status": "COMPLETED",
+          "signalCount": 0,
+          "degradedReason": null,
+          "startedAt": "2026-09-27T08:42:41.427999Z",
+          "completedAt": "2026-09-27T08:42:41.430087Z",
+          "durationMillis": 2
+        },
+        {
+          "key": "PRESENCE:GOVERNING_LAW",
+          "status": "COMPLETED",
+          "signalCount": 0,
+          "degradedReason": null,
+          "startedAt": "2026-09-27T08:42:41.433243Z",
+          "completedAt": "2026-09-27T08:42:41.435639Z",
+          "durationMillis": 2
+        }
+      ]
+    },
+    "findings": {
+      "total": 2,
+      "blocking": 1,
+      "reviewRequired": 0,
+      "informational": 1
+    },
+    "decisions": {
+      "accepted": 0,
+      "edited": 1,
+      "rejected": 0,
+      "escalated": 0
+    },
+    "finalization": {
+      "finalized": true,
+      "changeSetId": "c1a7f22f-7fb3-4dea-9793-861c5aecf323",
+      "finalizedAt": "2026-09-27T08:42:41.807473Z",
+      "approvedChanges": 1
+    },
+    "redline": {
+      "status": "FAILED",
+      "outcome": null,
+      "failureCode": "APPROVED_SEMANTICS_DRIFT",
+      "changeCount": 1,
+      "downloadAvailable": false,
+      "ageSeconds": 857
+    },
+    "stalled": []
+  },
+  "status": 200,
+  "timestamp": "2026-09-27T08:57:04.559935Z"
+}

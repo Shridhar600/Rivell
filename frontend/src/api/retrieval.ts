@@ -4,7 +4,6 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import { createApiClient } from './client'
 import {
   asRecord,
-  errorMessage,
   malformed,
   parseApiResult,
   readArray,
@@ -19,6 +18,7 @@ import {
   readStringArray,
   readStringMap,
 } from './envelope'
+import { boundedErrorMessage } from './errorMessage'
 
 export type AuthorityClass =
   | 'POLICY'
@@ -365,6 +365,13 @@ export function parseRetrievalTrace(value: unknown, what = 'retrieval trace'): R
   }
 }
 
+const RETRIEVAL_MESSAGES: Partial<Record<number, string>> = {
+  404: 'That evidence set or retrieval trace could not be found.',
+  409: 'Evidence cannot be built for this contract version yet.',
+  500: 'The finding evidence could not be resolved.',
+  503: 'The evidence service is unavailable right now.',
+}
+
 class RetrievalApiError extends Error {
   readonly status: number
 
@@ -409,7 +416,7 @@ type EvidenceBuildInput = {
 
 export async function buildEvidence(input: EvidenceBuildInput): Promise<EvidenceBundle> {
   const client = createApiClient()
-  const { data, error, response } = await client.POST('/api/retrieval/evidence', {
+  const { data, response } = await client.POST('/api/retrieval/evidence', {
     body: {
       contractId: input.contractId,
       versionNumber: input.versionNumber,
@@ -418,7 +425,7 @@ export async function buildEvidence(input: EvidenceBuildInput): Promise<Evidence
   })
   if (!data) {
     throw new RetrievalApiError(
-      errorMessage(error, 'Evidence construction failed'),
+      boundedErrorMessage(response.status, RETRIEVAL_MESSAGES, 'The evidence set could not be built.'),
       response.status,
     )
   }
@@ -460,12 +467,12 @@ export function useEvidenceBundle(
 
 export async function fetchRetrievalTrace(traceId: string): Promise<RetrievalTrace> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/retrieval/traces/{id}', {
+  const { data, response } = await client.GET('/api/retrieval/traces/{id}', {
     params: { path: { id: traceId } },
   })
   if (!data) {
     throw new RetrievalApiError(
-      errorMessage(error, 'Retrieval trace unavailable'),
+      boundedErrorMessage(response.status, RETRIEVAL_MESSAGES, 'The retrieval trace could not be loaded.'),
       response.status,
     )
   }

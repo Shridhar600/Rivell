@@ -190,6 +190,147 @@ describe('recording a decision in the workspace', () => {
 })
 
 describe('workflow state availability and conflict truth', () => {
+  it('keeps the approved change set and redline reachable when the human-review read fails', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        humanReviewStatus: 500,
+        changeSet: fixtureChangeSet(),
+        redlineStatus: 404,
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    expect(
+      await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('region', { name: 'Redline execution' }, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', { name: /Generate redline/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Frozen when this review was created')).toBeInTheDocument()
+
+    const changeSetCalls = api.requests.filter((r) => r.url.includes('/approved-change-set'))
+    expect(changeSetCalls).toHaveLength(1)
+  })
+
+  it('fails the decision read closed on a malformed row instead of showing a blank list', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        decisions: {
+          items: [
+            {
+              id: 'd-1',
+              findingId: 'f-1',
+              revision: 1,
+              action: 'ACCEPT',
+              approvedAction: null,
+              approvedLanguage: null,
+              languageSource: null,
+              approvedDraftingEvidenceId: null,
+              comment: null,
+              actorId: null,
+              decidedAt: '2026-09-26T10:00:00Z',
+              clientRequestId: null,
+              supersedesDecisionId: null,
+            },
+          ],
+          truncated: false,
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    expect(
+      await screen.findByText(/Decisions could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
+    )
+    expect(screen.getByText(/Decision controls are unavailable/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
+  })
+
+
+  it('states a permission failure as a permission failure, not a load failure', async () => {
+    const api = stubContractApi(baseOptions({ reviewSummaryStatus: 403 }))
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    const alert = await screen.findByRole('alert', {}, { timeout: 3000 })
+    expect(alert).toHaveTextContent(/do not have permission/i)
+    expect(alert).not.toHaveTextContent(/could not be loaded/i)
+    expect(
+      screen.queryByRole('button', { name: 'Try again' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('invents nothing when the human-review read fails and no change set exists', async () => {
+    const api = stubContractApi(
+      baseOptions({ humanReviewStatus: 500, changeSetStatus: 404 }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    expect(
+      await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Redline execution' })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(api.requests.filter((r) => r.url.includes('/approved-change-set')).length).toBe(1),
+    )
+    expect(
+      screen.queryByText(/The approved change set could not be loaded/),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/approved change set and redline cannot be confirmed/i),
+    ).toBeInTheDocument()
+  })
+
+  it('does not read the change set when human-review state loads and the review is not finalized', async () => {
+    const api = stubContractApi(
+      baseOptions({ humanReview: fixtureHumanReview({ status: 'IN_PROGRESS' }) }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    await screen.findByRole('region', { name: 'Human review' })
+    expect(api.requests.filter((r) => r.url.includes('/approved-change-set'))).toHaveLength(0)
+  })
+
+  it('treats a missing change set as not finalized rather than a load failure', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        humanReview: fixtureHumanReview({ status: 'COMPLETED' }),
+        changeSetStatus: 404,
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    expect(
+      await screen.findByText(/The approved change set is frozen and decisions are read-only/),
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(api.requests.filter((r) => r.url.includes('/redline')).length).toBeGreaterThan(0),
+    )
+    expect(
+      screen.queryByText(/The approved change set could not be loaded/),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  })
+
+  it('states that the change set and redline are unavailable for the same reason', async () => {
+    const api = stubContractApi(
+      baseOptions({ humanReviewStatus: 500, changeSetStatus: 404 }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    const banner = await screen.findByText(/Human review state could not be loaded/, {}, {
+      timeout: 3000,
+    })
+    expect(banner.parentElement).toHaveTextContent(
+      /approved change set and redline/i,
+    )
+  })
+
   it('hides decision controls and explains when human-review state cannot be loaded', async () => {
     const api = stubContractApi(baseOptions({ humanReviewStatus: 500 }))
     renderRouter('/reviews/c1/analysis/r-1', api)
@@ -378,6 +519,41 @@ describe('finalization', () => {
     expect(screen.getByRole('button', { name: 'Confirm finalize' })).toHaveFocus()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.getByRole('button', { name: 'Finalize review' })).toHaveFocus()
+  })
+
+  it('states a degraded analysis honestly and offers no recovery control', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        reviewSummary: { ...fixtureCompletedReviewSummary, findings: 0, degradedChecks: 4 },
+        findings: { items: [], truncated: false },
+        humanReview: fixtureHumanReview({
+          status: 'NOT_STARTED',
+          readyToFinalize: false,
+          blockers: [
+            {
+              code: 'ANALYSIS_DEGRADED',
+              message:
+                'No planned check completed a trustworthy analysis, so this review has no machine findings to decide on and cannot be finalized. Create a new review against the current semantics to continue.',
+              findingIds: [],
+            },
+          ],
+        }),
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    const progress = await screen.findByRole('region', { name: 'Human review' })
+    expect(progress).toHaveTextContent('The analysis produced no trustworthy result')
+    expect(progress).toHaveTextContent('The analysis produced no trustworthy result')
+    expect(progress).toHaveTextContent(/new review/i)
+    expect(
+      screen.queryByText('Every planned check completed without findings.'),
+    ).not.toBeInTheDocument()
+
+    for (const name of [/retry/i, /recompute/i, /run again/i, /re-run/i, /re-analy/i]) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+    }
   })
 
   it('refreshes blockers and does not retry when finalization is rejected', async () => {

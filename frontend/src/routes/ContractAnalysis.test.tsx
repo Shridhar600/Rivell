@@ -60,6 +60,8 @@ function listRequests(api: ReturnType<typeof stubContractApi>) {
   )
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn()
 })
@@ -94,7 +96,11 @@ describe('review creation', () => {
     )
     const creates = createRequests(api)
     expect(creates).toHaveLength(1)
-    expect(creates[0].body).toEqual({ contractPackKey: 'MSA_PACK' })
+    expect(creates[0].body).toMatchObject({ contractPackKey: 'MSA_PACK' })
+    expect(Object.keys(creates[0].body as Record<string, unknown>).sort()).toEqual([
+      'clientRequestId',
+      'contractPackKey',
+    ])
 
     await screen.findByRole('heading', { name: 'Analysis state' }, { timeout: 5000 })
     expect(screen.getByRole('heading', { name: 'Master Services Agreement' })).toBeInTheDocument()
@@ -111,7 +117,10 @@ describe('review creation', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
 
     await waitFor(() => expect(createRequests(api)).toHaveLength(1))
-    expect(createRequests(api)[0].body).toEqual({})
+    expect(Object.keys(createRequests(api)[0].body as Record<string, unknown>)).toEqual(['clientRequestId'])
+    expect((createRequests(api)[0].body as Record<string, unknown>).clientRequestId).toMatch(
+      UUID_PATTERN,
+    )
   })
 
   it('submits only once when the form is submitted twice synchronously', async () => {
@@ -144,12 +153,101 @@ describe('review creation', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
 
     const alert = await screen.findByRole('alert')
-    expect(within(alert).getByText(/not ready for an automated review/)).toBeInTheDocument()
+    expect(
+      within(alert).getByText(/could not start a review for this contract version/),
+    ).toBeInTheDocument()
+    expect(within(alert).getByText(/semantic analysis may not be ready/)).toBeInTheDocument()
+    expect(
+      within(alert).getByText(/already used for a different contract version/),
+    ).toBeInTheDocument()
+    expect(alert.textContent).not.toMatch(/Exception|com\.rivell|\bat [a-z]+\.[a-z]+:/i)
     expect(
       within(alert).getByRole('link', { name: "Open the contract's semantic analysis" }),
     ).toHaveAttribute('href', '/reviews/c1?view=semantics')
     expect(createRequests(api)).toHaveLength(1)
     expect(router.state.location.pathname).toBe('/reviews/c1/analysis')
+  })
+
+  it('treats a conflict as a settled negative and never claims a review was created', async () => {
+    const api = stubContractApi({ createReviewStatus: 409, reviews: { items: [], truncated: false } })
+    renderRoute('/reviews/c1/analysis')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/could not start a review for this contract version/i)
+    expect(within(alert).queryByRole('button', { name: 'Re-check reviews' })).not.toBeInTheDocument()
+    expect(alert).not.toHaveTextContent(/A review was created/i)
+    expect(screen.getByRole('button', { name: 'Start review' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Contract pack (optional)')).toBeEnabled()
+
+    api.setReviews?.({
+      items: [
+        {
+          id: 'r-99',
+          contractId: 'c1',
+          contractVersionNumber: 1,
+          status: 'ANALYSIS_QUEUED',
+          createdAt: '2026-09-27T10:00:00Z',
+          completedAt: null,
+        },
+      ],
+      truncated: false,
+    })
+
+    await waitFor(() => expect(listRequests(api).length).toBeGreaterThan(0))
+    expect(
+      screen.queryByText(/A review was created while the outcome was unknown/),
+    ).not.toBeInTheDocument()
+    expect(createRequests(api)).toHaveLength(1)
+  })
+
+  it('reuses one request id for the same logical attempt and mints a new one for a new pack', async () => {
+    const api = stubContractApi({
+      createReviewResponse: () => Promise.reject(new TypeError('Failed to fetch')),
+      reviews: fixtureReviewList,
+    })
+    renderRoute('/reviews/c1/analysis')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+    let alert = await screen.findByRole('alert')
+    await userEvent.click(within(alert).getByRole('button', { name: 'Re-check reviews' }))
+    await screen.findByText(/No new review appeared in the history/)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start review' }))
+    alert = await screen.findByRole('alert')
+    await userEvent.click(within(alert).getByRole('button', { name: 'Re-check reviews' }))
+    await screen.findByText(/No new review appeared in the history/)
+
+    await userEvent.selectOptions(await screen.findByLabelText('Contract pack (optional)'), 'NDA_PACK')
+    await userEvent.click(screen.getByRole('button', { name: 'Start review' }))
+
+    const bodies = createRequests(api).map((request) => request.body as { clientRequestId?: string })
+    expect(bodies).toHaveLength(3)
+    expect(bodies[0].clientRequestId).toMatch(UUID_PATTERN)
+    expect(bodies[1].clientRequestId).toBe(bodies[0].clientRequestId)
+    expect(bodies[2].clientRequestId).toMatch(UUID_PATTERN)
+    expect(bodies[2].clientRequestId).not.toBe(bodies[0].clientRequestId)
+  })
+
+  it('locks the pack choice until an uncertain attempt has been reconciled', async () => {
+    const api = stubContractApi({
+      createReviewResponse: () => Promise.reject(new TypeError('Failed to fetch')),
+      reviews: fixtureReviewList,
+    })
+    renderRoute('/reviews/c1/analysis')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
+    const alert = await screen.findByRole('alert')
+
+    expect(screen.getByLabelText('Contract pack (optional)')).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Start review' })).not.toBeInTheDocument()
+
+    await userEvent.click(within(alert).getByRole('button', { name: 'Re-check reviews' }))
+    await screen.findByText(/No new review appeared in the history/)
+
+    expect(screen.getByLabelText('Contract pack (optional)')).toBeEnabled()
+    expect(createRequests(api)).toHaveLength(1)
   })
 
   it('offers an honest recovery path when the outcome is unknown', async () => {
@@ -302,7 +400,11 @@ describe('review creation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Start review' }))
 
     await waitFor(() => expect(createRequests(api)).toHaveLength(1))
-    expect(createRequests(api)[0].body).toEqual({ contractPackKey: 'CUSTOM_PACK' })
+    expect(createRequests(api)[0].body).toMatchObject({ contractPackKey: 'CUSTOM_PACK' })
+    expect(Object.keys(createRequests(api)[0].body as Record<string, unknown>).sort()).toEqual([
+      'clientRequestId',
+      'contractPackKey',
+    ])
   })
 
   it('keeps pack-less creation available when the catalog fails', async () => {
@@ -322,7 +424,10 @@ describe('review creation', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Start review' }))
     await waitFor(() => expect(createRequests(api)).toHaveLength(1))
-    expect(createRequests(api)[0].body).toEqual({})
+    expect(Object.keys(createRequests(api)[0].body as Record<string, unknown>)).toEqual(['clientRequestId'])
+    expect((createRequests(api)[0].body as Record<string, unknown>).clientRequestId).toMatch(
+      UUID_PATTERN,
+    )
   })
 
   it('gates creation until semantic analysis is ready', async () => {

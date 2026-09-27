@@ -434,7 +434,7 @@ describe('ContractWorkspace', () => {
               {
                 code: 'NOT_FOUND',
                 title: 'Not found',
-                detail: 'Contract does not exist in this organization',
+                detail: 'Contract 8f0e missing at com.rivell.workbench.contracts.ContractService.require:88',
               },
               404,
             )
@@ -448,7 +448,8 @@ describe('ContractWorkspace', () => {
     renderWorkspace()
 
     const alert = await screen.findByRole('alert', {}, { timeout: 5000 })
-    expect(alert).toHaveTextContent(/does not exist in this organization/i)
+    expect(alert).toHaveTextContent(/This contract could not be found/i)
+    expect(alert).not.toHaveTextContent(/com\.rivell|8f0e|require:88/)
 
     await userEvent.click(screen.getByRole('button', { name: /try again/i }))
     expect(

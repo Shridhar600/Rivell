@@ -5,12 +5,12 @@ import type { ReactNode } from 'react'
 import {
   createReview,
   fetchReviewPacks,
-  isReviewConflictError,
   parseFindingDetail,
   parseFindingList,
   parseReviewList,
   parseReviewProgress,
   parseReviewSummary,
+  reviewErrorStatus,
   reviewKeys,
   reviewPollInterval,
   useCreateReview,
@@ -358,11 +358,34 @@ describe('review requests', () => {
     expect(await requests[0].json()).toEqual({})
   })
 
+  it('sends a supplied client request id and omits it when absent', async () => {
+    const withId = stubFetch(() => jsonResponse(envelope(queuedSummary)))
+    await createReview('c-1', 1, 'MSA_PACK', '11111111-1111-4111-8111-111111111111')
+    expect(await withId[0].json()).toEqual({
+      contractPackKey: 'MSA_PACK',
+      clientRequestId: '11111111-1111-4111-8111-111111111111',
+    })
+
+    const withoutId = stubFetch(() => jsonResponse(envelope(queuedSummary)))
+    await createReview('c-1', 1, null, null)
+    expect(await withoutId[0].json()).toEqual({})
+  })
+
+  it('exposes the failing status and classifies a payload ceiling failure', async () => {
+    stubFetch(() => jsonResponse({ code: '413' }, 413))
+    const error = await createReview('c-1', 1).catch((thrown: unknown) => thrown)
+
+    expect(reviewErrorStatus(error)).toBe(413)
+    expect(reviewErrorStatus(new Error('boom'))).toBeNull()
+  })
+
   it('classifies a typed conflict without retrying the request', async () => {
     const requests = stubFetch(() =>
       jsonResponse({ code: 'ENRICHMENT_NOT_READY', detail: 'Semantic analysis not ready' }, 409),
     )
-    await expect(createReview('c-1', 1)).rejects.toSatisfy(isReviewConflictError)
+    const error = await createReview('c-1', 1).catch((thrown: unknown) => thrown)
+
+    expect(reviewErrorStatus(error)).toBe(409)
     expect(requests).toHaveLength(1)
   })
 

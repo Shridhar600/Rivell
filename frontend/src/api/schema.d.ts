@@ -465,6 +465,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reviews/{id}/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Developer diagnostics for one review: run state, check outcomes, counts, decision outcomes, finalization, redline, and anything stalling progress */
+        get: operations["diagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reviews/{id}/decisions": {
         parameters: {
             query?: never;
@@ -1391,6 +1408,7 @@ export interface components {
             /** Format: int32 */
             versionNumber?: number;
             enrichmentStatus?: string;
+            failureReason?: string;
             pipelineVersion?: string;
             reviewProfile?: components["schemas"]["ReviewProfileView"];
             metadata?: components["schemas"]["MetadataFactView"][];
@@ -1429,6 +1447,8 @@ export interface components {
         };
         CreateReviewRequest: {
             contractPackKey?: string;
+            /** Format: uuid */
+            clientRequestId?: string;
         };
         AnalysisWarningView: {
             checkKey?: string;
@@ -1735,6 +1755,118 @@ export interface components {
         DecisionListResponse: {
             items?: components["schemas"]["DecisionView"][];
             truncated?: boolean;
+        };
+        /** @description The latest analysis run */
+        AnalysisRunView: {
+            /** Format: uuid */
+            runId?: string;
+            /** Format: int32 */
+            runNumber?: number;
+            status?: string;
+            trigger?: string;
+            pipelineVersion?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: int64 */
+            ageSeconds?: number;
+            failureReason?: string;
+            /** @description Whether the snapshot the review froze still matches the live contract semantics and model configuration */
+            environmentMatchesSnapshot?: boolean;
+            checks?: components["schemas"]["CheckView"][];
+        };
+        ApiResultReviewDiagnosticsView: {
+            data?: components["schemas"]["ReviewDiagnosticsView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        /** @description One planned check and how it ended */
+        CheckView: {
+            key?: string;
+            status?: string;
+            /** Format: int32 */
+            signalCount?: number;
+            degradedReason?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: int64 */
+            durationMillis?: number;
+        };
+        /** @description Finding counts, no finding content */
+        CountsView: {
+            /** Format: int32 */
+            total?: number;
+            /** Format: int32 */
+            blocking?: number;
+            /** Format: int32 */
+            reviewRequired?: number;
+            /** Format: int32 */
+            informational?: number;
+        };
+        /** @description Human decision outcomes, which are the natural evaluation labels */
+        DecisionsView: {
+            /** Format: int32 */
+            accepted?: number;
+            /** Format: int32 */
+            edited?: number;
+            /** Format: int32 */
+            rejected?: number;
+            /** Format: int32 */
+            escalated?: number;
+        };
+        /** @description Finalization state */
+        FinalizationView: {
+            finalized?: boolean;
+            /** Format: uuid */
+            changeSetId?: string;
+            /** Format: date-time */
+            finalizedAt?: string;
+            /** Format: int32 */
+            approvedChanges?: number;
+        };
+        /** @description Deterministic redline state */
+        RedlineView: {
+            status?: string;
+            outcome?: string;
+            failureCode?: string;
+            /** Format: int32 */
+            changeCount?: number;
+            downloadAvailable?: boolean;
+            /** Format: int64 */
+            ageSeconds?: number;
+        };
+        /** @description Developer diagnostics for one review run. Read-only; contains no contract text and no model output. */
+        ReviewDiagnosticsView: {
+            /**
+             * Format: uuid
+             * @description Review the diagnostics describe
+             */
+            reviewId?: string;
+            /**
+             * Format: uuid
+             * @description Contract version under review
+             */
+            contractId?: string;
+            /** Format: int32 */
+            contractVersionNumber?: number;
+            /** @description Current review status */
+            reviewStatus?: string;
+            /** @description Failure reason recorded on the review, if any */
+            reviewFailure?: string;
+            /** @description Whether a background job worker is running. A queued analysis with no worker will never start. */
+            backgroundWorkerEnabled?: boolean;
+            analysis?: components["schemas"]["AnalysisRunView"];
+            findings?: components["schemas"]["CountsView"];
+            decisions?: components["schemas"]["DecisionsView"];
+            finalization?: components["schemas"]["FinalizationView"];
+            redline?: components["schemas"]["RedlineView"];
+            /** @description Operational problems that explain a review making no progress */
+            stalled?: string[];
         };
         ApiResultReviewPackCatalogView: {
             data?: components["schemas"]["ReviewPackCatalogView"];
@@ -3258,6 +3390,46 @@ export interface operations {
                 };
             };
             /** @description Unknown review or finding */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    diagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultReviewDiagnosticsView"];
+                };
+            };
+            /** @description Missing reviews:read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown review */
             404: {
                 headers: {
                     [name: string]: unknown;

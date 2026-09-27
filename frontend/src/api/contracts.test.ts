@@ -1,3 +1,4 @@
+import { UploadApiError } from './uploadError'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { components } from './schema'
 import {
@@ -106,27 +107,28 @@ describe('fetchContract', () => {
     expect(requests[0].url).toContain('/api/contracts/c1')
   })
 
-  it('surfaces the backend error detail', async () => {
+  it('reports a bounded 404 and never the backend error body', async () => {
     stubFetch(() =>
       jsonResponse(
         {
           code: 'NOT_FOUND',
           title: 'Not found',
-          detail: 'Contract does not exist in this organization',
+          detail: 'Contract 8f0e missing at com.rivell.workbench.contracts.ContractService.require:88',
         },
         404,
       ),
     )
 
-    await expect(fetchContract('missing')).rejects.toThrow(
-      /does not exist in this organization/i,
-    )
+    const error = await fetchContract('missing').catch((thrown: unknown) => thrown)
+
+    expect((error as Error).message).toBe('This contract could not be found.')
+    expect((error as Error).message).not.toMatch(/8f0e|com\.rivell/)
   })
 
-  it('falls back to a readable message when the error body is empty', async () => {
+  it('reports a bounded message for a status with no server body', async () => {
     stubFetch(() => new Response(null, { status: 500 }))
 
-    await expect(fetchContract('broken')).rejects.toThrow(/contract unavailable/i)
+    await expect(fetchContract('broken')).rejects.toThrow(/contract could not be loaded/i)
   })
 
   it('rejects a malformed successful summary instead of crashing later', async () => {
@@ -220,20 +222,24 @@ describe('uploadContract', () => {
     expect(formData.get('file')).toBeInstanceOf(File)
   })
 
-  it('surfaces upload error details', async () => {
+  it('reports a bounded upload error that names no server text', async () => {
     stubFetch(() =>
       jsonResponse(
         {
           code: 'INVALID_UPLOAD',
           title: 'Invalid upload',
-          detail: 'Only .docx files are supported',
+          detail: 'Rejected at com.rivell.workbench.contracts.ContractService.require:88',
         },
         400,
       ),
     )
 
     const file = new File(['bad'], 'bad.txt', { type: 'text/plain' })
-    await expect(uploadContract(file)).rejects.toThrow(/only .docx files are supported/i)
+    const error = await uploadContract(file).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(UploadApiError)
+    expect((error as Error).message).toMatch(/upload was not accepted/i)
+    expect((error as Error).message).not.toMatch(/com\.rivell|require:88|only \.docx/)
   })
 
   it('rejects a malformed ingest response', async () => {

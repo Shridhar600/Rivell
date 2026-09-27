@@ -195,7 +195,7 @@ describe('AddKnowledgeForm', () => {
               {
                 code: '400',
                 title: 'Invalid request',
-                detail: 'Only .docx, .xlsx files are supported',
+                detail: 'Rejected at com.rivell.workbench.knowledge.KnowledgeService.require:71',
               },
               400,
             ),
@@ -215,7 +215,8 @@ describe('AddKnowledgeForm', () => {
     await userEvent.click(within(addForm()).getByRole('button', { name: /add knowledge/i }))
 
     const alert = await within(addForm()).findByRole('alert')
-    expect(alert).toHaveTextContent(/only \.docx, \.xlsx files are supported/i)
+    expect(alert).toHaveTextContent(/upload was not accepted/i)
+    expect(alert).not.toHaveTextContent(/com\.rivell|require:71/)
 
     await userEvent.click(
       within(addForm()).getByRole('button', { name: /try again/i }),

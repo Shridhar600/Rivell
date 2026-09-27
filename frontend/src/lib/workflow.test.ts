@@ -84,6 +84,7 @@ describe('workflow labels', () => {
     expect(blockerLabel('UNRESOLVED_BLOCKING_FINDINGS')).toContain('Blocking findings')
     expect(blockerLabel('ACTIVE_ESCALATION')).toContain('escalated')
     expect(blockerLabel('APPROVED_CHANGE_CONFLICT')).toContain('same contract location')
+    expect(blockerLabel('ANALYSIS_DEGRADED')).toMatch(/produced no trustworthy result/)
     expect(blockerLabel('SOMETHING_NEW')).toBe('The review cannot be finalized yet.')
   })
 

@@ -75,7 +75,7 @@ describe('semantic analysis lifecycle', () => {
     expect(overview).toHaveFocus()
   })
 
-  it('shows the server message when enrichment fails', async () => {
+  it('shows a bounded message when enrichment fails', async () => {
     stubContractApi({
       semantics: null,
       enrichmentResponse: () =>
@@ -96,9 +96,9 @@ describe('semantic analysis lifecycle', () => {
       screen.getByRole('button', { name: 'Run semantic analysis' }),
     )
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /no parsed structure/i,
-    )
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('The semantic analysis could not be started.')
+    expect(alert).not.toHaveTextContent(/no parsed structure/i)
   })
 
   it('offers a retry with the stored profile after a failure', async () => {
@@ -124,6 +124,49 @@ describe('semantic analysis lifecycle', () => {
     expect(
       screen.getByRole('button', { name: 'Try semantic analysis again' }),
     ).toBeInTheDocument()
+  })
+
+  it('states a transient service failure and keeps the retry available', async () => {
+    const api = stubContractApi({
+      semantics: fixtureSemantics({
+        enrichmentStatus: 'FAILED',
+        failureReason: 'PROVIDER_UNAVAILABLE',
+      }),
+    })
+    renderRoute('/reviews/c1?view=semantics')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('The semantic analysis service did not respond')
+    expect(alert).not.toHaveTextContent('PROVIDER_UNAVAILABLE')
+    expect(
+      screen.getByRole('button', { name: 'Try semantic analysis again' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/You can try again with the profile below/)).toBeInTheDocument()
+    expect(api.requests.filter((r) => r.url.includes('/enrichment'))).toHaveLength(0)
+  })
+
+  it('never tells the user a retry is pointless while offering one', async () => {
+    stubContractApi({
+      semantics: fixtureSemantics({
+        enrichmentStatus: 'FAILED',
+        failureReason: 'UNSUPPORTED_SOURCE',
+      }),
+    })
+    renderRoute('/reviews/c1?view=semantics')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('This document cannot be analysed for semantics as it is supplied.')
+    expect(screen.queryByText(/unlikely to change the result/)).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Try semantic analysis again' }),
+    ).toBeInTheDocument()
+  })
+
+  it('admits a missing reason instead of hiding it', async () => {
+    stubContractApi({ semantics: fixtureSemantics({ enrichmentStatus: 'FAILED', failureReason: null }) })
+    renderRoute('/reviews/c1?view=semantics')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('did not record a reason')
   })
 
   it('shows analysis in progress and can check again', async () => {

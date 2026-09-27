@@ -1,0 +1,125 @@
+{
+  "data": {
+    "reviewId": "5fed6948-d76a-4596-bcf5-5d1298d75f16",
+    "contractId": "ddda4c84-4956-4c23-877c-e9ed36bfbc30",
+    "contractVersionNumber": 1,
+    "reviewStatus": "COMPLETED",
+    "reviewFailure": null,
+    "backgroundWorkerEnabled": true,
+    "analysis": {
+      "runId": "e897e7dc-3c72-411a-b92e-db8446c645ce",
+      "runNumber": 1,
+      "status": "COMPLETED",
+      "trigger": "INITIAL",
+      "pipelineVersion": "rivell-review-pipeline-1",
+      "startedAt": "2026-09-26T13:49:14.072162Z",
+      "completedAt": "2026-09-26T13:49:14.207322Z",
+      "ageSeconds": 0,
+      "failureReason": null,
+      "environmentMatchesSnapshot": true,
+      "checks": [
+        {
+          "key": "PRESENCE:LIMITATION_OF_LIABILITY",
+          "status": "COMPLETED",
+          "signalCount": 0,
+          "degradedReason": null,
+          "startedAt": "2026-09-26T13:49:14.084747Z",
+          "completedAt": "2026-09-26T13:49:14.086777Z",
+          "durationMillis": 2
+        },
+        {
+          "key": "PRESENCE:CONFIDENTIALITY",
+          "status": "COMPLETED",
+          "signalCount": 0,
+          "degradedReason": null,
+          "startedAt": "2026-09-26T13:49:14.090263Z",
+          "completedAt": "2026-09-26T13:49:14.092002Z",
+          "durationMillis": 1
+        },
+        {
+          "key": "PRESENCE:TERM_TERMINATION",
+          "status": "COMPLETED",
+          "signalCount": 0,
+          "degradedReason": null,
+          "startedAt": "2026-09-26T13:49:14.094580Z",
+          "completedAt": "2026-09-26T13:49:14.096243Z",
+          "durationMillis": 1
+        },
+        {
+          "key": "PRESENCE:INDEMNIFICATION",
+          "status": "COMPLETED",
+          "signalCount": 0,
+          "degradedReason": null,
+          "startedAt": "2026-09-26T13:49:14.098813Z",
+          "completedAt": "2026-09-26T13:49:14.100459Z",
+          "durationMillis": 1
+        },
+        {
+          "key": "PRESENCE:GOVERNING_LAW",
+          "status": "COMPLETED",
+          "signalCount": 0,
+          "degradedReason": null,
+          "startedAt": "2026-09-26T13:49:14.102769Z",
+          "completedAt": "2026-09-26T13:49:14.104412Z",
+          "durationMillis": 1
+        },
+        {
+          "key": "CLAUSE:LIABILITY_CAP:LIMITATION_OF_LIABILITY:ab5de1ea-8643-453d-a79d-ca30cf1412b5",
+          "status": "COMPLETED",
+          "signalCount": 1,
+          "degradedReason": null,
+          "startedAt": "2026-09-26T13:49:14.106729Z",
+          "completedAt": "2026-09-26T13:49:14.141221Z",
+          "durationMillis": 34
+        },
+        {
+          "key": "CROSS:CONFIDENTIALITY_SURVIVAL:CONFIDENTIALITY:TERM_TERMINATION:e6e7b899-811e-4540-a179-e485a2bd3e9f",
+          "status": "COMPLETED",
+          "signalCount": 1,
+          "degradedReason": null,
+          "startedAt": "2026-09-26T13:49:14.170897Z",
+          "completedAt": "2026-09-26T13:49:14.188643Z",
+          "durationMillis": 17
+        },
+        {
+          "key": "CROSS:CARVE_OUT_CONSISTENCY:LIMITATION_OF_LIABILITY:INDEMNIFICATION:ab5de1ea-8643-453d-a79d-ca30cf1412b5",
+          "status": "FAILED",
+          "signalCount": 0,
+          "degradedReason": null,
+          "startedAt": "2026-09-26T13:49:14.193123Z",
+          "completedAt": "2026-09-26T13:49:14.203542Z",
+          "durationMillis": 10
+        }
+      ]
+    },
+    "findings": {
+      "total": 2,
+      "blocking": 0,
+      "reviewRequired": 2,
+      "informational": 0
+    },
+    "decisions": {
+      "accepted": 0,
+      "edited": 2,
+      "rejected": 0,
+      "escalated": 0
+    },
+    "finalization": {
+      "finalized": true,
+      "changeSetId": "b0278980-6b44-4c65-85dc-71798672dce7",
+      "finalizedAt": "2026-09-26T13:49:30.171232Z",
+      "approvedChanges": 2
+    },
+    "redline": {
+      "status": "COMPLETED",
+      "outcome": "REDLINE_GENERATED",
+      "failureCode": null,
+      "changeCount": 2,
+      "downloadAvailable": true,
+      "ageSeconds": 67425
+    },
+    "stalled": []
+  },
+  "status": 200,
+  "timestamp": "2026-09-27T08:39:08.045578Z"
+}

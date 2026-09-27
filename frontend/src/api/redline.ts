@@ -33,6 +33,7 @@ export const REDLINE_FAILURE_CODES = [
   'SOURCE_VERSION_MISMATCH',
   'SOURCE_INTEGRITY_MISMATCH',
   'UNSUPPORTED_SOURCE_FORMAT',
+  'SOURCE_EXPANSION_LIMIT_EXCEEDED',
   'UNSUPPORTED_CHANGESET_VERSION',
   'PROTECTED_DOCUMENT_UNSUPPORTED',
   'PREEXISTING_REVISIONS_UNSUPPORTED',
@@ -42,6 +43,7 @@ export const REDLINE_FAILURE_CODES = [
   'CHANGE_OVERLAP',
   'MISSING_APPROVED_LANGUAGE',
   'INSERT_PLACEMENT_UNRESOLVED',
+  'APPROVED_SEMANTICS_DRIFT',
   'DOCX_LOAD_FAILED',
   'DOCX_SERIALIZATION_FAILED',
   'ROUND_TRIP_FAILED',
@@ -171,7 +173,7 @@ const SAFE_ERROR_MESSAGES: Record<number, string> = {
   404: 'This review or its redline could not be found.',
   409: 'The redline is not available in its current state.',
   500: 'The redline engine is unavailable right now.',
-  503: 'The redline engine is unavailable right now.',
+  503: 'Document storage is unavailable, so the redline was not produced.',
 }
 
 export class RedlineApiError extends Error {

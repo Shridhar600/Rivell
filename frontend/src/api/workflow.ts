@@ -178,8 +178,8 @@ export function parseDecision(value: unknown, what = 'decision'): HumanDecision 
       what,
     ),
     comment: readOptionalNullableString(decision, 'comment', what),
-    actorId: readOptionalNullableString(decision, 'actorId', what) ?? '',
-    decidedAt: readOptionalNullableString(decision, 'decidedAt', what) ?? '',
+    actorId: readString(decision, 'actorId', what),
+    decidedAt: readString(decision, 'decidedAt', what),
     clientRequestId: readOptionalNullableString(decision, 'clientRequestId', what),
     supersedesDecisionId: readOptionalNullableString(decision, 'supersedesDecisionId', what),
   }
@@ -470,7 +470,9 @@ export function useSubmitDecision(
               }
             : previous,
       )
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.decisions(reviewId) })
+      // The decisions cache is written above from the server's own response, so it is deliberately
+      // not invalidated: doing both cost a second read on the hottest write path. Human review and
+      // the history are derived server-side and are still refetched.
       void queryClient.invalidateQueries({ queryKey: workflowKeys.humanReview(reviewId) })
       void queryClient.invalidateQueries({
         queryKey: ['reviews', 'decision-history', reviewId],

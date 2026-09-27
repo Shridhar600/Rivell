@@ -9,9 +9,9 @@ import {
 import { createApiClient } from './client'
 import {
   asRecord,
-  errorMessage,
   parseApiResult,
   readArray,
+  readNullableClosedString,
   readNumber,
   readOptionalBoolean,
   readOptionalNullableNumber,
@@ -31,6 +31,18 @@ export type EnrichmentStatus =
   | 'READY'
   | 'FAILED'
   | 'UNKNOWN'
+
+export const ENRICHMENT_FAILURE_REASONS = [
+  'NO_PROVIDER_CONFIGURED',
+  'PROVIDER_UNAVAILABLE',
+  'PROVIDER_TIMEOUT',
+  'PROVIDER_REJECTED',
+  'PROVIDER_PROTOCOL',
+  'UNSUPPORTED_SOURCE',
+  'INTERNAL',
+] as const
+
+export type EnrichmentFailureReason = (typeof ENRICHMENT_FAILURE_REASONS)[number] | 'UNKNOWN'
 
 const ENRICHMENT_STATUSES: readonly string[] = [
   'NOT_ENRICHED',
@@ -138,6 +150,7 @@ export type SemanticContract = {
   contractId: string
   versionNumber: number
   enrichmentStatus: EnrichmentStatus
+  failureReason: EnrichmentFailureReason | null
   reviewProfile: ReviewProfile
   metadata: SemanticMetadataFact[]
   parties: SemanticParty[]
@@ -306,6 +319,7 @@ export function parseSemanticContract(
     contractId: readString(response, 'contractId', what),
     versionNumber: readNumber(response, 'versionNumber', what),
     enrichmentStatus,
+    failureReason: readNullableClosedString(response, 'failureReason', ENRICHMENT_FAILURE_REASONS),
     reviewProfile: parseReviewProfile(response.reviewProfile, what),
     metadata: readArray(response, 'metadata', what, parseMetadataFact),
     parties: readArray(response, 'parties', what, parseParty),
@@ -319,11 +333,38 @@ export function parseSemanticContract(
   }
 }
 
-class SemanticApiError extends Error {
+// Each semantics endpoint has its own failures, so each carries its own messages. One shared table
+// produced statements that were false for the endpoint rendering them.
+const SEMANTICS_READ_MESSAGES: Record<number, string> = {
+  403: 'You do not have permission to read this semantic analysis.',
+  404: 'This contract version has no semantic analysis.',
+  500: 'The semantic analysis could not be loaded.',
+  503: 'The semantic analysis service is unavailable right now.',
+}
+
+const ENRICHMENT_MESSAGES: Record<number, string> = {
+  400: 'The review profile Rivell received was not valid. Check the contract type and try again.',
+  403: 'You do not have permission to run semantic analysis for this contract.',
+  404: 'This contract version could not be found.',
+  409: 'A semantic analysis is already running for this contract version.',
+  500: 'The semantic analysis could not be started.',
+  503: 'The semantic analysis service is unavailable right now.',
+}
+
+const CORRECTION_MESSAGES: Record<number, string> = {
+  400: 'That correction was not valid for this interpretation.',
+  403: 'You do not have permission to change this semantic analysis.',
+  404: 'That part of the contract could not be found.',
+  409: 'The semantic analysis changed and this correction no longer applies.',
+  500: 'The correction could not be saved.',
+  503: 'The semantic analysis service is unavailable right now.',
+}
+
+export class SemanticApiError extends Error {
   readonly status: number
 
-  constructor(message: string, status: number) {
-    super(message)
+  constructor(status: number, messages: Record<number, string> = SEMANTICS_READ_MESSAGES) {
+    super(messages[status] ?? 'The semantic analysis request could not be completed.')
     this.name = 'SemanticApiError'
     this.status = status
   }
@@ -343,18 +384,13 @@ export async function fetchSemantics(
   versionNumber: number,
 ): Promise<SemanticContract | null> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET(
+  const { data, response } = await client.GET(
     '/api/contracts/{id}/versions/{versionNumber}/semantics',
     { params: { path: { id: contractId, versionNumber } } },
   )
 
   if (response.status === 404) return null
-  if (!data) {
-    throw new SemanticApiError(
-      errorMessage(error, 'Semantic analysis unavailable'),
-      response.status,
-    )
-  }
+  if (!data) throw new SemanticApiError(response.status)
   return parseApiResult(data, parseSemanticContract, 'semantics')
 }
 
@@ -407,15 +443,12 @@ export function useEnrichContract(
 ): UseMutationResult<SemanticContract, Error, ReviewProfileInput> {
   return useSemanticsMutation(contractId, versionNumber, async (profile) => {
     const client = createApiClient()
-    const { data, error, response } = await client.POST(
+    const { data, response } = await client.POST(
       '/api/contracts/{id}/versions/{versionNumber}/enrichment',
       { params: { path: { id: contractId, versionNumber } }, body: profile },
     )
     if (!data) {
-      throw new SemanticApiError(
-        errorMessage(error, 'Semantic analysis failed'),
-        response.status,
-      )
+      throw new SemanticApiError(response.status, ENRICHMENT_MESSAGES)
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
@@ -431,7 +464,7 @@ export function useCorrectPartyRole(
 > {
   return useSemanticsMutation(contractId, versionNumber, async ({ partyId, roles }) => {
     const client = createApiClient()
-    const { data, error, response } = await client.POST(
+    const { data, response } = await client.POST(
       '/api/contracts/{id}/versions/{versionNumber}/semantics/parties/{partyId}/role',
       {
         params: { path: { id: contractId, versionNumber, partyId } },
@@ -439,10 +472,7 @@ export function useCorrectPartyRole(
       },
     )
     if (!data) {
-      throw new SemanticApiError(
-        errorMessage(error, 'Role correction failed'),
-        response.status,
-      )
+      throw new SemanticApiError(response.status, CORRECTION_MESSAGES)
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
@@ -458,7 +488,7 @@ export function useCorrectClauseConcept(
 > {
   return useSemanticsMutation(contractId, versionNumber, async ({ clauseId, primary }) => {
     const client = createApiClient()
-    const { data, error, response } = await client.POST(
+    const { data, response } = await client.POST(
       '/api/contracts/{id}/versions/{versionNumber}/semantics/clauses/{clauseId}/concepts',
       {
         params: { path: { id: contractId, versionNumber, clauseId } },
@@ -466,10 +496,7 @@ export function useCorrectClauseConcept(
       },
     )
     if (!data) {
-      throw new SemanticApiError(
-        errorMessage(error, 'Classification correction failed'),
-        response.status,
-      )
+      throw new SemanticApiError(response.status, CORRECTION_MESSAGES)
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })
@@ -485,7 +512,7 @@ export function useCorrectClauseFacts(
 > {
   return useSemanticsMutation(contractId, versionNumber, async ({ clauseId, values }) => {
     const client = createApiClient()
-    const { data, error, response } = await client.POST(
+    const { data, response } = await client.POST(
       '/api/contracts/{id}/versions/{versionNumber}/semantics/clauses/{clauseId}/facts',
       {
         params: { path: { id: contractId, versionNumber, clauseId } },
@@ -493,10 +520,7 @@ export function useCorrectClauseFacts(
       },
     )
     if (!data) {
-      throw new SemanticApiError(
-        errorMessage(error, 'Fact correction failed'),
-        response.status,
-      )
+      throw new SemanticApiError(response.status, CORRECTION_MESSAGES)
     }
     return parseApiResult(data, parseSemanticContract, 'semantics')
   })

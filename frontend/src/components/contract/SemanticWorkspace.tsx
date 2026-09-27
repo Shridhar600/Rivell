@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import type { RegionLabelNode } from '../../lib/contractSemantics'
-import { buildRegionLabelMap } from '../../lib/contractSemantics'
+import { buildRegionLabelMap, enrichmentFailureNote } from '../../lib/contractSemantics'
 import { useContractStructureQuery } from '../../api/contracts'
 import { useSemanticsQuery } from '../../api/semantics'
 import { ErrorState } from '../ErrorState'
@@ -154,6 +154,7 @@ export function SemanticWorkspace({
   }
 
   if (semantics.enrichmentStatus === 'FAILED') {
+    const failure = enrichmentFailureNote(semantics.failureReason)
     return (
       <div className="semantic-workspace" ref={containerRef}>
         <section
@@ -166,12 +167,14 @@ export function SemanticWorkspace({
             This contract could not be analysed. The structural document view is still
             available.
           </p>
+          <p>{failure.summary}</p>
         </section>
         <EnrichmentPanel
           contractId={contractId}
           versionNumber={versionNumber}
           storedProfile={semantics.reviewProfile}
           mode="retry"
+          retryable={failure.retryable}
         />
       </div>
     )

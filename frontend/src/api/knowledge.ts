@@ -8,7 +8,6 @@ import {
 import { apiBaseUrl, createApiClient } from './client'
 import {
   asRecord,
-  errorMessage,
   parseApiResult,
   readArray,
   readArrayValue,
@@ -25,6 +24,8 @@ import {
   readStringMap,
 } from './envelope'
 import type { components, paths } from './schema'
+import { UploadApiError } from './uploadError'
+import { boundedErrorMessage } from './errorMessage'
 
 type SchemaArtifactSummary = components['schemas']['KnowledgeArtifactSummaryResponse']
 type SchemaArtifactType = NonNullable<SchemaArtifactSummary['artifactType']>
@@ -513,6 +514,41 @@ export function parsePublication(value: unknown, what = 'publication'): Publicat
   }
 }
 
+const PUBLISH_MESSAGES: Partial<Record<number, string>> = {
+  404: 'That knowledge source could not be found.',
+  409: 'Only candidates that have been approved can be published. Review the candidate states, then try again.',
+  500: 'The knowledge version could not be published.',
+  503: 'The knowledge service is unavailable right now.',
+}
+
+function knowledgeRetry(failureCount: number, error: Error): boolean {
+  // A denial or a missing resource cannot become true on a second identical request, and these
+  // queries otherwise inherit the app-wide single retry.
+  return failureCount < 1 && !isKnowledgeForbiddenError(error) && !(error instanceof KnowledgeApiError && error.status === 404)
+}
+
+export class KnowledgeApiError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'KnowledgeApiError'
+    this.status = status
+  }
+}
+
+export function isKnowledgeForbiddenError(error: unknown): boolean {
+  return error instanceof KnowledgeApiError && error.status === 403
+}
+
+const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
+  404: 'That knowledge source or candidate could not be found.',
+  409: 'That knowledge request does not apply in the current state.',
+  413: 'The submitted content is larger than this Rivell deployment accepts.',
+  500: 'The knowledge request could not be completed.',
+  503: 'The knowledge service is unavailable right now.',
+}
+
 export const knowledgeKeys = {
   artifacts: ['knowledge', 'artifacts'] as const,
   artifact: (id: string) => ['knowledge', 'artifacts', id] as const,
@@ -530,10 +566,10 @@ export function isProcessingArtifact(status: IngestStatus): boolean {
 
 export async function fetchArtifacts(): Promise<ArtifactSummary[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts')
+  const { data, response } = await client.GET('/api/knowledge/artifacts')
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Knowledge sources unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge sources unavailable'))
   }
   return parseApiResult(
     data,
@@ -544,12 +580,12 @@ export async function fetchArtifacts(): Promise<ArtifactSummary[]> {
 
 export async function fetchArtifact(artifactId: string): Promise<ArtifactDetail> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts/{id}', {
+  const { data, response } = await client.GET('/api/knowledge/artifacts/{id}', {
     params: { path: { id: artifactId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Knowledge source unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge source unavailable'))
   }
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
 }
@@ -558,12 +594,12 @@ export async function fetchKnowledgeStructure(
   artifactId: string,
 ): Promise<KnowledgeNode[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts/{id}/structure', {
+  const { data, response } = await client.GET('/api/knowledge/artifacts/{id}/structure', {
     params: { path: { id: artifactId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Knowledge structure unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge structure unavailable'))
   }
   return parseApiResult(
     data,
@@ -576,12 +612,12 @@ export async function fetchExtractionUnits(
   artifactId: string,
 ): Promise<ExtractionUnit[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts/{id}/units', {
+  const { data, response } = await client.GET('/api/knowledge/artifacts/{id}/units', {
     params: { path: { id: artifactId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Extraction units unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Extraction units unavailable'))
   }
   return parseApiResult(
     data,
@@ -592,12 +628,12 @@ export async function fetchExtractionUnits(
 
 export async function fetchCandidates(artifactId: string): Promise<Candidate[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts/{id}/candidates', {
+  const { data, response } = await client.GET('/api/knowledge/artifacts/{id}/candidates', {
     params: { path: { id: artifactId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Knowledge candidates unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge candidates unavailable'))
   }
   return parseApiResult(
     data,
@@ -608,22 +644,22 @@ export async function fetchCandidates(artifactId: string): Promise<Candidate[]> 
 
 export async function fetchCandidate(candidateId: string): Promise<Candidate> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/candidates/{id}', {
+  const { data, response } = await client.GET('/api/knowledge/candidates/{id}', {
     params: { path: { id: candidateId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Candidate unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Candidate unavailable'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
 
 export async function fetchPublications(): Promise<Publication[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/publications')
+  const { data, response } = await client.GET('/api/knowledge/publications')
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Publications unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publications unavailable'))
   }
   return parseApiResult(
     data,
@@ -634,12 +670,12 @@ export async function fetchPublications(): Promise<Publication[]> {
 
 export async function fetchPublication(publicationId: string): Promise<Publication> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/publications/{id}', {
+  const { data, response } = await client.GET('/api/knowledge/publications/{id}', {
     params: { path: { id: publicationId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Publication unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publication unavailable'))
   }
   return parseApiResult(data, parsePublication, 'publication')
 }
@@ -676,27 +712,25 @@ export async function uploadKnowledge(
   const formData = new FormData()
   formData.append('file', file)
 
-  const { data, error } = await client.POST('/api/knowledge/artifacts', {
+  const { data, response } = await client.POST('/api/knowledge/artifacts', {
     params: { query: manifestQuery(manifest) },
     body: { file: file.name },
     bodySerializer: () => formData,
   })
 
-  if (!data) {
-    throw new Error(errorMessage(error, 'Upload failed'))
-  }
+  if (!data) throw new UploadApiError(response.status)
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
 }
 
 async function approveCandidate(candidateId: string, note?: string): Promise<Candidate> {
   const client = createApiClient()
-  const { data, error } = await client.POST('/api/knowledge/candidates/{id}/approve', {
+  const { data, response } = await client.POST('/api/knowledge/candidates/{id}/approve', {
     params: { path: { id: candidateId } },
     body: note && note.trim().length > 0 ? { note } : {},
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Approval failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Approval failed'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -740,26 +774,26 @@ async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
   if (input.semanticFields !== undefined) body.semanticFields = input.semanticFields
   if (input.note !== undefined && input.note.trim().length > 0) body.note = input.note
 
-  const { data, error } = await client.POST('/api/knowledge/candidates/{id}/edit', {
+  const { data, response } = await client.POST('/api/knowledge/candidates/{id}/edit', {
     params: { path: { id: input.candidateId } },
     body,
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Edit failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Edit failed'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
 
 async function rejectCandidate(candidateId: string, note?: string): Promise<Candidate> {
   const client = createApiClient()
-  const { data, error } = await client.POST('/api/knowledge/candidates/{id}/reject', {
+  const { data, response } = await client.POST('/api/knowledge/candidates/{id}/reject', {
     params: { path: { id: candidateId } },
     body: note && note.trim().length > 0 ? { note } : {},
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Rejection failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Rejection failed'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -784,13 +818,13 @@ async function bulkApproveCandidates(
   candidateIds: string[],
 ): Promise<BulkApprovalResult> {
   const client = createApiClient()
-  const { data, error } = await client.POST(
+  const { data, response } = await client.POST(
     '/api/knowledge/candidates/bulk-approve',
     { body: { candidateIds } },
   )
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Bulk approval failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Bulk approval failed'))
   }
   return parseApiResult(data, parseBulkApprovalResult, 'bulk approval')
 }
@@ -811,16 +845,17 @@ async function publishKnowledge(
   }
   if (note && note.trim().length > 0) body.note = note
 
-  const { data, error } = await client.POST('/api/knowledge/publications', { body })
+  const { data, response } = await client.POST('/api/knowledge/publications', { body })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Publication failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, PUBLISH_MESSAGES, 'The knowledge version could not be published.'))
   }
   return parseApiResult(data, parsePublication, 'publication')
 }
 
 export function useArtifactsQuery(): UseQueryResult<ArtifactSummary[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.artifacts,
     queryFn: fetchArtifacts,
     refetchInterval: (query) =>
@@ -834,6 +869,7 @@ export function useArtifactQuery(
   artifactId: string,
 ): UseQueryResult<ArtifactDetail, Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.artifact(artifactId),
     queryFn: () => fetchArtifact(artifactId),
     refetchInterval: (query) =>
@@ -845,6 +881,7 @@ export function useKnowledgeStructureQuery(
   artifactId: string,
 ): UseQueryResult<KnowledgeNode[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.structure(artifactId),
     queryFn: () => fetchKnowledgeStructure(artifactId),
   })
@@ -854,6 +891,7 @@ export function useExtractionUnitsQuery(
   artifactId: string,
 ): UseQueryResult<ExtractionUnit[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.units(artifactId),
     queryFn: () => fetchExtractionUnits(artifactId),
   })
@@ -863,6 +901,7 @@ export function useCandidatesQuery(
   artifactId: string,
 ): UseQueryResult<Candidate[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.candidates(artifactId),
     queryFn: () => fetchCandidates(artifactId),
   })
@@ -872,6 +911,7 @@ export function useCandidateQuery(
   candidateId: string | undefined,
 ): UseQueryResult<Candidate, Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.candidate(candidateId ?? ''),
     queryFn: () => {
       if (!candidateId) throw new Error('Candidate id is required')
@@ -885,6 +925,7 @@ export function usePublicationsQuery(
   enabled = true,
 ): UseQueryResult<Publication[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.publications,
     queryFn: fetchPublications,
     enabled,
@@ -895,6 +936,7 @@ export function usePublicationQuery(
   publicationId: string,
 ): UseQueryResult<Publication, Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.publication(publicationId),
     queryFn: () => fetchPublication(publicationId),
   })
@@ -1025,5 +1067,5 @@ export function usePublishKnowledge(): UseMutationResult<
 }
 
 export function originalArtifactUrl(artifactId: string): string {
-  return `${apiBaseUrl}/api/knowledge/artifacts/${artifactId}/original`
+  return `${apiBaseUrl}/api/knowledge/artifacts/${encodeURIComponent(artifactId)}/original`
 }

@@ -54,8 +54,13 @@ export function humanStatusLabel(status: HumanReviewStatus): string {
   }
 }
 
+// `blocker.message` is rendered verbatim by HumanReviewProgress, and is exempt from the rule the
+// API layer follows for the same reason as `AnalysisWarning.message` and `ReviewFailure.message`:
+// the backend builds every blocker message from a fixed literal plus an integer count, so it carries
+// no internals. Keep this in step with the note in `lib/reviews.ts` if that ever changes.
 const BLOCKER_LABELS: Record<string, string> = {
   ANALYSIS_NOT_COMPLETE: 'The automated analysis is not complete.',
+  ANALYSIS_DEGRADED: 'The analysis produced no trustworthy result.',
   UNRESOLVED_BLOCKING_FINDINGS: 'Blocking findings still need a decision.',
   UNRESOLVED_REVIEW_REQUIRED_FINDINGS:
     'Findings that require review still need a decision.',

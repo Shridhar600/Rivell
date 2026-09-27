@@ -1,4 +1,5 @@
 import type { components } from '../api/schema'
+import type { EnrichmentFailureReason } from '../api/semantics'
 import {
   CONCEPT_LABELS,
   VERIFICATION_LABELS,
@@ -489,4 +490,62 @@ export function profileKey(profile: ReviewProfile | null): string {
     profile.paperSource,
     profile.jurisdiction,
   ].join('|')
+}
+
+export type EnrichmentFailureNote = { summary: string; retryable: boolean }
+
+const ENRICHMENT_FAILURE_NOTES: Record<string, EnrichmentFailureNote> = {
+  NO_PROVIDER_CONFIGURED: {
+    summary: 'Rivell is not set up to analyse contract semantics in this environment right now.',
+    retryable: false,
+  },
+  PROVIDER_UNAVAILABLE: {
+    summary: 'The semantic analysis service did not respond, so the analysis did not complete.',
+    retryable: true,
+  },
+  PROVIDER_TIMEOUT: {
+    summary: 'The semantic analysis took too long and did not complete.',
+    retryable: true,
+  },
+  PROVIDER_REJECTED: {
+    // The backend's cause is auth, quota, or a request it considered invalid, so this must not
+    // blame the document. Retrying is left available because a quota or credential problem can
+    // clear; the copy does not tell the user which it was.
+    summary: 'Rivell could not obtain a semantic analysis for this contract version.',
+    retryable: true,
+  },
+  PROVIDER_PROTOCOL: {
+    summary:
+      'The semantic analysis service returned a result Rivell could not use, so the analysis did not complete.',
+    retryable: true,
+  },
+  UNSUPPORTED_SOURCE: {
+    summary: 'This document cannot be analysed for semantics as it is supplied.',
+    retryable: false,
+  },
+  INTERNAL: {
+    summary: 'Rivell could not complete the semantic analysis of this contract version.',
+    retryable: false,
+  },
+}
+
+export function enrichmentFailureNote(
+  reason: EnrichmentFailureReason | null,
+): EnrichmentFailureNote {
+  if (reason === null) {
+    return {
+      summary:
+        'Rivell could not complete the semantic analysis of this contract version and did not record a reason.',
+      retryable: true,
+    }
+  }
+  return (
+    ENRICHMENT_FAILURE_NOTES[reason] ?? {
+      summary:
+        'Rivell could not complete the semantic analysis of this contract version and recorded a reason Rivell does not recognise.',
+      // Not recognising a new code is not evidence that re-running would fail, so the retry is left
+      // available rather than blocked on a guess.
+      retryable: true,
+    }
+  )
 }

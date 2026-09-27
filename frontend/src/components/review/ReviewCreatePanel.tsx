@@ -1,10 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import {
-  isReviewBadRequestError,
-  isReviewConflictError,
-  isReviewForbiddenError,
-  isReviewNotFoundError,
+  reviewErrorStatus,
   useCreateReview,
   useReviewPacksQuery,
 } from '../../api/reviews'
@@ -15,40 +12,9 @@ import {
   PAPER_SOURCE_LABELS,
   roleLabel,
 } from '../../lib/contractSemantics'
+import { newRequestId } from '../../lib/requestId'
+import { classifyCreateOutcome, type CreateOutcome } from '../../lib/reviewCreation'
 import { LoadingState } from '../LoadingState'
-
-type CreateErrorCopy = { message: string; uncertain: boolean }
-
-function describeCreateError(error: Error): CreateErrorCopy {
-  if (isReviewConflictError(error)) {
-    return {
-      message:
-        'This contract version is not ready for an automated review yet. Check the semantic analysis status, then start the review again.',
-      uncertain: false,
-    }
-  }
-  if (isReviewBadRequestError(error)) {
-    return {
-      message:
-        'The review could not be started with the selected contract pack. Choose a different pack, or run the review without a pack.',
-      uncertain: false,
-    }
-  }
-  if (isReviewNotFoundError(error)) {
-    return {
-      message: 'This contract version is not available for review.',
-      uncertain: false,
-    }
-  }
-  if (isReviewForbiddenError(error)) {
-    return { message: 'This review could not be started.', uncertain: false }
-  }
-  return {
-    message:
-      'We could not confirm whether the review started. Check the review history before starting another review.',
-    uncertain: true,
-  }
-}
 
 type RecoveryOutcome = { ok: boolean; ids: string[] }
 
@@ -72,14 +38,24 @@ export function ReviewCreatePanel({
   const packsQuery = useReviewPacksQuery()
   const [packKey, setPackKey] = useState('')
   const selectedPack = (packsQuery.data ?? []).find((pack) => pack.key === packKey) ?? null
-  const [errorCopy, setErrorCopy] = useState<CreateErrorCopy | null>(null)
+  const [outcome, setOutcome] = useState<CreateOutcome | null>(null)
   const [blocked, setBlocked] = useState(false)
   const [recoveryState, setRecoveryState] = useState<
     'none' | 'needs-check' | 'refreshed' | 'found-review' | 'refresh-failed'
   >('none')
   const [foundReviewId, setFoundReviewId] = useState<string | null>(null)
+  const [rechecking, setRechecking] = useState(false)
   const submitting = useRef(false)
   const knownReviewIds = useRef<string[]>([])
+  const requestRef = useRef<{ signature: string; id: string | null } | null>(null)
+  const requestSignature = `${contractId}:${versionNumber}:${packKey}`
+
+  function requestId(): string | undefined {
+    if (requestRef.current?.signature !== requestSignature) {
+      requestRef.current = { signature: requestSignature, id: newRequestId() }
+    }
+    return requestRef.current.id ?? undefined
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -87,19 +63,19 @@ export function ReviewCreatePanel({
     if (blocked && recoveryState !== 'refreshed') return
     submitting.current = true
     knownReviewIds.current = reviewIds
-    setErrorCopy(null)
+    setOutcome(null)
     setRecoveryState('none')
     setFoundReviewId(null)
     create.mutate(
-      { contractPackKey: packKey || null },
+      { contractPackKey: packKey || null, clientRequestId: requestId() },
       {
         onSuccess: (summary) =>
           navigate(`/reviews/${contractId}/analysis/${summary.id}`),
         onError: (error) => {
-          const copy = describeCreateError(error)
-          setErrorCopy(copy)
-          setBlocked(copy.uncertain)
-          setRecoveryState(copy.uncertain ? 'needs-check' : 'none')
+          const failure = classifyCreateOutcome(reviewErrorStatus(error))
+          setOutcome(failure)
+          setBlocked(failure.uncertain)
+          setRecoveryState(failure.uncertain ? 'needs-check' : 'none')
         },
         onSettled: () => {
           submitting.current = false
@@ -109,7 +85,10 @@ export function ReviewCreatePanel({
   }
 
   async function handleRecoveryCheck() {
+    if (rechecking) return
+    setRechecking(true)
     const outcome = await onCheckReviews()
+    setRechecking(false)
     if (!outcome.ok) {
       setRecoveryState('refresh-failed')
       return
@@ -173,7 +152,7 @@ export function ReviewCreatePanel({
             id="review-pack"
             value={packKey}
             onChange={(event) => setPackKey(event.target.value)}
-            disabled={create.isPending}
+            disabled={create.isPending || (blocked && recoveryState !== 'refreshed')}
             aria-describedby="review-pack-hint"
           >
             <option value="">No contract pack</option>
@@ -184,7 +163,7 @@ export function ReviewCreatePanel({
             ))}
           </select>
           {packsQuery.isError ? (
-            <p className="state state--warning" role="status">
+            <p className="state state--warning" role="alert">
               The review pack catalog could not be loaded. You can still run a review without a
               pack.{' '}
               <button
@@ -207,16 +186,16 @@ export function ReviewCreatePanel({
         {create.isPending ? (
           <LoadingState label="Starting review…" />
         ) : blocked && recoveryState === 'needs-check' ? (
-          <p className="state state--warning">
+          <p className="state state--warning" role="status">
             Re-check the review history before starting another review.
           </p>
         ) : blocked && recoveryState === 'refresh-failed' ? (
-          <p className="state state--warning">
+          <p className="state state--warning" role="status">
             The review history could not be refreshed. Do not start another review until you
             can confirm whether the first one was created.
           </p>
         ) : blocked && recoveryState === 'found-review' && foundReviewId ? (
-          <p className="state state--warning">
+          <p className="state state--warning" role="status">
             A review was created while the outcome was unknown.{' '}
             <Link
               className="link-button"
@@ -239,17 +218,24 @@ export function ReviewCreatePanel({
         )}
       </form>
 
-      {errorCopy ? (
+      {outcome ? (
         <div role="alert" className="state state--error">
-          <p>{errorCopy.message}</p>
-          {errorCopy.uncertain ? (
-            <button type="button" className="button" onClick={() => void handleRecoveryCheck()}>
-              Re-check reviews
-            </button>
-          ) : isReviewConflictError(create.error) ? (
+          <p>{outcome.message}</p>
+          {outcome.kind === 'CONFLICT' ? (
             <Link className="link-button" to={`/reviews/${contractId}?view=semantics`}>
-              Open the contract's semantic analysis
+              Open the contract&apos;s semantic analysis
             </Link>
+          ) : null}
+          {outcome.uncertain ? (
+            <button
+              type="button"
+              className="button"
+              disabled={rechecking}
+              aria-busy={rechecking}
+              onClick={() => void handleRecoveryCheck()}
+            >
+              {rechecking ? 'Re-checking reviews…' : 'Re-check reviews'}
+            </button>
           ) : null}
         </div>
       ) : null}

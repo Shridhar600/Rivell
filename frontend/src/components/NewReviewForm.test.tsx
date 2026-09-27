@@ -128,7 +128,7 @@ describe('NewReviewForm', () => {
     expect(screen.getByLabelText(/contract file/i)).toBeInTheDocument()
   })
 
-  it('surfaces the backend upload error detail', async () => {
+  it('reports a bounded message and never the backend error body', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
@@ -137,7 +137,7 @@ describe('NewReviewForm', () => {
             {
               code: 'INVALID_UPLOAD',
               title: 'Invalid upload',
-              detail: 'Only .docx files are supported',
+              detail: 'Rejected at com.rivell.workbench.contracts.ContractService.require:88',
             },
             400,
           ),
@@ -156,7 +156,34 @@ describe('NewReviewForm', () => {
     )
 
     const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
-    expect(alert).toHaveTextContent(/only .docx files are supported/i)
+    expect(alert).toHaveTextContent(/upload was not accepted/i)
+    expect(alert).not.toHaveTextContent(/com\.rivell|require:88/)
+  })
+
+  it('states the deployment upload ceiling without inventing a byte number', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
+        Promise.resolve(
+          jsonResponse(
+            { code: '413', title: 'Payload too large', detail: 'The uploaded file exceeds 10485760 bytes' },
+            413,
+          ),
+        ),
+      ),
+    )
+
+    renderForm()
+
+    const file = new File(['big'], 'big.docx', {
+      type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    })
+    await userEvent.upload(screen.getByLabelText(/contract file/i), file)
+    await userEvent.click(screen.getByRole('button', { name: /start review/i }))
+
+    const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
+    expect(alert).toHaveTextContent(/larger than this Rivell deployment accepts/i)
+    expect(alert).not.toHaveTextContent(/10485760|10\s*MB/i)
   })
 
   it('navigates to the workspace when a failed upload is retried successfully', async () => {
@@ -175,7 +202,7 @@ describe('NewReviewForm', () => {
                 {
                   code: 'INVALID_UPLOAD',
                   title: 'Invalid upload',
-                  detail: 'Transient upload failure',
+                  detail: 'Transient failure at com.rivell.workbench.platform.storage.LocalDocumentStorage:212',
                 },
                 400,
               ),
@@ -231,7 +258,8 @@ describe('NewReviewForm', () => {
     )
 
     const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
-    expect(alert).toHaveTextContent(/transient upload failure/i)
+    expect(alert).toHaveTextContent(/upload was not accepted/i)
+    expect(alert).not.toHaveTextContent(/com\.rivell|LocalDocumentStorage/)
 
     await userEvent.click(
       within(reviewForm()).getByRole('button', { name: /try again/i }),
