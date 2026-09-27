@@ -215,6 +215,43 @@ describe('workflow state availability and conflict truth', () => {
     expect(changeSetCalls).toHaveLength(1)
   })
 
+  it('fails the decision read closed on a malformed row instead of showing a blank list', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        decisions: {
+          items: [
+            {
+              id: 'd-1',
+              findingId: 'f-1',
+              revision: 1,
+              action: 'ACCEPT',
+              approvedAction: null,
+              approvedLanguage: null,
+              languageSource: null,
+              approvedDraftingEvidenceId: null,
+              comment: null,
+              actorId: null,
+              decidedAt: '2026-09-26T10:00:00Z',
+              clientRequestId: null,
+              supersedesDecisionId: null,
+            },
+          ],
+          truncated: false,
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    expect(
+      await screen.findByText(/Decisions could not be loaded/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
+    )
+    expect(screen.getByText(/Decision controls are unavailable/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
+  })
+
   it('invents nothing when the human-review read fails and no change set exists', async () => {
     const api = stubContractApi(
       baseOptions({ humanReviewStatus: 500, changeSetStatus: 404 }),

@@ -178,8 +178,8 @@ export function parseDecision(value: unknown, what = 'decision'): HumanDecision 
       what,
     ),
     comment: readOptionalNullableString(decision, 'comment', what),
-    actorId: readOptionalNullableString(decision, 'actorId', what) ?? '',
-    decidedAt: readOptionalNullableString(decision, 'decidedAt', what) ?? '',
+    actorId: readString(decision, 'actorId', what),
+    decidedAt: readString(decision, 'decidedAt', what),
     clientRequestId: readOptionalNullableString(decision, 'clientRequestId', what),
     supersedesDecisionId: readOptionalNullableString(decision, 'supersedesDecisionId', what),
   }

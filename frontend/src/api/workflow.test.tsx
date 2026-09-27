@@ -10,6 +10,7 @@ import {
   isWorkflowForbiddenError,
   isWorkflowNotFoundError,
   parseApprovedChangeSet,
+  parseDecision,
   parseDecisionList,
   parseHumanReview,
   submitDecision,
@@ -172,6 +173,30 @@ describe('workflow parsers', () => {
       },
     ])
     expect(review.changeSetId).toBeNull()
+  })
+
+  it('fails closed on a decision that omits its actor or timestamp', () => {
+    const complete = {
+      id: 'd-1',
+      findingId: 'f-1',
+      revision: 1,
+      action: 'ACCEPT',
+      approvedAction: null,
+      approvedLanguage: null,
+      languageSource: null,
+      approvedDraftingEvidenceId: null,
+      comment: null,
+      actorId: 'u-1',
+      decidedAt: '2026-09-26T10:00:00Z',
+      clientRequestId: null,
+      supersedesDecisionId: null,
+    }
+
+    expect(parseDecision(complete).actorId).toBe('u-1')
+    expect(parseDecision(complete).decidedAt).toBe('2026-09-26T10:00:00Z')
+    expect(() => parseDecision({ ...complete, actorId: null })).toThrow(/malformed/i)
+    expect(() => parseDecision({ ...complete, actorId: 7 })).toThrow(/malformed/i)
+    expect(() => parseDecision({ ...complete, decidedAt: undefined })).toThrow(/malformed/i)
   })
 
   it('keeps unknown human status and blocker codes readable', () => {
