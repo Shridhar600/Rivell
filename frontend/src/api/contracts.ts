@@ -18,6 +18,7 @@ import {
   readStringArray,
 } from './envelope'
 import type { components } from './schema'
+import { UploadApiError } from './uploadError'
 
 export type IngestResponse = components['schemas']['IngestResponse']
 export type ContractSummary = components['schemas']['ContractSummaryResponse']
@@ -141,14 +142,12 @@ export function createUploadFormData(file: File): FormData {
 
 export async function uploadContract(file: File): Promise<IngestResponse> {
   const client = createApiClient()
-  const { data, error } = await client.POST('/api/contracts', {
+  const { data, response } = await client.POST('/api/contracts', {
     body: { file: file.name },
     bodySerializer: () => createUploadFormData(file),
   })
 
-  if (!data) {
-    throw new Error(errorMessage(error, 'Upload failed'))
-  }
+  if (!data) throw new UploadApiError(response.status)
   return parseApiResult(data, parseIngestResponse, 'upload')
 }
 

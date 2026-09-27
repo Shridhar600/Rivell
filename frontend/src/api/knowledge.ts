@@ -25,6 +25,7 @@ import {
   readStringMap,
 } from './envelope'
 import type { components, paths } from './schema'
+import { UploadApiError } from './uploadError'
 
 type SchemaArtifactSummary = components['schemas']['KnowledgeArtifactSummaryResponse']
 type SchemaArtifactType = NonNullable<SchemaArtifactSummary['artifactType']>
@@ -676,15 +677,13 @@ export async function uploadKnowledge(
   const formData = new FormData()
   formData.append('file', file)
 
-  const { data, error } = await client.POST('/api/knowledge/artifacts', {
+  const { data, response } = await client.POST('/api/knowledge/artifacts', {
     params: { query: manifestQuery(manifest) },
     body: { file: file.name },
     bodySerializer: () => formData,
   })
 
-  if (!data) {
-    throw new Error(errorMessage(error, 'Upload failed'))
-  }
+  if (!data) throw new UploadApiError(response.status)
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
 }
 

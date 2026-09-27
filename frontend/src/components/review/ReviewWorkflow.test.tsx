@@ -380,6 +380,40 @@ describe('finalization', () => {
     expect(screen.getByRole('button', { name: 'Finalize review' })).toHaveFocus()
   })
 
+  it('states a degraded analysis honestly and offers no recovery control', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        reviewSummary: { ...fixtureCompletedReviewSummary, findings: 0, degradedChecks: 4 },
+        findings: { items: [], truncated: false },
+        humanReview: fixtureHumanReview({
+          status: 'NOT_STARTED',
+          readyToFinalize: false,
+          blockers: [
+            {
+              code: 'ANALYSIS_DEGRADED',
+              message:
+                'No planned check completed a trustworthy analysis, so this review has no machine findings to decide on and cannot be finalized. Create a new review against the current semantics to continue.',
+              findingIds: [],
+            },
+          ],
+        }),
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    const progress = await screen.findByRole('region', { name: 'Human review' })
+    expect(progress).toHaveTextContent('The analysis produced no trustworthy result')
+    expect(progress).toHaveTextContent('Create a new review against the current semantics')
+    expect(
+      screen.queryByText('Every planned check completed without findings.'),
+    ).not.toBeInTheDocument()
+
+    for (const name of [/retry/i, /recompute/i, /run again/i, /re-run/i, /re-analy/i]) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+    }
+  })
+
   it('refreshes blockers and does not retry when finalization is rejected', async () => {
     const user = userEvent.setup()
     let stub: ReturnType<typeof stubContractApi>

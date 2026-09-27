@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { UploadApiError } from './uploadError'
 import {
   fetchArtifacts,
   fetchCandidates,
@@ -364,22 +365,27 @@ describe('uploadKnowledge', () => {
     expect(requests[0].headers.get('content-type')).toContain('multipart/form-data')
   })
 
-  it('surfaces backend upload errors', async () => {
+  it('reports a bounded upload error that names no server text', async () => {
     stubFetch(() =>
       jsonResponse(
         {
           code: '400',
           title: 'Invalid request',
-          detail: 'Only .docx, .xlsx files are supported',
+          detail: 'Rejected at com.rivell.workbench.knowledge.KnowledgeService.require:71',
         },
         400,
       ),
     )
 
     const file = new File(['bad'], 'notes.txt')
-    await expect(
-      uploadKnowledge(file, { artifactType: 'PLAYBOOK', declaredContractTypes: [] }),
-    ).rejects.toThrow(/only .docx, \.xlsx files are supported/i)
+    const error = await uploadKnowledge(file, {
+      artifactType: 'PLAYBOOK',
+      declaredContractTypes: [],
+    }).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(UploadApiError)
+    expect((error as Error).message).toMatch(/upload was not accepted/i)
+    expect((error as Error).message).not.toMatch(/com\.rivell|require:71|only \.docx/)
   })
 
   it('requires the runtime ApiResult envelope on upload', async () => {
