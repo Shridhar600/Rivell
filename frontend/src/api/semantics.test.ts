@@ -268,9 +268,9 @@ describe('parseSemanticContract', () => {
     const withReason = parseSemanticContract({
       ...readyContract,
       enrichmentStatus: 'FAILED',
-      failureReason: 'PROVIDER_TIMEOUT',
+      failureReason: 'SERVICE_UNAVAILABLE',
     })
-    expect(withReason.failureReason).toBe('PROVIDER_TIMEOUT')
+    expect(withReason.failureReason).toBe('SERVICE_UNAVAILABLE')
 
     const withoutReason = parseSemanticContract({ ...readyContract, enrichmentStatus: 'FAILED' })
     expect(withoutReason.failureReason).toBeNull()

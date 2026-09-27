@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -109,11 +110,11 @@ public class ReviewDiagnosticsService {
             stalled.add("No analysis run has been created for this review.");
         }
 
-        var findings = run.flatMap(r -> analysisRepository.findLatestCompletedRun(
-                organizationId, reviewId).map(completed ->
-                        findingRepository.findFindings(organizationId, completed.id())))
-                .orElse(List.of());
-        var decisions = decisionsView(organizationId, reviewId);
+        // One lookup, reused by the finding counts and the decision counters. Both previously asked
+        // the repository for the latest completed run separately, which is a duplicate read of the
+        // same row on the request an operator makes when something is already wrong.
+        var completedRun = analysisRepository.findLatestCompletedRun(organizationId, reviewId);
+        var decisions = decisionsView(organizationId, reviewId, completedRun);
 
         var changeSet = changeSetRepository.findByReview(organizationId, reviewId);
         var finalization = changeSet
@@ -133,7 +134,8 @@ public class ReviewDiagnosticsService {
 
         return new ReviewDiagnosticsView(review.id(), review.contractId(),
                 review.contractVersionNumber(), review.status().name(), review.failureReason(),
-                backgroundWorkerEnabled, analysis, countsView(findings), decisions, finalization,
+                backgroundWorkerEnabled, analysis, countsView(organizationId, completedRun),
+                decisions, finalization,
                 redline, stalled);
     }
 
@@ -203,35 +205,43 @@ public class ReviewDiagnosticsService {
         return keys;
     }
 
-    private ReviewDiagnosticsView.CountsView countsView(List<Finding> findings) {
-        return new ReviewDiagnosticsView.CountsView(findings.size(),
-                (int) count(findings, FindingClassification.BLOCKING),
-                (int) count(findings, FindingClassification.REVIEW_REQUIRED),
-                (int) count(findings, FindingClassification.INFORMATIONAL));
+    /**
+     * Four integers, computed in the database. The counts came from materialising every finding of
+     * the run together with its concept and claim children, and then discarding the lot; on a large
+     * or degraded run that is the most expensive thing a diagnostic read can do, and it is the run
+     * an operator opens this screen for.
+     */
+    private ReviewDiagnosticsView.CountsView countsView(
+            UUID organizationId, Optional<ReviewAnalysisRun> completedRun) {
+        var counts = completedRun
+                .map(run -> findingRepository.countFindingsByClassification(organizationId, run.id()))
+                .orElse(Map.of());
+        return new ReviewDiagnosticsView.CountsView(
+                (int) counts.values().stream().mapToLong(Long::longValue).sum(),
+                counts.getOrDefault(FindingClassification.BLOCKING, 0L).intValue(),
+                counts.getOrDefault(FindingClassification.REVIEW_REQUIRED, 0L).intValue(),
+                counts.getOrDefault(FindingClassification.INFORMATIONAL, 0L).intValue());
     }
 
-    private long count(List<Finding> findings, FindingClassification classification) {
-        return findings.stream()
-                .filter(finding -> finding.reviewClassification() == classification)
-                .count();
-    }
-
-    private ReviewDiagnosticsView.DecisionsView decisionsView(UUID organizationId, UUID reviewId) {
+    private ReviewDiagnosticsView.DecisionsView decisionsView(
+            UUID organizationId, UUID reviewId, Optional<ReviewAnalysisRun> completedRun) {
         // The run id is required: the repository filters on run_id, and `run_id = NULL` is never true
         // in SQL, so passing null returned an empty list and reported every review as having no human
         // decisions at all. These counters are the eval-label surface, so a silent zero is worse than
         // an absent field.
-        var runId = analysisRepository.findLatestCompletedRun(organizationId, reviewId)
-                .map(ReviewAnalysisRun::id).orElse(null);
+        var runId = completedRun.map(ReviewAnalysisRun::id).orElse(null);
         if (runId == null) {
             return new ReviewDiagnosticsView.DecisionsView(0, 0, 0, 0);
         }
-        var decisions = decisionRepository.findCurrentForRun(organizationId, reviewId, runId, 1000);
+        // Aggregated rather than counted from a bounded list. The list form read limit + 1 rows and
+        // then counted them, so a run with more decisions than the limit reported the limit, not
+        // the truth, on a surface whose whole purpose is to be trusted when something is wrong.
+        var counts = decisionRepository.countCurrentByAction(organizationId, reviewId, runId);
         return new ReviewDiagnosticsView.DecisionsView(
-                (int) decisions.stream().filter(d -> d.action() == DecisionAction.ACCEPT).count(),
-                (int) decisions.stream().filter(d -> d.action() == DecisionAction.EDIT).count(),
-                (int) decisions.stream().filter(d -> d.action() == DecisionAction.REJECT).count(),
-                (int) decisions.stream().filter(d -> d.action() == DecisionAction.ESCALATE).count());
+                counts.getOrDefault(DecisionAction.ACCEPT, 0L).intValue(),
+                counts.getOrDefault(DecisionAction.EDIT, 0L).intValue(),
+                counts.getOrDefault(DecisionAction.REJECT, 0L).intValue(),
+                counts.getOrDefault(DecisionAction.ESCALATE, 0L).intValue());
     }
 
     private Instant completion(Instant startedAt, Instant completedAt) {

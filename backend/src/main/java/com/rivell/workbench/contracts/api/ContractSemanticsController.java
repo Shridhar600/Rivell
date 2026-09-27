@@ -168,7 +168,9 @@ class ContractSemanticsController {
                 contractId,
                 versionNumber,
                 semantics.enrichmentStatus().name(),
-                semantics.failureReason() == null ? null : semantics.failureReason().name(),
+                semantics.failureReason() == null
+                        ? null
+                        : TenantEnrichmentFailureReason.of(semantics.failureReason()).name(),
                 semantics.pipelineVersion(),
                 new SemanticContractResponse.ReviewProfileView(
                         semantics.reviewProfile().contractType().name(),

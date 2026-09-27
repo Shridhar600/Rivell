@@ -17,6 +17,7 @@ import {
   roleLabel,
   verificationLabel,
 } from './contractSemantics'
+import { ENRICHMENT_FAILURE_REASONS } from '../api/semantics'
 import type { EnrichmentFailureReason, SemanticFact } from '../api/semantics'
 
 describe('label maps', () => {
@@ -245,18 +246,27 @@ describe('region labels', () => {
 })
 
 describe('enrichment failure reasons', () => {
-  const codes: EnrichmentFailureReason[] = [
+  // The tenant-facing taxonomy. The provider-level reasons the backend used to send are absent on
+  // purpose: see the DW-041 note on ENRICHMENT_FAILURE_REASONS.
+  const codes: EnrichmentFailureReason[] = ['SERVICE_UNAVAILABLE', 'UNSUPPORTED_SOURCE', 'INTERNAL']
+
+  const providerReasons = [
     'NO_PROVIDER_CONFIGURED',
     'PROVIDER_UNAVAILABLE',
     'PROVIDER_TIMEOUT',
     'PROVIDER_REJECTED',
     'PROVIDER_PROTOCOL',
-    'UNSUPPORTED_SOURCE',
-    'INTERNAL',
   ]
 
+  it('accepts only the tenant-facing taxonomy', () => {
+    expect([...ENRICHMENT_FAILURE_REASONS].sort()).toEqual([...codes].sort())
+    for (const provider of providerReasons) {
+      expect(ENRICHMENT_FAILURE_REASONS as readonly string[]).not.toContain(provider)
+    }
+  })
+
   it('does not blame the contract for a reason the server cannot attribute', () => {
-    for (const code of ['PROVIDER_REJECTED', 'INTERNAL'] as const) {
+    for (const code of ['SERVICE_UNAVAILABLE', 'INTERNAL'] as const) {
       expect(enrichmentFailureNote(code).summary).not.toMatch(
         /this document|this contract version cannot|cannot be analysed as it is supplied/i,
       )
@@ -273,14 +283,30 @@ describe('enrichment failure reasons', () => {
     }
   })
 
-  it('leaves a retry available for every reason that can clear on its own', () => {
-    const retryable = codes.filter((code) => enrichmentFailureNote(code).retryable)
+  it('never puts provider or configuration vocabulary in front of a tenant', () => {
+    for (const code of [...ENRICHMENT_FAILURE_REASONS, 'UNKNOWN'] as EnrichmentFailureReason[]) {
+      const { summary } = enrichmentFailureNote(code)
+      expect(summary).not.toMatch(
+        /provider|credential|api key|quota|not set up|configured|timeout|timed out/i,
+      )
+    }
+  })
 
-    expect(retryable).toEqual([
-      'PROVIDER_UNAVAILABLE',
-      'PROVIDER_TIMEOUT',
-      'PROVIDER_REJECTED',
-      'PROVIDER_PROTOCOL',
+  it('renders nothing from a provider reason that arrives anyway', () => {
+    // A stale response, a rolled-back backend or a proxied older deployment can still put one of
+    // these on the wire. It must degrade to the unrecognised-reason sentence, never to itself.
+    for (const provider of providerReasons) {
+      const note = enrichmentFailureNote(provider as EnrichmentFailureReason)
+
+      expect(note.summary).not.toContain(provider)
+      expect(note.summary).not.toMatch(/provider|credential|quota|configured/i)
+      expect(note.summary).toMatch(/does not recognise/i)
+    }
+  })
+
+  it('leaves a retry available for the reason that can clear on its own', () => {
+    expect(codes.filter((code) => enrichmentFailureNote(code).retryable)).toEqual([
+      'SERVICE_UNAVAILABLE',
     ])
   })
 

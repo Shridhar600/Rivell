@@ -494,29 +494,18 @@ export function profileKey(profile: ReviewProfile | null): string {
 
 export type EnrichmentFailureNote = { summary: string; retryable: boolean }
 
+/**
+ * Copy for the tenant-facing enrichment failure taxonomy (M10A.1 / DW-041).
+ *
+ * The five provider-level reasons this replaces were disclosed to tenants even though none of them
+ * is actionable by a tenant, and `NO_PROVIDER_CONFIGURED` in particular described the deployment's
+ * credential state. `SERVICE_UNAVAILABLE` is the one class a tenant can act on: retry later. The
+ * operator's precise diagnosis stays in server state, where it is queryable and safe.
+ */
 const ENRICHMENT_FAILURE_NOTES: Record<string, EnrichmentFailureNote> = {
-  NO_PROVIDER_CONFIGURED: {
-    summary: 'Rivell is not set up to analyse contract semantics in this environment right now.',
-    retryable: false,
-  },
-  PROVIDER_UNAVAILABLE: {
-    summary: 'The semantic analysis service did not respond, so the analysis did not complete.',
-    retryable: true,
-  },
-  PROVIDER_TIMEOUT: {
-    summary: 'The semantic analysis took too long and did not complete.',
-    retryable: true,
-  },
-  PROVIDER_REJECTED: {
-    // The backend's cause is auth, quota, or a request it considered invalid, so this must not
-    // blame the document. Retrying is left available because a quota or credential problem can
-    // clear; the copy does not tell the user which it was.
-    summary: 'Rivell could not obtain a semantic analysis for this contract version.',
-    retryable: true,
-  },
-  PROVIDER_PROTOCOL: {
+  SERVICE_UNAVAILABLE: {
     summary:
-      'The semantic analysis service returned a result Rivell could not use, so the analysis did not complete.',
+      'Rivell could not complete the semantic analysis of this contract version just now. Try again in a moment.',
     retryable: true,
   },
   UNSUPPORTED_SOURCE: {

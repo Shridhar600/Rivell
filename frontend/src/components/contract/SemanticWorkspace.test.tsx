@@ -130,14 +130,16 @@ describe('semantic analysis lifecycle', () => {
     const api = stubContractApi({
       semantics: fixtureSemantics({
         enrichmentStatus: 'FAILED',
-        failureReason: 'PROVIDER_UNAVAILABLE',
+        failureReason: 'SERVICE_UNAVAILABLE',
       }),
     })
     renderRoute('/reviews/c1?view=semantics')
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('The semantic analysis service did not respond')
-    expect(alert).not.toHaveTextContent('PROVIDER_UNAVAILABLE')
+    expect(alert).toHaveTextContent('Rivell could not complete the semantic analysis')
+    expect(alert).not.toHaveTextContent('SERVICE_UNAVAILABLE')
+    // The tenant copy must not carry the operator's vocabulary, whatever the reason code was.
+    expect(alert.textContent ?? '').not.toMatch(/provider|credential|quota|configured/i)
     expect(
       screen.getByRole('button', { name: 'Try semantic analysis again' }),
     ).toBeInTheDocument()

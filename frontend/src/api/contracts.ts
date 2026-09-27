@@ -1,4 +1,5 @@
 import {
+  skipToken,
   useMutation,
   useQuery,
   type UseMutationResult,
@@ -192,7 +193,10 @@ export function useContractQuery(
 ): UseQueryResult<ContractSummary, Error> {
   return useQuery({
     queryKey: ['contract', contractId],
-    queryFn: () => fetchContract(contractId),
+    // A route can be reached without the identity it needs. Without this the read is issued
+    // against an empty path segment, which is a request for a contract that cannot exist.
+    queryFn: contractId ? () => fetchContract(contractId) : skipToken,
+    enabled: Boolean(contractId),
   })
 }
 
@@ -208,7 +212,9 @@ export function useContractStructureQuery(
       }
       return fetchContractStructure(contractId, versionNumber)
     },
-    enabled: versionNumber !== undefined,
+    // Same guard as useContractQuery: a missing route identity must not produce a read against an
+    // empty path segment, and a defined version number does not imply a defined contract id.
+    enabled: versionNumber !== undefined && Boolean(contractId),
   })
 }
 

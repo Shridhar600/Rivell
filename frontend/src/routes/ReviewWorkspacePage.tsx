@@ -72,7 +72,7 @@ export function ReviewWorkspacePage() {
   const structureQuery = useContractStructureQuery(contractId, pinnedVersion)
   const semanticsQuery = useSemanticsQuery(contractId, pinnedVersion)
 
-  const selectedFindingId = searchParams.get('finding')
+  const selectedFindingParam = searchParams.get('finding')
   const filters: FindingFilters = {
     severity: readSeverity(searchParams.get('severity')),
     classification: readClassification(searchParams.get('classification')),
@@ -81,6 +81,22 @@ export function ReviewWorkspacePage() {
   const status = summaryQuery.data?.status
   const canReadFindings = isReviewTerminal(status) || status === 'UNKNOWN'
   const findingsQuery = useFindingsQuery(reviewId, filters, canReadFindings)
+
+  // A finding id in the URL only means something for the review that produced it. The detail
+  // endpoint is scoped to one review, so a selection carried across reviews requests a finding that
+  // cannot exist here and can only answer 404. Membership in this review's own findings is the
+  // guard, rather than the shape of the id, so no cross-review authority is inferred.
+  //
+  // The membership check is only sound when the list represents the whole review: absence from a
+  // filtered or truncated list proves nothing. So the guard applies when the list is authoritative,
+  // and stands down when it is not, rather than withholding a finding the URL legitimately names.
+  const findingsListIsAuthoritative =
+    !filters.severity && !filters.classification && !filters.concept && !findingsQuery.data?.truncated
+  const selectedFindingBelongsToReview =
+    !findingsListIsAuthoritative ||
+    (findingsQuery.data?.items ?? []).some((f) => f.id === selectedFindingParam)
+  const selectedFindingId =
+    selectedFindingParam !== null && selectedFindingBelongsToReview ? selectedFindingParam : null
   const findingQuery = useFindingQuery(reviewId, canReadFindings ? selectedFindingId : null)
 
   const analysisCompleted = status === 'COMPLETED'
@@ -176,6 +192,12 @@ export function ReviewWorkspacePage() {
     }
     params.delete('finding')
     setSearchParams(params)
+  }
+
+  // The route needs both identities to mean anything. Without them the reads are inert, so this
+  // must come before the loading check: an unresolvable identity otherwise waits forever.
+  if (!contractId || !reviewId) {
+    return <ErrorState message="Missing contract or review id." />
   }
 
   if (contractQuery.isPending || summaryQuery.isPending) {
