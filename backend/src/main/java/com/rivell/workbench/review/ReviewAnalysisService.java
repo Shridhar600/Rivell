@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.intelligence.EmbeddingService;

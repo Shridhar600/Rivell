@@ -143,7 +143,7 @@ public final class RedlineTestStructures {
                 ? UUID.randomUUID() : changes.get(0).changeSetId();
         return new ApprovedChangeSet(changeSetId, organizationId, UUID.randomUUID(),
                 UUID.randomUUID(), contractId, versionId, 1, changeSetVersion,
-                UUID.randomUUID(), java.time.Instant.parse("2026-09-26T00:00:00Z"),
-                changes);
+                "c".repeat(64), UUID.randomUUID(),
+                java.time.Instant.parse("2026-09-26T00:00:00Z"), changes);
     }
 }

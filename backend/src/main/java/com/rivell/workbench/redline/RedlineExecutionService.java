@@ -13,6 +13,7 @@ import java.util.UUID;
 import com.rivell.workbench.contracts.ContractNotFoundException;
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractVersionNotFoundException;
+import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.foundation.DocumentStorage;
 import com.rivell.workbench.foundation.Hashes;
@@ -85,7 +86,12 @@ public class RedlineExecutionService {
         var startedAt = clock.instant();
         log.info("Redline execution started reviewId={} changeSetId={} organizationId={}",
                 reviewId, changeSet.id(), organizationId);
-        var execution = run(changeSet, organizationId, requestedBy, startedAt);
+        var execution = semanticallyDrifted(changeSet, organizationId)
+                ? fail(changeSet, organizationId, requestedBy, startedAt,
+                        RedlineFailureCode.APPROVED_SEMANTICS_DRIFT, null,
+                        "The contract semantics changed after this review was approved.",
+                        List.of(), null)
+                : run(changeSet, organizationId, requestedBy, startedAt);
         if (execution.status() == RedlineExecutionStatus.FAILED) {
             log.info("Redline execution failed reviewId={} executionId={} code={}",
                     reviewId, execution.id(), execution.failureCode());
@@ -270,7 +276,8 @@ public class RedlineExecutionService {
                 changeSet.contractVersionNumber(), changeSet.changeSetVersion(),
                 RedlineExecutionStatus.COMPLETED, RedlineOutcome.REDLINE_GENERATED,
                 null, null, RedlinePlanResolver.RENDERER_VERSION,
-                InsertPlacementStrategy.VERSION, sourceSha, changeSet.changes().size(),
+                InsertPlacementStrategy.VERSION, sourceSha, changeSet.semanticsDigest(),
+                changeSet.changes().size(),
                 requestedBy, startedAt, clock.instant(), changes, artifact);
     }
 
@@ -282,7 +289,8 @@ public class RedlineExecutionService {
                 changeSet.contractVersionNumber(), changeSet.changeSetVersion(),
                 RedlineExecutionStatus.COMPLETED, RedlineOutcome.NO_CHANGES, null, null,
                 RedlinePlanResolver.RENDERER_VERSION, InsertPlacementStrategy.VERSION,
-                null, 0, requestedBy, startedAt, clock.instant(), List.of(), null);
+                null, changeSet.semanticsDigest(), 0,
+                requestedBy, startedAt, clock.instant(), List.of(), null);
     }
 
     private RedlineExecution fail(
@@ -325,8 +333,8 @@ public class RedlineExecutionService {
                 changeSet.contractVersionNumber(), changeSet.changeSetVersion(),
                 RedlineExecutionStatus.FAILED, null, code, sanitized(detail),
                 RedlinePlanResolver.RENDERER_VERSION, InsertPlacementStrategy.VERSION,
-                sourceSha, changeSet.changes().size(), requestedBy, startedAt,
-                clock.instant(), changes, null);
+                sourceSha, changeSet.semanticsDigest(), changeSet.changes().size(),
+                requestedBy, startedAt, clock.instant(), changes, null);
         return persist(execution);
     }
 
@@ -358,6 +366,38 @@ public class RedlineExecutionService {
         }
     }
 
+    /**
+     * Placement for an INSERT is derived from the effective concepts the review planned against,
+     * so a post-approval correction or re-enrichment would silently reposition the redline in a
+     * document a human already approved. Comparing the digest of the live semantics against the
+     * one frozen at finalization makes that drift visible and stops the execution before any
+     * rendering work. An already-verified artifact is never invalidated by this: the existing
+     * execution is returned above, before this check runs.
+     */
+    private boolean semanticallyDrifted(ApprovedChangeSet changeSet, UUID organizationId) {
+        // Scoped to the change types that actually consume effective concepts. A REPLACE or DELETE
+        // resolves against the document structure and the approved language alone, so a routine
+        // post-approval correction such as fixing a party role would otherwise permanently block a
+        // legitimate redline for a reason that cannot affect it. The failed execution is also a
+        // permanent record, which made an over-broad guard an availability dead end rather than a
+        // safety property.
+        var dependsOnConcepts = changeSet.changes().stream()
+                .anyMatch(change -> change.actionType() == ChangeActionType.INSERT);
+        if (!dependsOnConcepts) {
+            return false;
+        }
+        var live = contractQueryService.getSemanticsForOrganization(organizationId,
+                changeSet.contractId(), changeSet.contractVersionNumber());
+        if (live.isEmpty()) {
+            // M10 review finding: this failed open. With no live semantics there is nothing to compare,
+            // so the guard reported "not drifted" and placement proceeded with an empty concept map -
+            // exactly the unverified placement the check exists to prevent. Absence of the thing being
+            // verified is not evidence that it verified.
+            return true;
+        }
+        return !SemanticsDigest.of(live.get()).equals(changeSet.semanticsDigest());
+    }
+
     private Map<UUID, LegalConcept> effectiveConcepts(
             UUID organizationId, ApprovedChangeSet changeSet) {
         var concepts = new HashMap<UUID, LegalConcept>();
@@ -385,8 +425,9 @@ public class RedlineExecutionService {
     private void storeArtifact(String storageKey, byte[] bytes) {
         try {
             documentStorage.store(new StorageKey(storageKey), new ByteArrayInputStream(bytes));
-        } catch (IOException e) {
-            throw new IllegalStateException("The redline artifact could not be stored", e);
+        } catch (IOException | RuntimeException e) {
+            throw new RedlineArtifactStoreException(
+                    "The verified redline artifact could not be stored.", e);
         }
     }
 

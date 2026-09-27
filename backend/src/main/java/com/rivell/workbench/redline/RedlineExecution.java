@@ -25,6 +25,7 @@ public record RedlineExecution(
         String rendererVersion,
         String placementStrategyVersion,
         String sourceSha256,
+        String semanticsDigest,
         int changeCount,
         UUID requestedBy,
         Instant startedAt,

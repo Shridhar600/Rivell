@@ -31,6 +31,7 @@ import com.rivell.workbench.retrieval.EnrichmentNotReadyException;
 import com.rivell.workbench.retrieval.TraceNotFoundException;
 import com.rivell.workbench.retrieval.UnauthorizedEvidenceAccessException;
 import com.rivell.workbench.redline.ApprovedChangeSetNotFoundException;
+import com.rivell.workbench.redline.RedlineArtifactStoreException;
 import com.rivell.workbench.redline.RedlineArtifactUnavailableException;
 import com.rivell.workbench.redline.RedlineExecutionFailedException;
 import com.rivell.workbench.redline.RedlineExecutionNotFoundException;
@@ -163,6 +164,21 @@ public class GlobalExceptionHandler {
             RedlineSourceUnavailableException.class})
     ResponseEntity<ErrorResponse> redlineConflict(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
+    }
+
+    @ExceptionHandler(com.rivell.workbench.review.IdempotencyKeyReusedException.class)
+    ResponseEntity<ErrorResponse> idempotencyKeyReused(
+            com.rivell.workbench.review.IdempotencyKeyReusedException e) {
+        return error(HttpStatus.CONFLICT, "409", "Invalid state",
+                "The supplied request id was already used for a different contract version. "
+                        + "Use a new request id, or repeat the original request unchanged.");
+    }
+
+    @ExceptionHandler(RedlineArtifactStoreException.class)
+    ResponseEntity<ErrorResponse> redlineStoreUnavailable(RedlineArtifactStoreException e) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "503", "Document storage unavailable",
+                "The verified redline artifact could not be stored. The review is unchanged and "
+                        + "the execution can be retried.");
     }
 
     @ExceptionHandler(ConceptClassificationUnavailableException.class)

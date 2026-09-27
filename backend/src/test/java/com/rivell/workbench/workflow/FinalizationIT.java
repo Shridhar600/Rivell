@@ -289,6 +289,112 @@ class FinalizationIT {
         assertThat(set.get("changes").size()).isZero();
     }
 
+    /**
+     * M10: the product's hardest failure to diagnose is a review that stops. With the default
+     * configuration there is no background worker, so an enqueued analysis is never picked up and the
+     * review sits in ANALYSIS_QUEUED with nothing to indicate why. The diagnostics surface has to
+     * say so plainly, and it has to say it without exposing contract text.
+     */
+    @Test
+    void diagnosticsExplainAQueuedAnalysisThatNoWorkerHasPickedUp() throws Exception {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        // No analysis is driven: the review is created, its job is enqueued, and with the default
+        // configuration nothing will ever run it.
+        var result = mockMvc.perform(get("/api/reviews/{id}/diagnostics", review.id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("ANALYSIS_QUEUED"))
+                .andExpect(jsonPath("$.data.backgroundWorkerEnabled").value(false))
+                .andExpect(jsonPath("$.data.analysis").doesNotExist())
+                .andExpect(jsonPath("$.data.stalled[0]")
+                        .value("No analysis run has been created for this review."))
+                .andReturn();
+
+        var body = result.getResponse().getContentAsString();
+        assertThat(body)
+                .as("diagnostics must not echo contract text")
+                .doesNotContain("limitation of liability")
+                .doesNotContain("Liability is capped");
+    }
+
+    @Test
+    void diagnosticsReportACompletedRunWithItsChecksAndOutcomes() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var reviewId = fixture.review().id();
+        var actionable = fixture.findings().stream()
+                .filter(f -> f.reviewClassification()
+                        != FindingClassification.INFORMATIONAL)
+                .toList();
+        assertThat(actionable).as("the corpus must offer a decision to record").isNotEmpty();
+        decide(reviewId, actionable.get(0).id(),
+                "{\"expectedVersion\": 0, \"action\": \"REJECT\","
+                        + " \"comment\": \"Counterparty position accepted.\"}");
+
+        mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reviewStatus").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.analysis.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.analysis.checks").isNotEmpty())
+                .andExpect(jsonPath("$.data.findings.total").isNumber())
+                .andExpect(jsonPath("$.data.analysis.environmentMatchesSnapshot").value(true))
+                .andExpect(jsonPath("$.data.stalled").isEmpty())
+                // The eval-label surface. This counts real decisions: the query filters on run_id, and
+                // passing null there returned nothing, so the field read zero for every review.
+                .andExpect(jsonPath("$.data.decisions.rejected").value(1))
+                .andExpect(jsonPath("$.data.decisions.accepted").value(0));
+    }
+
+    /**
+     * M10: a run whose checks all degraded produced a COMPLETED review with zero Findings, which
+     * was then finalizable into a zero-change ApprovedChangeSet and a NO_CHANGES redline. That is
+     * the worst possible failure for a legal tool: a clean-looking artifact from an analysis that
+     * never actually ran. A degraded analysis must be reported as a typed blocker.
+     */
+    @Test
+    void aDegradedAnalysisBlocksFinalizationInsteadOfReadingAsClean() throws Exception {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        // A human corrects a concept after the review froze: the review's analysis environment no
+        // longer matches the live semantics, so every check degrades and produces no signal. The
+        // target is a clause that actually carries a concept, and the replacement is a different
+        // one, so the effective classification genuinely changes.
+        var clause = enrichmentService.getSemantics(corpus.contract().contractId(), 1)
+                .clauses().stream()
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no classified clause to correct"));
+        var replacement = clause.effectivePrimaryConcept().orElseThrow()
+                == com.rivell.workbench.contracts.LegalConcept.GOVERNING_LAW
+                        ? "LIMITATION_OF_LIABILITY" : "GOVERNING_LAW";
+        enrichmentService.correctClause(corpus.contract().contractId(), 1, clause.id(),
+                new com.rivell.workbench.contracts.FactCorrection(
+                        replacement, java.util.Map.of(), UUID.randomUUID()));
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()))
+                .isNotEmpty()
+                .allSatisfy(execution -> assertThat(execution.status())
+                        .isEqualTo(com.rivell.workbench.review.CheckExecutionStatus.DEGRADED));
+        assertThat(findingRepository.findFindings(organizationId, run.id())).isEmpty();
+
+        mockMvc.perform(get("/api/reviews/{id}/human-review", review.id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.readyToFinalize").value(false))
+                .andExpect(jsonPath("$.data.blockers[?(@.code == 'ANALYSIS_DEGRADED')]")
+                        .exists());
+
+        mockMvc.perform(post("/api/reviews/{id}/finalize", review.id()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("409"));
+    }
+
     @Test
     void unresolvedFindingsBlockFinalization() throws Exception {
         var fixture = analyzedMainCorpus();

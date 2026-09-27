@@ -15,28 +15,78 @@ import org.xml.sax.helpers.DefaultHandler;
  * entries into memory without an uncompressed-size cap. Also counts true top-level body
  * children so loader-side dropping of content becomes visible.
  */
-final class ZipGuard {
+/**
+ * Uncompressed-size bound for a DOCX package, applied before docx4j materialises it.
+ *
+ * <p>Public because the redline renderer and verifier live in a sibling package and load packages
+ * too; they must not be the one path in the system where a decompression bomb reaches the heap.
+ */
+public final class ZipGuard {
 
-    record ScanResult(long totalUncompressedBytes, byte[] mainDocumentXml) {
+    public record ScanResult(long totalUncompressedBytes, byte[] mainDocumentXml) {
     }
 
     private ZipGuard() {
     }
 
-    static ScanResult scan(byte[] docxBytes, long maxUncompressedBytes) throws IOException {
+    /**
+     * Verifies the package without materialising anything.
+     *
+     * <p>M10 review finding: the main-document branch used {@code readAllBytes()} and only compared
+     * the total afterwards, so the single largest entry in a real DOCX was fully allocated in order to
+     * decide it was too large. Every other entry was already drained through a counting read; this
+     * exists because the redline path needs the bound and has no use for the main part.
+     */
+    public static void verify(byte[] docxBytes, long maxUncompressedBytes) throws IOException {
+        long total = 0;
+        boolean sawMainDocument = false;
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(docxBytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if ("word/document.xml".equals(entry.getName())) {
+                    sawMainDocument = true;
+                }
+                total += drain(zip);
+                if (total > maxUncompressedBytes) {
+                    throw new ZipGuardException(
+                            "Document expands beyond the maximum supported size");
+                }
+            }
+        }
+        if (!sawMainDocument) {
+            throw new IOException("The DOCX package does not contain a main document");
+        }
+    }
+
+    public static ScanResult scan(byte[] docxBytes, long maxUncompressedBytes) throws IOException {
         long total = 0;
         byte[] mainDocument = null;
         try (var zip = new ZipInputStream(new ByteArrayInputStream(docxBytes))) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
                 if ("word/document.xml".equals(entry.getName())) {
-                    mainDocument = zip.readAllBytes();
-                    total += mainDocument.length;
+                    var collected = new java.io.ByteArrayOutputStream();
+                    // Counted read, never an unbounded one. This is the ingest path, so it is the one
+                    // that faces first-party untrusted input: readAllBytes() here would allocate the
+                    // whole entry in order to decide it was too large, which is the exact bomb the
+                    // ceiling exists to stop. The entry is only materialised after it has passed.
+                    var buffer = new byte[8192];
+                    int read;
+                    while ((read = zip.read(buffer)) > 0) {
+                        collected.write(buffer, 0, read);
+                        total += read;
+                        if (total > maxUncompressedBytes) {
+                            throw new ZipGuardException(
+                                    "Document expands beyond the maximum supported size");
+                        }
+                    }
+                    mainDocument = collected.toByteArray();
                 } else {
                     total += drain(zip);
                 }
                 if (total > maxUncompressedBytes) {
-                    throw new IOException("Document expands beyond the maximum supported size");
+                    throw new ZipGuardException(
+                            "Document expands beyond the maximum supported size");
                 }
             }
         }
@@ -44,6 +94,15 @@ final class ZipGuard {
             throw new IOException("The DOCX package does not contain a main document");
         }
         return new ScanResult(total, mainDocument);
+    }
+
+    /** The package exceeds the permitted uncompressed size. Distinct so callers can report it. */
+    public static final class ZipGuardException extends IOException {
+        private static final long serialVersionUID = 1L;
+
+        ZipGuardException(String message) {
+            super(message);
+        }
     }
 
     private static long drain(ZipInputStream entryStream) throws IOException {

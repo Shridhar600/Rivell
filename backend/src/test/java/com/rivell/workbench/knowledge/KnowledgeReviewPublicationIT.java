@@ -3,6 +3,7 @@ package com.rivell.workbench.knowledge;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -141,6 +142,54 @@ class KnowledgeReviewPublicationIT {
         var rejected = reviewService.reject(approved.id(), "Changed my mind");
         assertThat(rejected.reviewStatus()).isEqualTo(ReviewStatus.REJECTED);
         assertThat(rejected.reviewNote()).isEqualTo("Changed my mind");
+    }
+
+    /**
+     * M10 / DW-001: publication numbers are allocated as max + 1 with no lock. Two concurrent
+     * publications therefore raced for the same number, and the loser surfaced a raw integrity
+     * violation to the user with no route forward except a blind retry. Both must succeed with
+     * distinct, consecutive numbers, and the numbering must stay uncorrupt.
+     */
+    @Test
+    void concurrentPublicationsBothSucceedWithDistinctNumbers() throws Exception {
+        var first = firstVariant(ingestClauseLibrary());
+        reviewService.approve(first.id(), null);
+        var second = allVariants(ingestClauseLibrary()).stream()
+                .filter(candidate -> !candidate.id().equals(first.id()))
+                .findFirst()
+                .orElseThrow();
+        reviewService.approve(second.id(), null);
+
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        List<java.util.concurrent.Callable<KnowledgePublication>> tasks = List.of(
+                () -> {
+                    start.await();
+                    return publicationService.publish(List.of(first.id()), null, "concurrent a");
+                },
+                () -> {
+                    start.await();
+                    return publicationService.publish(List.of(second.id()), null, "concurrent b");
+                });
+        var futures = tasks.stream().map(executor::submit).toList();
+        start.countDown();
+        List<KnowledgePublication> publications = new ArrayList<>();
+        for (var future : futures) {
+            publications.add(future.get());
+        }
+        executor.shutdown();
+
+        assertThat(publications).extracting(KnowledgePublication::publicationNumber)
+                .as("concurrent publications must not share a number")
+                .containsExactlyInAnyOrder(1L, 2L);
+        assertThat(publications).extracting(KnowledgePublication::publicationNumber)
+                .doesNotHaveDuplicates();
+    }
+
+    private List<KnowledgeCandidate> allVariants(KnowledgeArtifact artifact) {
+        return queryService.getCandidates(artifact.id()).stream()
+                .filter(candidate -> candidate.candidateType() == CandidateType.CLAUSE_VARIANT)
+                .toList();
     }
 
     @Test

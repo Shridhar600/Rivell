@@ -67,7 +67,7 @@ class ContractSemanticsSchemaIT {
         var semantics = new ContractSemantics(UUID.randomUUID(), versionId, UUID.randomUUID(),
                 EnrichmentStatus.ENRICHING, ContractSemantics.PIPELINE_VERSION,
                 ReviewProfile.minimal(ContractType.NDA), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), QualityReasons.NONE, null, List.of());
+                List.of(), List.of(), List.of(), QualityReasons.NONE, null, List.of(), null);
 
         assertThatThrownBy(() -> semanticsRepository.replaceSemantics(semantics))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
@@ -191,7 +191,7 @@ class ContractSemanticsSchemaIT {
                         Jurisdiction.US),
                 List.of(metadata), List.of(party), List.of(definedTerm), List.of(reference),
                 List.of(clause), List.of(relationship), QualityReasons.NONE,
-                new Observations(3, 2, 10, 0, 2, false, false), List.of());
+                new Observations(3, 2, 10, 0, 2, false, false), List.of(), null);
 
         transactionTemplate.executeWithoutResult(status ->
                 semanticsRepository.replaceSemantics(semantics));
@@ -235,8 +235,7 @@ class ContractSemanticsSchemaIT {
         var semantics = new ContractSemantics(UUID.randomUUID(), versionId, organizationId,
                 EnrichmentStatus.READY, ContractSemantics.PIPELINE_VERSION,
                 ReviewProfile.minimal(ContractType.NDA), List.of(), List.of(party),
-                List.of(), List.of(), List.of(clause), List.of(), QualityReasons.NONE,
-                null, List.of());
+                List.of(), List.of(), List.of(clause), List.of(), QualityReasons.NONE, null, List.of(), null);
 
         transactionTemplate.executeWithoutResult(status ->
                 semanticsRepository.replaceSemantics(semantics));
@@ -265,7 +264,7 @@ class ContractSemanticsSchemaIT {
                         EnrichmentStatus.READY, ContractSemantics.PIPELINE_VERSION,
                         ReviewProfile.minimal(ContractType.NDA),
                         List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                        QualityReasons.NONE, null, List.of())));
+                        QualityReasons.NONE, null, List.of(), null)));
 
         assertThat(semanticsRepository.findStatus(versionId, organizationId))
                 .contains(EnrichmentStatus.READY);
@@ -287,7 +286,7 @@ class ContractSemanticsSchemaIT {
         return new ContractSemantics(UUID.randomUUID(), versionId, organizationId, status,
                 pipelineVersion, ReviewProfile.minimal(ContractType.MSA),
                 List.of(), List.of(), List.of(), List.of(), List.of(clause), List.of(),
-                QualityReasons.NONE, null, List.of());
+                QualityReasons.NONE, null, List.of(), null);
     }
 
     private UUID stagedVersion(UUID organizationId) {

@@ -30,7 +30,7 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
             id, organization_id, review_id, change_set_id, contract_id,
             contract_version_id, contract_version_number, change_set_version,
             status, outcome, failure_code, failure_detail, renderer_version,
-            placement_strategy_version, source_sha256, change_count, requested_by,
+            placement_strategy_version, source_sha256, semantics_digest, change_count, requested_by,
             started_at, completed_at
             """;
 
@@ -74,13 +74,13 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
                   (id, organization_id, review_id, change_set_id, contract_id,
                    contract_version_id, contract_version_number, change_set_version,
                    status, outcome, failure_code, failure_detail, renderer_version,
-                   placement_strategy_version, source_sha256, change_count, requested_by,
-                   started_at, completed_at)
+                   placement_strategy_version, source_sha256, semantics_digest, change_count,
+                   requested_by, started_at, completed_at)
                 values (:id, :organizationId, :reviewId, :changeSetId, :contractId,
                    :contractVersionId, :contractVersionNumber, :changeSetVersion,
                    :status, :outcome, :failureCode, :failureDetail, :rendererVersion,
-                   :placementStrategyVersion, :sourceSha256, :changeCount, :requestedBy,
-                   :startedAt, :completedAt)
+                   :placementStrategyVersion, :sourceSha256, :semanticsDigest, :changeCount,
+                   :requestedBy, :startedAt, :completedAt)
                 on conflict (change_set_id) do nothing
                 """)
                 .param("id", execution.id())
@@ -99,6 +99,7 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
                 .param("rendererVersion", execution.rendererVersion())
                 .param("placementStrategyVersion", execution.placementStrategyVersion())
                 .param("sourceSha256", execution.sourceSha256())
+                .param("semanticsDigest", execution.semanticsDigest())
                 .param("changeCount", execution.changeCount())
                 .param("requestedBy", execution.requestedBy())
                 .param("startedAt", timestamp(execution.startedAt()))
@@ -175,7 +176,8 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
                 header.contractVersionNumber(), header.changeSetVersion(), header.status(),
                 header.outcome(), header.failureCode(), header.failureDetail(),
                 header.rendererVersion(), header.placementStrategyVersion(),
-                header.sourceSha256(), header.changeCount(), header.requestedBy(),
+                header.sourceSha256(), header.semanticsDigest(), header.changeCount(),
+                header.requestedBy(),
                 header.startedAt(), header.completedAt(),
                 changes(header.id(), header.organizationId()),
                 artifact(header.id(), header.organizationId()).orElse(null));
@@ -256,6 +258,7 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
                 rs.getString("renderer_version"),
                 rs.getString("placement_strategy_version"),
                 rs.getString("source_sha256"),
+                rs.getString("semantics_digest"),
                 rs.getInt("change_count"),
                 rs.getObject("requested_by", UUID.class),
                 rs.getTimestamp("started_at").toInstant(),
@@ -267,7 +270,8 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
             UUID contractVersionId, int contractVersionNumber, int changeSetVersion,
             RedlineExecutionStatus status, RedlineOutcome outcome,
             RedlineFailureCode failureCode, String failureDetail, String rendererVersion,
-            String placementStrategyVersion, String sourceSha256, int changeCount,
+            String placementStrategyVersion, String sourceSha256, String semanticsDigest,
+            int changeCount,
             UUID requestedBy, Instant startedAt, Instant completedAt) {
     }
 

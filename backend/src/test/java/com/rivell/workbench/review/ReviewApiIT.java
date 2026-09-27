@@ -812,9 +812,11 @@ class ReviewApiIT {
 
     private void updateEnrichmentStatus(UUID versionId, String status) {
         jdbcClient.sql("""
-                update contract_semantics set enrichment_status = :status
+                update contract_semantics set enrichment_status = :status,
+                    enrichment_failure_reason = :reason
                 where contract_version_id = :versionId
                 """)
+                .param("reason", "FAILED".equals(status) ? "INTERNAL" : null)
                 .param("status", status)
                 .param("versionId", versionId)
                 .update();

@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -341,6 +342,129 @@ class RedlineExecutionIT {
         assertThat(artifactFiles(fixture.review().id())).isEqualTo(1);
     }
 
+    /**
+     * M10: redline placement must be derived from the semantics frozen at finalization, not from
+     * whatever the contract semantics say at execution time. A human concept correction after
+     * finalization changes the effective concepts the INSERT placement strategy reads, so a
+     * placement computed from post-freeze classification is not reproducible from the approved
+     * review. Executing after that correction must fail closed with a typed reason and store no
+     * artifact.
+     */
+    @Test
+    void semanticsDriftAfterFinalizationFailsClosedBeforeAnyArtifactExists()
+            throws Exception {
+        var fixture = analyzedNdaWithAbsenceFindings();
+        // An INSERT is the only change type that consumes the effective concepts, so this is the case
+        // the drift guard exists for. Each absence Finding becomes an INSERT.
+        resolveAllActionable(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var changeSet = changeSetRepository.findByReview(organizationId(), reviewId).orElseThrow();
+        assertThat(changeSet.changes())
+                .as("this test is only meaningful with an INSERT in the set")
+                .anyMatch(change -> change.actionType()
+                        == com.rivell.workbench.redline.ChangeActionType.INSERT);
+        var contractId = changeSet.contractId();
+
+        var clauseSemanticsId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no classified clause to correct"))
+                .id();
+
+        // A human corrects a concept after the review froze: the placement inputs no longer match.
+        enrichmentService.correctClause(contractId, 1, clauseSemanticsId,
+                new com.rivell.workbench.contracts.FactCorrection(
+                        "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
+
+        var drifted = redlineExpectingFailure(reviewId);
+        assertThat(drifted.get("status").asText()).isEqualTo("FAILED");
+        assertThat(drifted.get("failureCode").asText()).isEqualTo("APPROVED_SEMANTICS_DRIFT");
+        assertThat(drifted.get("downloadAvailable").asBoolean()).isFalse();
+        assertThat(countArtifacts(reviewId)).as("a drifted execution must store no artifact")
+                .isZero();
+        assertThat(artifactFiles(reviewId)).isZero();
+    }
+
+    @Test
+    void aCorrectionUnrelatedToPlacementDoesNotBlockAReplaceOnlyRedline() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var contractId = changeSetRepository.findByReview(organizationId(), reviewId)
+                .orElseThrow().contractId();
+
+        // Correct an unrelated clause's concept, after the review froze.
+        var clause = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
+                .findFirst()
+                .orElseThrow();
+        enrichmentService.correctClause(contractId, 1, clause.id(),
+                new com.rivell.workbench.contracts.FactCorrection("GOVERNING_LAW",
+                        Map.of(), UUID.randomUUID()));
+
+        // This change set is a REPLACE, which resolves from the document structure and the approved
+        // language. A concept change cannot move it, so the execution must still succeed.
+        var execution = redline(reviewId);
+        assertThat(execution.get("outcome").asText()).isEqualTo("REDLINE_GENERATED");
+        assertThat(execution.get("downloadAvailable").asBoolean()).isTrue();
+    }
+
+    @Test
+    void artifactStorageFailureIsReportedWithTheStandardErrorEnvelope() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var organizationId = organizationId();
+
+        // A real misconfiguration: a file where the organisation's redline directory must be.
+        Files.createDirectories(Path.of(STORAGE_ROOT, organizationId.toString()));
+        Files.createFile(Path.of(STORAGE_ROOT, organizationId.toString(), "redline"));
+
+        var result = mockMvc.perform(post("/api/reviews/{id}/redline", reviewId))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("503"))
+                .andExpect(jsonPath("$.title").value("Document storage unavailable"))
+                .andReturn();
+        assertThat(result.getResponse().getContentType()).contains("application/json");
+
+        // No execution row and no artifact may be recorded for a store that never happened.
+        assertThat(countExecutions(reviewId)).isZero();
+        assertThat(countArtifacts(reviewId)).isZero();
+    }
+
+    @Test
+    void semanticsDriftAfterAVerifiedExecutionKeepsTheCanonicalArtifact()
+            throws Exception {
+        var fixture = analyzedNdaWithAbsenceFindings();
+        resolveAllActionable(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var contractId = changeSetRepository.findByReview(organizationId(), reviewId)
+                .orElseThrow().contractId();
+
+        var first = redline(reviewId);
+        assertThat(first.get("outcome").asText()).isEqualTo("REDLINE_GENERATED");
+        var artifactSha = first.get("artifactSha256").asText();
+
+        var clauseSemanticsId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
+                .findFirst()
+                .orElseThrow()
+                .id();
+        enrichmentService.correctClause(contractId, 1, clauseSemanticsId,
+                new com.rivell.workbench.contracts.FactCorrection(
+                        "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
+
+        var second = redline(reviewId);
+        assertThat(second.get("id").asText()).isEqualTo(first.get("id").asText());
+        assertThat(second.get("artifactSha256").asText()).isEqualTo(artifactSha);
+        assertThat(countArtifacts(reviewId)).isEqualTo(1);
+        assertThat(downloadBytes(reviewId)).isNotEmpty();
+    }
+
     @Test
     void concurrentTriggersRaceToOneCanonicalExecutionWithoutOrphanArtifacts()
             throws Exception {
@@ -603,6 +727,28 @@ class RedlineExecutionIT {
                 findingRepository.findFindings(organizationId(), run.id()));
     }
 
+    /**
+     * A review whose Findings are absence Findings, so resolving them produces INSERTs - the only
+     * change type whose placement consumes the effective concepts.
+     */
+    private Fixture analyzedNdaWithAbsenceFindings() throws Exception {
+        var bytes = Files.readAllBytes(Path.of(
+                "src/test/resources/fixtures/m5-nda-counterparty.docx"));
+        var ingested = contractIngestionService.ingest("m5-nda-counterparty.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.NDA, PartyRole.RECEIVING_PARTY,
+                        PaperSource.COUNTERPARTY_PAPER, Jurisdiction.US,
+                        ReviewPackRegistry.MSA_PACK));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+        var run = analysisService.analyze(organizationId(), review.id());
+        var findings = findingRepository.findFindings(organizationId(), run.id());
+        assertThat(findings).as("this fixture must produce absence findings to insert for")
+                .isNotEmpty()
+                .allMatch(f -> f.subjectKind() == FindingSubjectKind.ABSENCE);
+        return new Fixture(review, run, findings);
+    }
+
     private Fixture analyzedSource(String fixtureName) throws Exception {
         corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
@@ -722,6 +868,15 @@ class RedlineExecutionIT {
     private void finalize(UUID reviewId) throws Exception {
         mockMvc.perform(post("/api/reviews/{id}/finalize", reviewId))
                 .andExpect(status().isOk());
+    }
+
+    private JsonNode redlineExpectingFailure(UUID reviewId) throws Exception {
+        mockMvc.perform(post("/api/reviews/{id}/redline", reviewId))
+                .andExpect(status().isConflict());
+        var state = mockMvc.perform(get("/api/reviews/{id}/redline", reviewId))
+                .andExpect(status().isOk())
+                .andReturn();
+        return json(state).get("data");
     }
 
     private JsonNode redline(UUID reviewId) throws Exception {

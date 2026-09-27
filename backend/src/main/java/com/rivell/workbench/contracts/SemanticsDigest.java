@@ -1,4 +1,4 @@
-package com.rivell.workbench.review;
+package com.rivell.workbench.contracts;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -8,26 +8,21 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import com.rivell.workbench.contracts.ClauseSemantics;
-import com.rivell.workbench.contracts.ContractParty;
-import com.rivell.workbench.contracts.ContractReference;
-import com.rivell.workbench.contracts.ContractSemantics;
-import com.rivell.workbench.contracts.DefinedTerm;
-import com.rivell.workbench.contracts.LegalFact;
-import com.rivell.workbench.contracts.MetadataFact;
-import com.rivell.workbench.contracts.SemanticRelationship;
 
 /**
  * Deterministic digest of the effective semantic state a review plans against.
- * Analysis fails closed when the live semantics no longer match the snapshot digest,
- * so a re-enrichment or correction cannot silently change review inputs.
+ *
+ * <p>Lives with {@link ContractSemantics}, the aggregate it hashes, so every module that must
+ * detect semantic drift computes it the same way: review when it freezes a snapshot and validates
+ * the analysis environment, redline when it derives INSERT placement from the frozen change set.
+ * The algorithm is a pure function of contracts-owned data; it carries no policy and no judgement.
  */
-final class SemanticsDigest {
+public final class SemanticsDigest {
 
     private SemanticsDigest() {
     }
 
-    static String of(ContractSemantics semantics) {
+    public static String of(ContractSemantics semantics) {
         var canonical = new StringBuilder();
         canonical.append("v2\n");
         canonical.append("status=").append(semantics.enrichmentStatus()).append('\n');

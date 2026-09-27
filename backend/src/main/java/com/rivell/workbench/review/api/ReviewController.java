@@ -54,7 +54,8 @@ class ReviewController {
             @PathVariable int versionNumber,
             @RequestBody(required = false) CreateReviewRequest request) {
         return ApiResult.ok(apiService.create(contractId, versionNumber,
-                request == null ? null : request.contractPackKey()));
+                request == null ? null : request.contractPackKey(),
+                request == null ? null : request.clientRequestId()));
     }
 
     @Operation(summary = "List the currently selectable contract packs")

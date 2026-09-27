@@ -3,6 +3,7 @@ package com.rivell.workbench.workflow;
 /** Code-owned reasons a review cannot be finalized for redline. */
 public enum FinalizationBlockerCode {
     ANALYSIS_NOT_COMPLETE,
+    ANALYSIS_DEGRADED,
     UNRESOLVED_BLOCKING_FINDINGS,
     UNRESOLVED_REVIEW_REQUIRED_FINDINGS,
     ACTIVE_ESCALATION,

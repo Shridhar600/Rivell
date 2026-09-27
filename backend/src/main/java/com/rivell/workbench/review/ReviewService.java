@@ -7,6 +7,7 @@ import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.EnrichmentFailedException;
@@ -75,9 +76,41 @@ public class ReviewService {
     }
 
     public Review create(UUID contractId, int versionNumber, String requestedPackKey) {
+        return create(contractId, versionNumber, requestedPackKey, null);
+    }
+
+    /**
+     * M10 / DW-020: with a client-supplied key, creation is idempotent. A retry or a double-click
+     * returns the original review instead of freezing a second snapshot, planning a second run and
+     * paying for a second analysis. The replay is resolved before any work, and the unique index on
+     * (organization_id, client_request_id) is the authority when two identical requests race.
+     */
+    /**
+     * A key identifies one operation. Returning a review recorded for a different contract or
+     * version would be a confused deputy: the caller would receive a valid, fully populated review of
+     * a contract it did not name and poll the wrong one. Refusing is the only safe answer.
+     */
+    private static Review requireSameOperation(
+            Review existing, UUID contractId, int contractVersionNumber) {
+        if (!existing.contractId().equals(contractId)
+                || existing.contractVersionNumber() != contractVersionNumber) {
+            throw new IdempotencyKeyReusedException(existing.clientRequestId());
+        }
+        return existing;
+    }
+
+    public Review create(UUID contractId, int versionNumber, String requestedPackKey,
+            UUID clientRequestId) {
         var identity = identityProvider.currentIdentity();
         if (!authorizationService.isAuthorized(identity, Permissions.REVIEW_CREATE)) {
             throw new UnauthorizedReviewAccessException(identity.userId());
+        }
+        if (clientRequestId != null) {
+            var replay = reviewRepository.findByClientRequestId(
+                    identity.organizationId(), clientRequestId);
+            if (replay.isPresent()) {
+                return requireSameOperation(replay.get(), contractId, versionNumber);
+            }
         }
         var version = contractQueryService.getVersionSummary(contractId, versionNumber);
         var semantics = contractEnrichmentService.getSemantics(contractId, versionNumber);
@@ -110,12 +143,27 @@ public class ReviewService {
                 now);
         var review = Review.analysisQueued(
                 reviewId, organizationId, contractId, version.versionId(), versionNumber,
-                identity.userId(), now);
-        transactionTemplate.executeWithoutResult(status -> {
-            reviewRepository.create(review, snapshot, planBuilder.build(reviewId,
-                    organizationId, snapshot, semantics));
-            eventPublisher.publishEvent(new ReviewCreatedEvent(organizationId, reviewId));
-        });
+                identity.userId(), now, clientRequestId);
+        try {
+            transactionTemplate.executeWithoutResult(status -> {
+                reviewRepository.create(review, snapshot, planBuilder.build(reviewId,
+                        organizationId, snapshot, semantics));
+                eventPublisher.publishEvent(new ReviewCreatedEvent(organizationId, reviewId));
+            });
+        } catch (org.springframework.dao.DataIntegrityViolationException conflict) {
+            // M10 review finding: the pre-check cannot see a concurrent identical request, so two
+            // simultaneous submits both missed it and the loser's insert violated the unique index.
+            // The index enforces the invariant but does not return the winner, so read it back: the
+            // client asked for an idempotent create and must get the original review, not a 500.
+            if (clientRequestId == null) {
+                throw conflict;
+            }
+            var winner = reviewRepository.findByClientRequestId(organizationId, clientRequestId);
+            if (winner.isEmpty()) {
+                throw conflict;
+            }
+            return winner.get();
+        }
         return review;
     }
 

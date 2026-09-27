@@ -48,6 +48,38 @@ import com.rivell.workbench.redline.VerificationReport;
 @Component
 public class DocxRedlineVerifier implements RedlineVerifier {
 
+    private final com.rivell.workbench.platform.parsing.DocxParserProperties properties;
+
+    public DocxRedlineVerifier(
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        this.properties = properties;
+    }
+
+    /**
+     * The verifier reads both the generated and the source package, so it needs the same
+     * decompression bound the renderer applies. A verification pass must not be the cheapest way to
+     * exhaust the heap.
+     */
+    private static WordprocessingMLPackage load(byte[] bytes,
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        try {
+            com.rivell.workbench.platform.parsing.ZipGuard.verify(bytes,
+                    properties.maxUncompressedBytes());
+        } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {
+            // M10 review finding: this used to be caught by the broad handler below and reported as
+            // ROUND_TRIP_FAILED, so a size rejection looked like a verification mismatch. It is a
+            // distinct, deliberate outcome and says so.
+            throw new PackageExpansionRejectedException();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Package could not be scanned", e);
+        }
+        try {
+            return WordprocessingMLPackage.load(new ByteArrayInputStream(bytes));
+        } catch (Exception e) {
+            throw new IllegalStateException("Package could not be loaded", e);
+        }
+    }
+
     @Override
     public VerificationReport verify(
             byte[] sourceBytes, byte[] generatedBytes, DocumentExecutionPlan plan,
@@ -55,13 +87,21 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         WordprocessingMLPackage generated;
         WordprocessingMLPackage source;
         try {
-            generated = WordprocessingMLPackage.load(new ByteArrayInputStream(generatedBytes));
+            generated = load(generatedBytes, properties);
+        } catch (PackageExpansionRejectedException e) {
+            return VerificationReport.failed(
+                    RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED,
+                    "The package expands beyond the permitted size for verification.", List.of());
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
                     "The generated document could not be reopened.", List.of());
         }
         try {
-            source = WordprocessingMLPackage.load(new ByteArrayInputStream(sourceBytes));
+            source = load(sourceBytes, properties);
+        } catch (PackageExpansionRejectedException e) {
+            return VerificationReport.failed(
+                    RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED,
+                    "The package expands beyond the permitted size for verification.", List.of());
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
                     "The frozen source document could not be reopened.", List.of());

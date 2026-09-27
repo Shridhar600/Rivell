@@ -57,6 +57,13 @@ public class DocxRedlineRenderer implements RedlineRenderer {
 
     private final ObjectFactory factory = new ObjectFactory();
 
+    private final com.rivell.workbench.platform.parsing.DocxParserProperties properties;
+
+    public DocxRedlineRenderer(
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        this.properties = properties;
+    }
+
     @Override
     public RenderedRedline render(byte[] sourceBytes, DocumentExecutionPlan plan) {
         var wordPackage = load(sourceBytes);
@@ -431,9 +438,20 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         }
     }
 
+    /**
+     * Loads the source with the same decompression bound the ingest parser applies, before docx4j
+     * materialises the package. Without it the redline path is the one place in the system where a
+     * crafted package reaches the heap unbounded, and it is reachable with stored bytes that were
+     * never re-checked after ingestion.
+     */
     private WordprocessingMLPackage load(byte[] sourceBytes) {
         try {
+            com.rivell.workbench.platform.parsing.ZipGuard.verify(sourceBytes,
+                    properties.maxUncompressedBytes());
             return WordprocessingMLPackage.load(new ByteArrayInputStream(sourceBytes));
+        } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {
+            throw failure(RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED, null,
+                    "The source document expands beyond the permitted size for execution.");
         } catch (Exception e) {
             throw failure(RedlineFailureCode.DOCX_LOAD_FAILED, null,
                     "The source document could not be loaded for execution.");

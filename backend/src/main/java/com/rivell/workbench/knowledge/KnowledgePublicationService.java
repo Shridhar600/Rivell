@@ -1,5 +1,7 @@
 package com.rivell.workbench.knowledge;
 
+import org.springframework.dao.DataIntegrityViolationException;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -23,6 +25,9 @@ import com.rivell.workbench.organization.Permissions;
  * as one atomic unit, so an interrupted publication persists nothing.
  */
 public class KnowledgePublicationService {
+
+    /** Bounded: the race window is one insert, so a second attempt is normally enough. */
+    private static final int MAX_PUBLICATION_NUMBER_ATTEMPTS = 3;
 
     private final KnowledgeRepository repository;
     private final TransactionTemplate transactionTemplate;
@@ -73,7 +78,6 @@ public class KnowledgePublicationService {
 
         var now = Instant.now();
         var publicationId = UUID.randomUUID();
-        var publicationNumber = repository.nextPublicationNumber(organizationId);
         var items = new ArrayList<PublicationItem>();
         for (var candidate : candidates) {
             items.add(new PublicationItem(
@@ -100,33 +104,62 @@ public class KnowledgePublicationService {
             }
         }
 
-        var publication = new KnowledgePublication(
-                publicationId, organizationId, publicationNumber,
-                Texts.normalize(note), items, now);
         var superseded = new java.util.LinkedHashMap<UUID, UUID>();
         for (var item : items) {
             if (item.action() == PublicationAction.SUPERSEDE && item.supersededCandidateId() != null) {
                 superseded.put(item.candidateId(), item.supersededCandidateId());
             }
         }
-        transactionTemplate.executeWithoutResult(status -> {
-            repository.insertPublication(publication);
-            for (var candidate : candidates) {
-                repository.updateReviewState(
-                        candidate.id(), organizationId, candidate.reviewStatus(),
-                        ReviewStatus.PUBLISHED, candidate.editedContentText(),
-                        candidate.editedPayload(), candidate.editedSemanticFields(), candidate.scope(),
-                        candidate.supersedingCandidateId(),
-                        candidate.reviewNote(), candidate.reviewedAt(),
-                        now);
+
+        // M10 / DW-001: publication numbers are allocated as max + 1 with no lock, so two concurrent
+        // publications can pick the same number. The unique constraint keeps numbering uncorrupt, but
+        // the loser used to fail outright and the user had to retry blind. The whole transactional
+        // unit is retried against a freshly allocated number; the event is published inside the
+        // transaction, so a losing attempt emits nothing.
+        DataIntegrityViolationException lastConflict = null;
+        for (var attempt = 1; attempt <= MAX_PUBLICATION_NUMBER_ATTEMPTS; attempt++) {
+            var number = repository.nextPublicationNumber(organizationId);
+            var publication = new KnowledgePublication(
+                    publicationId, organizationId, number, Texts.normalize(note), items, now);
+            try {
+                transactionTemplate.executeWithoutResult(status -> {
+                    repository.insertPublication(publication);
+                    for (var candidate : candidates) {
+                        repository.updateReviewState(
+                                candidate.id(), organizationId, candidate.reviewStatus(),
+                                ReviewStatus.PUBLISHED, candidate.editedContentText(),
+                                candidate.editedPayload(), candidate.editedSemanticFields(),
+                                candidate.scope(), candidate.supersedingCandidateId(),
+                                candidate.reviewNote(), candidate.reviewedAt(), now);
+                    }
+                    // published inside the transaction: AFTER_COMMIT listeners fire post-commit
+                    eventPublisher.publishEvent(new KnowledgePublishedEvent(
+                            organizationId, publicationId, number,
+                            candidates.stream().map(KnowledgeCandidate::id).toList(),
+                            java.util.Collections.unmodifiableMap(superseded)));
+                });
+                return publication;
+            } catch (DataIntegrityViolationException conflict) {
+                if (!isPublicationNumberConflict(conflict)) {
+                    throw conflict;
+                }
+                lastConflict = conflict;
             }
-            // published inside the transaction: AFTER_COMMIT listeners fire post-commit
-            eventPublisher.publishEvent(new KnowledgePublishedEvent(
-                    organizationId, publicationId, publicationNumber,
-                    candidates.stream().map(KnowledgeCandidate::id).toList(),
-                    java.util.Collections.unmodifiableMap(superseded)));
-        });
-        return publication;
+        }
+        throw lastConflict;
+    }
+
+    /**
+     * Distinguishes "someone else took this publication number" from every other integrity failure.
+     * Only the first is retryable; retrying a candidate-state conflict would hide a real defect.
+     */
+    private static boolean isPublicationNumberConflict(
+            DataIntegrityViolationException conflict) {
+        // The constraint is the inline UNIQUE (organization_id, publication_number) declared in V4,
+        // so PostgreSQL names it after the table and columns. There is no named constraint to match.
+        var message = conflict.getMostSpecificCause().getMessage();
+        return message != null
+                && message.contains("knowledge_publication_organization_id_publication_number_key");
     }
 
 }

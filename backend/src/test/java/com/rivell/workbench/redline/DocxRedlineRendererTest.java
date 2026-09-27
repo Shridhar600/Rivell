@@ -28,7 +28,15 @@ import com.rivell.workbench.platform.docx.DocxRedlineRenderer;
 
 class DocxRedlineRendererTest {
 
-    private final DocxRedlineRenderer renderer = new DocxRedlineRenderer();
+    /**
+     * A deliberately small expansion budget so the bomb test is fast and deterministic. Production
+     * uses the configured 200 MB ceiling; the property is the same one the ingest parser honours.
+     */
+    private static final long MAX_UNCOMPRESSED_BYTES = 64 * 1024;
+
+    private final DocxRedlineRenderer renderer = new DocxRedlineRenderer(
+            new com.rivell.workbench.platform.parsing.DocxParserProperties(
+                    MAX_UNCOMPRESSED_BYTES));
 
     @Test
     void simpleReplaceProducesTrackedDeletionAndInsertionAndKeepsTheHeading() {
@@ -324,6 +332,53 @@ class DocxRedlineRendererTest {
                 .isInstanceOf(RedlineRenderException.class)
                 .extracting(e -> ((RedlineRenderException) e).code())
                 .isEqualTo(RedlineFailureCode.PREEXISTING_REVISIONS_UNSUPPORTED);
+    }
+
+    /**
+     * M10 / DW-035(3): the redline path loads stored source bytes with no decompression bound, while
+     * the ingest parser has always had one. A package that expands far beyond its stored size must
+     * fail closed at the redline boundary with its own reason, not be handed to docx4j.
+     */
+    @Test
+    void aPackageThatExpandsBeyondThePermittedSizeFailsClosed() {
+        var plan = replacePlan("m9-simple-replace.docx", "2. Limitation of Liability",
+                "Liability is capped at the fees paid.");
+        var bomb = decompressionBomb("m9-simple-replace.docx");
+
+        assertThatThrownBy(() -> renderer.render(bomb, plan))
+                .isInstanceOf(RedlineRenderException.class)
+                .extracting(e -> ((RedlineRenderException) e).code())
+                .isEqualTo(RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED);
+    }
+
+    /**
+     * Builds a package that stores a small file but declares a far larger uncompressed payload: the
+     * shape of a decompression bomb, without needing a large fixture on disk.
+     */
+    private static byte[] decompressionBomb(String fixture) {
+        var original = RedlineFixturePipeline.fixture(fixture);
+        var inflated = new java.io.ByteArrayOutputStream();
+        try (var zip = new java.util.zip.ZipInputStream(
+                new ByteArrayInputStream(original))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                inflated.write(zip.readAllBytes());
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("fixture could not be expanded", e);
+        }
+        var payload = new byte[(int) (MAX_UNCOMPRESSED_BYTES * 4)];
+        java.util.Arrays.fill(payload, (byte) ' ');
+
+        var bomb = new java.io.ByteArrayOutputStream();
+        try (var out = new java.util.zip.ZipOutputStream(bomb)) {
+            out.putNextEntry(new ZipEntry("word/document.xml"));
+            out.write(payload);
+            out.closeEntry();
+        } catch (Exception e) {
+            throw new IllegalStateException("bomb could not be built", e);
+        }
+        return bomb.toByteArray();
     }
 
     @Test

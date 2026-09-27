@@ -177,7 +177,7 @@ public class ContractEnrichmentService {
                 ContractSemantics.PIPELINE_VERSION, profile,
                 merged.metadata(), merged.parties(), merged.definedTerms(),
                 merged.references(), merged.clauses(), merged.relationships(),
-                merged.quality(), merged.observations(), List.of());
+                merged.quality(), merged.observations(), List.of(), null);
     }
 
     private record MergedResult(
@@ -330,9 +330,41 @@ public class ContractEnrichmentService {
         return semantics;
     }
 
+    /**
+     * Maps a failure to a code-owned reason. Provider classes are the only ones that carry an
+     * operational meaning here; anything else is deliberately coarse, because the useful detail
+     * belongs in server logs rather than in reviewable state.
+     */
+    private static EnrichmentFailureReason classify(RuntimeException cause) {
+        if (cause instanceof com.rivell.workbench.intelligence.NoProviderConfiguredException) {
+            return EnrichmentFailureReason.NO_PROVIDER_CONFIGURED;
+        }
+        if (cause instanceof com.rivell.workbench.intelligence.ProviderTimeoutException) {
+            return EnrichmentFailureReason.PROVIDER_TIMEOUT;
+        }
+        if (cause instanceof com.rivell.workbench.intelligence.ProviderUnavailableException) {
+            return EnrichmentFailureReason.PROVIDER_UNAVAILABLE;
+        }
+        if (cause instanceof com.rivell.workbench.intelligence.ProviderRejectedException) {
+            return EnrichmentFailureReason.PROVIDER_REJECTED;
+        }
+        if (cause instanceof com.rivell.workbench.intelligence.ProviderProtocolException
+                || cause instanceof com.rivell.workbench.intelligence.SemanticDecisionException) {
+            return EnrichmentFailureReason.PROVIDER_PROTOCOL;
+        }
+        if (cause instanceof IllegalArgumentException) {
+            return EnrichmentFailureReason.UNSUPPORTED_SOURCE;
+        }
+        return EnrichmentFailureReason.INTERNAL;
+    }
+
     private void persistFailed(
             UUID versionId, UUID organizationId, ReviewProfile profile, RuntimeException cause) {
-        var reason = List.of("Enrichment failed (" + cause.getClass().getSimpleName() + ")");
+        // The stored warning names the code-owned reason, never the exception class: a class name
+        // is an implementation detail that changes on refactor and tells a reader nothing about
+        // whether the failure is worth retrying. The exception itself stays in the server log.
+        var failure = classify(cause);
+        var reason = List.of("Enrichment failed (" + failure.name() + ")");
         transactionTemplate.executeWithoutResult(status -> {
             var existing = semanticsRepository.find(versionId, organizationId);
             var semanticsId = existing.map(ContractSemantics::id).orElseGet(UUID::randomUUID);
@@ -341,7 +373,7 @@ public class ContractEnrichmentService {
                     ContractSemantics.PIPELINE_VERSION, profile,
                     List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                     QualityReasons.of(List.of(ReviewQualityNote.PROVIDER_DEGRADATION)),
-                    null, reason));
+                    null, reason, failure));
         });
     }
 
