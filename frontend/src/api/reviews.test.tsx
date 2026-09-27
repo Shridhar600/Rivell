@@ -6,11 +6,13 @@ import {
   createReview,
   fetchReviewPacks,
   isReviewConflictError,
+  isReviewPayloadTooLargeError,
   parseFindingDetail,
   parseFindingList,
   parseReviewList,
   parseReviewProgress,
   parseReviewSummary,
+  reviewErrorStatus,
   reviewKeys,
   reviewPollInterval,
   useCreateReview,
@@ -356,6 +358,30 @@ describe('review requests', () => {
     const requests = stubFetch(() => jsonResponse(envelope(queuedSummary)))
     await createReview('c-1', 1)
     expect(await requests[0].json()).toEqual({})
+  })
+
+  it('sends a supplied client request id and omits it when absent', async () => {
+    const withId = stubFetch(() => jsonResponse(envelope(queuedSummary)))
+    await createReview('c-1', 1, 'MSA_PACK', '11111111-1111-4111-8111-111111111111')
+    expect(await withId[0].json()).toEqual({
+      contractPackKey: 'MSA_PACK',
+      clientRequestId: '11111111-1111-4111-8111-111111111111',
+    })
+
+    const withoutId = stubFetch(() => jsonResponse(envelope(queuedSummary)))
+    await createReview('c-1', 1, null, null)
+    expect(await withoutId[0].json()).toEqual({})
+  })
+
+  it('exposes the failing status and classifies a payload ceiling failure', async () => {
+    stubFetch(() => jsonResponse({ code: '413' }, 413))
+    const error = await createReview('c-1', 1).catch((thrown: unknown) => thrown)
+
+    expect(reviewErrorStatus(error)).toBe(413)
+    expect(isReviewPayloadTooLargeError(error)).toBe(true)
+    expect(isReviewConflictError(error)).toBe(false)
+    expect(reviewErrorStatus(new Error('boom'))).toBeNull()
+    expect(isReviewPayloadTooLargeError(new Error('boom'))).toBe(false)
   })
 
   it('classifies a typed conflict without retrying the request', async () => {

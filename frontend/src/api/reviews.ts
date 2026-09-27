@@ -3,7 +3,7 @@ import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import { createApiClient } from './client'
 import { parseEvidenceItem } from './retrieval'
 import type { EvidenceItem } from './retrieval'
-import type { paths } from './schema'
+import type { components, paths } from './schema'
 import {
   asRecord,
   errorMessage,
@@ -530,6 +530,14 @@ export function isReviewForbiddenError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 403
 }
 
+export function isReviewPayloadTooLargeError(error: unknown): boolean {
+  return error instanceof ReviewApiError && error.status === 413
+}
+
+export function reviewErrorStatus(error: unknown): number | null {
+  return error instanceof ReviewApiError ? error.status : null
+}
+
 function reviewRetry(failureCount: number, error: Error): boolean {
   return failureCount < 1 && !isReviewNotFoundError(error)
 }
@@ -648,13 +656,17 @@ export async function createReview(
   contractId: string,
   versionNumber: number,
   contractPackKey?: string | null,
+  clientRequestId?: string | null,
 ): Promise<ReviewSummary> {
   const client = createApiClient()
+  const body: components['schemas']['CreateReviewRequest'] = {}
+  if (contractPackKey) body.contractPackKey = contractPackKey
+  if (clientRequestId) body.clientRequestId = clientRequestId
   const { data, error, response } = await client.POST(
     '/api/contracts/{contractId}/versions/{versionNumber}/reviews',
     {
       params: { path: { contractId, versionNumber } },
-      body: contractPackKey ? { contractPackKey } : {},
+      body,
     },
   )
   if (!data) {
@@ -724,10 +736,15 @@ export function useFindingQuery(
 export function useCreateReview(
   contractId: string,
   versionNumber: number,
-): UseMutationResult<ReviewSummary, Error, { contractPackKey?: string | null }> {
+): UseMutationResult<
+  ReviewSummary,
+  Error,
+  { contractPackKey?: string | null; clientRequestId?: string | null }
+> {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ contractPackKey }) => createReview(contractId, versionNumber, contractPackKey),
+    mutationFn: ({ contractPackKey, clientRequestId }) =>
+      createReview(contractId, versionNumber, contractPackKey, clientRequestId),
     retry: false,
     networkMode: 'always',
     onSuccess: (summary) => {
