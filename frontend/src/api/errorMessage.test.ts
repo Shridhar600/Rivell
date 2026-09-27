@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
-import { boundedErrorMessage } from './errorMessage'
+import { describe, expect, it, vi } from 'vitest'
+import { boundedErrorMessage, TransportError } from './errorMessage'
+import { fetchContract } from './contracts'
 
 describe('boundedErrorMessage', () => {
   it('derives copy from the status alone and never accepts server text', () => {
@@ -22,6 +23,25 @@ describe('boundedErrorMessage', () => {
       const message = boundedErrorMessage(status)
       expect(message.length).toBeGreaterThan(10)
       expect(message).not.toMatch(/exception|com\.rivell|select |insert |stack/i)
+    }
+  })
+})
+
+describe('transport failures', () => {
+  it('never surfaces the browser wording for a request that produced no response', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('NetworkError when attempting to fetch resource.'))),
+    )
+    try {
+      const error = await fetchContract('c1').catch((thrown: unknown) => thrown)
+
+      expect(error).toBeInstanceOf(TransportError)
+      expect((error as Error).message).toMatch(/could not be reached/i)
+      expect((error as Error).message).not.toMatch(/NetworkError|Failed to fetch|Load failed/i)
+      expect((error as TransportError).status).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 })

@@ -74,7 +74,7 @@ const FAILURE_TITLES: Record<string, string> = {
   INSERT_PLACEMENT_UNRESOLVED:
     'Rivell could not determine a safe insertion location for a missing provision.',
   APPROVED_SEMANTICS_DRIFT:
-    'The contract semantics changed after this review was approved, so Rivell did not place the approved change. The approved change set is unchanged.',
+    'The contract semantics changed after this review was approved, so Rivell placed none of the approved changes. The approved change set is unchanged.',
   DOCX_LOAD_FAILED: 'The frozen document could not be opened for redlining.',
   DOCX_SERIALIZATION_FAILED: 'The redlined document could not be written.',
   ROUND_TRIP_FAILED: 'The generated document could not be reopened for verification.',

@@ -97,6 +97,10 @@ describe('review creation', () => {
     const creates = createRequests(api)
     expect(creates).toHaveLength(1)
     expect(creates[0].body).toMatchObject({ contractPackKey: 'MSA_PACK' })
+    expect(Object.keys(creates[0].body as Record<string, unknown>).sort()).toEqual([
+      'clientRequestId',
+      'contractPackKey',
+    ])
 
     await screen.findByRole('heading', { name: 'Analysis state' }, { timeout: 5000 })
     expect(screen.getByRole('heading', { name: 'Master Services Agreement' })).toBeInTheDocument()
@@ -397,6 +401,10 @@ describe('review creation', () => {
 
     await waitFor(() => expect(createRequests(api)).toHaveLength(1))
     expect(createRequests(api)[0].body).toMatchObject({ contractPackKey: 'CUSTOM_PACK' })
+    expect(Object.keys(createRequests(api)[0].body as Record<string, unknown>).sort()).toEqual([
+      'clientRequestId',
+      'contractPackKey',
+    ])
   })
 
   it('keeps pack-less creation available when the catalog fails', async () => {

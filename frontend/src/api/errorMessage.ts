@@ -22,3 +22,20 @@ export function boundedErrorMessage(
 ): string {
   return messages[status] ?? DEFAULT_MESSAGES[status] ?? fallback
 }
+
+/**
+ * A request that never produced a response.
+ *
+ * Without this, a transport failure rethrows the browser's own error and surfaces as "Failed to
+ * fetch", "NetworkError when attempting to fetch resource" or "Load failed" depending on the
+ * browser. It carries no status, so callers classify it as unconfirmed rather than as a server
+ * rejection.
+ */
+export class TransportError extends Error {
+  readonly status = null
+
+  constructor() {
+    super('Rivell could not be reached. Check your connection and try again.')
+    this.name = 'TransportError'
+  }
+}

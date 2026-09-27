@@ -508,8 +508,11 @@ const ENRICHMENT_FAILURE_NOTES: Record<string, EnrichmentFailureNote> = {
     retryable: true,
   },
   PROVIDER_REJECTED: {
-    summary: 'The semantic analysis service declined to analyse this contract version.',
-    retryable: false,
+    // The backend's cause is auth, quota, or a request it considered invalid, so this must not
+    // blame the document. Retrying is left available because a quota or credential problem can
+    // clear; the copy does not tell the user which it was.
+    summary: 'Rivell could not obtain a semantic analysis for this contract version.',
+    retryable: true,
   },
   PROVIDER_PROTOCOL: {
     summary:

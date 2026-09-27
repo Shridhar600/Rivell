@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  errorMessage,
   parseApiResult,
   readClosedString,
   readEnum,
@@ -110,21 +109,6 @@ describe('guard primitives', () => {
     expect(() =>
       readEnum({ status: 'ARCHIVED' }, 'status', 'candidate', STATUSES),
     ).toThrow(/malformed candidate response/i)
-  })
-})
-
-describe('errorMessage', () => {
-  it('prefers detail, then title, then message', () => {
-    expect(
-      errorMessage({ detail: 'The requested resource does not exist.', title: 'Not found' }, 'fallback'),
-    ).toBe('The requested resource does not exist.')
-    expect(errorMessage({ title: 'Not found' }, 'fallback')).toBe('Not found')
-    expect(errorMessage({ message: 'network' }, 'fallback')).toBe('network')
-  })
-
-  it('falls back for empty or non-object errors', () => {
-    expect(errorMessage(null, 'fallback')).toBe('fallback')
-    expect(errorMessage({ detail: '  ' }, 'fallback')).toBe('fallback')
   })
 })
 

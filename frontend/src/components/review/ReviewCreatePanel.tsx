@@ -44,6 +44,7 @@ export function ReviewCreatePanel({
     'none' | 'needs-check' | 'refreshed' | 'found-review' | 'refresh-failed'
   >('none')
   const [foundReviewId, setFoundReviewId] = useState<string | null>(null)
+  const [rechecking, setRechecking] = useState(false)
   const submitting = useRef(false)
   const knownReviewIds = useRef<string[]>([])
   const requestRef = useRef<{ signature: string; id: string | null } | null>(null)
@@ -84,7 +85,10 @@ export function ReviewCreatePanel({
   }
 
   async function handleRecoveryCheck() {
+    if (rechecking) return
+    setRechecking(true)
     const outcome = await onCheckReviews()
+    setRechecking(false)
     if (!outcome.ok) {
       setRecoveryState('refresh-failed')
       return
@@ -223,8 +227,14 @@ export function ReviewCreatePanel({
             </Link>
           ) : null}
           {outcome.uncertain ? (
-            <button type="button" className="button" onClick={() => void handleRecoveryCheck()}>
-              Re-check reviews
+            <button
+              type="button"
+              className="button"
+              disabled={rechecking}
+              aria-busy={rechecking}
+              onClick={() => void handleRecoveryCheck()}
+            >
+              {rechecking ? 'Re-checking reviews…' : 'Re-check reviews'}
             </button>
           ) : null}
         </div>

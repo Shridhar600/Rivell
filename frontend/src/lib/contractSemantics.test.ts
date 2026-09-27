@@ -255,20 +255,33 @@ describe('enrichment failure reasons', () => {
     'INTERNAL',
   ]
 
+  it('does not blame the contract for a reason the server cannot attribute', () => {
+    for (const code of ['PROVIDER_REJECTED', 'INTERNAL'] as const) {
+      expect(enrichmentFailureNote(code).summary).not.toMatch(
+        /this document|this contract version cannot|cannot be analysed as it is supplied/i,
+      )
+    }
+  })
+
   it('gives every code a distinct, non-technical sentence', () => {
     const summaries = codes.map((code) => enrichmentFailureNote(code).summary)
 
     expect(new Set(summaries).size).toBe(codes.length)
     for (const summary of summaries) {
       expect(summary.length).toBeGreaterThan(20)
-      expect(summary).not.toMatch(/Exception|com\.rivell|provider|api key|quota|credential/i)
+      expect(summary).not.toMatch(/Exception|com\.rivell|api key|credential|token|secret/i)
     }
   })
 
-  it('marks only transient service failures as retryable', () => {
+  it('leaves a retry available for every reason that can clear on its own', () => {
     const retryable = codes.filter((code) => enrichmentFailureNote(code).retryable)
 
-    expect(retryable).toEqual(['PROVIDER_UNAVAILABLE', 'PROVIDER_TIMEOUT', 'PROVIDER_PROTOCOL'])
+    expect(retryable).toEqual([
+      'PROVIDER_UNAVAILABLE',
+      'PROVIDER_TIMEOUT',
+      'PROVIDER_REJECTED',
+      'PROVIDER_PROTOCOL',
+    ])
   })
 
   it('states an unrecognised code instead of hiding it', () => {

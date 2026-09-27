@@ -199,6 +199,13 @@ function degradationFlagLabel(flag: string): string {
   return 'The check ran in a degraded mode'
 }
 
+// `AnalysisWarning.message` and `ReviewFailure.message` are the only server strings still rendered
+// verbatim, and they are exempt from the rule the rest of the API layer follows on purpose: the
+// backend builds both from a closed set of fixed sentences (it maps the raw execution detail to a
+// warning reason and replaces anything unrecognised with a generic sentence), so they carry no
+// identifiers or internals and the specific wording is more useful to a reviewer than a flag would
+// be. This exemption depends on that backend sanitization. If a raw message ever appears here, the
+// fix belongs in the same place the other fields were fixed: at the parser boundary.
 export function analysisWarningMessage(warning: AnalysisWarning): string {
   const message = warning.message.trim()
   const fallback =

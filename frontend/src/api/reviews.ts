@@ -516,15 +516,6 @@ const REVIEW_PACK_MESSAGES: Partial<Record<number, string>> = {
   503: 'The review pack catalog service is unavailable right now.',
 }
 
-const REVIEW_CREATE_MESSAGES: Partial<Record<number, string>> = {
-  400: 'The review could not be started with the selected options.',
-  403: 'You do not have permission to start a review.',
-  404: 'This contract version is not available for review.',
-  409: 'This contract version is not ready for an automated review yet.',
-  500: 'The review could not be started.',
-  503: 'The review service is unavailable right now.',
-}
-
 class ReviewApiError extends Error {
   readonly status: number
 
@@ -539,20 +530,12 @@ export function isReviewBadRequestError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 400
 }
 
-export function isReviewConflictError(error: unknown): boolean {
-  return error instanceof ReviewApiError && error.status === 409
-}
-
 export function isReviewNotFoundError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 404
 }
 
 export function isReviewForbiddenError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 403
-}
-
-export function isReviewPayloadTooLargeError(error: unknown): boolean {
-  return error instanceof ReviewApiError && error.status === 413
 }
 
 export function reviewErrorStatus(error: unknown): number | null {
@@ -709,10 +692,9 @@ export async function createReview(
     },
   )
   if (!data) {
-    throw new ReviewApiError(
-      boundedErrorMessage(response.status, REVIEW_CREATE_MESSAGES, 'Review creation failed'),
-      response.status,
-    )
+    // The create panel classifies this by status, so this message is never rendered. It exists only
+    // so the thrown error is still readable in a log or a test.
+    throw new ReviewApiError('Review creation failed.', response.status)
   }
   return parseApiResult(data, parseReviewSummary, 'review summary')
 }

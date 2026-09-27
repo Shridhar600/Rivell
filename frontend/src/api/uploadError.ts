@@ -16,7 +16,3 @@ export class UploadApiError extends Error {
     this.status = status
   }
 }
-
-export function isUploadPayloadTooLargeError(error: unknown): boolean {
-  return error instanceof UploadApiError && error.status === 413
-}

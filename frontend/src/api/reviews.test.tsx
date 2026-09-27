@@ -5,8 +5,6 @@ import type { ReactNode } from 'react'
 import {
   createReview,
   fetchReviewPacks,
-  isReviewConflictError,
-  isReviewPayloadTooLargeError,
   parseFindingDetail,
   parseFindingList,
   parseReviewList,
@@ -378,17 +376,16 @@ describe('review requests', () => {
     const error = await createReview('c-1', 1).catch((thrown: unknown) => thrown)
 
     expect(reviewErrorStatus(error)).toBe(413)
-    expect(isReviewPayloadTooLargeError(error)).toBe(true)
-    expect(isReviewConflictError(error)).toBe(false)
     expect(reviewErrorStatus(new Error('boom'))).toBeNull()
-    expect(isReviewPayloadTooLargeError(new Error('boom'))).toBe(false)
   })
 
   it('classifies a typed conflict without retrying the request', async () => {
     const requests = stubFetch(() =>
       jsonResponse({ code: 'ENRICHMENT_NOT_READY', detail: 'Semantic analysis not ready' }, 409),
     )
-    await expect(createReview('c-1', 1)).rejects.toSatisfy(isReviewConflictError)
+    const error = await createReview('c-1', 1).catch((thrown: unknown) => thrown)
+
+    expect(reviewErrorStatus(error)).toBe(409)
     expect(requests).toHaveLength(1)
   })
 
