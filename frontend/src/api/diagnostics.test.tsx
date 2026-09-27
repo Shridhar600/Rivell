@@ -110,6 +110,58 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+import completedWire from '../test/fixtures/diagnosticsCompleted.json'
+import failedRedlineWire from '../test/fixtures/diagnosticsFailedRedline.json'
+
+describe('parseReviewDiagnostics against recorded backend responses', () => {
+  it('maps a real completed-review response', () => {
+    const parsed = parseReviewDiagnostics(completedWire.data)
+
+    expect(parsed.reviewId).toBe('5fed6948-d76a-4596-bcf5-5d1298d75f16')
+    expect(parsed.reviewStatus).toBe('COMPLETED')
+    expect(parsed.backgroundWorkerEnabled).toBe(true)
+    expect(parsed.analysis?.status).toBe('COMPLETED')
+    expect(parsed.analysis?.trigger).toBe('INITIAL')
+    expect(parsed.analysis?.pipelineVersion).toBe('rivell-review-pipeline-1')
+    expect(parsed.analysis?.runDurationSeconds).toBe(0)
+    expect(parsed.analysis?.semanticsMatchFrozenSnapshot).toBe(true)
+    expect(parsed.analysis?.checks).toHaveLength(8)
+    expect(parsed.analysis?.checks[0].key).toMatch(/^PRESENCE:/)
+    expect(parsed.findings.total).toBe(2)
+    expect(parsed.decisions.edited).toBe(2)
+    expect(parsed.finalization.finalized).toBe(true)
+    expect(parsed.finalization.approvedChanges).toBe(2)
+    expect(parsed.redline?.outcome).toBe('REDLINE_GENERATED')
+    expect(parsed.redline?.downloadAvailable).toBe(true)
+    expect(parsed.stalled).toEqual([])
+
+    // A FAILED check writes its reason under a different detail key, so this field is null for it.
+    const failedCheck = parsed.analysis?.checks.find((check) => check.status === 'FAILED')
+    expect(failedCheck).toBeDefined()
+    expect(failedCheck?.degradedReason).toBe('NONE')
+    expect(failedCheck?.signalCount).toBe(0)
+  })
+
+  it('maps a real failed-redline response', () => {
+    const parsed = parseReviewDiagnostics(failedRedlineWire.data)
+
+    expect(parsed.redline?.status).toBe('FAILED')
+    expect(parsed.redline?.outcome).toBeNull()
+    expect(parsed.redline?.failureCode).toBe('APPROVED_SEMANTICS_DRIFT')
+    expect(parsed.redline?.downloadAvailable).toBe(false)
+    expect(parsed.redline?.changeCount).toBe(1)
+    expect(parsed.finalization.approvedChanges).toBe(1)
+  })
+
+  it('carries no internal string out of a real response', () => {
+    for (const wire of [completedWire, failedRedlineWire]) {
+      expect(JSON.stringify(parseReviewDiagnostics(wire.data))).not.toMatch(
+        /IllegalState|com\.rivell|at [a-z]+\.[A-Z]/,
+      )
+    }
+  })
+})
+
 describe('parseReviewDiagnostics', () => {
   it('maps a completed review response field by field', () => {
     const parsed = parseReviewDiagnostics(completedPayload)
