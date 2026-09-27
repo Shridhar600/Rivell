@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  SemanticApiError,
   fetchSemantics,
   parseSemanticContract,
   semanticsKeys,
@@ -251,6 +252,32 @@ describe('parseSemanticContract', () => {
     expect(parsed.clauses).toEqual([])
   })
 
+  it('closes the enrichment failure reason and treats an absent one as no reason', () => {
+    const withReason = parseSemanticContract({
+      ...readyContract,
+      enrichmentStatus: 'FAILED',
+      failureReason: 'PROVIDER_TIMEOUT',
+    })
+    expect(withReason.failureReason).toBe('PROVIDER_TIMEOUT')
+
+    const withoutReason = parseSemanticContract({ ...readyContract, enrichmentStatus: 'FAILED' })
+    expect(withoutReason.failureReason).toBeNull()
+
+    const nulled = parseSemanticContract({
+      ...readyContract,
+      enrichmentStatus: 'FAILED',
+      failureReason: null,
+    })
+    expect(nulled.failureReason).toBeNull()
+
+    const unknown = parseSemanticContract({
+      ...readyContract,
+      enrichmentStatus: 'FAILED',
+      failureReason: 'A_FUTURE_REASON',
+    })
+    expect(unknown.failureReason).toBe('UNKNOWN')
+  })
+
   it('keeps unknown enum-like codes instead of failing the page', () => {
     const parsed = parseSemanticContract({
       ...readyContract,
@@ -311,16 +338,27 @@ describe('fetchSemantics', () => {
     expect(result?.enrichmentStatus).toBe('READY')
   })
 
-  it('throws the server message on other failures', async () => {
+  it('reports a status-mapped message and never the server body', async () => {
     stubFetch(
       () =>
         new Response(
-          JSON.stringify({ code: '409', title: 'Invalid state', detail: 'Enrichment already running' }),
+          JSON.stringify({
+            code: '409',
+            title: 'Invalid state',
+            detail: 'Enrichment already running for contract 8f0e at com.rivell.Foo.bar:12',
+          }),
           { status: 409, headers: { 'Content-Type': 'application/json' } },
         ),
     )
 
-    await expect(fetchSemantics('c1', 1)).rejects.toThrow(/already running/i)
+    const error = await fetchSemantics('c1', 1).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(SemanticApiError)
+    expect((error as SemanticApiError).status).toBe(409)
+    expect((error as Error).message).toBe(
+      'The semantic analysis changed and this request no longer applies.',
+    )
+    expect((error as Error).message).not.toMatch(/already running|8f0e|com\.rivell/)
   })
 })
 

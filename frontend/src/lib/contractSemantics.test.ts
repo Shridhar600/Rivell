@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   conceptLabel,
   describeFact,
+  enrichmentFailureNote,
   factDivergence,
   factEditorFields,
   humanizeCode,
@@ -16,7 +17,7 @@ import {
   roleLabel,
   verificationLabel,
 } from './contractSemantics'
-import type { SemanticFact } from '../api/semantics'
+import type { EnrichmentFailureReason, SemanticFact } from '../api/semantics'
 
 describe('label maps', () => {
   it('labels known concepts and humanizes unknown ones', () => {
@@ -240,5 +241,47 @@ describe('region labels', () => {
 
   it('returns null for unknown regions', () => {
     expect(resolveRegionLabel('missing', clauses, nodes)).toBeNull()
+  })
+})
+
+describe('enrichment failure reasons', () => {
+  const codes: EnrichmentFailureReason[] = [
+    'NO_PROVIDER_CONFIGURED',
+    'PROVIDER_UNAVAILABLE',
+    'PROVIDER_TIMEOUT',
+    'PROVIDER_REJECTED',
+    'PROVIDER_PROTOCOL',
+    'UNSUPPORTED_SOURCE',
+    'INTERNAL',
+  ]
+
+  it('gives every code a distinct, non-technical sentence', () => {
+    const summaries = codes.map((code) => enrichmentFailureNote(code).summary)
+
+    expect(new Set(summaries).size).toBe(codes.length)
+    for (const summary of summaries) {
+      expect(summary.length).toBeGreaterThan(20)
+      expect(summary).not.toMatch(/Exception|com\.rivell|provider|api key|quota|credential/i)
+    }
+  })
+
+  it('marks only transient service failures as retryable', () => {
+    const retryable = codes.filter((code) => enrichmentFailureNote(code).retryable)
+
+    expect(retryable).toEqual(['PROVIDER_UNAVAILABLE', 'PROVIDER_TIMEOUT', 'PROVIDER_PROTOCOL'])
+  })
+
+  it('states an unrecognised code instead of hiding it', () => {
+    const note = enrichmentFailureNote('UNKNOWN')
+
+    expect(note.summary).toMatch(/does not recognise/i)
+    expect(note.retryable).toBe(false)
+  })
+
+  it('keeps the retry available but admits the missing reason when none was recorded', () => {
+    const note = enrichmentFailureNote(null)
+
+    expect(note.summary).toMatch(/did not record a reason/i)
+    expect(note.retryable).toBe(true)
   })
 })

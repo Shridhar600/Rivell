@@ -8,11 +8,13 @@ export function EnrichmentPanel({
   versionNumber,
   storedProfile,
   mode,
+  retryable = true,
 }: {
   contractId: string
   versionNumber: number
   storedProfile: ReviewProfile | null
   mode: 'initial' | 'retry'
+  retryable?: boolean
 }) {
   const enrich = useEnrichContract(contractId, versionNumber)
 
@@ -27,8 +29,9 @@ export function EnrichmentPanel({
         </p>
       ) : (
         <p>
-          The previous analysis did not complete. The contract structure is still
-          available in the document view. You can try again with the profile below.
+          {retryable
+            ? 'The previous analysis did not complete. The contract structure is still available in the document view. You can try again with the profile below.'
+            : 'The previous analysis did not complete, and repeating it with the same document is unlikely to change the result. The contract structure is still available in the document view.'}
         </p>
       )}
       <ReviewProfileForm

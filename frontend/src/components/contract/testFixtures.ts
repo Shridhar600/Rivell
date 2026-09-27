@@ -113,6 +113,7 @@ export function fixtureSemantics(
     contractId: 'c1',
     versionNumber: 1,
     enrichmentStatus: 'READY',
+    failureReason: null,
     reviewProfile: {
       contractType: 'MSA',
       ourSideRole: 'CUSTOMER',
