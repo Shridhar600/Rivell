@@ -252,6 +252,19 @@ describe('workflow state availability and conflict truth', () => {
     expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
   })
 
+
+  it('states a permission failure as a permission failure, not a load failure', async () => {
+    const api = stubContractApi(baseOptions({ reviewSummaryStatus: 403 }))
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    const alert = await screen.findByRole('alert', {}, { timeout: 3000 })
+    expect(alert).toHaveTextContent(/do not have permission/i)
+    expect(alert).not.toHaveTextContent(/could not be loaded/i)
+    expect(
+      screen.queryByRole('button', { name: 'Try again' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('invents nothing when the human-review read fails and no change set exists', async () => {
     const api = stubContractApi(
       baseOptions({ humanReviewStatus: 500, changeSetStatus: 404 }),

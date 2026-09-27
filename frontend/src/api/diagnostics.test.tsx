@@ -400,6 +400,11 @@ describe('useReviewDiagnosticsQuery', () => {
 })
 
 describe('diagnostics cache isolation', () => {
+  it('gives every review its own cache entry', () => {
+    expect(diagnosticsKeys.forReview('r-1')).not.toEqual(diagnosticsKeys.forReview('r-2'))
+    expect(diagnosticsKeys.forReview('r-1')).toContain('r-1')
+  })
+
   it('is not refetched when an unrelated review query is invalidated', async () => {
     stubFetch(() => jsonResponse(envelope(completedPayload)))
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
