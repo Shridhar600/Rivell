@@ -13,6 +13,7 @@ import {
 } from '../api/reviews'
 import {
   isWorkflowConflictError,
+  isWorkflowNotFoundError,
   useApprovedChangeSetQuery,
   useCurrentDecisionsQuery,
   useFinalizeReview,
@@ -86,7 +87,12 @@ export function ReviewWorkspacePage() {
     reviewId,
     analysisCompleted && (humanReview?.status === 'COMPLETED' || humanReviewUnavailable),
   )
+  // A change set exists only once finalization has run, so a successful read is proof of
+  // finalization. This is the fallback for the case where the human-review read failed and the
+  // change set is therefore the only remaining authority.
   const isFinalized = humanReview?.status === 'COMPLETED' || changeSetQuery.isSuccess
+  const changeSetReadFailed =
+    changeSetQuery.isError && !isWorkflowNotFoundError(changeSetQuery.error)
   const decisionsLoaded = decisionsQuery.isSuccess
   const finalizeError = finalizeMutation.isError
     ? isWorkflowConflictError(finalizeMutation.error)
@@ -258,8 +264,8 @@ export function ReviewWorkspacePage() {
           />
         </>
       ) : null}
-      {isFinalized || changeSetQuery.isError ? (
-        changeSetQuery.isError ? (
+      {isFinalized || changeSetReadFailed ? (
+        changeSetReadFailed ? (
           <p className="state state--warning" role="alert">
             The approved change set could not be loaded.{' '}
             <button

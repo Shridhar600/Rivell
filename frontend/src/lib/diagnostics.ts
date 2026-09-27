@@ -6,7 +6,11 @@ import type {
 } from '../api/diagnostics'
 import { redlineFailureTitle } from './redline'
 
-export type DiagnosticsTone = 'neutral' | 'positive' | 'caution' | 'critical' | 'unknown'
+/**
+ * This module maps server states to labels and factual statements. It deliberately returns no
+ * severity, colour or emphasis signal: how a state should read visually is a product-design
+ * decision, and an unmapped tone invented here would constrain it.
+ */
 
 const CHECK_LABELS: Record<DiagnosticsCheckStatus, string> = {
   PENDING: 'Not started',
@@ -18,46 +22,20 @@ const CHECK_LABELS: Record<DiagnosticsCheckStatus, string> = {
   UNKNOWN: 'State not recognised',
 }
 
-const CHECK_TONES: Record<DiagnosticsCheckStatus, DiagnosticsTone> = {
-  PENDING: 'neutral',
-  RUNNING: 'neutral',
-  COMPLETED: 'positive',
-  DEGRADED: 'caution',
-  FAILED: 'critical',
-  SKIPPED: 'neutral',
-  UNKNOWN: 'unknown',
-}
-
-const RUN_LABELS: Record<string, string> = {
+const RUN_LABELS: Record<DiagnosticsRun['status'], string> = {
   RUNNING: 'Analysis run in progress',
   COMPLETED: 'Analysis run completed',
   FAILED: 'Analysis run failed',
   UNKNOWN: 'Analysis run state not recognised',
 }
 
-const RUN_TONES: Record<string, DiagnosticsTone> = {
-  RUNNING: 'neutral',
-  COMPLETED: 'positive',
-  FAILED: 'critical',
-  UNKNOWN: 'unknown',
+export function diagnosticsRunStateLabel(run: DiagnosticsRun | null): string {
+  if (run === null) return 'No analysis run has been created for this review.'
+  return RUN_LABELS[run.status]
 }
 
-export function diagnosticsRunState(
-  run: DiagnosticsRun | null,
-): { label: string; tone: DiagnosticsTone } {
-  if (run === null) return { label: 'No analysis run has been recorded', tone: 'neutral' }
-  const label = RUN_LABELS[run.status] ?? 'Analysis run state not recognised'
-  return { label, tone: RUN_TONES[run.status] ?? 'unknown' }
-}
-
-export function diagnosticsCheckState(check: DiagnosticsCheck): {
-  label: string
-  tone: DiagnosticsTone
-} {
-  return {
-    label: CHECK_LABELS[check.status] ?? 'State not recognised',
-    tone: CHECK_TONES[check.status] ?? 'unknown',
-  }
+export function diagnosticsCheckStateLabel(check: DiagnosticsCheck): string {
+  return CHECK_LABELS[check.status]
 }
 
 export function diagnosticsCheckSummary(run: DiagnosticsRun): string {
@@ -77,11 +55,11 @@ export function diagnosticsCheckSummary(run: DiagnosticsRun): string {
 
 export function diagnosticsRunDuration(run: DiagnosticsRun | null): string | null {
   if (run === null || run.completedAt === null) return null
-  if (run.runDurationSeconds === null) return null
   const seconds = run.runDurationSeconds
-  return seconds < 60
-    ? `The run took ${seconds} seconds.`
-    : `The run took ${Math.floor(seconds / 60)} minutes.`
+  if (seconds === null) return null
+  if (seconds < 60) return `The run took ${seconds} seconds.`
+  if (seconds < 3600) return `The run took ${Math.round(seconds / 60)} minutes.`
+  return `The run took ${Math.round(seconds / 3600)} hours.`
 }
 
 export function diagnosticsCountRows(
@@ -91,6 +69,8 @@ export function diagnosticsCountRows(
     { label: 'Findings recorded', value: String(diagnostics.findings.total) },
     { label: 'Blocking', value: String(diagnostics.findings.blocking) },
     { label: 'Requiring review', value: String(diagnostics.findings.reviewRequired) },
+    // The server counts findings and decisions from the latest completed run, which is not
+    // necessarily the run reported above, so a single note covers both blocks.
     { label: 'Accepted decisions', value: String(diagnostics.decisions.accepted) },
     { label: 'Edited decisions', value: String(diagnostics.decisions.edited) },
     { label: 'Rejected decisions', value: String(diagnostics.decisions.rejected) },
@@ -125,6 +105,11 @@ export function diagnosticsRedlineStatement(diagnostics: ReviewDiagnostics): str
   return 'The redline execution state is not recognised.'
 }
 
+/**
+ * The server builds every stall reason from a fixed literal plus an integer, so the text is
+ * passed through unchanged. If a future backend change puts an exception string here, this
+ * function is the place that has to notice.
+ */
 export function diagnosticsStallLines(diagnostics: ReviewDiagnostics): string[] {
   return diagnostics.stalled
 }
@@ -141,9 +126,6 @@ export function diagnosticsEnvironmentStatement(diagnostics: ReviewDiagnostics):
 }
 
 export function diagnosticsBackgroundWorkerStatement(diagnostics: ReviewDiagnostics): string {
-  if (diagnostics.backgroundWorkerEnabled === null) {
-    return 'Rivell could not determine whether the background analysis worker is running.'
-  }
   return diagnostics.backgroundWorkerEnabled
     ? 'The background analysis worker is running.'
     : 'The background analysis worker is not running, so queued analysis is not being picked up.'

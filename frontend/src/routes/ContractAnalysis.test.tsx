@@ -164,17 +164,37 @@ describe('review creation', () => {
     expect(router.state.location.pathname).toBe('/reviews/c1/analysis')
   })
 
-  it('reconciles a conflict instead of leaving the re-check inert', async () => {
+  it('treats a conflict as a settled negative and never claims a review was created', async () => {
     const api = stubContractApi({ createReviewStatus: 409, reviews: { items: [], truncated: false } })
     renderRoute('/reviews/c1/analysis')
 
     await userEvent.click(await screen.findByRole('button', { name: 'Start review' }))
-    const alert = await screen.findByRole('alert')
-    await userEvent.click(within(alert).getByRole('button', { name: 'Re-check reviews' }))
 
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/could not start a review for this contract version/i)
+    expect(within(alert).queryByRole('button', { name: 'Re-check reviews' })).not.toBeInTheDocument()
+    expect(alert).not.toHaveTextContent(/A review was created/i)
+    expect(screen.getByRole('button', { name: 'Start review' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Contract pack (optional)')).toBeEnabled()
+
+    api.setReviews?.({
+      items: [
+        {
+          id: 'r-99',
+          contractId: 'c1',
+          contractVersionNumber: 1,
+          status: 'ANALYSIS_QUEUED',
+          createdAt: '2026-09-27T10:00:00Z',
+          completedAt: null,
+        },
+      ],
+      truncated: false,
+    })
+
+    await waitFor(() => expect(listRequests(api).length).toBeGreaterThan(0))
     expect(
-      await screen.findByText(/No new review appeared in the history/),
-    ).toBeInTheDocument()
+      screen.queryByText(/A review was created while the outcome was unknown/),
+    ).not.toBeInTheDocument()
     expect(createRequests(api)).toHaveLength(1)
   })
 

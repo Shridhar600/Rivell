@@ -4,9 +4,9 @@ import { createApiClient } from './client'
 import { parseEvidenceItem } from './retrieval'
 import type { EvidenceItem } from './retrieval'
 import type { components, paths } from './schema'
+import { boundedErrorMessage } from './errorMessage'
 import {
   asRecord,
-  errorMessage,
   malformed,
   parseApiResult,
   readArray,
@@ -504,6 +504,27 @@ export function reviewPollInterval(status: ReviewStatus | undefined | null): num
   return isReviewPending(status) ? 2500 : false
 }
 
+const REVIEW_MESSAGES: Partial<Record<number, string>> = {
+  404: 'That review could not be found.',
+  409: 'That review request does not apply in the current state.',
+  500: 'The review could not be loaded.',
+  503: 'The review service is unavailable right now.',
+}
+
+const REVIEW_PACK_MESSAGES: Partial<Record<number, string>> = {
+  500: 'The review pack catalog could not be loaded.',
+  503: 'The review pack catalog service is unavailable right now.',
+}
+
+const REVIEW_CREATE_MESSAGES: Partial<Record<number, string>> = {
+  400: 'The review could not be started with the selected options.',
+  403: 'You do not have permission to start a review.',
+  404: 'This contract version is not available for review.',
+  409: 'This contract version is not ready for an automated review yet.',
+  500: 'The review could not be started.',
+  503: 'The review service is unavailable right now.',
+}
+
 class ReviewApiError extends Error {
   readonly status: number
 
@@ -562,9 +583,12 @@ export const reviewKeys = {
 
 export async function fetchReviewPacks(): Promise<ReviewPack[]> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/packs')
+  const { data, response } = await client.GET('/api/reviews/packs')
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review pack catalog unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_PACK_MESSAGES, 'Review pack catalog unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(
     data,
@@ -584,33 +608,42 @@ export function useReviewPacksQuery(): UseQueryResult<ReviewPack[]> {
 
 export async function fetchReviewList(contractId: string): Promise<ReviewListResponse> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews', {
+  const { data, response } = await client.GET('/api/reviews', {
     params: { query: { contractId, limit: MAX_PAGE_LIMIT } },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review list unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review list unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewList, 'review list')
 }
 
 export async function fetchReviewSummary(reviewId: string): Promise<ReviewSummary> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/{id}', {
+  const { data, response } = await client.GET('/api/reviews/{id}', {
     params: { path: { id: reviewId } },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewSummary, 'review summary')
 }
 
 export async function fetchReviewProgress(reviewId: string): Promise<ReviewProgress> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/{id}/progress', {
+  const { data, response } = await client.GET('/api/reviews/{id}/progress', {
     params: { path: { id: reviewId } },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review progress unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review progress unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewProgress, 'review progress')
 }
@@ -620,7 +653,7 @@ export async function fetchFindingList(
   filters: FindingFilters,
 ): Promise<FindingListResponse> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/{id}/findings', {
+  const { data, response } = await client.GET('/api/reviews/{id}/findings', {
     params: {
       path: { id: reviewId },
       query: {
@@ -632,7 +665,10 @@ export async function fetchFindingList(
     },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Findings unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Findings unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseFindingList, 'finding list')
 }
@@ -642,12 +678,15 @@ export async function fetchFindingDetail(
   findingId: string,
 ): Promise<FindingDetail> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET(
+  const { data, response } = await client.GET(
     '/api/reviews/{id}/findings/{findingId}',
     { params: { path: { id: reviewId, findingId } } },
   )
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Finding unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Finding unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseFindingDetail, 'finding detail')
 }
@@ -662,7 +701,7 @@ export async function createReview(
   const body: components['schemas']['CreateReviewRequest'] = {}
   if (contractPackKey) body.contractPackKey = contractPackKey
   if (clientRequestId) body.clientRequestId = clientRequestId
-  const { data, error, response } = await client.POST(
+  const { data, response } = await client.POST(
     '/api/contracts/{contractId}/versions/{versionNumber}/reviews',
     {
       params: { path: { contractId, versionNumber } },
@@ -670,7 +709,10 @@ export async function createReview(
     },
   )
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review creation failed'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_CREATE_MESSAGES, 'Review creation failed'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewSummary, 'review summary')
 }

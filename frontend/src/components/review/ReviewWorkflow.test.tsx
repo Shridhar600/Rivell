@@ -262,8 +262,14 @@ describe('workflow state availability and conflict truth', () => {
       await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Redline execution' })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(api.requests.filter((r) => r.url.includes('/approved-change-set')).length).toBe(1),
+    )
     expect(
-      await screen.findByText(/The approved change set could not be loaded/, {}, { timeout: 3000 }),
+      screen.queryByText(/The approved change set could not be loaded/),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/approved change set and redline cannot be confirmed/i),
     ).toBeInTheDocument()
   })
 
@@ -275,6 +281,27 @@ describe('workflow state availability and conflict truth', () => {
 
     await screen.findByRole('region', { name: 'Human review' })
     expect(api.requests.filter((r) => r.url.includes('/approved-change-set'))).toHaveLength(0)
+  })
+
+  it('treats a missing change set as not finalized rather than a load failure', async () => {
+    const api = stubContractApi(
+      baseOptions({
+        humanReview: fixtureHumanReview({ status: 'COMPLETED' }),
+        changeSetStatus: 404,
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+
+    expect(
+      await screen.findByText(/The approved change set is frozen and decisions are read-only/),
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(api.requests.filter((r) => r.url.includes('/redline')).length).toBeGreaterThan(0),
+    )
+    expect(
+      screen.queryByText(/The approved change set could not be loaded/),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
   it('states that the change set and redline are unavailable for the same reason', async () => {

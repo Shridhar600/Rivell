@@ -84,6 +84,16 @@ export function readOptionalNullableBoolean(
   return value
 }
 
+export function readBoolean(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): boolean {
+  const value = source[key]
+  if (typeof value !== 'boolean') throw malformed(what)
+  return value
+}
+
 export function readOptionalBoolean(
   source: Record<string, unknown>,
   key: string,
@@ -257,6 +267,14 @@ export function parseApiResult<T>(
   return parseData(envelope.data, what)
 }
 
+/**
+ * Reads the server's free-text error body.
+ *
+ * No production path calls this any more: for several failure paths the backend's `detail` is a raw
+ * exception message carrying identifiers and internal source locations, and it must never reach a
+ * rendered message. Use `boundedErrorMessage` from `./errorMessage` instead, which derives copy from
+ * the HTTP status alone. Kept only for the record and its own tests.
+ */
 export function errorMessage(error: unknown, fallback: string): string {
   if (typeof error === 'object' && error !== null) {
     const record = error as Record<string, unknown>

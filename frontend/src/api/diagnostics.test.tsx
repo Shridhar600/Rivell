@@ -214,6 +214,31 @@ describe('parseReviewDiagnostics', () => {
   it('rejects a payload with no review identity', () => {
     expect(() => parseReviewDiagnostics({ contractId: 'c-1' })).toThrow(/malformed/i)
   })
+
+  it('fails closed rather than reporting a missing count block as zero', () => {
+    const { findings, decisions, finalization, ...withoutCounts } = completedPayload
+    void findings
+    void decisions
+    void finalization
+
+    expect(() => parseReviewDiagnostics(withoutCounts)).toThrow(/malformed/i)
+    expect(() =>
+      parseReviewDiagnostics({ ...completedPayload, findings: null }),
+    ).toThrow(/malformed/i)
+    expect(() =>
+      parseReviewDiagnostics({ ...completedPayload, finalization: null }),
+    ).toThrow(/malformed/i)
+    expect(() =>
+      parseReviewDiagnostics({ ...completedPayload, decisions: undefined }),
+    ).toThrow(/malformed/i)
+  })
+
+  it('fails closed when the worker flag is missing rather than claiming it is off', () => {
+    const { backgroundWorkerEnabled, ...withoutWorker } = completedPayload
+    void backgroundWorkerEnabled
+
+    expect(() => parseReviewDiagnostics(withoutWorker)).toThrow(/malformed/i)
+  })
 })
 
 describe('fetchReviewDiagnostics', () => {

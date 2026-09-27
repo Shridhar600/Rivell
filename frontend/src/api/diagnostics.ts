@@ -11,6 +11,7 @@ import {
   readClosedString,
   readNumber,
   readOptionalBoolean,
+  readBoolean,
   readOptionalNullableBoolean,
   readOptionalNullableNumber,
   readOptionalNullableString,
@@ -104,7 +105,7 @@ export type ReviewDiagnostics = {
   contractVersionNumber: number
   reviewStatus: (typeof REVIEW_STATUSES)[number] | 'UNKNOWN'
   reviewFailureDetail: InternalDetail
-  backgroundWorkerEnabled: boolean | null
+  backgroundWorkerEnabled: boolean
   analysis: DiagnosticsRun | null
   findings: DiagnosticsFindingCounts
   decisions: DiagnosticsDecisionCounts
@@ -217,17 +218,13 @@ export function parseReviewDiagnostics(value: unknown, what = 'review diagnostic
     contractVersionNumber: readNumber(source, 'contractVersionNumber', what),
     reviewStatus: readClosedString(source, 'reviewStatus', REVIEW_STATUSES),
     reviewFailureDetail: readInternalDetail(source, 'reviewFailure', what),
-    backgroundWorkerEnabled: readOptionalNullableBoolean(
-      source,
-      'backgroundWorkerEnabled',
-      what,
-    ),
+    backgroundWorkerEnabled: readBoolean(source, 'backgroundWorkerEnabled', what),
     analysis: source['analysis'] === null || source['analysis'] === undefined
       ? null
       : parseRun(source['analysis'], what),
-    findings: parseFindingCounts(source['findings'] ?? {}, what),
-    decisions: parseDecisionCounts(source['decisions'] ?? {}, what),
-    finalization: parseFinalization(source['finalization'] ?? {}, what),
+    findings: parseFindingCounts(source['findings'], what),
+    decisions: parseDecisionCounts(source['decisions'], what),
+    finalization: parseFinalization(source['finalization'], what),
     redline:
       source['redline'] === null || source['redline'] === undefined
         ? null

@@ -135,7 +135,7 @@ describe('Knowledge overview', () => {
     renderRoute()
 
     const alert = await screen.findByRole('alert', {}, { timeout: 5000 })
-    expect(alert).toHaveTextContent(/knowledge sources are unavailable/i)
+    expect(alert).toHaveTextContent(/knowledge request could not be completed/i)
 
     await userEvent.click(screen.getByRole('button', { name: /try again/i }))
     expect(

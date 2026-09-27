@@ -72,10 +72,9 @@ export function ReviewCreatePanel({
           navigate(`/reviews/${contractId}/analysis/${summary.id}`),
         onError: (error) => {
           const failure = classifyCreateOutcome(reviewErrorStatus(error))
-          const needsReconciliation = failure.uncertain || failure.kind === 'CONFLICT'
           setOutcome(failure)
-          setBlocked(needsReconciliation)
-          setRecoveryState(needsReconciliation ? 'needs-check' : 'none')
+          setBlocked(failure.uncertain)
+          setRecoveryState(failure.uncertain ? 'needs-check' : 'none')
         },
         onSettled: () => {
           submitting.current = false
@@ -223,7 +222,7 @@ export function ReviewCreatePanel({
               Open the contract&apos;s semantic analysis
             </Link>
           ) : null}
-          {outcome.uncertain || outcome.kind === 'CONFLICT' ? (
+          {outcome.uncertain ? (
             <button type="button" className="button" onClick={() => void handleRecoveryCheck()}>
               Re-check reviews
             </button>

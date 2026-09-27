@@ -402,7 +402,7 @@ describe('knowledge publication', () => {
       candidates: [approvedOne],
       publications: [],
       publishError:
-        'Candidate c1 cannot be published: only APPROVED candidates can be published',
+        'Candidate c1 cannot be published: only APPROVED candidates can be published at com.rivell.workbench.knowledge.KnowledgePublicationService.publish:104',
     })
 
     renderRoute('/knowledge/artifacts/a1')
@@ -417,8 +417,9 @@ describe('knowledge publication', () => {
     )
 
     expect(
-      await within(dialog).findByText(/only APPROVED candidates can be published/i),
+      await within(dialog).findByText(/only candidates that have been approved can be published/i),
     ).toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent(/com\.rivell|publish:104/)
     expect(dialog).toHaveAttribute('open')
   })
 

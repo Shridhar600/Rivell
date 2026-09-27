@@ -3,7 +3,7 @@ import { parseReviewDiagnostics } from '../api/diagnostics'
 import type { DiagnosticsCheck, DiagnosticsRun, ReviewDiagnostics } from '../api/diagnostics'
 import {
   diagnosticsBackgroundWorkerStatement,
-  diagnosticsCheckState,
+  diagnosticsCheckStateLabel,
   diagnosticsCheckSummary,
   diagnosticsCountRows,
   diagnosticsEnvironmentStatement,
@@ -11,7 +11,7 @@ import {
   diagnosticsRedlineStatement,
   diagnosticsReviewFailureStatement,
   diagnosticsRunDuration,
-  diagnosticsRunState,
+  diagnosticsRunStateLabel,
   diagnosticsStallLines,
 } from './diagnostics'
 
@@ -97,15 +97,27 @@ function diagnostics(wireOverrides: Record<string, unknown> = {}): ReviewDiagnos
 }
 
 describe('diagnostics state labels', () => {
-  it('labels run and check states with an honest tone', () => {
-    expect(diagnosticsRunState(run()).tone).toBe('positive')
-    expect(diagnosticsRunState(run({ status: 'FAILED' })).tone).toBe('critical')
-    expect(diagnosticsRunState(run({ status: 'UNKNOWN' })).tone).toBe('unknown')
-    expect(diagnosticsRunState(null).label).toMatch(/no analysis run/i)
+  it('labels every run and check state, including unknown ones', () => {
+    expect(diagnosticsRunStateLabel(run())).toBe('Analysis run completed')
+    expect(diagnosticsRunStateLabel(run({ status: 'FAILED' }))).toBe('Analysis run failed')
+    expect(diagnosticsRunStateLabel(run({ status: 'UNKNOWN' }))).toMatch(/not recognised/i)
+    expect(diagnosticsRunStateLabel(null)).toMatch(/no analysis run has been created/i)
 
-    expect(diagnosticsCheckState(check({ status: 'DEGRADED' })).tone).toBe('caution')
-    expect(diagnosticsCheckState(check({ status: 'SKIPPED' })).label).toBe('Skipped')
-    expect(diagnosticsCheckState(check({ status: 'UNKNOWN' })).tone).toBe('unknown')
+    expect(diagnosticsCheckStateLabel(check({ status: 'DEGRADED' }))).toBe('Degraded')
+    expect(diagnosticsCheckStateLabel(check({ status: 'SKIPPED' }))).toBe('Skipped')
+    expect(diagnosticsCheckStateLabel(check({ status: 'UNKNOWN' }))).toMatch(/not recognised/i)
+  })
+
+  it('exposes no severity or emphasis signal for a future design to inherit', () => {
+    const labels = [
+      diagnosticsRunStateLabel(run({ status: 'COMPLETED' })),
+      diagnosticsRunStateLabel(run({ status: 'FAILED' })),
+      diagnosticsCheckStateLabel(check({ status: 'DEGRADED' })),
+      diagnosticsCheckStateLabel(check({ status: 'UNKNOWN' })),
+    ]
+
+    for (const label of labels) expect(typeof label).toBe('string')
+    expect(Object.keys(diagnosticsRunStateLabel)).not.toContain('tone')
   })
 
   it('summarises check outcomes by count', () => {
@@ -219,8 +231,8 @@ describe('diagnostics statements', () => {
       diagnosticsBackgroundWorkerStatement(diagnostics({ backgroundWorkerEnabled: false })),
     ).toMatch(/not running/)
     expect(
-      diagnosticsBackgroundWorkerStatement(diagnostics({ backgroundWorkerEnabled: null })),
-    ).toMatch(/could not determine/)
+      diagnosticsBackgroundWorkerStatement(diagnostics({ backgroundWorkerEnabled: true })),
+    ).toMatch(/worker is running/)
   })
 
   it('admits a recorded review failure without exposing it', () => {
@@ -239,7 +251,10 @@ describe('diagnostics statements', () => {
 
     expect(rows.map((row) => row.label)).toContain('Findings recorded')
     expect(rows.find((row) => row.label === 'Findings recorded')?.value).toBe('2')
-    for (const row of rows) expect(row.value).not.toMatch(/run|latest|completed/i)
+    for (const row of rows) {
+      expect(row.value).not.toMatch(/run|latest|completed/i)
+      expect(row.label).not.toMatch(/run|latest|completed/i)
+    }
   })
 
   it('passes the server stall reasons through unchanged', () => {
@@ -256,18 +271,28 @@ describe('diagnostics statements', () => {
       reviewStatus: 'FAILED',
       reviewFailure: RAW_INTERNAL,
       backgroundWorkerEnabled: false,
+      findings: { total: 0, blocking: 0, reviewRequired: 0, informational: 0 },
+      decisions: { accepted: 0, edited: 0, rejected: 0, escalated: 0 },
+      finalization: { finalized: false, changeSetId: null, finalizedAt: null, approvedChanges: 0 },
       analysis: toWireRun(run({ failureDetail: 'RECORDED', checks: [check({ degradedReason: 'RECORDED' })] })),
     })
     const rendered = [
-      diagnosticsRunState(withInternals.analysis).label,
+      diagnosticsRunStateLabel(withInternals.analysis),
+      diagnosticsCheckStateLabel(
+        (withInternals.analysis as DiagnosticsRun).checks[0],
+      ),
       diagnosticsCheckSummary(withInternals.analysis as DiagnosticsRun),
       diagnosticsEnvironmentStatement(withInternals),
       diagnosticsBackgroundWorkerStatement(withInternals),
       diagnosticsReviewFailureStatement(withInternals),
       diagnosticsRedlineStatement(withInternals),
       diagnosticsFinalizationStatement(withInternals),
+      diagnosticsRunDuration(withInternals.analysis),
+      ...diagnosticsCountRows(withInternals).map((row) => `${row.label} ${row.value}`),
       ...diagnosticsStallLines(withInternals),
-    ].join(' ')
+    ]
+      .filter((part): part is string => part !== null)
+      .join(' ')
 
     expect(rendered).not.toMatch(/IllegalState|com\.rivell|require:81/)
   })
