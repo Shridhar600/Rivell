@@ -142,10 +142,14 @@ class EnrichmentTenantDisclosureIT {
         //
         // `failureReason` is present exactly when the version FAILED. `observations` is ABSENT here,
         // and that is a fact about the state rather than a gap in coverage: enrichment threw before
-        // it produced an observations record, so there is no analysis-health telemetry to report. A
-        // failed version has no provider/quality telemetry to leak, which is why the FAILED fixture
-        // cannot exercise the `quality`/`observations` leakage path and the degraded fixture below
-        // must.
+        // it produced an observations record, so there is no execution telemetry to report.
+        //
+        // `quality` is NOT absent, and an earlier draft of this comment claimed it was. Every FAILED
+        // enrichment is recorded with a PROVIDER_DEGRADATION quality note — `persistFailed` writes it
+        // unconditionally, for every classified reason, including UNSUPPORTED_SOURCE where the
+        // document is the cause. So this fixture DOES carry provider attribution through `quality`,
+        // and the allow-list check below is applied to it for that reason. Whether that write is
+        // correct is escalated, not fixed here; see the ledger entry.
         assertThat(data.path("enrichmentStatus").asText()).isEqualTo("FAILED");
         assertThat(data.has("failureReason")).isTrue();
         assertThat(data.path("quality").isArray()).isTrue();
@@ -156,6 +160,14 @@ class EnrichmentTenantDisclosureIT {
         assertNoSuppressedOperatorReason(data, "a FAILED response");
         assertNoSecrets(data, "a FAILED response");
         assertTenantCodesAreClosedSets(data, "a FAILED response");
+
+        // Applied here too, not only on the degraded fixture. This response carries provider
+        // attribution through `quality` on the FAILED path, so leaving the check to the degraded
+        // test would permit the token accidentally rather than knowingly.
+        assertThat(providerAttributedTokensIn(data))
+                .as("provider attribution on the FAILED path is limited to the escalated allow-list")
+                .isSubsetOf(PERMITTED_PROVIDER_ATTRIBUTION)
+                .isNotEmpty();
     }
 
     @Test

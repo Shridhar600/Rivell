@@ -286,15 +286,13 @@ describe('enrichment failure reasons', () => {
     expect(enrichmentFailureNote('UNSUPPORTED_SOURCE').summary).not.toBe(
       enrichmentFailureNote('INTERNAL').summary,
     )
-    // SERVICE_UNAVAILABLE and INTERNAL deliberately share a sentence. After DW-041 the tenant
-    // cannot honestly be told which of the two occurred, and the only truthful difference is the
-    // affordance: a re-run control is offered for one and withheld for the other. Distinct wording
-    // here would assert a distinction this surface does not have.
+    // SERVICE_UNAVAILABLE and INTERNAL deliberately share a sentence. After DW-041 the tenant cannot
+    // honestly be told which of the two occurred, and distinct wording here would assert a
+    // distinction this surface does not have. There is no second signal to fall back on either: the
+    // note carries a sentence and nothing else, because the boolean this view model used to carry
+    // gated no control and named a claim the surface cannot support.
     expect(enrichmentFailureNote('SERVICE_UNAVAILABLE').summary).toBe(
       enrichmentFailureNote('INTERNAL').summary,
-    )
-    expect(enrichmentFailureNote('SERVICE_UNAVAILABLE').retryAvailable).not.toBe(
-      enrichmentFailureNote('INTERNAL').retryAvailable,
     )
   })
 
@@ -319,24 +317,12 @@ describe('enrichment failure reasons', () => {
     }
   })
 
-  it('leaves a retry control available only for the reason that is not about the document', () => {
-    expect(codes.filter((code) => enrichmentFailureNote(code).retryAvailable)).toEqual([
-      'SERVICE_UNAVAILABLE',
-    ])
+  it('states an unrecognised code instead of hiding it', () => {
+    expect(enrichmentFailureNote('UNKNOWN').summary).toMatch(/does not recognise/i)
   })
 
-  it('states an unrecognised code instead of hiding it, without assuming a retry is futile', () => {
-    const note = enrichmentFailureNote('UNKNOWN')
-
-    expect(note.summary).toMatch(/does not recognise/i)
-    expect(note.retryAvailable).toBe(true)
-  })
-
-  it('keeps the retry available but admits the missing reason when none was recorded', () => {
-    const note = enrichmentFailureNote(null)
-
-    expect(note.summary).toMatch(/did not record a reason/i)
-    expect(note.retryAvailable).toBe(true)
+  it('admits the missing reason when none was recorded', () => {
+    expect(enrichmentFailureNote(null).summary).toMatch(/did not record a reason/i)
   })
 
   /**
@@ -365,19 +351,24 @@ describe('enrichment failure reasons', () => {
   })
 
   /**
-   * The field name is the other half of the claim. `retryAvailable` asserts that a control is
-   * offered; the previous `retryable` asserted that a retry was appropriate, which the frontend
-   * cannot know after redaction. This pins the meaning rather than the value, so renaming the field
-   * back to a claim of suitability fails here.
+   * The view model must carry no claim about recoverability at all.
+   *
+   * <p>It previously carried two. The first, `retryable`, asserted that a retry was appropriate,
+   * which this surface cannot know once the diagnosis is redacted. Replacing it with
+   * `retryAvailable` looked like a fix and was not: the re-run control is rendered unconditionally,
+   * so the boolean selected a sentence and withheld nothing, while the name and the accompanying
+   * comment claimed it withheld the control. A test asserting the field's shape is what makes that
+   * class of fiction visible — the field is now gone, and this fails if any claim-shaped field
+   * returns.
    */
-  it('reports retry availability as availability, never as suitability', () => {
+  it('carries a sentence and no claim about whether a retry is appropriate or available', () => {
     for (const code of [...ENRICHMENT_FAILURE_REASONS, 'UNKNOWN', null] as (
       | EnrichmentFailureReason
       | null
     )[]) {
       const note = enrichmentFailureNote(code as EnrichmentFailureReason)
-      expect(Object.keys(note).sort()).toEqual(['retryAvailable', 'summary'])
-      expect(typeof note.retryAvailable).toBe('boolean')
+      expect(Object.keys(note)).toEqual(['summary'])
+      expect(Object.keys(note).join()).not.toMatch(/retry|recover|available|worthwhile/i)
     }
   })
 })

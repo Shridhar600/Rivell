@@ -164,8 +164,11 @@ class ReviewDiagnosticsQueryIT {
         // Decision history on the first run: eight of the nine findings decided, three of them with
         // a superseded revision. The latest-revision totals differ from the all-row totals, so a
         // regression to "count every row" is detectable by value and not only by SQL shape.
-        //   all rows:     ACCEPT 5  REJECT 4  ESCALATE 2  EDIT 1  = 12 rows
-        //   latest only:  ACCEPT 1  REJECT 4  ESCALATE 2  EDIT 1  =  8 decided findings
+        //   latest only (correct):  ACCEPT 1  REJECT 4  ESCALATE 2  EDIT 1  =  8 decided findings
+        //   earliest only:           ACCEPT 3  REJECT 2  ESCALATE 1  EDIT 2  =  8 rows, wrong action
+        //   every historical row:    ACCEPT 4  REJECT 4  ESCALATE 2  EDIT 2  = 12 rows, double counted
+        // Both wrong shapes differ from the correct one in at least two actions, so either
+        // regression - reversing the revision order, or dropping `distinct on` - is caught by value.
         seedDecisions(organizationId, review.id(), firstRun.id(), findings, 0, 8);
         assertThat(decisionRepository.findCurrentForRun(organizationId, review.id(), firstRun.id()))
                 .as("the fixture must really hold superseded revisions, or the totals prove nothing")

@@ -495,18 +495,18 @@ export function profileKey(profile: ReviewProfile | null): string {
 /**
  * What the tenant is told about a failed enrichment.
  *
- * `retryAvailable` says only that a re-run control is offered. It deliberately does NOT say that a
- * retry is worthwhile or that it will succeed, because after DW-041 narrowed the taxonomy the
- * frontend can no longer know either: the information that would decide it lives in the operator
- * reason, which is deliberately redacted from this surface. The earlier field was called
- * `retryable` and the copy told the tenant to "try again in a moment", which asserted a transient
- * condition. Two of the five reasons that collapse into `SERVICE_UNAVAILABLE` can never succeed on
- * a retry — the deployment has no usable provider, or the provider refused on auth/quota — so that
- * was a false claim about recoverability. Whether a retry should be offered at all for this class,
- * or whether the tenant needs a recovery class of its own, is an open product decision (DW-041)
- * and is escalated rather than answered here.
+ * <p>Only the sentence. There is deliberately no "retryable" or "retry available" flag, because a
+ * re-run control is offered for every reason — the previous implementation had a boolean that gated
+ * nothing but was named as though it withheld the control, and a second claim attached to it that a
+ * retry was worthwhile. Neither was true, and two of the five reasons collapsed into
+ * `SERVICE_UNAVAILABLE` can never succeed on a retry, so the frontend cannot honestly assert
+ * suitability: the diagnosis that would decide it is exactly what DW-041 redacted.
+ *
+ * <p>Whether a retry should be offered at all for this class, and whether the tenant needs a recovery
+ * classification of its own, is an open product decision and is escalated rather than answered here.
+ * What this surface does is state what happened, without a cause, a timeframe or an outcome.
  */
-export type EnrichmentFailureNote = { summary: string; retryAvailable: boolean }
+export type EnrichmentFailureNote = { summary: string }
 
 /**
  * Copy for the tenant-facing enrichment failure taxonomy (M10A.1 / DW-041).
@@ -516,22 +516,23 @@ export type EnrichmentFailureNote = { summary: string; retryAvailable: boolean }
  * credential state. The operator's precise diagnosis stays in server state, where it is queryable
  * and safe.
  *
- * The copy is strictly subtractive: it states what happened and nothing else. It names no cause, no
- * timeframe and no outcome, because this surface cannot honestly assert any of the three.
+ * The copy is strictly subtractive: it states what happened and nothing else. `SERVICE_UNAVAILABLE`
+ * and `INTERNAL` deliberately share a sentence, because after the narrowing the tenant cannot
+ * honestly be told which of the two occurred, and the only difference the wire could show was a
+ * claim that no diagnosis had been recorded — which is untrue for both.
  */
-const ENRICHMENT_FAILURE_NOTES: Record<string, EnrichmentFailureNote> = {
+const ENRICHMENT_FAILURE_NOTES: Record<
+  Exclude<EnrichmentFailureReason, 'UNKNOWN'>,
+  EnrichmentFailureNote
+> = {
   SERVICE_UNAVAILABLE: {
-    summary:
-      'Rivell could not complete the semantic analysis of this contract version.',
-    retryAvailable: true,
+    summary: 'Rivell could not complete the semantic analysis of this contract version.',
   },
   UNSUPPORTED_SOURCE: {
     summary: 'This document cannot be analysed for semantics as it is supplied.',
-    retryAvailable: false,
   },
   INTERNAL: {
     summary: 'Rivell could not complete the semantic analysis of this contract version.',
-    retryAvailable: false,
   },
 }
 
@@ -542,16 +543,16 @@ export function enrichmentFailureNote(
     return {
       summary:
         'Rivell could not complete the semantic analysis of this contract version and did not record a reason.',
-      retryAvailable: true,
     }
   }
+  // The record is keyed by the real reasons so a typo is a compile error, mirroring the backend's
+  // exhaustive switch. 'UNKNOWN' is the parser's sentinel for an unrecognised wire value rather than
+  // a reason, so it is excluded from the key type and falls through to the fallback sentence.
+  const known = ENRICHMENT_FAILURE_NOTES[reason as Exclude<EnrichmentFailureReason, 'UNKNOWN'>];
   return (
-    ENRICHMENT_FAILURE_NOTES[reason] ?? {
+    known ?? {
       summary:
         'Rivell could not complete the semantic analysis of this contract version and recorded a reason Rivell does not recognise.',
-      // Not recognising a new code is not evidence that re-running would fail, so the control stays
-      // available rather than withheld on a guess.
-      retryAvailable: true,
     }
   )
 }

@@ -174,6 +174,37 @@ describe('semantic analysis lifecycle', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('did not record a reason')
   })
 
+/**
+   * The retry paragraph itself, which no component test covered.
+   *
+   * <p>It previously varied by reason and one of its two branches told the tenant that "Rivell did
+   * not record whether running it again would help" — untrue for every reason it applied to, because
+   * the backend records a reason for every FAILED enrichment, and INTERNAL is the most common
+   * recorded reason of all. The branch also claimed to withhold a re-run control while the control
+   * was in fact rendered unconditionally. Both claims are unrecoverable from the copy alone, so the
+   * rendered sentence is asserted directly.
+   */
+  it('never tells the tenant that no recoverability was recorded, for any reason', async () => {
+    for (const failureReason of ['SERVICE_UNAVAILABLE', 'INTERNAL', 'UNSUPPORTED_SOURCE'] as const) {
+      const api = stubContractApi({
+        semantics: fixtureSemantics({ enrichmentStatus: 'FAILED', failureReason }),
+      })
+      const { unmount } = renderRoute('/reviews/c1?view=semantics')
+
+      await screen.findByRole('alert')
+      const body = document.body.textContent ?? ''
+      expect(body).not.toMatch(/did not record whether/i)
+      // A re-run is offered for every reason, and the copy may not imply the profile is the remedy.
+      expect(
+        screen.getByRole('button', { name: 'Try semantic analysis again' }),
+      ).toBeInTheDocument()
+      expect(body).not.toMatch(/try again with the profile/i)
+      expect(body).toMatch(/can be run again with the profile below/i)
+      unmount()
+      api.requests.length = 0
+    }
+  })
+
   it('shows analysis in progress and can check again', async () => {
     const api = stubContractApi({
       semantics: fixtureSemantics({ enrichmentStatus: 'ENRICHING' }),

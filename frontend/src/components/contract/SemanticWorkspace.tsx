@@ -174,7 +174,7 @@ export function SemanticWorkspace({
           versionNumber={versionNumber}
           storedProfile={semantics.reviewProfile}
           mode="retry"
-          retryAvailable={failure.retryAvailable}
+
         />
       </div>
     )
