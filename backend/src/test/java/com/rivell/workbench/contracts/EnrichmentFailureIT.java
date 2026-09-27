@@ -7,9 +7,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.rivell.workbench.contracts.api.TenantEnrichmentFailureReason;
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -136,7 +138,7 @@ class EnrichmentFailureIT {
                 .as("the legacy warning string must not be the only trace")
                 .allSatisfy(warning -> assertThat(warning).doesNotContain("Exception"));
 
-        // The reason survives to the API so a client can decide whether to retry.
+        // The tenant still learns whether a retry is worthwhile, but not the operator's diagnosis.
         MvcResult result = mockMvc.perform(get(
                         "/api/contracts/{id}/versions/{n}/semantics", contractId, 1))
                 .andExpect(status().isOk())
@@ -145,8 +147,52 @@ class EnrichmentFailureIT {
                 .andReturn();
         var reason = objectMapper.readTree(result.getResponse().getContentAsString())
                 .get("data").get("failureReason").asText();
-        assertThat(EnrichmentFailureReason.valueOf(reason))
-                .isEqualTo(semantics.failureReason());
+        assertThat(TenantEnrichmentFailureReason.valueOf(reason))
+                .isEqualTo(TenantEnrichmentFailureReason.of(semantics.failureReason()));
+    }
+
+    /**
+     * M10A.1 / DW-041: the wire reason must never name provider or configuration state, for any
+     * recorded reason, while the precise reason stays in state for an operator.
+     *
+     * <p>This is a whole-taxonomy assertion rather than a single case, because the disclosure risk
+     * is in the vocabulary itself: a mapping that is correct for the reason that happens to occur
+     * today still leaks the next one that is added.
+     */
+    @Test
+    void noRecordedEnrichmentReasonRevealsProviderStateToTheTenant() {
+        // Derived from the enum, so adding a tenant-facing reason extends the vocabulary checks
+        // below instead of leaving them asserting a stale hand-written snapshot of three names.
+        var tenantSafe = java.util.Arrays.stream(TenantEnrichmentFailureReason.values())
+                .map(Enum::name)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        assertThat(tenantSafe)
+                .as("the tenant vocabulary must not be empty")
+                .isNotEmpty();
+
+        // The tenant vocabulary itself is free of provider and configuration vocabulary. This is the
+        // property that holds even after a reason is added, which a per-reason assertion would not.
+        assertThat(tenantSafe).allSatisfy(name -> {
+            assertThat(name).doesNotContain("PROVIDER");
+            assertThat(name).doesNotContain("CONFIGURED");
+        });
+
+        // The five provider diagnoses are retained for an operator, all collapse to one class, and
+        // none of them passes through under its own name.
+        assertThat(Set.of(EnrichmentFailureReason.NO_PROVIDER_CONFIGURED,
+                        EnrichmentFailureReason.PROVIDER_TIMEOUT,
+                        EnrichmentFailureReason.PROVIDER_UNAVAILABLE,
+                        EnrichmentFailureReason.PROVIDER_REJECTED,
+                        EnrichmentFailureReason.PROVIDER_PROTOCOL))
+                .allSatisfy(reason -> {
+                    assertThat(TenantEnrichmentFailureReason.of(reason))
+                            .isEqualTo(TenantEnrichmentFailureReason.SERVICE_UNAVAILABLE);
+                    assertThat(tenantSafe).doesNotContain(reason.name());
+                });
+
+        // The one reason that stays distinct is the one the tenant can actually act on.
+        assertThat(TenantEnrichmentFailureReason.of(EnrichmentFailureReason.UNSUPPORTED_SOURCE))
+                .isEqualTo(TenantEnrichmentFailureReason.UNSUPPORTED_SOURCE);
     }
 
     /**

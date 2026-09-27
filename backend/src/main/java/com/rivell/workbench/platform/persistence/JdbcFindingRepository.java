@@ -187,6 +187,26 @@ class JdbcFindingRepository implements FindingRepository {
     }
 
     @Override
+    public Map<FindingClassification, Long> countFindingsByClassification(
+            UUID organizationId, UUID runId) {
+        return jdbcClient.sql("""
+                select review_classification, count(*) as total
+                from finding
+                where run_id = :runId and organization_id = :organizationId
+                group by review_classification
+                """)
+                .param("runId", runId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> Map.entry(
+                        FindingClassification.valueOf(rs.getString("review_classification")),
+                        rs.getLong("total")))
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
     public List<Finding> findFindings(UUID organizationId, UUID runId) {
         var rows = jdbcClient.sql("""
                 select id, organization_id, review_id, run_id, consolidation_key,

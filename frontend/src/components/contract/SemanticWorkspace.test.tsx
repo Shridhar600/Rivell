@@ -126,22 +126,27 @@ describe('semantic analysis lifecycle', () => {
     ).toBeInTheDocument()
   })
 
-  it('states a transient service failure and keeps the retry available', async () => {
+  it('states a service failure without claiming it is transient or that a retry will work', async () => {
     const api = stubContractApi({
       semantics: fixtureSemantics({
         enrichmentStatus: 'FAILED',
-        failureReason: 'PROVIDER_UNAVAILABLE',
+        failureReason: 'SERVICE_UNAVAILABLE',
       }),
     })
     renderRoute('/reviews/c1?view=semantics')
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('The semantic analysis service did not respond')
-    expect(alert).not.toHaveTextContent('PROVIDER_UNAVAILABLE')
+    expect(alert).toHaveTextContent('Rivell could not complete the semantic analysis')
+    expect(alert).not.toHaveTextContent('SERVICE_UNAVAILABLE')
+    // The tenant copy must not carry the operator's vocabulary, whatever the reason code was.
+    expect(alert.textContent ?? '').not.toMatch(/provider|credential|quota|configured/i)
+    // DW-041 corrective: this class merges transient provider failures with two that can never
+    // succeed on a retry, so the rendered surface may not assert a timeframe or an outcome.
+    expect(alert.textContent ?? '').not.toMatch(/in a moment|just now|shortly|will (?:succeed|work)/i)
     expect(
       screen.getByRole('button', { name: 'Try semantic analysis again' }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/You can try again with the profile below/)).toBeInTheDocument()
+    expect(screen.getByText(/The analysis can be run again with the profile below/)).toBeInTheDocument()
     expect(api.requests.filter((r) => r.url.includes('/enrichment'))).toHaveLength(0)
   })
 
@@ -167,6 +172,121 @@ describe('semantic analysis lifecycle', () => {
     renderRoute('/reviews/c1?view=semantics')
 
     expect(await screen.findByRole('alert')).toHaveTextContent('did not record a reason')
+  })
+
+/**
+   * The retry paragraph itself, which no component test covered.
+   *
+   * <p>It previously varied by reason and one of its two branches told the tenant that "Rivell did
+   * not record whether running it again would help" — untrue for every reason it applied to, because
+   * the backend records a reason for every FAILED enrichment, and INTERNAL is the most common
+   * recorded reason of all. The branch also claimed to withhold a re-run control while the control
+   * was in fact rendered unconditionally. Both claims are unrecoverable from the copy alone, so the
+   * rendered sentence is asserted directly.
+   */
+/**
+ * The re-run panel's own copy, which no assertion anywhere covered.
+ *
+ * <p>`ReRunAnalysis` renders inside `SemanticOverview` on the READY semantics view and carries its
+ * own retry copy, separate from the failure paragraph in `EnrichmentPanel`. Both are surfaces on
+ * which a tenant reads why an analysis did not finish, and both must stay free of promises: DW-041
+ * collapsed five provider reasons into `SERVICE_UNAVAILABLE`, two of which can never succeed on a
+ * re-run, so nothing on this path may say that waiting will help or that trying again will work.
+ *
+ * <p>The independent audit mutated the re-run panel's copy to "Try again in a moment" and every
+ * focused test stayed green, because this component had no test at all. This is that test.
+ *
+ * <p>Deliberate exclusion: the pending state says "Re-analysing this contract. This can take a
+ * moment." That is a duration hint about the operation the tenant has just started, and it promises
+ * nothing about the failure that produced this surface — so it is not treated as a promise here.
+ * Widening the rule to forbid any timing phrase would have failed against truthful copy, which is
+ * worse than leaving a gap. The judgement is recorded so it can be challenged rather than
+ * rediscovered.
+ */
+const RETRY_PROMISE =
+  /try again (?:in|after) (?:a |the )?(?:moment|second|minute|hour|day)|\b(?:in|after|within|wait(?:ing)?(?: a | the )?)\s*(?:a |the )?(?:few |little )?(?:moment|second|minute|hour)s?\b[^.]{0,60}\b(?:try|retry|work|help|succeed|resolve|fix|clear|recover)\b|\bwill (?:succeed|work|resolve|fix|recover|clear|heal)\b|\bshould (?:succeed|work|resolve)\b|\bguarantee[sd]?\b|\beventually\b|\bworth (?:a )?retr(?:y|ying)\b|\bretr(?:y|ying) is (?:safe|worth|recommended)\b|\bsafe to retr(?:y|ying)\b/i
+
+describe('retry surfaces make no promise about recovery', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('scans the promise patterns against known-bad copy, so the rule cannot pass vacuously', () => {
+    // Guards the guard: a mistyped or over-narrow regex would otherwise make every assertion below
+    // meaningless, and a mistyped or over-broad one would fail against copy that is already truthful.
+    for (const promise of [
+      'Try again in a moment.',
+      'Rivell could not finish. Wait a few minutes and try again.',
+      'This will succeed once the service responds.',
+      'A retry is safe.',
+      'The result will resolve shortly.',
+      'Recovery is guaranteed.',
+    ]) {
+      expect(promise).toMatch(RETRY_PROMISE)
+    }
+    for (const honest of [
+      'The analysis can be run again with the profile below.',
+      'Re-running recomputes the machine interpretations.',
+      'This can take a moment.',
+      'Rivell could not complete the semantic analysis of this contract version.',
+    ]) {
+      expect(honest).not.toMatch(RETRY_PROMISE)
+    }
+  })
+
+  it('keeps the re-run panel free of timing and guaranteed-recovery promises', async () => {
+    stubContractApi({ semantics: fixtureSemantics() })
+
+    renderRoute('/reviews/c1?view=semantics')
+
+    // The real component on the real route, not a copy of its logic.
+    const summary = await screen.findByText(/update profile and re-run analysis/i)
+    const panel = summary.closest('details')
+    expect(panel).not.toBeNull()
+
+    const copy = panel?.textContent ?? ''
+    expect(copy).toContain('Update profile and re-run analysis')
+    expect(copy).toMatch(/recomputes the machine interpretations/i)
+    expect(copy).not.toMatch(RETRY_PROMISE)
+  })
+
+  it('keeps the failed-enrichment retry paragraph free of the same promises', async () => {
+    for (const failureReason of ['SERVICE_UNAVAILABLE', 'INTERNAL', 'UNSUPPORTED_SOURCE'] as const) {
+      const api = stubContractApi({
+        semantics: fixtureSemantics({ enrichmentStatus: 'FAILED', failureReason }),
+      })
+      const { unmount } = renderRoute('/reviews/c1?view=semantics')
+
+      const paragraph = await screen.findByText(/the previous analysis did not complete/i)
+      const copy = paragraph.textContent ?? ''
+      expect(copy).toMatch(/can be run again with the profile below/i)
+      expect(copy).not.toMatch(RETRY_PROMISE)
+
+      unmount()
+      api.requests.length = 0
+    }
+  })
+})
+
+  it('never tells the tenant that no recoverability was recorded, for any reason', async () => {
+    for (const failureReason of ['SERVICE_UNAVAILABLE', 'INTERNAL', 'UNSUPPORTED_SOURCE'] as const) {
+      const api = stubContractApi({
+        semantics: fixtureSemantics({ enrichmentStatus: 'FAILED', failureReason }),
+      })
+      const { unmount } = renderRoute('/reviews/c1?view=semantics')
+
+      await screen.findByRole('alert')
+      const body = document.body.textContent ?? ''
+      expect(body).not.toMatch(/did not record whether/i)
+      // A re-run is offered for every reason, and the copy may not imply the profile is the remedy.
+      expect(
+        screen.getByRole('button', { name: 'Try semantic analysis again' }),
+      ).toBeInTheDocument()
+      expect(body).not.toMatch(/try again with the profile/i)
+      expect(body).toMatch(/can be run again with the profile below/i)
+      unmount()
+      api.requests.length = 0
+    }
   })
 
   it('shows analysis in progress and can check again', async () => {

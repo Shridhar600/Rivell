@@ -8,13 +8,11 @@ export function EnrichmentPanel({
   versionNumber,
   storedProfile,
   mode,
-  retryable = true,
 }: {
   contractId: string
   versionNumber: number
   storedProfile: ReviewProfile | null
   mode: 'initial' | 'retry'
-  retryable?: boolean
 }) {
   const enrich = useEnrichContract(contractId, versionNumber)
 
@@ -28,12 +26,15 @@ export function EnrichmentPanel({
           facts. The original document is never changed.
         </p>
       ) : (
+        // One sentence for every reason. A re-run control is offered either way — a version can be
+        // re-run after a corrected document or a changed profile — and this surface cannot say
+        // whether a re-run would succeed, because the diagnosis that would decide it is redacted
+        // (DW-041). It previously varied this sentence by reason, including a branch claiming no
+        // recoverability had been recorded, which was untrue: the backend records a reason for every
+        // FAILED enrichment.
         <p>
           The previous analysis did not complete. The contract structure is still available in the
-          document view.{' '}
-          {retryable
-            ? 'You can try again with the profile below.'
-            : 'Rivell did not record whether trying again would help, so the profile below can still be changed and re-run.'}
+          document view. The analysis can be run again with the profile below.
         </p>
       )}
       <ReviewProfileForm

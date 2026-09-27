@@ -32,15 +32,16 @@ export type EnrichmentStatus =
   | 'FAILED'
   | 'UNKNOWN'
 
-export const ENRICHMENT_FAILURE_REASONS = [
-  'NO_PROVIDER_CONFIGURED',
-  'PROVIDER_UNAVAILABLE',
-  'PROVIDER_TIMEOUT',
-  'PROVIDER_REJECTED',
-  'PROVIDER_PROTOCOL',
-  'UNSUPPORTED_SOURCE',
-  'INTERNAL',
-] as const
+/**
+ * Tenant-facing enrichment failure taxonomy (M10A.1 / DW-041).
+ *
+ * The backend records a precise operator diagnosis but projects a narrow classification onto this
+ * surface, because a tenant cannot act on whether the deployment holds credentials or has hit a
+ * provider quota, and telling them discloses the operator's configuration and account state. The
+ * provider-level values are deliberately absent: they must never reach a tenant, and a response
+ * carrying one is treated as unrecognised rather than rendered.
+ */
+export const ENRICHMENT_FAILURE_REASONS = ['UNSUPPORTED_SOURCE', 'SERVICE_UNAVAILABLE', 'INTERNAL'] as const
 
 export type EnrichmentFailureReason = (typeof ENRICHMENT_FAILURE_REASONS)[number] | 'UNKNOWN'
 
@@ -407,7 +408,9 @@ export function useSemanticsQuery(
       }
       return fetchSemantics(contractId, versionNumber)
     },
-    enabled: versionNumber !== undefined,
+    // Same empty-identity guard as the contract reads: versionNumber alone is not proof of a route
+    // identity, and a read against an empty contract id can only fail.
+    enabled: versionNumber !== undefined && Boolean(contractId),
     refetchInterval: (query) => {
       if (query.state.data?.enrichmentStatus !== 'ENRICHING') {
         pollAttempts.current = 0

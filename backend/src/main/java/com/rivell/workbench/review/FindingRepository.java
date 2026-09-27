@@ -1,6 +1,7 @@
 package com.rivell.workbench.review;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,6 +18,17 @@ public interface FindingRepository {
     void deleteFindings(UUID organizationId, UUID runId);
 
     List<Finding> findFindings(UUID organizationId, UUID runId);
+
+    /**
+     * Counts one run's findings per classification without materialising them.
+     *
+     * <p>Diagnostics needs four integers. Reading them from {@link #findFindings} loads every
+     * finding row for the run and then every concept and claim child, which is the most expensive
+     * thing a stalled-run diagnostic can do, on the run most likely to be large. Classifications
+     * absent from the result had no rows.
+     */
+    Map<FindingClassification, Long> countFindingsByClassification(
+            UUID organizationId, UUID runId);
 
     /**
      * Bounded filtered list over one run, ordered by severity then consolidation key;

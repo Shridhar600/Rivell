@@ -47,10 +47,34 @@ const detailById: Record<string, unknown> = {
   'f-6': fixtureCrossClauseFindingDetail,
 }
 
+/**
+ * The review's findings, as the list endpoint would actually return them for this review. Every id
+ * here has a detail below, so the list and the detail endpoint agree; the workspace now only requests
+ * a finding it can see in this review's own list.
+ */
+const absenceFinding = (id: string, concept: string) => ({
+  ...fixtureAbsenceFindingSummary,
+  id,
+  absenceConcept: concept,
+  concept,
+})
+
+const findingsForThisReview = {
+  items: [
+    fixtureClauseFindingSummary,
+    fixtureAbsenceFindingSummary,
+    absenceFinding('f-3', 'GOVERNING_LAW'),
+    absenceFinding('f-4', 'CONFIDENTIALITY'),
+    absenceFinding('f-5', 'INDEMNIFICATION'),
+    absenceFinding('f-6', 'TERM_TERMINATION'),
+  ],
+  truncated: false,
+}
+
 function renderWorkspace(initialEntry = '/reviews/c1/analysis/r-1', options: StubOptions = {}) {
   const api = stubContractApi({
     reviewSummary: fixtureCompletedReviewSummary,
-    findings: fixtureFindingList,
+    findings: findingsForThisReview,
     ...(options.findingDetailResponse || options.findingDetailStatus || options.findingDetail
       ? {}
       : {
@@ -576,7 +600,7 @@ describe('review workspace authority and network guards', () => {
 
     stubContractApi({
       reviewSummary: fixtureCompletedReviewSummary,
-      findings: fixtureFindingList,
+      findings: findingsForThisReview,
       findingDetailResponse: () => jsonResponse(envelope(fixtureGenerativeFindingDetail)),
     })
     render(
