@@ -126,7 +126,7 @@ describe('semantic analysis lifecycle', () => {
     ).toBeInTheDocument()
   })
 
-  it('states a transient service failure and keeps the retry available', async () => {
+  it('states a service failure without claiming it is transient or that a retry will work', async () => {
     const api = stubContractApi({
       semantics: fixtureSemantics({
         enrichmentStatus: 'FAILED',
@@ -140,10 +140,13 @@ describe('semantic analysis lifecycle', () => {
     expect(alert).not.toHaveTextContent('SERVICE_UNAVAILABLE')
     // The tenant copy must not carry the operator's vocabulary, whatever the reason code was.
     expect(alert.textContent ?? '').not.toMatch(/provider|credential|quota|configured/i)
+    // DW-041 corrective: this class merges transient provider failures with two that can never
+    // succeed on a retry, so the rendered surface may not assert a timeframe or an outcome.
+    expect(alert.textContent ?? '').not.toMatch(/in a moment|just now|shortly|will (?:succeed|work)/i)
     expect(
       screen.getByRole('button', { name: 'Try semantic analysis again' }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/You can try again with the profile below/)).toBeInTheDocument()
+    expect(screen.getByText(/The analysis can be run again with the profile below/)).toBeInTheDocument()
     expect(api.requests.filter((r) => r.url.includes('/enrichment'))).toHaveLength(0)
   })
 

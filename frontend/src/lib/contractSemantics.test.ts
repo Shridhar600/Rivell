@@ -273,14 +273,29 @@ describe('enrichment failure reasons', () => {
     }
   })
 
-  it('gives every code a distinct, non-technical sentence', () => {
+  it('gives every code a non-technical sentence, distinguishing them only where it can be truthful', () => {
     const summaries = codes.map((code) => enrichmentFailureNote(code).summary)
 
-    expect(new Set(summaries).size).toBe(codes.length)
     for (const summary of summaries) {
       expect(summary.length).toBeGreaterThan(20)
       expect(summary).not.toMatch(/Exception|com\.rivell|api key|credential|token|secret/i)
     }
+    // The document-attributable reason is separable from the two service-side ones, because that
+    // difference is real and the tenant can act on it.
+    expect(new Set(summaries).size).toBeGreaterThanOrEqual(2)
+    expect(enrichmentFailureNote('UNSUPPORTED_SOURCE').summary).not.toBe(
+      enrichmentFailureNote('INTERNAL').summary,
+    )
+    // SERVICE_UNAVAILABLE and INTERNAL deliberately share a sentence. After DW-041 the tenant
+    // cannot honestly be told which of the two occurred, and the only truthful difference is the
+    // affordance: a re-run control is offered for one and withheld for the other. Distinct wording
+    // here would assert a distinction this surface does not have.
+    expect(enrichmentFailureNote('SERVICE_UNAVAILABLE').summary).toBe(
+      enrichmentFailureNote('INTERNAL').summary,
+    )
+    expect(enrichmentFailureNote('SERVICE_UNAVAILABLE').retryAvailable).not.toBe(
+      enrichmentFailureNote('INTERNAL').retryAvailable,
+    )
   })
 
   it('never puts provider or configuration vocabulary in front of a tenant', () => {
@@ -304,8 +319,8 @@ describe('enrichment failure reasons', () => {
     }
   })
 
-  it('leaves a retry available for the reason that can clear on its own', () => {
-    expect(codes.filter((code) => enrichmentFailureNote(code).retryable)).toEqual([
+  it('leaves a retry control available only for the reason that is not about the document', () => {
+    expect(codes.filter((code) => enrichmentFailureNote(code).retryAvailable)).toEqual([
       'SERVICE_UNAVAILABLE',
     ])
   })
@@ -314,13 +329,55 @@ describe('enrichment failure reasons', () => {
     const note = enrichmentFailureNote('UNKNOWN')
 
     expect(note.summary).toMatch(/does not recognise/i)
-    expect(note.retryable).toBe(true)
+    expect(note.retryAvailable).toBe(true)
   })
 
   it('keeps the retry available but admits the missing reason when none was recorded', () => {
     const note = enrichmentFailureNote(null)
 
     expect(note.summary).toMatch(/did not record a reason/i)
-    expect(note.retryable).toBe(true)
+    expect(note.retryAvailable).toBe(true)
+  })
+
+  /**
+   * M10A.1 corrective (DW-041): the narrowing collapsed five provider reasons into
+   * SERVICE_UNAVAILABLE, two of which can never succeed on a retry — the deployment has no usable
+   * provider, or the provider refused on auth/quota. The copy used to tell the tenant to "try again
+   * in a moment", which asserts a transient, time-bounded condition this surface cannot know about,
+   * because the diagnosis that would decide it is exactly what was redacted.
+   *
+   * So the copy may state what happened and nothing else: no cause, no timeframe, no outcome, and
+   * no instruction that presumes a retry is the remedy. This asserts the absence of those claims for
+   * every tenant-facing code rather than for the one code that happens to occur today, because a
+   * promise added to the next code would be just as false.
+   */
+  it('promises no cause, no timeframe and no outcome for any tenant-facing reason', () => {
+    const forbiddenClaim =
+      /in a moment|just now|shortly|later|again|retry|eventually|will (?:succeed|work|resolve)|should (?:succeed|work)|temporary|transient/i
+
+    for (const code of [...ENRICHMENT_FAILURE_REASONS, 'UNKNOWN', null] as (
+      | EnrichmentFailureReason
+      | null
+    )[]) {
+      const { summary } = enrichmentFailureNote(code as EnrichmentFailureReason)
+      expect(summary).not.toMatch(forbiddenClaim)
+    }
+  })
+
+  /**
+   * The field name is the other half of the claim. `retryAvailable` asserts that a control is
+   * offered; the previous `retryable` asserted that a retry was appropriate, which the frontend
+   * cannot know after redaction. This pins the meaning rather than the value, so renaming the field
+   * back to a claim of suitability fails here.
+   */
+  it('reports retry availability as availability, never as suitability', () => {
+    for (const code of [...ENRICHMENT_FAILURE_REASONS, 'UNKNOWN', null] as (
+      | EnrichmentFailureReason
+      | null
+    )[]) {
+      const note = enrichmentFailureNote(code as EnrichmentFailureReason)
+      expect(Object.keys(note).sort()).toEqual(['retryAvailable', 'summary'])
+      expect(typeof note.retryAvailable).toBe('boolean')
+    }
   })
 })

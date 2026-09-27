@@ -492,29 +492,46 @@ export function profileKey(profile: ReviewProfile | null): string {
   ].join('|')
 }
 
-export type EnrichmentFailureNote = { summary: string; retryable: boolean }
+/**
+ * What the tenant is told about a failed enrichment.
+ *
+ * `retryAvailable` says only that a re-run control is offered. It deliberately does NOT say that a
+ * retry is worthwhile or that it will succeed, because after DW-041 narrowed the taxonomy the
+ * frontend can no longer know either: the information that would decide it lives in the operator
+ * reason, which is deliberately redacted from this surface. The earlier field was called
+ * `retryable` and the copy told the tenant to "try again in a moment", which asserted a transient
+ * condition. Two of the five reasons that collapse into `SERVICE_UNAVAILABLE` can never succeed on
+ * a retry — the deployment has no usable provider, or the provider refused on auth/quota — so that
+ * was a false claim about recoverability. Whether a retry should be offered at all for this class,
+ * or whether the tenant needs a recovery class of its own, is an open product decision (DW-041)
+ * and is escalated rather than answered here.
+ */
+export type EnrichmentFailureNote = { summary: string; retryAvailable: boolean }
 
 /**
  * Copy for the tenant-facing enrichment failure taxonomy (M10A.1 / DW-041).
  *
  * The five provider-level reasons this replaces were disclosed to tenants even though none of them
  * is actionable by a tenant, and `NO_PROVIDER_CONFIGURED` in particular described the deployment's
- * credential state. `SERVICE_UNAVAILABLE` is the one class a tenant can act on: retry later. The
- * operator's precise diagnosis stays in server state, where it is queryable and safe.
+ * credential state. The operator's precise diagnosis stays in server state, where it is queryable
+ * and safe.
+ *
+ * The copy is strictly subtractive: it states what happened and nothing else. It names no cause, no
+ * timeframe and no outcome, because this surface cannot honestly assert any of the three.
  */
 const ENRICHMENT_FAILURE_NOTES: Record<string, EnrichmentFailureNote> = {
   SERVICE_UNAVAILABLE: {
     summary:
-      'Rivell could not complete the semantic analysis of this contract version just now. Try again in a moment.',
-    retryable: true,
+      'Rivell could not complete the semantic analysis of this contract version.',
+    retryAvailable: true,
   },
   UNSUPPORTED_SOURCE: {
     summary: 'This document cannot be analysed for semantics as it is supplied.',
-    retryable: false,
+    retryAvailable: false,
   },
   INTERNAL: {
     summary: 'Rivell could not complete the semantic analysis of this contract version.',
-    retryable: false,
+    retryAvailable: false,
   },
 }
 
@@ -525,16 +542,16 @@ export function enrichmentFailureNote(
     return {
       summary:
         'Rivell could not complete the semantic analysis of this contract version and did not record a reason.',
-      retryable: true,
+      retryAvailable: true,
     }
   }
   return (
     ENRICHMENT_FAILURE_NOTES[reason] ?? {
       summary:
         'Rivell could not complete the semantic analysis of this contract version and recorded a reason Rivell does not recognise.',
-      // Not recognising a new code is not evidence that re-running would fail, so the retry is left
-      // available rather than blocked on a guess.
-      retryable: true,
+      // Not recognising a new code is not evidence that re-running would fail, so the control stays
+      // available rather than withheld on a guess.
+      retryAvailable: true,
     }
   )
 }

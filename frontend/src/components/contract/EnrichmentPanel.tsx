@@ -8,13 +8,13 @@ export function EnrichmentPanel({
   versionNumber,
   storedProfile,
   mode,
-  retryable = true,
+  retryAvailable = true,
 }: {
   contractId: string
   versionNumber: number
   storedProfile: ReviewProfile | null
   mode: 'initial' | 'retry'
-  retryable?: boolean
+  retryAvailable?: boolean
 }) {
   const enrich = useEnrichContract(contractId, versionNumber)
 
@@ -31,9 +31,11 @@ export function EnrichmentPanel({
         <p>
           The previous analysis did not complete. The contract structure is still available in the
           document view.{' '}
-          {retryable
-            ? 'You can try again with the profile below.'
-            : 'Rivell did not record whether trying again would help, so the profile below can still be changed and re-run.'}
+          {/* Neither branch claims the re-run will succeed or that the profile is the cause; this
+              surface cannot know either, because the diagnosis is redacted. See DW-041. */}
+          {retryAvailable
+            ? 'The analysis can be run again with the profile below.'
+            : 'Rivell did not record whether running it again would help, so the profile below can still be changed and re-run.'}
         </p>
       )}
       <ReviewProfileForm

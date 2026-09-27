@@ -24,6 +24,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import com.rivell.workbench.organization.UserIdentity;
+import com.rivell.workbench.redline.ChangeActionType;
+import com.rivell.workbench.redline.ChangeLanguageSource;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.review.ClaimKind;
@@ -35,6 +37,10 @@ import com.rivell.workbench.review.ProposedAction;
 import com.rivell.workbench.review.ProposedLanguageSource;
 import com.rivell.workbench.review.FindingClassification;
 import com.rivell.workbench.review.FindingRepository;
+import com.rivell.workbench.review.ReviewAnalysisRepository;
+import com.rivell.workbench.review.ReviewAnalysisRun;
+import com.rivell.workbench.review.ReviewPipeline;
+import com.rivell.workbench.review.RunTrigger;
 import com.rivell.workbench.review.LiabilityReviewIT;
 import com.rivell.workbench.review.ReviewAnalysisService;
 import com.rivell.workbench.review.ReviewPackRegistry;
@@ -89,6 +95,8 @@ class ReviewDiagnosticsQueryIT {
     @Autowired ReviewService reviewService;
     @Autowired ReviewAnalysisService analysisService;
     @Autowired FindingRepository findingRepository;
+    @Autowired ReviewAnalysisRepository analysisRepository;
+    @Autowired HumanDecisionRepository decisionRepository;
     @Autowired LiabilityReviewIT.MutableIdentity identityProvider;
     @Autowired JdbcClient jdbcClient;
 
@@ -118,6 +126,233 @@ class ReviewDiagnosticsQueryIT {
         assertThat(close).as("closing marker must appear in the server log")
                 .isNotNegative().isGreaterThan(open);
         return log.substring(open, close);
+    }
+
+
+    /**
+     * M10A.1 corrective / DW-046: the decision counters are the eval-label surface, so they must
+     * count the CURRENT effective decision for each finding, and only within one review, one run and
+     * one organization.
+     *
+     * <p>The first version of this test created no human decisions at all. Its decision assertions
+     * were about SQL shape only, so "the aggregate groups by action" passed whether or not the
+     * aggregate returned anything correct. Correctness and shape are separate claims and both are
+     * needed: the shape assertions cannot tell you the numbers are right, and the numbers cannot tell
+     * you the expensive path did not come back.
+     *
+     * <p><b>What this can and cannot prove.</b> It proves the aggregate returns the right totals for
+     * every row the schema can represent, across two organizations, two reviews of one organization,
+     * and two runs of one review. It CANNOT prove the scope predicates are load-bearing, because
+     * {@code human_decision}'s composite foreign keys tie every row to a real review, run, finding
+     * and organization: a cross-organization, cross-review or wrong-run row is unrepresentable, so
+     * no fixture can contain a contaminating one. Deleting a scope predicate from the query would
+     * leave this test green. Predicate presence is guarded by the SQL-shape assertions in the
+     * sibling test, and that is the honest limit of what is covered here.
+     */
+    @Test
+    void decisionCountsUseTheLatestRevisionPerFindingWithinOneRunAndOrganization() throws Exception {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+        var firstRun = analysisService.analyze(organizationId, review.id());
+
+        var findings = multiFindingRun(organizationId, review.id(), firstRun.id());
+        findingRepository.replaceFindings(organizationId, review.id(), firstRun.id(), findings);
+        assertThat(findings).hasSizeGreaterThanOrEqualTo(9);
+
+        // Decision history on the first run: eight of the nine findings decided, three of them with
+        // a superseded revision. The latest-revision totals differ from the all-row totals, so a
+        // regression to "count every row" is detectable by value and not only by SQL shape.
+        //   all rows:     ACCEPT 5  REJECT 4  ESCALATE 2  EDIT 1  = 12 rows
+        //   latest only:  ACCEPT 1  REJECT 4  ESCALATE 2  EDIT 1  =  8 decided findings
+        seedDecisions(organizationId, review.id(), firstRun.id(), findings, 0, 8);
+        assertThat(decisionRepository.findCurrentForRun(organizationId, review.id(), firstRun.id()))
+                .as("the fixture must really hold superseded revisions, or the totals prove nothing")
+                .hasSize(8);
+
+        // A second review in the same organization, with its own run and its own decisions. Its rows
+        // must not appear in the first review's counters.
+        var secondReview = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+        var secondRun = analysisService.analyze(organizationId, secondReview.id());
+        var secondFindings = multiFindingRun(organizationId, secondReview.id(), secondRun.id());
+        findingRepository.replaceFindings(
+                organizationId, secondReview.id(), secondRun.id(), secondFindings);
+        seedDecisions(organizationId, secondReview.id(), secondRun.id(), secondFindings, 100, 8);
+
+        // A second organization, with its own corpus, review, run and decisions.
+        var otherOrganizationId = organizationId();
+        var otherCorpus = corpusBuilder.buildMainCorpus(otherOrganizationId);
+        var otherReview = reviewService.create(
+                otherCorpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+        var otherRun = analysisService.analyze(otherOrganizationId, otherReview.id());
+        var otherFindings = multiFindingRun(
+                otherOrganizationId, otherReview.id(), otherRun.id());
+        findingRepository.replaceFindings(
+                otherOrganizationId, otherReview.id(), otherRun.id(), otherFindings);
+        seedDecisions(
+                otherOrganizationId, otherReview.id(), otherRun.id(), otherFindings, 200, 8);
+
+        // The other organization's rows are now in the database. Return to the first organization
+        // before asserting, because the identity the request runs under decides which organization
+        // the endpoint can see at all.
+        identityProvider.use(new UserIdentity(UUID.randomUUID(), organizationId, Set.of("ADMIN")));
+
+        // Assert the first review's counters before a second run exists, so the two assertions
+        // differ only by the run that was added between them.
+        assertDecisionCounts(review.id(), 1, 1, 4, 2);
+
+        // A second COMPLETED run for the SAME review, seeded through the production run repository
+        // rather than by re-running the analysis pipeline. This is the real recompute-shaped state:
+        // the earlier run and its decisions remain as audit history, and the counters must follow the
+        // latest completed run. Invoking `recompute` instead would pull provider fakes, snapshot
+        // freezing and the whole check pipeline into a test whose subject is a GROUP BY.
+        var secondRunNumber = analysisRepository.maxRunNumber(organizationId, review.id()) + 1;
+        var laterRun = ReviewAnalysisRun.running(UUID.randomUUID(), organizationId, review.id(),
+                secondRunNumber, RunTrigger.RECOMPUTE, ReviewPipeline.VERSION,
+                java.time.Instant.now());
+        assertThat(analysisRepository.tryInsertRun(laterRun)).isTrue();
+        assertThat(analysisRepository.markRunCompleted(
+                organizationId, laterRun.id(), java.time.Instant.now())).isTrue();
+
+        // Two decisions on the newer run only. The first run's eight decided findings must now be
+        // excluded entirely, and this run's two must be counted.
+        var laterFindings = multiFindingRun(organizationId, review.id(), laterRun.id());
+        findingRepository.replaceFindings(organizationId, review.id(), laterRun.id(), laterFindings);
+        // Deliberately a DIFFERENT shape from the first run's history. If both runs produced the
+        // same totals, a query that read the wrong run would still pass, and this assertion would
+        // not be testing run selection at all.
+        seedDecisions(organizationId, review.id(), laterRun.id(), laterFindings, 300, 1);
+        // The first run's findings stay in place as history, so this also exercises a latest
+        // completed run that is not the run the decisions were first written against.
+        assertThat(findingRepository.findFindings(organizationId, firstRun.id()))
+                .as("the superseded run keeps its findings as history")
+                .isNotEmpty();
+
+        // The first run's 8 decided findings are excluded entirely: the counters follow the latest
+        // COMPLETED run, and this run has exactly two decided findings of its own.
+        assertDecisionCounts(review.id(), 1, 0, 1, 0);
+    }
+
+    /**
+     * Also asserts the finding totals, because this fixture is the only one holding a second review
+     * in the same organization and a second organization. Without that, a scope predicate removed
+     * from the FINDING aggregate would go unnoticed: the finding assertions live in the sibling
+     * test, which only ever builds one review in one organization.
+     */
+    private void assertDecisionCounts(
+            UUID reviewId, int accepted, int edited, int rejected, int escalated)
+            throws Exception {
+        mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.findings.total").value(9))
+                .andExpect(jsonPath("$.data.decisions.accepted").value(accepted))
+                .andExpect(jsonPath("$.data.decisions.edited").value(edited))
+                .andExpect(jsonPath("$.data.decisions.rejected").value(rejected))
+                .andExpect(jsonPath("$.data.decisions.escalated").value(escalated));
+    }
+
+    /**
+     * Writes the decision history for one run, column-exactly.
+     *
+     * <p>Seeded through the repository rather than {@code HumanDecisionService.decide}, which
+     * requires a COMPLETED review and would drag finalization into a test about a count query. That
+     * is the same choice this file already makes for findings. It means the READ projection is what
+     * is under test; the write path has its own tests.
+     *
+     * <p>The revision numbers and the supersedes chain are load-bearing: the aggregate selects
+     * {@code distinct on (finding_id) ... order by finding_id, revision desc}, so a fixture with
+     * sloppy revisions would look rigorous while proving nothing. Dropping {@code revision desc}
+     * from the production query must therefore fail this test.
+     */
+    private void seedDecisions(
+            UUID organizationId, UUID reviewId, UUID runId, List<Finding> findings, int tag,
+            int decidedFindings) {
+        var actor = UUID.randomUUID();
+        var now = java.time.Instant.now();
+        java.util.function.IntFunction<UUID> at = index -> findings.get(index).id();
+        var rows = new java.util.ArrayList<HumanDecision>();
+
+        // Index -> the revision chain written for it. f8 is deliberately absent: an undecided finding
+        // must not be counted, and a counter that cannot show that is not proving much.
+        rows.add(decision(organizationId, reviewId, runId, at.apply(0), 1,
+                DecisionAction.ACCEPT, null, actor, now, tag));
+        rows.add(decision(organizationId, reviewId, runId, at.apply(1), 1,
+                DecisionAction.REJECT, "not the agreed position", actor, now, tag));
+        rows.add(decision(organizationId, reviewId, runId, at.apply(2), 1,
+                DecisionAction.ESCALATE, "needs the General Counsel", actor, now, tag));
+        rows.add(decision(organizationId, reviewId, runId, at.apply(4), 1,
+                DecisionAction.EDIT, null, actor, now, tag));
+        rows.add(decision(organizationId, reviewId, runId, at.apply(7), 1,
+                DecisionAction.ESCALATE, "outside the playbook", actor, now, tag));
+
+        if (decidedFindings <= 2) {
+            // The reduced shape used for the later run: one ACCEPT and one REJECT, nothing else.
+            for (var row : rows.subList(0, 2)) {
+                assertThat(decisionRepository.insert(row)).isTrue();
+            }
+            return;
+        }
+
+        // f3: an ACCEPT superseded by a REJECT, so the latest revision must win.
+        var f3r1 = decision(organizationId, reviewId, runId, at.apply(3), 1,
+                DecisionAction.ACCEPT, null, actor, now, tag);
+        rows.add(f3r1);
+        rows.add(decision(organizationId, reviewId, runId, at.apply(3), 2,
+                DecisionAction.REJECT, "rejected on second review", actor,
+                now.plusSeconds(1), tag, f3r1.id()));
+        // f5: an EDIT superseded by a REJECT, so the ordering is proven in both directions.
+        var f5r1 = decision(organizationId, reviewId, runId, at.apply(5), 1,
+                DecisionAction.EDIT, null, actor, now, tag);
+        rows.add(f5r1);
+        rows.add(decision(organizationId, reviewId, runId, at.apply(5), 2,
+                DecisionAction.REJECT, "rejected after drafting", actor,
+                now.plusSeconds(1), tag, f5r1.id()));
+        // f6: three revisions. The current one is the highest revision, not the last row inserted and
+        // not the first, so both "highest revision" and "most recent" readings are distinguished.
+        var f6r1 = decision(organizationId, reviewId, runId, at.apply(6), 1,
+                DecisionAction.ACCEPT, null, actor, now, tag);
+        rows.add(f6r1);
+        var f6r2 = decision(organizationId, reviewId, runId, at.apply(6), 2,
+                DecisionAction.ACCEPT, "accepted, then withdrawn", actor,
+                now.plusSeconds(1), tag, f6r1.id());
+        rows.add(f6r2);
+        rows.add(decision(organizationId, reviewId, runId, at.apply(6), 3,
+                DecisionAction.REJECT, "finally rejected", actor,
+                now.plusSeconds(2), tag, f6r2.id()));
+
+        for (var row : rows) {
+            assertThat(decisionRepository.insert(row))
+                    .as("decision fixture must be insertable: %s", row.action())
+                    .isTrue();
+        }
+    }
+
+    private static HumanDecision decision(
+            UUID organizationId, UUID reviewId, UUID runId, UUID findingId, int revision,
+            DecisionAction action, String comment, UUID actor, java.time.Instant at, int tag) {
+        return decision(organizationId, reviewId, runId, findingId, revision, action, comment,
+                actor, at, tag, null);
+    }
+
+    /**
+     * Built through the domain constructor on purpose. {@code HumanDecision} refuses an ACCEPT or
+     * EDIT without an approved action and refuses a REJECT or ESCALATE with one, so a fixture that
+     * hand-wrote the columns would either fail here or, worse, quietly encode rows the write path
+     * could never produce.
+     */
+    private static HumanDecision decision(
+            UUID organizationId, UUID reviewId, UUID runId, UUID findingId, int revision,
+            DecisionAction action, String comment, UUID actor, java.time.Instant at, int tag,
+            UUID supersedes) {
+        var executable = action == DecisionAction.ACCEPT || action == DecisionAction.EDIT;
+        return new HumanDecision(
+                UUID.randomUUID(), organizationId, reviewId, findingId, runId, revision, action,
+                executable ? ChangeActionType.REPLACE : null,
+                executable ? "approved language " + tag : null,
+                executable ? ChangeLanguageSource.HUMAN_EDIT : null,
+                null, comment, actor, at, null, supersedes);
     }
 
     @Test
@@ -199,10 +434,82 @@ class ReviewDiagnosticsQueryIT {
                 .contains("group by action")
                 .doesNotContain("supersedes_decision_id");
 
+        // The bounded-list regression cannot be caught by value: a fixture would need more than a
+        // thousand decisions to make a bound visible, and the old bug reported the limit rather than
+        // the truth. So it is caught by shape instead, on the aggregate statement alone — the wider
+        // request window legitimately contains bounded reads elsewhere.
+        var aggregate = statementContaining(sql, "select action, count(*)");
+        assertThat(aggregate.toLowerCase())
+                .as("the decision aggregate must be unbounded; a limit+1 bound is what reported "
+                        + "1001 for a single action")
+                .doesNotContain("limit");
+
         // Nothing is read once per finding.
         assertThat(countOccurrences(lower, "where finding_id ="))
                 .as("no per-finding read may be issued")
                 .isZero();
+    }
+
+    /** The single statement that contains the given fragment, so a shape claim is scoped to it. */
+    private static String statementContaining(String sql, String fragment) {
+        var start = sql.indexOf(fragment);
+        assertThat(start).as("statement containing '%s' must be in the window", fragment)
+                .isNotNegative();
+        var end = sql.indexOf(';', start);
+        return end < 0 ? sql.substring(start) : sql.substring(start, end);
+    }
+
+/**
+     * Why the organization-scope mutations survive, and what guards them instead.
+     *
+     * <p>Deleting {@code organization_id} from either aggregate leaves this suite green. That is not
+     * a gap that happens to be unfound: no fixture can expose it, because {@code human_decision} and
+     * {@code finding} carry composite foreign keys that tie every row to a real organization, review,
+     * run and finding. A cross-organization row is unrepresentable, so there is nothing for a missing
+     * predicate to wrongly include.
+     *
+     * <p>So the guarantee is asserted where it actually lives — in the schema. If a future migration
+     * drops one of these keys, this fails, and the failure is the signal that value-level isolation
+     * coverage has to be added at the same time, because from that point the query predicates would
+     * be the only thing standing between two organizations' data.
+     */
+    @Test
+    void theDecisionAndFindingTablesAreSchemaScopedByCompositeForeignKeys() {
+        var keys = jdbcClient.sql("""
+                select conrelid::regclass::text as table_name, conname,
+                       pg_get_constraintdef(oid) as definition
+                from pg_constraint
+                where contype = 'f'
+                  and conrelid::regclass::text in ('human_decision', 'finding')
+                """)
+                .query((rs, rowNum) -> rs.getString("table_name") + "|" + rs.getString("conname")
+                        + "|" + rs.getString("definition"))
+                .list();
+
+        assertThat(keys)
+                .as("the composite keys are the reason a cross-scope row cannot exist")
+                .isNotEmpty();
+
+        var decisionKeys = keys.stream().filter(k -> k.startsWith("human_decision|")).toList();
+        assertThat(decisionKeys)
+                .as("human_decision must be tied to its organization, review, run and finding")
+                .anyMatch(k -> k.contains("FOREIGN KEY (review_id, organization_id)"))
+                .anyMatch(k -> k.contains(
+                        "FOREIGN KEY (run_id, review_id, organization_id)"))
+                .anyMatch(k -> k.contains("FOREIGN KEY (finding_id, organization_id)"))
+                .anyMatch(k -> k.contains("FOREIGN KEY (finding_id, review_id)"))
+                .anyMatch(k -> k.contains("FOREIGN KEY (finding_id, run_id)"));
+
+        // finding is tied the same way: to its review by (review_id, organization_id), and to its
+        // run by the full (run_id, review_id, organization_id) triple. Those two keys are what make
+        // a finding row of another organization, review or run unrepresentable.
+        var findingKeys = keys.stream().filter(k -> k.startsWith("finding|")).toList();
+        assertThat(findingKeys)
+                .as("finding must be tied to its review and to its run, both organization-scoped")
+                .anyMatch(k -> k.contains("fk_finding_review_org")
+                        && k.contains("FOREIGN KEY (review_id, organization_id)"))
+                .anyMatch(k -> k.contains("fk_finding_run_review_org")
+                        && k.contains("FOREIGN KEY (run_id, review_id, organization_id)"));
     }
 
     private static int countOccurrences(String haystack, String needle) {
