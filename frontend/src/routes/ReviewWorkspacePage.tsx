@@ -5,6 +5,7 @@ import type { FindingFilters } from '../api/reviews'
 import {
   CLASSIFICATIONS,
   SEVERITIES,
+  isReviewForbiddenError,
   isReviewNotFoundError,
   isReviewTerminal,
   useFindingQuery,
@@ -191,6 +192,10 @@ export function ReviewWorkspacePage() {
         onRetry={() => void summaryQuery.refetch()}
       />
     )
+  }
+
+  if (isReviewForbiddenError(summaryQuery.error) || isReviewForbiddenError(contractQuery.error)) {
+    return <ErrorState message="You do not have permission to read this review." />
   }
 
   if (summaryQuery.isError || !summaryQuery.data || contractQuery.isError) {

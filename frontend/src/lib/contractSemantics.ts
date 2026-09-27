@@ -543,7 +543,9 @@ export function enrichmentFailureNote(
     ENRICHMENT_FAILURE_NOTES[reason] ?? {
       summary:
         'Rivell could not complete the semantic analysis of this contract version and recorded a reason Rivell does not recognise.',
-      retryable: false,
+      // Not recognising a new code is not evidence that re-running would fail, so the retry is left
+      // available rather than blocked on a guess.
+      retryable: true,
     }
   )
 }

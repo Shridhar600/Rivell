@@ -470,7 +470,9 @@ export function useSubmitDecision(
               }
             : previous,
       )
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.decisions(reviewId) })
+      // The decisions cache is written above from the server's own response, so it is deliberately
+      // not invalidated: doing both cost a second read on the hottest write path. Human review and
+      // the history are derived server-side and are still refetched.
       void queryClient.invalidateQueries({ queryKey: workflowKeys.humanReview(reviewId) })
       void queryClient.invalidateQueries({
         queryKey: ['reviews', 'decision-history', reviewId],

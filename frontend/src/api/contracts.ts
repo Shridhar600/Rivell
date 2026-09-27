@@ -205,5 +205,5 @@ export function originalDocumentUrl(
   contractId: string,
   versionNumber: number,
 ): string {
-  return `${apiBaseUrl}/api/contracts/${contractId}/versions/${versionNumber}/original`
+  return `${apiBaseUrl}/api/contracts/${encodeURIComponent(contractId)}/versions/${versionNumber}/original`
 }

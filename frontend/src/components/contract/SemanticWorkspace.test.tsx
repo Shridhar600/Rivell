@@ -145,7 +145,7 @@ describe('semantic analysis lifecycle', () => {
     expect(api.requests.filter((r) => r.url.includes('/enrichment'))).toHaveLength(0)
   })
 
-  it('does not advise a pointless retry for a non-transient failure', async () => {
+  it('never tells the user a retry is pointless while offering one', async () => {
     stubContractApi({
       semantics: fixtureSemantics({
         enrichmentStatus: 'FAILED',
@@ -156,8 +156,10 @@ describe('semantic analysis lifecycle', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('This document cannot be analysed for semantics as it is supplied.')
-    expect(screen.getByText(/unlikely to change the result/)).toBeInTheDocument()
-    expect(screen.queryByText(/You can try again with the profile below/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/unlikely to change the result/)).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Try semantic analysis again' }),
+    ).toBeInTheDocument()
   })
 
   it('admits a missing reason instead of hiding it', async () => {

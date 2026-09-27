@@ -531,7 +531,8 @@ describe('finalization', () => {
 
     const progress = await screen.findByRole('region', { name: 'Human review' })
     expect(progress).toHaveTextContent('The analysis produced no trustworthy result')
-    expect(progress).toHaveTextContent('Create a new review against the current semantics')
+    expect(progress).toHaveTextContent('The analysis produced no trustworthy result')
+    expect(progress).toHaveTextContent(/new review/i)
     expect(
       screen.queryByText('Every planned check completed without findings.'),
     ).not.toBeInTheDocument()

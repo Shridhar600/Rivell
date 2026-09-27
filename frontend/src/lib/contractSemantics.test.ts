@@ -284,11 +284,11 @@ describe('enrichment failure reasons', () => {
     ])
   })
 
-  it('states an unrecognised code instead of hiding it', () => {
+  it('states an unrecognised code instead of hiding it, without assuming a retry is futile', () => {
     const note = enrichmentFailureNote('UNKNOWN')
 
     expect(note.summary).toMatch(/does not recognise/i)
-    expect(note.retryable).toBe(false)
+    expect(note.retryable).toBe(true)
   })
 
   it('keeps the retry available but admits the missing reason when none was recorded', () => {

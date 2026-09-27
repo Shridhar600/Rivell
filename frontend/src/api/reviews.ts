@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import { createApiClient } from './client'
@@ -500,11 +501,17 @@ export function isReviewPending(status: ReviewStatus | undefined | null): boolea
   return status === 'ANALYSIS_QUEUED' || status === 'ANALYZING'
 }
 
+// A review whose background worker is not running stays queued forever, so the poll is bounded
+// rather than running for the life of the page. The review read is the only way to notice a
+// completion, so this is a cap on patience, not a limit on correctness.
+export const MAX_POLL_ATTEMPTS = 80
+
 export function reviewPollInterval(status: ReviewStatus | undefined | null): number | false {
   return isReviewPending(status) ? 2500 : false
 }
 
 const REVIEW_MESSAGES: Partial<Record<number, string>> = {
+  403: 'You do not have permission to read this review.',
   404: 'That review could not be found.',
   409: 'That review request does not apply in the current state.',
   500: 'The review could not be loaded.',
@@ -526,10 +533,6 @@ class ReviewApiError extends Error {
   }
 }
 
-export function isReviewBadRequestError(error: unknown): boolean {
-  return error instanceof ReviewApiError && error.status === 400
-}
-
 export function isReviewNotFoundError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 404
 }
@@ -543,7 +546,8 @@ export function reviewErrorStatus(error: unknown): number | null {
 }
 
 function reviewRetry(failureCount: number, error: Error): boolean {
-  return failureCount < 1 && !isReviewNotFoundError(error)
+  // A permission denial or a missing resource cannot become true on a second identical request.
+  return failureCount < 1 && !isReviewNotFoundError(error) && !isReviewForbiddenError(error)
 }
 
 export const reviewKeys = {
@@ -709,12 +713,21 @@ export function useContractReviewsQuery(contractId: string): UseQueryResult<Revi
 }
 
 export function useReviewSummaryQuery(reviewId: string | undefined): UseQueryResult<ReviewSummary> {
+  const pollAttempts = useRef(0)
   return useQuery({
     queryKey: reviewKeys.summary(reviewId ?? ''),
     queryFn: reviewId ? () => fetchReviewSummary(reviewId) : skipToken,
     enabled: Boolean(reviewId),
     retry: reviewRetry,
-    refetchInterval: (query) => reviewPollInterval(query.state.data?.status),
+    refetchInterval: (query) => {
+      if (query.state.data?.status !== 'ANALYSIS_QUEUED' && query.state.data?.status !== 'ANALYZING') {
+        pollAttempts.current = 0
+        return false
+      }
+      if (pollAttempts.current >= MAX_POLL_ATTEMPTS) return false
+      pollAttempts.current += 1
+      return reviewPollInterval(query.state.data?.status)
+    },
   })
 }
 

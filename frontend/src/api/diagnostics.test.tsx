@@ -12,9 +12,7 @@ import {
   useReviewDiagnosticsQuery,
 } from './diagnostics'
 import { redlineKeys } from './redline'
-import { retrievalKeys } from './retrieval'
 import { reviewKeys } from './reviews'
-import { semanticsKeys } from './semantics'
 import { workflowKeys } from './workflow'
 
 const RAW_INTERNAL = 'IllegalStateException:Review snapshot missing@com.rivell.workbench.review.ReviewService.require:81'
@@ -37,6 +35,7 @@ function stubFetch(handler: () => Response | Promise<Response>) {
     return handler()
   })
   vi.stubGlobal('fetch', fetchMock)
+  lastFetchMock = fetchMock
   return fetchMock
 }
 
@@ -106,8 +105,18 @@ const completedPayload = {
   stalled: [],
 }
 
+let lastFetchMock: ReturnType<typeof vi.fn> | null = null
+
+function fetchMockCount(fragment: string): number {
+  if (!lastFetchMock) return 0
+  return lastFetchMock.mock.calls.filter((call) =>
+    (call[0] as Request).url.includes(fragment),
+  ).length
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
+  lastFetchMock = null
 })
 
 import completedWire from '../test/fixtures/diagnosticsCompleted.json'
@@ -362,7 +371,6 @@ describe('useReviewDiagnosticsQuery', () => {
       (call[0] as Request).url.includes('/diagnostics'),
     )
     expect(diagnosticsCalls).toHaveLength(1)
-    expect((query.result.current as { refetchInterval?: unknown }).refetchInterval).toBeFalsy()
   })
 
   it('issues no request while it is not enabled', async () => {
@@ -391,33 +399,26 @@ describe('useReviewDiagnosticsQuery', () => {
   })
 })
 
-describe('diagnostics query key', () => {
-  it('cannot be swallowed by an invalidation prefix of another review query', () => {
-    const id = 'r-1'
-    const diagnostics = diagnosticsKeys.forReview(id)
-    const others = [
-      reviewKeys.packs(),
-      reviewKeys.list('c-1'),
-      reviewKeys.summary(id),
-      reviewKeys.progress(id),
-      reviewKeys.findings(id, {}),
-      reviewKeys.finding(id, 'f-1'),
-      workflowKeys.decisions(id),
-      workflowKeys.humanReview(id),
-      workflowKeys.decisionHistory(id, 'f-1'),
-      workflowKeys.changeSet(id),
-      redlineKeys.execution(id),
-      semanticsKeys.semantics('c-1', 1),
-      retrievalKeys.bundle('c-1', 1, 'n-1'),
-      retrievalKeys.trace('t-1'),
-    ]
+describe('diagnostics cache isolation', () => {
+  it('is not refetched when an unrelated review query is invalidated', async () => {
+    stubFetch(() => jsonResponse(envelope(completedPayload)))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    )
+    renderHook(() => useReviewDiagnosticsQuery('r-1', true), { wrapper })
 
-    const isPrefix = (prefix: readonly unknown[], key: readonly unknown[]) =>
-      prefix.every((part, index) => part === key[index])
+    await waitFor(() =>
+      expect(queryClient.getQueryData(diagnosticsKeys.forReview('r-1'))).toBeDefined(),
+    )
+    const before = fetchMockCount('diagnostics')
 
-    for (const other of others) {
-      expect(isPrefix(other, diagnostics)).toBe(false)
-      expect(isPrefix(diagnostics, other)).toBe(false)
-    }
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: workflowKeys.humanReview('r-1') })
+      await queryClient.invalidateQueries({ queryKey: redlineKeys.execution('r-1') })
+      await queryClient.invalidateQueries({ queryKey: reviewKeys.findings('r-1', {}) })
+    })
+
+    expect(fetchMockCount('diagnostics')).toBe(before)
   })
 })

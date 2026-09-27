@@ -163,7 +163,7 @@ export function ReviewCreatePanel({
             ))}
           </select>
           {packsQuery.isError ? (
-            <p className="state state--warning" role="status">
+            <p className="state state--warning" role="alert">
               The review pack catalog could not be loaded. You can still run a review without a
               pack.{' '}
               <button
@@ -186,16 +186,16 @@ export function ReviewCreatePanel({
         {create.isPending ? (
           <LoadingState label="Starting review…" />
         ) : blocked && recoveryState === 'needs-check' ? (
-          <p className="state state--warning">
+          <p className="state state--warning" role="status">
             Re-check the review history before starting another review.
           </p>
         ) : blocked && recoveryState === 'refresh-failed' ? (
-          <p className="state state--warning">
+          <p className="state state--warning" role="status">
             The review history could not be refreshed. Do not start another review until you
             can confirm whether the first one was created.
           </p>
         ) : blocked && recoveryState === 'found-review' && foundReviewId ? (
-          <p className="state state--warning">
+          <p className="state state--warning" role="status">
             A review was created while the outcome was unknown.{' '}
             <Link
               className="link-button"

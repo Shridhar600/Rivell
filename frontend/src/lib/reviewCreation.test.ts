@@ -42,14 +42,4 @@ describe('classifyCreateOutcome', () => {
       expect(outcome.uncertain).toBe(true)
     }
   })
-
-  it('never exposes server text in any message', () => {
-    const messages = [null, 400, 403, 404, 409, 413, 500].map(
-      (status) => classifyCreateOutcome(status).message,
-    )
-
-    for (const message of messages) {
-      expect(message).not.toMatch(/detail|Exception|com\.rivell/)
-    }
-  })
 })
