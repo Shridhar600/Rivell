@@ -362,10 +362,34 @@ describe('trigger error classification', () => {
     ).toBe('ENGINE_UNAVAILABLE')
     expect(
       classifyTriggerError({ status: 503, execution: null, executionStateKnown: true }),
-    ).toBe('ENGINE_UNAVAILABLE')
+    ).toBe('STORAGE_UNAVAILABLE')
     expect(
       classifyTriggerError({ status: null, execution: null, executionStateKnown: true }),
     ).toBe('TRANSPORT')
+  })
+
+  it('distinguishes artifact storage failure from an engine failure and keeps a retry honest', () => {
+    const storage = redlineTriggerErrorNotice('STORAGE_UNAVAILABLE')
+    const engine = redlineTriggerErrorNotice('ENGINE_UNAVAILABLE')
+
+    expect(storage).not.toBe(engine)
+    expect(storage).toMatch(/unchanged/i)
+    expect(storage).toMatch(/again|retry|later/i)
+    expect(storage).not.toMatch(/engine/i)
+  })
+
+  it('explains the two M10 failure codes without leaking internals or offering recovery', () => {
+    const drift = redlineFailureTitle('APPROVED_SEMANTICS_DRIFT')
+    const expansion = redlineFailureTitle('SOURCE_EXPANSION_LIMIT_EXCEEDED')
+
+    expect(drift).not.toBe(redlineFailureTitle('SOURCE_INTEGRITY_MISMATCH'))
+    expect(drift).toMatch(/semantics changed after/i)
+    expect(drift).toMatch(/unchanged/i)
+    expect(drift).not.toMatch(/recompute|re-run|run again|try again|Exception|com\.rivell/i)
+
+    expect(expansion).not.toBe(drift)
+    expect(expansion).toMatch(/size|expand/i)
+    expect(expansion).not.toMatch(/zip|xml|byte|central directory|Exception|com\.rivell/i)
   })
 
   it('gives distinct safe notices for every trigger error kind', () => {
@@ -376,6 +400,7 @@ describe('trigger error classification', () => {
       'NOT_AVAILABLE',
       'UNCONFIRMED',
       'ENGINE_UNAVAILABLE',
+      'STORAGE_UNAVAILABLE',
       'TRANSPORT',
     ] as const
     const notices = kinds.map((kind) => redlineTriggerErrorNotice(kind))

@@ -472,6 +472,28 @@ describe('redline trigger recovery', () => {
   })
 })
 
+describe('redline artifact storage failure', () => {
+  it('states that no document was produced, keeps a retry, and offers no download', async () => {
+    const api = stubContractApi(
+      baseOptions({ redlineTriggerResponse: () => errorResponse(503) }),
+    )
+    renderRouter(api)
+    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+
+    await userEvent.click(
+      await within(panel).findByRole('button', { name: 'Generate redline' }),
+    )
+
+    const alert = await within(panel).findByRole('alert')
+    expect(alert).toHaveTextContent('The generated redline could not be stored')
+    expect(alert).toHaveTextContent('approved change set are unchanged')
+    expect(alert).not.toHaveTextContent('redline engine is unavailable')
+    expect(alert.textContent).not.toMatch(/Exception|com\.rivell/)
+    expect(within(panel).queryByRole('button', { name: /download/i })).not.toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Generate redline' })).toBeEnabled()
+  })
+})
+
 describe('redline download', () => {
   it('downloads the verified DOCX as a file and revokes the object URL after the click', async () => {
     const clicked: { href: string; download: string }[] = []

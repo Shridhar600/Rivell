@@ -53,6 +53,8 @@ const FAILURE_TITLES: Record<string, string> = {
     'The frozen source document failed its integrity check and was not used.',
   UNSUPPORTED_SOURCE_FORMAT:
     'This document format cannot be redlined automatically.',
+  SOURCE_EXPANSION_LIMIT_EXCEEDED:
+    'This document expands beyond the size Rivell will process, so it was not redlined.',
   UNSUPPORTED_CHANGESET_VERSION:
     'This approved change set version is not supported by the redline engine.',
   PROTECTED_DOCUMENT_UNSUPPORTED:
@@ -71,6 +73,8 @@ const FAILURE_TITLES: Record<string, string> = {
     'An approved change is missing its final approved language.',
   INSERT_PLACEMENT_UNRESOLVED:
     'Rivell could not determine a safe insertion location for a missing provision.',
+  APPROVED_SEMANTICS_DRIFT:
+    'The contract semantics changed after this review was approved, so Rivell did not place the approved change. The approved change set is unchanged.',
   DOCX_LOAD_FAILED: 'The frozen document could not be opened for redlining.',
   DOCX_SERIALIZATION_FAILED: 'The redlined document could not be written.',
   ROUND_TRIP_FAILED: 'The generated document could not be reopened for verification.',
@@ -222,6 +226,7 @@ export type RedlineTriggerErrorKind =
   | 'NOT_AVAILABLE'
   | 'UNCONFIRMED'
   | 'ENGINE_UNAVAILABLE'
+  | 'STORAGE_UNAVAILABLE'
   | 'TRANSPORT'
 
 export function classifyTriggerError(input: {
@@ -236,7 +241,8 @@ export function classifyTriggerError(input: {
     if (input.execution?.status === 'FAILED') return 'FAILED_EXECUTION'
     return 'NOT_AVAILABLE'
   }
-  if (input.status === 500 || input.status === 503) return 'ENGINE_UNAVAILABLE'
+  if (input.status === 503) return 'STORAGE_UNAVAILABLE'
+  if (input.status === 500) return 'ENGINE_UNAVAILABLE'
   return 'TRANSPORT'
 }
 
@@ -252,6 +258,8 @@ const TRIGGER_ERROR_NOTICES: Record<RedlineTriggerErrorKind, string> = {
     'The redline request could not be confirmed. Reopen this review to check whether an execution exists.',
   ENGINE_UNAVAILABLE:
     'The redline engine is unavailable right now. The approved change set is unchanged; try again later.',
+  STORAGE_UNAVAILABLE:
+    'The generated redline could not be stored, so no document was produced. This review and its approved change set are unchanged; you can generate the redline again once storage is available.',
   TRANSPORT:
     'The redline could not be generated. Check your connection and try again.',
 }
