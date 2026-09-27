@@ -14,9 +14,19 @@ import com.rivell.workbench.contracts.EnrichmentFailureReason;
  * lawyer-facing UI", and "No retrieval/model context may cross tenant boundaries."
  *
  * <p>So the precise reason is still recorded in state and stays queryable by an operator; only the
- * projection onto this narrower vocabulary crosses the API boundary. The tenant keeps what it
- * actually needs: whether the document is the problem, or the service is, and therefore whether a
- * retry is worthwhile.
+ * projection onto this narrower vocabulary crosses the API boundary. The tenant keeps the one thing
+ * it can act on: whether the document is the problem or the service is.
+ *
+ * <p><b>This vocabulary deliberately says nothing about recoverability, and nothing downstream
+ * infers it either.</b> It does not carry a retryable flag, and the frontend does not derive one:
+ * {@code SERVICE_UNAVAILABLE} merges transient provider failures with two that can never succeed on
+ * a re-run, so the information that would decide recoverability is exactly the operator reason this
+ * projection withholds. The client is therefore told what happened and nothing more — no cause, no
+ * timeframe, no outcome, and no claim that waiting will help. A recovery classification for tenants
+ * is an open product decision: it is recorded as DW-041 escalation 1, which is why
+ * <b>DW-041 remains PARTIALLY RESOLVED</b> — the credential and quota disclosure this type closes is
+ * closed, and the recovery question is not. Do not "helpfully" add a retryable flag here; see that
+ * escalation for the disclosure cost of splitting this class.
  *
  * <p>The mapping is a switch with no default, so adding a reason to {@link EnrichmentFailureReason}
  * fails compilation until someone decides whether a tenant may see it. That is the point.
@@ -27,8 +37,9 @@ public enum TenantEnrichmentFailureReason {
     UNSUPPORTED_SOURCE,
     /**
      * Rivell could not complete the analysis. Deliberately says nothing about credentials, quota,
-     * provider identity or timing: the tenant can act by retrying, and an operator can find the
-     * cause in the recorded reason.
+     * provider identity or timing, and deliberately does not say that re-running would help, because
+     * for two of the reasons merged into it that is false. An operator can find the cause in the
+     * recorded reason.
      */
     SERVICE_UNAVAILABLE,
     /** Anything else. The cause belongs in server logs and in state, not on this surface. */
