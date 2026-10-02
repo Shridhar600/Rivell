@@ -234,7 +234,7 @@ class KnowledgeReviewPublicationIT {
         assertThat(reloaded.items()).hasSize(1);
         assertThat(reloaded.items().get(0).candidateId()).isEqualTo(candidateB.id());
         assertThat(reloaded.createdAt()).isEqualTo(publication2.createdAt());
-        assertThat(queryService.listPublications())
+        assertThat(queryService.listPublications(null))
                 .extracting(KnowledgePublication::publicationNumber)
                 .containsExactlyInAnyOrder(2L, 1L);
 
@@ -250,11 +250,11 @@ class KnowledgeReviewPublicationIT {
 
         reviewService.reject(rejected.id(), null);
 
-        var publicationsBefore = queryService.listPublications().size();
+        var publicationsBefore = queryService.listPublications(null).size();
         assertThatThrownBy(() -> publicationService.publish(
                 List.of(pending.id(), rejected.id()), null, null))
                 .isInstanceOf(InvalidPublicationException.class);
-        assertThat(queryService.listPublications()).hasSize(publicationsBefore);
+        assertThat(queryService.listPublications(null)).hasSize(publicationsBefore);
     }
 
     @Test
@@ -279,7 +279,7 @@ class KnowledgeReviewPublicationIT {
         var artifact = ingestClauseLibrary();
         var candidate = firstVariant(artifact);
         reviewService.approve(candidate.id(), null);
-        var publicationsBefore = queryService.listPublications().size();
+        var publicationsBefore = queryService.listPublications(null).size();
 
         FailingKnowledgeRepository.armed = true;
         try {
@@ -289,7 +289,7 @@ class KnowledgeReviewPublicationIT {
             FailingKnowledgeRepository.armed = false;
         }
 
-        assertThat(queryService.listPublications()).hasSize(publicationsBefore);
+        assertThat(queryService.listPublications(null)).hasSize(publicationsBefore);
         assertThat(queryService.getCandidate(candidate.id()).reviewStatus())
                 .isEqualTo(ReviewStatus.APPROVED);
     }

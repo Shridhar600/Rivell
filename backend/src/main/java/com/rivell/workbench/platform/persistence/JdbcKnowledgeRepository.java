@@ -147,15 +147,21 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
-    public List<KnowledgeArtifact> listArtifacts(UUID organizationId) {
-        return jdbcClient.sql("""
-                        select * from knowledge_artifact
-                        where organization_id = :organizationId
-                        order by created_at desc
-                        """)
-                .param("organizationId", organizationId)
-                .query(this::mapArtifact)
-                .list();
+    public List<KnowledgeArtifact> listArtifacts(UUID organizationId, Integer limit) {
+        var sql = new StringBuilder("""
+                select * from knowledge_artifact
+                where organization_id = :organizationId
+                """);
+        sql.append(" order by created_at desc");
+        if (limit != null) {
+            sql.append(" limit :limit");
+        }
+        var client = jdbcClient.sql(sql.toString())
+                .param("organizationId", organizationId);
+        if (limit != null) {
+            client = client.param("limit", limit);
+        }
+        return client.query(this::mapArtifact).list();
     }
 
     @Override
@@ -626,13 +632,21 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
-    public List<KnowledgePublication> listPublications(UUID organizationId) {
-        var publications = jdbcClient.sql("""
-                        select * from knowledge_publication
-                        where organization_id = :organizationId
-                        order by publication_number desc
-                        """)
-                .param("organizationId", organizationId)
+    public List<KnowledgePublication> listPublications(UUID organizationId, Integer limit) {
+        var sql = new StringBuilder("""
+                select * from knowledge_publication
+                where organization_id = :organizationId
+                """);
+        sql.append(" order by publication_number desc");
+        if (limit != null) {
+            sql.append(" limit :limit");
+        }
+        var publicationClient = jdbcClient.sql(sql.toString())
+                .param("organizationId", organizationId);
+        if (limit != null) {
+            publicationClient = publicationClient.param("limit", limit);
+        }
+        var publications = publicationClient
                 .query((rs, rowNum) -> new PublicationRow(
                         UUID.fromString(rs.getString("id")),
                         rs.getLong("publication_number"),
