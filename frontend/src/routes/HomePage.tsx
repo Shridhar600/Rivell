@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router'
 import { useHomeData } from '../api/home'
+import { HOME_PAGE_LIMIT } from '../api/reviews'
 import { longDate } from '../lib/dates'
 import { boundedErrorMessage, TransportError } from '../api/errorMessage'
 import {
@@ -9,6 +11,7 @@ import {
   reviewItemView,
   HOME_GROUP_LABELS,
   type HomeGroupKey,
+  type HomeReviewSummary,
   type HomeWorkItem,
 } from '../lib/home'
 import { CollapsibleGroup } from '../components/ui/CollapsibleGroup'
@@ -22,15 +25,28 @@ import { Inspector, TopBar } from '../components/shell/TopBar'
 
 export function HomePage() {
   const { reviews, artifacts, publications } = useHomeData()
+  const reviewItems = useMemo<HomeReviewSummary[]>(
+    () =>
+      (reviews.data?.items ?? []).map((review) => ({
+        id: review.id,
+        contractId: review.contractId,
+        filename: review.contractFilename,
+        contractVersionNumber: review.contractVersionNumber,
+        status: review.status,
+        createdAt: review.createdAt,
+        startedAt: review.startedAt,
+        completedAt: review.completedAt,
+        findings: review.findings,
+      })),
+    [reviews.data],
+  )
   const items = useMemo<HomeWorkItem[]>(() => {
     const collected: HomeWorkItem[] = []
-    if (reviews.availability === 'available') {
-      for (const review of reviews.items) collected.push(reviewItemView(review))
-    }
+    for (const review of reviewItems) collected.push(reviewItemView(review))
     for (const artifact of artifacts.data ?? []) collected.push(knowledgeItemView(artifact))
     for (const publication of publications.data ?? []) collected.push(publicationItemView(publication))
     return collected
-  }, [reviews, artifacts.data, publications.data])
+  }, [reviewItems, artifacts.data, publications.data])
 
   const groups = useMemo(() => buildHomeGroups(items), [items])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -40,7 +56,7 @@ export function HomePage() {
   const effectiveId = items.some((item) => item.id === selectedId) ? selectedId : null
   const selected = items.find((item) => item.id === effectiveId) ?? null
 
-    const [openGroups, setOpenGroups] = useState<ReadonlySet<HomeGroupKey>>(
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<HomeGroupKey>>(
     () => new Set<HomeGroupKey>(['needs_action', 'failed']),
   )
   function toggleGroup(key: HomeGroupKey) {
@@ -55,11 +71,31 @@ export function HomePage() {
     setOpenGroups((current) => (current.has(key) ? current : new Set(current).add(key)))
   }
 
-  const loading = artifacts.isPending || publications.isPending
-  const failed = artifacts.isError || publications.isError
-  const error = artifacts.error ?? publications.error ?? null
-  const forbidden = statusOf(error) === 403
-  const errorMessage = homeErrorMessage(error)
+  // Failure is tracked per domain. Collapsing it into one flag let a knowledge refusal hide
+  // readable review work, which is exactly the state the design forbids.
+  const reviewState = domainState({
+    isPending: reviews.isPending,
+    isError: reviews.isError,
+    error: reviews.error,
+  })
+  const artifactState = domainState({
+    isPending: artifacts.isPending,
+    isError: artifacts.isError,
+    error: artifacts.error,
+  })
+  const publicationState = domainState({
+    isPending: publications.isPending,
+    isError: publications.isError,
+    error: publications.error,
+  })
+  const knowledgeState = artifactState.loading || artifactState.failed || artifactState.forbidden
+    ? artifactState
+    : publicationState
+  const loading = reviewState.loading || knowledgeState.loading
+  // The headline describes all review work, so it waits for every read to settle.
+  const resolved = !reviewState.loading && !knowledgeState.loading
+  const showEmptyState = resolved && !reviewState.failed && !knowledgeState.failed && items.length === 0
+  const moreReviewsExist = Boolean(reviews.data?.nextCursor)
 
   return (
     <>
@@ -68,44 +104,23 @@ export function HomePage() {
         <div className="rv-scroll">
           <div className="rv-wrap">
             <Hero
-              resolved={!loading}
-              headlineReady={reviews.availability === 'available'}
+              resolved={resolved}
+              headlineReady={!reviewState.failed}
               needsAction={groups.needsAction.length}
               running={groups.running.length}
               failed={groups.failed.length}
               onReveal={revealGroup}
             />
 
-            {reviews.availability === 'unavailable' ? (
-              <UnavailableNotice
-                title="Review work across contracts is not readable yet."
-                to="/reviews"
-                actionLabel="Start a review"
-              >
-                {reviews.reason} Start a review, or open Reviews to work on a contract you already
-                have.
-              </UnavailableNotice>
-            ) : null}
-
             {loading ? <LoadingState label="Loading your work" /> : null}
 
-            {failed ? (
-              <ErrorState
-                title={forbidden ? 'You do not have access to this knowledge' : 'Something went wrong'}
-                tone={forbidden ? 'neutral' : 'danger'}
-                message={errorMessage}
-                onRetry={
-                  forbidden
-                    ? undefined
-                    : () => {
-                        void artifacts.refetch()
-                        void publications.refetch()
-                      }
-                }
-              />
-            ) : null}
+            <DomainError state={reviewState} domain="reviews" onRetry={() => void reviews.refetch()} />
+            <DomainError state={knowledgeState} domain="knowledge" onRetry={() => {
+              void artifacts.refetch()
+              void publications.refetch()
+            }} />
 
-            {!loading && !failed && items.length === 0 && reviews.availability === 'available' ? (
+            {showEmptyState ? (
               <EmptyState
                 title="Nothing needs your attention"
                 message="Start a review, or add a playbook or clause library to begin."
@@ -116,6 +131,13 @@ export function HomePage() {
                   </LinkButton>
                 }
               />
+            ) : null}
+
+            {moreReviewsExist ? (
+              <p className="rv-note">
+                Showing the newest {HOME_PAGE_LIMIT} reviews.{' '}
+                <Link to="/reviews">Open Reviews for the full list.</Link>
+              </p>
             ) : null}
 
             <GroupSection
@@ -173,25 +195,84 @@ function statusOf(error: Error | null): number | null {
   return typeof status === 'number' ? status : null
 }
 
+interface DomainState {
+  loading: boolean
+  failed: boolean
+  /** A permission denial, which is a view-only state rather than a failure. */
+  forbidden: boolean
+  error: Error | null
+}
+
+/**
+ * Reduces one read to a state. Healthy reads report `failed: false` so a domain that loaded fine
+ * never contributes a message, and a domain that failed never suppresses the others.
+ */
+function domainState(query: {
+  isPending: boolean
+  isError: boolean
+  error: Error | null
+}): DomainState {
+  if (query.isPending) return { loading: true, failed: false, forbidden: false, error: null }
+  if (query.isError) {
+    return {
+      loading: false,
+      failed: statusOf(query.error) !== 403,
+      forbidden: statusOf(query.error) === 403,
+      error: query.error,
+    }
+  }
+  return { loading: false, failed: false, forbidden: false, error: null }
+}
+
+function DomainError({
+  state,
+  domain,
+  onRetry,
+}: {
+  state: DomainState
+  domain: 'reviews' | 'knowledge'
+  onRetry: () => void
+}) {
+  if (state.loading) return null
+  const noun = domain === 'reviews' ? 'review work' : 'knowledge sources'
+  if (state.forbidden) {
+    return (
+      <UnavailableNotice
+        title="View only"
+        to={domain === 'reviews' ? '/reviews' : '/knowledge'}
+        actionLabel={domain === 'reviews' ? 'Open Reviews' : 'Open Knowledge'}
+      >
+        This Rivell deployment did not grant access to {noun}. Everything else on Home still works.
+      </UnavailableNotice>
+    )
+  }
+  if (!state.failed) return null
+  return (
+    <ErrorState
+      title={`${domain === 'reviews' ? 'Review work' : 'Knowledge'} could not be loaded`}
+      tone="danger"
+      message={domainMessage(state.error, domain)}
+      onRetry={onRetry}
+    />
+  )
+}
+
 /** Says what failed, what is intact, and what the user can do next. */
-function homeErrorMessage(error: Error | null): string {
+function domainMessage(error: Error | null, domain: 'reviews' | 'knowledge'): string {
+  const noun = domain === 'reviews' ? 'review work' : 'knowledge sources'
   if (error instanceof TransportError) {
-    return 'Rivell could not be reached. Your work is unchanged. Check your connection and try again.'
+    return `Rivell could not be reached, so ${noun} is unavailable. Your work is unchanged. Check your connection and try again.`
   }
   if (statusOf(error) === 403) {
-    return 'This Rivell deployment did not grant access to knowledge sources. Nothing was changed.'
+    return `This Rivell deployment did not grant access to ${noun}. The rest of Home still works.`
   }
-  const HOME_MESSAGES: Record<number, string> = {
-    404: 'That knowledge could not be found.',
+  const MESSAGES: Record<number, string> = {
+    404: `That ${noun} could not be found.`,
     500: 'Rivell could not complete that request.',
-    503: 'The knowledge service is unavailable right now.',
+    503: `The service for ${noun} is unavailable right now.`,
   }
-  const derived = boundedErrorMessage(
-    statusOf(error) ?? 500,
-    HOME_MESSAGES,
-    'Your work could not be loaded right now.',
-  )
-  return `${derived} Your work is unchanged.`
+  const derived = boundedErrorMessage(statusOf(error) ?? 500, MESSAGES, `${noun} could not be loaded`)
+  return `${derived} The rest of Home still works, and your work is unchanged.`
 }
 
 /** One line for a collapsed group, capped so an unbounded list cannot build a huge string. */

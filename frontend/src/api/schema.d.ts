@@ -80,7 +80,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the organization's published knowledge versions */
+        /** List the organization's published knowledge versions. Supply limit to bound the read; omitting it returns every publication. */
         get: operations["listPublications"];
         put?: never;
         /** Publish approved candidates as a new versioned knowledge snapshot */
@@ -183,7 +183,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the organization's knowledge artifacts */
+        /** List the organization's knowledge artifacts, newest first. Supply limit to bound the read; omitting it returns every artifact. */
         get: operations["listArtifacts"];
         put?: never;
         /** Upload a legal knowledge source with its human-declared manifest */
@@ -218,7 +218,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List the organization's contracts newest first (bounded). Supply nextCursor to continue; a new upload always creates a new contract, so this endpoint never lists versions of an existing contract. */
+        get: operations["listContracts"];
         put?: never;
         /** Upload and parse a DOCX contract */
         post: operations["upload_1"];
@@ -336,7 +337,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List a contract's reviews, newest first (bounded) */
+        /** List reviews newest first (bounded), optionally scoped to one contract. Omitting contractId returns the whole organization; supply the nextCursor value to continue. */
         get: operations["list"];
         put?: never;
         post?: never;
@@ -1556,15 +1557,36 @@ export interface components {
             contractId?: string;
             /** Format: int32 */
             contractVersionNumber?: number;
+            contractFilename?: string;
             status?: string;
+            failure?: components["schemas"]["FailureView"];
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
             completedAt?: string;
+            /** Format: int32 */
+            activeRunNumber?: number;
+            activeRunStatus?: string;
+            latestRunStatus?: string;
+            /** Format: int32 */
+            plannedChecks?: number;
+            /** Format: int32 */
+            completedChecks?: number;
+            /** Format: int32 */
+            degradedChecks?: number;
+            /** Format: int32 */
+            failedChecks?: number;
+            /** Format: int32 */
+            signals?: number;
+            /** Format: int32 */
+            findings?: number;
         };
         ReviewListResponse: {
             items?: components["schemas"]["ReviewListItemView"][];
             truncated?: boolean;
+            nextCursor?: string;
         };
         ApiResultReviewProgressView: {
             data?: components["schemas"]["ReviewProgressView"];
@@ -2034,19 +2056,25 @@ export interface components {
             /** Format: date-time */
             timestamp?: string;
         };
-        ApiResultContractSummaryResponse: {
-            data?: components["schemas"]["ContractSummaryResponse"];
+        ApiResultContractListResponse: {
+            data?: components["schemas"]["ContractListResponse"];
             /** Format: int32 */
             status?: number;
             /** Format: date-time */
             timestamp?: string;
         };
         /** @description Contract with its latest version state */
-        ContractSummaryResponse: {
+        ContractListItemResponse: {
             /** Format: uuid */
             id: string;
             title: string | null;
+            /** Format: date-time */
+            createdAt: string;
             latestVersion: components["schemas"]["LatestVersion"];
+        };
+        ContractListResponse: {
+            items?: components["schemas"]["ContractListItemResponse"][];
+            nextCursor?: string;
         };
         /** @description Latest version of the contract */
         LatestVersion: {
@@ -2060,6 +2088,20 @@ export interface components {
             filename: string;
             /** Format: int32 */
             nodeCount: number;
+        };
+        ApiResultContractSummaryResponse: {
+            data?: components["schemas"]["ContractSummaryResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        /** @description Contract with its latest version state */
+        ContractSummaryResponse: {
+            /** Format: uuid */
+            id: string;
+            title: string | null;
+            latestVersion: components["schemas"]["LatestVersion"];
         };
         ApiResultContractStructureResponse: {
             data?: components["schemas"]["ContractStructureResponse"];
@@ -2362,7 +2404,9 @@ export interface operations {
     };
     listPublications: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2669,7 +2713,9 @@ export interface operations {
     };
     listArtifacts: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2793,6 +2839,38 @@ export interface operations {
             };
             /** @description Semantic classification is not available */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listContracts: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultContractListResponse"];
+                };
+            };
+            /** @description Missing contracts:read */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3133,9 +3211,10 @@ export interface operations {
     };
     list: {
         parameters: {
-            query: {
-                contractId: string;
+            query?: {
+                contractId?: string;
                 limit?: number;
+                cursor?: string;
             };
             header?: never;
             path?: never;

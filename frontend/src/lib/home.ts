@@ -144,34 +144,38 @@ export function publicationItemView(publication: Publication): HomeWorkItem {
 }
 
 /**
- * Exactly the fields the register's GAP-A promises: a `ReviewSummaryView` subset plus `filename`.
- * `contractTitle` and decision counts are deliberately absent, because the shipped OpenAPI has
- * neither, and inventing them here would be a fabricated contract.
+ * The subset of `ReviewListItemView` Home needs. `contractTitle` and decision counts stay absent:
+ * the read model carries a filename and a findings total, but nothing that says how much of that
+ * work still awaits a human. Outstanding decisions live on `HumanReviewView`, one read per review.
  */
 export interface HomeReviewSummary {
   id: string
   contractId: string
   filename: string | null
-  contractVersionNumber: number
+  contractVersionNumber: number | null
   status: ReviewStatus | string
   createdAt: string
+  startedAt: string | null
   completedAt: string | null
+  findings: number
 }
 
 export function reviewItemView(review: HomeReviewSummary): HomeWorkItem {
   const state = mapReviewStatus(review.status)
+  const time = review.completedAt ?? review.startedAt ?? review.createdAt
+  const timeKind = review.completedAt ? 'updated' : review.startedAt ? 'updated' : 'added'
   return {
     id: `review:${review.id}`,
     kind: 'review',
     title: review.filename?.trim() || 'Untitled contract',
-    meta: null,
-    chip: `v${review.contractVersionNumber}`,
+    meta: review.findings > 0 ? `${review.findings} ${review.findings === 1 ? 'finding' : 'findings'}` : null,
+    chip: review.contractVersionNumber === null ? null : `v${review.contractVersionNumber}`,
     stateLabel: state.label,
     tone: state.tone,
     group: state.group,
-    timeLabel: shortDate(review.completedAt ?? review.createdAt),
-    timeValue: review.completedAt ?? review.createdAt,
-    timeLabelKind: review.completedAt ? 'updated' : 'added',
+    timeLabel: shortDate(time),
+    timeValue: time,
+    timeLabelKind: timeKind,
     to: `/reviews/${review.contractId}/analysis/${review.id}`,
     primaryActionLabel: 'Open review',
     guidance: reviewGuidance(state),

@@ -37,6 +37,13 @@ export type FindingClassification = (typeof CLASSIFICATIONS)[number] | 'UNKNOWN'
 
 export const MAX_PAGE_LIMIT = 100
 
+/**
+ * How many rows Home asks for. Bounded on purpose: Home is a work queue, not an archive, and the
+ * backend rejects anything above its own maximum. Reviews the page does not show are reachable
+ * from Reviews, and Home says so when the response carries a continuation cursor.
+ */
+export const HOME_PAGE_LIMIT = 20
+
 export type AnalysisWarning = {
   checkKey: string
   status: string
@@ -134,14 +141,25 @@ export type ReviewListItem = {
   id: string
   contractId: string
   contractVersionNumber: number | null
+  /** The uploaded file's name. Null only when the server sends no filename. */
+  contractFilename: string | null
   status: ReviewStatus
+  failure: ReviewFailure | null
   createdAt: string
+  startedAt: string | null
   completedAt: string | null
+  plannedChecks: number
+  completedChecks: number
+  degradedChecks: number
+  failedChecks: number
+  findings: number
 }
 
 export type ReviewListResponse = {
   items: ReviewListItem[]
   truncated: boolean
+  /** Non-null exactly when more rows exist beyond this page. */
+  nextCursor: string | null
 }
 
 export type FindingSubjectKind = 'CLAUSE' | 'ABSENCE' | 'UNKNOWN'
@@ -384,9 +402,17 @@ function parseReviewListItem(value: unknown, what: string): ReviewListItem {
     id: readString(item, 'id', what),
     contractId: readString(item, 'contractId', what),
     contractVersionNumber: readOptionalNullableNumber(item, 'contractVersionNumber', what),
+    contractFilename: readOptionalNullableString(item, 'contractFilename', what),
     status: readStatus(item, 'status', REVIEW_STATUSES),
+    failure: parseFailure(item.failure, what),
     createdAt: readString(item, 'createdAt', what),
+    startedAt: readOptionalNullableString(item, 'startedAt', what),
     completedAt: readOptionalNullableString(item, 'completedAt', what),
+    plannedChecks: readOptionalNumber(item, 'plannedChecks', what),
+    completedChecks: readOptionalNumber(item, 'completedChecks', what),
+    degradedChecks: readOptionalNumber(item, 'degradedChecks', what),
+    failedChecks: readOptionalNumber(item, 'failedChecks', what),
+    findings: readOptionalNumber(item, 'findings', what),
   }
 }
 
@@ -398,6 +424,7 @@ export function parseReviewList(
   return {
     items: readArray(list, 'items', what, parseReviewListItem),
     truncated: readOptionalBoolean(list, 'truncated', what),
+    nextCursor: readOptionalNullableString(list, 'nextCursor', what),
   }
 }
 
@@ -560,6 +587,7 @@ function reviewRetry(failureCount: number, error: Error): boolean {
 export const reviewKeys = {
   packs: () => ['reviews', 'packs'] as const,
   list: (contractId: string) => ['reviews', 'list', contractId] as const,
+  organization: () => ['reviews', 'organization'] as const,
   summary: (reviewId: string) => ['reviews', 'summary', reviewId] as const,
   progress: (reviewId: string) => ['reviews', 'progress', reviewId] as const,
   findings: (reviewId: string, filters: FindingFilters) =>
@@ -612,6 +640,32 @@ export async function fetchReviewList(contractId: string): Promise<ReviewListRes
     )
   }
   return parseApiResult(data, parseReviewList, 'review list')
+}
+
+/** One page of the newest reviews across the whole organization. */
+export async function fetchOrganizationReviewList(): Promise<ReviewListResponse> {
+  const client = createApiClient()
+  // contractId is deliberately omitted: Home shows all review work in one read. Enumerating
+  // contracts first and then reading reviews per contract is the N+1 this endpoint removes.
+  const { data, response } = await client.GET('/api/reviews', {
+    params: { query: { limit: HOME_PAGE_LIMIT } },
+  })
+  if (!data) {
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review list unavailable'),
+      response.status,
+    )
+  }
+  return parseApiResult(data, parseReviewList, 'review list')
+}
+
+export function useOrganizationReviewsQuery(): UseQueryResult<ReviewListResponse> {
+  return useQuery({
+    queryKey: reviewKeys.organization(),
+    queryFn: fetchOrganizationReviewList,
+    staleTime: 15_000,
+    retry: reviewRetry,
+  })
 }
 
 export async function fetchReviewSummary(reviewId: string): Promise<ReviewSummary> {

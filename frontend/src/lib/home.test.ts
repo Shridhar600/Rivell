@@ -104,7 +104,9 @@ describe('reviewItemView', () => {
       contractVersionNumber: 2,
       status: 'COMPLETED',
       createdAt: AT,
+      startedAt: null,
       completedAt: null,
+      findings: 0,
     })
     expect(item.kind).toBe('review')
     expect(item.title).toBe('Acme MSA')
@@ -122,12 +124,74 @@ describe('reviewItemView', () => {
       contractVersionNumber: 1,
       status: 'ANALYZING',
       createdAt: AT,
+      startedAt: null,
       completedAt: null,
+      findings: 0,
     })
     expect(item.title).toBe('Untitled contract')
     expect(item.title).not.toContain('con-2')
   })
 
+  it('shows a real findings count as the row meta, and nothing when there are none', () => {
+    const withFindings = reviewItemView({
+      id: 'rev-3',
+      contractId: 'con-3',
+      filename: 'Atlas Mutual NDA.docx',
+      contractVersionNumber: 1,
+      status: 'COMPLETED',
+      createdAt: AT,
+      startedAt: null,
+      completedAt: AT,
+      findings: 7,
+    })
+    const noFindings = reviewItemView({
+      id: 'rev-4',
+      contractId: 'con-4',
+      filename: 'Northstar Vendor MSA.docx',
+      contractVersionNumber: 1,
+      status: 'ANALYSIS_QUEUED',
+      createdAt: AT,
+      startedAt: null,
+      completedAt: null,
+      findings: 0,
+    })
+    expect(withFindings.meta).toBe('7 findings')
+    expect(withFindings.meta).not.toMatch(/decision|decided|outstanding|approved/i)
+    expect(noFindings.meta).toBeNull()
+  })
+
+  it('uses startedAt as the row time when analysis began but has not completed', () => {
+    const item = reviewItemView({
+      id: 'rev-5',
+      contractId: 'con-5',
+      filename: 'Beacon DPA.docx',
+      contractVersionNumber: 1,
+      status: 'ANALYZING',
+      createdAt: AT,
+      startedAt: '2026-10-04T09:30:00Z',
+      completedAt: null,
+      findings: 0,
+    })
+    expect(item.timeValue).toBe('2026-10-04T09:30:00Z')
+    expect(item.timeLabelKind).toBe('updated')
+  })
+
+  it('keeps a completed review out of Needs action because the row cannot prove outstanding work', () => {
+    const item = reviewItemView({
+      id: 'rev-6',
+      contractId: 'con-6',
+      filename: 'Finalised MSA.docx',
+      contractVersionNumber: 3,
+      status: 'COMPLETED',
+      createdAt: AT,
+      startedAt: null,
+      completedAt: AT,
+      findings: 0,
+    })
+    expect(item.group).toBe('completed')
+    // A completed review says analysis finished, never that a human has work left.
+    expect(item.guidance).toBeNull()
+  })
 })
 
 describe('buildHomeGroups', () => {
@@ -230,7 +294,9 @@ describe('claims the data cannot prove are absent', () => {
   it('never claims a COMPLETED review has outstanding human decisions', () => {
     const review = reviewItemView({
       id: 'r1', contractId: 'c1', filename: 'X', contractVersionNumber: 1,
-      status: 'COMPLETED', createdAt: AT, completedAt: AT,
+      status: 'COMPLETED', createdAt: AT, startedAt: null,
+      completedAt: AT,
+      findings: 0,
     })
     // COMPLETED is also what a finalized review reports, so it cannot mean "needs action".
     expect(review.group).not.toBe('needs_action')
