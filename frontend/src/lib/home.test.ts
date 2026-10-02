@@ -16,7 +16,7 @@ describe('mapIngestStatus', () => {
   it('maps every real knowledge ingest status to a truthful group and label', () => {
     expect(mapIngestStatus('RECEIVED')).toEqual({ group: 'running', label: 'Queued for compilation', tone: 'active' })
     expect(mapIngestStatus('EXTRACTING')).toEqual({ group: 'running', label: 'Compiling', tone: 'active' })
-    expect(mapIngestStatus('EXTRACTED')).toEqual({ group: 'needs_action', label: 'Ready for review', tone: 'attention' })
+    expect(mapIngestStatus('EXTRACTED')).toEqual({ group: 'needs_action', label: 'Extracted', tone: 'attention' })
     expect(mapIngestStatus('FAILED')).toEqual({ group: 'failed', label: 'Ingestion failed', tone: 'danger' })
   })
 
@@ -30,7 +30,7 @@ describe('mapReviewStatus', () => {
   it('maps every real review status to a truthful group and label', () => {
     expect(mapReviewStatus('ANALYSIS_QUEUED')).toEqual({ group: 'running', label: 'Analysis queued', tone: 'active' })
     expect(mapReviewStatus('ANALYZING')).toEqual({ group: 'running', label: 'Analyzing', tone: 'active' })
-    expect(mapReviewStatus('COMPLETED')).toEqual({ group: 'needs_action', label: 'Ready for review', tone: 'attention' })
+    expect(mapReviewStatus('COMPLETED')).toEqual({ group: 'completed', label: 'Analysis complete', tone: 'complete' })
     expect(mapReviewStatus('FAILED')).toEqual({ group: 'failed', label: 'Analysis failed', tone: 'danger' })
   })
 
@@ -89,7 +89,7 @@ describe('publicationItemView', () => {
     })
     expect(item.kind).toBe('knowledge_publication')
     expect(item.title).toBe('Knowledge publication 12')
-    expect(item.group).toBe('recently_completed')
+    expect(item.group).toBe('completed')
     expect(item.stateLabel).toBe('Published')
     expect(item.to).toBe('/knowledge/publications/pub-1')
   })
@@ -100,7 +100,7 @@ describe('reviewItemView', () => {
     const item = reviewItemView({
       id: 'rev-1',
       contractId: 'con-1',
-      contractTitle: 'Acme MSA',
+      filename: 'Acme MSA',
       contractVersionNumber: 2,
       status: 'COMPLETED',
       createdAt: AT,
@@ -117,7 +117,7 @@ describe('reviewItemView', () => {
     const item = reviewItemView({
       id: 'rev-2',
       contractId: 'con-2',
-      contractTitle: null,
+      filename: null,
       contractVersionNumber: 1,
       status: 'ANALYZING',
       createdAt: AT,
@@ -127,19 +127,6 @@ describe('reviewItemView', () => {
     expect(item.title).not.toContain('con-2')
   })
 
-  it('never invents decision counts', () => {
-    const item = reviewItemView({
-      id: 'rev-3',
-      contractId: 'con-3',
-      contractTitle: 'X',
-      contractVersionNumber: 1,
-      status: 'COMPLETED',
-      createdAt: AT,
-      completedAt: null,
-      decisionProgress: null,
-    })
-    expect(item.decisionProgress).toBeNull()
-  })
 })
 
 describe('buildHomeGroups', () => {
@@ -152,7 +139,7 @@ describe('buildHomeGroups', () => {
 
   it('buckets every item into exactly one real group', () => {
     const groups = buildHomeGroups(items)
-    const total = groups.needsAction.length + groups.running.length + groups.failed.length + groups.recentlyCompleted.length
+    const total = groups.needsAction.length + groups.running.length + groups.failed.length + groups.completed.length
     expect(total).toBe(items.length)
   })
 
@@ -161,17 +148,17 @@ describe('buildHomeGroups', () => {
     expect(groups.failed.map((i) => i.title)).toEqual(['bad.docx'])
     expect(groups.needsAction.map((i) => i.title)).toEqual(['done.docx'])
     expect(groups.running.map((i) => i.title)).toEqual(['busy.docx'])
-    expect(groups.recentlyCompleted.map((i) => i.title)).toEqual(['Knowledge publication 1'])
+    expect(groups.completed.map((i) => i.title)).toEqual(['Knowledge publication 1'])
   })
 
   it('produces empty arrays rather than undefined for an empty input', () => {
     const groups = buildHomeGroups([])
-    expect(groups).toEqual({ needsAction: [], running: [], failed: [], recentlyCompleted: [] })
+    expect(groups).toEqual({ needsAction: [], running: [], failed: [], completed: [] })
   })
 
   it('counts each bucket independently for the summary line', () => {
     const groups = buildHomeGroups(items)
-    expect(counts(groups)).toEqual({ needsAction: 1, running: 1, failed: 1, recentlyCompleted: 1 })
+    expect(counts(groups)).toEqual({ needsAction: 1, running: 1, failed: 1, completed: 1 })
   })
 })
 
@@ -182,7 +169,7 @@ describe('group labels', () => {
   })
 
   it('has a label for every group the mapper can produce', () => {
-    for (const g of ['needs_action', 'running', 'failed', 'recently_completed'] as const) {
+    for (const g of ['needs_action', 'running', 'failed', 'completed'] as const) {
       expect(HOME_GROUP_LABELS[g]).toBeTruthy()
     }
   })
@@ -193,7 +180,7 @@ function counts(g: ReturnType<typeof buildHomeGroups>) {
     needsAction: g.needsAction.length,
     running: g.running.length,
     failed: g.failed.length,
-    recentlyCompleted: g.recentlyCompleted.length,
+    completed: g.completed.length,
   }
 }
 describe('WorkRow time label', () => {
@@ -211,5 +198,53 @@ describe('WorkRow time label', () => {
       id: 'p1', organizationId: 'o', publicationNumber: 1, note: '', items: [], createdAt: 'not-a-date',
     })
     expect(item.timeLabel).toBe('')
+  })
+})
+
+describe('claims the data cannot prove are absent', () => {
+  const artifact = {
+    id: 'a1', artifactType: 'PLAYBOOK' as const, filename: 'p.docx', contentType: '',
+    sizeBytes: 1, sha256: 'x', ingestStatus: 'EXTRACTED' as const, createdAt: AT,
+  }
+
+  it('never claims an extracted source still awaits review or is unpublished', () => {
+    // ingestStatus does not change after extraction, so it cannot prove pending review work.
+    const item = knowledgeItemView(artifact)
+    expect(item.guidance ?? '').not.toMatch(/until you publish|await|outstanding|still needs|not been published/i)
+    expect(item.stateLabel).not.toMatch(/ready for review/i)
+  })
+
+  it('never claims a COMPLETED review has outstanding human decisions', () => {
+    const review = reviewItemView({
+      id: 'r1', contractId: 'c1', filename: 'X', contractVersionNumber: 1,
+      status: 'COMPLETED', createdAt: AT, completedAt: AT,
+    })
+    // COMPLETED is also what a finalized review reports, so it cannot mean "needs action".
+    expect(review.group).not.toBe('needs_action')
+    expect(review.guidance ?? '').not.toMatch(/decision|await|outstanding/i)
+  })
+
+  it('keeps the running guidance true when compilation fails', () => {
+    const running = knowledgeItemView({ ...artifact, ingestStatus: 'EXTRACTING' }).guidance ?? ''
+    expect(running).toMatch(/Failed/)
+  })
+
+  it('uses a completed-group label with no time claim', () => {
+    expect(HOME_GROUP_LABELS.completed).toBe('Completed')
+    expect(HOME_GROUP_LABELS.completed).not.toMatch(/recent|later|latest|now|today/i)
+  })
+
+  it('never lets a real status render as unknown, or an unknown one as a real status', () => {
+    for (const status of ['ANALYSIS_QUEUED', 'ANALYZING', 'COMPLETED', 'FAILED']) {
+      expect(mapReviewStatus(status).label).not.toMatch(/unknown/i)
+    }
+    const unknown = mapReviewStatus('SOME_FUTURE_STATUS')
+    expect(unknown.label).toBe('Status unknown')
+    expect(unknown.tone).toBe('neutral')
+    expect(['running', 'completed', 'failed']).not.toContain(unknown.group)
+  })
+
+  it('labels a createdAt timestamp as Added, not Updated', () => {
+    expect(knowledgeItemView(artifact).timeLabelKind).toBe('added')
   })
 })

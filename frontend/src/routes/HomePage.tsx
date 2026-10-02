@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useHomeData } from '../api/home'
+import { longDate } from '../lib/dates'
 import { boundedErrorMessage, TransportError } from '../api/errorMessage'
 import {
   buildHomeGroups,
@@ -34,8 +35,9 @@ export function HomePage() {
   const groups = useMemo(() => buildHomeGroups(items), [items])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // One effective id drives both the row highlight and the inspector, so they cannot disagree.
-  // A selection that disappears after a refetch falls back to the first real item.
-  const effectiveId = items.some((item) => item.id === selectedId) ? selectedId : (items[0]?.id ?? null)
+  // Nothing is auto-selected: the inspector shows a hint until the reviewer chooses an item.
+  // A selection that disappears after a refetch is dropped rather than reassigned silently.
+  const effectiveId = items.some((item) => item.id === selectedId) ? selectedId : null
   const selected = items.find((item) => item.id === effectiveId) ?? null
 
     const [openGroups, setOpenGroups] = useState<ReadonlySet<HomeGroupKey>>(
@@ -55,12 +57,14 @@ export function HomePage() {
 
   const loading = artifacts.isPending || publications.isPending
   const failed = artifacts.isError || publications.isError
-  const errorMessage = homeErrorMessage(artifacts.error ?? publications.error ?? null)
+  const error = artifacts.error ?? publications.error ?? null
+  const forbidden = statusOf(error) === 403
+  const errorMessage = homeErrorMessage(error)
 
   return (
     <>
       <div className="rv-main">
-        <TopBar title="Home" hasInspector />
+        <TopBar title="Home" />
         <div className="rv-scroll">
           <div className="rv-wrap">
             <Hero
@@ -77,8 +81,8 @@ export function HomePage() {
                 to="/reviews"
                 actionLabel="Start a review"
               >
-                {reviews.reason} Start a review below, or open Reviews to work on a contract you
-                already have.
+                {reviews.reason} Start a review, or open Reviews to work on a contract you already
+                have.
               </UnavailableNotice>
             ) : null}
 
@@ -86,11 +90,17 @@ export function HomePage() {
 
             {failed ? (
               <ErrorState
+                title={forbidden ? 'You do not have access to this knowledge' : 'Something went wrong'}
+                tone={forbidden ? 'neutral' : 'danger'}
                 message={errorMessage}
-                onRetry={() => {
-                  void artifacts.refetch()
-                  void publications.refetch()
-                }}
+                onRetry={
+                  forbidden
+                    ? undefined
+                    : () => {
+                        void artifacts.refetch()
+                        void publications.refetch()
+                      }
+                }
               />
             ) : null}
 
@@ -132,19 +142,26 @@ export function HomePage() {
               onSelect={setSelectedId}
             />
             <GroupSection
-              groupKey="recently_completed"
-              items={groups.recentlyCompleted}
-              open={openGroups.has('recently_completed')}
-              onToggle={() => toggleGroup('recently_completed')}
+              groupKey="completed"
+              items={groups.completed}
+              open={openGroups.has('completed')}
+              onToggle={() => toggleGroup('completed')}
               selectedId={effectiveId}
               onSelect={setSelectedId}
             />
           </div>
         </div>
       </div>
-      <Inspector>{selected ? <InspectorBody item={selected} /> : <InspectorHint />}</Inspector>
+      <Inspector status={selected ? `${selected.title}. ${selected.stateLabel}.` : ''}>
+        {selected ? <InspectorBody item={selected} /> : <InspectorHint />}
+      </Inspector>
     </>
   )
+}
+
+function statusOf(error: Error | null): number | null {
+  const status = (error as { status?: number | null } | null)?.status
+  return typeof status === 'number' ? status : null
 }
 
 /** Says what failed, what is intact, and what the user can do next. */
@@ -152,14 +169,18 @@ function homeErrorMessage(error: Error | null): string {
   if (error instanceof TransportError) {
     return 'Rivell could not be reached. Your work is unchanged. Check your connection and try again.'
   }
-  const status = (error as { status?: number | null } | null)?.status
-  if (status === 403) {
-    return 'You do not have permission to see this knowledge. Nothing was changed.'
+  if (statusOf(error) === 403) {
+    return 'This Rivell deployment did not grant access to knowledge sources. Nothing was changed.'
+  }
+  const HOME_MESSAGES: Record<number, string> = {
+    404: 'That knowledge could not be found.',
+    500: 'Rivell could not complete that request.',
+    503: 'The knowledge service is unavailable right now.',
   }
   const derived = boundedErrorMessage(
-    typeof status === 'number' ? status : 500,
-    {},
-    'Your work could not be loaded right now. Nothing was changed.',
+    statusOf(error) ?? 500,
+    HOME_MESSAGES,
+    'Your work could not be loaded right now.',
   )
   return `${derived} Your work is unchanged.`
 }
@@ -268,7 +289,8 @@ function WorkList({
   selectedId: string | null
   onSelect: (id: string) => void
 }) {
-  const currentId = items.some((item) => item.id === selectedId) ? selectedId : (items[0]?.id ?? null)
+  // Never fall back to this group's first row: that made every group highlight a row.
+  const currentId = items.some((item) => item.id === selectedId) ? selectedId : null
 
   function move(offset: number) {
     const index = items.findIndex((item) => item.id === currentId)
@@ -281,13 +303,13 @@ function WorkList({
       {/* ul[role=listbox] is the valid ARIA mapping the design system requires for WorkRow. */}
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-to-interactive-role */}
       <ul className="rv-rows" role="listbox" aria-label="Work">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <WorkRow
             key={item.id}
             item={item}
             selected={item.id === currentId}
             spin={item.group === 'running'}
-            tabbable={item.id === currentId}
+            tabbable={currentId ? item.id === currentId : index === 0}
             onSelect={() => onSelect(item.id)}
             onStep={(offset) => move(offset)}
           />
@@ -333,8 +355,8 @@ function InspectorBody({ item }: { item: HomeWorkItem }) {
             </dd>
           </>
         ) : null}
-        <dt>Updated</dt>
-        <dd>{formatDate(item.updatedAt)}</dd>
+        <dt>{item.timeLabelKind === 'added' ? 'Added' : 'Updated'}</dt>
+        <dd>{longDate(item.timeLabel)}</dd>
       </dl>
       {item.guidance ? <p className="rv-insp__note">{item.guidance}</p> : null}
       <div className="rv-insp__action">
@@ -344,10 +366,4 @@ function InspectorBody({ item }: { item: HomeWorkItem }) {
       </div>
     </>
   )
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }

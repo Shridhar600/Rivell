@@ -42,14 +42,26 @@ export function LinkButton({ to, variant = 'default', compact, className, childr
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Required: an icon alone carries no accessible name. */
   label: string
-  pressed?: boolean
+  /**
+   * Disclosure state. Uses `aria-expanded`, never `aria-pressed`, because this control shows and
+   * hides a region rather than toggling a setting.
+   */
+  expanded?: boolean
+  controls?: string
   children: ReactNode
 }
 
-export function IconButton({ label, pressed, children, className, ...rest }: IconButtonProps) {
+export function IconButton({ label, expanded, controls, children, className, ...rest }: IconButtonProps) {
   const classes = ['rv-iconbtn', className].filter(Boolean).join(' ')
   return (
-    <button type="button" className={classes} aria-label={label} aria-pressed={pressed} {...rest}>
+    <button
+      type="button"
+      className={classes}
+      aria-label={label}
+      aria-expanded={expanded}
+      aria-controls={controls}
+      {...rest}
+    >
       {children}
     </button>
   )

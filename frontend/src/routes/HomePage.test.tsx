@@ -80,7 +80,7 @@ describe('Home page data honesty', () => {
   it('reads only the two real organization-scoped knowledge endpoints', async () => {
     const urls = stubApi({ artifacts: [], publications: [] })
     renderHome()
-    await waitFor(() => expect(screen.getByText(/nothing needs/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
     const knowledgeCalls = urls
       .filter((u) => u.includes('/api/knowledge/'))
       .map((u) => new URL(u).pathname)
@@ -90,7 +90,7 @@ describe('Home page data honesty', () => {
   it('issues no review call and no per-contract fan-out', async () => {
     const urls = stubApi({ artifacts: [], publications: [] })
     renderHome()
-    await waitFor(() => expect(screen.getByText(/nothing needs/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
     expect(urls.filter((u) => u.includes('/api/reviews'))).toEqual([])
     expect(urls.filter((u) => u.includes('/api/contracts'))).toEqual([])
   })
@@ -125,10 +125,17 @@ describe('Home real work states', () => {
     expect(within(group).getByRole('option', { name: /broken\.docx/i })).toBeInTheDocument()
   })
 
-  it('shows publications under Recently completed', async () => {
+  it('never labels the completed group with a time window it cannot compute', async () => {
     stubApi({ artifacts: [], publications: [publication('p1', 12)] })
     renderHome()
-    const group = await screen.findByRole('region', { name: 'Recently completed' })
+    await screen.findByRole('region', { name: 'Completed' })
+    expect(screen.queryByText(/recently/i)).not.toBeInTheDocument()
+  })
+
+  it('shows publications under Completed', async () => {
+    stubApi({ artifacts: [], publications: [publication('p1', 12)] })
+    renderHome()
+    const group = await screen.findByRole('region', { name: 'Completed' })
     expect(within(group).getByRole('option', { name: /knowledge publication 12/i })).toBeInTheDocument()
   })
 
@@ -138,7 +145,7 @@ describe('Home real work states', () => {
     await screen.findByRole('region', { name: 'Running' })
     expect(screen.queryByRole('region', { name: 'Failed' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Needs action' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Recently completed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Completed' })).not.toBeInTheDocument()
   })
 })
 
@@ -176,7 +183,7 @@ describe('Home never fabricates', () => {
   it('never shows a sample id', async () => {
     stubApi({ artifacts: [], publications: [] })
     const { container } = renderHome()
-    await waitFor(() => expect(screen.getByText(/nothing needs/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
     expect(container.textContent ?? '').not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}/i)
   })
 })
@@ -223,7 +230,7 @@ describe('Home selection and inspector', () => {
     const row = await screen.findByRole('option', { name: /msa-playbook\.docx/i })
     await userEvent.click(row)
     const details = screen.getByRole('complementary', { name: 'Details' })
-    expect(within(details).getByText(/msa-playbook\.docx/i)).toBeInTheDocument()
+    expect(within(details).getByRole('heading', { level: 2 })).toHaveTextContent('msa-playbook.docx')
   })
 
   it('moves selection with the arrow keys', async () => {
@@ -260,9 +267,10 @@ describe('Home loading state', () => {
       }),
     )
     renderHome()
-    const status = await screen.findByRole('status')
-    expect(status).toHaveTextContent(/loading/i)
-    expect(status).not.toHaveTextContent(/nothing needs/i)
+    const loading = await screen.findByRole('status')
+    expect(loading).toHaveTextContent(/loading/i)
+    expect(loading).not.toHaveTextContent(/nothing needs/i)
+    expect(screen.queryByText(/nothing needs your attention/i)).not.toBeInTheDocument()
     release?.()
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
   })
@@ -280,24 +288,41 @@ describe('Home loading state', () => {
       }),
     )
     renderHome()
-    await screen.findByRole('status')
-    expect(screen.queryByText(/nothing needs/i)).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getAllByRole('status').some((el) => /loading/i.test(el.textContent ?? ''))).toBe(true),
+    )
+    expect(screen.queryByText(/nothing needs your attention/i)).not.toBeInTheDocument()
     release?.()
-    await waitFor(() => expect(screen.getByText(/nothing needs/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
   })
 })
 
 describe('selection, pills and groups', () => {
   const busy = [artifact('a1', 'EXTRACTING', 'busy.docx')]
 
-  it('keeps the row highlight and the inspector on the same item', async () => {
-    stubApi({ artifacts: [artifact('a1', 'EXTRACTED', 'one.docx'), artifact('a2', 'EXTRACTED', 'two.docx')] })
+  it('highlights only the selected item, never one row per group', async () => {
+    stubApi({
+      artifacts: [
+        artifact('a1', 'EXTRACTED', 'one.docx'),
+        artifact('a2', 'EXTRACTED', 'two.docx'),
+        artifact('a3', 'EXTRACTING', 'busy.docx'),
+        artifact('a4', 'FAILED', 'bad.docx'),
+      ],
+      publications: [publication('p1', 1)],
+    })
     renderHome()
-    const rows = await screen.findAllByRole('option')
-    const selectedRow = rows.find((r) => r.getAttribute('aria-selected') === 'true')!
+    await screen.findByRole('option', { name: /one\.docx/i })
+
+    const selectedCount = () =>
+      screen.getAllByRole('option').filter((r) => r.getAttribute('aria-selected') === 'true').length
+
+    // Nothing is auto-selected, so no group highlights its own first row.
+    expect(selectedCount()).toBe(0)
+
+    await userEvent.click(screen.getByRole('option', { name: /two\.docx/i }))
+    expect(selectedCount()).toBe(1)
     const details = screen.getByRole('complementary', { name: 'Details' })
-    expect(within(selectedRow).getByText('one.docx')).toBeInTheDocument()
-    expect(within(details).getByRole('heading', { level: 2 })).toHaveTextContent('one.docx')
+    expect(within(details).getByRole('heading', { level: 2 })).toHaveTextContent('two.docx')
   })
 
   it('expands a collapsed group when its summary pill is used', async () => {

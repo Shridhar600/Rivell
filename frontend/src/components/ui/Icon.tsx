@@ -32,21 +32,7 @@ export function BookIcon({ className }: IconProps) {
   )
 }
 
-export function ClauseIcon({ className }: IconProps) {
-  return (
-    <svg {...base} className={className}>
-      <path d="M3 4h10M3 7.5h10M3 11h6" />
-    </svg>
-  )
-}
 
-export function SourceIcon({ className }: IconProps) {
-  return (
-    <svg {...base} className={className}>
-      <path d="M2.5 4.5h4l1.5 1.5h5.5v7h-11z" />
-    </svg>
-  )
-}
 
 export function PlusIcon({ className }: IconProps) {
   return (
@@ -83,14 +69,6 @@ export function PanelRightIcon({ className }: IconProps) {
 }
 
 /** Half-filled circle: work a human has in progress. */
-export function ProgressIcon({ className }: IconProps) {
-  return (
-    <svg {...base} className={className}>
-      <circle cx="8" cy="8" r="6" />
-      <path d="M8 4.5A3.5 3.5 0 0 1 11.5 8 3.5 3.5 0 0 1 8 11.5" strokeWidth="3" />
-    </svg>
-  )
-}
 
 /** Circle with "!": needs a human. */
 export function NeedsHumanIcon({ className }: IconProps) {

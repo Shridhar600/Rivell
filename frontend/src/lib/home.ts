@@ -1,15 +1,17 @@
 import type { ArtifactSummary, ArtifactType, Publication } from '../api/knowledge'
 import type { ReviewStatus } from '../api/reviews'
-import { humanizeCode } from './domainLabels'
+import { shortDate } from './dates'
 
-export type HomeGroupKey = 'needs_action' | 'running' | 'failed' | 'recently_completed'
+export type HomeGroupKey = 'needs_action' | 'running' | 'failed' | 'completed'
 export type HomeTone = 'active' | 'attention' | 'danger' | 'neutral' | 'complete'
 
 export const HOME_GROUP_LABELS: Record<HomeGroupKey, string> = {
   needs_action: 'Needs action',
   running: 'Running',
   failed: 'Failed',
-  recently_completed: 'Recently completed',
+  // Deliberately not "Recently": /api/knowledge/publications is unbounded and carries no recency
+  // field, so the old label was a time claim the data cannot support.
+  completed: 'Completed',
 }
 
 interface MappedState {
@@ -20,17 +22,28 @@ interface MappedState {
 
 const UNKNOWN_STATE: MappedState = { group: 'needs_action', label: 'Status unknown', tone: 'neutral' }
 
+/**
+ * `ingestStatus` never changes after extraction, so it cannot prove that a source still awaits
+ * human review: once every candidate is published, the summary still reads EXTRACTED. The label
+ * therefore states only what the field proves. Whether outstanding review work exists is a
+ * backend gap, recorded in DEFERRED_WORK.md.
+ */
 const INGEST_STATE: Record<string, MappedState> = {
   RECEIVED: { group: 'running', label: 'Queued for compilation', tone: 'active' },
   EXTRACTING: { group: 'running', label: 'Compiling', tone: 'active' },
-  EXTRACTED: { group: 'needs_action', label: 'Ready for review', tone: 'attention' },
+  EXTRACTED: { group: 'needs_action', label: 'Extracted', tone: 'attention' },
   FAILED: { group: 'failed', label: 'Ingestion failed', tone: 'danger' },
 }
 
+/**
+ * COMPLETED means analysis finished. It says nothing about whether decisions remain: a finalized
+ * review reports COMPLETED too. Outstanding human work lives on HumanReviewView
+ * (actionableFindings / remainingFindings), one read per review, so this must not claim it.
+ */
 const REVIEW_STATE: Record<string, MappedState> = {
   ANALYSIS_QUEUED: { group: 'running', label: 'Analysis queued', tone: 'active' },
   ANALYZING: { group: 'running', label: 'Analyzing', tone: 'active' },
-  COMPLETED: { group: 'needs_action', label: 'Ready for review', tone: 'attention' },
+  COMPLETED: { group: 'completed', label: 'Analysis complete', tone: 'complete' },
   FAILED: { group: 'failed', label: 'Analysis failed', tone: 'danger' },
 }
 
@@ -62,9 +75,10 @@ export interface HomeWorkItem {
   stateLabel: string
   tone: HomeTone
   group: HomeGroupKey
-  updatedAt: string
   /** Short, honest date for the WorkRow time column. Never a relative guess. */
   timeLabel: string
+  /** How to label that timestamp truthfully: `createdAt` is an "Added" time, not an "Updated" one. */
+  timeLabelKind: 'added' | 'updated'
   /** Only set when the server actually supplied both counts. Never synthesised. */
   decisionProgress: { resolved: number; total: number } | null
   /** Real in-product route for the primary action. */
@@ -85,24 +99,24 @@ export function knowledgeItemView(artifact: ArtifactSummary): HomeWorkItem {
     stateLabel: state.label,
     tone: state.tone,
     group: state.group,
-    updatedAt: artifact.createdAt,
     timeLabel: shortDate(artifact.createdAt),
+    timeLabelKind: 'added',
     decisionProgress: null,
     to: `/knowledge/artifacts/${artifact.id}`,
-    primaryActionLabel: state.group === 'needs_action' ? 'Review candidates' : 'Open knowledge source',
+    primaryActionLabel: 'Open knowledge source',
     guidance: knowledgeGuidance(state),
   }
 }
 
 function knowledgeGuidance(state: MappedState): string | null {
   switch (state.label) {
-    case 'Ready for review':
-      return 'Extracted knowledge is not used in reviews until you publish it.'
+    case 'Extracted':
+      return 'Extracted candidates wait for your review before anything is published.'
     case 'Ingestion failed':
       return 'Nothing from this source was published.'
     case 'Compiling':
     case 'Queued for compilation':
-      return 'You can leave this page. It moves to Needs action when compilation finishes.'
+      return 'You can leave this page. It moves to Needs action when compilation finishes, or to Failed if it does not.'
     default:
       return null
   }
@@ -117,9 +131,9 @@ export function publicationItemView(publication: Publication): HomeWorkItem {
     chip: null,
     stateLabel: 'Published',
     tone: 'complete',
-    group: 'recently_completed',
-    updatedAt: publication.createdAt,
+    group: 'completed',
     timeLabel: shortDate(publication.createdAt),
+    timeLabelKind: 'added',
     decisionProgress: null,
     to: `/knowledge/publications/${publication.id}`,
     primaryActionLabel: 'View publication',
@@ -127,44 +141,43 @@ export function publicationItemView(publication: Publication): HomeWorkItem {
   }
 }
 
+/**
+ * Exactly the fields the register's GAP-A promises: a `ReviewSummaryView` subset plus `filename`.
+ * `contractTitle` and decision counts are deliberately absent, because the shipped OpenAPI has
+ * neither, and inventing them here would be a fabricated contract.
+ */
 export interface HomeReviewSummary {
   id: string
   contractId: string
-  contractTitle: string | null
+  filename: string | null
   contractVersionNumber: number
   status: ReviewStatus | string
   createdAt: string
   completedAt: string | null
-  decisionProgress?: { resolved: number; total: number } | null
 }
 
 export function reviewItemView(review: HomeReviewSummary): HomeWorkItem {
   const state = mapReviewStatus(review.status)
-  const progress =
-    review.decisionProgress && review.decisionProgress.total > 0
-      ? review.decisionProgress
-      : null
   return {
     id: `review:${review.id}`,
     kind: 'review',
-    title: review.contractTitle?.trim() || 'Untitled contract',
-    meta: progress ? `${progress.resolved} of ${progress.total} decided` : null,
+    title: review.filename?.trim() || 'Untitled contract',
+    meta: null,
     chip: `v${review.contractVersionNumber}`,
     stateLabel: state.label,
     tone: state.tone,
     group: state.group,
-    updatedAt: review.completedAt ?? review.createdAt,
     timeLabel: shortDate(review.completedAt ?? review.createdAt),
-    decisionProgress: progress,
+    timeLabelKind: review.completedAt ? 'updated' : 'added',
+    decisionProgress: null,
     to: `/reviews/${review.contractId}/analysis/${review.id}`,
-    primaryActionLabel: state.group === 'needs_action' ? 'Open review workspace' : 'Open review',
+    primaryActionLabel: 'Open review',
     guidance: reviewGuidance(state),
   }
 }
 
 function reviewGuidance(state: MappedState): string | null {
   if (state.label === 'Analysis failed') return 'The source document is unchanged.'
-  if (state.label === 'Ready for review') return 'Findings await your decision. Rivell recommends; you decide.'
   if (state.group === 'running') return 'You can leave this page.'
   return null
 }
@@ -173,42 +186,16 @@ export interface HomeGroups {
   needsAction: HomeWorkItem[]
   running: HomeWorkItem[]
   failed: HomeWorkItem[]
-  recentlyCompleted: HomeWorkItem[]
+  completed: HomeWorkItem[]
 }
 
 export function buildHomeGroups(items: readonly HomeWorkItem[]): HomeGroups {
-  const groups: HomeGroups = { needsAction: [], running: [], failed: [], recentlyCompleted: [] }
+  const groups: HomeGroups = { needsAction: [], running: [], failed: [], completed: [] }
   for (const item of items) {
-    switch (item.group) {
-      case 'needs_action':
-        groups.needsAction.push(item)
-        break
-      case 'running':
-        groups.running.push(item)
-        break
-      case 'failed':
-        groups.failed.push(item)
-        break
-      case 'recently_completed':
-        groups.recentlyCompleted.push(item)
-        break
-      default:
-        break
-    }
+    if (item.group === 'needs_action') groups.needsAction.push(item)
+    else if (item.group === 'running') groups.running.push(item)
+    else if (item.group === 'failed') groups.failed.push(item)
+    else groups.completed.push(item)
   }
   return groups
-}
-
-export function unknownStateLabel(code: string): string {
-  return humanizeCode(code)
-}
-
-/**
- * A real calendar date, not a relative guess. The prototype's "Today" / "9:12" / "2m" column
- * cannot be reproduced honestly from a timestamp without a timezone and a reference clock.
- */
-function shortDate(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }

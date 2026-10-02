@@ -6,6 +6,12 @@
 :root {
   --rv-focus: 0 0 0 3px var(--ring), 0 0 0 1px var(--text-3);
   --rv-focus-inset: inset 0 0 0 2px var(--text-3);
+  /* The frozen layout tokens, so no width is hardcoded twice. */
+  --rv-w-sidebar: var(--w-sidebar);
+  --rv-w-sidebar-collapsed: var(--w-sidebar-collapsed);
+  --rv-w-inspector: var(--w-inspector);
+  --rv-h-topbar: var(--h-topbar);
+  --rv-edge-half: 11px;
 }
 
 body {
@@ -18,15 +24,12 @@ body {
 }
 
 /* ---------- focus ---------- */
-.rv-focusable:focus-visible,
 .rv-btn:focus-visible,
 .rv-iconbtn:focus-visible,
-.rv-chip-btn:focus-visible,
 .rv-nav__link:focus-visible,
 .rv-row:focus-visible,
 .rv-group__head:focus-visible,
-.rv-pill:focus-visible,
-.rv-insp__action:focus-visible {
+.rv-pill:focus-visible {
   outline: none;
   box-shadow: var(--rv-focus);
   border-radius: 8px;
@@ -39,13 +42,13 @@ body {
 /* ---------- shell ---------- */
 .rv-shell {
   display: grid;
-  grid-template-columns: var(--rv-sidebar, 220px) minmax(0, 1fr) var(--rv-inspector, 340px);
+  grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr) var(--rv-inspector, var(--rv-w-inspector));
   height: 100vh;
   overflow: hidden;
   transition: grid-template-columns var(--t-panel) var(--ease);
 }
 .rv-shell[data-sidebar='collapsed'] {
-  --rv-sidebar: 56px;
+  --rv-sidebar: var(--rv-w-sidebar-collapsed);
 }
 .rv-shell[data-inspector='collapsed'] {
   --rv-inspector: 0px;
@@ -53,6 +56,7 @@ body {
 
 /* ---------- sidebar ---------- */
 .rv-side {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -106,12 +110,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1px;
-}
-.rv-nav__label {
-  padding: 4px 8px;
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 500;
 }
 .rv-nav__link {
   position: relative;
@@ -167,7 +165,6 @@ body {
 /* collapsed rail */
 .rv-shell[data-sidebar='collapsed'] .rv-side__brand-text,
 .rv-shell[data-sidebar='collapsed'] .rv-nav__text,
-.rv-shell[data-sidebar='collapsed'] .rv-nav__label,
 .rv-shell[data-sidebar='collapsed'] .rv-side__hint {
   display: none;
 }
@@ -191,7 +188,7 @@ body {
   align-items: center;
   gap: 12px;
   flex: none;
-  height: 44px;
+  height: var(--rv-h-topbar);
   padding: 0 20px;
   border-bottom: 1px solid var(--line);
   background: var(--bg);
@@ -199,9 +196,6 @@ body {
 .rv-topbar__title {
   font-weight: 500;
   letter-spacing: -0.01em;
-}
-.rv-topbar__spacer {
-  flex: 1;
 }
 .rv-scroll {
   flex: 1;
@@ -224,6 +218,40 @@ body {
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* ---------- edge panel toggles ---------- */
+/* Each panel's collapse control sits on that panel's own edge, never in the central bar. */
+.rv-edge {
+  position: absolute;
+  z-index: 2;
+  width: 22px;
+  height: 34px;
+  border: 1px solid var(--line-2);
+  background: var(--bg);
+  box-shadow: var(--sh-xs);
+  color: var(--text-2);
+  border-radius: 0;
+}
+.rv-edge:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--text-3);
+}
+.rv-edge:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+  border-radius: 0;
+}
+.rv-edge--sidebar {
+  top: 50%;
+  right: calc(-1 * (var(--rv-edge-half) + 1px));
+  transform: translateY(-50%);
+}
+.rv-edge--inspector {
+  top: 50%;
+  left: calc(-1 * (var(--rv-edge-half) + 1px));
+  transform: translateY(-50%);
 }
 
 /* ---------- buttons ---------- */
@@ -576,16 +604,26 @@ body {
 
 /* ---------- inspector ---------- */
 .rv-insp {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: auto;
   border-left: 1px solid var(--line);
   background: var(--bg);
 }
+/*
+ * A collapsed panel keeps its grid column. Its contents are hidden rather than unmounted, but the
+ * edge handle must stay visible and reachable, otherwise the panel could never be reopened.
+ */
 .rv-shell[data-inspector='collapsed'] .rv-insp {
-  visibility: hidden;
-  overflow: hidden;
+  overflow: visible;
   border-left: 0;
+}
+.rv-shell[data-inspector='collapsed'] .rv-insp > * {
+  visibility: hidden;
+}
+.rv-shell[data-inspector='collapsed'] .rv-insp > .rv-edge--inspector {
+  visibility: visible;
 }
 .rv-insp__inner {
   display: flex;
@@ -679,12 +717,6 @@ body {
   margin-top: 1px;
   color: var(--text-2);
 }
-.rv-empty-group {
-  padding: 14px;
-  color: var(--text-2);
-  font-size: 12.5px;
-}
-
 /* ---------- legacy surface (temporary F1 seam) ---------- */
 .rv-legacy {
   /* The shell is 100vh with overflow:hidden, so the legacy column must scroll itself. */
@@ -697,12 +729,14 @@ body {
 /* ---------- responsive ---------- */
 @media (max-width: 1180px) {
   .rv-shell {
-    grid-template-columns: var(--rv-sidebar, 220px) minmax(0, 1fr);
+    grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr);
   }
   .rv-shell[data-inspector='collapsed'] {
     --rv-inspector: 0px;
   }
-  .rv-insp {
+  /* Hidden with its panel, so the control never promises an effect it cannot have. */
+  .rv-insp,
+  .rv-edge--inspector {
     display: none;
   }
 }
@@ -712,7 +746,8 @@ body {
     height: auto;
     overflow: visible;
   }
-  .rv-side {
+  .rv-side,
+  .rv-edge--sidebar {
     display: none;
   }
   .rv-legacy {
@@ -734,6 +769,7 @@ body {
   .rv-shell,
   .rv-btn,
   .rv-chev,
+  .rv-edge,
   .rv-glyph--spin {
     animation: none;
     transition: none;

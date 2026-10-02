@@ -22,11 +22,19 @@ export function EmptyState({ title, message, action }: { title: string; message:
   )
 }
 
+interface ErrorStateProps {
+  message: string
+  /** Defaults to a neutral failure heading. A permission boundary is not a failure. */
+  title?: string
+  tone?: 'danger' | 'neutral'
+  onRetry?: () => void
+}
+
 /** Says what failed, what is intact, and what the user can do. */
-export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function ErrorState({ message, title = 'Something went wrong', tone = 'danger', onRetry }: ErrorStateProps) {
   return (
-    <div role="alert" className="rv-state rv-state--error">
-      <h2 className="rv-state__title">Something went wrong</h2>
+    <div role="alert" className={`rv-state${tone === 'danger' ? ' rv-state--error' : ''}`}>
+      <h2 className="rv-state__title">{title}</h2>
       <p className="rv-state__body">{message}</p>
       {onRetry ? (
         <Button onClick={onRetry} compact>

@@ -35,9 +35,14 @@ export function CollapsibleGroup({
         onClick={onToggle}
       >
         <ChevronIcon className="rv-icon rv-chev" />
-        {title}
+        <span className="rv-group__title">{title}</span>
         <CountPill>{count}</CountPill>
-        {collapsedSummary ? <span className="rv-group__summary">{collapsedSummary}</span> : null}
+        {/* Decorative: without this the button would be named by every item in the group. */}
+        {collapsedSummary ? (
+          <span className="rv-group__summary" aria-hidden="true">
+            {collapsedSummary}
+          </span>
+        ) : null}
       </button>
       <div id={regionId} className="rv-rows">
         {children}

@@ -25,6 +25,19 @@ function stubApi(artifacts: unknown[] = [], publications: unknown[] = []) {
   )
 }
 
+function artifact(id: string, ingestStatus: string, filename: string) {
+  return {
+    id,
+    artifactType: 'PLAYBOOK',
+    filename,
+    contentType: 'application/octet-stream',
+    sizeBytes: 2048,
+    sha256: `sha-${id}`,
+    ingestStatus,
+    createdAt: '2026-10-02T08:00:00Z',
+  }
+}
+
 function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
@@ -88,19 +101,38 @@ describe('M10B shell', () => {
 })
 
 describe('sidebar owns its own collapse control', () => {
-  it('puts the control on the sidebar, not in the top bar', () => {
+  it('puts the control on the sidebar edge, not in the top bar', () => {
     stubApi()
     renderAt('/')
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
     const topbar = document.querySelector('.rv-topbar') as HTMLElement
-    expect(within(sidebar).getByRole('button', { name: /collapse sidebar/i })).toBeInTheDocument()
-    expect(within(topbar).queryByRole('button', { name: /sidebar/i })).not.toBeInTheDocument()
+    const toggle = within(sidebar).getByRole('button', { name: 'Sidebar' })
+    expect(toggle).toHaveClass('rv-edge--sidebar')
+    expect(toggle).toHaveAttribute('title', expect.stringContaining('Collapse sidebar'))
+    expect(within(topbar).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('keeps a stable accessible name and uses aria-expanded, not aria-pressed', () => {
+    stubApi()
+    renderAt('/')
+    const toggle = screen.getByRole('button', { name: 'Sidebar' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveAttribute('aria-controls', 'rv-sidebar')
+    expect(toggle).not.toHaveAttribute('aria-pressed')
+  })
+
+  it('hides each handle together with its own panel', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
+    const wide = css.slice(css.indexOf('max-width: 1180px'), css.indexOf('max-width: 760px'))
+    expect(wide).toContain('.rv-edge--inspector')
+    const narrow = css.slice(css.indexOf('max-width: 760px'))
+    expect(narrow).toContain('.rv-edge--sidebar')
   })
 
   it('is reachable by Tab and operable from the keyboard', async () => {
     stubApi()
     const { container } = renderAt('/')
-    const toggle = screen.getByRole('button', { name: /collapse sidebar/i })
+    const toggle = screen.getByRole('button', { name: 'Sidebar' })
 
     let reached = false
     for (let i = 0; i < 12 && !reached; i++) {
@@ -113,7 +145,8 @@ describe('sidebar owns its own collapse control', () => {
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-sidebar', 'collapsed'),
     )
-    expect(screen.getByRole('button', { name: /expand sidebar/i })).toBeInTheDocument()
+    // The name does not change with state, so the button is still findable.
+    expect(screen.getByRole('button', { name: 'Sidebar' })).toHaveAttribute('aria-expanded', 'false')
 
     await userEvent.keyboard('{Enter}')
     await waitFor(() =>
@@ -131,7 +164,7 @@ describe('sidebar owns its own collapse control', () => {
     for (let i = 0; i < 12; i++) {
       await userEvent.tab()
       const active = document.activeElement
-      if (active?.getAttribute('aria-label') === 'Collapse sidebar') break
+      if (active?.getAttribute('aria-label') === 'Sidebar') break
       visited.push(active as Element)
     }
 
@@ -174,17 +207,37 @@ describe('sidebar owns its own collapse control', () => {
 })
 
 describe('inspector panel', () => {
-  it('toggles from the top bar and keeps its grid column', async () => {
+  it('toggles from its own panel edge and keeps its grid column', async () => {
     stubApi([
-      { id: 'a1', artifactType: 'PLAYBOOK', filename: 'p.docx', contentType: '', sizeBytes: 1, sha256: '', ingestStatus: 'EXTRACTED', createdAt: '2026-10-02T08:00:00Z' },
+      artifact('a1', 'EXTRACTED', 'p.docx'),
     ])
     const { container } = renderAt('/')
-    const toggle = screen.getByRole('button', { name: /hide details panel/i })
+    const details = screen.getByRole('complementary', { name: 'Details' })
+    const toggle = within(details).getByRole('button', { name: 'Details panel' })
+    expect(toggle).toHaveClass('rv-edge--inspector')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(toggle).toHaveAttribute('aria-controls', 'rv-inspector')
+    expect(toggle).not.toHaveAttribute('aria-pressed')
+
     await userEvent.click(toggle)
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
-    expect(screen.getByRole('button', { name: /show details panel/i })).toBeInTheDocument()
+    // Still reachable, otherwise the panel could never be reopened.
+    expect(within(details).getByRole('button', { name: 'Details panel' })).toBeInTheDocument()
+  })
+
+  it('is not in the top bar', () => {
+    stubApi()
+    renderAt('/')
+    const topbar = document.querySelector('.rv-topbar') as HTMLElement
+    expect(within(topbar).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('animates the column width rather than snapping', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
+    const shell = css.slice(css.indexOf('.rv-shell {'))
+    expect(shell.slice(0, 500)).toMatch(/transition:[^;]*grid-template-columns/)
   })
 })
 
@@ -221,12 +274,20 @@ describe('responsive shell structure', () => {
     stubApi()
     const { container } = renderAt('/')
     expect(container.querySelector('.rv-insp')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /hide details panel/i }))
+    const details = screen.getByRole('complementary', { name: 'Details' })
+    await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
     // Still mounted: the grid column collapses to 0, the panel is not unmounted.
     expect(container.querySelector('.rv-insp')).toBeInTheDocument()
+  })
+
+  it('keeps the collapsed panel handle visible so it can be reopened', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
+    const rule = css.slice(css.indexOf(".rv-shell[data-inspector='collapsed'] .rv-insp {"))
+    expect(rule.slice(0, 400)).toContain('.rv-edge--inspector')
+    expect(rule.slice(0, 400)).toContain('visibility: visible')
   })
 
   it('declares the breakpoints the design system requires', () => {

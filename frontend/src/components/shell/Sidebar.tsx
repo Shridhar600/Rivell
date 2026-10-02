@@ -1,7 +1,9 @@
+import type { JSX } from 'react'
 import { NavLink } from 'react-router'
 import { IconButton } from '../ui/Button'
 import { BookIcon, DocumentIcon, HomeIcon, PanelLeftIcon } from '../ui/Icon'
-import type { ComponentType } from 'react'
+
+export const SIDEBAR_ID = 'rv-sidebar'
 
 interface SidebarProps {
   collapsed: boolean
@@ -10,7 +12,7 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
-    <aside className="rv-side" aria-label="Sidebar">
+    <aside className="rv-side" id={SIDEBAR_ID} aria-label="Sidebar">
       {/* No organisation name, user menu or greeting: identity is deferred and must not be faked. */}
       <NavLink to="/" className="rv-side__brand">
         <span className="rv-logo" aria-hidden="true">
@@ -25,19 +27,21 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <NavItem to="/knowledge" label="Knowledge" Icon={BookIcon} collapsed={collapsed} />
       </nav>
 
-      <div className="rv-side__foot">
-        {/* The sidebar owns its own collapse control, and the shortcut is stated next to it. */}
-        <span className="rv-side__hint" aria-hidden="true">
-          [
-        </span>
-        <IconButton
-          label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          pressed={!collapsed}
-          onClick={onToggle}
-        >
-          <PanelLeftIcon className="rv-icon" />
-        </IconButton>
-      </div>
+      {/*
+        The sidebar owns its own collapse control and it sits on the sidebar's own edge, so the
+        control is never in the central bar. Stable name plus aria-expanded: a toggle button must
+        not change its accessible name when it changes state.
+      */}
+      <IconButton
+        className="rv-edge rv-edge--sidebar"
+        label="Sidebar"
+        expanded={!collapsed}
+        controls={SIDEBAR_ID}
+        title={collapsed ? 'Expand sidebar [' : 'Collapse sidebar ['}
+        onClick={onToggle}
+      >
+        <PanelLeftIcon className="rv-icon" />
+      </IconButton>
     </aside>
   )
 }
@@ -52,7 +56,7 @@ function NavItem({
   to: string
   label: string
   end?: boolean
-  Icon: ComponentType<{ className?: string }>
+  Icon: (props: { className?: string }) => JSX.Element
   collapsed: boolean
 }) {
   return (
