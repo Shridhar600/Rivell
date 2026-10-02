@@ -327,3 +327,44 @@ describe('stylesheet contract (documentation only)', () => {
   })
 
 })
+
+describe('panel edge handles', () => {
+  it('is a single chevron that states which way the panel will move', () => {
+    stubApi()
+    renderAt('/')
+    const toggle = screen.getByRole('button', { name: 'Sidebar' })
+    // One control, one direction cue: a glyph, not a layout icon that reads as "panels".
+    expect(toggle.querySelectorAll('svg')).toHaveLength(1)
+  })
+
+  it('keeps the same accessible name and reversed chevron when collapsed', async () => {
+    stubApi()
+    renderAt('/')
+    const before = screen.getByRole('button', { name: 'Sidebar' })
+    const iconBefore = before.querySelector('svg')?.getAttribute('class')
+    await userEvent.click(before)
+    await waitFor(() =>
+      expect(document.querySelector('.rv-shell')).toHaveAttribute('data-sidebar', 'collapsed'),
+    )
+    const after = screen.getByRole('button', { name: 'Sidebar' })
+    expect(after).toHaveAttribute('title', expect.stringContaining('Expand sidebar'))
+    // The chevron direction is driven by the --open modifier, so it must appear when collapsed.
+    expect(after.className).toContain('rv-edge--open')
+    expect(iconBefore).toBe('rv-icon')
+  })
+
+  it('styles the handle once, so no stale duplicate rule can win on order', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
+    expect(css.match(/^\.rv-iconbtn\.rv-edge \{/gm) ?? []).toHaveLength(1)
+    expect(css.match(/^\.rv-edge--sidebar \{/gm) ?? []).toHaveLength(1)
+    expect(css.match(/^\.rv-edge--inspector \{/gm) ?? []).toHaveLength(1)
+  })
+
+  it('derives the edge offset from the handle width, never a percentage', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
+    const sidebar = css.slice(css.indexOf('.rv-edge--sidebar {'))
+    expect(sidebar.slice(0, 200)).toContain('calc(var(--rv-edge-w) / -2 - 1px)')
+    // A percentage here resolves against the 220px panel, not the 20px handle.
+    expect(sidebar.slice(0, 200)).not.toMatch(/-1 \* \(50%/)
+  })
+})

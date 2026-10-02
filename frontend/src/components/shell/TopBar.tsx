@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { IconButton } from '../ui/Button'
-import { PanelRightIcon } from '../ui/Icon'
+import { EdgeChevron } from '../ui/Icon'
 import { useShell } from './ShellContext'
 
 export const INSPECTOR_ID = 'rv-inspector'
@@ -38,14 +38,14 @@ export function Inspector({ status, children }: InspectorProps) {
       ) : null}
       <div className="rv-insp__inner">{children}</div>
       <IconButton
-        className="rv-edge rv-edge--inspector"
+        className={`rv-edge rv-edge--inspector${inspectorCollapsed ? ' rv-edge--open' : ''}`}
         label="Details panel"
         expanded={!inspectorCollapsed}
         controls={INSPECTOR_ID}
         title={inspectorCollapsed ? 'Show details ]' : 'Hide details ]'}
         onClick={toggleInspector}
       >
-        <PanelRightIcon className="rv-icon" />
+        <EdgeChevron className="rv-icon" />
       </IconButton>
     </aside>
   )

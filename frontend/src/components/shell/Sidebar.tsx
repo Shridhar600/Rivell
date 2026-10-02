@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 import { NavLink } from 'react-router'
 import { IconButton } from '../ui/Button'
-import { BookIcon, DocumentIcon, HomeIcon, PanelLeftIcon } from '../ui/Icon'
+import { BookIcon, DocumentIcon, EdgeChevron, HomeIcon } from '../ui/Icon'
 
 export const SIDEBAR_ID = 'rv-sidebar'
 
@@ -35,14 +35,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         not change its accessible name when it changes state.
       */}
       <IconButton
-        className="rv-edge rv-edge--sidebar"
+        className={`rv-edge rv-edge--sidebar${collapsed ? ' rv-edge--open' : ''}`}
         label="Sidebar"
         expanded={!collapsed}
         controls={SIDEBAR_ID}
         title={collapsed ? 'Expand sidebar [' : 'Collapse sidebar ['}
         onClick={onToggle}
       >
-        <PanelLeftIcon className="rv-icon" />
+        <EdgeChevron className="rv-icon" />
       </IconButton>
     </aside>
   )

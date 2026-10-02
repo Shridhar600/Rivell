@@ -129,6 +129,15 @@ export function UnknownIcon({ className }: IconProps) {
   )
 }
 
+/** Single chevron used by the panel edge handles; the direction is set by CSS rotation. */
+export function EdgeChevron({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="m10 4-4 4 4 4" />
+    </svg>
+  )
+}
+
 /** Plain info marker for inline notices. */
 export function InfoIcon({ className }: IconProps) {
   return (
