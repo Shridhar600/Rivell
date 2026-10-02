@@ -68,7 +68,8 @@ export function HomePage() {
         <div className="rv-scroll">
           <div className="rv-wrap">
             <Hero
-              resolved={!loading && reviews.availability === 'available'}
+              resolved={!loading}
+              headlineReady={reviews.availability === 'available'}
               needsAction={groups.needsAction.length}
               running={groups.running.length}
               failed={groups.failed.length}
@@ -206,12 +207,16 @@ function plural(count: number, one: string, many: string): string {
 
 function Hero({
   resolved,
+  headlineReady,
   needsAction,
   running,
   failed,
   onReveal,
 }: {
+  /** Data has arrived, so counts are safe to show. */
   resolved: boolean
+  /** Every part of Rivell's work is readable, so a claim about all of it is safe. */
+  headlineReady: boolean
   needsAction: number
   running: number
   failed: number
@@ -222,8 +227,8 @@ function Hero({
     <div className="rv-hero">
       <div>
         <h1 className="rv-hero__title">Rivell</h1>
-        {/* Claims no state until the reads resolve, and never duplicates the empty state. */}
-        {resolved && total > 0 ? (
+        {/* Claims nothing until every read resolves, and never duplicates the empty state. */}
+        {resolved && headlineReady && total > 0 ? (
           <p className="rv-hero__line">Here is where your work stands.</p>
         ) : null}
       </div>

@@ -339,7 +339,7 @@ describe('selection, pills and groups', () => {
     const head = within(runningGroup).getByRole('button', { name: /^Running/ })
     expect(head).toHaveAttribute('aria-expanded', 'false')
 
-    await userEvent.click(screen.getByRole('button', { name: /running/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^1 running$/ }))
     await waitFor(() => expect(head).toHaveAttribute('aria-expanded', 'true'))
   })
 
@@ -356,6 +356,16 @@ describe('selection, pills and groups', () => {
     await screen.findByRole('region', { name: 'Running' })
     expect(screen.queryByRole('button', { name: /needs? action/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /failed/i })).not.toBeInTheDocument()
+  })
+
+  it('shows real counts even while the review read is missing', async () => {
+    // A pill counts work Home can actually see, so it stays honest without the review read.
+    // Only the headline claims wait for it.
+    stubApi({ artifacts: [artifact('a1', 'FAILED', 'bad.docx')] })
+    renderHome()
+    const pill = await screen.findByRole('button', { name: /1 failed/i })
+    expect(pill).toBeInTheDocument()
+    expect(screen.queryByText(/here is where your work stands/i)).not.toBeInTheDocument()
   })
 
   it('does not claim work state before the reads resolve', async () => {
