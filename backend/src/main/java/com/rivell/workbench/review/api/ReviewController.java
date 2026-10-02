@@ -67,15 +67,18 @@ class ReviewController {
         return ApiResult.ok(apiService.packs());
     }
 
-    @Operation(summary = "List a contract's reviews, newest first (bounded)")
+    @Operation(summary = "List reviews newest first (bounded), optionally scoped to one "
+            + "contract. Omitting contractId returns the whole organization; supply the "
+            + "nextCursor value to continue.")
     @ResponseStatus(HttpStatus.OK)
-    @ApiResponses(@ApiResponse(responseCode = "404", description = "Unknown contract",
-            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
+    @ApiResponses({@ApiResponse(responseCode = "404", description = "Unknown contract",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
     @GetMapping("/reviews")
     ApiResult<ReviewListResponse> list(
-            @RequestParam UUID contractId,
-            @RequestParam(required = false) Integer limit) {
-        return ApiResult.ok(apiService.list(contractId, limit));
+            @RequestParam(required = false) UUID contractId,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String cursor) {
+        return ApiResult.ok(apiService.list(contractId, limit, cursor));
     }
 
     @Operation(summary = "Get a review summary with its active analysis run and counts")
