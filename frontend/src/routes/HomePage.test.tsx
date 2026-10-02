@@ -1,0 +1,357 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createMemoryRouter } from 'react-router'
+import { RouterProvider } from 'react-router/dom'
+import { appRoutes } from '../app/router'
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function envelope(data: unknown) {
+  return { data, status: 200, timestamp: '2026-10-02T09:00:00Z' }
+}
+
+function artifact(id: string, ingestStatus: string, filename: string) {
+  return {
+    id,
+    artifactType: 'PLAYBOOK',
+    filename,
+    contentType: 'application/octet-stream',
+    sizeBytes: 2048,
+    sha256: `sha-${id}`,
+    ingestStatus,
+    createdAt: '2026-10-02T08:00:00Z',
+  }
+}
+
+function publication(id: string, publicationNumber: number) {
+  return { id, organizationId: 'org-1', publicationNumber, note: '', items: [], createdAt: '2026-10-01T08:00:00Z' }
+}
+
+function stubApi(options: { artifacts?: unknown[]; publications?: unknown[]; artifactsStatus?: number }) {
+  const urls: string[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const request = input instanceof Request ? input : new Request(String(input))
+      const url = request.url
+      urls.push(url)
+      if (url.includes('/api/knowledge/artifacts')) {
+        if (options.artifactsStatus && options.artifactsStatus !== 200) {
+          return jsonResponse({}, options.artifactsStatus)
+        }
+        return jsonResponse(envelope(options.artifacts ?? []))
+      }
+      if (url.includes('/api/knowledge/publications')) {
+        return jsonResponse(envelope(options.publications ?? []))
+      }
+      return jsonResponse({}, 404)
+    }),
+  )
+  return urls
+}
+
+function renderHome() {
+  // The knowledge layer supplies its own retry predicate, so the delay is zeroed here rather than
+  // weakening production retry behaviour.
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
+  })
+  const router = createMemoryRouter(appRoutes, { initialEntries: ['/'] })
+  return render(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  )
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  globalThis.localStorage?.clear()
+})
+
+describe('Home page data honesty', () => {
+  it('reads only the two real organization-scoped knowledge endpoints', async () => {
+    const urls = stubApi({ artifacts: [], publications: [] })
+    renderHome()
+    await waitFor(() => expect(screen.getByText(/nothing needs/i)).toBeInTheDocument())
+    const knowledgeCalls = urls
+      .filter((u) => u.includes('/api/knowledge/'))
+      .map((u) => new URL(u).pathname)
+    expect(knowledgeCalls).toEqual(['/api/knowledge/artifacts', '/api/knowledge/publications'])
+  })
+
+  it('issues no review call and no per-contract fan-out', async () => {
+    const urls = stubApi({ artifacts: [], publications: [] })
+    renderHome()
+    await waitFor(() => expect(screen.getByText(/nothing needs/i)).toBeInTheDocument())
+    expect(urls.filter((u) => u.includes('/api/reviews'))).toEqual([])
+    expect(urls.filter((u) => u.includes('/api/contracts'))).toEqual([])
+  })
+
+  it('states plainly that review work across contracts is not readable yet', async () => {
+    stubApi({ artifacts: [], publications: [] })
+    renderHome()
+    expect(await screen.findByText(/cannot yet list review work across contracts/i)).toBeInTheDocument()
+  })
+})
+
+describe('Home real work states', () => {
+  it('groups extracted knowledge under Needs action', async () => {
+    stubApi({ artifacts: [artifact('a1', 'EXTRACTED', 'msa-playbook.docx')], publications: [] })
+    renderHome()
+    const group = await screen.findByRole('region', { name: 'Needs action' })
+    expect(within(group).getByRole('option', { name: /msa-playbook\.docx/i })).toBeInTheDocument()
+  })
+
+  it('shows compiling knowledge under Running with a real running glyph', async () => {
+    stubApi({ artifacts: [artifact('a1', 'EXTRACTING', 'busy.docx')], publications: [] })
+    renderHome()
+    const group = await screen.findByRole('region', { name: 'Running' })
+    const row = within(group).getByRole('option', { name: /busy\.docx/i })
+    expect(row).toHaveTextContent(/compiling/i)
+  })
+
+  it('keeps failed work visible', async () => {
+    stubApi({ artifacts: [artifact('a1', 'FAILED', 'broken.docx')], publications: [] })
+    renderHome()
+    const group = await screen.findByRole('region', { name: 'Failed' })
+    expect(within(group).getByRole('option', { name: /broken\.docx/i })).toBeInTheDocument()
+  })
+
+  it('shows publications under Recently completed', async () => {
+    stubApi({ artifacts: [], publications: [publication('p1', 12)] })
+    renderHome()
+    const group = await screen.findByRole('region', { name: 'Recently completed' })
+    expect(within(group).getByRole('option', { name: /knowledge publication 12/i })).toBeInTheDocument()
+  })
+
+  it('omits an empty group rather than rendering noise', async () => {
+    stubApi({ artifacts: [artifact('a1', 'EXTRACTING', 'busy.docx')], publications: [] })
+    renderHome()
+    await screen.findByRole('region', { name: 'Running' })
+    expect(screen.queryByRole('region', { name: 'Failed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Needs action' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Recently completed' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Home never fabricates', () => {
+  it('renders no percentage progress anywhere', async () => {
+    stubApi({
+      artifacts: [artifact('a1', 'EXTRACTING', 'busy.docx'), artifact('a2', 'EXTRACTED', 'ready.docx')],
+      publications: [publication('p1', 3)],
+    })
+    const { container } = renderHome()
+    await screen.findByRole('region', { name: 'Running' })
+    expect(container.textContent ?? '').not.toMatch(/\d\s*%/)
+    expect(container.textContent ?? '').not.toMatch(/progress/i)
+  })
+
+  it('renders no ownership or queue language', async () => {
+    stubApi({ artifacts: [artifact('a1', 'EXTRACTED', 'ready.docx')], publications: [] })
+    renderHome()
+    await screen.findByRole('region', { name: 'Needs action' })
+    const text = document.body.textContent ?? ''
+    for (const forbidden of [
+      'your decision',
+      'needs your',
+      'assigned',
+      'owner',
+      'next in queue',
+      'queue position',
+      'waiting for you',
+      'reviewer fallback',
+    ]) {
+      expect(text.toLowerCase()).not.toContain(forbidden)
+    }
+  })
+
+  it('never shows a sample id', async () => {
+    stubApi({ artifacts: [], publications: [] })
+    const { container } = renderHome()
+    await waitFor(() => expect(screen.getByText(/nothing needs/i)).toBeInTheDocument())
+    expect(container.textContent ?? '').not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}/i)
+  })
+})
+
+describe('Home states', () => {
+  it('says what failed, that work is intact, and keeps the page usable', async () => {
+    stubApi({ artifacts: [], publications: [], artifactsStatus: 500 })
+    renderHome()
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/could not complete/i)
+    expect(alert).toHaveTextContent(/unchanged/i)
+    expect(alert).not.toHaveTextContent(/\{\{|undefined|null/)
+    expect(screen.getAllByRole('link', { name: /start a review/i }).length).toBeGreaterThan(0)
+  })
+
+  it('retries the failed reads on request', async () => {
+    const urls = stubApi({ artifacts: [], publications: [], artifactsStatus: 500 })
+    renderHome()
+    const before = urls.length
+    const retry = await screen.findByRole('button', { name: /try again/i })
+    await userEvent.click(retry)
+    await waitFor(() => expect(urls.length).toBeGreaterThan(before))
+    expect(urls.filter((u) => u.includes('/api/knowledge/artifacts')).length).toBeGreaterThan(1)
+  })
+
+  it('never leaks a raw server error body into the page', async () => {
+    stubApi({ artifacts: [], publications: [], artifactsStatus: 500 })
+    renderHome()
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent ?? '').not.toMatch(/exception|at org\.|java\.|\b500\b/)
+  })
+
+  it('shows a first-run empty state with the next action', async () => {
+    stubApi({ artifacts: [], publications: [] })
+    renderHome()
+    expect(await screen.findByText(/nothing needs/i)).toBeInTheDocument()
+  })
+})
+
+describe('Home selection and inspector', () => {
+  it('fills the details panel when a row is selected', async () => {
+    stubApi({ artifacts: [artifact('a1', 'EXTRACTED', 'msa-playbook.docx')], publications: [] })
+    renderHome()
+    const row = await screen.findByRole('option', { name: /msa-playbook\.docx/i })
+    await userEvent.click(row)
+    const details = screen.getByRole('complementary', { name: 'Details' })
+    expect(within(details).getByText(/msa-playbook\.docx/i)).toBeInTheDocument()
+  })
+
+  it('moves selection with the arrow keys', async () => {
+    stubApi({
+      artifacts: [artifact('a1', 'EXTRACTED', 'one.docx'), artifact('a2', 'EXTRACTED', 'two.docx')],
+      publications: [],
+    })
+    renderHome()
+    const first = await screen.findByRole('option', { name: /one\.docx/i })
+    await userEvent.click(first)
+    // The focused option owns arrow handling, so the keys go to it rather than the list.
+    expect(first).toHaveFocus()
+    await userEvent.keyboard('{ArrowDown}')
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /two\.docx/i })).toHaveAttribute('aria-selected', 'true'),
+    )
+    await userEvent.keyboard('{ArrowUp}')
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /one\.docx/i })).toHaveAttribute('aria-selected', 'true'),
+    )
+  })
+})
+describe('Home loading state', () => {
+  it('announces loading politely and does not claim there is no work', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        await gate
+        return jsonResponse(envelope([]))
+      }),
+    )
+    renderHome()
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent(/loading/i)
+    expect(status).not.toHaveTextContent(/nothing needs/i)
+    release?.()
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
+  })
+
+  it('shows no empty state while the reads are still in flight', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        await gate
+        return jsonResponse(envelope([]))
+      }),
+    )
+    renderHome()
+    await screen.findByRole('status')
+    expect(screen.queryByText(/nothing needs/i)).not.toBeInTheDocument()
+    release?.()
+    await waitFor(() => expect(screen.getByText(/nothing needs/i)).toBeInTheDocument())
+  })
+})
+
+describe('selection, pills and groups', () => {
+  const busy = [artifact('a1', 'EXTRACTING', 'busy.docx')]
+
+  it('keeps the row highlight and the inspector on the same item', async () => {
+    stubApi({ artifacts: [artifact('a1', 'EXTRACTED', 'one.docx'), artifact('a2', 'EXTRACTED', 'two.docx')] })
+    renderHome()
+    const rows = await screen.findAllByRole('option')
+    const selectedRow = rows.find((r) => r.getAttribute('aria-selected') === 'true')!
+    const details = screen.getByRole('complementary', { name: 'Details' })
+    expect(within(selectedRow).getByText('one.docx')).toBeInTheDocument()
+    expect(within(details).getByRole('heading', { level: 2 })).toHaveTextContent('one.docx')
+  })
+
+  it('expands a collapsed group when its summary pill is used', async () => {
+    stubApi({ artifacts: busy })
+    renderHome()
+    const runningGroup = await screen.findByRole('region', { name: 'Running' })
+    const head = within(runningGroup).getByRole('button')
+    expect(head).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(screen.getByRole('link', { name: /1.*running/i }))
+    await waitFor(() => expect(head).toHaveAttribute('aria-expanded', 'true'))
+  })
+
+  it('opens Failed by default so failed work is never hidden', async () => {
+    stubApi({ artifacts: [artifact('a1', 'FAILED', 'bad.docx')] })
+    renderHome()
+    const group = await screen.findByRole('region', { name: 'Failed' })
+    expect(within(group).getByRole('button')).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('never renders a pill whose count is zero', async () => {
+    stubApi({ artifacts: busy })
+    renderHome()
+    await screen.findByRole('region', { name: 'Running' })
+    expect(screen.queryByRole('link', { name: /need action/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /failed/i })).not.toBeInTheDocument()
+  })
+
+  it('does not claim work state before the reads resolve', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        await gate
+        return jsonResponse(envelope([]))
+      }),
+    )
+    renderHome()
+    await screen.findByRole('status')
+    expect(screen.queryByText(/here is where your work stands/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /need action|running|failed/i })).not.toBeInTheDocument()
+    release?.()
+    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
+  })
+
+  it('shows a real date in the row time column, never a relative guess', async () => {
+    stubApi({ artifacts: [artifact('a1', 'EXTRACTED', 'one.docx')] })
+    renderHome()
+    const row = await screen.findByRole('option', { name: /one\.docx/i })
+    const time = within(row).getByLabelText(/^Updated /)
+    expect(time).toHaveTextContent(/\w{3}/)
+    expect(time.textContent ?? '').not.toMatch(/ago|just now|\d+\s*(m|min|h)\b/i)
+  })
+})
