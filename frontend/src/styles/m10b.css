@@ -11,6 +11,7 @@
   --rv-w-sidebar-collapsed: var(--w-sidebar-collapsed);
   --rv-w-inspector: var(--w-inspector);
   --rv-h-topbar: var(--h-topbar);
+  --rv-edge-w: 22px;
 }
 
 body {
@@ -271,7 +272,7 @@ body {
 .rv-iconbtn.rv-edge {
   position: absolute;
   z-index: 2;
-  width: 22px;
+  width: var(--rv-edge-w);
   height: 36px;
   border: 1px solid var(--line-2);
   background: var(--bg);
@@ -289,14 +290,22 @@ body {
   box-shadow: var(--rv-focus);
   border-radius: 0;
 }
+/*
+ * The handles sit on the panel border, level with the top bar. Centring them vertically put them
+ * over the content rows; the top bar line is chrome, so nothing scrolls under them.
+ */
+/*
+ * The offset is derived from the handle's own width. A percentage here would resolve against
+ * the containing block (the 220px sidebar), not the handle, which put it 111px off the edge.
+ */
 .rv-edge--sidebar {
-  top: 50%;
-  right: calc(-1 * (50% + 1px));
+  top: calc(var(--rv-h-topbar) / 2);
+  right: calc(var(--rv-edge-w) / -2 - 1px);
   transform: translateY(-50%);
 }
 .rv-edge--inspector {
-  top: 50%;
-  left: calc(-1 * (50% + 1px));
+  top: calc(var(--rv-h-topbar) / 2);
+  left: calc(var(--rv-edge-w) / -2 - 1px);
   transform: translateY(-50%);
 }
 
