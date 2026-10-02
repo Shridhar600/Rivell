@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.Contract;
+import com.rivell.workbench.contracts.ContractListEntry;
 import com.rivell.workbench.contracts.ContractRepository;
 import com.rivell.workbench.contracts.ContractSource;
 import com.rivell.workbench.contracts.ContractStructure;
@@ -25,14 +26,24 @@ import java.time.Instant;
 @Repository
 class JdbcContractRepository implements ContractRepository {
 
+    /**
+     * The latest-version projection, shared by the single-contract read and the list so
+     * the two surfaces cannot drift. {@code node_count} is the one correlated subquery,
+     * evaluated per row inside a single statement rather than as a round trip per row.
+     */
+    private static final String VERSION_SUMMARY_COLUMNS = """
+            cv.id, cv.contract_id, cv.version_number, cv.parse_status, cv.parse_warnings,
+            cv.parser_version, sa.sha256, sa.filename,
+            (select count(*) from document_node n where n.contract_version_id = cv.id)
+                as node_count
+            """;
+
     private static final String VERSION_SUMMARY_SQL = """
-            select cv.id, cv.contract_id, cv.version_number, cv.parse_status, cv.parse_warnings,
-                   cv.parser_version, sa.sha256, sa.filename,
-                   (select count(*) from document_node n where n.contract_version_id = cv.id) as node_count
+            select %s
             from contract_version cv
             join contract c on c.id = cv.contract_id
             join source_artifact sa on sa.id = cv.source_artifact_id
-            """;
+            """.formatted(VERSION_SUMMARY_COLUMNS);
 
     private final JdbcClient jdbcClient;
     private final ObjectMapper objectMapper;
@@ -307,6 +318,56 @@ class JdbcContractRepository implements ContractRepository {
                     .param("rawStyleId", node.rawStyleId())
                     .update();
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<ContractListEntry> findContracts(
+            UUID organizationId, java.time.Instant afterCreatedAt, UUID afterId, int limit) {
+        var cursor = "";
+        if (afterCreatedAt != null && afterId != null) {
+            cursor = """
+                    and (c.created_at, c.id) < (
+                          cast(:afterCreatedAt as timestamptz), cast(:afterId as uuid))
+                    """;
+        }
+        var client = jdbcClient.sql("""
+                select c.title, c.created_at,
+                       %s
+                from contract c
+                join contract_version cv
+                  on cv.contract_id = c.id
+                 and cv.version_number = (
+                        select max(newer.version_number) from contract_version newer
+                        where newer.contract_id = c.id)
+                join source_artifact sa
+                  on sa.id = cv.source_artifact_id
+                 and sa.organization_id = c.organization_id
+                where c.organization_id = :organizationId
+                """.formatted(VERSION_SUMMARY_COLUMNS) + cursor + """
+                order by c.created_at desc, c.id desc
+                limit :limit
+                """)
+                .param("organizationId", organizationId)
+                .param("limit", limit + 1);
+        if (afterCreatedAt != null && afterId != null) {
+            // Bound at full TIMESTAMPTZ precision: a truncated resume position would skip
+            // contracts sharing that millisecond.
+            client = client
+                    .param("afterCreatedAt",
+                            OffsetDateTime.ofInstant(afterCreatedAt, ZoneOffset.UTC))
+                    .param("afterId", afterId.toString());
+        }
+        return client
+                .query((rs, rowNum) -> new ContractListEntry(
+                        // contract_version.contract_id equals contract.id by the join, so
+                        // the row's contract id is read from the same label the single-contract
+                        // read uses rather than selecting a second column under that name.
+                        rs.getObject("contract_id", UUID.class),
+                        rs.getString("title"),
+                        rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+                        mapVersionSummary(rs, rowNum)))
+                .list();
     }
 
     private ContractVersionSummary mapVersionSummary(java.sql.ResultSet rs, int rowNum)

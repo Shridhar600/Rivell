@@ -109,6 +109,13 @@ class ContractIngestionFailureTest {
             }
 
             @Override
+            public java.util.List<ContractListEntry> findContracts(
+                    UUID organizationId, java.time.Instant afterCreatedAt, UUID afterId,
+                    int limit) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
             public java.util.Optional<ContractSource> findSourceForVersion(
                     UUID versionId, UUID organizationId) {
                 throw new UnsupportedOperationException();

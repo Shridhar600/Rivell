@@ -20,6 +20,19 @@ public interface ContractRepository {
 
     ContractStructure loadStructure(UUID versionId);
 
+    /**
+     * Bounded newest-first organization-scoped contract list. Implementations read
+     * {@code limit + 1} rows so callers can detect more rows and mint a cursor.
+     * {@code afterCreatedAt}/{@code afterId} resume after a previous page and are both
+     * null for the first page. Each row carries the contract's latest version, projected
+     * by the same rule the single-contract read uses.
+     *
+     * <p>This is enumeration only. It adds no version write path: an upload still mints a
+     * new contract.
+     */
+    List<ContractListEntry> findContracts(
+            UUID organizationId, java.time.Instant afterCreatedAt, UUID afterId, int limit);
+
     /** Heading node ids of one immutable contract version (cheap readiness reads). */
     java.util.List<UUID> findHeadingNodeIds(UUID versionId);
 

@@ -13,6 +13,9 @@ import com.rivell.workbench.organization.Permissions;
  */
 public class ContractQueryService {
 
+    private static final int DEFAULT_PAGE_LIMIT = 20;
+    private static final int MAX_PAGE_LIMIT = 100;
+
     private final ContractRepository repository;
     private final ContractSemanticsRepository semanticsRepository;
     private final IdentityProvider identityProvider;
@@ -27,6 +30,44 @@ public class ContractQueryService {
         this.semanticsRepository = semanticsRepository;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+    }
+
+    /**
+     * Bounded newest-first page of the organization's contracts, with the opaque position
+     * to resume from. Enumeration only: it adds no version write path, and an upload
+     * still mints a new contract.
+     */
+    public ContractListPage listContractsPage(Integer limit, String cursorToken) {
+        requireReadPermission();
+        var bounded = boundedLimit(limit);
+        var after = com.rivell.workbench.foundation.PageCursor.decode(cursorToken);
+        var rows = repository.findContracts(currentOrganizationId(),
+                after == null ? null : after.createdAt(),
+                after == null ? null : after.id(),
+                bounded);
+        var truncated = rows.size() > bounded;
+        var page = java.util.List.copyOf(rows.stream().limit(bounded).toList());
+        var nextCursor = truncated && !page.isEmpty()
+                ? com.rivell.workbench.foundation.PageCursor.encode(
+                        new com.rivell.workbench.foundation.PageCursor(
+                                page.get(page.size() - 1).createdAt(),
+                                page.get(page.size() - 1).contractId()))
+                : null;
+        return new ContractListPage(page, nextCursor);
+    }
+
+    /** One bounded page of contracts plus its opaque resume position. */
+    public record ContractListPage(java.util.List<ContractListEntry> items, String nextCursor) {
+    }
+
+    private static int boundedLimit(Integer limit) {
+        if (limit == null) {
+            return DEFAULT_PAGE_LIMIT;
+        }
+        if (limit < 1) {
+            throw new IllegalArgumentException("limit must be >= 1");
+        }
+        return Math.min(limit, MAX_PAGE_LIMIT);
     }
 
     public ContractSummary getContractSummary(UUID contractId) {

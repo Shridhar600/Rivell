@@ -195,39 +195,6 @@ class JdbcReviewRepository implements ReviewRepository {
 
     @Override
     @Transactional(readOnly = true)
-    public List<Review> findReviews(UUID organizationId, UUID contractId, int limit) {
-        return jdbcClient.sql("""
-                select id, organization_id, contract_id, contract_version_id,
-                       contract_version_number, status, failure_reason, created_by,
-                       client_request_id,
-                       created_at, updated_at, started_at, completed_at
-                from review
-                where organization_id = :organizationId and contract_id = :contractId
-                order by created_at desc, id desc
-                limit :limit
-                """)
-                .param("organizationId", organizationId)
-                .param("contractId", contractId)
-                .param("limit", limit + 1)
-                .query((rs, rowNum) -> new Review(
-                        rs.getObject("id", UUID.class),
-                        rs.getObject("organization_id", UUID.class),
-                        rs.getObject("contract_id", UUID.class),
-                        rs.getObject("contract_version_id", UUID.class),
-                        rs.getInt("contract_version_number"),
-                        ReviewStatus.valueOf(rs.getString("status")),
-                        rs.getString("failure_reason"),
-                        rs.getObject("created_by", UUID.class),
-                        rs.getTimestamp("created_at").toInstant(),
-                        rs.getTimestamp("updated_at").toInstant(),
-                        rs.getTimestamp("started_at") == null ? null : rs.getTimestamp("started_at").toInstant(),
-                        rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant(),
-                        rs.getObject("client_request_id", UUID.class)))
-                .list();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public Optional<ReviewSnapshot> findSnapshot(UUID organizationId, UUID reviewId) {
         return jdbcClient.sql("""
                 select review_id, organization_id, contract_id, contract_version_id,
