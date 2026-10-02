@@ -80,7 +80,7 @@ describe('Home page data honesty', () => {
   it('reads only the two real organization-scoped knowledge endpoints', async () => {
     const urls = stubApi({ artifacts: [], publications: [] })
     renderHome()
-    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
     const knowledgeCalls = urls
       .filter((u) => u.includes('/api/knowledge/'))
       .map((u) => new URL(u).pathname)
@@ -90,7 +90,7 @@ describe('Home page data honesty', () => {
   it('issues no review call and no per-contract fan-out', async () => {
     const urls = stubApi({ artifacts: [], publications: [] })
     renderHome()
-    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
     expect(urls.filter((u) => u.includes('/api/reviews'))).toEqual([])
     expect(urls.filter((u) => u.includes('/api/contracts'))).toEqual([])
   })
@@ -103,11 +103,13 @@ describe('Home page data honesty', () => {
 })
 
 describe('Home real work states', () => {
-  it('groups extracted knowledge under Needs action', async () => {
+  it('puts extracted knowledge in its own neutral group, not in Needs action', async () => {
     stubApi({ artifacts: [artifact('a1', 'EXTRACTED', 'msa-playbook.docx')], publications: [] })
     renderHome()
-    const group = await screen.findByRole('region', { name: 'Needs action' })
+    const group = await screen.findByRole('region', { name: 'Extracted' })
     expect(within(group).getByRole('option', { name: /msa-playbook\.docx/i })).toBeInTheDocument()
+    // Nothing proves a human is needed, so Needs action must stay empty.
+    expect(screen.queryByRole('region', { name: 'Needs action' })).not.toBeInTheDocument()
   })
 
   it('shows compiling knowledge under Running with a real running glyph', async () => {
@@ -164,7 +166,7 @@ describe('Home never fabricates', () => {
   it('renders no ownership or queue language', async () => {
     stubApi({ artifacts: [artifact('a1', 'EXTRACTED', 'ready.docx')], publications: [] })
     renderHome()
-    await screen.findByRole('region', { name: 'Needs action' })
+    await screen.findByRole('region', { name: 'Extracted' })
     const text = document.body.textContent ?? ''
     for (const forbidden of [
       'your decision',
@@ -183,7 +185,7 @@ describe('Home never fabricates', () => {
   it('never shows a sample id', async () => {
     stubApi({ artifacts: [], publications: [] })
     const { container } = renderHome()
-    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
     expect(container.textContent ?? '').not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}/i)
   })
 })
@@ -216,10 +218,13 @@ describe('Home states', () => {
     expect(alert.textContent ?? '').not.toMatch(/exception|at org\.|java\.|\b500\b/)
   })
 
-  it('shows a first-run empty state with the next action', async () => {
+  it('does not claim there is nothing to do while the review read is missing', async () => {
+    // With GAP-A open, `items` can never contain a review, so "nothing needs your attention"
+    // would be a fabricated claim about work Rivell cannot see.
     stubApi({ artifacts: [], publications: [] })
     renderHome()
-    expect(await screen.findByText(/nothing needs/i)).toBeInTheDocument()
+    await screen.findByText(/cannot yet list review work across contracts/i)
+    expect(screen.queryByText(/nothing needs your attention/i)).not.toBeInTheDocument()
   })
 })
 
@@ -293,7 +298,9 @@ describe('Home loading state', () => {
     )
     expect(screen.queryByText(/nothing needs your attention/i)).not.toBeInTheDocument()
     release?.()
-    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.queryByRole('status')).not.toBeInTheDocument(),
+    )
   })
 })
 
@@ -329,10 +336,10 @@ describe('selection, pills and groups', () => {
     stubApi({ artifacts: busy })
     renderHome()
     const runningGroup = await screen.findByRole('region', { name: 'Running' })
-    const head = within(runningGroup).getByRole('button')
+    const head = within(runningGroup).getByRole('button', { name: /^Running/ })
     expect(head).toHaveAttribute('aria-expanded', 'false')
 
-    await userEvent.click(screen.getByRole('link', { name: /1.*running/i }))
+    await userEvent.click(screen.getByRole('button', { name: /running/i }))
     await waitFor(() => expect(head).toHaveAttribute('aria-expanded', 'true'))
   })
 
@@ -347,8 +354,8 @@ describe('selection, pills and groups', () => {
     stubApi({ artifacts: busy })
     renderHome()
     await screen.findByRole('region', { name: 'Running' })
-    expect(screen.queryByRole('link', { name: /need action/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /failed/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /needs? action/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /failed/i })).not.toBeInTheDocument()
   })
 
   it('does not claim work state before the reads resolve', async () => {
@@ -366,16 +373,16 @@ describe('selection, pills and groups', () => {
     renderHome()
     await screen.findByRole('status')
     expect(screen.queryByText(/here is where your work stands/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /need action|running|failed/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /needs? action|running|failed/i })).not.toBeInTheDocument()
     release?.()
-    await waitFor(() => expect(screen.getByText(/nothing needs your attention/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
   })
 
   it('shows a real date in the row time column, never a relative guess', async () => {
     stubApi({ artifacts: [artifact('a1', 'EXTRACTED', 'one.docx')] })
     renderHome()
     const row = await screen.findByRole('option', { name: /one\.docx/i })
-    const time = within(row).getByLabelText(/^Updated /)
+    const time = within(row).getByLabelText(/^Added /)
     expect(time).toHaveTextContent(/\w{3}/)
     expect(time.textContent ?? '').not.toMatch(/ago|just now|\d+\s*(m|min|h)\b/i)
   })

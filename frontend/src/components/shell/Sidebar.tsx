@@ -14,18 +14,20 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <aside className="rv-side" id={SIDEBAR_ID} aria-label="Sidebar">
       {/* No organisation name, user menu or greeting: identity is deferred and must not be faked. */}
-      <NavLink to="/" className="rv-side__brand">
-        <span className="rv-logo" aria-hidden="true">
-          R
-        </span>
-        <span className="rv-side__brand-text">Rivell</span>
-      </NavLink>
+      <div className="rv-side__scroll">
+        <NavLink to="/" className="rv-side__brand">
+          <span className="rv-logo" aria-hidden="true">
+            R
+          </span>
+          <span className="rv-side__brand-text">Rivell</span>
+        </NavLink>
 
-      <nav className="rv-nav" aria-label="Primary">
-        <NavItem to="/" label="Home" end Icon={HomeIcon} collapsed={collapsed} />
-        <NavItem to="/reviews" label="Reviews" Icon={DocumentIcon} collapsed={collapsed} />
-        <NavItem to="/knowledge" label="Knowledge" Icon={BookIcon} collapsed={collapsed} />
-      </nav>
+        <nav className="rv-nav" aria-label="Primary">
+          <NavItem to="/" label="Home" end Icon={HomeIcon} collapsed={collapsed} />
+          <NavItem to="/reviews" label="Reviews" Icon={DocumentIcon} collapsed={collapsed} />
+          <NavItem to="/knowledge" label="Knowledge" Icon={BookIcon} collapsed={collapsed} />
+        </nav>
+      </div>
 
       {/*
         The sidebar owns its own collapse control and it sits on the sidebar's own edge, so the

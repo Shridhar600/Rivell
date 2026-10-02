@@ -2,13 +2,14 @@ import type { ArtifactSummary, ArtifactType, Publication } from '../api/knowledg
 import type { ReviewStatus } from '../api/reviews'
 import { shortDate } from './dates'
 
-export type HomeGroupKey = 'needs_action' | 'running' | 'failed' | 'completed'
+export type HomeGroupKey = 'needs_action' | 'running' | 'failed' | 'extracted' | 'completed'
 export type HomeTone = 'active' | 'attention' | 'danger' | 'neutral' | 'complete'
 
 export const HOME_GROUP_LABELS: Record<HomeGroupKey, string> = {
   needs_action: 'Needs action',
   running: 'Running',
   failed: 'Failed',
+  extracted: 'Extracted',
   // Deliberately not "Recently": /api/knowledge/publications is unbounded and carries no recency
   // field, so the old label was a time claim the data cannot support.
   completed: 'Completed',
@@ -31,7 +32,7 @@ const UNKNOWN_STATE: MappedState = { group: 'needs_action', label: 'Status unkno
 const INGEST_STATE: Record<string, MappedState> = {
   RECEIVED: { group: 'running', label: 'Queued for compilation', tone: 'active' },
   EXTRACTING: { group: 'running', label: 'Compiling', tone: 'active' },
-  EXTRACTED: { group: 'needs_action', label: 'Extracted', tone: 'attention' },
+  EXTRACTED: { group: 'extracted', label: 'Extracted', tone: 'neutral' },
   FAILED: { group: 'failed', label: 'Ingestion failed', tone: 'danger' },
 }
 
@@ -77,10 +78,10 @@ export interface HomeWorkItem {
   group: HomeGroupKey
   /** Short, honest date for the WorkRow time column. Never a relative guess. */
   timeLabel: string
+  /** The raw API timestamp behind `timeLabel`, for a full date in the inspector. */
+  timeValue: string
   /** How to label that timestamp truthfully: `createdAt` is an "Added" time, not an "Updated" one. */
   timeLabelKind: 'added' | 'updated'
-  /** Only set when the server actually supplied both counts. Never synthesised. */
-  decisionProgress: { resolved: number; total: number } | null
   /** Real in-product route for the primary action. */
   to: string
   primaryActionLabel: string
@@ -100,8 +101,8 @@ export function knowledgeItemView(artifact: ArtifactSummary): HomeWorkItem {
     tone: state.tone,
     group: state.group,
     timeLabel: shortDate(artifact.createdAt),
+    timeValue: artifact.createdAt,
     timeLabelKind: 'added',
-    decisionProgress: null,
     to: `/knowledge/artifacts/${artifact.id}`,
     primaryActionLabel: 'Open knowledge source',
     guidance: knowledgeGuidance(state),
@@ -111,12 +112,13 @@ export function knowledgeItemView(artifact: ArtifactSummary): HomeWorkItem {
 function knowledgeGuidance(state: MappedState): string | null {
   switch (state.label) {
     case 'Extracted':
-      return 'Extracted candidates wait for your review before anything is published.'
+      // ingestStatus cannot say whether review work is outstanding, so it says only what happened.
+      return 'Compilation finished. Nothing from this source is used until it is published.'
     case 'Ingestion failed':
       return 'Nothing from this source was published.'
     case 'Compiling':
     case 'Queued for compilation':
-      return 'You can leave this page. It moves to Needs action when compilation finishes, or to Failed if it does not.'
+      return 'You can leave this page. This source keeps moving until compilation finishes, or it stops in Failed.'
     default:
       return null
   }
@@ -133,8 +135,8 @@ export function publicationItemView(publication: Publication): HomeWorkItem {
     tone: 'complete',
     group: 'completed',
     timeLabel: shortDate(publication.createdAt),
+    timeValue: publication.createdAt,
     timeLabelKind: 'added',
-    decisionProgress: null,
     to: `/knowledge/publications/${publication.id}`,
     primaryActionLabel: 'View publication',
     guidance: 'Published knowledge is an immutable versioned snapshot.',
@@ -168,8 +170,8 @@ export function reviewItemView(review: HomeReviewSummary): HomeWorkItem {
     tone: state.tone,
     group: state.group,
     timeLabel: shortDate(review.completedAt ?? review.createdAt),
+    timeValue: review.completedAt ?? review.createdAt,
     timeLabelKind: review.completedAt ? 'updated' : 'added',
-    decisionProgress: null,
     to: `/reviews/${review.contractId}/analysis/${review.id}`,
     primaryActionLabel: 'Open review',
     guidance: reviewGuidance(state),
@@ -186,15 +188,17 @@ export interface HomeGroups {
   needsAction: HomeWorkItem[]
   running: HomeWorkItem[]
   failed: HomeWorkItem[]
+  extracted: HomeWorkItem[]
   completed: HomeWorkItem[]
 }
 
 export function buildHomeGroups(items: readonly HomeWorkItem[]): HomeGroups {
-  const groups: HomeGroups = { needsAction: [], running: [], failed: [], completed: [] }
+  const groups: HomeGroups = { needsAction: [], running: [], failed: [], extracted: [], completed: [] }
   for (const item of items) {
     if (item.group === 'needs_action') groups.needsAction.push(item)
     else if (item.group === 'running') groups.running.push(item)
     else if (item.group === 'failed') groups.failed.push(item)
+    else if (item.group === 'extracted') groups.extracted.push(item)
     else groups.completed.push(item)
   }
   return groups

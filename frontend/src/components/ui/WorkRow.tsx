@@ -10,6 +10,7 @@ interface WorkRowProps {
     stateLabel: string
     tone: 'active' | 'attention' | 'danger' | 'neutral' | 'complete'
     timeLabel: string
+    timeLabelKind: 'added' | 'updated'
     to: string
   }
   selected: boolean
@@ -57,7 +58,10 @@ export const WorkRow = forwardRef<HTMLLIElement, WorkRowProps>(function WorkRow(
         </span>
         <span className="rv-row__state">{item.stateLabel}</span>
         {item.timeLabel ? (
-          <span className="rv-row__time" aria-label={`Updated ${item.timeLabel}`}>
+          <span
+            className="rv-row__time"
+            aria-label={`${item.timeLabelKind === 'added' ? 'Added' : 'Updated'} ${item.timeLabel}`}
+          >
             {item.timeLabel}
           </span>
         ) : null}

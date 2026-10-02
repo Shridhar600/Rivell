@@ -16,7 +16,7 @@ describe('mapIngestStatus', () => {
   it('maps every real knowledge ingest status to a truthful group and label', () => {
     expect(mapIngestStatus('RECEIVED')).toEqual({ group: 'running', label: 'Queued for compilation', tone: 'active' })
     expect(mapIngestStatus('EXTRACTING')).toEqual({ group: 'running', label: 'Compiling', tone: 'active' })
-    expect(mapIngestStatus('EXTRACTED')).toEqual({ group: 'needs_action', label: 'Extracted', tone: 'attention' })
+    expect(mapIngestStatus('EXTRACTED')).toEqual({ group: 'extracted', label: 'Extracted', tone: 'neutral' })
     expect(mapIngestStatus('FAILED')).toEqual({ group: 'failed', label: 'Ingestion failed', tone: 'danger' })
   })
 
@@ -65,7 +65,7 @@ describe('knowledgeItemView', () => {
     expect(item.title).toBe('msa-playbook.docx')
     expect(item.chip).toBe('Playbook')
     expect(item.to).toBe('/knowledge/artifacts/art-1')
-    expect(item.group).toBe('needs_action')
+    expect(item.group).toBe('extracted')
   })
 
   it('labels a clause library artifact without inventing a contract type', () => {
@@ -110,7 +110,8 @@ describe('reviewItemView', () => {
     expect(item.title).toBe('Acme MSA')
     expect(item.chip).toBe('v2')
     expect(item.to).toBe('/reviews/con-1/analysis/rev-1')
-    expect(item.decisionProgress).toBeNull()
+    // No decision counts exist in any shipped schema, so none are claimed.
+    expect('decisionProgress' in item).toBe(false)
   })
 
   it('shows an honest placeholder for a contract with no title, without leaking an id', () => {
@@ -139,26 +140,31 @@ describe('buildHomeGroups', () => {
 
   it('buckets every item into exactly one real group', () => {
     const groups = buildHomeGroups(items)
-    const total = groups.needsAction.length + groups.running.length + groups.failed.length + groups.completed.length
+    const total =
+      groups.needsAction.length +
+      groups.running.length +
+      groups.failed.length +
+      groups.extracted.length +
+      groups.completed.length
     expect(total).toBe(items.length)
   })
 
   it('sorts failed work first so it is never hidden', () => {
     const groups = buildHomeGroups(items)
     expect(groups.failed.map((i) => i.title)).toEqual(['bad.docx'])
-    expect(groups.needsAction.map((i) => i.title)).toEqual(['done.docx'])
+    expect(groups.extracted.map((i) => i.title)).toEqual(['done.docx'])
     expect(groups.running.map((i) => i.title)).toEqual(['busy.docx'])
     expect(groups.completed.map((i) => i.title)).toEqual(['Knowledge publication 1'])
   })
 
   it('produces empty arrays rather than undefined for an empty input', () => {
     const groups = buildHomeGroups([])
-    expect(groups).toEqual({ needsAction: [], running: [], failed: [], completed: [] })
+    expect(groups).toEqual({ needsAction: [], running: [], failed: [], extracted: [], completed: [] })
   })
 
   it('counts each bucket independently for the summary line', () => {
     const groups = buildHomeGroups(items)
-    expect(counts(groups)).toEqual({ needsAction: 1, running: 1, failed: 1, completed: 1 })
+    expect(counts(groups)).toEqual({ needsAction: 0, running: 1, failed: 1, extracted: 1, completed: 1 })
   })
 })
 
@@ -180,6 +186,7 @@ function counts(g: ReturnType<typeof buildHomeGroups>) {
     needsAction: g.needsAction.length,
     running: g.running.length,
     failed: g.failed.length,
+    extracted: g.extracted.length,
     completed: g.completed.length,
   }
 }
@@ -210,8 +217,14 @@ describe('claims the data cannot prove are absent', () => {
   it('never claims an extracted source still awaits review or is unpublished', () => {
     // ingestStatus does not change after extraction, so it cannot prove pending review work.
     const item = knowledgeItemView(artifact)
-    expect(item.guidance ?? '').not.toMatch(/until you publish|await|outstanding|still needs|not been published/i)
+    const guidance = item.guidance ?? ''
+    // The claim being guarded is that a human is needed. Publication is a real, verified
+    // invariant (only PUBLISHED candidates are read), so that word is allowed.
+    expect(guidance).not.toMatch(/wait|await|your review|outstanding|still needs/i)
     expect(item.stateLabel).not.toMatch(/ready for review/i)
+    // Not in Needs action either: nothing proves a human is needed.
+    expect(item.group).toBe('extracted')
+    expect(item.tone).toBe('neutral')
   })
 
   it('never claims a COMPLETED review has outstanding human decisions', () => {
@@ -227,6 +240,8 @@ describe('claims the data cannot prove are absent', () => {
   it('keeps the running guidance true when compilation fails', () => {
     const running = knowledgeItemView({ ...artifact, ingestStatus: 'EXTRACTING' }).guidance ?? ''
     expect(running).toMatch(/Failed/)
+    // It must not claim the item lands in Needs action, which ingestion cannot promise.
+    expect(running).not.toMatch(/Needs action/)
   })
 
   it('uses a completed-group label with no time claim', () => {

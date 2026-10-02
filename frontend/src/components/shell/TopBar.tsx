@@ -32,7 +32,7 @@ export function Inspector({ status, children }: InspectorProps) {
         panel a live region: arrowing down a list would otherwise read out every node.
       */}
       {status ? (
-        <p className="visually-hidden" role="status">
+        <p className="rv-visually-hidden" role="status">
           {status}
         </p>
       ) : null}

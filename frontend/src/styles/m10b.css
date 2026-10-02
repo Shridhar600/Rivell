@@ -11,7 +11,6 @@
   --rv-w-sidebar-collapsed: var(--w-sidebar-collapsed);
   --rv-w-inspector: var(--w-inspector);
   --rv-h-topbar: var(--h-topbar);
-  --rv-edge-half: 11px;
 }
 
 body {
@@ -56,14 +55,21 @@ body {
 
 /* ---------- sidebar ---------- */
 .rv-side {
+  /* overflow stays visible so the edge handle is not clipped; .rv-side__scroll scrolls instead. */
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
   padding: 10px 8px;
-  overflow: auto;
   background: var(--side);
   border-right: 1px solid var(--line);
+}
+.rv-side__scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
 }
 .rv-side__brand {
   display: flex;
@@ -149,33 +155,13 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rv-side__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: auto;
-  padding: 8px;
-}
-.rv-side__hint {
-  color: var(--text-2);
-  font-size: 12px;
-}
 
 /* collapsed rail */
 .rv-shell[data-sidebar='collapsed'] .rv-side__brand-text,
 .rv-shell[data-sidebar='collapsed'] .rv-nav__text,
-.rv-shell[data-sidebar='collapsed'] .rv-side__hint {
-  display: none;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-side__brand,
+.rv-shell[data-sidebar='collapsed'] .rv-shell[data-sidebar='collapsed'] .rv-side__brand,
 .rv-shell[data-sidebar='collapsed'] .rv-nav__link,
-.rv-shell[data-sidebar='collapsed'] .rv-side__foot {
-  justify-content: center;
-  gap: 0;
-  padding-inline: 0;
-}
-
+.rv-shell[data-sidebar='collapsed']
 /* ---------- centre column ---------- */
 .rv-main {
   display: flex;
@@ -218,40 +204,6 @@ body {
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-/* ---------- edge panel toggles ---------- */
-/* Each panel's collapse control sits on that panel's own edge, never in the central bar. */
-.rv-edge {
-  position: absolute;
-  z-index: 2;
-  width: 22px;
-  height: 34px;
-  border: 1px solid var(--line-2);
-  background: var(--bg);
-  box-shadow: var(--sh-xs);
-  color: var(--text-2);
-  border-radius: 0;
-}
-.rv-edge:hover:not(:disabled) {
-  background: var(--hover);
-  color: var(--text);
-  border-color: var(--text-3);
-}
-.rv-edge:focus-visible {
-  outline: none;
-  box-shadow: var(--rv-focus);
-  border-radius: 0;
-}
-.rv-edge--sidebar {
-  top: 50%;
-  right: calc(-1 * (var(--rv-edge-half) + 1px));
-  transform: translateY(-50%);
-}
-.rv-edge--inspector {
-  top: 50%;
-  left: calc(-1 * (var(--rv-edge-half) + 1px));
-  transform: translateY(-50%);
 }
 
 /* ---------- buttons ---------- */
@@ -309,12 +261,43 @@ body {
   background: var(--hover);
   color: var(--text);
 }
-.rv-iconbtn[aria-pressed='true'] {
-  color: var(--text);
-}
 .rv-iconbtn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* ---------- edge panel toggles ---------- */
+/* Each panel's collapse control sits on that panel's own edge, never in the central bar. */
+.rv-iconbtn.rv-edge {
+  position: absolute;
+  z-index: 2;
+  width: 22px;
+  height: 36px;
+  border: 1px solid var(--line-2);
+  background: var(--bg);
+  box-shadow: var(--sh-xs);
+  color: var(--text-2);
+  border-radius: 0;
+}
+.rv-iconbtn.rv-edge:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+  border-color: var(--text-3);
+}
+.rv-iconbtn.rv-edge:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+  border-radius: 0;
+}
+.rv-edge--sidebar {
+  top: 50%;
+  right: calc(-1 * (50% + 1px));
+  transform: translateY(-50%);
+}
+.rv-edge--inspector {
+  top: 50%;
+  left: calc(-1 * (50% + 1px));
+  transform: translateY(-50%);
 }
 
 /* ---------- chip / badge / glyph ---------- */
@@ -604,10 +587,11 @@ body {
 
 /* ---------- inspector ---------- */
 .rv-insp {
+  /* overflow stays visible so the edge handle is not clipped; .rv-insp__inner scrolls instead. */
   position: relative;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  min-height: 0;
   border-left: 1px solid var(--line);
   background: var(--bg);
 }
@@ -616,13 +600,13 @@ body {
  * edge handle must stay visible and reachable, otherwise the panel could never be reopened.
  */
 .rv-shell[data-inspector='collapsed'] .rv-insp {
-  overflow: visible;
   border-left: 0;
 }
 .rv-shell[data-inspector='collapsed'] .rv-insp > * {
   visibility: hidden;
 }
-.rv-shell[data-inspector='collapsed'] .rv-insp > .rv-edge--inspector {
+.rv-shell[data-inspector='collapsed'] .rv-insp > .rv-edge--inspector,
+.rv-shell[data-inspector='collapsed'] .rv-insp > [role='status'] {
   visibility: visible;
 }
 .rv-insp__inner {
@@ -731,9 +715,6 @@ body {
   .rv-shell {
     grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr);
   }
-  .rv-shell[data-inspector='collapsed'] {
-    --rv-inspector: 0px;
-  }
   /* Hidden with its panel, so the control never promises an effect it cannot have. */
   .rv-insp,
   .rv-edge--inspector {
@@ -752,6 +733,10 @@ body {
   }
   .rv-legacy {
     height: auto;
+    overflow: visible;
+  }
+  .rv-side__scroll,
+  .rv-insp__inner {
     overflow: visible;
   }
   .rv-wrap {
@@ -779,4 +764,17 @@ body {
   flex: none;
   align-self: center;
   margin-left: auto;
+}
+
+/* M10B's own visually-hidden, so this layer does not depend on the legacy stylesheet. */
+.rv-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

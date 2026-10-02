@@ -68,7 +68,7 @@ export function HomePage() {
         <div className="rv-scroll">
           <div className="rv-wrap">
             <Hero
-              resolved={!loading}
+              resolved={!loading && reviews.availability === 'available'}
               needsAction={groups.needsAction.length}
               running={groups.running.length}
               failed={groups.failed.length}
@@ -104,7 +104,7 @@ export function HomePage() {
               />
             ) : null}
 
-            {!loading && !failed && items.length === 0 ? (
+            {!loading && !failed && items.length === 0 && reviews.availability === 'available' ? (
               <EmptyState
                 title="Nothing needs your attention"
                 message="Start a review, or add a playbook or clause library to begin."
@@ -138,6 +138,14 @@ export function HomePage() {
               items={groups.failed}
               open={openGroups.has('failed')}
               onToggle={() => toggleGroup('failed')}
+              selectedId={effectiveId}
+              onSelect={setSelectedId}
+            />
+            <GroupSection
+              groupKey="extracted"
+              items={groups.extracted}
+              open={openGroups.has('extracted')}
+              onToggle={() => toggleGroup('extracted')}
               selectedId={effectiveId}
               onSelect={setSelectedId}
             />
@@ -185,6 +193,17 @@ function homeErrorMessage(error: Error | null): string {
   return `${derived} Your work is unchanged.`
 }
 
+/** One line for a collapsed group, capped so an unbounded list cannot build a huge string. */
+function summarise(items: HomeWorkItem[]): string {
+  const MAX = 3
+  if (items.length <= MAX) return items.map((item) => item.title).join(', ')
+  return `${items.slice(0, MAX).map((item) => item.title).join(', ')} and ${items.length - MAX} more`
+}
+
+function plural(count: number, one: string, many: string): string {
+  return count === 1 ? one : many
+}
+
 function Hero({
   resolved,
   needsAction,
@@ -213,23 +232,23 @@ function Hero({
           <div className="rv-pills">
             <SummaryPill
               count={needsAction}
-              label="need action"
+              label={plural(needsAction, 'needs action', 'needs action')}
               tone="attention"
-              to="#needs-action"
+              targetId="needs-action"
               onReveal={() => onReveal('needs_action')}
             />
             <SummaryPill
               count={running}
-              label="running"
+              label={plural(running, 'running', 'running')}
               tone="active"
-              to="#running"
+              targetId="running"
               onReveal={() => onReveal('running')}
             />
             <SummaryPill
               count={failed}
-              label="failed"
+              label={plural(failed, 'failed', 'failed')}
               tone="danger"
-              to="#failed"
+              targetId="failed"
               onReveal={() => onReveal('failed')}
             />
           </div>
@@ -272,7 +291,7 @@ function GroupSection({
         count={items.length}
         open={open}
         onToggle={onToggle}
-        collapsedSummary={items.map((item) => item.title).join(', ')}
+        collapsedSummary={summarise(items)}
       >
         <WorkList items={items} selectedId={selectedId} onSelect={onSelect} />
       </CollapsibleGroup>
@@ -294,6 +313,8 @@ function WorkList({
 
   function move(offset: number) {
     const index = items.findIndex((item) => item.id === currentId)
+    // With no selection there is nothing to step from, so ArrowUp must not jump to the top.
+    if (index < 0 && offset < 0) return
     const next = items[Math.min(items.length - 1, Math.max(0, index + offset))]
     if (next) onSelect(next.id)
   }
@@ -347,16 +368,8 @@ function InspectorBody({ item }: { item: HomeWorkItem }) {
             <dd>{item.chip}</dd>
           </>
         ) : null}
-        {item.decisionProgress ? (
-          <>
-            <dt>Decided</dt>
-            <dd>
-              {item.decisionProgress.resolved} of {item.decisionProgress.total}
-            </dd>
-          </>
-        ) : null}
         <dt>{item.timeLabelKind === 'added' ? 'Added' : 'Updated'}</dt>
-        <dd>{longDate(item.timeLabel)}</dd>
+        <dd>{longDate(item.timeValue)}</dd>
       </dl>
       {item.guidance ? <p className="rv-insp__note">{item.guidance}</p> : null}
       <div className="rv-insp__action">
