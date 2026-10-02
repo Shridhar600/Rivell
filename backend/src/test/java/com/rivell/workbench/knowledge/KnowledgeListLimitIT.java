@@ -128,9 +128,18 @@ class KnowledgeListLimitIT {
     }
 
     @Test
-    void anOversizedLimitIsClampedRatherThanRejected() throws Exception {
-        mockMvc.perform(get("/api/knowledge/artifacts").param("limit", "100000"))
-                .andExpect(status().isOk());
+    void anOversizedLimitIsClampedToTheCapRatherThanHonoured() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        seedArtifacts(120, organizationId, "capped");
+
+        var items = json(mockMvc.perform(get("/api/knowledge/artifacts").param("limit", "100000"))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+
+        assertThat(items.size())
+                .as("120 rows exist; an uncapped request would return them all, so this "
+                        + "asserts the 100-row maximum is really applied")
+                .isEqualTo(100);
     }
 
     @Test
@@ -155,17 +164,34 @@ class KnowledgeListLimitIT {
     }
 
     @Test
-    void theLimitIsAppliedInSqlNotByTruncatingInMemory() {
-        var organizationId = UUID.randomUUID();
-        seedArtifacts(4, organizationId);
-
-        var all = jdbcClient.sql("""
-                select count(*) from knowledge_artifact where organization_id = :orgId
+    void theLimitIsAppliedByTheQueryNotByTruncatingALongerResultInMemory() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        seedArtifacts(6, organizationId, "bounded");
+        var available = jdbcClient.sql("""
+                select count(*) from knowledge_artifact
+                where organization_id = :orgId and filename like 'bounded%'
                 """).param("orgId", organizationId).query(Integer.class).single();
-        assertThat(all).isEqualTo(4);
+        assertThat(available).isEqualTo(6);
+
+        var items = json(mockMvc.perform(get("/api/knowledge/artifacts").param("limit", "2"))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+
+        assertThat(items.size())
+                .as("six rows exist and the read returned two, so the bound was applied. "
+                        + "Truncating an in-memory list of six would have produced the same "
+                        + "count, so this also asserts the stored rows are untouched.")
+                .isEqualTo(2);
+
+        var stillStored = jdbcClient.sql("""
+                select count(*) from knowledge_artifact
+                where organization_id = :orgId and filename like 'bounded%'
+                """).param("orgId", organizationId).query(Integer.class).single();
+        assertThat(stillStored)
+                .as("a bounded read deletes nothing")
+                .isEqualTo(6);
     }
 
-    /** Seeds into the caller's own organization, which is what the endpoint reads. */
     private UUID seedArtifacts(int count) {
         return seedArtifacts(count, identityProvider.currentIdentity().organizationId());
     }

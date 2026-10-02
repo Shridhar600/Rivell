@@ -152,7 +152,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 select * from knowledge_artifact
                 where organization_id = :organizationId
                 """);
-        sql.append(" order by created_at desc");
+        sql.append(" order by created_at desc, id desc");
         if (limit != null) {
             sql.append(" limit :limit");
         }

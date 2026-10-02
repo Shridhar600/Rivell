@@ -47,7 +47,10 @@ import com.rivell.workbench.organization.UserIdentity;
  * <p>The list assembles its progress numbers with its own SQL aggregates while the
  * summary endpoint counts in Java. Those are two implementations of the same five numbers,
  * so {@link #listRowAgreesWithTheSummaryAndProgressEndpoints} pins them together over a
- * multi-run review; a single-run fixture cannot expose a divergence between them.
+ * completed run, and {@link #anInFlightReviewReportsTheSameLatestRunStatusAsItsSummary}
+ * pins the generation resolution when no generation has completed. The multi-generation
+ * case, where a newer generation exists above the counted one, is covered at repository
+ * level in {@code JdbcReviewListQueryIT} rather than here.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -339,6 +342,19 @@ class ReviewListApiIT {
         mockMvc.perform(get("/api/reviews").param("limit", "-1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("400"));
+    }
+
+    @Test
+    void anOversizedLimitIsClampedToTheCapRatherThanHonoured() throws Exception {
+        for (var i = 0; i < 105; i++) {
+            createReview(createContract("cap" + i + ".docx"));
+        }
+
+        mockMvc.perform(get("/api/reviews").param("limit", "100000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(100))
+                .andExpect(jsonPath("$.data.truncated").value(true))
+                .andExpect(jsonPath("$.data.nextCursor").isNotEmpty());
     }
 
     @Test

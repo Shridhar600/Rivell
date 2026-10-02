@@ -214,28 +214,90 @@ class ContractListApiIT {
     }
 
     @Test
-    void aCursorMintedForAnotherOrganizationCannotResumeIntoIt() throws Exception {
+    void aCursorMintedInOneOrganizationCannotResumeIntoAnother() throws Exception {
+        var myOrganization = organizationId();
+        // Mint a real cursor while acting as a different organization, carrying several
+        // contracts so nextCursor is actually issued rather than being trivially null.
         var otherOrganization = UUID.randomUUID();
-        var theirContract = seedContractFor(otherOrganization, "theirs.docx");
-        var theirCursor = json(mockMvc.perform(get("/api/contracts"))
+        seedContractFor(otherOrganization, "theirs-a.docx");
+        seedContractFor(otherOrganization, "theirs-b.docx");
+        seedContractFor(otherOrganization, "theirs-c.docx");
+        // Date them later than this organization's contracts. The list orders newest first
+        // and resumes with a strictly-older-than comparison, so a cursor only ever returns
+        // rows older than itself. Without this the foreign cursor would match nothing and
+        // the assertion below would pass without proving anything.
+        dateContracts(otherOrganization, "2030-01-01T00:00:00Z");
+        identityProvider.use(new UserIdentity(
+                UUID.randomUUID(), otherOrganization, Set.of("ADMIN")));
+
+        var theirFirstPage = json(mockMvc.perform(get("/api/contracts").param("limit", "1"))
                 .andExpect(status().isOk())
-                .andReturn()).get("data").get("nextCursor");
-        assertThat(theirCursor.isNull()).isTrue();
+                .andReturn()).get("data");
+        var theirCursor = theirFirstPage.get("nextCursor").asText();
+        assertThat(theirFirstPage.get("items").size()).isEqualTo(1);
+        assertThat(theirCursor)
+                .as("a genuine opaque resume position from another tenant")
+                .isNotBlank();
 
-        createContract("mine.docx");
-        var cursorFromAnotherOrganization = "not-a-valid-position-for-this-organization";
+        // Resume with the foreign cursor as this organization. Restoring the identity
+        // matters: the contracts below must belong to this organization, or the
+        // assertion would compare the other tenant against itself.
+        identityProvider.use(new UserIdentity(
+                UUID.randomUUID(), myOrganization, Set.of("ADMIN")));
+        createContract("mine-a.docx");
+        createContract("mine-b.docx");
+        createContract("mine-c.docx");
+        var myItems = json(mockMvc.perform(get("/api/contracts")
+                        .param("limit", "1")
+                        .param("cursor", theirCursor))
+                .andExpect(status().isOk())
+                .andReturn()).get("data").get("items");
 
-        // A foreign or hand-made cursor is either rejected or resumes within this
-        // organization. It must never surface another tenant's contracts.
-        var response = mockMvc.perform(get("/api/contracts")
-                        .param("cursor", cursorFromAnotherOrganization));
-        response.andExpect(result -> {
-            var status = result.getResponse().getStatus();
-            assertThat(status == 200 || status == 400)
-                    .as("a malformed cursor is rejected or ignored, never honoured as a "
-                            + "cross-tenant position")
-                    .isTrue();
-        });
+        assertThat(myItems.size()).isEqualTo(1);
+        assertThat(myItems.get(0).get("id").asText())
+                .as("the foreign position may only ever resume within this organization; "
+                        + "it cannot surface the other tenant's contract")
+                .isNotIn(seededContractIds(otherOrganization));
+    }
+
+    @Test
+    void aHandBuiltCursorCanOnlyEverReadTheCallersOwnOrganization() throws Exception {
+        createContract("mine-a.docx");
+        var otherOrganization = UUID.randomUUID();
+        seedContractFor(otherOrganization, "theirs-a.docx");
+        seedContractFor(otherOrganization, "theirs-b.docx");
+
+        // A position built by hand rather than minted. The cursor carries no signature, so
+        // it is accepted -- and that is safe, because the organization predicate is applied
+        // unconditionally in SQL and nothing in the token can widen it.
+        var forged = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                "2030-01-01T00:00:00Z|00000000-0000-0000-0000-000000000001"
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        var items = json(mockMvc.perform(get("/api/contracts").param("cursor", forged))
+                .andExpect(status().isOk())
+                .andReturn()).get("data").get("items");
+
+        assertThat(items.size()).isEqualTo(1);
+        assertThat(items.get(0).get("id").asText())
+                .as("a hand-built position reads this organization, never another tenant's")
+                .isNotIn(seededContractIds(otherOrganization));
+    }
+
+    private void dateContracts(UUID organizationId, String instant) {
+        jdbcClient.sql("""
+                update contract set created_at = cast(:instant as timestamptz)
+                where organization_id = :orgId
+                """)
+                .param("instant", instant)
+                .param("orgId", organizationId)
+                .update();
+    }
+
+    private java.util.List<String> seededContractIds(UUID organizationId) throws Exception {
+        return jdbcClient.sql("""
+                select id::text from contract where organization_id = :orgId
+                """).param("orgId", organizationId).query(String.class).list();
     }
 
     @Test
@@ -251,6 +313,18 @@ class ContractListApiIT {
         mockMvc.perform(get("/api/contracts").param("limit", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("400"));
+    }
+
+    @Test
+    void anOversizedLimitIsClampedToTheCapRatherThanHonoured() throws Exception {
+        for (var i = 0; i < 105; i++) {
+            createContract("cap" + i + ".docx");
+        }
+
+        mockMvc.perform(get("/api/contracts").param("limit", "100000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(100))
+                .andExpect(jsonPath("$.data.nextCursor").isNotEmpty());
     }
 
     @Test

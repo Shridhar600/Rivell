@@ -15,7 +15,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -112,15 +111,21 @@ class ReviewListQueryCountIT {
     @Test
     void aPageIssuesTheSameWorkRegardlessOfRowCount() throws Exception {
         createReviews(2);
-        var small = statementsIn(() -> mockMvc.perform(get("/api/reviews")).andReturn());
+        var small = statementCount(
+                statementsIn(() -> mockMvc.perform(get("/api/reviews")).andReturn()));
 
         createReviews(18);
-        var large = statementsIn(() -> mockMvc.perform(get("/api/reviews")).andReturn());
+        var large = statementCount(
+                statementsIn(() -> mockMvc.perform(get("/api/reviews")).andReturn()));
 
         assertThat(large)
                 .as("statement count must not grow with row count: a per-row contract or "
                         + "summary lookup would make this grow by the eighteen added reviews")
                 .isEqualTo(small);
+        assertThat(small)
+                .as("one page query plus the fixed batched aggregates, so a small page is "
+                        + "never materially cheaper than a full one")
+                .isGreaterThanOrEqualTo(4);
     }
 
     @Test
@@ -169,16 +174,37 @@ class ReviewListQueryCountIT {
                 .doesNotContain("in ('");
     }
 
+    private final java.util.concurrent.atomic.AtomicInteger fence =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * Everything the server logged for one call, fenced by a marker unique to that call.
+     *
+     * <p>The tag must be unique per invocation. With a fixed tag, {@code indexOf} returns the
+     * first window for every call, so two different calls would be handed identical text and
+     * comparing them would prove nothing. The container is shared across the whole class.
+     */
     private String statementsIn(CheckedCall call) throws Exception {
-        mark("open");
+        var tag = MARKER + "_" + fence.incrementAndGet();
+        mark(tag + "_open");
         call.run();
-        mark("close");
+        mark(tag + "_close");
         var log = postgres.getLogs();
-        var open = log.indexOf(MARKER + "_open");
-        var close = log.indexOf(MARKER + "_close", open);
+        var open = log.indexOf(tag + "_open");
+        var close = log.indexOf(tag + "_close", open);
         assertThat(open).as("opening marker must appear in the server log").isNotNegative();
         assertThat(close).as("closing marker must appear after it").isGreaterThan(open);
         return log.substring(open, close);
+    }
+
+    /**
+     * Statements the server actually executed inside a window. Log lines are counted rather
+     * than compared as text, because every line carries a timestamp and millisecond
+     * precision, so two identical requests never produce byte-identical text.
+     */
+    private int statementCount(String window) {
+        return countOccurrences(window, "execute <unnamed>")
+                + countOccurrences(window, "LOG:  statement:");
     }
 
     /**

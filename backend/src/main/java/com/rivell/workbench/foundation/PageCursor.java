@@ -18,8 +18,11 @@ import java.util.UUID;
  * resume comparison would then silently skip rows sharing that millisecond.
  *
  * <p>Both components are already returned to the caller as {@code createdAt} and
- * {@code id} on every row, so the token discloses nothing new. It is opaque only in
- * that the total order cannot be hand-edited into an arbitrary position.
+ * {@code id} on every row, so the token discloses nothing new. It is encoded rather than
+ * structured so callers do not parse it, not to keep it secret: it carries no signature
+ * and is therefore not tamper-evident. A caller can construct any position, which is
+ * safe because the organization predicate is applied unconditionally in SQL and cannot
+ * be widened from anything in this token.
  */
 public record PageCursor(Instant createdAt, UUID id) {
 
