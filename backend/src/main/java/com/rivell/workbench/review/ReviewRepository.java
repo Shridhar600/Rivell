@@ -22,12 +22,6 @@ public interface ReviewRepository {
      */
     Optional<Review> findByClientRequestId(UUID organizationId, UUID clientRequestId);
 
-    /**
-     * Bounded newest-first list for one contract; implementations read {@code limit + 1}
-     * rows so callers can detect truncation.
-     */
-    List<Review> findReviews(UUID organizationId, UUID contractId, int limit);
-
     Optional<ReviewSnapshot> findSnapshot(UUID organizationId, UUID reviewId);
 
     List<ReviewPlanCheck> findPlanChecks(UUID organizationId, UUID reviewId);

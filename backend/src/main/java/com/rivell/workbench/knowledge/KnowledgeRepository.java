@@ -20,7 +20,11 @@ public interface KnowledgeRepository {
 
     Optional<KnowledgeArtifact> findArtifact(UUID artifactId, UUID organizationId);
 
-    List<KnowledgeArtifact> listArtifacts(UUID organizationId);
+    /**
+     * Newest-first artifact list. {@code limit} bounds the read; null keeps the
+     * unbounded behaviour existing callers rely on.
+     */
+    List<KnowledgeArtifact> listArtifacts(UUID organizationId, Integer limit);
 
     Optional<KnowledgeSource> findSource(UUID artifactId, UUID organizationId);
 
@@ -79,7 +83,11 @@ public interface KnowledgeRepository {
 
     void insertPublication(KnowledgePublication publication);
 
-    List<KnowledgePublication> listPublications(UUID organizationId);
+    /**
+     * Publications newest first. {@code limit} bounds the read; null keeps the unbounded
+     * behaviour existing callers rely on.
+     */
+    List<KnowledgePublication> listPublications(UUID organizationId, Integer limit);
 
     Optional<KnowledgePublication> findPublication(UUID publicationId, UUID organizationId);
 

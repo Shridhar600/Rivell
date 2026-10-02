@@ -5,11 +5,13 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.foundation.PageCursor;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
@@ -26,6 +28,9 @@ import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.Review;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
 import com.rivell.workbench.review.ReviewAnalysisRun;
+import com.rivell.workbench.review.ReviewListQuery;
+import com.rivell.workbench.review.ReviewListRow;
+import com.rivell.workbench.review.ReviewListRunState;
 import com.rivell.workbench.review.ReviewAnalysisService;
 import com.rivell.workbench.review.ReviewCheckExecution;
 import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
@@ -57,6 +62,7 @@ public class ReviewApiService {
     private final FindingRepository findingRepository;
     private final ContractQueryService contractQueryService;
     private final ReviewPackRegistry reviewPackRegistry;
+    private final ReviewListQuery reviewListQuery;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
 
@@ -68,6 +74,7 @@ public class ReviewApiService {
             FindingRepository findingRepository,
             ContractQueryService contractQueryService,
             ReviewPackRegistry reviewPackRegistry,
+            ReviewListQuery reviewListQuery,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         this.reviewService = reviewService;
@@ -77,6 +84,7 @@ public class ReviewApiService {
         this.findingRepository = findingRepository;
         this.contractQueryService = contractQueryService;
         this.reviewPackRegistry = reviewPackRegistry;
+        this.reviewListQuery = reviewListQuery;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
     }
@@ -124,14 +132,86 @@ public class ReviewApiService {
                 warnings.truncated());
     }
 
-    public ReviewListResponse list(UUID contractId, Integer limit) {
+    /**
+     * Bounded newest-first page of reviews for the organization, or of one contract when
+     * {@code contractId} is supplied.
+     *
+     * <p>When a contract filter is present the contract is still resolved, which preserves
+     * the 404 on an unknown or cross-organization contract and the transitive
+     * {@code contracts:read} this list has always required. An organization-wide list needs
+     * no such resolution, so an absent filter narrows the required authority to
+     * {@code reviews:read} rather than widening it.
+     */
+    public ReviewListResponse list(UUID contractId, Integer limit, String cursorToken) {
         var organizationId = requireRead();
-        contractQueryService.getContract(contractId);
+        if (contractId != null) {
+            contractQueryService.getContract(contractId);
+        }
         var bounded = boundedLimit(limit);
-        var rows = reviewRepository.findReviews(organizationId, contractId, bounded);
+        var after = PageCursor.decode(cursorToken);
+        var rows = reviewListQuery.findPage(organizationId, contractId,
+                after == null ? null : after.createdAt(),
+                after == null ? null : after.id(),
+                bounded);
+
         var truncated = rows.size() > bounded;
-        var items = rows.stream().limit(bounded).map(ReviewApiService::toListItem).toList();
-        return new ReviewListResponse(items, truncated);
+        var page = rows.stream().limit(bounded).toList();
+        var nextCursor = truncated && !page.isEmpty()
+                ? PageCursor.encode(new PageCursor(
+                        page.get(page.size() - 1).createdAt(),
+                        page.get(page.size() - 1).reviewId()))
+                : null;
+        return new ReviewListResponse(assemble(organizationId, page), truncated, nextCursor);
+    }
+
+    /**
+     * Assembles a page from a fixed number of aggregate queries keyed on the page's own
+     * ids. Progress numbers are never obtained by reading each review individually, and
+     * the counted generation is resolved exactly as {@link #summaryFor} resolves it so a
+     * row and its summary can never disagree.
+     */
+    private List<ReviewListItemView> assemble(UUID organizationId, List<ReviewListRow> page) {
+        if (page.isEmpty()) {
+            return List.of();
+        }
+        var reviewIds = page.stream().map(ReviewListRow::reviewId).toList();
+        var runStates = reviewListQuery.findRunStates(organizationId, reviewIds);
+        var planned = reviewListQuery.countPlannedChecks(organizationId, reviewIds);
+        var countedRunIds = runStates.values().stream()
+                .map(ReviewListRunState::countedRunId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        var executions = reviewListQuery.countExecutions(organizationId, countedRunIds);
+        var signals = reviewListQuery.countSignals(organizationId, countedRunIds);
+        var findings = reviewListQuery.countFindings(organizationId, countedRunIds);
+
+        var items = new ArrayList<ReviewListItemView>(page.size());
+        for (var row : page) {
+            var state = runStates.get(row.reviewId());
+            var countedRunId = state == null ? null : state.countedRunId();
+            var counts = countedRunId == null ? null : executions.get(countedRunId);
+            items.add(new ReviewListItemView(
+                    row.reviewId(),
+                    row.contractId(),
+                    row.contractVersionNumber(),
+                    row.contractFilename(),
+                    row.status(),
+                    failure(row.failureReason()),
+                    row.createdAt(),
+                    row.startedAt(),
+                    row.completedAt(),
+                    state == null ? null : state.latestCompletedRunNumber(),
+                    state == null ? null : state.latestCompletedRunStatus(),
+                    state == null || !state.hasNewerRunThanCounted() ? null : state.latestRunStatus(),
+                    planned.getOrDefault(row.reviewId(), 0),
+                    counts == null ? 0 : counts.completed(),
+                    counts == null ? 0 : counts.degraded(),
+                    counts == null ? 0 : counts.failed(),
+                    countedRunId == null ? 0 : signals.getOrDefault(countedRunId, 0),
+                    countedRunId == null ? 0 : findings.getOrDefault(countedRunId, 0)));
+        }
+        return List.copyOf(items);
     }
 
     public FindingListResponse findings(
@@ -443,12 +523,6 @@ public class ReviewApiService {
             throw new IllegalArgumentException("limit must be >= 1");
         }
         return Math.min(limit, MAX_PAGE_LIMIT);
-    }
-
-    private static ReviewListItemView toListItem(Review review) {
-        return new ReviewListItemView(review.id(), review.contractId(),
-                review.contractVersionNumber(), review.status().name(), review.createdAt(),
-                review.completedAt());
     }
 
     private static FindingSummaryView toSummary(Finding finding) {

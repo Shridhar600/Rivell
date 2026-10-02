@@ -127,10 +127,12 @@ class KnowledgeController {
         }
     }
 
-    @Operation(summary = "List the organization's knowledge artifacts")
+    @Operation(summary = "List the organization's knowledge artifacts, newest first. "
+            + "Supply limit to bound the read; omitting it returns every artifact.")
     @GetMapping("/artifacts")
-    ApiResult<List<KnowledgeArtifactSummaryResponse>> listArtifacts() {
-        return ApiResult.ok(queryService.listArtifacts().stream()
+    ApiResult<List<KnowledgeArtifactSummaryResponse>> listArtifacts(
+            @RequestParam(required = false) Integer limit) {
+        return ApiResult.ok(queryService.listArtifacts(limit).stream()
                 .map(KnowledgeController::toSummary)
                 .toList());
     }
@@ -290,10 +292,12 @@ class KnowledgeController {
                 publication.createdAt()));
     }
 
-    @Operation(summary = "List the organization's published knowledge versions")
+    @Operation(summary = "List the organization's published knowledge versions. "
+            + "Supply limit to bound the read; omitting it returns every publication.")
     @GetMapping("/publications")
-    ApiResult<List<PublicationView>> listPublications() {
-        return ApiResult.ok(queryService.listPublications().stream()
+    ApiResult<List<PublicationView>> listPublications(
+            @RequestParam(required = false) Integer limit) {
+        return ApiResult.ok(queryService.listPublications(limit).stream()
                 .map(KnowledgeController::toPublicationView)
                 .toList());
     }

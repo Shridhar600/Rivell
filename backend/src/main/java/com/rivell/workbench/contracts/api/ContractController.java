@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -79,6 +80,37 @@ class ContractController {
                     result.sha256(),
                     result.nodeCount()));
         }
+    }
+
+    @Operation(summary = "List the organization's contracts newest first (bounded). "
+            + "Supply nextCursor to continue; a new upload always creates a new contract, "
+            + "so this endpoint never lists versions of an existing contract.")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "403", description = "Missing contracts:read",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping
+    ApiResult<ContractListResponse> listContracts(
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String cursor) {
+        var page = queryService.listContractsPage(limit, cursor);
+        return ApiResult.ok(new ContractListResponse(
+                page.items().stream()
+                        .map(entry -> new ContractListItemResponse(
+                                entry.contractId(),
+                                entry.title(),
+                                entry.createdAt(),
+                                new ContractSummaryResponse.LatestVersion(
+                                        entry.latestVersion().versionNumber(),
+                                        entry.latestVersion().parseStatus(),
+                                        entry.latestVersion().parseWarnings(),
+                                        entry.latestVersion().parserVersion(),
+                                        entry.latestVersion().sha256(),
+                                        entry.latestVersion().filename(),
+                                        entry.latestVersion().nodeCount())))
+                        .toList(),
+                page.nextCursor()));
     }
 
     @Operation(summary = "Get a contract with its latest version state")
