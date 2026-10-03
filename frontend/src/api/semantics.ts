@@ -440,21 +440,29 @@ function useSemanticsMutation<TVariables>(
   })
 }
 
+export async function enrichContract(
+  contractId: string,
+  versionNumber: number,
+  profile: ReviewProfileInput,
+): Promise<SemanticContract> {
+  const client = createApiClient()
+  const { data, response } = await client.POST(
+    '/api/contracts/{id}/versions/{versionNumber}/enrichment',
+    { params: { path: { id: contractId, versionNumber } }, body: profile },
+  )
+  if (!data) {
+    throw new SemanticApiError(response.status, ENRICHMENT_MESSAGES)
+  }
+  return parseApiResult(data, parseSemanticContract, 'semantics')
+}
+
 export function useEnrichContract(
   contractId: string,
   versionNumber: number,
 ): UseMutationResult<SemanticContract, Error, ReviewProfileInput> {
-  return useSemanticsMutation(contractId, versionNumber, async (profile) => {
-    const client = createApiClient()
-    const { data, response } = await client.POST(
-      '/api/contracts/{id}/versions/{versionNumber}/enrichment',
-      { params: { path: { id: contractId, versionNumber } }, body: profile },
-    )
-    if (!data) {
-      throw new SemanticApiError(response.status, ENRICHMENT_MESSAGES)
-    }
-    return parseApiResult(data, parseSemanticContract, 'semantics')
-  })
+  return useSemanticsMutation(contractId, versionNumber, (profile) =>
+    enrichContract(contractId, versionNumber, profile),
+  )
 }
 
 export function useCorrectPartyRole(

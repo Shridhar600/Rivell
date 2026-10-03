@@ -445,6 +445,29 @@ describe('review creation', () => {
   })
 })
 
+describe('the readiness gate', () => {
+  it.each([
+    ['has no semantic analysis at all', { semantics: null }],
+    ['is still being analysed', { semantics: { ...fixtureSemantics(), enrichmentStatus: 'ENRICHING' as const } }],
+    ['failed', { semantics: { ...fixtureSemantics(), enrichmentStatus: 'FAILED' as const } }],
+    ['reports a state Rivell does not recognise', { semantics: { ...fixtureSemantics(), enrichmentStatus: 'WHATEVER' } }],
+  ])('never offers to start a review when the analysis %s', async (_name, options) => {
+    const api = stubContractApi(options as Parameters<typeof stubContractApi>[0])
+    renderRoute('/reviews/c1/analysis')
+
+    expect(await screen.findByText('Semantic analysis is not ready')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start review' })).not.toBeInTheDocument()
+    expect(createRequests(api)).toHaveLength(0)
+  })
+
+  it('offers it only for an explicit READY', async () => {
+    stubContractApi({ semantics: fixtureSemantics({ enrichmentStatus: 'READY' }) })
+    renderRoute('/reviews/c1/analysis')
+    expect(await screen.findByRole('button', { name: 'Start review' })).toBeInTheDocument()
+    expect(screen.queryByText('Semantic analysis is not ready')).not.toBeInTheDocument()
+  })
+})
+
 describe('review history', () => {
   it('lists reviews and opens the selected one', async () => {
     stubContractApi({

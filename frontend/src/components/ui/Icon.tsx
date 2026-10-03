@@ -158,3 +158,50 @@ export function InfoIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+/** Padlock: a frozen (finalized) review. */
+export function LockIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+    </svg>
+  )
+}
+
+/** Tick: a statement the product keeps. */
+export function CheckIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="m3.5 8.3 3 3 6-6.5" />
+    </svg>
+  )
+}
+
+/** Arrow into a tray: choose a file to upload. */
+export function UploadIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M8 11V3m0 0L5 6m3-3 3 3M3 13h10" />
+    </svg>
+  )
+}
+
+/** Page with a folded corner: a chosen file. */
+export function FileIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M4 1.5h5L12.5 5v9.5H4zM9 1.5V5h3.5" />
+    </svg>
+  )
+}
+
+/** Circle with an upward arrow: a caution that needs the reader's eye. */
+export function CautionIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 11.5V5m0 0L5.8 7.2M8 5l2.2 2.2" />
+    </svg>
+  )
+}

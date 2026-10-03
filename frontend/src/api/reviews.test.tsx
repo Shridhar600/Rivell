@@ -298,6 +298,55 @@ describe('review parsers', () => {
     expect(findings.items[1].absenceConcept).toBe('LIMITATION_OF_LIABILITY')
   })
 
+  it('parses the human-review, finalization, redline and context truth carried by a list row', () => {
+    const list = parseReviewList({
+      items: [
+        {
+          ...completedSummary,
+          id: 'r-1',
+          uploadedAt: '2026-10-02T07:30:00Z',
+          context: { contractType: 'NDA', ourSideRole: null, paperSource: 'OUR_PAPER', jurisdiction: 'UNSPECIFIED' },
+          humanReview: {
+            status: 'IN_PROGRESS',
+            actionableFindings: 8,
+            resolvedFindings: 5,
+            remainingFindings: 3,
+            escalated: 1,
+            readyToFinalize: false,
+            blockers: ['ACTIVE_ESCALATION'],
+          },
+          finalization: { finalizedAt: '2026-10-02T10:00:00Z', approvedChanges: 7 },
+          redline: { status: 'COMPLETED', outcome: 'REDLINE_GENERATED', verifiedChangeCount: 7, downloadAvailable: true, completedAt: '2026-10-02T10:05:00Z' },
+        },
+        { ...completedSummary, id: 'r-2', humanReview: { status: 'NOT_STARTED' } },
+      ],
+    })
+    expect(list.items[0]).toMatchObject({
+      uploadedAt: '2026-10-02T07:30:00Z',
+      context: { contractType: 'NDA', ourSideRole: null, paperSource: 'OUR_PAPER', jurisdiction: 'UNSPECIFIED' },
+      humanReview: { status: 'IN_PROGRESS', resolvedFindings: 5, escalated: 1, readyToFinalize: false, blockers: ['ACTIVE_ESCALATION'] },
+      finalization: { approvedChanges: 7 },
+      redline: { status: 'COMPLETED', verifiedChangeCount: 7, downloadAvailable: true },
+    })
+  })
+
+  it('reads an absent list-row fact as absent, and never as ready', () => {
+    const [bare, partial] = parseReviewList({
+      items: [
+        { ...completedSummary, id: 'r-1' },
+        { ...completedSummary, id: 'r-2', humanReview: { status: 'NOT_STARTED' } },
+      ],
+    }).items
+    expect(bare).toMatchObject({ uploadedAt: null, context: null, humanReview: null, finalization: null, redline: null })
+    expect(partial.humanReview).toMatchObject({ readyToFinalize: false, blockers: [] })
+  })
+
+  it('rejects a list-row fact of the wrong shape', () => {
+    expect(() =>
+      parseReviewList({ items: [{ ...completedSummary, id: 'r-1', humanReview: { status: 'X', blockers: 'ACTIVE_ESCALATION' } }] }),
+    ).toThrow()
+  })
+
   it('parses progress counts and status', () => {
     const progress = parseReviewProgress({
       reviewStatus: 'ANALYZING',
