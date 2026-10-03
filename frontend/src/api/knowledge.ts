@@ -549,6 +549,13 @@ const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
   503: 'The knowledge service is unavailable right now.',
 }
 
+/**
+ * Bounded so Home and the legacy lists cannot request an unbounded page. The backend caps both
+ * knowledge lists at 100. Neither list has a cursor yet, so a page is not the whole set; the
+ * remaining GAP-C items are recorded in DEFERRED_WORK.md.
+ */
+export const KNOWLEDGE_PAGE_LIMIT = 20
+
 export const knowledgeKeys = {
   artifacts: ['knowledge', 'artifacts'] as const,
   artifact: (id: string) => ['knowledge', 'artifacts', id] as const,
@@ -566,7 +573,9 @@ export function isProcessingArtifact(status: IngestStatus): boolean {
 
 export async function fetchArtifacts(): Promise<ArtifactSummary[]> {
   const client = createApiClient()
-  const { data, response } = await client.GET('/api/knowledge/artifacts')
+  const { data, response } = await client.GET('/api/knowledge/artifacts', {
+    params: { query: { limit: KNOWLEDGE_PAGE_LIMIT } },
+  })
 
   if (!data) {
     throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge sources unavailable'))
@@ -656,7 +665,9 @@ export async function fetchCandidate(candidateId: string): Promise<Candidate> {
 
 export async function fetchPublications(): Promise<Publication[]> {
   const client = createApiClient()
-  const { data, response } = await client.GET('/api/knowledge/publications')
+  const { data, response } = await client.GET('/api/knowledge/publications', {
+    params: { query: { limit: KNOWLEDGE_PAGE_LIMIT } },
+  })
 
   if (!data) {
     throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publications unavailable'))
