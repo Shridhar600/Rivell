@@ -1763,6 +1763,21 @@ export interface components {
             absence?: boolean;
             evidenceItemIds?: string[];
         };
+        ContractPositionSlot: {
+            /** Format: uuid */
+            evidenceItemId?: string;
+            authorityClass?: string;
+            legalConcept?: string;
+            facts?: components["schemas"]["LegalFact"][];
+        };
+        EscalationSlot: {
+            /** Format: uuid */
+            evidenceItemId?: string;
+            authorityClass?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
+            trigger?: string;
+        };
         FindingDetailView: {
             /** Format: uuid */
             id?: string;
@@ -1802,10 +1817,26 @@ export interface components {
             claims?: components["schemas"]["ClaimView"][];
             evidenceItemIds?: string[];
             evidenceItems?: components["schemas"]["EvidenceItemResponse"][];
+            positionComparison?: components["schemas"]["FindingPositionComparison"];
             signalIds?: string[];
             absenceBasis?: components["schemas"]["AbsenceBasisView"];
             /** Format: date-time */
             createdAt?: string;
+        };
+        FindingPositionComparison: {
+            contract?: components["schemas"]["ContractPositionSlot"][];
+            preferred?: components["schemas"]["PolicyPositionSlot"][];
+            fallback?: components["schemas"]["PolicyPositionSlot"][];
+            escalation?: components["schemas"]["EscalationSlot"][];
+        };
+        PolicyPositionSlot: {
+            /** Format: uuid */
+            evidenceItemId?: string;
+            authorityClass?: string;
+            legalConcept?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
+            text?: string;
         };
         ApiResultDecisionListResponse: {
             data?: components["schemas"]["DecisionListResponse"];
