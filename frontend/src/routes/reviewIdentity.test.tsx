@@ -67,6 +67,9 @@ const jsonBody = (value: unknown) =>
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   )
 
+const detailRequestFor = (api: ReturnType<typeof stubContractApi>, findingId: string) =>
+  findingDetailRequests(api).filter((request) => request.url.includes(`/findings/${findingId}`))
+
 /** A list that does NOT contain the selected finding, so a stand-down is observable. */
 const listWithout = (ids: string[], truncated = false) => ({
   items: fixtureFindingList.items.filter((item) => ids.includes(item.id)),
@@ -129,12 +132,15 @@ describe('missing route identity', () => {
  *
  * The exact behaviour, which the earlier report overclaimed, is:
  *
- *   authoritative complete list + member       -> request issued
- *   authoritative complete list + non-member   -> ZERO requests
- *   list filtered                             -> request issued (guard stands down)
+ *   authoritative complete list + member       -> request issued for the named finding
+ *   authoritative complete list + non-member   -> ZERO requests for the named id (the workspace
+ *                                                 falls back to its own first finding instead)
  *   list truncated                            -> request issued (guard stands down)
  *   list unresolved                           -> ZERO requests
  *   list errored                              -> ZERO requests
+ *
+ * The filtered-list case no longer exists: the M10B workspace has no list filters, so every list read
+ * is either complete or truncated.
  *
  * "List unresolved" blocks because the list is empty, not because the guard knows it is unresolved:
  * with no data, the authoritative test passes and membership fails. Those two states are
@@ -160,7 +166,7 @@ describe('cross-review finding selection: full matrix', () => {
     expect(findingDetailRequests(api)[0].url).toContain('/api/reviews/r-9/findings/f-1')
   })
 
-  it('issues ZERO detail requests for a non-member of an authoritative list', async () => {
+  it('never requests a non-member of an authoritative list, and falls back to the review\'s own finding', async () => {
     const api = stubContractApi({
       reviewSummary: fixtureCompletedReviewSummary,
       findings: fixtureFindingList,
@@ -168,15 +174,16 @@ describe('cross-review finding selection: full matrix', () => {
 
     renderAppRoute('/reviews/c1/analysis/r-9?finding=f-from-another-review')
 
-    await waitFor(() =>
-      expect(api.requests.some((r) => r.url.includes('/api/reviews/r-9/findings'))).toBe(true),
-    )
-    await waitFor(() => expect(findingDetailRequests(api)).toEqual([]))
+    // The workspace settles on the review's own first finding. Waiting for that request proves the
+    // list had resolved, so the absence of a request for the foreign id is not an early read.
+    await waitFor(() => expect(detailRequestFor(api, 'f-1')).toHaveLength(1))
+    expect(detailRequestFor(api, 'f-from-another-review')).toEqual([])
+    expect(findingDetailRequests(api).every((r) => r.url.includes('/api/reviews/r-9/findings/f-1'))).toBe(true)
   })
 
-  it('issues ZERO detail requests for a finding absent from an authoritative list', async () => {
-    // Same state as above, framed as staleness rather than cross-review: an id the URL still names
-    // after the review's findings changed. Both are the authoritative non-member case.
+  it('never requests a finding absent from an authoritative list, even when the URL still names it', async () => {
+    // Same state, framed as staleness rather than cross-review: an id the URL still names after the
+    // review's findings changed.
     const api = stubContractApi({
       reviewSummary: fixtureCompletedReviewSummary,
       findings: listWithout(['f-1']),
@@ -184,27 +191,20 @@ describe('cross-review finding selection: full matrix', () => {
 
     renderAppRoute('/reviews/c1/analysis/r-9?finding=f-2')
 
-    await waitFor(() =>
-      expect(api.requests.some((r) => r.url.includes('/api/reviews/r-9/findings'))).toBe(true),
-    )
-    await waitFor(() => expect(findingDetailRequests(api)).toEqual([]))
+    await waitFor(() => expect(detailRequestFor(api, 'f-1')).toHaveLength(1))
+    expect(detailRequestFor(api, 'f-2')).toEqual([])
   })
 
-  it('ALLOWS the request when the list is filtered, because a filtered absence proves nothing', async () => {
+  it('requests the named member rather than the default finding', async () => {
     const api = stubContractApi({
       reviewSummary: fixtureCompletedReviewSummary,
-      // The filtered list does not contain the selected finding, and must not: if it did, this case
-      // would pass for the wrong reason.
-      findingsResponse: (url) => {
-        expect(url).toContain('severity=HIGH')
-        return Promise.resolve(jsonBody(listWithout([])))
-      },
+      findings: fixtureFindingList,
     })
 
-    renderAppRoute('/reviews/c1/analysis/r-9?finding=f-1&severity=HIGH')
+    renderAppRoute('/reviews/c1/analysis/r-9?finding=f-2')
 
-    await waitFor(() => expect(findingDetailRequests(api)).toHaveLength(1))
-    expect(findingDetailRequests(api)[0].url).toContain('/api/reviews/r-9/findings/f-1')
+    await waitFor(() => expect(detailRequestFor(api, 'f-2')).toHaveLength(1))
+    expect(detailRequestFor(api, 'f-1')).toEqual([])
   })
 
   it('ALLOWS the request when the list is truncated, because a truncated absence proves nothing', async () => {

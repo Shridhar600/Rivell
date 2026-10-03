@@ -19,7 +19,7 @@ import {
   fixtureHumanReview,
   fixtureMixedChangeSet,
 } from './workflowFixtures'
-import { fixtureAcceptableFinding } from './workflowFixtures'
+import { fixtureAbsenceFindingForDecision, fixtureAcceptableFinding } from './workflowFixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -55,6 +55,7 @@ function baseOptions(options: StubOptions = {}): StubOptions {
     findingDetailResponse: (findingId: string) => {
       const details: Record<string, unknown> = {
         'f-1': fixtureClauseFindingDetail,
+        'f-2': fixtureAbsenceFindingForDecision,
       }
       return jsonResponse(envelope(details[findingId] ?? null))
     },
@@ -73,8 +74,29 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/** The three regions of the workspace, found by their accessible names. */
+const findingsNav = () => within(screen.getByRole('complementary', { name: 'Findings' }))
+const findingDetail = () => within(screen.getByRole('complementary', { name: 'Finding detail' }))
+const topBar = () => within(screen.getByRole('banner'))
+const finalizeButton = () => topBar().getByRole('button', { name: /^(Finalize review|Finalized)/ })
+const FINDING_TITLE = '6. Limitation of Liability'
+
+async function findSelectedFindingDetail() {
+  return screen.findByRole('heading', { level: 2, name: FINDING_TITLE })
+}
+
+/** The workspace draws only once the review and contract have loaded. */
+async function workspaceReady() {
+  await screen.findByRole('banner')
+  await screen.findByRole('complementary', { name: 'Finding detail' })
+}
+
+function openFinalizeDialog() {
+  return screen.getByRole('dialog', { name: 'Finalize this review?' })
+}
+
 describe('human review progress in the workspace', () => {
-  it('renders server-owned status, counts and blockers with finding navigation', async () => {
+  it('renders server-owned counts, blocker and unresolved total, and lets a finding be opened from the list', async () => {
     const api = stubContractApi(
       baseOptions({
         humanReview: fixtureHumanReview({
@@ -95,28 +117,33 @@ describe('human review progress in the workspace', () => {
       }),
     )
     const { router } = renderRouter('/reviews/c1/analysis/r-1', api)
+    await workspaceReady()
 
-    const progress = await screen.findByRole('region', { name: 'Human review' })
-    expect(progress).toHaveTextContent('Human review in progress')
-    expect(progress).toHaveTextContent('Findings needing a decision')
-    expect(progress).toHaveTextContent('Informational findings decided')
-    expect(progress).toHaveTextContent('1 of 2')
-    expect(progress).toHaveTextContent(
-      '1 finding that requires review still needs a decision.',
-    )
-    await userEvent.click(
-      screen.getByRole('button', {
-        name: 'Open finding: 6. Limitation of Liability',
-      }),
-    )
+    expect(await topBar().findByText('1 of 2 resolved')).toBeInTheDocument()
+    expect(topBar().getByText('1 finding that requires review still needs a decision.')).toBeInTheDocument()
+    expect(finalizeButton()).toHaveTextContent('Finalize review · 1 unresolved')
+    expect(finalizeButton()).toBeDisabled()
+    expect(
+      within(screen.getByRole('complementary', { name: 'Findings' })).getByText('1 unresolved'),
+    ).toBeInTheDocument()
+
+    const list = findingsNav().getByRole('listbox', { name: 'Findings list' })
+    await userEvent.click(within(list).getByRole('option', { name: /Limitation of Liability/ }))
     await waitFor(() => expect(router.state.location.search).toContain('finding=f-1'))
   })
 
-  it('shows the machine analysis and human review states separately', async () => {
+  it('does not claim the review is finalized or frozen when only the machine analysis has completed', async () => {
     const api = stubContractApi(baseOptions())
     renderRouter('/reviews/c1/analysis/r-1', api)
-    expect(await screen.findByRole('heading', { name: 'Human review' })).toBeInTheDocument()
+
+    await findSelectedFindingDetail()
+    expect(topBar().getByText('0 of 1 resolved')).toBeInTheDocument()
+    expect(finalizeButton()).toHaveTextContent('Finalize review · 1 unresolved')
+    expect(topBar().queryByText('Approved changes frozen')).not.toBeInTheDocument()
+    expect(topBar().queryByText('Ready to finalize')).not.toBeInTheDocument()
     expect(screen.queryByText('Human review completed')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Approved preview' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Decision preview' })).toBeInTheDocument()
   })
 })
 
@@ -149,31 +176,34 @@ describe('recording a decision in the workspace', () => {
     )
     renderRouter('/reviews/c1/analysis/r-1', stub)
 
-    await userEvent.click(
-      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
-    )
+    await findSelectedFindingDetail()
     const findingListRequestsBeforeSave = stub.requests.filter((request) =>
       /\/findings\?/.test(request.url),
     ).length
-    await screen.findByRole('heading', { name: 'Human decision' })
-    await userEvent.click(screen.getByRole('button', { name: 'Record decision' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Accept recommendation' }))
+    await userEvent.click(await findingDetail().findByRole('button', { name: 'Accept' }))
 
-    expect(await screen.findByText('Decision recorded.')).toBeInTheDocument()
-    const put = stub.requests.find((request) => request.method === 'PUT')
-    const body = put?.body as Record<string, unknown>
-    expect(body).toMatchObject({ action: 'ACCEPT', expectedVersion: 0 })
-    const decisionSection = screen.getByRole('region', { name: 'Human decision' })
-    expect(await within(decisionSection).findByText('Accepted')).toBeInTheDocument()
-    expect(await screen.findByText('Ready to finalize')).toBeInTheDocument()
-    const progress = screen.getByRole('region', { name: 'Human review' })
-    const openLabel = within(progress).getByText('Still open')
-    expect(openLabel.parentElement).toHaveTextContent('0')
-    const findingRow = within(screen.getByRole('region', { name: 'Findings' })).getByRole(
-      'button',
-      { name: /^6\. Limitation of Liability/ },
+    await waitFor(() =>
+      expect(stub.requests.find((request) => request.method === 'PUT')).toBeDefined(),
     )
-    expect(findingRow).toHaveTextContent('Accepted')
+    const put = stub.requests.find((request) => request.method === 'PUT')
+    expect(put?.body as Record<string, unknown>).toMatchObject({
+      action: 'ACCEPT',
+      expectedVersion: 0,
+    })
+
+    // The server's refreshed human-review state drives the top bar.
+    expect(await topBar().findByText('Ready to finalize')).toBeInTheDocument()
+    expect(topBar().getByText('1 of 1 resolved')).toBeInTheDocument()
+    expect(finalizeButton()).toBeEnabled()
+
+    // The saved decision is shown as current in the list and in the detail.
+    const row = await findingsNav().findByRole('option', { name: /Limitation of Liability/ })
+    expect(row).toHaveTextContent('Accepted')
+    await userEvent.click(row)
+    const detail = findingDetail()
+    expect(await detail.findByText('Revision 1', { exact: false })).toBeInTheDocument()
+    expect(detail.getByRole('button', { name: 'Accept' })).toHaveAttribute('aria-pressed', 'true')
+
     expect(
       stub.requests.filter((request) => /\/findings\?/.test(request.url)),
     ).toHaveLength(findingListRequestsBeforeSave)
@@ -182,7 +212,8 @@ describe('recording a decision in the workspace', () => {
   it('checks the evidence endpoint is never called from decision surfaces', async () => {
     const api = stubContractApi(baseOptions())
     renderRouter('/reviews/c1/analysis/r-1', api)
-    await screen.findByRole('heading', { name: 'Human review' })
+    await findSelectedFindingDetail()
+    await findingDetail().findByRole('button', { name: 'Accept' })
     expect(
       api.requests.filter((request) => request.url.includes('/api/retrieval/')),
     ).toHaveLength(0)
@@ -203,13 +234,20 @@ describe('workflow state availability and conflict truth', () => {
     expect(
       await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
+    // A readable change set is proof of finalization, so the frozen card is still reachable.
+    const card = (await findingDetail().findByText('Approved changes frozen', {}, { timeout: 3000 })).closest(
+      '.rv-ws-phase',
+    ) as HTMLElement
+    expect(card).toHaveTextContent('1 executable change in the immutable approved change set.')
+    await userEvent.click(findingDetail().getByRole('button', { name: 'Redline and change report' }))
+
+    const sheet = await screen.findByRole('dialog', { name: 'Redline' })
     expect(
-      await screen.findByRole('region', { name: 'Redline execution' }, { timeout: 3000 }),
+      await within(sheet).findByRole('region', { name: 'Redline execution' }, { timeout: 3000 }),
     ).toBeInTheDocument()
     expect(
-      await screen.findByRole('button', { name: /Generate redline/i }),
+      await within(sheet).findByRole('button', { name: /Generate redline/i }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Frozen when this review was created')).toBeInTheDocument()
 
     const changeSetCalls = api.requests.filter((r) => r.url.includes('/approved-change-set'))
     expect(changeSetCalls).toHaveLength(1)
@@ -245,13 +283,11 @@ describe('workflow state availability and conflict truth', () => {
     expect(
       await screen.findByText(/Decisions could not be loaded/, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
-    await userEvent.click(
-      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
-    )
-    expect(screen.getByText(/Decision controls are unavailable/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
+    await findSelectedFindingDetail()
+    expect(findingDetail().getByText(/Decision controls are unavailable/)).toBeInTheDocument()
+    expect(findingDetail().queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
+    expect(findingDetail().queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
-
 
   it('states a permission failure as a permission failure, not a load failure', async () => {
     const api = stubContractApi(baseOptions({ reviewSummaryStatus: 403 }))
@@ -271,19 +307,23 @@ describe('workflow state availability and conflict truth', () => {
     )
     renderRouter('/reviews/c1/analysis/r-1', api)
 
-    expect(
-      await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Redline execution' })).not.toBeInTheDocument()
+    const banner = await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 })
+    expect(banner).toHaveTextContent(/decisions and finalization cannot be confirmed/i)
+    await findSelectedFindingDetail()
     await waitFor(() =>
       expect(api.requests.filter((r) => r.url.includes('/approved-change-set')).length).toBe(1),
     )
+    expect(findingDetail().queryByText('Approved changes frozen')).not.toBeInTheDocument()
+    expect(
+      findingDetail().queryByRole('button', { name: 'Redline and change report' }),
+    ).not.toBeInTheDocument()
+    expect(topBar().queryByText('Approved changes frozen')).not.toBeInTheDocument()
+    expect(topBar().queryByText('Ready to finalize')).not.toBeInTheDocument()
+    expect(finalizeButton()).toBeDisabled()
+    expect(finalizeButton()).not.toHaveTextContent('Finalized')
     expect(
       screen.queryByText(/The approved change set could not be loaded/),
     ).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/approved change set and redline cannot be confirmed/i),
-    ).toBeInTheDocument()
   })
 
   it('does not read the change set when human-review state loads and the review is not finalized', async () => {
@@ -292,7 +332,9 @@ describe('workflow state availability and conflict truth', () => {
     )
     renderRouter('/reviews/c1/analysis/r-1', api)
 
-    await screen.findByRole('region', { name: 'Human review' })
+    await workspaceReady()
+    await topBar().findByText('0 of 1 resolved')
+    await findSelectedFindingDetail()
     expect(api.requests.filter((r) => r.url.includes('/approved-change-set'))).toHaveLength(0)
   })
 
@@ -305,9 +347,21 @@ describe('workflow state availability and conflict truth', () => {
     )
     renderRouter('/reviews/c1/analysis/r-1', api)
 
-    expect(
-      await screen.findByText(/The approved change set is frozen and decisions are read-only/),
-    ).toBeInTheDocument()
+    await workspaceReady()
+    // The server says COMPLETED, so the review is shown as finalized and read-only. The change set
+    // is simply not available: its size is not claimed and no load failure is reported.
+    const card = (await findingDetail().findByText('Approved changes frozen')).closest(
+      '.rv-ws-phase',
+    ) as HTMLElement
+    expect(card).toHaveTextContent('The approved change set is immutable.')
+    expect(card).not.toHaveTextContent(/executable change/)
+    expect(findingDetail().getByText(/Decision frozen/)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(api.requests.filter((r) => r.url.includes('/approved-change-set')).length).toBeGreaterThan(0),
+    )
+
+    await userEvent.click(findingDetail().getByRole('button', { name: 'Redline and change report' }))
+    await screen.findByRole('dialog', { name: 'Redline' })
     await waitFor(() =>
       expect(api.requests.filter((r) => r.url.includes('/redline')).length).toBeGreaterThan(0),
     )
@@ -317,33 +371,17 @@ describe('workflow state availability and conflict truth', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
   })
 
-  it('states that the change set and redline are unavailable for the same reason', async () => {
-    const api = stubContractApi(
-      baseOptions({ humanReviewStatus: 500, changeSetStatus: 404 }),
-    )
-    renderRouter('/reviews/c1/analysis/r-1', api)
-
-    const banner = await screen.findByText(/Human review state could not be loaded/, {}, {
-      timeout: 3000,
-    })
-    expect(banner.parentElement).toHaveTextContent(
-      /approved change set and redline/i,
-    )
-  })
-
   it('hides decision controls and explains when human-review state cannot be loaded', async () => {
     const api = stubContractApi(baseOptions({ humanReviewStatus: 500 }))
     renderRouter('/reviews/c1/analysis/r-1', api)
     expect(
       await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
-    await userEvent.click(
-      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
-    )
-    await screen.findByRole('heading', { name: 'Human decision' })
-    expect(screen.getByText(/Decision controls are unavailable/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Change decision' })).not.toBeInTheDocument()
+    await findSelectedFindingDetail()
+    const detail = findingDetail()
+    expect(detail.getByText(/Decision controls are unavailable/)).toBeInTheDocument()
+    expect(detail.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
+    expect(detail.queryByRole('button', { name: 'Change decision' })).not.toBeInTheDocument()
   })
 
   it('never claims no decision and disables controls when decisions cannot be loaded', async () => {
@@ -352,18 +390,19 @@ describe('workflow state availability and conflict truth', () => {
     expect(
       await screen.findByText(/Decisions could not be loaded/, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
-    await userEvent.click(
-      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
-    )
-    await screen.findByRole('heading', { name: 'Human decision' })
-    expect(screen.queryByText(/No human decision recorded yet/)).not.toBeInTheDocument()
-    expect(screen.getByText(/Decision state could not be loaded/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
-    const findingsPanel = screen.getByRole('region', { name: 'Findings' })
-    expect(within(findingsPanel).queryByText('No decision')).not.toBeInTheDocument()
+    await findSelectedFindingDetail()
+    const detail = findingDetail()
+    expect(detail.queryByText(/No human decision recorded yet/)).not.toBeInTheDocument()
+    expect(detail.getByText(/Decision controls are unavailable/)).toBeInTheDocument()
+    expect(detail.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
+    // No row claims a decision state (not even "Needs decision") while decisions are unknown.
+    const list = findingsNav().getByRole('listbox', { name: 'Findings list' })
+    expect(within(list).queryByText(/Needs decision/)).not.toBeInTheDocument()
+    expect(within(list).queryByText(/Accepted|Rejected|Edited|Escalated/)).not.toBeInTheDocument()
   })
 
   it('reports a stale revision as changed elsewhere after refetching server state', async () => {
+    const user = userEvent.setup()
     let stub: ReturnType<typeof stubContractApi>
     stub = stubContractApi(
       baseOptions({
@@ -387,35 +426,19 @@ describe('workflow state availability and conflict truth', () => {
         },
       }),
     )
-    renderRouter('/reviews/c1/analysis/r-1', stub)
-    await userEvent.click(
-      await screen.findByRole('button', { name: /^6\. Limitation of Liability/ }),
-    )
-    await userEvent.click(await screen.findByRole('button', { name: 'Change decision' }))
-    await userEvent.click(screen.getByRole('radio', { name: 'Reject recommendation' }))
-    await userEvent.type(screen.getByLabelText(/Comment/), 'Second opinion.')
-    await userEvent.click(screen.getByRole('button', { name: 'Reject recommendation' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(/changed elsewhere/)
-    expect(screen.queryByText(/expected version/)).not.toBeInTheDocument()
-  })
+    // f-1 already has a decision, so name it: with no ?finding= the page would open the next open one.
+    renderRouter('/reviews/c1/analysis/r-1?finding=f-1', stub)
+    await findSelectedFindingDetail()
+    await user.click(await findingDetail().findByRole('button', { name: 'Change decision' }))
+    await user.click(findingDetail().getByRole('button', { name: 'Reject' }))
+    const form = screen.getByRole('form', { name: 'Reject Finding' })
+    await user.type(within(form).getByLabelText('Reason'), 'Second opinion.')
+    await user.click(within(form).getByRole('button', { name: 'Reject' }))
 
-  it('discloses blocker findings beyond the first three links', async () => {
-    const api = stubContractApi(
-      baseOptions({
-        humanReview: fixtureHumanReview({
-          blockers: [
-            {
-              code: 'UNRESOLVED_REVIEW_REQUIRED_FINDINGS',
-              message: '4 findings that require review still need decisions.',
-              findingIds: ['f-1', 'f-2', 'f-3', 'f-4'],
-            },
-          ],
-        }),
-      }),
-    )
-    renderRouter('/reviews/c1/analysis/r-1', api)
-    const progress = await screen.findByRole('region', { name: 'Human review' })
-    expect(progress).toHaveTextContent('and 1 more affected finding(s)')
+    expect(await within(form).findByRole('alert')).toHaveTextContent(/changed elsewhere/)
+    expect(screen.queryByText(/expected version/)).not.toBeInTheDocument()
+    const put = stub.requests.find((request) => request.method === 'PUT')
+    expect(put?.body).toMatchObject({ action: 'REJECT', expectedVersion: 2 })
   })
 })
 
@@ -430,16 +453,29 @@ function readyReview() {
   })
 }
 
+function completedHumanReview(overrides: Parameters<typeof fixtureHumanReview>[0] = {}) {
+  return fixtureHumanReview({
+    status: 'COMPLETED',
+    readyToFinalize: true,
+    blockers: [],
+    changeSetId: 'cs-1',
+    finalizedAt: '2026-09-26T11:00:00Z',
+    ...overrides,
+  })
+}
+
 describe('finalization', () => {
   it('blocks finalization until the server says the review is ready', async () => {
     const api = stubContractApi(baseOptions())
     renderRouter('/reviews/c1/analysis/r-1', api)
-    const panel = await screen.findByRole('region', { name: 'Finalization' })
-    expect(panel).toHaveTextContent('Accepted: 0')
-    expect(panel).toHaveTextContent('The review cannot be finalized yet.')
-    expect(
-      screen.queryByRole('button', { name: 'Finalize review' }),
-    ).not.toBeInTheDocument()
+    await workspaceReady()
+    await topBar().findByText('1 finding that requires review still needs a decision.')
+    expect(finalizeButton()).toBeDisabled()
+    expect(finalizeButton()).toHaveTextContent('Finalize review · 1 unresolved')
+
+    // A disabled control cannot open the dialog, so nothing is sent.
+    await userEvent.click(finalizeButton())
+    expect(screen.queryByRole('dialog', { name: 'Finalize this review?' })).not.toBeInTheDocument()
     expect(api.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(0)
   })
 
@@ -451,16 +487,7 @@ describe('finalization', () => {
         humanReview: readyReview(),
         finalizeResponse: () => {
           stub.setHumanReview(
-            fixtureHumanReview({
-              status: 'COMPLETED',
-              accepted: 1,
-              resolvedFindings: 1,
-              remainingFindings: 0,
-              blockers: [],
-              readyToFinalize: true,
-              changeSetId: 'cs-1',
-              finalizedAt: '2026-09-26T11:00:00Z',
-            }),
+            completedHumanReview({ accepted: 1, resolvedFindings: 1, remainingFindings: 0 }),
           )
           return jsonResponse(envelope(fixtureChangeSet()))
         },
@@ -469,56 +496,22 @@ describe('finalization', () => {
     renderRouter('/reviews/c1/analysis/r-1', stub)
 
     await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
-    expect(screen.getByRole('group', { name: 'Confirm finalization' })).toHaveTextContent(
-      'cannot be undone',
-    )
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('group', { name: 'Confirm finalization' })).not.toBeInTheDocument()
+    const dialog = openFinalizeDialog()
+    expect(dialog).toHaveTextContent('frozen')
+    expect(dialog).toHaveTextContent('1 approved change (1 accepted, 0 edited)')
+    expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(0)
+    await user.click(within(dialog).getByRole('button', { name: 'Keep reviewing' }))
+    expect(screen.queryByRole('dialog', { name: 'Finalize this review?' })).not.toBeInTheDocument()
+    expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(0)
 
-    await user.click(screen.getByRole('button', { name: 'Finalize review' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
-    const finalization = screen.getByRole('region', { name: 'Finalization' })
-    expect(
-      await within(finalization).findByText(/approved change set is frozen/),
-    ).toBeInTheDocument()
+    await user.click(finalizeButton())
+    await user.click(within(openFinalizeDialog()).getByRole('button', { name: 'Finalize review' }))
+    expect(await findingDetail().findByText('Approved changes frozen')).toBeInTheDocument()
     expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: 'Confirm finalize' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Finalize review' })).not.toBeInTheDocument()
-  })
-
-  it('clears a finalize conflict notice once the review becomes ready', async () => {
-    const user = userEvent.setup()
-    let stub: ReturnType<typeof stubContractApi>
-    stub = stubContractApi(
-      baseOptions({
-        humanReview: readyReview(),
-        finalizeResponse: () => {
-          stub.setHumanReview(readyReview())
-          return jsonResponse(
-            { code: '409', title: 'Invalid state', detail: 'review is not finalizable' },
-            409,
-          )
-        },
-      }),
-    )
-    renderRouter('/reviews/c1/analysis/r-1', stub)
-    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
-    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Confirm finalize' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Finalization' })).toHaveTextContent(
-      'All required decisions are recorded',
-    )
-  })
-
-  it('moves focus into the confirmation and back to the trigger', async () => {
-    const user = userEvent.setup()
-    const api = stubContractApi(baseOptions({ humanReview: readyReview() }))
-    renderRouter('/reviews/c1/analysis/r-1', api)
-    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
-    expect(screen.getByRole('button', { name: 'Confirm finalize' })).toHaveFocus()
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('button', { name: 'Finalize review' })).toHaveFocus()
+    expect(screen.queryByRole('dialog', { name: 'Finalize this review?' })).not.toBeInTheDocument()
+    expect(finalizeButton()).toHaveTextContent('Finalized')
+    expect(finalizeButton()).toBeDisabled()
+    expect(topBar().getByText('Approved changes frozen')).toBeInTheDocument()
   })
 
   it('states a degraded analysis honestly and offers no recovery control', async () => {
@@ -529,6 +522,8 @@ describe('finalization', () => {
         humanReview: fixtureHumanReview({
           status: 'NOT_STARTED',
           readyToFinalize: false,
+          actionableFindings: 0,
+          remainingFindings: 0,
           blockers: [
             {
               code: 'ANALYSIS_DEGRADED',
@@ -542,10 +537,10 @@ describe('finalization', () => {
     )
     renderRouter('/reviews/c1/analysis/r-1', api)
 
-    const progress = await screen.findByRole('region', { name: 'Human review' })
-    expect(progress).toHaveTextContent('The analysis produced no trustworthy result')
-    expect(progress).toHaveTextContent('The analysis produced no trustworthy result')
-    expect(progress).toHaveTextContent(/new review/i)
+    await workspaceReady()
+    const blocker = await topBar().findByText(/No planned check completed a trustworthy analysis/)
+    expect(blocker).toHaveTextContent(/new review/i)
+    expect(finalizeButton()).toBeDisabled()
     expect(
       screen.queryByText('Every planned check completed without findings.'),
     ).not.toBeInTheDocument()
@@ -585,29 +580,42 @@ describe('finalization', () => {
     )
     renderRouter('/reviews/c1/analysis/r-1', stub)
     await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    await user.click(within(openFinalizeDialog()).getByRole('button', { name: 'Finalize review' }))
+
+    expect(await within(openFinalizeDialog()).findByRole('alert')).toHaveTextContent(
       'cannot be finalized yet',
     )
-    expect(screen.getByRole('region', { name: 'Human review' })).toHaveTextContent(
-      'same contract location',
-    )
+    expect(await topBar().findByText(/same contract location/)).toBeInTheDocument()
     expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(1)
+  })
+
+  it('uses finalization-specific copy for transport failures', async () => {
+    const user = userEvent.setup()
+    const api = stubContractApi(
+      baseOptions({
+        humanReview: readyReview(),
+        finalizeResponse: () => {
+          throw new TypeError('Failed to fetch')
+        },
+      }),
+    )
+    renderRouter('/reviews/c1/analysis/r-1', api)
+    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
+    await user.click(within(openFinalizeDialog()).getByRole('button', { name: 'Finalize review' }))
+    expect(await within(openFinalizeDialog()).findByRole('alert')).toHaveTextContent(
+      /could not be finalized/,
+    )
+    expect(screen.queryByText(/Failed to fetch/)).not.toBeInTheDocument()
   })
 })
 
 describe('approved change set', () => {
   const completedReview = () =>
-    fixtureHumanReview({
-      status: 'COMPLETED',
+    completedHumanReview({
       accepted: 2,
       edited: 1,
       resolvedFindings: 3,
       remainingFindings: 0,
-      blockers: [],
-      readyToFinalize: true,
-      changeSetId: 'cs-1',
-      finalizedAt: '2026-09-26T11:00:00Z',
     })
 
   const changeSetDecisions = {
@@ -619,6 +627,7 @@ describe('approved change set', () => {
         revision: 1,
         action: 'ACCEPT',
         approvedAction: 'INSERT',
+        approvedLanguage: 'Confidential information shall be protected for five years.',
         languageSource: 'GENERATIVE',
       }),
       fixtureDecision({
@@ -664,14 +673,14 @@ describe('approved change set', () => {
   it('does not request the frozen set before finalization', async () => {
     const api = stubContractApi(baseOptions())
     renderRouter('/reviews/c1/analysis/r-1', api)
-    await screen.findByRole('heading', { name: 'Human review' })
+    await findSelectedFindingDetail()
     await new Promise((resolve) => setTimeout(resolve, 30))
     expect(
       api.requests.filter((request) => request.url.includes('/approved-change-set')),
     ).toHaveLength(0)
   })
 
-  it('renders the frozen set with action types, provenance and source findings', async () => {
+  it('shows the frozen set size from the approved change set and previews the approved changes', async () => {
     const api = stubContractApi(
       baseOptions({
         humanReview: completedReview(),
@@ -681,37 +690,31 @@ describe('approved change set', () => {
       }),
     )
     renderRouter('/reviews/c1/analysis/r-1', api)
+    await workspaceReady()
 
-    const changeSet = await screen.findByRole('region', { name: 'Approved change set' })
-    expect(changeSet).toHaveTextContent('Frozen')
-    expect(changeSet).toHaveTextContent('Version 1')
-    const changes = await within(
-      screen.getByRole('list', { name: 'Approved changes' }),
-    ).findAllByRole('listitem')
-
-    expect(changes[0]).toHaveTextContent('Replace clause — 6. Limitation of Liability')
-    expect(changes[0]).toHaveTextContent('Liability is capped at two times the fees paid.')
-    expect(changes[0]).toHaveTextContent('Human-authored')
-    expect(changes[0]).toHaveTextContent('Decision: Edited · Revision 1')
-    expect(changes[0]).toHaveTextContent('From finding: 6. Limitation of Liability')
-    expect(changes[0]).toHaveTextContent('View clause in contract')
-
-    expect(changes[1]).toHaveTextContent('Insert provision — Missing provision: Confidentiality')
-    expect(changes[1]).toHaveTextContent(
-      'Confidential information shall be protected for five years.',
+    const card = (await findingDetail().findByText('Approved changes frozen')).closest(
+      '.rv-ws-phase',
+    ) as HTMLElement
+    await waitFor(() =>
+      expect(card).toHaveTextContent('3 executable changes in the immutable approved change set.'),
     )
-    expect(changes[1]).toHaveTextContent('AI-proposed, human-approved for this contract')
-    expect(changes[1]).toHaveTextContent(
-      'The insertion location is not part of the approved change set.',
-    )
+    expect(finalizeButton()).toHaveTextContent('Finalized')
 
-    expect(changes[2]).toHaveTextContent('Delete clause — 5. Termination')
-    expect(changes[2]).toHaveTextContent('No replacement text')
-    expect(changes[2]).toHaveTextContent('View clause in contract')
-
+    await userEvent.click(screen.getByRole('tab', { name: 'Approved preview' }))
+    const contract = within(screen.getByRole('main', { name: 'Contract' }))
     expect(
-      within(changeSet).queryByRole('button', { name: /redline|apply|download/i }),
-    ).not.toBeInTheDocument()
+      contract.getByText(/3 frozen executable changes shown; INSERT placement remains unresolved until execution/),
+    ).toBeInTheDocument()
+    // Replace: the approved language stands in for the clause.
+    expect(contract.getByText('Liability is capped at two times the fees paid.')).toBeInTheDocument()
+    // Insert: the language is shown, but no location is claimed for it.
+    expect(contract.getByText('Approved insertion: Confidentiality')).toBeInTheDocument()
+    expect(
+      contract.getByText(/Confidential information shall be protected for five years\./),
+    ).toBeInTheDocument()
+    expect(contract.getByText(/Placement will be resolved by deterministic redline execution/)).toBeInTheDocument()
+    // Delete: the removed clause is not part of the approved document.
+    expect(contract.queryByText(/Termination/)).not.toBeInTheDocument()
   })
 
   it('renders an available frozen set even when the decisions read fails', async () => {
@@ -723,14 +726,15 @@ describe('approved change set', () => {
       }),
     )
     renderRouter('/reviews/c1/analysis/r-1', api)
-    expect(
-      await screen.findByRole('region', { name: 'Approved change set' }),
-    ).toBeInTheDocument()
+    await workspaceReady()
+    const card = (await findingDetail().findByText('Approved changes frozen')).closest(
+      '.rv-ws-phase',
+    ) as HTMLElement
+    await waitFor(() =>
+      expect(card).toHaveTextContent('3 executable changes in the immutable approved change set.'),
+    )
     expect(
       await screen.findByText(/Decisions could not be loaded/, {}, { timeout: 3000 }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('region', { name: 'Human review' }),
     ).toBeInTheDocument()
   })
 
@@ -742,79 +746,24 @@ describe('approved change set', () => {
         humanReview: readyReview(),
         changeSet: fixtureMixedChangeSet(),
         finalizeResponse: () => {
-          stub.setHumanReview(
-            fixtureHumanReview({
-              status: 'COMPLETED',
-              readyToFinalize: true,
-              blockers: [],
-              changeSetId: 'cs-1',
-              finalizedAt: '2026-09-26T11:00:00Z',
-            }),
-          )
+          stub.setHumanReview(completedHumanReview())
           return jsonResponse(envelope(fixtureMixedChangeSet()))
         },
       }),
     )
     renderRouter('/reviews/c1/analysis/r-1', stub)
     await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
-    expect(
-      await screen.findByRole('region', { name: 'Approved change set' }),
-    ).toBeInTheDocument()
+    await user.click(within(openFinalizeDialog()).getByRole('button', { name: 'Finalize review' }))
+    const card = (await findingDetail().findByText('Approved changes frozen')).closest(
+      '.rv-ws-phase',
+    ) as HTMLElement
+    expect(card).toHaveTextContent('3 executable changes in the immutable approved change set.')
     expect(
       stub.requests.filter((request) => request.url.includes('/approved-change-set')),
     ).toHaveLength(0)
   })
 
-  it('uses finalization-specific copy for transport failures', async () => {
-    const user = userEvent.setup()
-    const api = stubContractApi(
-      baseOptions({
-        humanReview: readyReview(),
-        finalizeResponse: () => {
-          throw new TypeError('Failed to fetch')
-        },
-      }),
-    )
-    renderRouter('/reviews/c1/analysis/r-1', api)
-    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(/could not be finalized/)
-    expect(screen.queryByText(/Failed to fetch/)).not.toBeInTheDocument()
-  })
-
-  it('moves focus to the completion status after finalization', async () => {
-    const user = userEvent.setup()
-    let stub: ReturnType<typeof stubContractApi>
-    stub = stubContractApi(
-      baseOptions({
-        humanReview: readyReview(),
-        finalizeResponse: () => {
-          stub.setHumanReview(
-            fixtureHumanReview({
-              status: 'COMPLETED',
-              readyToFinalize: true,
-              blockers: [],
-              changeSetId: 'cs-1',
-              finalizedAt: '2026-09-26T11:00:00Z',
-            }),
-          )
-          return jsonResponse(envelope(fixtureChangeSet()))
-        },
-      }),
-    )
-    renderRouter('/reviews/c1/analysis/r-1', stub)
-    await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
-    await user.click(screen.getByRole('button', { name: 'Confirm finalize' }))
-    const finalization = screen.getByRole('region', { name: 'Finalization' })
-    await waitFor(() =>
-      expect(
-        within(finalization).getByText(/approved change set is frozen/),
-      ).toHaveFocus(),
-    )
-  })
-
-  it('selects the source finding from the frozen preview', async () => {
+  it('selects the source finding when its clause is clicked in the document', async () => {
     const api = stubContractApi(
       baseOptions({
         humanReview: completedReview(),
@@ -824,10 +773,16 @@ describe('approved change set', () => {
       }),
     )
     const { router } = renderRouter('/reviews/c1/analysis/r-1', api)
-    await screen.findByRole('region', { name: 'Approved change set' })
-    await userEvent.click(
-      screen.getByRole('button', { name: 'From finding: 5. Termination' }),
-    )
+    await workspaceReady()
+    await findingDetail().findByText('Approved changes frozen')
+    const contract = screen.getByRole('main', { name: 'Contract' })
+    // The deleted clause is struck through in the Changes view and belongs to finding f-3.
+    const region = await waitFor(() => {
+      const found = contract.querySelector<HTMLElement>('[data-findings="f-3"]')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    await userEvent.click(region)
     await waitFor(() => expect(router.state.location.search).toContain('finding=f-3'))
   })
 })

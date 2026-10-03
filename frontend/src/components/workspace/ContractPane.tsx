@@ -1,0 +1,329 @@
+import { useEffect, useRef, type ReactNode } from 'react'
+import type { FindingDetail, FindingSummary } from '../../api/reviews'
+import type { HumanDecision } from '../../api/workflow'
+import { conceptLabel } from '../../lib/contractSemantics'
+import type { StructureNode, TreeNode } from '../../lib/documentTree'
+import {
+  clauseBody,
+  executableChange,
+  isActionable,
+  isResolved,
+  nodeLabel,
+  nodeText,
+  proposedChangeType,
+  splitOnTerm,
+  topLevelNodes,
+} from '../../lib/workspace'
+import { ErrorState, LoadingState } from '../ui/State'
+
+export type DocMode = 'changes' | 'orig' | 'final'
+
+const MODES: { mode: DocMode; label: (final: boolean) => string }[] = [
+  { mode: 'changes', label: () => 'Changes' },
+  { mode: 'orig', label: () => 'Original' },
+  { mode: 'final', label: (final) => (final ? 'Approved preview' : 'Decision preview') },
+]
+
+interface Props {
+  title: string
+  versionNumber: number | null
+  nodes: StructureNode[] | undefined
+  isPending: boolean
+  isError: boolean
+  onRetry: () => void
+  mode: DocMode
+  onMode: (mode: DocMode) => void
+  term: string
+  onClearTerm: () => void
+  findings: FindingSummary[]
+  decisions: ReadonlyMap<string, HumanDecision>
+  selectedId: string | null
+  /** The selected finding's detail, for previewing its proposed wording. */
+  selected: FindingDetail | undefined
+  onSelect: (findingId: string) => void
+  isFinalized: boolean
+  /** The server's count of findings still needing a decision. */
+  remaining: number | null
+  /** Notes above the page: a pinned older version, limited coverage, analysis warnings. */
+  notes: ReactNode
+}
+
+interface Ctx {
+  /** Clause regions are cut only at the document's top level; nested content is drawn plainly. */
+  regionsOpen: boolean
+  mode: DocMode
+  term: string
+  regions: Map<string, FindingSummary[]>
+  decisions: ReadonlyMap<string, HumanDecision>
+  selectedId: string | null
+  selected: FindingDetail | undefined
+  onSelect: (findingId: string) => void
+}
+
+function Text({ text, term }: { text: string; term: string }) {
+  return (
+    <>
+      {splitOnTerm(text, term).map((part, index) =>
+        part.match ? <mark key={index}>{part.text}</mark> : part.text,
+      )}
+    </>
+  )
+}
+
+function Plain({ node, ctx }: { node: TreeNode; ctx: Ctx }) {
+  const content = nodeLabel(node)
+  const children = <Sequence nodes={node.children} ctx={{ ...ctx, regionsOpen: false }} />
+  switch (node.nodeType) {
+    case 'TITLE':
+      return <h1>{content}</h1>
+    case 'HEADING':
+      return (
+        <>
+          <h4>
+            <Text text={content} term={ctx.term} />
+          </h4>
+          {children}
+        </>
+      )
+    case 'PARAGRAPH':
+      return (
+        <>
+          <p>
+            <Text text={content} term={ctx.term} />
+          </p>
+          {children}
+        </>
+      )
+    case 'TABLE':
+      return (
+        <table>
+          <tbody>{children}</tbody>
+        </table>
+      )
+    case 'TABLE_ROW':
+      return <tr>{children}</tr>
+    case 'TABLE_CELL':
+      return (
+        <td>
+          {content ? <Text text={content} term={ctx.term} /> : null}
+          {children}
+        </td>
+      )
+    default:
+      return (
+        <>
+          {content ? (
+            <p>
+              <Text text={content} term={ctx.term} />
+            </p>
+          ) : null}
+          {children}
+        </>
+      )
+  }
+}
+
+/**
+ * What the reviewer's decision does to this clause. REPLACE keeps the heading and swaps the body;
+ * DELETE removes both. The open finding that is selected previews Rivell's proposal instead.
+ */
+function changeFor(findings: FindingSummary[], ctx: Ctx) {
+  for (const finding of findings) {
+    const change = executableChange(ctx.decisions.get(finding.id))
+    if (change) return { change, proposal: false }
+  }
+  const selected = ctx.selected
+  if (
+    selected &&
+    findings.some((finding) => finding.id === selected.id) &&
+    !ctx.decisions.get(selected.id) &&
+    selected.proposedLanguage &&
+    proposedChangeType(selected) === 'REPLACE'
+  ) {
+    return { change: { type: 'REPLACE' as const, language: selected.proposedLanguage }, proposal: true }
+  }
+  return null
+}
+
+function Region({ heading, body, findings, ctx }: { heading: TreeNode; body: TreeNode[]; findings: FindingSummary[]; ctx: Ctx }) {
+  const applied = ctx.mode === 'orig' ? null : changeFor(findings, ctx)
+  const change = applied && (ctx.mode === 'changes' || !applied.proposal) ? applied.change : null
+  if (ctx.mode === 'final' && change?.type === 'DELETE') return null
+
+  const settled = findings.every((finding) => !isActionable(finding) || isResolved(ctx.decisions.get(finding.id)))
+  const selected = findings.some((finding) => finding.id === ctx.selectedId)
+  const bodyOriginal = body.map(nodeText).filter(Boolean).join('\n')
+
+  let content: ReactNode
+  if (change?.type === 'REPLACE') {
+    content = (
+      <>
+        <h4>{nodeLabel(heading)}</h4>
+        {ctx.mode === 'final' ? (
+          <p>{change.language}</p>
+        ) : (
+          <p>
+            {bodyOriginal ? <del>{bodyOriginal}</del> : null} {change.language ? <ins>{change.language}</ins> : null}
+          </p>
+        )}
+      </>
+    )
+  } else if (change?.type === 'DELETE') {
+    content = (
+      <p>
+        <del>{[nodeLabel(heading), bodyOriginal].filter(Boolean).join('\n')}</del>
+      </p>
+    )
+  } else {
+    content = <Sequence nodes={[heading, ...body]} ctx={{ ...ctx, regionsOpen: false }} />
+  }
+
+  return (
+    <div
+      className={`rv-ws-cl rv-ws-cl--${ctx.mode === 'orig' || settled ? 'dec' : 'has'}`}
+      data-sel={selected ? '1' : undefined}
+      data-findings={findings.map((finding) => finding.id).join(' ')}
+    >
+      {content}
+    </div>
+  )
+}
+
+/** Top-level passages in order, with each clause that has findings drawn as one selectable region. */
+function Sequence({ nodes, ctx }: { nodes: readonly TreeNode[]; ctx: Ctx }) {
+  const out: ReactNode[] = []
+  for (let i = 0; i < nodes.length; i += 1) {
+    const node = nodes[i]
+    const findings = node.nodeType === 'HEADING' ? ctx.regions.get(node.id) : undefined
+    if (findings && ctx.regionsOpen) {
+      const body = clauseBody(nodes, i)
+      out.push(<Region key={node.id} heading={node} body={body} findings={findings} ctx={ctx} />)
+      i += body.length
+    } else {
+      out.push(<Plain key={node.id} node={node} ctx={ctx} />)
+    }
+  }
+  return <>{out}</>
+}
+
+/** A finding about a provision the contract lacks has no location, so it is a card, not a clause. */
+function AbsenceCards({ ctx, findings }: { ctx: Ctx; findings: FindingSummary[] }) {
+  const cards = findings.filter((finding) => finding.subjectKind === 'ABSENCE')
+  return (
+    <>
+      {cards.map((finding) => {
+        const change = executableChange(ctx.decisions.get(finding.id))
+        if (ctx.mode === 'final' && !change) return null
+        const name = finding.absenceConcept ? conceptLabel(finding.absenceConcept) : 'Provision'
+        return (
+          <div
+            key={finding.id}
+            className={`rv-ws-absent${change ? ' rv-ws-absent--approved' : ''}`}
+            data-sel={finding.id === ctx.selectedId ? '1' : undefined}
+            data-findings={finding.id}
+          >
+            <b>
+              {ctx.mode === 'final'
+                ? `Approved insertion: ${name}`
+                : change
+                  ? `Approved insertion decision: ${name}`
+                  : `Expected provision not found: ${name}`}
+            </b>
+            <span>
+              {ctx.mode === 'final'
+                ? `${change?.language ?? ''}\nPlacement will be resolved by deterministic redline execution.`
+                : change
+                  ? 'Insertion language is approved. Physical placement is not shown here; Rivell resolves placement deterministically during redline execution.'
+                  : 'This clause does not exist in the contract, so there is no source location. The proposed insertion is shown in the Finding panel.'}
+            </span>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+export function ContractPane(props: Props) {
+  const { nodes, findings, mode, term, isFinalized, remaining, selectedId, onSelect } = props
+  const page = useRef<HTMLElement>(null)
+
+  // A click on a clause or an absent-provision card selects its finding. This is a pointer
+  // convenience only: the Findings list is the keyboard path to every finding.
+  useEffect(() => {
+    const element = page.current
+    if (!element) return
+    const select = (event: MouseEvent) => {
+      const target = (event.target as Element | null)?.closest<HTMLElement>('[data-findings]')
+      const ids = target?.dataset.findings?.split(' ')
+      if (!ids) return
+      onSelect(ids[(ids.indexOf(selectedId ?? '') + 1) % ids.length])
+    }
+    element.addEventListener('click', select)
+    return () => element.removeEventListener('click', select)
+  }, [nodes, selectedId, onSelect])
+  const ctx: Ctx = {
+    regionsOpen: true,
+    mode,
+    term,
+    decisions: props.decisions,
+    selectedId,
+    selected: props.selected,
+    onSelect,
+    regions: new Map(),
+  }
+  for (const finding of findings) {
+    if (finding.subjectKind !== 'CLAUSE' || !finding.subjectHeadingNodeId) continue
+    ctx.regions.set(finding.subjectHeadingNodeId, [...(ctx.regions.get(finding.subjectHeadingNodeId) ?? []), finding])
+  }
+  const top = nodes ? topLevelNodes(nodes) : []
+  const hasTitle = top.some((node) => node.nodeType === 'TITLE')
+  const executable = findings.filter((finding) => executableChange(props.decisions.get(finding.id))).length
+
+  const note = term ? (
+    <>
+      Matches for “{term}”{' '}
+      <button type="button" className="rv-ws-link" onClick={props.onClearTerm}>
+        Clear
+      </button>
+    </>
+  ) : mode === 'changes' ? (
+    'Selected open Finding previews Rivell’s proposal; decided changes reflect current human decisions.'
+  ) : mode === 'orig' ? (
+    'As received. Extracted structural text, not native DOCX rendering.'
+  ) : isFinalized ? (
+    `${executable} frozen executable ${executable === 1 ? 'change' : 'changes'} shown; INSERT placement remains unresolved until execution.`
+  ) : (
+    `${executable} current executable ${executable === 1 ? 'decision' : 'decisions'} shown; ${remaining ?? 'the remaining'} unresolved ${remaining === 1 ? 'Finding remains' : 'Findings remain'} as received.`
+  )
+
+  return (
+    <main className="rv-ws-pane rv-ws-doc" aria-label="Contract">
+      <div className="rv-ws-doctools">
+        <div className="rv-ws-segc" role="tablist" aria-label="Document view">
+          {MODES.map((entry) => (
+            <button
+              key={entry.mode}
+              type="button"
+              role="tab"
+              aria-selected={mode === entry.mode}
+              onClick={() => props.onMode(entry.mode)}
+            >
+              {entry.label(isFinalized)}
+            </button>
+          ))}
+        </div>
+        <span className="rv-ws-dnote">{note}</span>
+      </div>
+      {props.notes}
+      {props.isPending ? <LoadingState label="Loading contract…" /> : null}
+      {props.isError ? <ErrorState message="The contract could not be loaded." onRetry={props.onRetry} /> : null}
+      {nodes ? (
+        <article className="rv-ws-page" ref={page}>
+          {hasTitle ? null : <h1>{props.title}</h1>}
+          <Sequence nodes={top} ctx={ctx} />
+          {mode !== 'orig' ? <AbsenceCards ctx={ctx} findings={findings} /> : null}
+        </article>
+      ) : null}
+    </main>
+  )
+}

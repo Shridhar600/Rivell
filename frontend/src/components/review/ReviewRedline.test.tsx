@@ -7,7 +7,11 @@ import { RouterProvider } from 'react-router/dom'
 import { AppProviders } from '../../app/AppProviders'
 import { appRoutes } from '../../app/router'
 import { stubContractApi, type StubOptions } from '../contract/testFixtures'
-import { fixtureCompletedReviewSummary, fixtureFindingList } from './testFixtures'
+import {
+  fixtureClauseFindingDetail,
+  fixtureCompletedReviewSummary,
+  fixtureFindingList,
+} from './testFixtures'
 import { fixtureChangeSet, fixtureDecision, fixtureHumanReview } from './workflowFixtures'
 import type { RedlineExecution } from '../../api/redline'
 import {
@@ -49,6 +53,16 @@ function renderRouter(api: ReturnType<typeof stubContractApi>) {
   return { router }
 }
 
+/**
+ * Redline lives in the "Redline" sheet, opened from the "Approved changes frozen" card in the
+ * finding detail panel. That card exists only once the review is finalized.
+ */
+async function openRedlinePanel() {
+  await userEvent.click(await screen.findByRole('button', { name: 'Redline and change report' }))
+  const sheet = await screen.findByRole('dialog', { name: 'Redline' })
+  return within(sheet).findByRole('region', { name: 'Redline execution' })
+}
+
 function finalizedHumanReview() {
   return fixtureHumanReview({
     status: 'COMPLETED',
@@ -67,7 +81,7 @@ function baseOptions(options: StubOptions = {}): StubOptions {
   return {
     reviewSummary: fixtureCompletedReviewSummary,
     findings: fixtureFindingList,
-    findingDetailResponse: () => jsonResponse(envelope(null)),
+    findingDetail: fixtureClauseFindingDetail,
     decisions: { items: [fixtureDecision()], truncated: false },
     humanReview: finalizedHumanReview(),
     changeSet: fixtureChangeSet(),
@@ -101,10 +115,11 @@ describe('redline availability', () => {
       baseOptions({ humanReview: fixtureHumanReview({ status: 'IN_PROGRESS' }) }),
     )
     renderRouter(api)
+    expect(await screen.findByText('Rivell found')).toBeInTheDocument()
     expect(
-      await screen.findByRole('heading', { name: 'Human review' }),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Redline execution' })).not.toBeInTheDocument()
+      screen.queryByRole('button', { name: 'Redline and change report' }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Approved changes frozen', { selector: 'b' })).not.toBeInTheDocument()
     expect(
       api.requests.filter((request) => request.url.includes('/redline')),
     ).toHaveLength(0)
@@ -113,7 +128,7 @@ describe('redline availability', () => {
   it('offers generation after finalization when no execution exists', async () => {
     const api = stubContractApi(baseOptions())
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     expect(
       await within(panel).findByRole('button', { name: 'Generate redline' }),
     ).toBeEnabled()
@@ -131,7 +146,7 @@ describe('redline generation', () => {
       baseOptions({ redlineTriggerResponse: () => jsonResponse(envelope(fixtureRedlineExecution())) }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await userEvent.click(
       await within(panel).findByRole('button', { name: 'Generate redline' }),
     )
@@ -170,7 +185,7 @@ describe('redline generation', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     const trigger = await within(panel).findByRole('button', { name: 'Generate redline' })
     await userEvent.click(trigger)
     await waitFor(() => expect(trigger).toBeDisabled())
@@ -215,7 +230,7 @@ describe('redline generation', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await userEvent.click(
       await within(panel).findByRole('button', { name: 'Generate redline' }),
     )
@@ -246,7 +261,7 @@ describe('redline generation', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     expect(await within(panel).findByText('No document changes')).toBeInTheDocument()
     expect(
       within(panel).getByText('No approved document changes were produced for this review.'),
@@ -273,7 +288,7 @@ describe('redline generation', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     expect(await within(panel).findByText('No document changes')).toBeInTheDocument()
     expect(
       within(panel).queryByRole('list', { name: 'Redline change report' }),
@@ -285,7 +300,7 @@ describe('redline generation', () => {
       baseOptions({ redline: fixtureMixedRedlineExecution() }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     expect(await within(panel).findByText('Redline generated')).toBeInTheDocument()
     expect(
       within(panel).queryByRole('button', { name: 'Generate redline' }),
@@ -311,7 +326,7 @@ describe('redline generation', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     expect(
       await within(panel).findByText('Redline execution completed'),
     ).toBeInTheDocument()
@@ -332,7 +347,7 @@ describe('redline generation', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     expect(await within(panel).findByText('Verification incomplete')).toBeInTheDocument()
     expect(
       within(panel).queryByRole('button', { name: 'Download redlined DOCX' }),
@@ -344,7 +359,7 @@ describe('redline generation', () => {
       baseOptions({ redline: fixtureRedlineExecution({ downloadAvailable: false }) }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     expect(await within(panel).findByText('Redline generated')).toBeInTheDocument()
     expect(await within(panel).findByText('Verification passed')).toBeInTheDocument()
     expect(
@@ -362,7 +377,7 @@ describe('redline generation', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     expect(await within(panel).findByText('Execution state unknown')).toBeInTheDocument()
     expect(
       within(panel).queryByRole('button', { name: 'Download redlined DOCX' }),
@@ -382,7 +397,7 @@ describe('redline failure truth', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await userEvent.click(
       await within(panel).findByRole('button', { name: 'Generate redline' }),
     )
@@ -397,7 +412,7 @@ describe('redline failure truth', () => {
       baseOptions({ redline: fixtureFailedRedlineExecution() }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     expect(
       await within(panel).findByText('Redline could not be generated'),
     ).toBeInTheDocument()
@@ -409,9 +424,9 @@ describe('redline failure truth', () => {
     expect(
       within(panel).queryByRole('button', { name: 'Download redlined DOCX' }),
     ).not.toBeInTheDocument()
-    expect(
-      await screen.findByRole('heading', { name: 'Approved change set' }),
-    ).toBeInTheDocument()
+    const detail = screen.getByRole('complementary', { name: 'Finding detail' })
+    expect(within(detail).getByText('Approved changes frozen')).toBeInTheDocument()
+    expect(detail).toHaveTextContent('1 executable change in the immutable approved change set.')
   })
 
   it('explains unsupported structure without blaming the legal review', async () => {
@@ -421,7 +436,7 @@ describe('redline failure truth', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await waitFor(() =>
       expect(panel).toHaveTextContent(
         'An approved change targets document structure that cannot be safely redlined automatically.',
@@ -435,7 +450,7 @@ describe('redline failure truth', () => {
       baseOptions({ redlineTriggerResponse: () => errorResponse(409) }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await userEvent.click(
       await within(panel).findByRole('button', { name: 'Generate redline' }),
     )
@@ -460,7 +475,7 @@ describe('redline trigger recovery', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await userEvent.click(
       await within(panel).findByRole('button', { name: 'Generate redline' }),
     )
@@ -478,7 +493,7 @@ describe('redline artifact storage failure', () => {
       baseOptions({ redlineTriggerResponse: () => errorResponse(503) }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
 
     await userEvent.click(
       await within(panel).findByRole('button', { name: 'Generate redline' }),
@@ -516,7 +531,7 @@ describe('redline download', () => {
       baseOptions({ redline: fixtureRedlineExecution() }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await userEvent.click(
       await within(panel).findByRole('button', { name: 'Download redlined DOCX' }),
     )
@@ -540,7 +555,7 @@ describe('redline download', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await userEvent.click(
       await within(panel).findByRole('button', { name: 'Download redlined DOCX' }),
     )
@@ -560,7 +575,7 @@ describe('redline download', () => {
       }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await userEvent.click(
       await within(panel).findByRole('button', { name: 'Download redlined DOCX' }),
     )
@@ -580,7 +595,7 @@ describe('redline permissions', () => {
   it('hides generation and explains a read-only permission failure', async () => {
     const api = stubContractApi(baseOptions({ redlineStatus: 403 }))
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     await waitFor(() =>
       expect(panel).toHaveTextContent(
         'You do not have permission to generate or download redlines for this review.',
@@ -596,7 +611,7 @@ describe('redline permissions', () => {
       baseOptions({ redlineTriggerResponse: () => errorResponse(403) }),
     )
     renderRouter(api)
-    const panel = await screen.findByRole('region', { name: 'Redline execution' })
+    const panel = await openRedlinePanel()
     const trigger = await within(panel).findByRole('button', { name: 'Generate redline' })
     await userEvent.click(trigger)
     await waitFor(() =>

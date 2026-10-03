@@ -1,5 +1,6 @@
 import type { ApprovedChangeSet, HumanDecision, HumanReview } from '../../api/workflow'
 import type { FindingDetail, FindingSummary } from '../../api/reviews'
+import { fixtureDraftingItem } from '../evidence/testFixtures'
 
 export const fixtureAcceptableFinding = {
   id: 'f-1',
@@ -27,8 +28,9 @@ export const fixtureAcceptableFindingDetail = {
   approvedDraftingEvidenceId: 'e-drafting',
   quality: { sufficiency: 'SUFFICIENT', verificationOutcome: 'VERIFIED', degradationFlags: [] },
   claims: [],
-  evidenceItems: [],
-  evidenceItemIds: [],
+  // Accept adopts approved wording, so the evidence it cites is part of the finding, as the backend guarantees.
+  evidenceItems: [fixtureDraftingItem],
+  evidenceItemIds: [fixtureDraftingItem.evidenceId],
   signalIds: [],
   absenceBasis: null,
 } satisfies FindingDetail

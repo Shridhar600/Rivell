@@ -19,7 +19,8 @@ export function CurrentContractCard({
   item: EvidenceItem
   regionLabels: Map<string, string>
   clauseHeadings: Map<string, string>
-  onNavigateToNode: (nodeId: string) => void
+  /** Absent when the review is pinned to an older version than the one the links would open. */
+  onNavigateToNode?: (nodeId: string) => void
   onOpenClauseSemantics?: (headingNodeId: string) => void
 }) {
   const headingId = `evidence-${item.evidenceId}`
@@ -56,12 +57,14 @@ export function CurrentContractCard({
         </div>
       ) : null}
       <div className="evidence-card__actions">
-        <SourceRegionLinks
-          nodeIds={item.provenanceNodeIds}
-          labelByNodeId={regionLabels}
-          onNavigateToNode={onNavigateToNode}
-          prefix="View in document:"
-        />
+        {onNavigateToNode ? (
+          <SourceRegionLinks
+            nodeIds={item.provenanceNodeIds}
+            labelByNodeId={regionLabels}
+            onNavigateToNode={onNavigateToNode}
+            prefix="View in document:"
+          />
+        ) : null}
         {onOpenClauseSemantics && clauseHeading ? (
           <button
             type="button"
