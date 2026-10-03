@@ -144,7 +144,21 @@ class ReviewListQueryCountIT {
                 .as("signals are counted once for the whole page")
                 .isEqualTo(1);
         assertThat(countOccurrences(window, "from finding"))
-                .as("findings are counted once for the whole page")
+                .as("findings are read once for the whole page by the count aggregate and "
+                        + "once by the batched human-review load; neither is per row")
+                .isEqualTo(2);
+        assertThat(countOccurrences(window, "from human_decision"))
+                .as("current decisions are read once for the whole page")
+                .isEqualTo(1);
+        assertThat(countOccurrences(window, "from review_finalization"))
+                .as("finalization is resolved once for the whole page")
+                .isEqualTo(1);
+        assertThat(countOccurrences(window, "from redline_execution e"))
+                .as("redline state is resolved once for the whole page")
+                .isEqualTo(1);
+        assertThat(countOccurrences(window, "join review_snapshot"))
+                .as("the frozen review context is read as part of the one page query, and "
+                        + "left-joined so a review whose snapshot is missing still appears")
                 .isEqualTo(1);
         assertThat(countOccurrences(window, "from review_analysis_run"))
                 .as("the counted and latest generations are resolved in one statement, which "
