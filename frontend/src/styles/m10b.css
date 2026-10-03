@@ -927,10 +927,6 @@ body {
   background: var(--text);
   color: var(--bg);
 }
-.rv-ftab:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 .rv-ftab:focus-visible {
   outline: none;
   box-shadow: var(--rv-focus);
@@ -1044,6 +1040,14 @@ body {
   background: var(--red-soft);
   color: var(--red);
 }
+.rv-stb--am {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.rv-stb--dk {
+  background: var(--text);
+  color: var(--bg);
+}
 .rv-rlist__empty {
   margin: 0;
   padding: 20px 16px;
@@ -1059,41 +1063,273 @@ body {
   margin: 0;
 }
 
-/* ---------- start review panel ---------- */
-.rv-form {
+/* ---------- breadcrumb (canonical .crumbs) ---------- */
+.rv-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.rv-crumbs a {
+  color: var(--text-3);
+  text-decoration: none;
+}
+.rv-crumbs a:hover {
+  color: var(--text);
+}
+.rv-crumbs__sep {
+  color: var(--line-2);
+}
+.rv-crumbs b {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Start Review (ported from rivell-reviews-v1.html#/new: .card, .cb, .ft, .fdrop, .fsel, .opt, .mm, .rail) ---------- */
+.rv-page--form {
+  max-width: 820px;
+}
+.rv-startform {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 20px;
+  gap: 22px;
 }
-.rv-form__label {
-  margin-top: 4px;
-  font-weight: 600;
+.rv-cb {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 22px;
 }
-.rv-form__drop {
-  align-self: stretch;
+.rv-cb__lede {
+  margin: 0;
+  color: var(--text-2);
+}
+.rv-lb {
+  margin: 0;
+  font: 600 13px/1.45 var(--font);
+}
+.rv-lb--field {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.rv-lb__opt {
+  color: var(--text-3);
+  font-weight: 400;
+}
+.rv-fld {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rv-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rv-g2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.rv-sel {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  box-shadow: var(--sh-xs);
+  color: var(--text);
+  font: inherit;
+}
+.rv-sel:disabled {
+  opacity: 0.6;
+}
+.rv-opt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rv-opt button {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--text-2);
+  font: 500 13px/1 var(--font);
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.rv-opt button[aria-pressed='true'] {
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
+  color: var(--text);
+}
+.rv-opt button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.rv-fdrop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
   padding: 22px;
   border: 1.5px dashed var(--line-2);
   border-radius: var(--r-lg);
   background: var(--side);
   color: var(--text-2);
+  font: inherit;
   text-align: center;
+  cursor: pointer;
 }
-.rv-form__hint {
+.rv-fdrop:hover,
+.rv-fdrop--over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.rv-fdrop b {
+  color: var(--text);
+  font-weight: 500;
+}
+.rv-fdrop .rv-hint {
+  margin-top: 4px;
+}
+.rv-fsel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--side);
+}
+.rv-fsel__text {
+  flex: 1;
+  min-width: 0;
+}
+.rv-fsel__text b {
+  display: block;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-fsel .rv-hint {
+  font-size: 12.5px;
+}
+.rv-tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--hover);
+  color: var(--text-2);
+}
+.rv-lnk {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 500 12px/1.45 var(--font);
+  letter-spacing: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.rv-lnk:hover {
+  text-decoration: underline;
+}
+.rv-lnk:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.rv-mm {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--amber) 28%, var(--bg));
+  border-radius: var(--r-lg);
+  background: var(--amber-soft);
+  color: color-mix(in srgb, var(--amber) 75%, var(--text));
+  font-size: 12.5px;
+}
+.rv-mm b {
+  font-weight: 600;
+}
+.rv-startfail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 30%, var(--bg));
+  border-radius: var(--r-lg);
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 12.5px;
+}
+.rv-startfail p {
   margin: 0;
-  color: var(--text-3);
-  font-size: 12px;
+}
+.rv-startfail .rv-startfail__intact {
+  color: var(--text-2);
 }
 .rv-form__error {
   margin: 0;
   color: var(--red);
 }
-.rv-form__actions {
+.rv-ft {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
+  padding: 12px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--side);
+}
+.rv-ft__sum {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.rv-ft .rv-btn--primary {
+  height: 34px;
+}
+/* The canonical rail supplies its own padding, so the inspector's default inset is dropped for it. */
+.rv-insp__inner:has(> .rv-rail) {
+  padding: 0;
+}
+.rv-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px 20px;
+}
+.rv-rail h3 {
+  margin: 0 0 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+.rv-chk {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rv-chk div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+}
+.rv-chk .rv-icon {
+  color: var(--accent);
 }
 
 /* ---------- legacy surface (temporary F1 seam) ---------- */
@@ -1161,6 +1397,9 @@ body {
   }
 }
 @media (max-width: 900px) {
+  .rv-g2 {
+    grid-template-columns: 1fr;
+  }
   .rv-rtab {
     grid-template-columns: minmax(0, 1fr) 120px;
   }

@@ -1550,6 +1550,40 @@ export interface components {
             /** Format: date-time */
             timestamp?: string;
         };
+        ContextView: {
+            contractType?: string;
+            ourSideRole?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+        };
+        FinalizationSummaryView: {
+            /** Format: date-time */
+            finalizedAt?: string;
+            /** Format: int32 */
+            approvedChanges?: number;
+        };
+        HumanReviewSummaryView: {
+            status?: string;
+            /** Format: int32 */
+            actionableFindings?: number;
+            /** Format: int32 */
+            resolvedFindings?: number;
+            /** Format: int32 */
+            remainingFindings?: number;
+            /** Format: int32 */
+            escalated?: number;
+            readyToFinalize?: boolean;
+            blockers?: string[];
+        };
+        RedlineSummaryView: {
+            status?: string;
+            outcome?: string;
+            /** Format: int32 */
+            verifiedChangeCount?: number;
+            downloadAvailable?: boolean;
+            /** Format: date-time */
+            completedAt?: string;
+        };
         ReviewListItemView: {
             /** Format: uuid */
             id?: string;
@@ -1558,6 +1592,8 @@ export interface components {
             /** Format: int32 */
             contractVersionNumber?: number;
             contractFilename?: string;
+            /** Format: date-time */
+            uploadedAt?: string;
             status?: string;
             failure?: components["schemas"]["FailureView"];
             /** Format: date-time */
@@ -1582,6 +1618,10 @@ export interface components {
             signals?: number;
             /** Format: int32 */
             findings?: number;
+            context?: components["schemas"]["ContextView"];
+            humanReview?: components["schemas"]["HumanReviewSummaryView"];
+            finalization?: components["schemas"]["FinalizationSummaryView"];
+            redline?: components["schemas"]["RedlineSummaryView"];
         };
         ReviewListResponse: {
             items?: components["schemas"]["ReviewListItemView"][];

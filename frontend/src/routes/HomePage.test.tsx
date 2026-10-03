@@ -305,7 +305,9 @@ describe('Home states', () => {
     expect(alert).toHaveTextContent(/could not complete/i)
     expect(alert).toHaveTextContent(/unchanged/i)
     expect(alert).not.toHaveTextContent(/\{\{|undefined|null/)
-    expect(screen.getAllByRole('link', { name: /start a review/i }).length).toBeGreaterThan(0)
+    const starts = screen.getAllByRole('link', { name: /start a review/i })
+    expect(starts.length).toBeGreaterThan(0)
+    for (const link of starts) expect(link).toHaveAttribute('href', '/reviews/new')
   })
 
   it('retries the failed reads on request', async () => {

@@ -10,12 +10,32 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
+const CONTEXT = { contractType: 'MSA', ourSideRole: 'CUSTOMER', paperSource: 'COUNTERPARTY_PAPER', jurisdiction: 'UK' }
+
+function human(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'IN_PROGRESS',
+    actionableFindings: 8,
+    resolvedFindings: 5,
+    remainingFindings: 3,
+    escalated: 0,
+    readyToFinalize: false,
+    blockers: ['UNRESOLVED_REVIEW_REQUIRED_FINDINGS'],
+    ...overrides,
+  }
+}
+
 function review(id: string, status: string, filename: string, overrides: Record<string, unknown> = {}) {
   return {
     id,
     contractId: `con-${id}`,
     contractVersionNumber: 1,
     contractFilename: filename,
+    uploadedAt: '2026-10-02T07:30:00Z',
+    context: CONTEXT,
+    humanReview: null,
+    finalization: null,
+    redline: null,
     status,
     failure: null,
     createdAt: '2026-10-02T08:00:00Z',
@@ -71,9 +91,19 @@ function renderReviews() {
 afterEach(() => vi.unstubAllGlobals())
 
 const SEEDED = [
-  review('r1', 'COMPLETED', 'Atlas Mutual NDA.docx', { findings: 4 }),
-  review('r2', 'ANALYSIS_QUEUED', 'Beacon Data Processing Addendum.docx'),
-  review('r3', 'COMPLETED', 'Northstar Vendor MSA.docx', { findings: 0 }),
+  review('r1', 'COMPLETED', 'Atlas Mutual NDA.docx', {
+    findings: 8,
+    humanReview: human(),
+    context: { ...CONTEXT, contractType: 'NDA' },
+  }),
+  review('r2', 'ANALYSIS_QUEUED', 'Beacon Data Processing Addendum.docx', {
+    humanReview: human({ status: 'NOT_STARTED', actionableFindings: 0, resolvedFindings: 0, blockers: ['ANALYSIS_NOT_COMPLETE'] }),
+  }),
+  review('r3', 'COMPLETED', 'Northstar Vendor MSA.docx', {
+    findings: 7,
+    humanReview: human({ status: 'COMPLETED', actionableFindings: 7, resolvedFindings: 7, remainingFindings: 0, blockers: [] }),
+    finalization: { finalizedAt: '2026-10-02T09:30:00Z', approvedChanges: 7 },
+  }),
 ]
 
 describe('Reviews page', () => {
@@ -84,7 +114,10 @@ describe('Reviews page', () => {
     const rows = await screen.findAllByRole('link', { name: /\.docx/ })
     expect(rows).toHaveLength(3)
     expect(within(rows[0]).getByText('Atlas Mutual NDA.docx')).toBeInTheDocument()
-    expect(screen.getByText('Progress')).toBeInTheDocument()
+    for (const heading of ['Contract', 'Status', 'Progress', 'Uploaded']) {
+      expect(screen.getByText(heading)).toBeInTheDocument()
+    }
+    expect(screen.queryByText('Created')).not.toBeInTheDocument()
 
     expect(urls).toHaveLength(1)
     const url = new URL(urls[0])
@@ -99,19 +132,60 @@ describe('Reviews page', () => {
     expect(row).toHaveAttribute('href', '/reviews/con-r1/analysis/r1')
   })
 
-  it('labels state truthfully: a finding count only for finished analysis, never a percentage', async () => {
+  it('shows the declared context as chips and as the canonical second line', async () => {
     stubApi({ first: { items: SEEDED } })
     renderReviews()
-    const done = await screen.findByRole('link', { name: /Atlas Mutual NDA\.docx/ })
-    expect(done).toHaveTextContent('Analysis complete')
-    expect(done).toHaveTextContent('4 Findings')
-    const queued = screen.getByRole('link', { name: /Beacon Data Processing/ })
-    expect(queued).toHaveTextContent('Analysis queued')
-    expect(queued).not.toHaveTextContent(/Finding/)
-    expect(document.body.textContent).not.toMatch(/%|ready to finalize/i)
+    const row = await screen.findByRole('link', { name: /Atlas Mutual NDA\.docx/ })
+    expect(within(row).getByText('v1')).toBeInTheDocument()
+    expect(within(row).getByText('NDA')).toBeInTheDocument()
+    expect(within(row).getByText('Customer side, counterparty paper, United Kingdom')).toBeInTheDocument()
   })
 
-  it('shows check progress for a running review and the failure sentence for a failed one', async () => {
+  it('names only what was declared, and not an undeclared jurisdiction', async () => {
+    stubApi({
+      first: {
+        items: [
+          review('r9', 'COMPLETED', 'Bare.docx', {
+            context: { contractType: 'OTHER', ourSideRole: null, paperSource: null, jurisdiction: 'UNSPECIFIED' },
+            humanReview: human({ status: 'NOT_STARTED', resolvedFindings: 0 }),
+          }),
+        ],
+      },
+    })
+    renderReviews()
+    const row = await screen.findByRole('link', { name: /Bare\.docx/ })
+    expect(within(row).getByText('Other')).toBeInTheDocument()
+    expect(row).not.toHaveTextContent(/side|paper|Not specified|Unspecified/i)
+  })
+
+  it('shows when the contract version was uploaded, not when the review was made', async () => {
+    stubApi({
+      first: {
+        items: [review('r1', 'COMPLETED', 'Old.docx', { uploadedAt: '2020-03-04T07:30:00Z', createdAt: '2026-10-02T08:00:00Z' })],
+      },
+    })
+    renderReviews()
+    const row = await screen.findByRole('link', { name: /Old\.docx/ })
+    expect(row).toHaveTextContent(/Mar/)
+    expect(row).not.toHaveTextContent(/Oct/)
+  })
+
+  it('draws the real lifecycle, decision progress and finalized count, never a percentage', async () => {
+    stubApi({ first: { items: SEEDED } })
+    renderReviews()
+    const inReview = await screen.findByRole('link', { name: /Atlas Mutual NDA\.docx/ })
+    expect(inReview).toHaveTextContent('In review')
+    expect(inReview).toHaveTextContent('5 of 8 decided')
+    const queued = screen.getByRole('link', { name: /Beacon Data Processing/ })
+    expect(queued).toHaveTextContent('Queued')
+    expect(queued).not.toHaveTextContent(/decided|Finding/)
+    const finalized = screen.getByRole('link', { name: /Northstar Vendor MSA\.docx/ })
+    expect(finalized).toHaveTextContent('Finalized')
+    expect(finalized).toHaveTextContent('7 approved changes')
+    expect(document.body.textContent).not.toMatch(/%/)
+  })
+
+  it('shows check progress for a running review through its status, and a failed analysis as failed', async () => {
     stubApi({
       first: {
         items: [
@@ -123,20 +197,59 @@ describe('Reviews page', () => {
       },
     })
     renderReviews()
-    expect(await screen.findByRole('link', { name: /Run\.docx.*2 of 5 checks complete/ })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Broken\.docx.*Machine analysis could not.*Analysis failed/ })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /Run\.docx.*Analyzing/ })).toBeInTheDocument()
+    const failed = screen.getByRole('link', { name: /Broken\.docx.*Analysis failed/ })
+    expect(failed).toHaveTextContent('—')
   })
 
-  it('filters to running reviews, and marks the filters the list cannot support as unavailable', async () => {
+  it('does not call a queued or analyzing review human attention because ANALYSIS_NOT_COMPLETE is a blocker', async () => {
+    stubApi({
+      first: {
+        items: [
+          review('q', 'ANALYSIS_QUEUED', 'Queued.docx', { humanReview: human({ blockers: ['ANALYSIS_NOT_COMPLETE'], status: 'NOT_STARTED' }) }),
+          review('a', 'ANALYZING', 'Analyzing.docx', { humanReview: human({ blockers: ['ANALYSIS_NOT_COMPLETE'], status: 'NOT_STARTED' }) }),
+          review('d', 'COMPLETED', 'Decide.docx', { humanReview: human({ status: 'NOT_STARTED', resolvedFindings: 0 }) }),
+        ],
+      },
+    })
+    renderReviews()
+    await screen.findAllByRole('link', { name: /\.docx/ })
+    expect(screen.getByRole('button', { name: /Needs you/ })).toHaveTextContent('1')
+    await userEvent.click(screen.getByRole('button', { name: /Needs you/ }))
+    expect(screen.getAllByRole('link', { name: /\.docx/ })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: /Decide\.docx.*Ready for review/ })).toBeInTheDocument()
+  })
+
+  it('enables the canonical filters and counts each group', async () => {
     stubApi({ first: { items: SEEDED } })
     renderReviews()
     await screen.findAllByRole('link', { name: /\.docx/ })
-    expect(screen.getByRole('button', { name: /All/ })).toHaveTextContent('3')
-    expect(screen.getByRole('button', { name: /Needs you/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Finalized/ })).toBeDisabled()
+    const all = screen.getByRole('button', { name: /^All/ })
+    expect(all).toHaveTextContent('3')
+    expect(all).toHaveAttribute('aria-pressed', 'true')
+    for (const name of [/Needs you/, /Running/, /Finalized/]) {
+      expect(screen.getByRole('button', { name })).toBeEnabled()
+    }
+    expect(screen.getByRole('button', { name: /Needs you/ })).toHaveTextContent('1')
+
     await userEvent.click(screen.getByRole('button', { name: /Running/ }))
     expect(screen.getAllByRole('link', { name: /\.docx/ })).toHaveLength(1)
     expect(screen.getByRole('link', { name: /Beacon/ })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Finalized/ }))
+    expect(screen.getAllByRole('link', { name: /\.docx/ })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: /Northstar/ })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Needs you/ }))
+    expect(screen.getByRole('link', { name: /Atlas/ })).toBeInTheDocument()
+  })
+
+  it('says so when a filter has no loaded reviews', async () => {
+    stubApi({ first: { items: [SEEDED[2]] } })
+    renderReviews()
+    await screen.findAllByRole('link', { name: /\.docx/ })
+    await userEvent.click(screen.getByRole('button', { name: /Needs you/ }))
+    expect(screen.getByText('No loaded reviews need you.')).toBeInTheDocument()
   })
 
   it('says it is empty', async () => {
@@ -149,7 +262,7 @@ describe('Reviews page', () => {
     stubApi({}, 'first')
     renderReviews()
     expect(await screen.findByRole('heading', { name: 'Reviews could not be loaded' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Start review' })[0]).toBeEnabled()
+    expect(screen.getAllByRole('link', { name: 'Start review' })[0]).toHaveAttribute('href', '/reviews/new')
   })
 
   it('discloses truncation and loads the next page on request, without repeating rows', async () => {
@@ -173,11 +286,11 @@ describe('Reviews page', () => {
     expect(screen.getByRole('link', { name: /Atlas Mutual NDA\.docx/ })).toBeInTheDocument()
   })
 
-  it('opens the upload form from Start review', async () => {
+  it('opens the canonical Start Review page from Start review', async () => {
     stubApi({ first: { items: SEEDED } })
     renderReviews()
     await screen.findAllByRole('link', { name: /\.docx/ })
-    await userEvent.click(screen.getAllByRole('button', { name: 'Start review' })[0])
-    expect(screen.getByLabelText(/contract file/i)).toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('link', { name: 'Start review' })[0])
+    expect(await screen.findByRole('heading', { name: 'Start a contract review' })).toBeInTheDocument()
   })
 })

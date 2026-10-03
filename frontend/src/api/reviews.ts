@@ -142,12 +142,50 @@ export type ReviewProgress = {
   analysisWarningsTruncated: boolean
 }
 
+/** The human-declared context this review froze at creation. Never inferred by the client. */
+export type ReviewListContext = {
+  contractType: string | null
+  ourSideRole: string | null
+  paperSource: string | null
+  /** The real `UNSPECIFIED` constant when none was declared. */
+  jurisdiction: string | null
+}
+
+/** Named and counted exactly as the review's own human-review read. Readiness is the server's. */
+export type ReviewListHumanReview = {
+  status: string
+  actionableFindings: number
+  resolvedFindings: number
+  remainingFindings: number
+  escalated: number
+  readyToFinalize: boolean
+  /** Server-owned reason codes. `ANALYSIS_NOT_COMPLETE` is one: it is not human attention. */
+  blockers: string[]
+}
+
+/** Present only once the review is finalized. */
+export type ReviewListFinalization = {
+  finalizedAt: string
+  approvedChanges: number
+}
+
+/** Present only once a redline was requested. A failed execution carries no verified count. */
+export type ReviewListRedline = {
+  status: string
+  outcome: string | null
+  verifiedChangeCount: number | null
+  downloadAvailable: boolean
+  completedAt: string | null
+}
+
 export type ReviewListItem = {
   id: string
   contractId: string
   contractVersionNumber: number | null
   /** The uploaded file's name. Null only when the server sends no filename. */
   contractFilename: string | null
+  /** When the pinned contract version was uploaded. Not the review's creation time. */
+  uploadedAt: string | null
   status: ReviewStatus
   failure: ReviewFailure | null
   createdAt: string
@@ -158,6 +196,10 @@ export type ReviewListItem = {
   degradedChecks: number
   failedChecks: number
   findings: number
+  context: ReviewListContext | null
+  humanReview: ReviewListHumanReview | null
+  finalization: ReviewListFinalization | null
+  redline: ReviewListRedline | null
 }
 
 export type ReviewListResponse = {
@@ -401,6 +443,53 @@ export function parseReviewProgress(value: unknown, what = 'review progress'): R
   }
 }
 
+function parseListContext(value: unknown, what: string): ReviewListContext | null {
+  if (value === null || value === undefined) return null
+  const context = asRecord(value, what)
+  return {
+    contractType: readOptionalNullableString(context, 'contractType', what),
+    ourSideRole: readOptionalNullableString(context, 'ourSideRole', what),
+    paperSource: readOptionalNullableString(context, 'paperSource', what),
+    jurisdiction: readOptionalNullableString(context, 'jurisdiction', what),
+  }
+}
+
+function parseListHumanReview(value: unknown, what: string): ReviewListHumanReview | null {
+  if (value === null || value === undefined) return null
+  const human = asRecord(value, what)
+  return {
+    status: readString(human, 'status', what),
+    actionableFindings: readOptionalNumber(human, 'actionableFindings', what),
+    resolvedFindings: readOptionalNumber(human, 'resolvedFindings', what),
+    remainingFindings: readOptionalNumber(human, 'remainingFindings', what),
+    escalated: readOptionalNumber(human, 'escalated', what),
+    // A missing flag is never read as ready.
+    readyToFinalize: readOptionalBoolean(human, 'readyToFinalize', what),
+    blockers: human.blockers === undefined || human.blockers === null ? [] : readStringArray(human, 'blockers', what),
+  }
+}
+
+function parseListFinalization(value: unknown, what: string): ReviewListFinalization | null {
+  if (value === null || value === undefined) return null
+  const finalization = asRecord(value, what)
+  return {
+    finalizedAt: readString(finalization, 'finalizedAt', what),
+    approvedChanges: readOptionalNumber(finalization, 'approvedChanges', what),
+  }
+}
+
+function parseListRedline(value: unknown, what: string): ReviewListRedline | null {
+  if (value === null || value === undefined) return null
+  const redline = asRecord(value, what)
+  return {
+    status: readString(redline, 'status', what),
+    outcome: readOptionalNullableString(redline, 'outcome', what),
+    verifiedChangeCount: readOptionalNullableNumber(redline, 'verifiedChangeCount', what),
+    downloadAvailable: readOptionalBoolean(redline, 'downloadAvailable', what),
+    completedAt: readOptionalNullableString(redline, 'completedAt', what),
+  }
+}
+
 function parseReviewListItem(value: unknown, what: string): ReviewListItem {
   const item = asRecord(value, what)
   return {
@@ -408,6 +497,7 @@ function parseReviewListItem(value: unknown, what: string): ReviewListItem {
     contractId: readString(item, 'contractId', what),
     contractVersionNumber: readOptionalNullableNumber(item, 'contractVersionNumber', what),
     contractFilename: readOptionalNullableString(item, 'contractFilename', what),
+    uploadedAt: readOptionalNullableString(item, 'uploadedAt', what),
     status: readStatus(item, 'status', REVIEW_STATUSES),
     failure: parseFailure(item.failure, what),
     createdAt: readString(item, 'createdAt', what),
@@ -418,6 +508,10 @@ function parseReviewListItem(value: unknown, what: string): ReviewListItem {
     degradedChecks: readOptionalNumber(item, 'degradedChecks', what),
     failedChecks: readOptionalNumber(item, 'failedChecks', what),
     findings: readOptionalNumber(item, 'findings', what),
+    context: parseListContext(item.context, what),
+    humanReview: parseListHumanReview(item.humanReview, what),
+    finalization: parseListFinalization(item.finalization, what),
+    redline: parseListRedline(item.redline, what),
   }
 }
 

@@ -6,7 +6,8 @@ import { useShell } from './ShellContext'
 export const INSPECTOR_ID = 'rv-inspector'
 
 interface TopBarProps {
-  title: string
+  /** A page name, or a breadcrumb trail for a page one level down. */
+  title: ReactNode
   /** Real, working controls for this surface. Nothing decorative: no search, no identity. */
   actions?: ReactNode
 }
@@ -18,7 +19,11 @@ interface TopBarProps {
 export function TopBar({ title, actions }: TopBarProps) {
   return (
     <header className="rv-topbar">
-      <span className="rv-topbar__title">{title}</span>
+      {typeof title === 'string' ? (
+        <span className="rv-topbar__title">{title}</span>
+      ) : (
+        <div className="rv-topbar__title">{title}</div>
+      )}
       {actions ? <div className="rv-topbar__actions">{actions}</div> : null}
     </header>
   )

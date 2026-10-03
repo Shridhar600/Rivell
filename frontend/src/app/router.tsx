@@ -10,6 +10,7 @@ import { KnowledgePage } from '../routes/KnowledgePage'
 import { KnowledgePublicationPage } from '../routes/KnowledgePublicationPage'
 import { KnowledgePublicationsPage } from '../routes/KnowledgePublicationsPage'
 import { ReviewsPage } from '../routes/ReviewsPage'
+import { StartReviewPage } from '../routes/StartReviewPage'
 import { ReviewWorkspacePage } from '../routes/ReviewWorkspacePage'
 
 export const appRoutes = [
@@ -19,6 +20,7 @@ export const appRoutes = [
     children: [
       { index: true, element: <HomePage /> },
       { path: 'reviews', element: <ReviewsPage /> },
+      { path: 'reviews/new', element: <StartReviewPage /> },
       {
         // Temporary seam: these surfaces keep their existing layout until they are restyled.
         element: <LegacySurface />,

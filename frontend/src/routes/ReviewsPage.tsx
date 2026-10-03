@@ -1,17 +1,27 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { useReviewHistoryQuery } from '../api/reviews'
-import { mergeReviewPages, reviewRowView, type ReviewRowView } from '../lib/reviewHistory'
-import { NewReviewForm } from '../components/NewReviewForm'
+import {
+  mergeReviewPages,
+  reviewRowView,
+  type ReviewGroup,
+  type ReviewRowView,
+} from '../lib/reviewHistory'
 import { TopBar } from '../components/shell/TopBar'
-import { Button } from '../components/ui/Button'
-import { ChevronIcon, PlusIcon, RunningIcon } from '../components/ui/Icon'
+import { Button, LinkButton } from '../components/ui/Button'
+import { ChevronIcon, LockIcon, PlusIcon, RunningIcon } from '../components/ui/Icon'
 import { Chip } from '../components/ui/Status'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/State'
 
-const PANEL_ID = 'rv-start-review'
+type Filter = 'all' | ReviewGroup
 
-type Filter = 'all' | 'running'
+/** The canonical filter tabs, in order. "Finalized" is the canonical name of the `done` group. */
+const FILTERS: { key: Filter; label: string; empty: string }[] = [
+  { key: 'all', label: 'All', empty: 'No reviews are loaded.' },
+  { key: 'needs', label: 'Needs you', empty: 'No loaded reviews need you.' },
+  { key: 'running', label: 'Running', empty: 'No loaded reviews are running.' },
+  { key: 'done', label: 'Finalized', empty: 'No loaded reviews are finalized.' },
+]
 
 export function ReviewsPage() {
   const history = useReviewHistoryQuery()
@@ -19,21 +29,15 @@ export function ReviewsPage() {
     () => mergeReviewPages(history.data?.pages ?? []).map(reviewRowView),
     [history.data],
   )
-  const [startOpen, setStartOpen] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
 
-  const running = rows.filter((row) => row.running)
-  const shown = filter === 'running' ? running : rows
+  const countOf = (key: Filter) => (key === 'all' ? rows.length : rows.filter((row) => row.lifecycle.group === key).length)
+  const shown = filter === 'all' ? rows : rows.filter((row) => row.lifecycle.group === filter)
   const startButton = (
-    <Button
-      variant="primary"
-      aria-expanded={startOpen}
-      aria-controls={PANEL_ID}
-      onClick={() => setStartOpen((open) => !open)}
-    >
+    <LinkButton to="/reviews/new" variant="primary">
       <PlusIcon className="rv-icon" />
       Start review
-    </Button>
+    </LinkButton>
   )
 
   return (
@@ -51,12 +55,6 @@ export function ReviewsPage() {
             {startButton}
           </div>
 
-          {startOpen ? (
-            <div id={PANEL_ID}>
-              <NewReviewForm onCancel={() => setStartOpen(false)} />
-            </div>
-          ) : null}
-
           {history.isPending ? <LoadingState label="Loading reviews" /> : null}
           {history.isError && rows.length === 0 ? (
             <ErrorState
@@ -72,17 +70,15 @@ export function ReviewsPage() {
           {rows.length > 0 ? (
             <>
               <div className="rv-ftabs" role="group" aria-label="Filter reviews">
-                <FilterTab label="All" count={rows.length} pressed={filter === 'all'} onClick={() => setFilter('all')} />
-                {/* Needs a per-review decision projection the list read does not carry. */}
-                <FilterTab label="Needs you" unavailable />
-                <FilterTab
-                  label="Running"
-                  count={running.length}
-                  pressed={filter === 'running'}
-                  onClick={() => setFilter('running')}
-                />
-                {/* Needs a finalization state the list read does not carry. */}
-                <FilterTab label="Finalized" unavailable />
+                {FILTERS.map((entry) => (
+                  <FilterTab
+                    key={entry.key}
+                    label={entry.label}
+                    count={countOf(entry.key)}
+                    pressed={filter === entry.key}
+                    onClick={() => setFilter(entry.key)}
+                  />
+                ))}
               </div>
 
               <div className="rv-rlist">
@@ -90,7 +86,7 @@ export function ReviewsPage() {
                   <span>Contract</span>
                   <span>Status</span>
                   <span>Progress</span>
-                  <span>Created</span>
+                  <span>Uploaded</span>
                 </div>
                 {shown.length > 0 ? (
                   <ul className="rv-rrows">
@@ -99,7 +95,7 @@ export function ReviewsPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="rv-rlist__empty">No loaded reviews are running.</p>
+                  <p className="rv-rlist__empty">{FILTERS.find((entry) => entry.key === filter)?.empty}</p>
                 )}
               </div>
             </>
@@ -130,31 +126,23 @@ function FilterTab({
   label,
   count,
   pressed,
-  unavailable,
   onClick,
 }: {
   label: string
-  count?: number
-  pressed?: boolean
-  unavailable?: boolean
-  onClick?: () => void
+  count: number
+  pressed: boolean
+  onClick: () => void
 }) {
   return (
-    <button
-      type="button"
-      className="rv-ftab"
-      aria-pressed={unavailable ? undefined : pressed}
-      disabled={unavailable}
-      title={unavailable ? 'Not available yet: the review list does not report this.' : undefined}
-      onClick={onClick}
-    >
+    <button type="button" className="rv-ftab" aria-pressed={pressed} onClick={onClick}>
       {label}
-      {count === undefined ? null : <span>{count}</span>}
+      <span>{count}</span>
     </button>
   )
 }
 
 function ReviewRow({ row }: { row: ReviewRowView }) {
+  const { lifecycle } = row
   return (
     <li>
       <Link to={row.to} className="rv-rrow">
@@ -163,17 +151,19 @@ function ReviewRow({ row }: { row: ReviewRowView }) {
             <b className="rv-rrow__title">
               {row.title}
               {row.versionChip ? <Chip>{row.versionChip}</Chip> : null}
+              {row.typeChip ? <Chip>{row.typeChip}</Chip> : null}
             </b>
-            <span className="rv-rrow__detail">{row.detail}</span>
+            {row.detail ? <span className="rv-rrow__detail">{row.detail}</span> : null}
           </div>
           <div>
-            <span className={`rv-stb${row.variant === 'plain' ? '' : ` rv-stb--${row.variant}`}`}>
-              {row.analyzing ? <RunningIcon className="rv-icon rv-glyph--spin" /> : null}
-              {row.stateLabel}
+            <span className={`rv-stb${lifecycle.variant === 'plain' ? '' : ` rv-stb--${lifecycle.variant}`}`}>
+              {lifecycle.glyph === 'spin' ? <RunningIcon className="rv-icon rv-glyph--spin" /> : null}
+              {lifecycle.glyph === 'lock' ? <LockIcon className="rv-icon" /> : null}
+              {lifecycle.label}
             </span>
           </div>
           <div className="rv-rrow__progress">{row.progress}</div>
-          <div className="rv-rrow__time">{row.createdLabel}</div>
+          <div className="rv-rrow__time">{row.uploadedLabel}</div>
         </div>
         <ChevronIcon className="rv-icon" />
       </Link>
