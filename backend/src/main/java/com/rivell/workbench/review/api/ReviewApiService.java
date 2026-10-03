@@ -41,6 +41,7 @@ import com.rivell.workbench.review.ReviewListRunState;
 import com.rivell.workbench.review.ReviewAnalysisService;
 import com.rivell.workbench.review.ReviewCheckExecution;
 import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
+import com.rivell.workbench.review.FindingPositionComparison;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.ReviewPackRegistry;
 import com.rivell.workbench.review.ReviewPlanCheck;
@@ -630,7 +631,8 @@ public class ReviewApiService {
                                 claim.claimKind(), claim.text(), claim.absence(),
                                 claim.evidenceItemIds()))
                         .toList(),
-                finding.evidenceItemIds(), evidenceItems, finding.signalIds(), absenceBasis,
+                finding.evidenceItemIds(), evidenceItems,
+                FindingPositionComparison.from(evidenceItems), finding.signalIds(), absenceBasis,
                 finding.createdAt());
     }
 
