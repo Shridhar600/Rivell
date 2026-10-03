@@ -8,6 +8,7 @@ import java.util.UUID;
 import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.review.ClaimKind;
 import com.rivell.workbench.review.FindingClassification;
+import com.rivell.workbench.review.FindingPositionComparison;
 import com.rivell.workbench.review.FindingSeverity;
 import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.IssueFamily;
@@ -45,6 +46,7 @@ public record FindingDetailView(
         List<ClaimView> claims,
         List<UUID> evidenceItemIds,
         List<RetrievalResponses.EvidenceItemResponse> evidenceItems,
+        FindingPositionComparison positionComparison,
         List<UUID> signalIds,
         AbsenceBasisView absenceBasis,
         Instant createdAt) {
