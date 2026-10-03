@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { useHomeData } from '../api/home'
 import { HOME_PAGE_LIMIT } from '../api/reviews'
-import { longDate } from '../lib/dates'
 import { boundedErrorMessage, TransportError } from '../api/errorMessage'
 import {
   buildHomeGroups,
@@ -11,16 +10,20 @@ import {
   reviewItemView,
   HOME_GROUP_LABELS,
   type HomeGroupKey,
+  type HomeGroups,
   type HomeReviewSummary,
   type HomeWorkItem,
 } from '../lib/home'
+import { clearResume, clearResumeFor, readResume, type ResumeRecord } from '../lib/resume'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import { CollapsibleGroup } from '../components/ui/CollapsibleGroup'
 import { SummaryPill } from '../components/ui/SummaryPill'
 import { WorkRow } from '../components/ui/WorkRow'
-import { StatusBadge } from '../components/ui/Status'
 import { EmptyState, ErrorState, LoadingState, UnavailableNotice } from '../components/ui/State'
 import { LinkButton } from '../components/ui/Button'
 import { DocumentIcon, PlusIcon } from '../components/ui/Icon'
+import { ContinueCard } from '../components/home/ContinueCard'
+import { WorkDetails, WorkDetailsHint } from '../components/home/WorkDetails'
 import { Inspector, TopBar } from '../components/shell/TopBar'
 
 export function HomePage() {
@@ -56,19 +59,21 @@ export function HomePage() {
   const effectiveId = items.some((item) => item.id === selectedId) ? selectedId : null
   const selected = items.find((item) => item.id === effectiveId) ?? null
 
-  const [openGroups, setOpenGroups] = useState<ReadonlySet<HomeGroupKey>>(
-    () => new Set<HomeGroupKey>(['needs_action', 'failed']),
-  )
+  // Only the reviewer's own choices are stored. Everything else follows `defaultOpen`, so a group
+  // that fills in after the first render still opens or stays closed by the same rule.
+  const [toggled, setToggled] = useState<ReadonlyMap<HomeGroupKey, boolean>>(() => new Map())
+  const openGroups = useMemo(() => {
+    const open = new Set<HomeGroupKey>()
+    for (const key of GROUP_ORDER) {
+      if (toggled.get(key) ?? defaultOpen(key, groups)) open.add(key)
+    }
+    return open
+  }, [toggled, groups])
   function toggleGroup(key: HomeGroupKey) {
-    setOpenGroups((current) => {
-      const next = new Set(current)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+    setToggled((current) => new Map(current).set(key, !openGroups.has(key)))
   }
   function revealGroup(key: HomeGroupKey) {
-    setOpenGroups((current) => (current.has(key) ? current : new Set(current).add(key)))
+    setToggled((current) => (openGroups.has(key) ? current : new Map(current).set(key, true)))
   }
 
   // Failure is tracked per domain. Collapsing it into one flag let a knowledge refusal hide
@@ -91,24 +96,67 @@ export function HomePage() {
   const knowledgeState = artifactState.loading || artifactState.failed || artifactState.forbidden
     ? artifactState
     : publicationState
+
+  // Device-local resumption. Read once when Home opens; the Review route writes it as it is visited.
+  const [resume, setResume] = useState<ResumeRecord | null>(readResume)
+  const reviewsListComplete = reviews.isSuccess && !reviews.data?.nextCursor
+  const liveResumeItem = resume
+    ? (items.find((item) => item.id === `review:${resume.reviewId}`) ?? null)
+    : null
+  // A complete read that lacks the saved Review proves it is gone. A truncated or failed read
+  // proves nothing, so the saved place is kept and the Review route itself reports any problem.
+  const resumeIsStale = resume !== null && reviewsListComplete && liveResumeItem === null
+  useEffect(() => {
+    if (resume && resumeIsStale) clearResumeFor(resume.reviewId)
+  }, [resume, resumeIsStale])
+  // Waits for the Review read so the card never flashes in and then disappears.
+  const showResume = resume !== null && !reviewState.loading && !resumeIsStale
+  const compact = useMediaQuery('(max-width: 1180px)')
+
   const loading = reviewState.loading || knowledgeState.loading
   // The headline describes all review work, so it waits for every read to settle.
   const resolved = !reviewState.loading && !knowledgeState.loading
   const showEmptyState = resolved && !reviewState.failed && !knowledgeState.failed && items.length === 0
   const moreReviewsExist = Boolean(reviews.data?.nextCursor)
 
+  const groupProps = {
+    openGroups,
+    onToggle: toggleGroup,
+    selectedId: effectiveId,
+    onSelect: setSelectedId,
+    compact,
+  }
+
   return (
     <>
       <div className="rv-main">
-        <TopBar title="Home" />
+        <TopBar
+          title="Home"
+          actions={
+            <>
+              <LinkButton to="/knowledge/new">
+                <PlusIcon className="rv-icon" />
+                Add knowledge
+              </LinkButton>
+              <LinkButton to="/reviews" variant="primary">
+                <DocumentIcon className="rv-icon" />
+                Start a review
+              </LinkButton>
+            </>
+          }
+        />
         <div className="rv-scroll">
           <div className="rv-wrap">
             <Hero
               resolved={resolved}
               headlineReady={!reviewState.failed}
-              needsAction={groups.needsAction.length}
-              running={groups.running.length}
-              failed={groups.failed.length}
+              hasWork={items.length > 0}
+              counts={{
+                needs_action: groups.needsAction.length,
+                running: groups.running.length,
+                failed: groups.failed.length,
+                extracted: groups.extracted.length,
+              }}
               onReveal={revealGroup}
             />
 
@@ -133,61 +181,61 @@ export function HomePage() {
               />
             ) : null}
 
+            {showResume && resume ? (
+              <ContinueCard
+                record={resume}
+                live={liveResumeItem}
+                onDismiss={() => {
+                  clearResume()
+                  setResume(null)
+                }}
+              />
+            ) : null}
+
+            <GroupSection groupKey="needs_action" items={groups.needsAction} {...groupProps} />
+            <GroupSection groupKey="running" items={groups.running} {...groupProps} />
+            <GroupSection groupKey="failed" items={groups.failed} {...groupProps} />
+            <GroupSection groupKey="extracted" items={groups.extracted} {...groupProps} />
+            <GroupSection groupKey="completed" items={groups.completed} {...groupProps} />
+
             {moreReviewsExist ? (
               <p className="rv-note">
                 Showing the newest {HOME_PAGE_LIMIT} reviews.{' '}
                 <Link to="/reviews">Open Reviews for the full list.</Link>
               </p>
             ) : null}
-
-            <GroupSection
-              groupKey="needs_action"
-              items={groups.needsAction}
-              open={openGroups.has('needs_action')}
-              onToggle={() => toggleGroup('needs_action')}
-              selectedId={effectiveId}
-              onSelect={setSelectedId}
-            />
-            <GroupSection
-              groupKey="running"
-              items={groups.running}
-              open={openGroups.has('running')}
-              onToggle={() => toggleGroup('running')}
-              selectedId={effectiveId}
-              onSelect={setSelectedId}
-            />
-            <GroupSection
-              groupKey="failed"
-              items={groups.failed}
-              open={openGroups.has('failed')}
-              onToggle={() => toggleGroup('failed')}
-              selectedId={effectiveId}
-              onSelect={setSelectedId}
-            />
-            <GroupSection
-              groupKey="extracted"
-              items={groups.extracted}
-              open={openGroups.has('extracted')}
-              onToggle={() => toggleGroup('extracted')}
-              selectedId={effectiveId}
-              onSelect={setSelectedId}
-            />
-            <GroupSection
-              groupKey="completed"
-              items={groups.completed}
-              open={openGroups.has('completed')}
-              onToggle={() => toggleGroup('completed')}
-              selectedId={effectiveId}
-              onSelect={setSelectedId}
-            />
           </div>
         </div>
       </div>
       <Inspector status={selected ? `${selected.title}. ${selected.stateLabel}.` : ''}>
-        {selected ? <InspectorBody item={selected} /> : <InspectorHint />}
+        {selected ? <WorkDetails item={selected} /> : <WorkDetailsHint />}
       </Inspector>
     </>
   )
+}
+
+const GROUP_ORDER: readonly HomeGroupKey[] = ['needs_action', 'running', 'failed', 'extracted', 'completed']
+
+const GROUP_ITEMS: Record<HomeGroupKey, (groups: HomeGroups) => HomeWorkItem[]> = {
+  needs_action: (groups) => groups.needsAction,
+  running: (groups) => groups.running,
+  failed: (groups) => groups.failed,
+  extracted: (groups) => groups.extracted,
+  completed: (groups) => groups.completed,
+}
+
+/**
+ * Work that needs a person, and work that failed, is always open. When there is none of either, the
+ * first settled-or-moving group opens instead, so Home never greets the reviewer with a column of
+ * closed cards. Everything else stays collapsed until asked for.
+ */
+function defaultOpen(key: HomeGroupKey, groups: HomeGroups): boolean {
+  if (key === 'needs_action' || key === 'failed') return true
+  if (groups.needsAction.length > 0 || groups.failed.length > 0) return false
+  const first = (['running', 'extracted', 'completed'] as const).find(
+    (candidate) => GROUP_ITEMS[candidate](groups).length > 0,
+  )
+  return key === first
 }
 
 function statusOf(error: Error | null): number | null {
@@ -282,74 +330,53 @@ function summarise(items: HomeWorkItem[]): string {
   return `${items.slice(0, MAX).map((item) => item.title).join(', ')} and ${items.length - MAX} more`
 }
 
-function plural(count: number, one: string, many: string): string {
-  return count === 1 ? one : many
-}
+type SummaryKey = 'needs_action' | 'running' | 'failed' | 'extracted'
+
+const SUMMARY_PILLS: { key: SummaryKey; label: string; tone: 'attention' | 'active' | 'danger' | 'neutral' }[] = [
+  { key: 'needs_action', label: 'need action', tone: 'attention' },
+  { key: 'running', label: 'running', tone: 'active' },
+  { key: 'failed', label: 'failed', tone: 'danger' },
+  { key: 'extracted', label: 'extracted', tone: 'neutral' },
+]
 
 function Hero({
   resolved,
   headlineReady,
-  needsAction,
-  running,
-  failed,
+  hasWork,
+  counts,
   onReveal,
 }: {
   /** Data has arrived, so counts are safe to show. */
   resolved: boolean
   /** Every part of Rivell's work is readable, so a claim about all of it is safe. */
   headlineReady: boolean
-  needsAction: number
-  running: number
-  failed: number
+  hasWork: boolean
+  counts: Record<SummaryKey, number>
   onReveal: (group: HomeGroupKey) => void
 }) {
-  const total = needsAction + running + failed
   return (
     <div className="rv-hero">
       <div>
         <h1 className="rv-hero__title">Rivell</h1>
         {/* Claims nothing until every read resolves, and never duplicates the empty state. */}
-        {resolved && headlineReady && total > 0 ? (
+        {resolved && headlineReady && hasWork ? (
           <p className="rv-hero__line">Here is where your work stands.</p>
         ) : null}
       </div>
-      <div className="rv-hero__side">
-        {resolved ? (
-          <div className="rv-pills">
+      {resolved ? (
+        <div className="rv-pills">
+          {SUMMARY_PILLS.map(({ key, label, tone }) => (
             <SummaryPill
-              count={needsAction}
-              label={plural(needsAction, 'needs action', 'needs action')}
-              tone="attention"
-              targetId="needs-action"
-              onReveal={() => onReveal('needs_action')}
+              key={key}
+              count={counts[key]}
+              label={key === 'needs_action' && counts[key] === 1 ? 'needs action' : label}
+              tone={tone}
+              targetId={key.replace('_', '-')}
+              onReveal={() => onReveal(key)}
             />
-            <SummaryPill
-              count={running}
-              label={plural(running, 'running', 'running')}
-              tone="active"
-              targetId="running"
-              onReveal={() => onReveal('running')}
-            />
-            <SummaryPill
-              count={failed}
-              label={plural(failed, 'failed', 'failed')}
-              tone="danger"
-              targetId="failed"
-              onReveal={() => onReveal('failed')}
-            />
-          </div>
-        ) : null}
-        <div className="rv-hero__actions">
-          <LinkButton to="/knowledge/new" compact>
-            <PlusIcon className="rv-icon" />
-            Add knowledge
-          </LinkButton>
-          <LinkButton to="/reviews" variant="primary" compact>
-            <DocumentIcon className="rv-icon" />
-            Start a review
-          </LinkButton>
+          ))}
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -357,27 +384,39 @@ function Hero({
 function GroupSection({
   groupKey,
   items,
-  open,
+  openGroups,
   onToggle,
   selectedId,
   onSelect,
+  compact,
 }: {
   groupKey: HomeGroupKey
   items: HomeWorkItem[]
-  open: boolean
-  onToggle: () => void
+  openGroups: ReadonlySet<HomeGroupKey>
+  onToggle: (key: HomeGroupKey) => void
   selectedId: string | null
   onSelect: (id: string) => void
+  /** The details panel is hidden at this width, so the selected row shows its details inline. */
+  compact: boolean
 }) {
   if (items.length === 0) return null
+  const open = openGroups.has(groupKey)
+  const selectedHere = items.find((item) => item.id === selectedId) ?? null
   return (
-    <div id={groupKey.replace('_', '-')}>
+    <div id={groupKey.replace('_', '-')} className="rv-anchor">
       <CollapsibleGroup
         title={HOME_GROUP_LABELS[groupKey]}
         count={items.length}
         open={open}
-        onToggle={onToggle}
+        onToggle={() => onToggle(groupKey)}
         collapsedSummary={summarise(items)}
+        footer={
+          compact && open && selectedHere ? (
+            <div className="rv-inline-detail">
+              <WorkDetails item={selectedHere} />
+            </div>
+          ) : null
+        }
       >
         <WorkList items={items} selectedId={selectedId} onSelect={onSelect} />
       </CollapsibleGroup>
@@ -422,47 +461,6 @@ function WorkList({
           />
         ))}
       </ul>
-    </>
-  )
-}
-
-function InspectorHint() {
-  return (
-    <>
-      <p className="rv-insp__kind">Details</p>
-      <p className="rv-insp__note">Select work to see what it is and what to do next.</p>
-    </>
-  )
-}
-
-const KIND_LABELS: Record<HomeWorkItem['kind'], string> = {
-  review: 'Contract review',
-  knowledge_artifact: 'Knowledge source',
-  knowledge_publication: 'Knowledge publication',
-}
-
-function InspectorBody({ item }: { item: HomeWorkItem }) {
-  return (
-    <>
-      <p className="rv-insp__kind">{KIND_LABELS[item.kind]}</p>
-      <h2 className="rv-insp__title">{item.title}</h2>
-      <StatusBadge tone={item.tone} label={item.stateLabel} />
-      <dl className="rv-insp__props">
-        {item.chip ? (
-          <>
-            <dt>Type</dt>
-            <dd>{item.chip}</dd>
-          </>
-        ) : null}
-        <dt>{item.timeLabelKind === 'added' ? 'Added' : 'Updated'}</dt>
-        <dd>{longDate(item.timeValue)}</dd>
-      </dl>
-      {item.guidance ? <p className="rv-insp__note">{item.guidance}</p> : null}
-      <div className="rv-insp__action">
-        <LinkButton to={item.to} variant="primary">
-          {item.primaryActionLabel}
-        </LinkButton>
-      </div>
     </>
   )
 }

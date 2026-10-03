@@ -129,6 +129,16 @@ export function UnknownIcon({ className }: IconProps) {
   )
 }
 
+/** Play mark in a circle: pick up where the reviewer left off. Not a status glyph. */
+export function ResumeIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M6.9 5.6 10.4 8l-3.5 2.4z" />
+    </svg>
+  )
+}
+
 /** Single chevron used by the panel edge handles; the direction is set by CSS rotation. */
 export function EdgeChevron({ className }: IconProps) {
   return (

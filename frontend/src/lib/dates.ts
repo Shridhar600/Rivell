@@ -21,3 +21,15 @@ export function longDate(value: string): string {
   if (!date) return ''
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
+
+/** Date and time for a moment the browser itself observed, e.g. "3 Oct, 14:20". */
+export function dateTime(value: string): string {
+  const date = parse(value)
+  if (!date) return ''
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}

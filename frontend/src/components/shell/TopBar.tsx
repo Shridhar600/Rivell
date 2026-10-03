@@ -5,14 +5,21 @@ import { useShell } from './ShellContext'
 
 export const INSPECTOR_ID = 'rv-inspector'
 
+interface TopBarProps {
+  title: string
+  /** Real, working controls for this surface. Nothing decorative: no search, no identity. */
+  actions?: ReactNode
+}
+
 /**
- * Holds only what belongs to the current surface. Neither panel toggle lives here: each sits on
- * its own panel's edge, so this bar is just the surface title.
+ * Holds only what belongs to the current surface: its title and its own actions. Neither panel
+ * toggle lives here: each sits with its own panel.
  */
-export function TopBar({ title }: { title: string }) {
+export function TopBar({ title, actions }: TopBarProps) {
   return (
     <header className="rv-topbar">
       <span className="rv-topbar__title">{title}</span>
+      {actions ? <div className="rv-topbar__actions">{actions}</div> : null}
     </header>
   )
 }

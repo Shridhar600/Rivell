@@ -87,6 +87,13 @@ export interface HomeWorkItem {
   primaryActionLabel: string
   /** One truthful line of guidance, or null. */
   guidance: string | null
+  /** Real facts for the inspector's property list. The date is added separately from `timeValue`. */
+  details: HomeDetail[]
+}
+
+export interface HomeDetail {
+  label: string
+  value: string
 }
 
 export function knowledgeItemView(artifact: ArtifactSummary): HomeWorkItem {
@@ -106,6 +113,7 @@ export function knowledgeItemView(artifact: ArtifactSummary): HomeWorkItem {
     to: `/knowledge/artifacts/${artifact.id}`,
     primaryActionLabel: 'Open knowledge source',
     guidance: knowledgeGuidance(state),
+    details: [{ label: 'Type', value: ARTIFACT_CHIPS[artifact.artifactType] ?? 'Knowledge source' }],
   }
 }
 
@@ -140,6 +148,10 @@ export function publicationItemView(publication: Publication): HomeWorkItem {
     to: `/knowledge/publications/${publication.id}`,
     primaryActionLabel: 'View publication',
     guidance: 'Published knowledge is an immutable versioned snapshot.',
+    details: [
+      { label: 'Number', value: String(publication.publicationNumber) },
+      ...(publication.note?.trim() ? [{ label: 'Note', value: publication.note.trim() }] : []),
+    ],
   }
 }
 
@@ -179,7 +191,26 @@ export function reviewItemView(review: HomeReviewSummary): HomeWorkItem {
     to: `/reviews/${review.contractId}/analysis/${review.id}`,
     primaryActionLabel: 'Open review',
     guidance: reviewGuidance(state),
+    details: reviewDetails(review, state),
   }
+}
+
+/**
+ * Only facts the read model proves. A finding count is shown once analysis is finished: before
+ * that, zero means "not yet", and "No findings" would be a claim the data cannot support.
+ */
+function reviewDetails(review: HomeReviewSummary, state: MappedState): HomeDetail[] {
+  const details: HomeDetail[] = []
+  if (review.contractVersionNumber !== null) {
+    details.push({ label: 'Contract version', value: `v${review.contractVersionNumber}` })
+  }
+  if (state.label === 'Analysis complete') {
+    details.push({
+      label: 'Findings',
+      value: review.findings === 0 ? 'None' : String(review.findings),
+    })
+  }
+  return details
 }
 
 function reviewGuidance(state: MappedState): string | null {

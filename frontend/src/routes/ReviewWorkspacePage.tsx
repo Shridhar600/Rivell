@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   isContractForbiddenError,
@@ -32,6 +32,7 @@ import { LoadingState } from '../components/LoadingState'
 import { buildRegionLabelMap, TAXONOMY_CONCEPTS } from '../lib/contractSemantics'
 import { coverageLimitations } from '../lib/reviews'
 import { subtreeNodes } from '../lib/documentTree'
+import { clearResumeFor, writeResume } from '../lib/resume'
 import { ApprovedChangeSetSummary } from '../components/review/ApprovedChangeSetSummary'
 import { FinalizationPanel } from '../components/review/FinalizationPanel'
 import { FindingDetailPane } from '../components/review/FindingDetailPane'
@@ -71,6 +72,28 @@ export function ReviewWorkspacePage() {
   const latestVersion = contractQuery.data?.latestVersion.versionNumber
   const structureQuery = useContractStructureQuery(contractId, pinnedVersion)
   const semanticsQuery = useSemanticsQuery(contractId, pinnedVersion)
+
+  // Device-local "Continue where you left off". It is saved only once this exact Review has loaded
+  // for this exact contract, so Home never offers a place the reviewer did not really reach.
+  const reviewLoaded =
+    summaryQuery.data !== undefined &&
+    summaryQuery.data.contractId.toLowerCase() === contractId.toLowerCase()
+  const resumeFilename = contractQuery.data?.latestVersion.filename
+  useEffect(() => {
+    if (!reviewId || !contractId || !reviewLoaded || !resumeFilename) return
+    writeResume({
+      reviewId,
+      contractId,
+      filename: resumeFilename,
+      versionNumber: pinnedVersion ?? null,
+      visitedAt: new Date().toISOString(),
+    })
+  }, [reviewId, contractId, reviewLoaded, resumeFilename, pinnedVersion])
+  const reviewMissing = isReviewNotFoundError(summaryQuery.error)
+  useEffect(() => {
+    // A Review that no longer exists cannot be continued, so a saved place pointing at it is stale.
+    if (reviewMissing && reviewId) clearResumeFor(reviewId)
+  }, [reviewMissing, reviewId])
 
   const selectedFindingParam = searchParams.get('finding')
   const filters: FindingFilters = {

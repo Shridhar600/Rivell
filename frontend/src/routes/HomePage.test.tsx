@@ -439,13 +439,14 @@ describe('selection, pills and groups', () => {
   })
 
   it('expands a collapsed group when its summary pill is used', async () => {
-    stubApi({ artifacts: busy })
+    // Running is the first non-empty group, so it opens by default and Extracted starts collapsed.
+    stubApi({ artifacts: [...busy, artifact('a9', 'EXTRACTED', 'done.docx')] })
     renderHome()
-    const runningGroup = await screen.findByRole('region', { name: 'Running' })
-    const head = within(runningGroup).getByRole('button', { name: /^Running/ })
+    const group = await screen.findByRole('region', { name: 'Extracted' })
+    const head = within(group).getByRole('button', { name: /^Extracted/ })
     expect(head).toHaveAttribute('aria-expanded', 'false')
 
-    await userEvent.click(screen.getByRole('button', { name: /^1 running$/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^1 extracted$/ }))
     await waitFor(() => expect(head).toHaveAttribute('aria-expanded', 'true'))
   })
 

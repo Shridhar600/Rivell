@@ -101,13 +101,14 @@ describe('M10B shell', () => {
 })
 
 describe('sidebar owns its own collapse control', () => {
-  it('puts the control on the sidebar edge, not in the top bar', () => {
+  it('puts the control in the sidebar header, not in the top bar', () => {
     stubApi()
     renderAt('/')
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
     const topbar = document.querySelector('.rv-topbar') as HTMLElement
     const toggle = within(sidebar).getByRole('button', { name: 'Sidebar' })
-    expect(toggle).toHaveClass('rv-edge--sidebar')
+    expect(toggle).toHaveClass('rv-side__toggle')
+    expect(toggle.closest('.rv-side__head')).not.toBeNull()
     expect(toggle).toHaveAttribute('title', expect.stringContaining('Collapse sidebar'))
     expect(within(topbar).queryByRole('button')).not.toBeInTheDocument()
   })
@@ -159,23 +160,24 @@ describe('sidebar owns its own collapse control', () => {
     )
   })
 
-  it('puts every destination in the tab order before the collapse control', async () => {
+  it('puts every sidebar control in the tab order', async () => {
     stubApi()
     renderAt('/')
-    const nav = screen.getByRole('navigation', { name: 'Primary' })
-    const destinations = within(nav).getAllByRole('link')
+    const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
+    const nav = within(sidebar).getByRole('navigation', { name: 'Primary' })
+    const expected = [
+      within(sidebar).getByRole('link', { name: 'Rivell' }),
+      within(sidebar).getByRole('button', { name: 'Sidebar' }),
+      ...within(nav).getAllByRole('link'),
+    ]
 
     const visited: Element[] = []
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 6; i++) {
       await userEvent.tab()
-      const active = document.activeElement
-      if (active?.getAttribute('aria-label') === 'Sidebar') break
-      visited.push(active as Element)
+      visited.push(document.activeElement as Element)
     }
-
-    // The loop stops at the collapse control, so everything above it was reached first.
-    for (const destination of destinations) {
-      expect(visited).toContain(destination)
+    for (const control of expected) {
+      expect(visited).toContain(control)
     }
   })
 
@@ -310,10 +312,12 @@ describe('stylesheet contract (documentation only)', () => {
   const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
 
   it('hides each panel and its own handle at the required breakpoint', () => {
+    // The inspector's own handle lives inside the panel, so hiding the panel hides the handle.
     const wide = css.slice(css.indexOf('max-width: 1180px'), css.indexOf('max-width: 760px'))
-    expect(wide).toContain('.rv-edge--inspector')
+    expect(wide).toContain('.rv-insp')
+    // The sidebar stays as the icon rail at this width, so only its expand control goes.
     const narrow = css.slice(css.indexOf('max-width: 760px'))
-    expect(narrow).toContain('.rv-edge--sidebar')
+    expect(narrow).toContain('.rv-side__toggle')
   })
 
   it('honours prefers-reduced-motion for every animated property', () => {
@@ -328,43 +332,56 @@ describe('stylesheet contract (documentation only)', () => {
 
 })
 
-describe('panel edge handles', () => {
-  it('is a single chevron that states which way the panel will move', () => {
+describe('panel toggles', () => {
+  it('uses a single glyph for the sidebar control', () => {
     stubApi()
     renderAt('/')
     const toggle = screen.getByRole('button', { name: 'Sidebar' })
-    // One control, one direction cue: a glyph, not a layout icon that reads as "panels".
     expect(toggle.querySelectorAll('svg')).toHaveLength(1)
   })
 
-  it('keeps the same accessible name and reversed chevron when collapsed', async () => {
+  it('keeps the same accessible name when collapsed and changes only state and tooltip', async () => {
     stubApi()
     renderAt('/')
-    const before = screen.getByRole('button', { name: 'Sidebar' })
-    const iconBefore = before.querySelector('svg')?.getAttribute('class')
-    await userEvent.click(before)
+    await userEvent.click(screen.getByRole('button', { name: 'Sidebar' }))
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).toHaveAttribute('data-sidebar', 'collapsed'),
     )
     const after = screen.getByRole('button', { name: 'Sidebar' })
+    expect(after).toHaveAttribute('aria-expanded', 'false')
     expect(after).toHaveAttribute('title', expect.stringContaining('Expand sidebar'))
-    // The chevron direction is driven by the --open modifier, so it must appear when collapsed.
-    expect(after.className).toContain('rv-edge--open')
-    expect(iconBefore).toBe('rv-icon')
   })
 
-  it('styles the handle once, so no stale duplicate rule can win on order', () => {
+  it('styles the inspector handle once, so no stale duplicate rule can win on order', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
     expect(css.match(/^\.rv-iconbtn\.rv-edge \{/gm) ?? []).toHaveLength(1)
-    expect(css.match(/^\.rv-edge--sidebar \{/gm) ?? []).toHaveLength(1)
-    expect(css.match(/^\.rv-edge--inspector \{/gm) ?? []).toHaveLength(1)
   })
 
-  it('derives the edge offset from the handle width, never a percentage', () => {
+  it('derives the handle offset from its own width, never a percentage', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
-    const sidebar = css.slice(css.indexOf('.rv-edge--sidebar {'))
-    expect(sidebar.slice(0, 200)).toContain('calc(var(--rv-edge-w) / -2 - 1px)')
-    // A percentage here resolves against the 220px panel, not the 20px handle.
-    expect(sidebar.slice(0, 200)).not.toMatch(/-1 \* \(50%/)
+    const handle = css.slice(css.indexOf('.rv-iconbtn.rv-edge {'))
+    expect(handle.slice(0, 400)).toContain('calc(var(--rv-edge-w) / -2 - 1px)')
+    // A percentage here resolves against the 340px panel, not the 20px handle.
+    expect(handle.slice(0, 400)).not.toMatch(/-1 \* \(50%/)
+  })
+})
+
+describe('centre column scroll', () => {
+  const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
+
+  it('bounds the shell grid row so a tall centre column scrolls instead of being clipped', () => {
+    // Without an explicit row the implicit `auto` row grows to the tallest child and the shell's
+    // overflow:hidden clips it, which is exactly how expanded groups became unreachable.
+    const shell = css.slice(css.indexOf('.rv-shell {'), css.indexOf('}', css.indexOf('.rv-shell {')))
+    expect(shell).toContain('grid-template-rows: minmax(0, 1fr)')
+    expect(shell).toContain('overflow: hidden')
+  })
+
+  it('lets the scroll area shrink below its content and scroll vertically', () => {
+    const scroll = css.slice(css.indexOf('.rv-scroll {'), css.indexOf('}', css.indexOf('.rv-scroll {')))
+    expect(scroll).toContain('min-height: 0')
+    expect(scroll).toContain('overflow-y: auto')
+    const main = css.slice(css.indexOf('.rv-main {'), css.indexOf('}', css.indexOf('.rv-main {')))
+    expect(main).toContain('min-height: 0')
   })
 })

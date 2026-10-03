@@ -10,6 +10,8 @@ interface CollapsibleGroupProps {
   open: boolean
   onToggle: () => void
   children: ReactNode
+  /** Rendered under the rows while the group is open, e.g. details for the selected row. */
+  footer?: ReactNode
 }
 
 /**
@@ -23,6 +25,7 @@ export function CollapsibleGroup({
   open,
   onToggle,
   children,
+  footer,
 }: CollapsibleGroupProps) {
   const regionId = useId()
   return (
@@ -46,6 +49,7 @@ export function CollapsibleGroup({
       </button>
       <div id={regionId} className="rv-rows">
         {children}
+        {footer}
       </div>
     </section>
   )

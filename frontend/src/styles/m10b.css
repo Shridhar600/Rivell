@@ -1,6 +1,7 @@
 /* M10B design-system layer.
    Tokens come from m10b-tokens.css (frozen Product Design values, unchanged).
-   Classes are prefixed rv- so the legacy M10A stylesheet keeps working untouched.
+   Declarations follow the canonical Home prototype (rivell-home-v5.html), expressed through those
+   tokens. Classes are prefixed rv- so the legacy M10A stylesheet keeps working untouched.
    Every colour here is a token. No literal hex. */
 
 :root {
@@ -27,7 +28,7 @@ body {
 .rv-btn:focus-visible,
 .rv-iconbtn:focus-visible,
 .rv-nav__link:focus-visible,
-.rv-row:focus-visible,
+.rv-side__brand:focus-visible,
 .rv-group__head:focus-visible,
 .rv-pill:focus-visible {
   outline: none;
@@ -35,15 +36,24 @@ body {
   border-radius: 8px;
 }
 .rv-row:focus-visible {
+  outline: none;
   border-radius: 0;
   box-shadow: var(--rv-focus-inset);
 }
 
 /* ---------- shell ---------- */
+/*
+ * The single grid row MUST be bounded. An implicit row is `auto`, which grows to fit the tallest
+ * child: with several groups expanded the centre column became taller than the viewport, the shell
+ * clipped it (overflow: hidden) and nothing could scroll. `minmax(0, 1fr)` pins the row to the
+ * shell's height, so each column scrolls inside it.
+ */
 .rv-shell {
   display: grid;
   grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr) var(--rv-inspector, var(--rv-w-inspector));
+  grid-template-rows: minmax(0, 1fr);
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   transition: grid-template-columns var(--t-panel) var(--ease);
 }
@@ -56,28 +66,33 @@ body {
 
 /* ---------- sidebar ---------- */
 .rv-side {
-  /* overflow stays visible so the edge handle is not clipped; .rv-side__scroll scrolls instead. */
-  position: relative;
   display: flex;
   flex-direction: column;
-  padding: 10px 8px;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 8px 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--side);
   border-right: 1px solid var(--line);
 }
-.rv-side__scroll {
+.rv-side__head {
   display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 14px;
-  min-height: 0;
-  overflow: auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  flex: none;
+  height: var(--rv-h-topbar);
 }
 .rv-side__brand {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--r-md);
   color: var(--text);
   text-decoration: none;
   font-weight: 600;
@@ -113,6 +128,9 @@ body {
   white-space: nowrap;
   overflow: hidden;
 }
+.rv-side__toggle {
+  color: var(--text-3);
+}
 .rv-nav {
   display: flex;
   flex-direction: column;
@@ -125,13 +143,19 @@ body {
   gap: 8px;
   height: 30px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--text-2);
   text-decoration: none;
+}
+.rv-nav__link .rv-icon {
+  color: var(--text-3);
 }
 .rv-nav__link:hover {
   background: var(--hover);
   color: var(--text);
+}
+.rv-nav__link:hover .rv-icon {
+  color: var(--text-2);
 }
 .rv-nav__link[aria-current='page'] {
   background: var(--hover);
@@ -157,17 +181,48 @@ body {
   text-overflow: ellipsis;
 }
 
-/* collapsed rail */
+/*
+ * Collapsed rail. Labels are visually hidden rather than removed, so each link keeps its
+ * accessible name; the `title` tooltip is added by the component while collapsed.
+ */
+.rv-shell[data-sidebar='collapsed'] .rv-side__head {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 2px;
+  height: auto;
+  padding: 7px 0 4px;
+}
+.rv-shell[data-sidebar='collapsed'] .rv-side__brand,
+.rv-shell[data-sidebar='collapsed'] .rv-nav__link {
+  justify-content: center;
+  width: 100%;
+  padding: 0;
+}
 .rv-shell[data-sidebar='collapsed'] .rv-side__brand-text,
-.rv-shell[data-sidebar='collapsed'] .rv-nav__text,
-.rv-shell[data-sidebar='collapsed'] .rv-shell[data-sidebar='collapsed'] .rv-side__brand,
-.rv-shell[data-sidebar='collapsed'] .rv-nav__link,
-.rv-shell[data-sidebar='collapsed']
+.rv-shell[data-sidebar='collapsed'] .rv-nav__text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.rv-shell[data-sidebar='collapsed'] .rv-nav {
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.rv-shell[data-sidebar='collapsed'] .rv-nav__link[aria-current='page']::before {
+  left: -8px;
+}
+
 /* ---------- centre column ---------- */
 .rv-main {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 .rv-topbar {
@@ -184,15 +239,24 @@ body {
   font-weight: 500;
   letter-spacing: -0.01em;
 }
+.rv-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+/* The one scroll container for Home. It owns the vertical scroll; nothing inside it scrolls. */
 .rv-scroll {
   flex: 1;
-  overflow: auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: linear-gradient(180deg, var(--sel) 0, var(--side) 280px);
 }
 .rv-wrap {
   max-width: 860px;
   margin: 0 auto;
-  padding: 28px 24px 40px;
+  padding: 28px 24px 56px;
 }
 
 /* ---------- icon ---------- */
@@ -216,13 +280,14 @@ body {
   height: 32px;
   padding: 0 12px;
   border: 1px solid var(--line-2);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg);
   box-shadow: var(--sh-xs);
   color: var(--text);
   font: 500 13px/1 var(--font);
   letter-spacing: inherit;
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease);
 }
@@ -242,6 +307,9 @@ body {
   height: 28px;
   padding: 0 10px;
 }
+.rv-btn--block {
+  width: 100%;
+}
 .rv-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -253,7 +321,7 @@ body {
   width: 30px;
   height: 30px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: none;
   color: var(--text-2);
   cursor: pointer;
@@ -267,21 +335,23 @@ body {
   cursor: not-allowed;
 }
 
-/* ---------- edge panel toggles ---------- */
+/* ---------- inspector edge toggle ---------- */
 /*
- * Each panel's collapse control sits on that panel's own edge. It is a small divider handle, not
- * a floating card: it takes the panel's own background so it reads as part of that panel, it sits
- * just below the top bar so no scrolling row can pass under it, and its chevron points the way
- * the panel will move.
+ * The details panel can collapse to zero width, so its toggle sits on the panel's own edge where
+ * it stays reachable. It is a small divider handle, not a floating card, and its chevron points
+ * the way the panel will move.
  */
 .rv-iconbtn.rv-edge {
   position: absolute;
   z-index: 3;
+  top: calc(var(--rv-h-topbar) + 15px);
+  left: calc(var(--rv-edge-w) / -2 - 1px);
   width: 20px;
   height: 26px;
   padding: 0;
   border: 1px solid var(--line-2);
   border-radius: 6px;
+  background: var(--bg);
   box-shadow: var(--sh-xs);
   color: var(--text-2);
 }
@@ -294,91 +364,12 @@ body {
   outline: none;
   box-shadow: var(--rv-focus);
 }
-
-/*
- * The offset is derived from the handle's own width. A percentage here would resolve against the
- * containing block (the 220px sidebar), not the handle, which put it 111px off the edge.
- */
-.rv-edge--sidebar {
-  top: calc(var(--rv-h-topbar) + 15px);
-  right: calc(var(--rv-edge-w) / -2 - 1px);
-  background: var(--side);
-}
-.rv-edge--inspector {
-  top: calc(var(--rv-h-topbar) + 15px);
-  left: calc(var(--rv-edge-w) / -2 - 1px);
-  background: var(--bg);
-}
-/* The base chevron points left, so the rotation states which way the panel will move. */
-.rv-edge--sidebar .rv-icon {
-  transform: rotate(0deg);
-}
+/* The base chevron points left; rotation states which way the panel will move. */
 .rv-edge--inspector .rv-icon {
   transform: rotate(180deg);
 }
-.rv-edge--sidebar.rv-edge--open .rv-icon,
 .rv-edge--inspector.rv-edge--open .rv-icon {
-  transform: rotate(180deg);
-}
-
-/* ---------- buttons ---------- */
-.rv-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--line-2);
-  border-radius: 8px;
-  background: var(--bg);
-  box-shadow: var(--sh-xs);
-  color: var(--text);
-  font: 500 13px/1 var(--font);
-  letter-spacing: inherit;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background var(--t-fast) var(--ease);
-}
-.rv-btn:hover:not(:disabled) {
-  background: var(--hover);
-}
-.rv-btn--primary {
-  border-color: var(--text);
-  background: var(--text);
-  color: var(--bg);
-}
-.rv-btn--primary:hover:not(:disabled) {
-  background: var(--text-2);
-  border-color: var(--text-2);
-}
-.rv-btn--compact {
-  height: 28px;
-  padding: 0 10px;
-}
-.rv-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.rv-iconbtn {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--text-2);
-  cursor: pointer;
-}
-.rv-iconbtn:hover:not(:disabled) {
-  background: var(--hover);
-  color: var(--text);
-}
-.rv-iconbtn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+  transform: rotate(0deg);
 }
 
 /* ---------- chip / badge / glyph ---------- */
@@ -389,7 +380,7 @@ body {
   height: 20px;
   padding: 0 5px;
   border: 1px solid var(--line-2);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: var(--side);
   color: var(--text-2);
   font-size: 11px;
@@ -413,10 +404,7 @@ body {
   background: var(--amber-soft);
   color: var(--amber);
 }
-.rv-badge--active {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
+.rv-badge--active,
 .rv-badge--complete {
   background: var(--accent-soft);
   color: var(--accent);
@@ -452,7 +440,7 @@ body {
 .rv-hero {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 22px;
@@ -465,17 +453,6 @@ body {
 .rv-hero__line {
   margin: 0;
   color: var(--text-2);
-}
-.rv-hero__side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
-}
-.rv-hero__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 /* ---------- summary pills ---------- */
@@ -522,6 +499,74 @@ body {
   background: var(--red);
 }
 
+/* ---------- continue where you left off ---------- */
+/* The only card with a 3px teal bar: it is the one place Home says "pick up here". */
+.rv-resume {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-bottom: 20px;
+  padding: 20px 22px 20px 26px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--bg);
+  box-shadow: var(--sh-sm);
+}
+.rv-resume::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+.rv-resume__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.rv-resume__kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.rv-resume__kicker .rv-icon {
+  color: var(--accent);
+}
+.rv-resume__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font: 500 21px/1.25 var(--doc);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.rv-resume__facts {
+  display: flex;
+  margin: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.rv-resume__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 170px;
+}
+
 /* ---------- card / group ---------- */
 .rv-card {
   overflow: hidden;
@@ -560,6 +605,7 @@ body {
   font-weight: 400;
 }
 .rv-group__summary {
+  display: none;
   margin-left: auto;
   min-width: 0;
   overflow: hidden;
@@ -571,7 +617,7 @@ body {
 }
 .rv-chev {
   flex: none;
-  color: var(--text-2);
+  color: var(--text-3);
   transition: transform var(--t-base) var(--ease);
 }
 .rv-group[data-collapsed='true'] .rv-chev {
@@ -583,9 +629,6 @@ body {
 .rv-group[data-collapsed='true'] .rv-group__summary {
   display: block;
 }
-.rv-group__summary {
-  display: none;
-}
 .rv-group[data-collapsed='true'] .rv-rows {
   display: none;
 }
@@ -596,7 +639,7 @@ body {
   padding: 0;
   list-style: none;
 }
-.rv-rows .rv-row:last-child {
+.rv-rows > li:last-child .rv-row {
   border-bottom: 0;
 }
 .rv-row {
@@ -633,22 +676,21 @@ body {
 }
 .rv-row__main {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   min-width: 0;
 }
 .rv-row__title {
+  min-width: 0;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .rv-row__meta {
-  min-width: 0;
+  flex: none;
   color: var(--text-2);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .rv-row__state {
   display: flex;
@@ -666,12 +708,40 @@ body {
   white-space: nowrap;
 }
 
+/* Shown only where the details panel is hidden, so a selected row can still be opened. */
+.rv-inline-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--side);
+}
+.rv-inline-detail .rv-insp__title {
+  font-size: 19px;
+}
+
+.rv-anchor {
+  scroll-margin-top: 16px;
+}
+.rv-note {
+  margin: 4px 2px 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.rv-note a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ---------- inspector ---------- */
 .rv-insp {
   /* overflow stays visible so the edge handle is not clipped; .rv-insp__inner scrolls instead. */
   position: relative;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   border-left: 1px solid var(--line);
   background: var(--bg);
@@ -692,14 +762,19 @@ body {
 }
 .rv-insp__inner {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
   padding: 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .rv-insp__kind {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin: 0;
   color: var(--text-2);
   font-size: 12px;
 }
@@ -707,6 +782,10 @@ body {
   margin: 0;
   font: 500 22px/1.25 var(--doc);
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.rv-insp__status {
+  display: flex;
 }
 .rv-insp__props {
   display: grid;
@@ -722,6 +801,7 @@ body {
 }
 .rv-insp__props dd {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 .rv-insp__note {
   margin: 0;
@@ -733,6 +813,14 @@ body {
   flex-direction: column;
   gap: 8px;
 }
+.rv-insp__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rv-insp__empty .rv-insp__note {
+  max-width: 24ch;
+}
 
 /* ---------- states ---------- */
 .rv-state {
@@ -740,6 +828,7 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+  margin-bottom: 20px;
   padding: 20px;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -782,69 +871,21 @@ body {
   margin-top: 1px;
   color: var(--text-2);
 }
-/* ---------- legacy surface (temporary F1 seam) ---------- */
-.rv-legacy {
-  /* The shell is 100vh with overflow:hidden, so the legacy column must scroll itself. */
-  height: 100vh;
-  overflow: auto;
-  max-width: 60rem;
-  padding: var(--space-4);
-}
-
-/* ---------- responsive ---------- */
-@media (max-width: 1180px) {
-  .rv-shell {
-    grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr);
-  }
-  /* Hidden with its panel, so the control never promises an effect it cannot have. */
-  .rv-insp,
-  .rv-edge--inspector {
-    display: none;
-  }
-}
-@media (max-width: 760px) {
-  .rv-shell {
-    grid-template-columns: minmax(0, 1fr);
-    height: auto;
-    overflow: visible;
-  }
-  .rv-side,
-  .rv-edge--sidebar {
-    display: none;
-  }
-  .rv-legacy {
-    height: auto;
-    overflow: visible;
-  }
-  .rv-side__scroll,
-  .rv-insp__inner {
-    overflow: visible;
-  }
-  .rv-wrap {
-    padding: 20px 16px 32px;
-  }
-  .rv-hero__side {
-    align-items: flex-start;
-  }
-  .rv-row__time {
-    display: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rv-shell,
-  .rv-btn,
-  .rv-chev,
-  .rv-edge,
-  .rv-glyph--spin {
-    animation: none;
-    transition: none;
-  }
-}
 .rv-notice__action {
   flex: none;
   align-self: center;
   margin-left: auto;
+}
+
+/* ---------- legacy surface (temporary F1 seam) ---------- */
+.rv-legacy {
+  /* The shell is a fixed-height grid with overflow:hidden, so the legacy column scrolls itself. */
+  grid-column: 2 / -1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  max-width: 60rem;
+  padding: var(--space-4);
 }
 
 /* M10B's own visually-hidden, so this layer does not depend on the legacy stylesheet. */
@@ -858,4 +899,72 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  .rv-shell {
+    grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr);
+  }
+  /* Hidden with its panel, so the control never promises an effect it cannot have. */
+  .rv-insp {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  /* The sidebar stays as the icon rail (the shell forces it), so navigation never disappears. */
+  .rv-side__toggle {
+    display: none;
+  }
+  .rv-wrap {
+    padding: 20px 16px 40px;
+  }
+  .rv-topbar {
+    padding: 0 12px;
+  }
+  .rv-resume {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 18px 18px 18px 22px;
+  }
+  .rv-resume__actions {
+    flex-direction: row;
+    min-width: 0;
+  }
+  .rv-resume__actions .rv-btn {
+    flex: 1;
+  }
+  .rv-row__time,
+  .rv-row .rv-chip {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  /* The state moves under the title so long filenames keep their width. */
+  .rv-row {
+    grid-template-columns: 20px minmax(0, 1fr);
+    row-gap: 2px;
+    padding-block: 8px;
+  }
+  .rv-row__state {
+    grid-column: 2;
+  }
+  .rv-topbar__title {
+    display: none;
+  }
+  .rv-topbar__actions {
+    flex: 1;
+    justify-content: flex-end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv-shell,
+  .rv-btn,
+  .rv-chev,
+  .rv-glyph--spin {
+    animation: none;
+    transition: none;
+  }
 }

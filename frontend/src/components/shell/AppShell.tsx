@@ -9,6 +9,7 @@ import {
   type ShellState,
 } from './ShellContext'
 import { Sidebar } from './Sidebar'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 
 export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readPanelFlag(SIDEBAR_KEY, true))
@@ -28,7 +29,12 @@ export function AppShell() {
     })
   }, [])
 
-  usePanelShortcut(toggleSidebar, toggleInspector)
+  // Below this width the sidebar is the icon rail and cannot be expanded, so navigation stays
+  // reachable. The saved preference is left alone, and returns when the window widens again.
+  const narrow = useMediaQuery('(max-width: 760px)')
+  const railed = sidebarCollapsed || narrow
+
+  usePanelShortcut(narrow ? () => {} : toggleSidebar, toggleInspector)
 
   const state = useMemo<ShellState>(
     () => ({ sidebarCollapsed, toggleSidebar, inspectorCollapsed, toggleInspector }),
@@ -37,8 +43,8 @@ export function AppShell() {
 
   return (
     <ShellContext value={state}>
-      <div className="rv-shell" data-sidebar={sidebarCollapsed ? 'collapsed' : undefined} data-inspector={inspectorCollapsed ? 'collapsed' : undefined}>
-        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+      <div className="rv-shell" data-sidebar={railed ? 'collapsed' : undefined} data-inspector={inspectorCollapsed ? 'collapsed' : undefined}>
+        <Sidebar collapsed={railed} onToggle={toggleSidebar} />
         <Outlet />
       </div>
     </ShellContext>

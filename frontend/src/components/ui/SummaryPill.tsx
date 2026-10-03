@@ -22,7 +22,7 @@ export function SummaryPill({ count, label, tone, targetId, onReveal }: SummaryP
         onReveal?.()
         // The scroll container is .rv-scroll, not the document, so anchor navigation alone
         // would leave the group off screen.
-        globalThis.document?.getElementById(targetId)?.scrollIntoView({ block: 'nearest' })
+        globalThis.document?.getElementById(targetId)?.scrollIntoView({ block: 'start' })
       }}
     >
       <i className={`rv-dot rv-dot--${tone}`} />
