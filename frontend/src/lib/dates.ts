@@ -33,3 +33,25 @@ export function dateTime(value: string): string {
     minute: '2-digit',
   })
 }
+
+const TIME = { hour: '2-digit', minute: '2-digit' } as const
+
+/**
+ * Review-table time, e.g. "Today, 09:12", "Yesterday, 16:40", "Tue, 15:10", "27 Sept, 08:43".
+ * Relative to the browser's own clock, so it is exact rather than a guess. `now` is injectable
+ * for tests. Empty when the timestamp is unusable.
+ */
+export function rowDate(value: string, now: Date = new Date()): string {
+  const date = parse(value)
+  if (!date) return ''
+  const time = date.toLocaleTimeString(undefined, TIME)
+  const days = Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+      new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) /
+      86_400_000,
+  )
+  if (days === 0) return `Today, ${time}`
+  if (days === 1) return `Yesterday, ${time}`
+  if (days > 1 && days < 7) return `${date.toLocaleDateString(undefined, { weekday: 'short' })}, ${time}`
+  return `${shortDate(value)}, ${time}`
+}

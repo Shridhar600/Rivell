@@ -1,6 +1,11 @@
 import { useRef } from 'react'
-import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
+import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type {
+  InfiniteData,
+  UseInfiniteQueryResult,
+  UseMutationResult,
+  UseQueryResult,
+} from '@tanstack/react-query'
 import { createApiClient } from './client'
 import { parseEvidenceItem } from './retrieval'
 import type { EvidenceItem } from './retrieval'
@@ -588,6 +593,7 @@ export const reviewKeys = {
   packs: () => ['reviews', 'packs'] as const,
   list: (contractId: string) => ['reviews', 'list', contractId] as const,
   organization: () => ['reviews', 'organization'] as const,
+  history: () => ['reviews', 'history'] as const,
   summary: (reviewId: string) => ['reviews', 'summary', reviewId] as const,
   progress: (reviewId: string) => ['reviews', 'progress', reviewId] as const,
   findings: (reviewId: string, filters: FindingFilters) =>
@@ -657,6 +663,43 @@ export async function fetchOrganizationReviewList(): Promise<ReviewListResponse>
     )
   }
   return parseApiResult(data, parseReviewList, 'review list')
+}
+
+/**
+ * Page size for the Reviews history. Larger than Home's queue because this page is the archive,
+ * and still well under the backend maximum.
+ */
+export const REVIEW_HISTORY_PAGE_LIMIT = 25
+
+async function fetchReviewHistoryPage(cursor: string | undefined): Promise<ReviewListResponse> {
+  const client = createApiClient()
+  const { data, response } = await client.GET('/api/reviews', {
+    params: { query: { limit: REVIEW_HISTORY_PAGE_LIMIT, ...(cursor ? { cursor } : {}) } },
+  })
+  if (!data) {
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review list unavailable'),
+      response.status,
+    )
+  }
+  return parseApiResult(data, parseReviewList, 'review list')
+}
+
+/**
+ * Every review in the organization, newest first, one cursor page at a time. Nothing is fetched
+ * ahead of the reviewer: more pages load only when they ask for them.
+ */
+export function useReviewHistoryQuery(): UseInfiniteQueryResult<
+  InfiniteData<ReviewListResponse, string | undefined>
+> {
+  return useInfiniteQuery({
+    queryKey: reviewKeys.history(),
+    queryFn: ({ pageParam }) => fetchReviewHistoryPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    staleTime: 15_000,
+    retry: reviewRetry,
+  })
 }
 
 export function useOrganizationReviewsQuery(): UseQueryResult<ReviewListResponse> {

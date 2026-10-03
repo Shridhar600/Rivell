@@ -18,11 +18,11 @@ export const appRoutes = [
     element: <AppShell />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'reviews', element: <ReviewsPage /> },
       {
-        // Temporary F1 seam: these surfaces keep their existing layout until F2/F3 restyle them.
+        // Temporary seam: these surfaces keep their existing layout until they are restyled.
         element: <LegacySurface />,
         children: [
-          { path: 'reviews', element: <ReviewsPage /> },
           { path: 'reviews/:contractId', element: <ContractPage /> },
           { path: 'reviews/:contractId/analysis', element: <ContractAnalysisPage /> },
           { path: 'reviews/:contractId/analysis/:reviewId', element: <ReviewWorkspacePage /> },

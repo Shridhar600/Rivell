@@ -28,15 +28,17 @@ const ingest = {
   nodeCount: 0,
 }
 
-function renderForm() {
+async function renderForm() {
   const router = createMemoryRouter(appRoutes, {
     initialEntries: ['/reviews'],
   })
-  return render(
+  render(
     <AppProviders>
       <RouterProvider router={router} />
     </AppProviders>,
   )
+  // The upload form lives behind the top bar's primary action.
+  await userEvent.click(screen.getAllByRole('button', { name: /^start review$/i })[0])
 }
 
 function reviewForm() {
@@ -50,11 +52,9 @@ afterEach(() => {
 
 describe('NewReviewForm', () => {
   it('shows validation error when submitting without a file', async () => {
-    renderForm()
+    await renderForm()
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /start review/i }),
-    )
+    await userEvent.click(within(reviewForm()).getByRole('button', { name: /start review/i }))
 
     expect(await within(reviewForm()).findByRole('alert')).toHaveTextContent(
       /choose a/i,
@@ -62,7 +62,7 @@ describe('NewReviewForm', () => {
   })
 
   it('rejects non-docx files with a clear message', async () => {
-    renderForm()
+    await renderForm()
 
     const input = screen.getByLabelText(/contract file/i)
     const file = new File(['hi'], 'notes.txt', { type: 'text/plain' })
@@ -80,15 +80,13 @@ describe('NewReviewForm', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    renderForm()
+    await renderForm()
 
     const file = new File(['docx-bytes'], 'upload.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     })
     await userEvent.upload(screen.getByLabelText(/contract file/i), file)
-    await userEvent.click(
-      screen.getByRole('button', { name: /start review/i }),
-    )
+    await userEvent.click(within(reviewForm()).getByRole('button', { name: /start review/i }))
 
     expect(await screen.findByRole('status')).toHaveTextContent(
       /loading contract/i,
@@ -113,15 +111,13 @@ describe('NewReviewForm', () => {
       ),
     )
 
-    renderForm()
+    await renderForm()
 
     const file = new File(['bad'], 'upload.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     })
     await userEvent.upload(screen.getByLabelText(/contract file/i), file)
-    await userEvent.click(
-      screen.getByRole('button', { name: /start review/i }),
-    )
+    await userEvent.click(within(reviewForm()).getByRole('button', { name: /start review/i }))
 
     const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
     expect(alert).toHaveTextContent(/upload|failed/i)
@@ -145,15 +141,13 @@ describe('NewReviewForm', () => {
       ),
     )
 
-    renderForm()
+    await renderForm()
 
     const file = new File(['bad'], 'upload.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     })
     await userEvent.upload(screen.getByLabelText(/contract file/i), file)
-    await userEvent.click(
-      screen.getByRole('button', { name: /start review/i }),
-    )
+    await userEvent.click(within(reviewForm()).getByRole('button', { name: /start review/i }))
 
     const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
     expect(alert).toHaveTextContent(/upload was not accepted/i)
@@ -173,13 +167,13 @@ describe('NewReviewForm', () => {
       ),
     )
 
-    renderForm()
+    await renderForm()
 
     const file = new File(['big'], 'big.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     })
     await userEvent.upload(screen.getByLabelText(/contract file/i), file)
-    await userEvent.click(screen.getByRole('button', { name: /start review/i }))
+    await userEvent.click(within(reviewForm()).getByRole('button', { name: /start review/i }))
 
     const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
     expect(alert).toHaveTextContent(/larger than this Rivell deployment accepts/i)
@@ -247,22 +241,20 @@ describe('NewReviewForm', () => {
       }),
     )
 
-    renderForm()
+    await renderForm()
 
     const file = new File(['docx-bytes'], 'upload.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     })
     await userEvent.upload(screen.getByLabelText(/contract file/i), file)
-    await userEvent.click(
-      screen.getByRole('button', { name: /start review/i }),
-    )
+    await userEvent.click(within(reviewForm()).getByRole('button', { name: /start review/i }))
 
     const alert = await within(reviewForm()).findByRole('alert', {}, { timeout: 5000 })
     expect(alert).toHaveTextContent(/upload was not accepted/i)
     expect(alert).not.toHaveTextContent(/com\.rivell|LocalDocumentStorage/)
 
     await userEvent.click(
-      within(reviewForm()).getByRole('button', { name: /try again/i }),
+      within(reviewForm()).getByRole('button', { name: /start review/i }),
     )
 
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(

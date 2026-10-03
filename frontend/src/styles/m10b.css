@@ -877,6 +877,225 @@ body {
   margin-left: auto;
 }
 
+/* ---------- Reviews index (ported from rivell-reviews-v1.html: .kp, .ftabs, .klist, .rtab, .krow) ---------- */
+/* No inspector on this page, as in the canonical list view, so the page takes its column too. */
+.rv-main--wide {
+  grid-column: 2 / -1;
+}
+.rv-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 28px 28px 60px;
+}
+.rv-page__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.rv-page__title {
+  margin: 0 0 4px;
+  font: 500 28px/1.15 var(--doc);
+  letter-spacing: -0.01em;
+}
+.rv-page__lede {
+  margin: 0;
+  color: var(--text-2);
+}
+.rv-ftabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.rv-ftab {
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--bg);
+  color: var(--text-2);
+  font: 500 12.5px/1 var(--font);
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.rv-ftab[aria-pressed='true'] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
+}
+.rv-ftab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.rv-ftab:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+}
+.rv-ftab span {
+  margin-left: 4px;
+  opacity: 0.65;
+}
+.rv-rlist {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--bg);
+  box-shadow: var(--sh-sm);
+}
+.rv-rtab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px 130px 100px;
+  gap: 14px;
+  align-items: center;
+}
+.rv-rtab--head {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--side);
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rv-rtab--head span:last-child {
+  text-align: right;
+}
+.rv-rrows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rv-rrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+  color: inherit;
+  text-decoration: none;
+}
+.rv-rrows > li:first-child .rv-rrow {
+  border-top: 0;
+}
+.rv-rrow:hover {
+  background: var(--side);
+}
+.rv-rrow:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus-inset);
+}
+.rv-rrow > .rv-icon {
+  color: var(--text-3);
+  transform: rotate(-90deg);
+}
+.rv-rrow__name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rv-rrow__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-weight: 500;
+}
+.rv-rrow__detail {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-rrow__progress {
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.rv-rrow__time {
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-align: right;
+}
+.rv-stb {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 9px;
+  border-radius: var(--r-pill);
+  background: var(--hover);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rv-stb .rv-icon {
+  width: 12px;
+  height: 12px;
+  margin-right: 5px;
+}
+.rv-stb--ok {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.rv-stb--red {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.rv-rlist__empty {
+  margin: 0;
+  padding: 20px 16px;
+  color: var(--text-2);
+}
+.rv-more {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rv-more .rv-note {
+  margin: 0;
+}
+
+/* ---------- start review panel ---------- */
+.rv-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 20px;
+}
+.rv-form__label {
+  margin-top: 4px;
+  font-weight: 600;
+}
+.rv-form__drop {
+  align-self: stretch;
+  padding: 22px;
+  border: 1.5px dashed var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--side);
+  color: var(--text-2);
+  text-align: center;
+}
+.rv-form__hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rv-form__error {
+  margin: 0;
+  color: var(--red);
+}
+.rv-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 /* ---------- legacy surface (temporary F1 seam) ---------- */
 .rv-legacy {
   /* The shell is a fixed-height grid with overflow:hidden, so the legacy column scrolls itself. */
@@ -916,7 +1135,8 @@ body {
   .rv-side__toggle {
     display: none;
   }
-  .rv-wrap {
+  .rv-wrap,
+  .rv-page {
     padding: 20px 16px 40px;
   }
   .rv-topbar {
@@ -937,6 +1157,14 @@ body {
   }
   .rv-row__time,
   .rv-row .rv-chip {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  .rv-rtab {
+    grid-template-columns: minmax(0, 1fr) 120px;
+  }
+  .rv-rtab > :nth-child(n + 3) {
     display: none;
   }
 }
