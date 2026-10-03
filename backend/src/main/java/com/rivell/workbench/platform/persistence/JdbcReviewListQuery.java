@@ -14,7 +14,10 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.rivell.workbench.review.ReviewExecutionCounts;
+import com.rivell.workbench.review.ReviewContextSummary;
+import com.rivell.workbench.review.ReviewListFinalization;
 import com.rivell.workbench.review.ReviewListQuery;
+import com.rivell.workbench.review.ReviewListRedline;
 import com.rivell.workbench.review.ReviewListRow;
 import com.rivell.workbench.review.ReviewListRunState;
 
@@ -50,6 +53,9 @@ class JdbcReviewListQuery implements ReviewListQuery {
             Instant afterCreatedAt, UUID afterId, int limit) {
         var sql = new StringBuilder("""
                 select r.id, r.contract_id, r.contract_version_number, sa.filename,
+                       cv.created_at as version_uploaded_at,
+                       rs.contract_type, rs.our_side_role, rs.paper_source,
+                       rs.jurisdiction,
                        r.status, r.failure_reason, r.created_at, r.started_at, r.completed_at
                 from review r
                 join contract_version cv
@@ -58,6 +64,9 @@ class JdbcReviewListQuery implements ReviewListQuery {
                 join source_artifact sa
                   on sa.id = cv.source_artifact_id
                  and sa.organization_id = r.organization_id
+                left join review_snapshot rs
+                  on rs.review_id = r.id
+                 and rs.organization_id = r.organization_id
                 where r.organization_id = :organizationId
                 """);
         if (contractId != null) {
@@ -92,6 +101,12 @@ class JdbcReviewListQuery implements ReviewListQuery {
                         rs.getObject("contract_id", UUID.class),
                         rs.getInt("contract_version_number"),
                         rs.getString("filename"),
+                        instant(rs, "version_uploaded_at"),
+                        new ReviewContextSummary(
+                                rs.getString("contract_type"),
+                                rs.getString("our_side_role"),
+                                rs.getString("paper_source"),
+                                rs.getString("jurisdiction")),
                         rs.getString("status"),
                         rs.getString("failure_reason"),
                         rs.getObject("created_at", OffsetDateTime.class).toInstant(),
@@ -205,6 +220,85 @@ class JdbcReviewListQuery implements ReviewListQuery {
     @Transactional(readOnly = true)
     public Map<UUID, Integer> countFindings(UUID organizationId, Collection<UUID> runIds) {
         return runCounts(organizationId, runIds, "finding");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, ReviewListFinalization> findFinalizations(
+            UUID organizationId, Collection<UUID> reviewIds) {
+        if (reviewIds.isEmpty()) {
+            return Map.of();
+        }
+        // LEFT JOIN, so a finalized review with no approved change still reports a zero
+        // rather than vanishing: "finalized with nothing approved" is a real outcome and
+        // is different from "not finalized".
+        return jdbcClient.sql("""
+                select f.review_id, f.finalized_at, count(c.id) as approved_changes
+                from review_finalization f
+                left join approved_change c
+                  on c.change_set_id = f.id
+                 and c.organization_id = f.organization_id
+                where f.organization_id = :organizationId
+                  and f.review_id = any(:reviewIds)
+                group by f.review_id, f.finalized_at
+                """)
+                .param("organizationId", organizationId)
+                .param("reviewIds", reviewIds.toArray(UUID[]::new))
+                .query((rs, rowNum) -> Map.entry(
+                        rs.getObject("review_id", UUID.class),
+                        new ReviewListFinalization(
+                                instant(rs, "finalized_at"),
+                                rs.getInt("approved_changes"))))
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, ReviewListRedline> findRedlines(
+            UUID organizationId, Collection<UUID> reviewIds) {
+        if (reviewIds.isEmpty()) {
+            return Map.of();
+        }
+        // A verified-change count is withheld unless the execution completed and produced
+        // a redline. A failed execution can hold changes that verified individually, so
+        // reporting its partial count as a verified total would claim success the domain
+        // withheld; an execution with nothing to redline verified nothing at all.
+        return jdbcClient.sql("""
+                select e.review_id, e.status, e.outcome, e.completed_at,
+                       (a.id is not null) as download_available,
+                       case
+                           when e.status = 'COMPLETED' and e.outcome = 'REDLINE_GENERATED'
+                           then (select count(*)
+                                 from redline_execution_change c
+                                 where c.organization_id = e.organization_id
+                                   and c.execution_id = e.id
+                                   and c.status = 'APPLIED'
+                                   and c.verification = 'VERIFIED')
+                       end as verified_change_count
+                from redline_execution e
+                left join redline_artifact a
+                  on a.execution_id = e.id
+                 and a.organization_id = e.organization_id
+                where e.organization_id = :organizationId
+                  and e.review_id = any(:reviewIds)
+                """)
+                .param("organizationId", organizationId)
+                .param("reviewIds", reviewIds.toArray(UUID[]::new))
+                .query((rs, rowNum) -> Map.entry(
+                        rs.getObject("review_id", UUID.class),
+                        new ReviewListRedline(
+                                rs.getString("status"),
+                                rs.getString("outcome"),
+                                nullableInt(rs, "verified_change_count"),
+                                rs.getBoolean("download_available"),
+                                instant(rs, "completed_at"))))
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private Map<UUID, Integer> countsByReview(
