@@ -39,6 +39,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reviews/{id}/redline/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry the frozen approved change set after a FAILED redline execution */
+        post: operations["retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reviews/{id}/finalize": {
         parameters: {
             query?: never;
@@ -827,6 +844,8 @@ export interface components {
             contractVersionNumber?: number;
             /** Format: int32 */
             changeSetVersion?: number;
+            /** Format: int32 */
+            attempt?: number;
             status?: string;
             outcome?: string;
             failureCode?: string;
@@ -1464,6 +1483,13 @@ export interface components {
             /** Format: date-time */
             timestamp?: string;
         };
+        DocumentView: {
+            contractFilename?: string;
+            /** Format: date-time */
+            uploadedAt?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+        };
         FailureView: {
             code?: string;
             message?: string;
@@ -1474,6 +1500,14 @@ export interface components {
             paperSource?: string;
             jurisdiction?: string;
             contractPackKey?: string;
+        };
+        ProposedChangeCounts: {
+            /** Format: int32 */
+            replace?: number;
+            /** Format: int32 */
+            insert?: number;
+            /** Format: int32 */
+            delete?: number;
         };
         ReviewCoverageView: {
             /** @enum {string} */
@@ -1519,6 +1553,8 @@ export interface components {
             signals?: number;
             /** Format: int32 */
             findings?: number;
+            proposedChanges?: components["schemas"]["ProposedChangeCounts"];
+            document?: components["schemas"]["DocumentView"];
             snapshot?: components["schemas"]["SnapshotView"];
             coverage?: components["schemas"]["ReviewCoverageView"][];
             analysisWarnings?: components["schemas"]["AnalysisWarningView"][];
@@ -2363,6 +2399,46 @@ export interface operations {
                 };
             };
             /** @description Not finalized, or the execution failed deterministically (full report via GET) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultRedlineExecutionView"];
+                };
+            };
+            /** @description Missing reviews:redline */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No FAILED execution to retry, or the retry failed deterministically (full report via GET) */
             409: {
                 headers: {
                     [name: string]: unknown;
