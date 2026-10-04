@@ -68,6 +68,14 @@ class DemoSeedDisabledByDefaultIT {
                 .as("the scripted provider must be unreachable in a normal deployment")
                 .isEmpty();
         assertThat(context.getBeanNamesForType(DemoScriptedGenerativeProvider.class)).isEmpty();
+        assertThat(context.getBeanNamesForType(DemoScenarioSeeder.class)).isEmpty();
+        assertThat(context.getBeanNamesForType(DemoAnalysisFaultPolicy.class))
+                .as("the injected-failure seam must not exist in a normal deployment")
+                .isEmpty();
+        assertThat(context.getBeanNamesForType(DemoFaultingReviewRepository.class)).isEmpty();
+        assertThat(context.containsBean("demoFaultingReviewRepository"))
+                .as("the review repository must not be decorated outside the demo")
+                .isFalse();
     }
 
     @Test
