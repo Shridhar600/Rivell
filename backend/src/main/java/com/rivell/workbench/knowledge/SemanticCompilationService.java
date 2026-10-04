@@ -202,6 +202,16 @@ public class SemanticCompilationService {
                     null, provenance, VerificationState.VERIFIED, null));
             return;
         }
+        if (verbatim.isEmpty() && (state.text() == null || state.text().isBlank())) {
+            // A table region carries candidate rows but no prose. Recording the outcome keeps
+            // the candidate explicit and the source lineage intact rather than silently
+            // omitting the field, and avoids asking a model to extract from nothing.
+            fields.put("escalationTrigger", new FieldInterpretation(
+                    "escalationTrigger", InterpretationKind.GENERATIVE_EXTRACTION, "UNAVAILABLE",
+                    M4ReasoningSpecs.ESCALATION_TRIGGER_SPEC, M4ReasoningSpecs.escalationTrigger().version(),
+                    null, provenance, VerificationState.UNCERTAIN, null));
+            return;
+        }
         try {
             var extracted = generativeFieldExtractor.extractEscalationTrigger(state);
             if (extracted.isPresent()) {

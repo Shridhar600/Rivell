@@ -41,8 +41,9 @@ def contract(title, parties, sections, schedules=()):
                      f'<w:tc><w:p><w:r><w:t>{right}</w:t></w:r></w:p></w:tc></w:tr>')
         body += '</w:tbl>'
     # The disclaimer goes last on purpose. A body paragraph placed before the first
-    # heading becomes a content unit with no heading, and the semantic compiler then
-    # dereferences that absent title.
+    # heading becomes a content unit with no heading, and a table region becomes one with
+    # no text at all. The semantic compiler used to dereference that absent text when a
+    # text-less unit looked like an escalation position.
     body += p('Heading1' and 'Notice', 'Heading1')
     body += p('This is a fictional demonstration document. It is not a real agreement '
               'and creates no obligation.')
