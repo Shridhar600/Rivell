@@ -26,6 +26,7 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     payloadColumns: {},
     legalConceptKey: 'LIMITATION_OF_LIABILITY',
     effectiveConceptKey: 'LIMITATION_OF_LIABILITY',
+    conceptCorrection: null,
     classifiedConcepts: { LIMITATION_OF_LIABILITY: 0.91 },
     positions: ['PREFERRED'],
     variantRole: null,

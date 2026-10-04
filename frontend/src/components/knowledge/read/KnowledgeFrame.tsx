@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { TopBar } from '../../shell/TopBar'
-import { LinkButton } from '../../ui/Button'
-import { PlusIcon } from '../../ui/Icon'
+import { CheckIcon, CloseIcon, PlusIcon } from '../../ui/Icon'
+import { IconButton } from '../../ui/Button'
 import { useHeadingFocus } from '../../../lib/useHeadingFocus'
+import { readPublishedNotice, type PublishedNotice } from '../../../lib/publishedNotice'
 
 export interface Crumb {
   label: string
@@ -31,18 +32,33 @@ function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
   )
 }
 
+/** Which document the reviewer is adding. A page can offer one type, and the dialog still lets them change it. */
+export type AddPreset = 'playbook' | 'clause-library'
+
+const PRESET_LABEL: Record<AddPreset, string> = { playbook: 'Add playbook', 'clause-library': 'Add clause library' }
+
 /**
- * "Add knowledge" opens the existing Add knowledge page. That page already works, so this is a
- * real destination and not a placeholder. The upload and compilation flow itself is not part of
- * the read surfaces.
+ * Opens Add knowledge on this same page. The dialog is addressed by `?add=`, so it survives a
+ * reload and the page behind it keeps its place. `KnowledgeLayout` renders it.
  */
-export function AddKnowledgeButton() {
+export function AddKnowledgeButton({ preset }: { preset?: AddPreset }) {
+  const [params] = useSearchParams()
+  const next = new URLSearchParams(params)
+  next.set('add', preset ?? '1')
   return (
-    <LinkButton to="/knowledge/new" variant="primary">
+    <Link to={{ search: `?${next.toString()}` }} replace className="rv-btn rv-btn--primary">
       <PlusIcon className="rv-icon" />
-      Add knowledge
-    </LinkButton>
+      {preset ? PRESET_LABEL[preset] : 'Add knowledge'}
+    </Link>
   )
+}
+
+function publishedMessage(notice: PublishedNotice): string {
+  const [one, many] = notice.type === 'CLAUSE_LIBRARY' ? ['clause variant', 'clause variants'] : ['position', 'positions']
+  const parts = [`${notice.published} ${notice.published === 1 ? one : many} published`]
+  if (notice.corrected > 0) parts.push(`${notice.corrected} corrected by you`)
+  if (notice.rejected > 0) parts.push(`${notice.rejected} rejected and left out`)
+  return `${parts.join(', ')}. The original source is unchanged and earlier publications remain reproducible.`
 }
 
 interface KnowledgeFrameProps {
@@ -61,11 +77,27 @@ interface KnowledgeFrameProps {
 /** The canonical Knowledge page: breadcrumb top bar, then a scrolling page with a serif title. */
 export function KnowledgeFrame({ crumbs, title, lede, meta, actions, withInspector = false, children }: KnowledgeFrameProps) {
   const headingRef = useHeadingFocus<HTMLHeadingElement>(title)
+  // Said on the page the reviewer lands on right after publishing, until they dismiss it or move on.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const notice = readPublishedNotice(location.state)
+  const dismiss = () => void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
   return (
     <div className={`rv-main${withInspector ? '' : ' rv-main--wide'}`}>
       <TopBar title={<Breadcrumbs crumbs={crumbs} />} actions={<AddKnowledgeButton />} />
       <div className="rv-scroll">
         <div className="rv-page">
+          {notice ? (
+            <p className="rv-k-published" role="status">
+              <CheckIcon className="rv-icon" />
+              <span>
+                <b>Published as publication {notice.publicationNumber}.</b> {publishedMessage(notice)}
+              </span>
+              <IconButton label="Dismiss" onClick={dismiss}>
+                <CloseIcon className="rv-icon" />
+              </IconButton>
+            </p>
+          ) : null}
           <div className="rv-page__head">
             <div>
               <h1 className="rv-page__title rv-k-title" tabIndex={-1} ref={headingRef}>

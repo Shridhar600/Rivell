@@ -161,6 +161,83 @@ describe('catalog', () => {
   })
 })
 
+describe('publication history isolation', () => {
+  const a = artifact({ id: 'a', filename: 'A.docx' })
+  const b = artifact({ id: 'b', filename: 'B.docx' })
+  const set = (id: string, ids: string[]) => ids.map((entry) => candidate({ id: entry, artifactId: id }))
+  const publications = [
+    publication(1, [{ candidateId: 'a1' }, { candidateId: 'a2' }]),
+    publication(2, [{ candidateId: 'b1' }, { candidateId: 'b2' }]),
+    publication(3, [{ candidateId: 'a3', supersedes: 'a1' }]),
+    publication(4, [{ candidateId: 'a4' }]),
+  ]
+  const candidates = new Map([
+    ['a', set('a', ['a1', 'a2', 'a3', 'a4'])],
+    ['b', set('b', ['b1', 'b2'])],
+  ])
+  const catalog = buildCatalog({ artifacts: [a, b], publications, candidates })
+  const playbook = (id: string) => {
+    const view = catalog.playbooks.find((entry) => entry.artifact.id === id)
+    if (!view) throw new Error(`no playbook ${id}`)
+    return view
+  }
+  const ids = (id: string, at?: number) => playbookPositions(playbook(id), catalog.index, at).map((c) => c.id)
+
+  it('never shows publication N an item that was first published in N+1 or later', () => {
+    expect(ids('a', 1)).toEqual(['a1', 'a2'])
+    expect(ids('a', 2)).toEqual(['a1', 'a2'])
+    expect(ids('a', 3)).toEqual(['a2', 'a3'])
+    expect(ids('a', 4)).toEqual(['a2', 'a3', 'a4'])
+  })
+
+  it('removes a superseded item at its superseding publication and not before', () => {
+    expect(isLiveAt(catalog.index, 'a1', 2)).toBe(true)
+    expect(isLiveAt(catalog.index, 'a1', 3)).toBe(false)
+    expect(isLiveAt(catalog.index, 'a1', 4)).toBe(false)
+    // The replacement is live exactly from that publication.
+    expect(isLiveAt(catalog.index, 'a3', 2)).toBe(false)
+    expect(isLiveAt(catalog.index, 'a3', 3)).toBe(true)
+  })
+
+  it('reproduces an older snapshot identically after later publications exist', () => {
+    const before = buildCatalog({ artifacts: [a], publications: publications.slice(0, 1), candidates })
+    const snapshot = (c: typeof catalog) => playbookPositions(c.playbooks[0]!, c.index, 1).map((entry) => entry.id)
+    expect(snapshot(catalog)).toEqual(snapshot(before))
+  })
+
+  it('does not let another source\'s publications into this source\'s history', () => {
+    expect(playbook('a').versions.map((v) => v.publication.number)).toEqual([4, 3, 1])
+    expect(playbook('b').versions.map((v) => v.publication.number)).toEqual([2])
+    // Publication 2 touched only B, so A has no version for it and no snapshot differs at 2.
+    expect(playbook('a').versions.some((v) => v.publication.number === 2)).toBe(false)
+    expect(playbook('b').versions[0]).toMatchObject({ added: 2, superseded: 0, live: 2 })
+  })
+
+  it('does not depend on the order the publication list arrives in', () => {
+    const reversed = buildPublicationIndex([...publications].reverse())
+    expect(isLiveAt(reversed, 'a1', 2)).toBe(true)
+    expect(isLiveAt(reversed, 'a1', 3)).toBe(false)
+  })
+
+  it('removes a twice-superseded item at the earliest supersession, in either list order', () => {
+    const twice = [
+      publication(1, [{ candidateId: 'x' }]),
+      publication(2, [{ candidateId: 'y', supersedes: 'x' }]),
+      publication(3, [{ candidateId: 'z', supersedes: 'x' }]),
+    ]
+    for (const list of [twice, [...twice].reverse()]) {
+      const index = buildPublicationIndex(list)
+      expect(isLiveAt(index, 'x', 1)).toBe(true)
+      expect(isLiveAt(index, 'x', 2)).toBe(false)
+    }
+  })
+
+  it('counts a version by what changed this source only', () => {
+    const entry = playbook('a').versions.find((v) => v.publication.number === 3)
+    expect(entry).toMatchObject({ added: 1, superseded: 1, live: 2 })
+  })
+})
+
 describe('presentation helpers', () => {
   it('names a source by its filename without the extension and nothing else', () => {
     expect(artifactName(pb)).toBe('Commercial MSA Playbook')

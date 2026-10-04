@@ -2,7 +2,6 @@ import { useKnowledgeCatalog } from '../../api/knowledgeRead'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
 import { AddKnowledgeButton, KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
-import { LinkButton } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/State'
 import { longDate } from '../../lib/dates'
 import { artifactName, countNoun, reviewedText, type Catalog, type PlaybookView } from '../../lib/knowledgeCatalog'
@@ -28,7 +27,7 @@ function playbookDetail(playbook: PlaybookView): string {
 function Playbooks({ catalog, state }: { catalog: Catalog; state: ReturnType<typeof useKnowledgeCatalog> }) {
   const compiling = catalog.inCompilation.filter((source) => source.artifact.artifactType === 'PLAYBOOK')
   return (
-    <KnowledgeFrame crumbs={CRUMBS} title="Playbooks" lede={LEDE} actions={<AddKnowledgeButton />}>
+    <KnowledgeFrame crumbs={CRUMBS} title="Playbooks" lede={LEDE} actions={<AddKnowledgeButton preset="playbook" />}>
       <CatalogNotices state={state} catalog={catalog} />
 
       {compiling.length > 0 ? (
@@ -37,7 +36,7 @@ function Playbooks({ catalog, state }: { catalog: Catalog; state: ReturnType<typ
             <KnowledgeLinkRow
               key={source.artifact.id}
               accent
-              to={`/knowledge/artifacts/${source.artifact.id}`}
+              to={`/knowledge/compilations/${source.artifact.id}`}
               type="PLAYBOOK"
               title={artifactName(source.artifact)}
               detail={`${reviewedText(source) ? `${reviewedText(source)}. ` : ''}Nothing is used in reviews until you publish it.`}
@@ -51,7 +50,7 @@ function Playbooks({ catalog, state }: { catalog: Catalog; state: ReturnType<typ
         <EmptyState
           title="No playbook is published"
           message="A playbook appears here once you publish its reviewed positions."
-          action={<LinkButton to="/knowledge/new">Add knowledge</LinkButton>}
+          action={<AddKnowledgeButton />}
         />
       ) : (
         <ul className="rv-k-list" aria-label="Published playbooks">

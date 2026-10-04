@@ -30,6 +30,7 @@ export function candidate(over: Partial<Candidate> & { id: string; artifactId: s
     payloadColumns: {},
     legalConceptKey: null,
     effectiveConceptKey: null,
+    conceptCorrection: null,
     classifiedConcepts: {},
     positions: ['PREFERRED'],
     variantRole: null,

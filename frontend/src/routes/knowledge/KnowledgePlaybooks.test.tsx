@@ -31,7 +31,7 @@ describe('Playbooks list', () => {
     renderKnowledge('/knowledge/playbooks')
     const compiling = await screen.findByRole('list', { name: 'Playbooks in compilation' })
     const row = within(compiling).getByRole('link')
-    expect(row).toHaveAttribute('href', '/knowledge/artifacts/draft')
+    expect(row).toHaveAttribute('href', '/knowledge/compilations/draft')
     expect(row).toHaveTextContent('Nothing is used in reviews until you publish it')
   })
 
@@ -39,7 +39,9 @@ describe('Playbooks list', () => {
     stubKnowledgeApi({ artifacts: [], candidates: {}, publications: [], units: {}, structure: {} })
     renderKnowledge('/knowledge/playbooks')
     expect(await screen.findByText('No playbook is published')).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: 'Add knowledge' }).every((link) => link.getAttribute('href') === '/knowledge/new')).toBe(true)
+    expect(screen.getAllByRole('link', { name: 'Add knowledge' }).every((link) => link.getAttribute('href') === '/knowledge/playbooks?add=1')).toBe(true)
+    // The page's own button names what it adds.
+    expect(screen.getByRole('link', { name: 'Add playbook' })).toHaveAttribute('href', '/knowledge/playbooks?add=playbook')
   })
 })
 
@@ -98,26 +100,14 @@ describe('Playbook detail', () => {
     expect(within(details).getByRole('link', { name: /Open in original source/ })).toHaveAttribute('href', '/knowledge/sources/pb?position=p1')
   })
 
-  it('links to an approved clause only where both carry the same typed legal concept', async () => {
+  it('never links a playbook position to a clause, even on the same legal concept', async () => {
     await open()
     const details = screen.getByRole('complementary', { name: 'Details' })
-    const link = within(details).getByRole('link', { name: /Open clause/ })
-    expect(link).toHaveAttribute('href', '/knowledge/clauses/LIMITATION_OF_LIABILITY')
-
-    // Payment Terms has no legal concept, so nothing is linked, whatever its title resembles.
-    await userEvent.click(within(screen.getByRole('list', { name: 'Positions' })).getByRole('button', { name: /Payment Terms/ }))
-    expect(within(details).queryByRole('link', { name: /Open clause/ })).not.toBeInTheDocument()
-    expect(within(details).queryByText(/same legal concept/)).not.toBeInTheDocument()
-  })
-
-  it('does not link a clause when the clause library has none on that concept', async () => {
-    const world = buildWorld()
-    world.candidates.cl = world.candidates.cl?.filter((c) => c.effectiveConceptKey !== 'LIMITATION_OF_LIABILITY') ?? []
-    stubKnowledgeApi(world)
-    renderKnowledge('/knowledge/playbooks/pb')
-    const details = await screen.findByRole('complementary', { name: 'Details' })
-    await within(details).findByRole('heading', { level: 2, name: 'Limitation of Liability' })
-    expect(within(details).queryByRole('link', { name: /Open clause/ })).not.toBeInTheDocument()
+    // The concept is shown as classification. The API has no playbook-position to clause relation.
+    expect(within(details).getByText('Limitation of liability')).toBeInTheDocument()
+    expect(within(details).queryByRole('link', { name: /clause/i })).not.toBeInTheDocument()
+    expect(within(details).queryByText(/same legal concept/i)).not.toBeInTheDocument()
+    expect(details.querySelector('a[href^="/knowledge/clauses/"]')).toBeNull()
   })
 
   it('selects a position from the URL', async () => {

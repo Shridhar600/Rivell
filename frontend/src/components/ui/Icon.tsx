@@ -239,3 +239,54 @@ export function CopyIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+export function BackIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M10 3 5 8l5 5" />
+    </svg>
+  )
+}
+
+export function CloseIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="m4 4 8 8m0-8-8 8" />
+    </svg>
+  )
+}
+
+export function EditIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M10.5 3 13 5.5 5.5 13H3v-2.5z" />
+    </svg>
+  )
+}
+
+/** Review state glyphs for a candidate row: open, approved, needs a closer look, rejected. */
+export function StateOpenIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="8" cy="8" r="6" />
+    </svg>
+  )
+}
+
+export function StateApprovedIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="8" cy="8" r="6" fill="currentColor" />
+      <path d="m5.5 8.2 1.8 1.8 3.2-3.6" stroke="var(--bg)" />
+    </svg>
+  )
+}
+
+export function StateRejectedIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="m6 6 4 4m0-4-4 4" />
+    </svg>
+  )
+}

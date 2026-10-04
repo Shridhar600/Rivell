@@ -1,0 +1,149 @@
+import type { ReactNode } from 'react'
+import type { ArtifactDetail, Candidate } from '../../../api/knowledge'
+import { artifactFormat } from '../../../lib/knowledgeCatalog'
+import {
+  OUTCOME_LABELS,
+  kindLabel,
+  outcomeOf,
+  primaryCondition,
+  type Outcome,
+  type Readiness,
+  type ReviewGroups,
+} from '../../../lib/compilation'
+import { CautionIcon, CheckIcon, ClauseIcon, StateApprovedIcon, StateOpenIcon, StateRejectedIcon } from '../../ui/Icon'
+
+function Glyph({ outcome, attention }: { outcome: Outcome; attention: boolean }) {
+  if (outcome === 'approved' || outcome === 'published') return <StateApprovedIcon className="rv-icon rv-kc-g rv-kc-g--ok" />
+  if (outcome === 'rejected') return <StateRejectedIcon className="rv-icon rv-kc-g rv-kc-g--no" />
+  if (attention) return <CautionIcon className="rv-icon rv-kc-g rv-kc-g--att" />
+  return <StateOpenIcon className="rv-icon rv-kc-g" />
+}
+
+function Row({ candidate, selected, location, onSelect }: { candidate: Candidate; selected: boolean; location: string | null; onSelect: (id: string) => void }) {
+  const outcome = outcomeOf(candidate)
+  const open = outcome === 'pending' || outcome === 'corrected'
+  const condition = open ? primaryCondition(candidate) : null
+  return (
+    <li>
+      <button type="button" className="rv-kc-row" aria-current={selected ? 'true' : undefined} onClick={() => onSelect(candidate.id)}>
+        <Glyph outcome={outcome} attention={condition !== null} />
+        <span>
+          <b>{candidate.rawLabel}</b>
+          <span className="rv-kc-row__sub">
+            {OUTCOME_LABELS[outcome]}
+            {open && location ? ` · ${location}` : ''}
+          </span>
+          {condition ? (
+            <span className={`rv-kc-flag${condition.kind === 'supersession' ? ' rv-kc-flag--sup' : ''}`}>{condition.label}</span>
+          ) : null}
+        </span>
+      </button>
+    </li>
+  )
+}
+
+function Group({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  if (count === 0) return null
+  return (
+    <section className="rv-kc-grp">
+      <h3 className="rv-kc-fgrp">
+        <span>{title}</span>
+        <span>{count}</span>
+      </h3>
+      <ul className="rv-kc-rows">{children}</ul>
+    </section>
+  )
+}
+
+interface RailProps {
+  id: string
+  artifact: ArtifactDetail
+  groups: ReviewGroups
+  readiness: Readiness
+  locations: ReadonlyMap<string, string | null>
+  selectedId: string | null
+  groupSelected: boolean
+  onSelect: (id: string) => void
+  onOpenGroup: () => void
+}
+
+/** The candidate list, grouped the way a reviewer works: what needs attention, what to review, the safe group, what is done. */
+export function CandidateRail({ id, artifact, groups, readiness, locations, selectedId, groupSelected, onSelect, onOpenGroup }: RailProps) {
+  const rows = (list: Candidate[]) =>
+    list.map((candidate) => (
+      <Row key={candidate.id} candidate={candidate} selected={!groupSelected && candidate.id === selectedId} location={locations.get(candidate.id) ?? null} onSelect={onSelect} />
+    ))
+  const ready = readiness.canPublish
+  const done = readiness.published > 0 && readiness.awaiting === 0 && readiness.approved === 0
+  return (
+    <aside className="rv-kc-fl" id={id} aria-label="Candidates">
+      <div className="rv-kc-src">
+        <b>{artifact.filename}</b>
+        <small>
+          {kindLabel(artifact.artifactType)} · {artifactFormat(artifact)} source
+        </small>
+        <small>Original retained unchanged</small>
+      </div>
+      <nav className="rv-kc-list" aria-label="Candidate list">
+        <Group title="Needs attention" count={groups.attention.length}>
+          {rows(groups.attention)}
+        </Group>
+        <Group title="To review" count={groups.toReview.length}>
+          {rows(groups.toReview)}
+        </Group>
+        {groups.bulk.length > 0 ? (
+          <section className="rv-kc-grp">
+            <h3 className="rv-kc-fgrp">
+              <span>Grouped review</span>
+            </h3>
+            <ul className="rv-kc-rows">
+              <li>
+                <button type="button" className="rv-kc-bulkrow" aria-current={groupSelected ? 'true' : undefined} onClick={onOpenGroup}>
+                  <ClauseIcon className="rv-icon rv-kc-g" />
+                  <span>
+                    <b>
+                      {groups.bulk.length} straightforward {groups.bulk.length === 1 ? 'candidate' : 'candidates'}
+                    </b>
+                    <span className="rv-kc-row__sub">Inspect, then approve together</span>
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </section>
+        ) : null}
+        <Group title="Reviewed" count={groups.reviewed.length}>
+          {rows(groups.reviewed)}
+        </Group>
+        <Group title="Published, immutable" count={groups.published.length}>
+          {rows(groups.published)}
+        </Group>
+      </nav>
+      <div className="rv-kc-ready" aria-live="polite">
+        <b>{ready ? 'Ready to publish' : done ? 'Published' : 'Compilation review'}</b>
+        <div className="rv-kc-ready__m">
+          <span>Awaiting review</span>
+          <span>{readiness.awaiting}</span>
+        </div>
+        <div className="rv-kc-ready__m">
+          <span>Approved</span>
+          <span>{readiness.approved}</span>
+        </div>
+        <div className="rv-kc-ready__m">
+          <span>Rejected</span>
+          <span>{readiness.rejected}</span>
+        </div>
+        {readiness.published > 0 ? (
+          <div className="rv-kc-ready__m">
+            <span>Published</span>
+            <span>{readiness.published}</span>
+          </div>
+        ) : null}
+        <p className={readiness.attention > 0 ? 'rv-kc-ready__no' : 'rv-kc-ready__ok'}>
+          {readiness.attention > 0 ? <CautionIcon className="rv-icon" /> : <CheckIcon className="rv-icon" />}
+          {readiness.attention > 0 ? `${readiness.attention} need closer review` : 'No flagged candidates remain'}
+        </p>
+        <p className="rv-kc-ready__hint">{done ? 'Published knowledge is immutable.' : ready ? 'Publishing is explicit. Nothing is published until you do.' : 'Nothing is published until you publish it.'}</p>
+      </div>
+    </aside>
+  )
+}

@@ -10,8 +10,9 @@ const UPLOAD_ERROR_MESSAGES: Record<number, string> = {
 export class UploadApiError extends Error {
   readonly status: number
 
-  constructor(status: number) {
-    super(UPLOAD_ERROR_MESSAGES[status] ?? 'The file could not be stored.')
+  /** `messages` replaces the default wording for a surface whose failures mean something different. */
+  constructor(status: number, messages: Partial<Record<number, string>> = {}) {
+    super(messages[status] ?? UPLOAD_ERROR_MESSAGES[status] ?? 'The file could not be stored.')
     this.name = 'UploadApiError'
     this.status = status
   }

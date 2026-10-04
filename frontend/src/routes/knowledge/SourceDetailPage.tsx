@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import {
-  originalArtifactUrl,
   useArtifactQuery,
   useExtractionUnitsQuery,
   useKnowledgeStructureQuery,
@@ -12,7 +11,7 @@ import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/Cat
 import { KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
 import { LinkButton } from '../../components/ui/Button'
-import { ArrowRightIcon, LockIcon, UploadIcon } from '../../components/ui/Icon'
+import { ArrowRightIcon, LockIcon } from '../../components/ui/Icon'
 import { Chip } from '../../components/ui/Status'
 import { EmptyState } from '../../components/ui/State'
 import { longDate } from '../../lib/dates'
@@ -122,10 +121,6 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
             {formatBytes(artifact.sizeBytes)}, uploaded {longDate(artifact.createdAt)}
           </small>
           <small>sha256 {shortSha(artifact.sha256)}</small>
-          <a className="rv-k-lnk" href={originalArtifactUrl(artifact.id)} download>
-            <UploadIcon className="rv-icon" />
-            Download original
-          </a>
         </div>
         <ArrowRightIcon className="rv-icon" />
         <div className="rv-k-lc">
@@ -135,7 +130,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
         </div>
         <ArrowRightIcon className="rv-icon" />
         {source.state === 'review' ? (
-          <Link to={`/knowledge/artifacts/${artifact.id}`} className="rv-k-lc rv-k-lc--attention">
+          <Link to={`/knowledge/compilations/${artifact.id}`} className="rv-k-lc rv-k-lc--attention">
             <span className="rv-k-lc__k">Published knowledge</span>
             <b>{source.publications.length > 0 ? publicationsTitle(source.publications) : 'None yet'}</b>
             <small>Continue review →</small>

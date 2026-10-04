@@ -79,6 +79,7 @@ const candidate = {
   },
   legalConceptKey: null,
   effectiveConceptKey: null,
+  conceptCorrection: null,
   classifiedConcepts: { LIMITATION_OF_LIABILITY: 0.91 },
   positions: ['FALLBACK', 'PREFERRED'],
   variantRole: null,
@@ -401,8 +402,19 @@ describe('uploadKnowledge', () => {
     }).catch((thrown: unknown) => thrown)
 
     expect(error).toBeInstanceOf(UploadApiError)
-    expect((error as Error).message).toMatch(/upload was not accepted/i)
-    expect((error as Error).message).not.toMatch(/com\.rivell|require:71|only \.docx/)
+    expect((error as Error).message).toMatch(/file was not accepted/i)
+    expect((error as Error).message).not.toMatch(/com\.rivell|require:71/)
+  })
+
+  it('does not claim that nothing was stored when the server fails, because a failed source may remain', async () => {
+    stubFetch(() => jsonResponse({ status: 500, error: 'Internal Server Error' }, 500))
+    const error = await uploadKnowledge(new File(['x'], 'm4-playbook.docx'), {
+      artifactType: 'PLAYBOOK',
+      declaredContractTypes: [],
+    }).catch((thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(UploadApiError)
+    expect((error as Error).message).toMatch(/appears in Sources as a failed source/)
+    expect((error as Error).message).not.toMatch(/Nothing was changed|not stored/)
   })
 
   it('requires the runtime ApiResult envelope on upload', async () => {

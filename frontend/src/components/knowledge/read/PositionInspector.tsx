@@ -4,7 +4,7 @@ import type { ArtifactSummary, Candidate } from '../../../api/knowledge'
 import { useExtractionUnitsQuery, useKnowledgeStructureQuery } from '../../../api/knowledge'
 import { longDate } from '../../../lib/dates'
 import { resolveCandidateSource } from '../../../lib/candidates'
-import { positionText, type ClauseGroup, type PublicationRef } from '../../../lib/knowledgeCatalog'
+import { positionText, type PublicationRef } from '../../../lib/knowledgeCatalog'
 import { conceptName, positionRoles, POSITION_ROLE_LABELS, scopeRows } from '../../../lib/knowledgePosition'
 import { sourceLocation } from '../../../lib/knowledgeSource'
 import { ArrowRightIcon } from '../../ui/Icon'
@@ -13,15 +13,15 @@ interface PositionInspectorProps {
   candidate: Candidate
   artifact: ArtifactSummary
   publication: PublicationRef
-  /** The published clause on the same legal concept, when there is one. */
-  clause: ClauseGroup | null
 }
 
 /**
  * Detail for one published position: the roles and scope the compilation recorded, the exact
- * authored wording, where it came from, and the clause on the same legal concept when one exists.
+ * authored wording, and where it came from. The legal concept is shown as classification only. No
+ * relationship between a playbook position and a clause library entry exists in the API, so none
+ * is implied here.
  */
-export function PositionInspector({ candidate, artifact, publication, clause }: PositionInspectorProps) {
+export function PositionInspector({ candidate, artifact, publication }: PositionInspectorProps) {
   const units = useExtractionUnitsQuery(artifact.id)
   const structure = useKnowledgeStructureQuery(artifact.id)
   const located =
@@ -82,16 +82,6 @@ export function PositionInspector({ candidate, artifact, publication, clause }: 
         </Link>
       </div>
 
-      {clause ? (
-        <div className="rv-k-prov">
-          <span className="rv-k-loc">Clause library, same legal concept</span>
-          <b>{clause.title}</b>
-          <Link className="rv-k-lnk" to={`/knowledge/clauses/${encodeURIComponent(clause.key)}`}>
-            Open clause
-            <ArrowRightIcon className="rv-icon" />
-          </Link>
-        </div>
-      ) : null}
     </div>
   )
 }
