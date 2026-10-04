@@ -488,12 +488,35 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 .filter(reference -> reference.kind() != null && reference.status() != null)
                 .toList();
 
+        // Clauses are anchored to the heading node they were extracted under, so their meaningful order
+        // is the order those headings appear in the document. Ordering by the same recursive
+        // sort_path the document read uses keeps a contract's clauses in reading order on every
+        // read, instead of whatever order the storage engine happens to return them in.
+        // SemanticsDigest sorts clauses itself, so the review snapshot pin is unaffected either
+        // way. The heading-node id is only a tie-break for a clause whose node is missing, where
+        // no document position exists; the left join keeps such a clause readable rather than
+        // dropping it.
         var clauses = jdbcClient.sql("""
-                        select id, heading_node_id, region_kind, text_node_ids, content_text,
-                               classification, facts, interpretations, correction, corrected_by
-                        from contract_clause_semantics where semantics_id = :id
+                        with recursive tree as (
+                            select n.id, array[n.ordinal] as sort_path
+                            from document_node n
+                            where n.contract_version_id = :versionId and n.parent_id is null
+                            union all
+                            select n.id, t.sort_path || n.ordinal
+                            from document_node n
+                            join tree t on n.parent_id = t.id
+                            where n.contract_version_id = :versionId
+                        )
+                        select c.id, c.heading_node_id, c.region_kind, c.text_node_ids,
+                               c.content_text, c.classification, c.facts, c.interpretations,
+                               c.correction, c.corrected_by
+                        from contract_clause_semantics c
+                        left join tree on tree.id = c.heading_node_id
+                        where c.semantics_id = :id
+                        order by tree.sort_path nulls last, c.heading_node_id
                         """)
                 .param("id", semanticsId)
+                .param("versionId", versionId)
                 .query((rs, rowNum) -> new ClauseSemantics(
                         UUID.fromString(rs.getString("id")), versionId,
                         UUID.fromString(rs.getString("heading_node_id")),
