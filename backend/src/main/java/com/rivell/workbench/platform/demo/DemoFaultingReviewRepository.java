@@ -49,7 +49,7 @@ final class DemoFaultingReviewRepository implements ReviewRepository {
     @Override
     public List<ReviewPlanCheck> findPlanChecks(UUID organizationId, UUID reviewId) {
         if (policy.shouldFail(reviewId)) {
-            throw new DemoAnalysisFaultPolicy.InjectedAnalysisFailure(reviewId);
+            throw new DemoAnalysisFaultPolicy.ReviewPlanUnavailableFailure();
         }
         return delegate.findPlanChecks(organizationId, reviewId);
     }

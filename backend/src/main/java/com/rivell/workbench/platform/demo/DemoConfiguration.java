@@ -10,7 +10,6 @@ import com.rivell.workbench.intelligence.ModelBinding;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
 import com.rivell.workbench.intelligence.ModelBindings;
 import com.rivell.workbench.intelligence.ModelPolicy;
-import com.rivell.workbench.intelligence.ReasoningSpec;
 import com.rivell.workbench.intelligence.SemanticAsset;
 import com.rivell.workbench.review.ReviewRepository;
 
@@ -49,9 +48,7 @@ public class DemoConfiguration {
     @Bean
     @Primary
     ModelPolicy demoModelPolicy() {
-        return asset -> asset instanceof ReasoningSpec
-                ? new ModelBinding(PROVIDER_ID, MODEL_ALIAS)
-                : new ModelBinding(PROVIDER_ID, MODEL_ALIAS);
+        return asset -> new ModelBinding(PROVIDER_ID, MODEL_ALIAS);
     }
 
     @Bean

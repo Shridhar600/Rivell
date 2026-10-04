@@ -60,12 +60,14 @@ See [`SCENARIOS.md`](SCENARIOS.md) for the per-scenario table. In short:
 | Reviews | R01–R12 in `SCENARIOS.md`, every state reached through the real services |
 | Knowledge | Published playbook with two superseding publications, published clause library, an unpublished compilation and a genuinely failed artifact |
 
-The two states that are still not seeded are documented with reasons in `SCENARIOS.md`:
+One state is deliberately not seeded, with the reason recorded in `SCENARIOS.md`: the
+**ANALYZING** state (R13) is lease-fenced and only exists inside one synchronous analysis
+call, so a persistent row could only be faked. The R10 failed review and the R11 limited
+analysis cover the failure and degradation surfaces instead.
 
-- **ANALYZING** is lease-fenced and only exists inside one synchronous analysis call, so a
-  persistent row could only be faked.
-- **R13** is therefore omitted; the R10 failed review and the R11 limited analysis cover the
-  failure and degradation surfaces.
+Model-backed judgments come from the demo's deterministic scripted providers, not a live
+model and not the network. That is what makes the catalog reproducible; the domain flow
+around those answers is the production one.
 
 ## Regenerating the documents
 

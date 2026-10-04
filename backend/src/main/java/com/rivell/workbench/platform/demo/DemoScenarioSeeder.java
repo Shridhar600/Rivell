@@ -2,6 +2,7 @@ package com.rivell.workbench.platform.demo;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,7 @@ final class DemoScenarioSeeder {
     private final DemoKnowledgeSeeder knowledge;
     private final DemoReviewSeeder reviews;
     private final KnowledgeQueryService knowledgeQueries;
+    private final boolean workerEnabled;
 
     DemoScenarioSeeder(
             ContractIngestionService contractIngestion,
@@ -61,7 +63,8 @@ final class DemoScenarioSeeder {
             ReviewAnalysisRepository analysisRepository,
             FindingRepository findingRepository,
             ReviewRepository reviewRepository,
-            DemoAnalysisFaultPolicy faultPolicy) {
+            DemoAnalysisFaultPolicy faultPolicy,
+            @Value("${jobrunr.background-job-server.enabled:false}") boolean workerEnabled) {
         this.contracts = new DemoContractSeeder(contractIngestion, enrichment, contractQueries,
                 identityProvider);
         this.knowledge = new DemoKnowledgeSeeder(knowledgeIngestion, knowledgeQueries,
@@ -70,9 +73,15 @@ final class DemoScenarioSeeder {
                 decisionRepository, humanReview, finalization, changeSets, redline,
                 analysisRepository, findingRepository, reviewRepository, faultPolicy);
         this.knowledgeQueries = knowledgeQueries;
+        this.workerEnabled = workerEnabled;
     }
 
     DemoSeedSummary seed() {
+        if (workerEnabled) {
+            log.warn("Rivell demo scenarios: the background job worker is enabled. R12 "
+                    + "(queued) and R10 (injected failure) assume the worker is off; keep "
+                    + "RIVELL_JOB_WORKER_ENABLED=false for the demo.");
+        }
         var started = System.currentTimeMillis();
         var seededContracts = contracts.seed();
         knowledge.publishBootstrap();

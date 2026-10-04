@@ -100,12 +100,17 @@ final class DemoContractSeeder {
 
     private Map<String, UUID> existingContracts() {
         var found = new LinkedHashMap<String, UUID>();
-        for (var entry : queries.listContractsPage(LOOKUP_LIMIT, null).items()) {
-            var version = queries.getLatestVersionSummary(entry.contractId());
-            if (version != null && version.filename() != null) {
-                found.putIfAbsent(version.filename(), entry.contractId());
+        String cursor = null;
+        do {
+            var page = queries.listContractsPage(LOOKUP_LIMIT, cursor);
+            for (var entry : page.items()) {
+                var version = queries.getLatestVersionSummary(entry.contractId());
+                if (version != null && version.filename() != null) {
+                    found.putIfAbsent(version.filename(), entry.contractId());
+                }
             }
-        }
+            cursor = page.nextCursor();
+        } while (cursor != null);
         return found;
     }
 

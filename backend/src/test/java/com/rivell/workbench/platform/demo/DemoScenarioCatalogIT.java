@@ -31,6 +31,7 @@ import com.rivell.workbench.redline.RedlineExecutionService;
 import com.rivell.workbench.redline.RedlineExecutionStatus;
 import com.rivell.workbench.redline.RedlineFailureCode;
 import com.rivell.workbench.review.Finding;
+import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.FindingRepository;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
 import com.rivell.workbench.workflow.DecisionAction;
@@ -164,11 +165,28 @@ class DemoScenarioCatalogIT {
                     .flatMap(finding -> finding.evidenceItemIds().stream())
                     .distinct()
                     .toList();
+            var clauseBearing = produced.stream().anyMatch(finding ->
+                    finding.subjectKind() == FindingSubjectKind.CLAUSE);
+            if (clauseBearing) {
+                // Absence findings cite nothing by nature: the provision is missing. Findings
+                // about an existing clause must cite the evidence they resolve against.
+                assertThat(cited)
+                        .as("%s clause findings must cite evidence", filename)
+                        .isNotEmpty();
+            }
             var resolved = analysisRepository.findEvidenceItems(organizationId(), runId, cited);
             assertThat(resolved)
                     .as("%s must resolve every cited evidence item", filename)
                     .hasSize(cited.size());
         }
+    }
+
+    @Test
+    void theFailedAnalysisIsTheInjectedDemoFailure() {
+        var reason = jdbc.sql("select failure_reason from review where id = :id")
+                .param("id", reviewId(DemoDocuments.UMBRELLA_MSA))
+                .query(String.class).single();
+        assertThat(reason).contains("ReviewPlanUnavailableFailure");
     }
 
     @Test
@@ -286,15 +304,14 @@ class DemoScenarioCatalogIT {
         var before = counts();
         var summary = seeder.seed();
         var after = counts();
-        assertThat(after).as("a rerun must not add rows").isEqualTo(before);
+        assertThat(after).as("a rerun must not add rows in any domain table").isEqualTo(before);
 
         assertThat(summary.contracts()).isEqualTo(14);
         assertThat(summary.reviews()).isEqualTo(12);
-        assertThat(summary.findings()).isGreaterThan(0);
+        assertThat(summary.findings()).isEqualTo(22);
         assertThat(summary.knowledgeSources()).isEqualTo(5);
         assertThat(summary.publications()).isEqualTo(2);
         assertThat(summary.escalationTriggerPublished()).isTrue();
-        assertThat(summary.runtimeMillis()).isGreaterThanOrEqualTo(0);
 
         var duplicateReviews = jdbc.sql("""
                 select count(*) from (
@@ -305,15 +322,39 @@ class DemoScenarioCatalogIT {
         assertThat(duplicateReviews).as("no contract may accumulate duplicate reviews").isZero();
     }
 
+    @Test
+    void theSeedResumesWhenTheRetryAttemptIsMissing() {
+        var reviewId = reviewId(DemoDocuments.INITECH_NDA);
+        jdbc.sql("""
+                delete from redline_artifact where execution_id in (
+                  select id from redline_execution where review_id = :id and attempt_number = 2)
+                """).param("id", reviewId).update();
+        jdbc.sql("""
+                delete from redline_execution_change where execution_id in (
+                  select id from redline_execution where review_id = :id and attempt_number = 2)
+                """).param("id", reviewId).update();
+        jdbc.sql("delete from redline_execution where review_id = :id and attempt_number = 2")
+                .param("id", reviewId).update();
+        assertThat(executionAttempts(DemoDocuments.INITECH_NDA))
+                .containsExactly("1|FAILED|APPROVED_SEMANTICS_DRIFT");
+
+        seeder.seed();
+
+        assertThat(executionAttempts(DemoDocuments.INITECH_NDA))
+                .containsExactly("1|FAILED|APPROVED_SEMANTICS_DRIFT", "2|COMPLETED|-");
+    }
+
     private Map<String, Long> counts() {
-        return Map.of(
-                "contract", count("contract"),
-                "review", count("review"),
-                "finding", count("finding"),
-                "human_decision", count("human_decision"),
-                "redline_execution", count("redline_execution"),
-                "knowledge_artifact", count("knowledge_artifact"),
-                "knowledge_publication", count("knowledge_publication"));
+        var counts = new java.util.TreeMap<String, Long>();
+        var tables = jdbc.sql("""
+                select table_name from information_schema.tables
+                where table_schema = 'public' and table_type = 'BASE TABLE'
+                  and table_name not like 'jobrunr%'
+                """).query(String.class).list();
+        for (var table : tables) {
+            counts.put(table, count(table));
+        }
+        return counts;
     }
 
     private long count(String table) {

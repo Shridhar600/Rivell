@@ -106,7 +106,7 @@ public final class DemoScenarioCatalog {
             contract(C03_SPARSE_STRUCTURE, "Minimal sparse structure",
                     "Minimal Sparse - Empty structure.docx",
                     "structurally valid sparse document with empty and table-only units",
-                    "contract and knowledge reads; must never crash"),
+                    "contract reads; sparse ingestion must never crash"),
             knowledge(K01_PUBLISHED_PLAYBOOK, "Published playbook",
                     "Rivell Demo Playbook.docx",
                     "ingested, approved, published #1 with positions, escalation trigger and "

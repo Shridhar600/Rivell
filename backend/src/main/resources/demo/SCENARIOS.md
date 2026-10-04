@@ -9,6 +9,10 @@ The catalog is code-owned in `DemoScenarioCatalog` and this file is checked agai
 `DemoScenarioCatalogIT`. Enable it only with `RIVELL_DEMO_SEED_ENABLED=true`; an ordinary
 startup seeds nothing and creates none of the demo beans.
 
+Model-backed judgments in the seeded analysis run through the demo's deterministic scripted
+providers, not a live model and not the network. That is what makes the catalog reproducible;
+the domain flow around those answers is the production one.
+
 ## Reset and run
 
 ```bash
@@ -57,7 +61,7 @@ being seeded as a fabricated row.
 |---|---|---|---|---|
 | C01 | Clean upload - Vendor NDA - Ready for review | parsed immutable version v1 | NDA body | shared with R01 |
 | C02 | Ingestion parse failure - Corrupt Upload - Parse failed | `contract_version.parse_status = FAILED` through the real parser | invalid bytes | no exception, no fake status |
-| C03 | Minimal sparse structure - Minimal Sparse - Empty structure | structurally valid sparse document with an empty section and a table-only region | sparse body | also ingested as a playbook for knowledge compilation; must never crash |
+| C03 | Minimal sparse structure - Minimal Sparse - Empty structure | structurally valid sparse document with an empty section and a table-only region | sparse body | ingested as a contract; the null-text knowledge compilation path is covered by NullTextUnitCompilationIT, not by this fixture |
 
 ## Knowledge scenarios
 

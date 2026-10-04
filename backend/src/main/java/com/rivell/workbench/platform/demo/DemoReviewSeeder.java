@@ -32,7 +32,6 @@ import com.rivell.workbench.review.ProposedAction;
 import com.rivell.workbench.review.Review;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
 import com.rivell.workbench.review.ReviewAnalysisService;
-import com.rivell.workbench.review.ReviewPackRegistry;
 import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewService;
 import com.rivell.workbench.review.ReviewStatus;
@@ -219,8 +218,12 @@ final class DemoReviewSeeder {
             }
         }
         finalizeIfNeeded(review);
-        if (currentExecution(review).isEmpty()) {
+        var latest = currentExecution(review);
+        if (latest.isEmpty()) {
             redline.execute(review.id());
+        } else if (latest.get().status() == RedlineExecutionStatus.FAILED) {
+            // resume from a partial attempt: retry appends, it never rewrites the failure
+            redline.retry(review.id());
         }
         var execution = currentExecution(review).orElseThrow();
         require(execution.status() == RedlineExecutionStatus.COMPLETED
@@ -256,7 +259,11 @@ final class DemoReviewSeeder {
             latest = currentExecution(review);
         }
         if (latest.orElseThrow().status() == RedlineExecutionStatus.FAILED) {
-            restoreSemantics(review);
+            // The drift correction may already have been reverted by a previous run that
+            // died before the retry; restoring is only needed while the correction exists.
+            if (driftedClause(review).isPresent()) {
+                restoreSemantics(review);
+            }
             redline.retry(review.id());
         }
         var execution = currentExecution(review).orElseThrow();
