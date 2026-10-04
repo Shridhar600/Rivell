@@ -361,24 +361,17 @@ class RedlineExecutionIT {
         finalize(fixture.review().id());
         var reviewId = fixture.review().id();
         var changeSet = changeSetRepository.findByReview(organizationId(), reviewId).orElseThrow();
-        assertThat(changeSet.changes())
-                .as("this test is only meaningful with an INSERT in the set")
-                .anyMatch(change -> change.actionType()
-                        == com.rivell.workbench.redline.ChangeActionType.INSERT);
-        var contractId = changeSet.contractId();
+          assertThat(changeSet.changes())
+                  .as("this test is only meaningful with an INSERT in the set")
+                  .anyMatch(change -> change.actionType()
+                          == com.rivell.workbench.redline.ChangeActionType.INSERT);
 
-        var clauseSemanticsId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
-                .filter(c -> c.effectivePrimaryConcept().isPresent())
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("no classified clause to correct"))
-                .id();
+          // A human corrects a concept after the review froze: the placement inputs no longer match.
+          // The helper picks a clause that is not already GOVERNING_LAW and not already corrected, so
+          // the correction always changes the digest it is meant to drift.
+          driftSemanticsOfPinnedVersion(reviewId);
 
-        // A human corrects a concept after the review froze: the placement inputs no longer match.
-        enrichmentService.correctClause(contractId, 1, clauseSemanticsId,
-                new com.rivell.workbench.contracts.FactCorrection(
-                        "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
-
-        var drifted = redlineExpectingFailure(reviewId);
+          var drifted = redlineExpectingFailure(reviewId);
         assertThat(drifted.get("status").asText()).isEqualTo("FAILED");
         assertThat(drifted.get("failureCode").asText()).isEqualTo("APPROVED_SEMANTICS_DRIFT");
         assertThat(drifted.get("downloadAvailable").asBoolean()).isFalse();
@@ -863,12 +856,12 @@ class RedlineExecutionIT {
         resolveAllActionable(fixture);
         finalize(fixture.review().id());
         var reviewId = fixture.review().id();
-        var originalConcept = driftSemanticsOfPinnedVersion(reviewId);
+        driftSemanticsOfPinnedVersion(reviewId);
 
         var first = redlineExpectingFailure(reviewId);
         assertThat(first.get("failureCode").asText()).isEqualTo("APPROVED_SEMANTICS_DRIFT");
 
-        restoreSemantics(reviewId, originalConcept);
+        restoreSemantics(reviewId);
 
         var result = mockMvc.perform(post("/api/reviews/{id}/redline/retry", reviewId))
                 .andExpect(status().isOk())
@@ -923,7 +916,8 @@ class RedlineExecutionIT {
         var clause = enrichmentService.getSemantics(contractId, 1).clauses().stream()
                 .filter(c -> c.effectivePrimaryConcept().isPresent())
                 .filter(c -> c.effectivePrimaryConcept().get() != LegalConcept.GOVERNING_LAW)
-                .findFirst()
+                .filter(c -> !c.conceptCorrected())
+                .min(java.util.Comparator.comparing(c -> c.id().toString()))
                 .orElseThrow(() -> new AssertionError("no classified clause to correct"));
         var original = clause.effectivePrimaryConcept().get();
         enrichmentService.correctClause(contractId, 1, clause.id(),
@@ -932,18 +926,18 @@ class RedlineExecutionIT {
         return original;
     }
 
-    private void restoreSemantics(UUID reviewId, LegalConcept concept) {
+    private void restoreSemantics(UUID reviewId) {
         var changeSet = changeSetRepository.findByReview(organizationId(), reviewId).orElseThrow();
         var contractId = changeSet.contractId();
-        var clauseId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
-                .filter(c -> c.effectivePrimaryConcept().isPresent())
-                .filter(c -> c.effectivePrimaryConcept().get() == LegalConcept.GOVERNING_LAW)
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("no corrected clause to restore"))
-                .id();
-        enrichmentService.correctClause(contractId, 1, clauseId,
+        var clause = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(c -> c.conceptCorrected())
+                .filter(c -> c.primaryConcept().isPresent())
+                .filter(c -> c.primaryConcept().get() != LegalConcept.GOVERNING_LAW)
+                .min(java.util.Comparator.comparing(c -> c.id().toString()))
+                .orElseThrow(() -> new AssertionError("no corrected clause to restore"));
+        enrichmentService.correctClause(contractId, 1, clause.id(),
                 new com.rivell.workbench.contracts.FactCorrection(
-                        concept.name(), Map.of(), UUID.randomUUID()));
+                        clause.primaryConcept().get().name(), Map.of(), UUID.randomUUID()));
     }
 
     private JsonNode retryExpectingFailure(UUID reviewId) throws Exception {

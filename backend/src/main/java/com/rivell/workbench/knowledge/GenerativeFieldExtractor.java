@@ -31,14 +31,20 @@ public class GenerativeFieldExtractor {
 
     public Optional<VerifiedValue> extractEscalationTrigger(
             M4SemanticStates.PlaybookUnitState state) {
+        var source = bounded(state.text());
+        if (source == null || source.isBlank()) {
+            // A unit with no prose has nothing to extract from and nothing to verify a claim
+            // against. Returning empty keeps the outcome explicit at the caller instead of
+            // asking a model to invent a condition, and stops the null reaching the bound.
+            return Optional.empty();
+        }
         var generation = reasoningService.generate(
                 M4ReasoningSpecs.escalationTrigger(), state);
         var claimed = generation.fields().get("escalationTrigger");
 
         var verificationExecution = decisionService.evaluate(
                 M4SemanticSpecs.fieldVerification(),
-                new M4SemanticStates.FieldVerificationState(
-                        bounded(state.text()), claimed));
+                new M4SemanticStates.FieldVerificationState(source, claimed));
         var supports = verificationExecution.answers().get("source_supports");
         if (!(supports instanceof YesNoAnswer yesNo)) {
             return Optional.empty();
@@ -67,6 +73,9 @@ public class GenerativeFieldExtractor {
     }
 
     private static String bounded(String text) {
+        if (text == null) {
+            return null;
+        }
         return text.length() > 1200 ? text.substring(0, 1200) : text;
     }
 
