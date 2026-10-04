@@ -55,6 +55,7 @@ function candidate(partial: Partial<Candidate> & { id: string }): Candidate {
     contentText: 'Rule content',
     payloadColumns: {},
     legalConceptKey: null,
+    effectiveConceptKey: null,
     editedContentText: null,
     editedPayloadColumns: {},
     supersedingCandidateId: null,

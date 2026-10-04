@@ -339,7 +339,8 @@ describe('ArtifactWorkspace', () => {
       await screen.findByText(/may not match the declared artifact type/i),
     ).toBeInTheDocument()
     expect(screen.getAllByText(/Contract playbook/).length).toBeGreaterThan(0)
-    expect(screen.getByText('Clause library')).toBeInTheDocument()
+    // The Knowledge sidebar also has a Clause library link, so look at the page content only.
+    expect(screen.getAllByText('Clause library').some((element) => !element.closest('nav'))).toBe(true)
     expect(screen.getByText(/remains authoritative/i)).toBeInTheDocument()
     expect(
       screen.getByText(/declared artifact type differs from Rivell's assessment/i),

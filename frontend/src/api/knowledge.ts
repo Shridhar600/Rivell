@@ -251,6 +251,8 @@ export interface Candidate {
   contentText: string | null
   payloadColumns: Record<string, string>
   legalConceptKey: string | null
+  /** The human correction when one exists, otherwise the classified concept. Absent when neither is set. */
+  effectiveConceptKey: string | null
   classifiedConcepts: Record<string, number>
   positions: PositionRole[]
   variantRole: PositionRole | null
@@ -463,6 +465,7 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     contentText: readNullableString(record, 'contentText', what),
     payloadColumns: readStringMap(record, 'payloadColumns', what),
     legalConceptKey: readNullableString(record, 'legalConceptKey', what),
+    effectiveConceptKey: readNullableString(record, 'effectiveConceptKey', what),
     classifiedConcepts: readNumberMap(record, 'classifiedConcepts', what),
     positions: readEnumArray(record, 'positions', what, POSITION_ROLES),
     variantRole: readNullableEnum(record, 'variantRole', what, POSITION_ROLES),
@@ -521,7 +524,7 @@ const PUBLISH_MESSAGES: Partial<Record<number, string>> = {
   503: 'The knowledge service is unavailable right now.',
 }
 
-function knowledgeRetry(failureCount: number, error: Error): boolean {
+export function knowledgeRetry(failureCount: number, error: Error): boolean {
   // A denial or a missing resource cannot become true on a second identical request, and these
   // queries otherwise inherit the app-wide single retry.
   return failureCount < 1 && !isKnowledgeForbiddenError(error) && !(error instanceof KnowledgeApiError && error.status === 404)
@@ -556,6 +559,9 @@ const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
  */
 export const KNOWLEDGE_PAGE_LIMIT = 20
 
+/** The backend's own cap on both lists. The read surfaces ask for all of it. */
+export const KNOWLEDGE_READ_LIMIT = 100
+
 export const knowledgeKeys = {
   artifacts: ['knowledge', 'artifacts'] as const,
   artifact: (id: string) => ['knowledge', 'artifacts', id] as const,
@@ -571,10 +577,10 @@ export function isProcessingArtifact(status: IngestStatus): boolean {
   return status === 'RECEIVED' || status === 'EXTRACTING'
 }
 
-export async function fetchArtifacts(): Promise<ArtifactSummary[]> {
+export async function fetchArtifacts(limit = KNOWLEDGE_PAGE_LIMIT): Promise<ArtifactSummary[]> {
   const client = createApiClient()
   const { data, response } = await client.GET('/api/knowledge/artifacts', {
-    params: { query: { limit: KNOWLEDGE_PAGE_LIMIT } },
+    params: { query: { limit } },
   })
 
   if (!data) {
@@ -663,10 +669,10 @@ export async function fetchCandidate(candidateId: string): Promise<Candidate> {
   return parseApiResult(data, parseCandidate, 'candidate')
 }
 
-export async function fetchPublications(): Promise<Publication[]> {
+export async function fetchPublications(limit = KNOWLEDGE_PAGE_LIMIT): Promise<Publication[]> {
   const client = createApiClient()
   const { data, response } = await client.GET('/api/knowledge/publications', {
-    params: { query: { limit: KNOWLEDGE_PAGE_LIMIT } },
+    params: { query: { limit } },
   })
 
   if (!data) {
@@ -868,7 +874,7 @@ export function useArtifactsQuery(): UseQueryResult<ArtifactSummary[], Error> {
   return useQuery({
     retry: knowledgeRetry,
     queryKey: knowledgeKeys.artifacts,
-    queryFn: fetchArtifacts,
+    queryFn: () => fetchArtifacts(),
     refetchInterval: (query) =>
       query.state.data?.some((artifact) => isProcessingArtifact(artifact.ingestStatus))
         ? 3000
@@ -938,7 +944,7 @@ export function usePublicationsQuery(
   return useQuery({
     retry: knowledgeRetry,
     queryKey: knowledgeKeys.publications,
-    queryFn: fetchPublications,
+    queryFn: () => fetchPublications(),
     enabled,
   })
 }

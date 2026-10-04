@@ -1,0 +1,653 @@
+/* Knowledge read surfaces (M10B-F5).
+   Ported from rivell-knowledge-v1.html (.kp, .sech, .cards3, .kcard, .klist, .krow, .tabs2, .banner,
+   .pos-t, .tl, .ins2, .fdl, .prov, .wording, .two, .lin, .lc, .srcdoc, .segc).
+   Page-scoped: every selector is prefixed rv-k- and uses the M10B tokens only. The shared shell,
+   Home and Reviews styles are not touched. */
+
+.rv-k-title:focus {
+  /* Focus is moved here on arrival for assistive technology. A heading is not a control, so no ring. */
+  outline: none;
+}
+.rv-k-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.rv-k-meta__text {
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.rv-k-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- section header ---------- */
+.rv-k-sech {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 8px;
+}
+.rv-k-sech h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.rv-k-sech span {
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+/* ---------- summary cards ---------- */
+.rv-k-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rv-k-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--bg);
+  box-shadow: var(--sh-sm);
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  transition: border-color var(--t-base);
+}
+.rv-k-card:hover {
+  border-color: var(--line-2);
+}
+.rv-k-card:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+}
+.rv-k-card__ico {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 6px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.rv-k-card__n {
+  font: 500 30px/1 var(--doc);
+}
+.rv-k-card b {
+  font-weight: 500;
+}
+.rv-k-card small {
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+/* ---------- list rows ---------- */
+.rv-k-list {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--bg);
+  box-shadow: var(--sh-sm);
+  list-style: none;
+}
+.rv-k-list > li + li {
+  border-top: 1px solid var(--line);
+}
+.rv-k-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto 16px;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.rv-k-row:hover {
+  background: var(--side);
+}
+.rv-k-row:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus-inset);
+}
+.rv-k-row[aria-current='true'] {
+  background: var(--sel);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.rv-k-row > .rv-icon:last-child {
+  color: var(--text-3);
+  transform: rotate(-90deg);
+}
+.rv-k-row__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rv-k-row__text b {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-k-row__text span {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-k-row__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.rv-tile--k {
+  border-color: var(--line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.rv-k-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rv-k-rows > li + li {
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- tabs ---------- */
+.rv-k-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+}
+.rv-k-tab {
+  margin-bottom: -1px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-2);
+  font: 500 13px/1.45 var(--font);
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.rv-k-tab[aria-selected='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.rv-k-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+  border-radius: var(--r-md);
+}
+
+/* ---------- banner ---------- */
+.rv-k-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--amber) 28%, var(--bg));
+  border-radius: var(--r-lg);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.rv-k-banner > span {
+  flex: 1;
+  min-width: 0;
+}
+.rv-k-banner .rv-btn {
+  flex: none;
+}
+
+/* ---------- positions table ---------- */
+.rv-k-pos-t {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) 1fr 1fr 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+.rv-k-pos-t--head {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--side);
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rv-k-posrow {
+  grid-template-columns: minmax(0, 1fr) 16px;
+  padding: 11px 16px;
+}
+.rv-k-posrow .rv-k-pos-t b {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-k-posrow .rv-k-pos-t span {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-k-pos-t .rv-k-both {
+  grid-column: span 2;
+}
+.rv-k-pos-t .rv-k-none {
+  color: var(--text-3);
+}
+
+/* ---------- version timeline ---------- */
+.rv-k-timeline > li {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+}
+.rv-k-dot {
+  width: 10px;
+  height: 10px;
+  margin: 5px 0 0 4px;
+  border: 2px solid var(--line-2);
+  border-radius: 50%;
+  background: var(--bg);
+}
+.rv-k-timeline [aria-current='true'] .rv-k-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.rv-k-timeline b {
+  font-weight: 500;
+}
+.rv-k-timeline p {
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.rv-k-timeline__side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+/* ---------- inspector content (canonical .ins2, .fdl, .prov) ---------- */
+.rv-k-ins {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.rv-k-ins h2 {
+  margin: 0;
+  font: 500 20px/1.25 var(--doc);
+  overflow-wrap: anywhere;
+}
+.rv-k-kicker {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rv-k-fdl {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 9px 8px;
+  margin: 0;
+  font-size: 13px;
+}
+.rv-k-fdl dt {
+  color: var(--text-3);
+}
+.rv-k-fdl dd {
+  margin: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.rv-k-prov {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--side);
+}
+.rv-k-prov q {
+  color: var(--text);
+  font: 400 14px/1.65 var(--doc);
+  quotes: none;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.rv-k-prov b {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.rv-k-loc {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rv-k-hl {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.rv-k-lnk {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: 500 12.5px/1.45 var(--font);
+  letter-spacing: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.rv-k-lnk:hover {
+  text-decoration: underline;
+}
+.rv-k-lnk:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+  border-radius: var(--r-md);
+}
+
+/* Detail shown under the list when the shell has no room for its panel. */
+.rv-k-inline {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--bg);
+  box-shadow: var(--sh-sm);
+}
+
+/* ---------- clause detail ---------- */
+.rv-k-two {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  align-items: start;
+}
+.rv-k-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.rv-k-wording {
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--bg);
+  box-shadow: var(--sh-sm);
+}
+.rv-k-wording__h {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+.rv-k-wording p {
+  margin: 0;
+  padding: 20px 24px;
+  font: 400 16px/1.8 var(--doc);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.rv-k-segc {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--hover);
+}
+.rv-k-segc button {
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-2);
+  font: 500 12.5px/1 var(--font);
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.rv-k-segc button:hover {
+  color: var(--text);
+}
+.rv-k-segc button[aria-selected='true'] {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--sh-xs);
+}
+.rv-k-segc button:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+}
+
+/* ---------- source lineage ---------- */
+.rv-k-lin {
+  display: grid;
+  grid-template-columns: 1fr 24px 1fr 24px 1fr;
+  align-items: stretch;
+}
+.rv-k-lin > .rv-icon {
+  align-self: center;
+  margin: auto;
+  color: var(--text-3);
+}
+.rv-k-lc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--bg);
+  box-shadow: var(--sh-sm);
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+a.rv-k-lc:hover {
+  border-color: var(--line-2);
+  background: var(--side);
+}
+a.rv-k-lc:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+}
+.rv-k-lc--attention {
+  border-color: var(--amber);
+}
+.rv-k-lc__k {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rv-k-lc b {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.rv-k-lc small {
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.rv-k-lc--attention small {
+  color: var(--amber);
+}
+
+.rv-k-srcdoc {
+  padding: 28px 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  box-shadow: var(--sh-sm);
+  color: var(--text);
+  font: 400 15px/1.75 var(--doc);
+}
+.rv-k-srcdoc h4 {
+  margin: 16px 0 2px;
+  color: var(--text-2);
+  font: 600 12.5px var(--font);
+}
+.rv-k-srcdoc h4:first-child {
+  margin-top: 0;
+}
+.rv-k-srcdoc p {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+.rv-k-srcdoc button.rv-k-hl {
+  display: inline;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rv-k-srcdoc button.rv-k-hl[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 24%, var(--bg));
+}
+.rv-k-srcdoc button.rv-k-hl:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+}
+.rv-k-pl {
+  padding: 6px;
+}
+.rv-k-pl > li + li {
+  border-top: 0;
+}
+.rv-k-pl button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rv-k-pl button .rv-icon {
+  flex: none;
+  color: var(--text-3);
+  transform: rotate(-90deg);
+}
+.rv-k-pl button:hover,
+.rv-k-pl button[aria-pressed='true'] {
+  background: var(--hover);
+}
+.rv-k-pl button:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus-inset);
+}
+.rv-k-related {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rv-k-related + .rv-k-related {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.rv-k-lnk-row {
+  margin: 10px 4px 0;
+}
+.rv-k-plain {
+  margin: 0;
+  padding: 18px;
+  color: var(--text-2);
+}
+.rv-k-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .rv-k-cards,
+  .rv-k-lin,
+  .rv-k-two {
+    grid-template-columns: 1fr;
+  }
+  .rv-k-lin > .rv-icon {
+    transform: rotate(90deg);
+  }
+  .rv-k-pos-t {
+    grid-template-columns: 1fr 1fr;
+  }
+  .rv-k-pos-t--head {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  /* The state stays, the chip goes, as in the canonical mobile rule. The position rows keep their own grid. */
+  .rv-k-row:not(.rv-k-posrow) {
+    grid-template-columns: 34px minmax(0, 1fr) auto 16px;
+    gap: 10px;
+  }
+  .rv-k-row__right .rv-chip {
+    display: none;
+  }
+}
+
+/* ---------- sidebar: Knowledge sections (canonical .nav-h) ---------- */
+.rv-nav__heading {
+  padding: 4px 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+.rv-nav--knowledge {
+  margin-top: 8px;
+}
+.rv-shell[data-sidebar='collapsed'] .rv-nav__heading {
+  display: none;
+}
