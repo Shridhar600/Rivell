@@ -1,6 +1,6 @@
 import { dateTime } from '../../lib/dates'
 import { resumeRoute, type ResumeRecord } from '../../lib/resume'
-import type { HomeWorkItem } from '../../lib/home'
+import type { HomeReview } from '../../lib/home'
 import { Button, LinkButton } from '../ui/Button'
 import { ResumeIcon } from '../ui/Icon'
 import { Chip, StatusBadge } from '../ui/Status'
@@ -8,7 +8,7 @@ import { Chip, StatusBadge } from '../ui/Status'
 interface ContinueCardProps {
   record: ResumeRecord
   /** The same Review as Home just read it, when it is in the bounded list. Source of live state. */
-  live: HomeWorkItem | null
+  live: HomeReview | null
   onDismiss: () => void
 }
 
@@ -19,7 +19,7 @@ interface ContinueCardProps {
  */
 export function ContinueCard({ record, live, onDismiss }: ContinueCardProps) {
   const title = live?.title ?? record.filename
-  const version = live?.chip ?? (record.versionNumber === null ? null : `v${record.versionNumber}`)
+  const version = record.versionNumber === null ? null : `v${record.versionNumber}`
   const opened = dateTime(record.visitedAt)
   return (
     <section className="rv-resume" aria-label="Continue where you left off">
@@ -34,7 +34,7 @@ export function ContinueCard({ record, live, onDismiss }: ContinueCardProps) {
         </h2>
         <p className="rv-resume__facts">
           {live ? <StatusBadge tone={live.tone} label={live.stateLabel} /> : null}
-          {live?.meta ? <span>{live.meta}</span> : null}
+          {live?.progress ? <span>{live.progress}</span> : null}
           <span>
             Last opened on this device{opened ? `, ${opened}` : ''}
           </span>

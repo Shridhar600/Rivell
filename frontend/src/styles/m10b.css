@@ -597,12 +597,17 @@ body {
   background: var(--side);
 }
 .rv-group__count {
+  flex: none;
   padding: 0 7px;
   border-radius: var(--r-pill);
   background: var(--hover);
   color: var(--text-2);
   font-size: 12px;
   font-weight: 400;
+}
+.rv-group__title {
+  flex: none;
+  white-space: nowrap;
 }
 .rv-group__summary {
   display: none;
@@ -631,6 +636,13 @@ body {
 }
 .rv-group[data-collapsed='true'] .rv-rows {
   display: none;
+}
+.rv-group__foot {
+  margin: 0;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: 12px;
 }
 
 /* ---------- work rows ---------- */

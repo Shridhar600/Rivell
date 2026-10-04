@@ -18,7 +18,7 @@ export function EvidenceItemSource({ item }: { item: EvidenceItem }) {
       <p className="evidence-source__line">
         {item.sourceArtifactId ? (
           <Link
-            to={`/knowledge/artifacts/${item.sourceArtifactId}`}
+            to={`/knowledge/sources/${item.sourceArtifactId}`}
             aria-label={`Open source artifact: ${sourceLabel}`}
           >
             {sourceLabel}

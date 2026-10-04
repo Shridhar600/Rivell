@@ -1,24 +1,18 @@
 import { longDate } from '../../lib/dates'
-import type { HomeWorkItem } from '../../lib/home'
+import type { HomeReview } from '../../lib/home'
 import { LinkButton } from '../ui/Button'
 import { StatusBadge } from '../ui/Status'
-
-const KIND_LABELS: Record<HomeWorkItem['kind'], string> = {
-  review: 'Contract review',
-  knowledge_artifact: 'Knowledge source',
-  knowledge_publication: 'Knowledge publication',
-}
 
 /**
  * What a selected row is and what to do next: kind, title, state, real facts, one line of
  * guidance, one primary action. The panel and the narrow-screen inline detail share this, so the
  * two can never describe the same row differently.
  */
-export function WorkDetails({ item }: { item: HomeWorkItem }) {
+export function WorkDetails({ item }: { item: HomeReview }) {
   const when = longDate(item.timeValue)
   return (
     <>
-      <p className="rv-insp__kind">{KIND_LABELS[item.kind]}</p>
+      <p className="rv-insp__kind">Contract review</p>
       <h2 className="rv-insp__title">{item.title}</h2>
       <div className="rv-insp__status">
         <StatusBadge tone={item.tone} label={item.stateLabel} />

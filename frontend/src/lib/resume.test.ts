@@ -38,7 +38,9 @@ describe('resume store', () => {
       RESUME_KEY,
       JSON.stringify({ v: 1, ...RECORD, route: 'https://evil.example/' }),
     )
-    expect(readResume()).toEqual(RECORD)
+    // A stored address that is not a current Review destination marks the whole entry stale.
+    expect(readResume()).toBeNull()
+    expect(globalThis.localStorage.getItem(RESUME_KEY)).toBeNull()
   })
 
   it('treats corrupt JSON as no resume state', () => {

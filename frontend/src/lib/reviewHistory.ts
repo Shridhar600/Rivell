@@ -6,7 +6,6 @@ import {
   roleLabel,
 } from './contractSemantics'
 import { rowDate } from './dates'
-import { mapReviewStatus } from './home'
 
 /**
  * One row of the Reviews table, from `ReviewListItemView` alone. Every phrase is backed by a field
@@ -67,9 +66,9 @@ const LIFECYCLE: Record<Exclude<LifecycleKey, 'unknown'>, Omit<Lifecycle, 'key'>
   analysis_complete: { label: 'Analysis complete', variant: 'plain', glyph: 'none', group: null },
 }
 
-function lifecycleOf(key: LifecycleKey, review: ReviewListItem): Lifecycle {
+function lifecycleOf(key: LifecycleKey): Lifecycle {
   if (key === 'unknown') {
-    return { key, label: mapReviewStatus(review.status).label, variant: 'plain', glyph: 'none', group: null }
+    return { key, label: 'Status unknown', variant: 'plain', glyph: 'none', group: null }
   }
   return { key, ...LIFECYCLE[key] }
 }
@@ -83,38 +82,38 @@ function lifecycleOf(key: LifecycleKey, review: ReviewListItem): Lifecycle {
 export function reviewLifecycle(review: ReviewListItem): Lifecycle {
   switch (review.status) {
     case 'ANALYSIS_QUEUED':
-      return lifecycleOf('queued', review)
+      return lifecycleOf('queued')
     case 'ANALYZING':
-      return lifecycleOf('analyzing', review)
+      return lifecycleOf('analyzing')
     case 'FAILED':
-      return lifecycleOf('failed', review)
+      return lifecycleOf('failed')
     case 'COMPLETED':
       break
     default:
-      return lifecycleOf('unknown', review)
+      return lifecycleOf('unknown')
   }
 
   const { finalization, redline, humanReview } = review
   if (finalization) {
-    if (redline?.status === 'FAILED') return lifecycleOf('rl_failed', review)
+    if (redline?.status === 'FAILED') return lifecycleOf('rl_failed')
     if (
       redline?.status === 'COMPLETED' &&
       redline.outcome === 'REDLINE_GENERATED' &&
       redline.downloadAvailable
     ) {
-      return lifecycleOf('rl_verified', review)
+      return lifecycleOf('rl_verified')
     }
-    return lifecycleOf(finalization.approvedChanges === 0 ? 'finalized_zero' : 'finalized', review)
+    return lifecycleOf(finalization.approvedChanges === 0 ? 'finalized_zero' : 'finalized')
   }
 
   if (!humanReview || humanReview.blockers.includes('ANALYSIS_NOT_COMPLETE')) {
-    return lifecycleOf('analysis_complete', review)
+    return lifecycleOf('analysis_complete')
   }
-  if (humanReview.blockers.includes('ANALYSIS_DEGRADED')) return lifecycleOf('degraded', review)
-  if (humanReview.blockers.includes('ACTIVE_ESCALATION')) return lifecycleOf('blocked', review)
-  if (humanReview.readyToFinalize) return lifecycleOf('ready', review)
-  if (humanReview.status === 'NOT_STARTED') return lifecycleOf('completed', review)
-  return lifecycleOf('progress', review)
+  if (humanReview.blockers.includes('ANALYSIS_DEGRADED')) return lifecycleOf('degraded')
+  if (humanReview.blockers.includes('ACTIVE_ESCALATION')) return lifecycleOf('blocked')
+  if (humanReview.readyToFinalize) return lifecycleOf('ready')
+  if (humanReview.status === 'NOT_STARTED') return lifecycleOf('completed')
+  return lifecycleOf('progress')
 }
 
 export interface ReviewRowView {

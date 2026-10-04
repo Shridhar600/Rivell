@@ -8,34 +8,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { appRoutes } from '../../app/router'
+import { LIFECYCLE_ROWS } from '../../test/reviewListFixtures'
 
 function envelope(data: unknown) {
   return { data, status: 200, timestamp: '2026-10-02T09:00:00Z' }
 }
 
-function stubApi(artifacts: unknown[] = [], publications: unknown[] = []) {
+function stubApi(reviews: unknown[] = []) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
-      const url = (input instanceof Request ? input : new Request(String(input))).url
-      if (url.includes('/api/knowledge/artifacts')) return new Response(JSON.stringify(envelope(artifacts)))
-      if (url.includes('/api/knowledge/publications')) return new Response(JSON.stringify(envelope(publications)))
+      const url = new URL((input instanceof Request ? input : new Request(String(input))).url)
+      if (url.pathname === '/api/reviews') {
+        return new Response(JSON.stringify(envelope({ items: reviews, truncated: false })))
+      }
+      if (url.pathname.startsWith('/api/knowledge/')) return new Response(JSON.stringify(envelope([])))
       return new Response('{}', { status: 404 })
     }),
   )
-}
-
-function artifact(id: string, ingestStatus: string, filename: string) {
-  return {
-    id,
-    artifactType: 'PLAYBOOK',
-    filename,
-    contentType: 'application/octet-stream',
-    sizeBytes: 2048,
-    sha256: `sha-${id}`,
-    ingestStatus,
-    createdAt: '2026-10-02T08:00:00Z',
-  }
 }
 
 function renderAt(path: string) {
@@ -123,16 +113,16 @@ describe('sidebar owns its own collapse control', () => {
   })
 
   it('keeps the selection status line in the tree when the inspector is collapsed', async () => {
-    stubApi([artifact('a1', 'EXTRACTED', 'one.docx')])
+    stubApi([LIFECYCLE_ROWS.unresolved])
     renderAt('/')
     const details = screen.getByRole('complementary', { name: 'Details' })
     await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
-    await userEvent.click(screen.getByRole('option', { name: /one\.docx/i }))
+    await userEvent.click(await screen.findByRole('option', { name: /Unresolved MSA\.docx/i }))
     const status = screen.getByRole('status')
-    expect(status).toHaveTextContent(/one\.docx/)
+    expect(status).toHaveTextContent(/Unresolved MSA\.docx/)
   })
 
   it('is reachable by Tab and operable from the keyboard', async () => {
@@ -215,9 +205,7 @@ describe('sidebar owns its own collapse control', () => {
 
 describe('inspector panel', () => {
   it('toggles from its own panel edge and keeps its grid column', async () => {
-    stubApi([
-      artifact('a1', 'EXTRACTED', 'p.docx'),
-    ])
+    stubApi([LIFECYCLE_ROWS.unresolved])
     const { container } = renderAt('/')
     const details = screen.getByRole('complementary', { name: 'Details' })
     const toggle = within(details).getByRole('button', { name: 'Details panel' })

@@ -32,7 +32,7 @@ function SupersededTarget({ candidateId }: { candidateId: string }) {
     <p className="meta">
       Supersedes{' '}
       <Link
-        to={`/knowledge/artifacts/${query.data.artifactId}?candidate=${query.data.id}`}
+        to={`/knowledge/sources/${query.data.artifactId}?position=${query.data.id}`}
       >
         {query.data.rawLabel}
       </Link>
@@ -55,7 +55,7 @@ function PublicationItemRow({ item }: { item: PublicationItem }) {
         ) : (
           <>
             <Link
-              to={`/knowledge/artifacts/${query.data.artifactId}?candidate=${query.data.id}`}
+              to={`/knowledge/sources/${query.data.artifactId}?position=${query.data.id}`}
               className="source-list__link"
             >
               {query.data.rawLabel}

@@ -253,7 +253,7 @@ describe('evidence text and provenance', () => {
 
     expect(
       screen.getByRole('link', { name: /Open source artifact: Playbook rule/ }),
-    ).toHaveAttribute('href', '/knowledge/artifacts/a-playbook')
+    ).toHaveAttribute('href', '/knowledge/sources/a-playbook')
   })
 })
 

@@ -1,7 +1,7 @@
-import type { JSX } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { IconButton } from '../ui/Button'
-import { BookIcon, ClauseIcon, DocumentIcon, HomeIcon, PanelLeftIcon, SourceIcon } from '../ui/Icon'
+import { PanelLeftIcon } from '../ui/Icon'
+import { openSections, TOP_LEVEL_NAVIGATION, type NavDestination } from './navigation'
 
 export const SIDEBAR_ID = 'rv-sidebar'
 
@@ -12,7 +12,6 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { pathname } = useLocation()
-  const inKnowledge = pathname === '/knowledge' || pathname.startsWith('/knowledge/')
   return (
     <aside className="rv-side" id={SIDEBAR_ID} aria-label="Sidebar">
       {/* No organisation name, user menu or greeting: identity is deferred and must not be faked. */}
@@ -41,38 +40,26 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <nav className="rv-nav" aria-label="Primary">
-        <NavItem to="/" label="Home" end Icon={HomeIcon} collapsed={collapsed} />
-        <NavItem to="/reviews" label="Reviews" Icon={DocumentIcon} collapsed={collapsed} />
-        <NavItem to="/knowledge" label="Knowledge" Icon={BookIcon} collapsed={collapsed} />
+        {TOP_LEVEL_NAVIGATION.map((destination) => (
+          <NavItem key={destination.id} destination={destination} collapsed={collapsed} />
+        ))}
       </nav>
 
-      {/* The Knowledge sections, shown while the reader is inside Knowledge. No counts: none is hardcoded. */}
-      {inKnowledge ? (
-        <nav className="rv-nav rv-nav--knowledge" aria-label="Knowledge">
-          <div className="rv-nav__heading">Knowledge</div>
-          <NavItem to="/knowledge" label="Overview" end Icon={BookIcon} collapsed={collapsed} />
-          <NavItem to="/knowledge/playbooks" label="Playbooks" Icon={DocumentIcon} collapsed={collapsed} />
-          <NavItem to="/knowledge/clauses" label="Clause library" Icon={ClauseIcon} collapsed={collapsed} />
-          <NavItem to="/knowledge/sources" label="Sources" Icon={SourceIcon} collapsed={collapsed} />
+      {/* Sections of the destination the reader is inside. They come from the shared navigation model. */}
+      {openSections(pathname).map((parent) => (
+        <nav key={parent.id} className={`rv-nav rv-nav--${parent.id}`} aria-label={parent.childrenLabel ?? parent.label}>
+          <div className="rv-nav__heading">{parent.childrenLabel ?? parent.label}</div>
+          {parent.children?.map((child) => (
+            <NavItem key={child.id} destination={child} collapsed={collapsed} />
+          ))}
         </nav>
-      ) : null}
+      ))}
     </aside>
   )
 }
 
-function NavItem({
-  to,
-  label,
-  end,
-  Icon,
-  collapsed,
-}: {
-  to: string
-  label: string
-  end?: boolean
-  Icon: (props: { className?: string }) => JSX.Element
-  collapsed: boolean
-}) {
+function NavItem({ destination, collapsed }: { destination: NavDestination; collapsed: boolean }) {
+  const { to, label, end, Icon } = destination
   return (
     <NavLink to={to} end={end} className="rv-nav__link" title={collapsed ? label : undefined}>
       <Icon className="rv-icon" />

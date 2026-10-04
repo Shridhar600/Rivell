@@ -8,6 +8,8 @@
  * next-step or decision data is kept, because the browser never knew any.
  */
 
+import { matchPath } from 'react-router'
+
 export const RESUME_KEY = 'rv-resume'
 
 const RECORD_VERSION = 1
@@ -24,6 +26,38 @@ export interface ResumeRecord {
   visitedAt: string
 }
 
+/**
+ * Where a saved place may lead. A Review has a front door (its overview) and a workspace, and the
+ * Reviews list is a safe place to land. Anything else, such as a removed Knowledge page, an old
+ * prototype address or a route this build no longer has, is not a destination to resume into.
+ */
+const CURRENT_DESTINATIONS = [
+  '/reviews',
+  '/reviews/:contractId/overview/:reviewId/*',
+  '/reviews/:contractId/analysis/:reviewId',
+]
+
+/** True only for an in-app path that one of the current Review destinations accepts. */
+export function isCurrentDestination(route: string): boolean {
+  if (!route.startsWith('/') || route.startsWith('//')) return false
+  const path = route.split(/[?#]/)[0] ?? ''
+  return CURRENT_DESTINATIONS.some((pattern) => matchPath({ path: pattern, end: true }, path) !== null)
+}
+
+/**
+ * Older builds could keep an address next to the ids. The route is always derived from the ids on
+ * read, so a stored address is never followed. If one is present and no longer current, the whole
+ * entry is stale and is dropped.
+ */
+const STORED_ADDRESS_FIELDS = ['route', 'to', 'path', 'href', 'url'] as const
+
+function hasStaleAddress(raw: Record<string, unknown>): boolean {
+  return STORED_ADDRESS_FIELDS.some((field) => {
+    const value = raw[field]
+    return value !== undefined && !(typeof value === 'string' && isCurrentDestination(value))
+  })
+}
+
 export function resumeRoute(record: Pick<ResumeRecord, 'contractId' | 'reviewId'>): string {
   return `/reviews/${record.contractId}/analysis/${record.reviewId}`
 }
@@ -37,6 +71,7 @@ export function parseResumeRecord(value: unknown): ResumeRecord | null {
   if (typeof value !== 'object' || value === null) return null
   const raw = value as Record<string, unknown>
   if (raw.v !== RECORD_VERSION) return null
+  if (hasStaleAddress(raw)) return null
   const { reviewId, contractId, filename, versionNumber, visitedAt } = raw
   if (typeof reviewId !== 'string' || !ID_PATTERN.test(reviewId)) return null
   if (typeof contractId !== 'string' || !ID_PATTERN.test(contractId)) return null
@@ -54,12 +89,22 @@ export function parseResumeRecord(value: unknown): ResumeRecord | null {
   }
 }
 
-/** Storage can be blocked, full or absent. Every failure reads as "nothing saved". */
+/**
+ * Storage can be blocked, full or absent. Every failure reads as "nothing saved". A saved value that
+ * is present but is not a current, well-formed place is discarded, so it is not parsed again on every visit.
+ */
 export function readResume(): ResumeRecord | null {
   try {
     const stored = globalThis.localStorage?.getItem(RESUME_KEY)
     if (!stored) return null
-    return parseResumeRecord(JSON.parse(stored))
+    let parsed: ResumeRecord | null = null
+    try {
+      parsed = parseResumeRecord(JSON.parse(stored))
+    } catch {
+      parsed = null
+    }
+    if (!parsed) clearResume()
+    return parsed
   } catch {
     return null
   }
