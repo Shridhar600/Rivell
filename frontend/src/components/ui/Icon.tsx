@@ -205,3 +205,37 @@ export function CautionIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+
+export function ClauseIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M3 4h10M3 7.5h10M3 11h6" />
+    </svg>
+  )
+}
+
+export function SourceIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M2.5 4.5h4l1.5 1.5h5.5v7h-11z" />
+    </svg>
+  )
+}
+
+export function ArrowRightIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M3 8h10m0 0L9 4m4 4-4 4" />
+    </svg>
+  )
+}
+
+export function CopyIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+      <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
+    </svg>
+  )
+}

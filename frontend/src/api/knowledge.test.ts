@@ -78,6 +78,7 @@ const candidate = {
     Fallback: '2x annual fees',
   },
   legalConceptKey: null,
+  effectiveConceptKey: null,
   classifiedConcepts: { LIMITATION_OF_LIABILITY: 0.91 },
   positions: ['FALLBACK', 'PREFERRED'],
   variantRole: null,
@@ -302,6 +303,14 @@ describe('knowledge parsers', () => {
     expect(result.skipped.c3).toBe('not ROUTINE')
   })
 
+  it('reads the effective legal concept, which a human correction can change', () => {
+    expect(parseCandidate({ ...candidate, effectiveConceptKey: 'INDEMNIFICATION' }).effectiveConceptKey).toBe('INDEMNIFICATION')
+    expect(parseCandidate(candidate).effectiveConceptKey).toBeNull()
+    const { effectiveConceptKey: _omitted, ...withoutField } = candidate
+    // Like every other field the server always sends, a missing key is a malformed response.
+    expect(() => parseCandidate(withoutField)).toThrow(/malformed candidate/i)
+  })
+
   it('parses extraction units and publications', () => {
     expect(parseExtractionUnit(unit).kind).toBe('TABLE')
     const parsed = parsePublication(publication)
@@ -319,6 +328,14 @@ describe('knowledge list queries', () => {
 
     expect(artifacts).toHaveLength(1)
     expect(artifacts[0].filename).toBe('knowledge-playbook.docx')
+  })
+
+  it('asks for the page size it is given, and keeps the short default for the legacy lists', async () => {
+    const { requests } = stubFetch(() => jsonResponse(envelope([])))
+    await fetchArtifacts(100)
+    await fetchArtifacts()
+    expect(requests[0]?.url).toContain('limit=100')
+    expect(requests[1]?.url).toContain('limit=20')
   })
 
   it('rejects a list response that is not enveloped', async () => {

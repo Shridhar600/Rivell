@@ -24,6 +24,7 @@ function candidate(
     contentText: 'Original text',
     payloadColumns: {},
     legalConceptKey: null,
+    effectiveConceptKey: null,
     editedContentText: null,
     editedPayloadColumns: {},
     supersedingCandidateId: null,

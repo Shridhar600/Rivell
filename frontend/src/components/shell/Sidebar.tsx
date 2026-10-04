@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
-import { Link, NavLink } from 'react-router'
+import { Link, NavLink, useLocation } from 'react-router'
 import { IconButton } from '../ui/Button'
-import { BookIcon, DocumentIcon, HomeIcon, PanelLeftIcon } from '../ui/Icon'
+import { BookIcon, ClauseIcon, DocumentIcon, HomeIcon, PanelLeftIcon, SourceIcon } from '../ui/Icon'
 
 export const SIDEBAR_ID = 'rv-sidebar'
 
@@ -11,6 +11,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { pathname } = useLocation()
+  const inKnowledge = pathname === '/knowledge' || pathname.startsWith('/knowledge/')
   return (
     <aside className="rv-side" id={SIDEBAR_ID} aria-label="Sidebar">
       {/* No organisation name, user menu or greeting: identity is deferred and must not be faked. */}
@@ -43,6 +45,17 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <NavItem to="/reviews" label="Reviews" Icon={DocumentIcon} collapsed={collapsed} />
         <NavItem to="/knowledge" label="Knowledge" Icon={BookIcon} collapsed={collapsed} />
       </nav>
+
+      {/* The Knowledge sections, shown while the reader is inside Knowledge. No counts: none is hardcoded. */}
+      {inKnowledge ? (
+        <nav className="rv-nav rv-nav--knowledge" aria-label="Knowledge">
+          <div className="rv-nav__heading">Knowledge</div>
+          <NavItem to="/knowledge" label="Overview" end Icon={BookIcon} collapsed={collapsed} />
+          <NavItem to="/knowledge/playbooks" label="Playbooks" Icon={DocumentIcon} collapsed={collapsed} />
+          <NavItem to="/knowledge/clauses" label="Clause library" Icon={ClauseIcon} collapsed={collapsed} />
+          <NavItem to="/knowledge/sources" label="Sources" Icon={SourceIcon} collapsed={collapsed} />
+        </nav>
+      ) : null}
     </aside>
   )
 }

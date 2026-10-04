@@ -257,13 +257,13 @@ describe('legacy surfaces still work', () => {
 
   it('keeps the legacy content wrapper so existing layout is preserved', () => {
     stubApi()
-    const { container } = renderAt('/knowledge')
+    const { container } = renderAt('/knowledge/new')
     expect(container.querySelector('.rv-legacy')).toBeInTheDocument()
   })
 
   it('lets long legacy pages scroll inside the fixed-height shell', () => {
     stubApi()
-    const { container } = renderAt('/knowledge')
+    const { container } = renderAt('/knowledge/new')
     expect(container.querySelector('.rv-legacy')).toBeInTheDocument()
   })
 
