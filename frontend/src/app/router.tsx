@@ -9,6 +9,7 @@ import { KnowledgeNewPage } from '../routes/KnowledgeNewPage'
 import { KnowledgePage } from '../routes/KnowledgePage'
 import { KnowledgePublicationPage } from '../routes/KnowledgePublicationPage'
 import { KnowledgePublicationsPage } from '../routes/KnowledgePublicationsPage'
+import { ReviewLifecyclePage } from '../routes/ReviewLifecyclePage'
 import { ReviewsPage } from '../routes/ReviewsPage'
 import { StartReviewPage } from '../routes/StartReviewPage'
 import { ReviewWorkspacePage } from '../routes/ReviewWorkspacePage'
@@ -21,6 +22,8 @@ export const appRoutes = [
       { index: true, element: <HomePage /> },
       { path: 'reviews', element: <ReviewsPage /> },
       { path: 'reviews/new', element: <StartReviewPage /> },
+      // The per-Review lifecycle surface. It sits outside LegacySurface: it is a canonical M10B page.
+      { path: 'reviews/:contractId/overview/:reviewId/:tab?', element: <ReviewLifecyclePage /> },
       {
         // Temporary seam: these surfaces keep their existing layout until they are restyled.
         element: <LegacySurface />,
