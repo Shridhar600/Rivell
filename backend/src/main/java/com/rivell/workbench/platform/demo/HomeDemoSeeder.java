@@ -3,6 +3,7 @@ package com.rivell.workbench.platform.demo;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -64,6 +65,7 @@ public class HomeDemoSeeder implements ApplicationRunner {
     private static final String MSA = "Northstar Vendor MSA.docx";
     private static final String DPA = "Beacon Data Processing Addendum.docx";
     private static final String PLAYBOOK = "Rivell Demo Playbook.docx";
+    private static final String CLAUSE_LIBRARY = "Rivell Demo Clause Library.docx";
 
     private final ContractIngestionService contractIngestion;
     private final ContractEnrichmentService enrichment;
@@ -116,9 +118,18 @@ public class HomeDemoSeeder implements ApplicationRunner {
                 artifactsAndPublications);
     }
 
+    /**
+     * Every seeded artifact must be present before the seed is skipped.
+     *
+     * <p>Checking only the playbook would strand a database seeded by an earlier build: it
+     * would report itself complete and never gain the clause library, leaving the demo review
+     * with findings that carry no proposed language.
+     */
     private boolean alreadySeeded() {
-        return knowledgeQuery.listArtifacts(null).stream()
-                .anyMatch(artifact -> PLAYBOOK.equals(artifact.filename()));
+        var filenames = knowledgeQuery.listArtifacts(null).stream()
+                .map(artifact -> artifact.filename())
+                .collect(java.util.stream.Collectors.toSet());
+        return filenames.contains(PLAYBOOK) && filenames.contains(CLAUSE_LIBRARY);
     }
 
     private Map<String, UUID> seedContracts() {
@@ -141,25 +152,42 @@ public class HomeDemoSeeder implements ApplicationRunner {
         }
     }
 
+    /**
+     * Publishes a playbook and a clause library. The library matters: without approved
+     * drafting a Finding can report a deviation but carries no proposed wording, so the
+     * Workspace has nothing truthful to show for "Proposed language". Both go through the
+     * same real ingest, approve and publish path.
+     */
     private int seedKnowledge() {
-        UUID artifactId;
-        try (InputStream source = document(PLAYBOOK)) {
-            artifactId = knowledgeIngestion.ingest(
-                    PLAYBOOK, DOCX, ArtifactType.PLAYBOOK, manifest(), source).id();
-        } catch (IOException e) {
-            throw new IllegalStateException("Demo playbook unreadable", e);
+        var published = new ArrayList<UUID>();
+        for (var artifact : List.of(
+                new SeededArtifact(PLAYBOOK, ArtifactType.PLAYBOOK),
+                new SeededArtifact(CLAUSE_LIBRARY, ArtifactType.CLAUSE_LIBRARY))) {
+            publish(artifact, published);
         }
+        if (published.isEmpty()) {
+            log.warn("Rivell demo: no knowledge candidates, so nothing was published");
+            return 0;
+        }
+        publication.publish(published, Map.of(), "Rivell demo publication");
+        return List.of(PLAYBOOK, CLAUSE_LIBRARY).size();
+    }
 
-        var approved = new ArrayList<UUID>();
+    private void publish(SeededArtifact artifact, List<UUID> approved) {
+        UUID artifactId;
+        try (InputStream source = document(artifact.filename())) {
+            artifactId = knowledgeIngestion.ingest(
+                    artifact.filename(), DOCX, artifact.type(), manifest(), source).id();
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "Demo knowledge unreadable: " + artifact.filename(), e);
+        }
         for (var candidate : knowledgeQuery.getCandidates(artifactId)) {
             approved.add(candidateReview.approve(candidate.id(), "demo approval").id());
         }
-        if (approved.isEmpty()) {
-            log.warn("Rivell demo: playbook produced no candidates, so nothing was published");
-            return 0;
-        }
-        publication.publish(approved, Map.of(), "Rivell demo publication");
-        return 1;
+    }
+
+    private record SeededArtifact(String filename, ArtifactType type) {
     }
 
     private ArtifactManifest manifest() {

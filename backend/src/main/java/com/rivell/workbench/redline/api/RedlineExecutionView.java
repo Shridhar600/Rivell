@@ -12,6 +12,7 @@ public record RedlineExecutionView(
         UUID contractId,
         int contractVersionNumber,
         int changeSetVersion,
+        int attempt,
         String status,
         String outcome,
         String failureCode,

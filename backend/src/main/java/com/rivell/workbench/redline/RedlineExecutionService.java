@@ -75,31 +75,73 @@ public class RedlineExecutionService {
             throw new UnauthorizedRedlineAccessException(identity.userId());
         }
         var organizationId = identity.organizationId();
-        var requestedBy = identity.userId();
         var changeSet = changeSetRepository.findByReview(organizationId, reviewId)
                 .orElseThrow(RedlineNotAvailableException::new);
         var existing = executionRepository.findByChangeSet(organizationId, changeSet.id());
         if (existing.isPresent()) {
             return requireSuccessful(existing.get());
         }
+        return requireSuccessful(
+                attempt(changeSet, organizationId, identity.userId(), 1, clock.instant()));
+    }
 
-        var startedAt = clock.instant();
-        log.info("Redline execution started reviewId={} changeSetId={} organizationId={}",
-                reviewId, changeSet.id(), organizationId);
+    /**
+     * Retries a persisted FAILED redline attempt.
+     *
+     * <p>The frozen ApprovedChangeSet is re-read and re-executed exactly as it stands: no
+     * re-decision, no re-finalization, and no new legal reasoning. The prior FAILED attempt is
+     * left byte-for-byte intact and this appends the next numbered attempt, so the recorded
+     * failure stays available instead of being rewritten into a success.
+     *
+     * <p>Deterministic inputs mean a retry usually reproduces the same failure, and that is
+     * the honest outcome: this is a re-run, not an escape hatch. It can succeed where the
+     * first attempt failed for a reason outside the frozen inputs, such as a contract
+     * semantics correction that has since been reverted.
+     *
+     * <p>Only a recorded failure is retriable. A review with no execution at all has not
+     * failed, so it is generated with the ordinary trigger rather than retried.
+     */
+    public RedlineExecution retry(UUID reviewId) {
+        var identity = identityProvider.currentIdentity();
+        if (!authorizationService.isAuthorized(identity, Permissions.REVIEW_REDLINE)) {
+            throw new UnauthorizedRedlineAccessException(identity.userId());
+        }
+        var organizationId = identity.organizationId();
+        var changeSet = changeSetRepository.findByReview(organizationId, reviewId)
+                .orElseThrow(RedlineNotAvailableException::new);
+        var latest = executionRepository.findByChangeSet(organizationId, changeSet.id())
+                .orElseThrow(() -> new RedlineRetryNotAvailableException(
+                        "No redline execution exists to retry; generate the redline first."));
+        if (latest.status() != RedlineExecutionStatus.FAILED) {
+            throw new RedlineRetryNotAvailableException(
+                    "Only a FAILED redline execution can be retried.");
+        }
+        return requireSuccessful(attempt(changeSet, organizationId, identity.userId(),
+                latest.attemptNumber() + 1, clock.instant()));
+    }
+
+    /**
+     * One numbered attempt at the frozen change set. Shared by the initial trigger and by
+     * retry so both paths render and verify identically; there is no second execution route.
+     */
+    private RedlineExecution attempt(ApprovedChangeSet changeSet, UUID organizationId,
+            UUID requestedBy, int attemptNumber, java.time.Instant startedAt) {
+        log.info("Redline execution started reviewId={} changeSetId={} attempt={} organizationId={}",
+                changeSet.reviewId(), changeSet.id(), attemptNumber, organizationId);
         var execution = semanticallyDrifted(changeSet, organizationId)
-                ? fail(changeSet, organizationId, requestedBy, startedAt,
+                ? fail(changeSet, organizationId, requestedBy, attemptNumber, startedAt,
                         RedlineFailureCode.APPROVED_SEMANTICS_DRIFT, null,
                         "The contract semantics changed after this review was approved.",
                         List.of(), null)
-                : run(changeSet, organizationId, requestedBy, startedAt);
+                : run(changeSet, organizationId, requestedBy, attemptNumber, startedAt);
         if (execution.status() == RedlineExecutionStatus.FAILED) {
-            log.info("Redline execution failed reviewId={} executionId={} code={}",
-                    reviewId, execution.id(), execution.failureCode());
+            log.info("Redline execution failed reviewId={} executionId={} attempt={} code={}",
+                    changeSet.reviewId(), execution.id(), attemptNumber, execution.failureCode());
         } else {
-            log.info("Redline execution completed reviewId={} executionId={} outcome={}",
-                    reviewId, execution.id(), execution.outcome());
+            log.info("Redline execution completed reviewId={} executionId={} attempt={} outcome={}",
+                    changeSet.reviewId(), execution.id(), attemptNumber, execution.outcome());
         }
-        return requireSuccessful(execution);
+        return execution;
     }
 
     public RedlineExecution find(UUID reviewId) {
@@ -138,9 +180,10 @@ public class RedlineExecutionService {
 
     private RedlineExecution run(
             ApprovedChangeSet changeSet, UUID organizationId, UUID requestedBy,
-            java.time.Instant startedAt) {
+            int attemptNumber, java.time.Instant startedAt) {
         if (changeSet.changes().isEmpty()) {
-            return persist(completedNoChanges(changeSet, organizationId, requestedBy, startedAt));
+            return persist(completedNoChanges(
+                    changeSet, organizationId, requestedBy, attemptNumber, startedAt));
         }
 
         var version = versionSummary(changeSet, organizationId);
@@ -185,7 +228,7 @@ public class RedlineExecutionService {
                     effectiveConcepts(organizationId, changeSet),
                     AUTHOR, startedAt, sourceSha);
         } catch (RedlinePlanException e) {
-            return fail(changeSet, organizationId, requestedBy, startedAt, e.code(),
+            return fail(changeSet, organizationId, requestedBy, attemptNumber, startedAt, e.code(),
                     e.approvedChangeId(), null, List.of(), sourceSha);
         }
 
@@ -193,14 +236,14 @@ public class RedlineExecutionService {
         try {
             rendered = renderer.render(sourceBytes, plan);
         } catch (RedlineRenderException e) {
-            return fail(changeSet, organizationId, requestedBy, startedAt, e.code(),
+            return fail(changeSet, organizationId, requestedBy, attemptNumber, startedAt, e.code(),
                     e.approvedChangeId(), null, List.of(), sourceSha);
         }
 
         var verification = verifier.verify(sourceBytes, rendered.bytes(), plan,
                 rendered.changes());
         if (!verification.passed()) {
-            return fail(changeSet, organizationId, requestedBy, startedAt,
+            return fail(changeSet, organizationId, requestedBy, attemptNumber, startedAt,
                     verification.failureCode(), null,
                     verification.failureDetail(), verification.changes(), sourceSha);
         }
@@ -211,6 +254,7 @@ public class RedlineExecutionService {
         try {
             var executionId = UUID.randomUUID();
             var completed = completedExecution(executionId, changeSet, organizationId,
+                    attemptNumber,
                     requestedBy, startedAt, sourceSha, plan, rendered, verification,
                     artifactId, storageKey);
             if (executionRepository.insert(completed)) {
@@ -231,6 +275,7 @@ public class RedlineExecutionService {
             UUID executionId,
             ApprovedChangeSet changeSet,
             UUID organizationId,
+            int attemptNumber,
             UUID requestedBy,
             java.time.Instant startedAt,
             String sourceSha,
@@ -272,7 +317,8 @@ public class RedlineExecutionService {
                 filename(organizationId, changeSet), RedlineArtifact.DOCX_CONTENT_TYPE,
                 rendered.bytes().length, rendered.sha256(), storageKey, clock.instant());
         return new RedlineExecution(executionId, organizationId, changeSet.reviewId(),
-                changeSet.id(), changeSet.contractId(), changeSet.contractVersionId(),
+                changeSet.id(), attemptNumber, changeSet.contractId(),
+                changeSet.contractVersionId(),
                 changeSet.contractVersionNumber(), changeSet.changeSetVersion(),
                 RedlineExecutionStatus.COMPLETED, RedlineOutcome.REDLINE_GENERATED,
                 null, null, RedlinePlanResolver.RENDERER_VERSION,
@@ -283,9 +329,10 @@ public class RedlineExecutionService {
 
     private RedlineExecution completedNoChanges(
             ApprovedChangeSet changeSet, UUID organizationId, UUID requestedBy,
-            java.time.Instant startedAt) {
+            int attemptNumber, java.time.Instant startedAt) {
         return new RedlineExecution(UUID.randomUUID(), organizationId, changeSet.reviewId(),
-                changeSet.id(), changeSet.contractId(), changeSet.contractVersionId(),
+                changeSet.id(), attemptNumber, changeSet.contractId(),
+                changeSet.contractVersionId(),
                 changeSet.contractVersionNumber(), changeSet.changeSetVersion(),
                 RedlineExecutionStatus.COMPLETED, RedlineOutcome.NO_CHANGES, null, null,
                 RedlinePlanResolver.RENDERER_VERSION, InsertPlacementStrategy.VERSION,
@@ -297,6 +344,7 @@ public class RedlineExecutionService {
             ApprovedChangeSet changeSet,
             UUID organizationId,
             UUID requestedBy,
+            int attemptNumber,
             java.time.Instant startedAt,
             RedlineFailureCode code,
             UUID failedChangeId,
@@ -329,7 +377,8 @@ public class RedlineExecutionService {
                     null, null, null, null, null));
         }
         var execution = new RedlineExecution(executionId, organizationId, changeSet.reviewId(),
-                changeSet.id(), changeSet.contractId(), changeSet.contractVersionId(),
+                changeSet.id(), attemptNumber, changeSet.contractId(),
+                changeSet.contractVersionId(),
                 changeSet.contractVersionNumber(), changeSet.changeSetVersion(),
                 RedlineExecutionStatus.FAILED, null, code, sanitized(detail),
                 RedlinePlanResolver.RENDERER_VERSION, InsertPlacementStrategy.VERSION,

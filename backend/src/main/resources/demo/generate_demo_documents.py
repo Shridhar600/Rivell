@@ -87,9 +87,15 @@ write_docx(str(OUT / 'Northstar Vendor MSA.docx'), contract(
         'Undisputed invoices are payable within thirty days of receipt.',
     ]),
      ('Limitation of Liability', [
-        'Each party total aggregate liability is limited to the fees paid in the twelve '
-        'months preceding the claim, except where liability cannot lawfully be limited.',
-        'Neither party is liable for indirect or consequential loss.',
+        'Supplier total aggregate liability arising out of or related to this Agreement '
+        'shall not exceed 3 times the fees paid in the preceding 12 months.',
+        'A party shall not be liable for indirect or consequential loss.',
+        'This limitation applies to all obligations under this Agreement, including '
+        'indemnification obligations.',
+    ]),
+     ('Indemnification', [
+        'Supplier shall defend Customer against third-party claims without regard to any '
+        'limitation of liability in this Agreement.',
     ]),
      ('Confidentiality', [
         'Each party will protect the other party confidential information with at least '
@@ -144,13 +150,18 @@ write_docx(str(OUT / 'Rivell Demo Playbook.docx'), contract(
     'Negotiation Playbook (Demonstration)',
     [],
     [('Confidentiality', [
-        'A confidentiality term of at least three years is preferred.',
-        'Perpetual protection is acceptable only for trade secrets.',
+        'Preferred: a confidentiality term of at least three years.',
+        'Fallback: two years, extended only for trade secrets.',
+        'Prohibited: no confidentiality obligation at all.',
     ]),
      ('Limitation of Liability', [
-        'A cap at twelve months of fees is the preferred position.',
-        'Any cap above two times annual fees requires legal review.',
-        'Uncapped liability for confidentiality and data protection is acceptable.',
+        'Preferred: total liability should not exceed the fees paid in the preceding 12 '
+        'months.',
+        'Fallback: a cap of 2 times the fees paid in the preceding 12 months is '
+        'acceptable.',
+        'Prohibited: uncapped liability is not acceptable in any master services '
+        'agreement.',
+        'Escalate to general counsel for any cap above the preferred position.',
     ]),
      ('Termination', [
         'Termination for convenience should require thirty days notice.',
@@ -161,5 +172,17 @@ write_docx(str(OUT / 'Rivell Demo Playbook.docx'), contract(
         'Exclusive jurisdiction in the governing law state is preferred.',
     ])],
     ))
+
+write_docx(str(OUT / 'Rivell Demo Clause Library.docx'), contract(
+    'Clause Library (Demonstration)',
+    [],
+    [('Limitation of Liability - Preferred', [
+        'Total aggregate liability shall not exceed the fees paid in the preceding 12 '
+        'months.',
+    ]),
+     ('Limitation of Liability - Fallback', [
+        'Total aggregate liability shall not exceed two times the fees paid in the '
+        'preceding 12 months.',
+    ])]))
 
 print(f'wrote {len(list(OUT.glob("*.docx")))} demo documents to {OUT}')

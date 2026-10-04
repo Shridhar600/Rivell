@@ -42,6 +42,8 @@ import com.rivell.workbench.review.ReviewAnalysisService;
 import com.rivell.workbench.review.ReviewCheckExecution;
 import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
 import com.rivell.workbench.review.FindingPositionComparison;
+import com.rivell.workbench.review.ProposedChangeCounts;
+import com.rivell.workbench.review.ReviewDocumentQuery;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.ReviewPackRegistry;
 import com.rivell.workbench.review.ReviewPlanCheck;
@@ -73,6 +75,7 @@ public class ReviewApiService {
     private final ReviewPackRegistry reviewPackRegistry;
     private final ReviewListQuery reviewListQuery;
     private final ReviewHumanReviewListQuery reviewHumanReviewListQuery;
+    private final ReviewDocumentQuery reviewDocumentQuery;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
 
@@ -86,6 +89,7 @@ public class ReviewApiService {
             ReviewPackRegistry reviewPackRegistry,
             ReviewListQuery reviewListQuery,
             ReviewHumanReviewListQuery reviewHumanReviewListQuery,
+            ReviewDocumentQuery reviewDocumentQuery,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         this.reviewService = reviewService;
@@ -97,6 +101,7 @@ public class ReviewApiService {
         this.reviewPackRegistry = reviewPackRegistry;
         this.reviewListQuery = reviewListQuery;
         this.reviewHumanReviewListQuery = reviewHumanReviewListQuery;
+        this.reviewDocumentQuery = reviewDocumentQuery;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
     }
@@ -362,6 +367,29 @@ public class ReviewApiService {
         return List.copyOf(ordered);
     }
 
+    /**
+     * Proposal counts for the same generation {@link ReviewAnalysisService#progress} counts,
+     * so a summary never mixes one generation's totals with another's breakdown. A review
+     * with no run yet proposes nothing.
+     */
+    private ProposedChangeCounts proposedChanges(
+            UUID organizationId, Optional<ReviewAnalysisRun> counted) {
+        return counted
+                .map(run -> findingRepository.countProposedChanges(organizationId, run.id()))
+                .orElse(ProposedChangeCounts.NONE);
+    }
+
+    /**
+     * The uploaded document behind the version this review pinned, read by version id so a
+     * newer version of the same contract cannot change what an existing review reports.
+     */
+    private ReviewSummaryView.DocumentView document(Review review) {
+        return reviewDocumentQuery.find(review.organizationId(), review.contractVersionId())
+                .map(document -> new ReviewSummaryView.DocumentView(
+                        document.filename(), document.uploadedAt(), document.sizeBytes()))
+                .orElse(null);
+    }
+
     private ReviewSummaryView summaryFor(UUID organizationId, UUID reviewId) {
         var review = reviewRepository.find(organizationId, reviewId)
                 .orElseThrow(() -> new ReviewNotFoundException(reviewId));
@@ -396,6 +424,8 @@ public class ReviewApiService {
                 progress.failedChecks(),
                 progress.signals(),
                 progress.findings(),
+                proposedChanges(organizationId, counted),
+                document(review),
                 new ReviewSummaryView.SnapshotView(
                         new ReviewSummaryView.ProfileView(
                                 snapshot.contractType().name(),

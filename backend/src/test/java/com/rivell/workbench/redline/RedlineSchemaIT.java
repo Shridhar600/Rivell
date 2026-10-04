@@ -108,9 +108,26 @@ class RedlineSchemaIT {
 
         assertThat(count("redline_execution", executionId)).isEqualTo(1);
 
-        assertThatThrownBy(() -> insertExecution(seeded))
+        // A retry appends a numbered attempt, so a different attempt number for the same
+        // change set is legitimate and must be accepted; only a repeat of the same attempt
+        // is refused. Preserving the prior FAILED row is what makes the refusal necessary.
+        var second = insertFailedAttempt(seeded, 2);
+        assertThat(count("redline_execution", second)).isEqualTo(1);
+        assertThatThrownBy(() -> insertFailedAttempt(seeded, 2))
                 .isInstanceOf(DataIntegrityViolationException.class)
-                .hasMessageContaining("redline_execution_change_set_id_key");
+                .hasMessageContaining("uq_redline_execution_change_set_attempt");
+
+        // A second COMPLETED attempt for one change set would mean two verified artifacts
+        // for one frozen change set, which is never a legitimate state.
+        assertThatThrownBy(() -> insertExecution(seeded, 3))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("uq_redline_execution_single_success");
+
+        // Attempts must be numbered from one.
+        assertThatThrownBy(() -> insertAttempt(
+                seeded, "FAILED", null, "RENDER_FAILED", 0))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("ck_redline_execution_attempt_number");
 
         var change = seeded.change();
         insertExecutionChange(executionId, seeded, change, 0);
@@ -125,15 +142,15 @@ class RedlineSchemaIT {
                 seeded.organizationId()))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
-        assertThatThrownBy(() -> insertExecutionWithStatus(seeded, "COMPLETED", null, null))
+        assertThatThrownBy(() -> insertAttempt(seeded, "COMPLETED", null, null, 9))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> insertExecutionWithStatus(
-                seeded, "FAILED", "REDLINE_GENERATED", "TARGET_NOT_FOUND"))
+        assertThatThrownBy(() -> insertAttempt(
+                seeded, "FAILED", "REDLINE_GENERATED", "TARGET_NOT_FOUND", 9))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> insertExecutionWithStatus(seeded, "FAILED", null, null))
+        assertThatThrownBy(() -> insertAttempt(seeded, "FAILED", null, null, 9))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> insertExecutionWithStatus(
-                seeded, "COMPLETED", "NO_CHANGES", null))
+        assertThatThrownBy(() -> insertAttempt(
+                seeded, "COMPLETED", "NO_CHANGES", null, 9))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -294,25 +311,35 @@ class RedlineSchemaIT {
     }
 
     private UUID insertExecution(Seeded seeded) {
-        return insertExecutionWithStatus(seeded, "COMPLETED", "REDLINE_GENERATED", null);
+        return insertAttempt(seeded, "COMPLETED", "REDLINE_GENERATED", null, 1);
     }
 
-    private UUID insertExecutionWithStatus(
-            Seeded seeded, String status, String outcome, String failureCode) {
+    private UUID insertExecution(Seeded seeded, int attemptNumber) {
+        return insertAttempt(seeded, "COMPLETED", "REDLINE_GENERATED", null, attemptNumber);
+    }
+
+    private UUID insertFailedAttempt(Seeded seeded, int attemptNumber) {
+        return insertAttempt(seeded, "FAILED", null, "RENDER_FAILED", attemptNumber);
+    }
+
+    private UUID insertAttempt(
+            Seeded seeded, String status, String outcome, String failureCode,
+            int attemptNumber) {
         var id = UUID.randomUUID();
         jdbcClient.sql("""
                 insert into redline_execution
-                  (id, organization_id, review_id, change_set_id, contract_id,
+                  (id, organization_id, review_id, change_set_id, attempt_number, contract_id,
                    contract_version_id, contract_version_number, change_set_version,
                    status, outcome, failure_code, failure_detail, renderer_version,
                    placement_strategy_version, source_sha256, semantics_digest, change_count,
                    requested_by, started_at, completed_at)
-                values (:id, :organizationId, :reviewId, :changeSetId, :contractId,
+                values (:id, :organizationId, :reviewId, :changeSetId, :attemptNumber, :contractId,
                    :contractVersionId, :contractVersionNumber, 1,
                    :status, :outcome, :failureCode, null, 'test-renderer',
                    'test-placement', repeat('a', 64), repeat('b', 64), 1, :requestedBy,
                    :startedAt, :completedAt)
                 """)
+                .param("attemptNumber", attemptNumber)
                 .param("id", id)
                 .param("organizationId", seeded.organizationId())
                 .param("reviewId", seeded.reviewId())

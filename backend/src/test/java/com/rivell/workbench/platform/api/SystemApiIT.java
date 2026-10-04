@@ -109,6 +109,7 @@ class SystemApiIT {
                         "/api/reviews/{id}/finalize",
                         "/api/reviews/{id}/approved-change-set",
                         "/api/reviews/{id}/redline",
+                        "/api/reviews/{id}/redline/retry",
                         "/api/reviews/{id}/redline/download",
                         "/api/reviews/{id}/progress",
                         "/api/knowledge/artifacts",

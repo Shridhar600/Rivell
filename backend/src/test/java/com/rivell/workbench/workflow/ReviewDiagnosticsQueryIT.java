@@ -460,12 +460,26 @@ class ReviewDiagnosticsQueryIT {
                 .isZero();
     }
 
-    /** The single statement that contains the given fragment, so a shape claim is scoped to it. */
+    /**
+     * The single statement that contains the given fragment, so a shape claim is scoped to it.
+     *
+     * <p>A logged statement is its text followed by a tab-only continuation line and then its
+     * bind parameters, so the boundary is whichever of those comes first. Slicing to a
+     * semicolon instead would swallow every later statement in the window, which makes an
+     * unrelated bounded read elsewhere look like a bound on the statement under test.
+     */
     private static String statementContaining(String sql, String fragment) {
         var start = sql.indexOf(fragment);
         assertThat(start).as("statement containing '%s' must be in the window", fragment)
                 .isNotNegative();
-        var end = sql.indexOf(';', start);
+        var continuation = sql.indexOf("\n\t\n", start);
+        var parameters = sql.indexOf("detail:", start);
+        var end = switch (Integer.compare(
+                continuation < 0 ? Integer.MAX_VALUE : continuation,
+                parameters < 0 ? Integer.MAX_VALUE : parameters)) {
+            case -1, 0 -> continuation < 0 ? parameters : continuation;
+            default -> parameters;
+        };
         return end < 0 ? sql.substring(start) : sql.substring(start, end);
     }
 

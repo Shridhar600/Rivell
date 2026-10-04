@@ -26,6 +26,7 @@ import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.ProposedAction;
 import com.rivell.workbench.review.ProposedLanguageSource;
+import com.rivell.workbench.review.ProposedChangeCounts;
 
 @Repository
 class JdbcFindingRepository implements FindingRepository {
@@ -445,6 +446,26 @@ class JdbcFindingRepository implements FindingRepository {
                 rs.getObject("approved_drafting_evidence_id", UUID.class),
                 map(rs.getString("quality")),
                 rs.getTimestamp("created_at").toInstant());
+    }
+
+    @Override
+    public ProposedChangeCounts countProposedChanges(UUID organizationId, UUID runId) {
+        return jdbcClient.sql("""
+                select
+                    count(*) filter (where subject_kind = 'CLAUSE'
+                        and proposed_language is not null) as replace_count,
+                    count(*) filter (where subject_kind = 'ABSENCE'
+                        and proposed_action = 'ADD_REQUIRED_PROVISION') as insert_count
+                from finding
+                where run_id = :runId and organization_id = :organizationId
+                """)
+                .param("runId", runId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> new ProposedChangeCounts(
+                        rs.getInt("replace_count"),
+                        rs.getInt("insert_count"),
+                        0))
+                .single();
     }
 
     @Override

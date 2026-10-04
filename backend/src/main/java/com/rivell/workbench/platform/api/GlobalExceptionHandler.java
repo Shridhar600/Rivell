@@ -36,6 +36,7 @@ import com.rivell.workbench.redline.RedlineArtifactUnavailableException;
 import com.rivell.workbench.redline.RedlineExecutionFailedException;
 import com.rivell.workbench.redline.RedlineExecutionNotFoundException;
 import com.rivell.workbench.redline.RedlineNotAvailableException;
+import com.rivell.workbench.redline.RedlineRetryNotAvailableException;
 import com.rivell.workbench.redline.RedlineSourceUnavailableException;
 import com.rivell.workbench.redline.UnauthorizedRedlineAccessException;
 import com.rivell.workbench.review.FindingNotFoundException;
@@ -159,6 +160,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({RedlineNotAvailableException.class,
+            RedlineRetryNotAvailableException.class,
             RedlineArtifactUnavailableException.class,
             RedlineExecutionFailedException.class,
             RedlineSourceUnavailableException.class})
