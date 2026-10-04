@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -43,7 +43,6 @@ import {
   regionText,
 } from '../lib/workspace'
 import { AnalysisWarnings, ReviewLifecyclePanel } from '../components/review/ReviewLifecyclePanel'
-import { RedlineExecutionPanel } from '../components/review/RedlineExecutionPanel'
 import { ReviewContext } from '../components/review/ReviewContext'
 import { ReviewCoveragePanel } from '../components/review/ReviewCoveragePanel'
 import { readPanelFlag, writePanelFlag } from '../components/shell/ShellContext'
@@ -52,12 +51,12 @@ import { CommandPalette, type PaletteItem } from '../components/workspace/Comman
 import { ContractPane, type DocMode } from '../components/workspace/ContractPane'
 import { DecisionHistorySheet } from '../components/workspace/DecisionHistorySheet'
 import { FindingNavigator } from '../components/workspace/FindingNavigator'
-import { FindingPanel } from '../components/workspace/FindingPanel'
+import { FindingPanel, SUMMARY_LINK_ID } from '../components/workspace/FindingPanel'
 import { FinalizeDialog } from '../components/workspace/FinalizeDialog'
 import { SourceContent } from '../components/workspace/SourceContent'
 import { useDecisionFlow } from '../components/workspace/useDecisionFlow'
 import { WorkspaceSheet } from '../components/workspace/WorkspaceSheet'
-import { WorkspaceTopBar } from '../components/workspace/WorkspaceTopBar'
+import { FROZEN_NOTE_ID, WorkspaceTopBar } from '../components/workspace/WorkspaceTopBar'
 import {
   CheckIcon,
   ClauseIcon,
@@ -73,7 +72,7 @@ const LEFT_KEY = 'rv-l'
 const RIGHT_KEY = 'rv-r'
 const MODE_CYCLE: Record<DocMode, DocMode> = { changes: 'orig', orig: 'final', final: 'changes' }
 
-type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'redline' }
+type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' }
 
 function Gate({ children }: { children: ReactNode }) {
   return (
@@ -178,6 +177,9 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const [sheet, setSheet] = useState<Sheet | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [finalizeOpen, setFinalizeOpen] = useState(false)
+  // Set when a Finalize succeeds, so focus can move on once the dialog is closed and the page shows
+  // the frozen state. A ref, because moving focus needs no render of its own.
+  const focusFrozen = useRef(false)
 
   const pinnedVersion = summary.contractVersionNumber ?? undefined
   const latestVersion = contract.latestVersion.versionNumber
@@ -275,6 +277,16 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     set(!current)
     writePanelFlag(side === 'l' ? LEFT_KEY : RIGHT_KEY, current)
   }
+
+  // The Finalize button the dialog was opened from is disabled once the review is frozen, which
+  // would drop focus to the page. It moves to the next action instead: the review summary link. When
+  // the detail panel is closed that link is hidden, so the always-visible frozen status takes focus.
+  useEffect(() => {
+    if (!focusFrozen.current || !isFinalized || finalizeOpen) return
+    focusFrozen.current = false
+    const link = rightOpen ? document.getElementById(SUMMARY_LINK_ID) : null
+    ;(link ?? document.getElementById(FROZEN_NOTE_ID))?.focus()
+  }, [isFinalized, finalizeOpen, rightOpen])
 
   function startFinalize() {
     if (humanReview?.readyToFinalize && !isFinalized) {
@@ -560,13 +572,13 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           onShowInDocument={showInDocument}
           onOpenSource={(evidenceId) => setSheet({ kind: 'source', evidenceId })}
           onOpenHistory={() => setSheet({ kind: 'history' })}
-          onOpenRedline={() => setSheet({ kind: 'redline' })}
+          summaryPath={`/reviews/${contractId}/overview/${reviewId}`}
         />
       </div>
 
       <WorkspaceSheet
         open={sheet !== null}
-        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'redline' ? 'Redline' : 'Source'}
+        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : 'Source'}
         onClose={() => setSheet(null)}
       >
         {sheet?.kind === 'source' ? (
@@ -592,18 +604,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
             <AnalysisWarnings summary={summary} />
           </>
         ) : null}
-        {sheet?.kind === 'redline' ? (
-          <RedlineExecutionPanel
-            reviewId={reviewId}
-            isFinalized={isFinalized}
-            approvedChangeSet={changeSetQuery.data ?? null}
-            regionLabels={regionLabels}
-            onSelectFinding={(findingId) => {
-              setSheet(null)
-              selectFinding(findingId)
-            }}
-          />
-        ) : null}
       </WorkspaceSheet>
 
       <CommandPalette
@@ -618,7 +618,14 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       <FinalizeDialog
         open={finalizeOpen}
         onClose={() => setFinalizeOpen(false)}
-        onConfirm={() => finalizeMutation.mutate(undefined, { onSuccess: () => setFinalizeOpen(false) })}
+        onConfirm={() =>
+          finalizeMutation.mutate(undefined, {
+            onSuccess: () => {
+              focusFrozen.current = true
+              setFinalizeOpen(false)
+            },
+          })
+        }
         isFinalizing={finalizeMutation.isPending}
         error={finalizeError}
         summary={finalizeLines}

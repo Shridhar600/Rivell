@@ -282,6 +282,59 @@ describe('review parsers', () => {
     expect(detail.evidenceItemIds).toEqual([])
   })
 
+  describe('position comparison', () => {
+    const contractSlot = {
+      evidenceItemId: 'e-contract',
+      authorityClass: 'CURRENT_CONTRACT',
+      legalConcept: 'LIMITATION_OF_LIABILITY',
+      facts: [{ factSchema: 'liability-facts', schemaVersion: 1, values: { liabilityCapMultiple: '3' } }],
+    }
+    const policySlot = (id: string, publicationNumber: number | null = 2) => ({
+      evidenceItemId: id,
+      authorityClass: 'POLICY',
+      legalConcept: 'LIMITATION_OF_LIABILITY',
+      publicationNumber,
+      text: 'Cap at fees paid.',
+    })
+
+    it('is null when the server sent no comparison', () => {
+      expect(parseFindingDetail(absenceFindingDetail).positionComparison).toBeNull()
+      expect(parseFindingDetail({ ...absenceFindingDetail, positionComparison: null }).positionComparison).toBeNull()
+    })
+
+    it('keeps every slot the server sent, in order', () => {
+      const detail = parseFindingDetail({
+        ...clauseFindingDetail,
+        positionComparison: {
+          contract: [contractSlot],
+          preferred: [policySlot('e-1'), policySlot('e-2')],
+          fallback: [policySlot('e-1')],
+          escalation: [{ evidenceItemId: 'e-1', authorityClass: 'POLICY', publicationNumber: 2, trigger: 'Uncapped liability' }],
+        },
+      })
+      const comparison = detail.positionComparison
+      expect(comparison?.preferred.map((slot) => slot.evidenceItemId)).toEqual(['e-1', 'e-2'])
+      expect(comparison?.fallback).toHaveLength(1)
+      expect(comparison?.contract[0].facts[0]).toMatchObject({ factSchema: 'liability-facts', values: { liabilityCapMultiple: '3' } })
+      expect(comparison?.escalation[0].trigger).toBe('Uncapped liability')
+    })
+
+    it('reads a slot list the server left out as empty, and never fills it in', () => {
+      const detail = parseFindingDetail({ ...clauseFindingDetail, positionComparison: { preferred: [policySlot('e-1', null)] } })
+      expect(detail.positionComparison).toEqual({
+        contract: [],
+        preferred: [expect.objectContaining({ evidenceItemId: 'e-1', publicationNumber: null })],
+        fallback: [],
+        escalation: [],
+      })
+    })
+
+    it('rejects a malformed comparison instead of showing part of it', () => {
+      expect(() => parseFindingDetail({ ...clauseFindingDetail, positionComparison: { preferred: 'Cap at fees paid.' } })).toThrow()
+      expect(() => parseFindingDetail({ ...clauseFindingDetail, positionComparison: { preferred: [{ text: 'no id' }] } })).toThrow()
+    })
+  })
+
   it('parses bounded lists with truncation', () => {
     const list = parseReviewList({
       items: [{ ...completedSummary, id: 'r-1' }],

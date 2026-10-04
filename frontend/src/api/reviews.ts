@@ -7,8 +7,8 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query'
 import { createApiClient } from './client'
-import { parseEvidenceItem } from './retrieval'
-import type { EvidenceItem } from './retrieval'
+import { parseContractFact, parseEvidenceItem } from './retrieval'
+import type { EvidenceContractFact, EvidenceItem } from './retrieval'
 import type { components, paths } from './schema'
 import { boundedErrorMessage } from './errorMessage'
 import {
@@ -251,6 +251,42 @@ export type AbsenceBasis = {
   checkKey: string
 }
 
+/**
+ * The finding's own positions, grouped by the server into the slots the Workspace compares. Each
+ * slot lists every cited item that holds the role, in the finding's frozen evidence order, and each
+ * carries the evidence id that opens its source.
+ */
+export type ContractPositionSlot = {
+  evidenceItemId: string
+  authorityClass: string
+  legalConcept: string | null
+  /** Typed facts extracted from the frozen clause. There is no sentence to read instead. */
+  facts: EvidenceContractFact[]
+}
+
+export type PolicyPositionSlot = {
+  evidenceItemId: string
+  authorityClass: string
+  legalConcept: string | null
+  publicationNumber: number | null
+  /** The authored wording, verbatim. */
+  text: string
+}
+
+export type EscalationSlot = {
+  evidenceItemId: string
+  authorityClass: string
+  publicationNumber: number | null
+  trigger: string
+}
+
+export type PositionComparison = {
+  contract: ContractPositionSlot[]
+  preferred: PolicyPositionSlot[]
+  fallback: PolicyPositionSlot[]
+  escalation: EscalationSlot[]
+}
+
 export type FindingDetail = FindingSummary & {
   reviewId: string
   runId: string
@@ -263,6 +299,8 @@ export type FindingDetail = FindingSummary & {
   claims: FindingClaim[]
   evidenceItemIds: string[]
   evidenceItems: EvidenceItem[]
+  /** Null when the server found no position data in the finding's evidence. */
+  positionComparison: PositionComparison | null
   signalIds: string[]
   absenceBasis: AbsenceBasis | null
 }
@@ -594,6 +632,54 @@ function parseAbsenceBasis(value: unknown, what: string): AbsenceBasis | null {
   }
 }
 
+// A slot list the server leaves out is an empty slot. Nothing is filled in for it.
+function readSlots<T>(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+  parseItem: (item: unknown, what: string) => T,
+): T[] {
+  return source[key] === undefined || source[key] === null ? [] : readArray(source, key, what, parseItem)
+}
+
+function parsePositionComparison(value: unknown, what: string): PositionComparison | null {
+  if (value === null || value === undefined) return null
+  const comparison = asRecord(value, what)
+  return {
+    contract: readSlots(comparison, 'contract', what, (item, label) => {
+      const slot = asRecord(item, label)
+      return {
+        evidenceItemId: readString(slot, 'evidenceItemId', label),
+        authorityClass: readOptionalNullableString(slot, 'authorityClass', label) ?? 'UNKNOWN',
+        legalConcept: readOptionalNullableString(slot, 'legalConcept', label),
+        facts: readSlots(slot, 'facts', label, parseContractFact),
+      }
+    }),
+    preferred: readSlots(comparison, 'preferred', what, parsePolicyPositionSlot),
+    fallback: readSlots(comparison, 'fallback', what, parsePolicyPositionSlot),
+    escalation: readSlots(comparison, 'escalation', what, (item, label) => {
+      const slot = asRecord(item, label)
+      return {
+        evidenceItemId: readString(slot, 'evidenceItemId', label),
+        authorityClass: readOptionalNullableString(slot, 'authorityClass', label) ?? 'UNKNOWN',
+        publicationNumber: readOptionalNullableNumber(slot, 'publicationNumber', label),
+        trigger: readOptionalNullableString(slot, 'trigger', label) ?? '',
+      }
+    }),
+  }
+}
+
+function parsePolicyPositionSlot(item: unknown, what: string): PolicyPositionSlot {
+  const slot = asRecord(item, what)
+  return {
+    evidenceItemId: readString(slot, 'evidenceItemId', what),
+    authorityClass: readOptionalNullableString(slot, 'authorityClass', what) ?? 'UNKNOWN',
+    legalConcept: readOptionalNullableString(slot, 'legalConcept', what),
+    publicationNumber: readOptionalNullableNumber(slot, 'publicationNumber', what),
+    text: readOptionalNullableString(slot, 'text', what) ?? '',
+  }
+}
+
 export function parseFindingDetail(value: unknown, what = 'finding detail'): FindingDetail {
   const finding = asRecord(value, what)
   return {
@@ -614,6 +700,7 @@ export function parseFindingDetail(value: unknown, what = 'finding detail'): Fin
     claims: readArray(finding, 'claims', what, parseClaim),
     evidenceItemIds: parseOptionalStringArray(finding, 'evidenceItemIds', what),
     evidenceItems: readArray(finding, 'evidenceItems', what, parseEvidenceItem),
+    positionComparison: parsePositionComparison(finding.positionComparison, what),
     signalIds: readStringArray(finding, 'signalIds', what),
     absenceBasis: parseAbsenceBasis(finding.absenceBasis, what),
   }

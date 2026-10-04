@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
 import type { EvidenceItem } from '../../api/retrieval'
 import type { FindingClaim, FindingDetail } from '../../api/reviews'
 import type { HumanDecision } from '../../api/workflow'
 import { conceptLabel } from '../../lib/contractSemantics'
-import { authorityLabel, policyPositionLabels } from '../../lib/evidence'
+import { authorityLabel } from '../../lib/evidence'
 import {
   absenceClaims,
   claimKindLabel,
@@ -18,15 +19,20 @@ import {
   whyClaims,
 } from '../../lib/reviews'
 import { dateTime } from '../../lib/dates'
+import { policyPositionView } from '../../lib/positionComparison'
 import { findingState, isWordingGrounded, languageAuthority, proposedChangeType } from '../../lib/workspace'
 import { Button } from '../ui/Button'
 import { BookIcon, ChevronIcon } from '../ui/Icon'
 import { ErrorState, LoadingState } from '../ui/State'
 import { DecisionComposer } from './DecisionComposer'
+import { PolicyPosition } from './PolicyPosition'
 import type { DecisionFlow } from './useDecisionFlow'
 import { CheckIcon, EditIcon, EscalateIcon, CloseIcon, LockIcon } from './WorkspaceIcons'
 
 const SOURCES_SHOWN = 3
+
+/** Where focus lands after Finalize, so it is not lost when the Finalize button becomes disabled. */
+export const SUMMARY_LINK_ID = 'rv-ws-summary-link'
 
 interface Props {
   finding: FindingDetail | undefined
@@ -52,7 +58,8 @@ interface Props {
   onShowInDocument: () => void
   onOpenSource: (evidenceId: string) => void
   onOpenHistory: () => void
-  onOpenRedline: () => void
+  /** The review summary, where the frozen change set and its redline are handled. */
+  summaryPath: string
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -100,10 +107,11 @@ function sourceRow(item: EvidenceItem, regionLabels: Map<string, string>): { tit
 }
 
 /**
- * Once finalized, the frozen change set and its redline stay reachable whatever the selected
- * finding is doing: a finding that fails to load, or a review with no findings, must not hide them.
+ * Once finalized, the frozen state stays reachable whatever the selected finding is doing: a
+ * finding that fails to load, or a review with no findings, must not hide it. The Workspace owns
+ * decisions and Finalize. The frozen change set and its redline belong to the review summary.
  */
-function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'onOpenRedline'>) {
+function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'summaryPath'>) {
   if (!props.isFinalized) return null
   return (
     <div className="rv-ws-phase">
@@ -119,7 +127,9 @@ function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'onOpen
         </div>
       </div>
       <div className="rv-ws-phase-actions">
-        <Button onClick={props.onOpenRedline}>Redline and change report</Button>
+        <Link id={SUMMARY_LINK_ID} className="rv-btn rv-btn--primary" to={props.summaryPath}>
+          View review summary
+        </Link>
       </div>
     </div>
   )
@@ -155,8 +165,7 @@ export function FindingPanel(props: Props) {
   const absences = absenceClaims(finding.claims)
   const quality = qualityFactorRows(finding.quality)
   const note = policyNoteText(finding)
-  const policy = finding.evidenceItems.find((item) => item.authorityClass === 'POLICY')
-  const positions = policy?.policyFacts ? policyPositionLabels(policy.policyFacts.positions) : []
+  const position = policyPositionView(finding.positionComparison)
   const change = proposedChangeType(finding)
   const grounded = isWordingGrounded(finding)
   const authority = !grounded ? null : languageAuthority(finding, items.get(finding.approvedDraftingEvidenceId ?? '')?.publicationNumber ?? null)
@@ -223,24 +232,7 @@ export function FindingPanel(props: Props) {
           </div>
         </div>
 
-        {policy ? (
-          <div className="rv-ws-sec">
-            <div className="rv-ws-sec-h">
-              Against your position
-              <button type="button" className="rv-ws-link" onClick={() => props.onOpenSource(policy.evidenceId)}>
-                Open source
-              </button>
-            </div>
-            <div className="rv-ws-incl rv-ws-clamp">{policy.text}</div>
-            {positions.length > 0 || policy.policyFacts?.escalationTrigger ? (
-              <div className="rv-ws-src">
-                {positions.length > 0 ? `Positions: ${positions.join(', ')}` : null}
-                {positions.length > 0 && policy.policyFacts?.escalationTrigger ? ' · ' : null}
-                {policy.policyFacts?.escalationTrigger ? `Escalate: ${policy.policyFacts.escalationTrigger}` : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {position ? <PolicyPosition view={position} openable={new Set(items.keys())} onOpenSource={props.onOpenSource} /> : null}
 
         <div className="rv-ws-sec">
           <div className="rv-ws-sec-h">

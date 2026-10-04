@@ -5,6 +5,8 @@ import { Chip } from '../ui/Status'
 import { BackIcon, LockIcon, SearchIcon } from './WorkspaceIcons'
 import { PanelLeftIcon, PanelRightIcon } from '../ui/Icon'
 
+export const FROZEN_NOTE_ID = 'rv-ws-frozen-note'
+
 interface Props {
   title: string
   chips: string[]
@@ -101,7 +103,13 @@ export function WorkspaceTopBar({
       >
         <PanelRightIcon className="rv-icon" />
       </button>
-      {note ? <span className="rv-ws-blocker">{note}</span> : null}
+      {note ? (
+        // After Finalize this is the one status that is always on screen, so it is the focus fallback
+        // when the detail panel is closed.
+        <span className="rv-ws-blocker" id={FROZEN_NOTE_ID} tabIndex={isFinalized ? -1 : undefined}>
+          {note}
+        </span>
+      ) : null}
       <Button
         variant="primary"
         disabled={!ready || isFinalized}

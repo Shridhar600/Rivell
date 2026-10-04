@@ -31,6 +31,7 @@ export const fixtureAcceptableFindingDetail = {
   // Accept adopts approved wording, so the evidence it cites is part of the finding, as the backend guarantees.
   evidenceItems: [fixtureDraftingItem],
   evidenceItemIds: [fixtureDraftingItem.evidenceId],
+  positionComparison: null,
   signalIds: [],
   absenceBasis: null,
 } satisfies FindingDetail

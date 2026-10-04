@@ -134,7 +134,7 @@ describe('finalize is the server’s decision', () => {
     await waitFor(() => expect(api.requests.filter((r) => r.method === 'POST' && r.url.endsWith('/finalize'))).toHaveLength(1))
   })
 
-  it('keeps the frozen change set and its redline reachable when the selected finding cannot load', async () => {
+  it('keeps the frozen state and the review summary reachable when the selected finding cannot load', async () => {
     renderWorkspace(
       stubContractApi(
         options({
@@ -147,8 +147,91 @@ describe('finalize is the server’s decision', () => {
     )
     expect(await within(await detail()).findByText('This finding could not be loaded.')).toBeInTheDocument()
     expect(within(await detail()).getByText('Approved changes frozen')).toBeInTheDocument()
-    expect(within(await detail()).getByRole('button', { name: 'Redline and change report' })).toBeInTheDocument()
+    expect(within(await detail()).getByRole('link', { name: 'View review summary' })).toBeInTheDocument()
     expect(within(await topBar()).getByRole('button', { name: 'Finalized' })).toBeDisabled()
+  })
+})
+
+const readyToFinalize = () =>
+  options({
+    humanReview: fixtureHumanReview({ readyToFinalize: true, blockers: [], resolvedFindings: 2, remainingFindings: 0, accepted: 1, rejected: 1, actionableFindings: 2 }),
+    decisions: { items: [fixtureDecision()], truncated: false },
+    changeSet: fixtureChangeSet(),
+    finalizeResponse: () =>
+      new Response(JSON.stringify({ data: fixtureChangeSet(), status: 200, timestamp: '2026-09-26T14:00:00Z' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+  })
+
+async function finalizeFromDialog() {
+  const finalize = await within(await topBar()).findByRole('button', { name: 'Finalize review' })
+  await waitFor(() => expect(finalize).toBeEnabled())
+  await userEvent.click(finalize)
+  const dialog = await screen.findByRole('dialog', { name: 'Finalize this review?' })
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Finalize review' }))
+}
+
+describe('after Finalize the Workspace hands over to the review summary', () => {
+  it('shows the frozen state and a link to the review summary, and nothing that generates a redline', async () => {
+    const api = stubContractApi(readyToFinalize())
+    renderWorkspace(api)
+    await finalizeFromDialog()
+
+    const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
+    expect(link).toHaveAttribute('href', '/reviews/c1/overview/r-1')
+    expect(within(await detail()).getByText('Approved changes frozen')).toBeInTheDocument()
+    expect(within(await detail()).getByText(/1 executable change in the immutable approved change set/)).toBeInTheDocument()
+    expect(await topBar()).toHaveTextContent('Approved changes frozen')
+
+    // Redline is not run, offered, or even read from here.
+    expect(screen.queryByRole('button', { name: /redline/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Redline execution' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Redline' })).not.toBeInTheDocument()
+    expect(api.requests.filter((r) => r.url.includes('/redline'))).toHaveLength(0)
+  })
+
+  it('moves keyboard focus to the review summary link once the review is finalized', async () => {
+    renderWorkspace(stubContractApi(readyToFinalize()))
+    await finalizeFromDialog()
+    const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
+    await waitFor(() => expect(link).toHaveFocus())
+    expect(screen.queryByRole('dialog', { name: 'Finalize this review?' })).not.toBeInTheDocument()
+  })
+
+  it('puts focus on the frozen status instead when the detail panel is closed, so it is never lost', async () => {
+    renderWorkspace(stubContractApi(readyToFinalize()))
+    await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
+    await userEvent.click(within(await topBar()).getByRole('button', { name: 'Toggle detail panel' }))
+    await finalizeFromDialog()
+    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Approved changes frozen')).toHaveFocus())
+    expect(document.body).not.toHaveFocus()
+  })
+
+  it('does not move focus when the review was already finalized on arrival', async () => {
+    renderWorkspace(
+      stubContractApi(
+        options({
+          humanReview: fixtureHumanReview({ status: 'COMPLETED', readyToFinalize: false, changeSetId: 'cs-1', finalizedAt: '2026-09-26T11:00:00Z' }),
+          decisions: { items: [fixtureDecision()], truncated: false },
+          changeSet: fixtureChangeSet(),
+        }),
+      ),
+    )
+    const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
+    expect(link).not.toHaveFocus()
+  })
+
+  it('does not hand over when Finalize fails', async () => {
+    renderWorkspace(
+      stubContractApi({
+        ...readyToFinalize(),
+        finalizeResponse: () => new Response(JSON.stringify({ code: '409', title: 'Conflict', detail: 'server detail' }), { status: 409, headers: { 'Content-Type': 'application/json' } }),
+      }),
+    )
+    await finalizeFromDialog()
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'View review summary' })).not.toBeInTheDocument()
   })
 })
 

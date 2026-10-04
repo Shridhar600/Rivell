@@ -488,6 +488,68 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
 }
+/* Policy position: the canonical three-cell comparison. Columns follow the slots the server filled. */
+.rv-ws-pos {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--line);
+}
+.rv-ws-pos > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  background: var(--bg);
+}
+.rv-ws-pos small {
+  display: block;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.rv-ws-pos b {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.rv-ws-pos-bad b {
+  color: var(--red);
+}
+.rv-ws-pos-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rv-ws-pos-item + .rv-ws-pos-item {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.rv-ws-pos-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rv-ws-pos-ft {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.rv-ws-pos-row {
+  display: flex;
+  flex-direction: column;
+}
+.rv-ws-pos-src {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 8px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.rv-ws-pos .rv-ws-clamp {
+  -webkit-line-clamp: 6;
+}
 .rv-ws-lifecycle {
   max-width: 720px;
   margin: 16px auto 0;
@@ -506,6 +568,11 @@
   margin-top: 8px;
   color: var(--text-3);
   font: 12px var(--font);
+}
+.rv-ws-src .rv-ws-link {
+  flex-shrink: 0;
+  margin-left: auto;
+  white-space: nowrap;
 }
 .rv-ws-authority {
   display: flex;

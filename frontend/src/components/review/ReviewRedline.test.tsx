@@ -2,10 +2,10 @@ import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
+import { MemoryRouter } from 'react-router'
 import { AppProviders } from '../../app/AppProviders'
-import { appRoutes } from '../../app/router'
+import { useApprovedChangeSetQuery, useHumanReviewQuery } from '../../api/workflow'
+import { RedlineExecutionPanel } from './RedlineExecutionPanel'
 import { stubContractApi, type StubOptions } from '../contract/testFixtures'
 import {
   fixtureClauseFindingDetail,
@@ -38,29 +38,42 @@ function errorResponse(status: number) {
   )
 }
 
+/**
+ * The Workspace no longer mounts the redline panel: generation, execution, reports and download are
+ * handled in the review summary. This host feeds the panel what a page would, so the panel's own
+ * behaviour stays covered while the component exists.
+ */
+function PanelHost() {
+  const humanReview = useHumanReviewQuery('r-1', true)
+  const isFinalized = humanReview.data?.status === 'COMPLETED'
+  const changeSet = useApprovedChangeSetQuery('r-1', isFinalized)
+  if (!humanReview.data) return <p>Loading…</p>
+  return (
+    <RedlineExecutionPanel
+      reviewId="r-1"
+      isFinalized={isFinalized}
+      approvedChangeSet={changeSet.data ?? null}
+      regionLabels={new Map()}
+      onSelectFinding={() => undefined}
+    />
+  )
+}
+
 function renderRouter(api: ReturnType<typeof stubContractApi>) {
   void api
-  const router = createMemoryRouter(appRoutes, {
-    initialEntries: ['/reviews/c1/analysis/r-1'],
-  })
   render(
     <StrictMode>
       <AppProviders>
-        <RouterProvider router={router} />
+        <MemoryRouter>
+          <PanelHost />
+        </MemoryRouter>
       </AppProviders>
     </StrictMode>,
   )
-  return { router }
 }
 
-/**
- * Redline lives in the "Redline" sheet, opened from the "Approved changes frozen" card in the
- * finding detail panel. That card exists only once the review is finalized.
- */
 async function openRedlinePanel() {
-  await userEvent.click(await screen.findByRole('button', { name: 'Redline and change report' }))
-  const sheet = await screen.findByRole('dialog', { name: 'Redline' })
-  return within(sheet).findByRole('region', { name: 'Redline execution' })
+  return screen.findByRole('region', { name: 'Redline execution' })
 }
 
 function finalizedHumanReview() {
@@ -115,11 +128,11 @@ describe('redline availability', () => {
       baseOptions({ humanReview: fixtureHumanReview({ status: 'IN_PROGRESS' }) }),
     )
     renderRouter(api)
-    expect(await screen.findByText('Rivell found')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Redline and change report' }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByText('Approved changes frozen', { selector: 'b' })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(api.requests.some((request) => request.url.includes('/human-review'))).toBe(true),
+    )
+    expect(screen.queryByRole('region', { name: 'Redline execution' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Generate redline' })).not.toBeInTheDocument()
     expect(
       api.requests.filter((request) => request.url.includes('/redline')),
     ).toHaveLength(0)
@@ -424,9 +437,8 @@ describe('redline failure truth', () => {
     expect(
       within(panel).queryByRole('button', { name: 'Download redlined DOCX' }),
     ).not.toBeInTheDocument()
-    const detail = screen.getByRole('complementary', { name: 'Finding detail' })
-    expect(within(detail).getByText('Approved changes frozen')).toBeInTheDocument()
-    expect(detail).toHaveTextContent('1 executable change in the immutable approved change set.')
+    // The approved changes stay listed beside the failure, with their per-change status.
+    expect(within(panel).getByRole('list', { name: 'Redline change report' })).toBeInTheDocument()
   })
 
   it('explains unsupported structure without blaming the legal review', async () => {

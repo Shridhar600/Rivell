@@ -221,7 +221,7 @@ describe('recording a decision in the workspace', () => {
 })
 
 describe('workflow state availability and conflict truth', () => {
-  it('keeps the approved change set and redline reachable when the human-review read fails', async () => {
+  it('keeps the frozen state and the review summary reachable when the human-review read fails', async () => {
     const api = stubContractApi(
       baseOptions({
         humanReviewStatus: 500,
@@ -239,15 +239,13 @@ describe('workflow state availability and conflict truth', () => {
       '.rv-ws-phase',
     ) as HTMLElement
     expect(card).toHaveTextContent('1 executable change in the immutable approved change set.')
-    await userEvent.click(findingDetail().getByRole('button', { name: 'Redline and change report' }))
-
-    const sheet = await screen.findByRole('dialog', { name: 'Redline' })
-    expect(
-      await within(sheet).findByRole('region', { name: 'Redline execution' }, { timeout: 3000 }),
-    ).toBeInTheDocument()
-    expect(
-      await within(sheet).findByRole('button', { name: /Generate redline/i }),
-    ).toBeInTheDocument()
+    // Redline belongs to the review summary. The Workspace only points there.
+    expect(findingDetail().getByRole('link', { name: 'View review summary' })).toHaveAttribute(
+      'href',
+      '/reviews/c1/overview/r-1',
+    )
+    expect(screen.queryByRole('button', { name: /Generate redline/i })).not.toBeInTheDocument()
+    expect(api.requests.filter((r) => r.url.includes('/redline'))).toHaveLength(0)
 
     const changeSetCalls = api.requests.filter((r) => r.url.includes('/approved-change-set'))
     expect(changeSetCalls).toHaveLength(1)
@@ -360,11 +358,8 @@ describe('workflow state availability and conflict truth', () => {
       expect(api.requests.filter((r) => r.url.includes('/approved-change-set')).length).toBeGreaterThan(0),
     )
 
-    await userEvent.click(findingDetail().getByRole('button', { name: 'Redline and change report' }))
-    await screen.findByRole('dialog', { name: 'Redline' })
-    await waitFor(() =>
-      expect(api.requests.filter((r) => r.url.includes('/redline')).length).toBeGreaterThan(0),
-    )
+    expect(findingDetail().getByRole('link', { name: 'View review summary' })).toBeInTheDocument()
+    expect(api.requests.filter((r) => r.url.includes('/redline'))).toHaveLength(0)
     expect(
       screen.queryByText(/The approved change set could not be loaded/),
     ).not.toBeInTheDocument()

@@ -290,10 +290,17 @@ describe('finding detail', () => {
     expect(proposed).toHaveTextContent('Publication 2')
     expect(within(detailPane()).queryByText('Machine-proposed')).not.toBeInTheDocument()
 
-    // The finding's policy position is shown on its own, apart from what Rivell concluded.
-    expect(section('Against your position')).toHaveTextContent(
-      'Liability must be capped at fees paid in the preceding 12 months.',
-    )
+    // The policy position is shown on its own, apart from what Rivell concluded, under the
+    // truthful heading: the frozen policy evidence, not a single authored "your position".
+    expect(within(detailPane()).queryByText('Against your position')).not.toBeInTheDocument()
+    const position = section('Policy position')
+    const cell = (label: string) => within(position).getByRole('group', { name: label })
+    expect(cell('Contract')).toHaveTextContent('3×')
+    expect(cell('Contract')).toHaveTextContent('Liability cap')
+    expect(cell('Contract')).toHaveTextContent('Preceding 12-month fees')
+    expect(cell('Preferred')).toHaveTextContent('Liability must be capped at fees paid in the preceding 12 months.')
+    expect(cell('Fallback')).toHaveTextContent('Liability must be capped at fees paid in the preceding 12 months.')
+    expect(position).toHaveTextContent('Escalate: Uncapped liability or consequential damages')
   })
 
   it('shows the exact clause text under "In the contract" and in the document', async () => {
@@ -417,8 +424,11 @@ describe('finding detail', () => {
     expect(section('Rivell found')).toHaveTextContent(
       /No organizational policy covers this clause.*does not establish policy\./,
     )
-    // There is no policy to put against the contract, and no wording to propose.
-    expect(within(detailPane()).queryByText('Against your position')).not.toBeInTheDocument()
+    // There is no policy to put against the contract, and no wording to propose. The contract has
+    // typed facts, but a lone contract slot is not a policy position, so the section is not drawn.
+    expect(within(detailPane()).queryByText('Policy position')).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByRole('group', { name: 'Preferred' })).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByRole('group', { name: 'Fallback' })).not.toBeInTheDocument()
     expect(within(detailPane()).queryByText('Proposed language')).not.toBeInTheDocument()
   })
 
@@ -433,6 +443,15 @@ describe('finding detail', () => {
     // Both policies stay reachable, told apart by number, so neither is presented as the answer.
     expect(within(found).getByRole('button', { name: 'Policy 1' })).toBeInTheDocument()
     expect(within(found).getByRole('button', { name: 'Policy 2' })).toBeInTheDocument()
+    // Every cited item that holds a role is kept: nothing is dropped to the first.
+    const position = section('Policy position')
+    expect(within(within(position).getByRole('group', { name: 'Preferred' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
+    expect(within(within(position).getByRole('group', { name: 'Fallback' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
+    expect(within(position).getAllByText(/Escalate: Uncapped liability/)).toHaveLength(2)
+    // The source of each one stays reachable.
+    expect(within(position).getAllByRole('button', { name: /Open source: Policy, publication 2/ }).length).toBeGreaterThanOrEqual(4)
+    // No contract slot was sent, so there is no Contract cell.
+    expect(within(position).queryByRole('group', { name: 'Contract' })).not.toBeInTheDocument()
   })
 
   it('renders uncertainty factors without a confidence percentage', async () => {
