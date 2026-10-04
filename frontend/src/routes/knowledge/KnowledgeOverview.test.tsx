@@ -49,7 +49,7 @@ describe('Knowledge overview', () => {
 
     const heading = await screen.findByRole('heading', { name: 'In compilation' })
     const row = within(heading.closest('section') as HTMLElement).getByRole('link')
-    expect(row).toHaveAttribute('href', '/knowledge/artifacts/draft')
+    expect(row).toHaveAttribute('href', '/knowledge/compilations/draft')
     expect(row).toHaveTextContent('From Draft Playbook.docx, 1 of 2 candidates reviewed')
     expect(row).toHaveTextContent('Awaiting review')
   })
@@ -72,18 +72,30 @@ describe('Knowledge overview', () => {
     expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(3)
   })
 
-  it('opens the existing Add knowledge page, and that page still renders', async () => {
+  it('opens Add knowledge on the same page, as a dialog', async () => {
     stubKnowledgeApi(buildWorld())
     const { router } = renderKnowledge('/knowledge')
-    // The page frame is replaced when the data arrives, so wait for it before taking the links.
     await screen.findByRole('heading', { name: 'Recently published' })
     const buttons = screen.getAllByRole('link', { name: 'Add knowledge' })
     expect(buttons.length).toBeGreaterThan(0)
-    for (const button of buttons) expect(button).toHaveAttribute('href', '/knowledge/new')
+    for (const button of buttons) expect(button).toHaveAttribute('href', '/knowledge?add=1')
 
     await userEvent.click(buttons[0] as HTMLElement)
-    await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/new'))
-    expect(await screen.findByRole('heading', { name: 'Add knowledge' })).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', { name: 'Add knowledge' })
+    expect(dialog).toBeInTheDocument()
+    // The page behind it keeps its place, and the dialog is addressable.
+    expect(router.state.location.pathname).toBe('/knowledge')
+    expect(router.state.location.search).toBe('?add=1')
+    expect(screen.getByRole('heading', { name: 'Recently published' })).toBeInTheDocument()
+  })
+
+  it('keeps the old /knowledge/new address working by opening the dialog', async () => {
+    stubKnowledgeApi(buildWorld())
+    const { router } = renderKnowledge('/knowledge/new?type=clause-library')
+    expect(await screen.findByRole('dialog', { name: 'Add knowledge' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/knowledge')
+    expect(router.state.location.search).toBe('?add=clause-library')
+    expect(screen.getByRole('radio', { name: /Clause library/ })).toBeChecked()
   })
 })
 

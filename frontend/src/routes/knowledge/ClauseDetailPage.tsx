@@ -12,9 +12,7 @@ import { resolveCandidateSource } from '../../lib/candidates'
 import { onTabKeys } from '../../lib/tabKeys'
 import { longDate } from '../../lib/dates'
 import {
-  artifactName,
   clauseGroups,
-  playbookPositions,
   positionText,
   type Catalog,
   type ClauseGroup,
@@ -61,7 +59,6 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
     { label: group.title },
   ]
   const scope = scopeLine([variant.candidate])
-  const related = relatedPlaybookPositions(catalog, group)
 
   return (
     <KnowledgeFrame
@@ -108,38 +105,12 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
           ))}
         </div>
       ) : null}
-      <VariantBody key={variant.candidate.id} variant={variant} related={related} />
+      <VariantBody key={variant.candidate.id} variant={variant} />
     </KnowledgeFrame>
   )
 }
 
-interface RelatedPosition {
-  playbookName: string
-  playbookId: string
-  candidateId: string
-  title: string
-}
-
-/** Playbook positions in the published set on the same legal concept. A typed key, never a title match. */
-function relatedPlaybookPositions(catalog: Catalog, group: ClauseGroup): RelatedPosition[] {
-  if (!group.conceptKey) return []
-  const related: RelatedPosition[] = []
-  for (const playbook of catalog.playbooks) {
-    for (const candidate of playbookPositions(playbook, catalog.index)) {
-      if (candidate.effectiveConceptKey === group.conceptKey) {
-        related.push({
-          playbookName: artifactName(playbook.artifact),
-          playbookId: playbook.artifact.id,
-          candidateId: candidate.id,
-          title: candidate.rawLabel,
-        })
-      }
-    }
-  }
-  return related
-}
-
-function VariantBody({ variant, related }: { variant: ClauseVariant; related: RelatedPosition[] }) {
+function VariantBody({ variant }: { variant: ClauseVariant }) {
   const { candidate, artifact, publication } = variant
   const units = useExtractionUnitsQuery(artifact.id)
   const structure = useKnowledgeStructureQuery(artifact.id)
@@ -200,21 +171,6 @@ function VariantBody({ variant, related }: { variant: ClauseVariant; related: Re
             <ArrowRightIcon className="rv-icon" />
           </Link>
         </div>
-        {related.length > 0 ? (
-          <div className="rv-k-prov">
-            <span className="rv-k-loc">Playbook positions on the same legal concept</span>
-            {related.map((position) => (
-              <div key={position.candidateId} className="rv-k-related">
-                <b>{position.title}</b>
-                <span className="rv-k-loc">{position.playbookName}</span>
-                <Link className="rv-k-lnk" to={`/knowledge/playbooks/${position.playbookId}?position=${position.candidateId}`}>
-                  Open position
-                  <ArrowRightIcon className="rv-icon" />
-                </Link>
-              </div>
-            ))}
-          </div>
-        ) : null}
       </div>
     </div>
   )

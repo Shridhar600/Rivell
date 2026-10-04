@@ -35,12 +35,15 @@ export interface PublicationIndex {
 export function buildPublicationIndex(publications: Publication[]): PublicationIndex {
   const added = new Map<string, PublicationRef>()
   const superseded = new Map<string, { by: string; publication: PublicationRef }>()
-  for (const publication of publications) {
+  // Read oldest first, whatever order the list arrives in. A candidate can only leave the published
+  // set once, so if later publications name it again, the earliest one is the one that removed it.
+  const ordered = [...publications].sort((a, b) => a.publicationNumber - b.publicationNumber)
+  for (const publication of ordered) {
     const ref = publicationRef(publication)
     for (const item of publication.items) {
       if (item.action === 'ADD') {
-        added.set(item.candidateId, ref)
-      } else if (item.supersededCandidateId) {
+        if (!added.has(item.candidateId)) added.set(item.candidateId, ref)
+      } else if (item.supersededCandidateId && !superseded.has(item.supersededCandidateId)) {
         superseded.set(item.supersededCandidateId, { by: item.candidateId, publication: ref })
       }
     }

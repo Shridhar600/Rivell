@@ -77,7 +77,9 @@ describe('Source detail and lineage', () => {
     expect(published).toHaveTextContent('Publications 1, 2')
     expect(published).toHaveTextContent('3 positions in use')
     expect(screen.getByText('Immutable original')).toBeInTheDocument()
-    expect(within(lineage).getByRole('link', { name: /Download original/ }).getAttribute('href')).toMatch(/\/api\/knowledge\/artifacts\/pb\/original$/)
+    // The canonical lineage has no download control, so none is offered even though the endpoint exists.
+    expect(screen.queryByRole('link', { name: /Download/ })).not.toBeInTheDocument()
+    expect(document.querySelector('a[href*="/original"]')).toBeNull()
   })
 
   it('highlights exactly the source nodes the extraction recorded for published knowledge', async () => {
@@ -120,7 +122,7 @@ describe('Source detail and lineage', () => {
     const lineage = screen.getByLabelText('Lineage: source, compilation, published knowledge')
     expect(within(lineage).getByText('2 candidates, 1 reviewed')).toBeInTheDocument()
     expect(within(lineage).getByText('None yet')).toBeInTheDocument()
-    expect(within(lineage).getByRole('link', { name: /Continue review/ })).toHaveAttribute('href', '/knowledge/artifacts/draft')
+    expect(within(lineage).getByRole('link', { name: /Continue review/ })).toHaveAttribute('href', '/knowledge/compilations/draft')
     expect(screen.queryByRole('list', { name: 'Produced positions' })).not.toBeInTheDocument()
   })
 

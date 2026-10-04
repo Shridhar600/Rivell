@@ -5,7 +5,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query'
-import { apiBaseUrl, createApiClient } from './client'
+import { createApiClient } from './client'
 import {
   asRecord,
   parseApiResult,
@@ -253,6 +253,8 @@ export interface Candidate {
   legalConceptKey: string | null
   /** The human correction when one exists, otherwise the classified concept. Absent when neither is set. */
   effectiveConceptKey: string | null
+  /** A reviewer's LegalConcept correction. An empty string means the reviewer cleared the concept. */
+  conceptCorrection: string | null
   classifiedConcepts: Record<string, number>
   positions: PositionRole[]
   variantRole: PositionRole | null
@@ -466,6 +468,7 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     payloadColumns: readStringMap(record, 'payloadColumns', what),
     legalConceptKey: readNullableString(record, 'legalConceptKey', what),
     effectiveConceptKey: readNullableString(record, 'effectiveConceptKey', what),
+    conceptCorrection: readNullableString(record, 'conceptCorrection', what),
     classifiedConcepts: readNumberMap(record, 'classifiedConcepts', what),
     positions: readEnumArray(record, 'positions', what, POSITION_ROLES),
     variantRole: readNullableEnum(record, 'variantRole', what, POSITION_ROLES),
@@ -542,6 +545,23 @@ export class KnowledgeApiError extends Error {
 
 export function isKnowledgeForbiddenError(error: unknown): boolean {
   return error instanceof KnowledgeApiError && error.status === 403
+}
+
+/**
+ * A failed extraction is stored as a failed source, so an upload that fails on the server may still
+ * have left one behind. These do not claim that nothing was changed.
+ */
+const KNOWLEDGE_UPLOAD_MESSAGES: Partial<Record<number, string>> = {
+  400: 'The file was not accepted. Use a .docx or .xlsx file.',
+  500: 'Rivell could not process this file. If it was stored, it appears in Sources as a failed source. Nothing was published.',
+}
+
+const CONCEPT_MESSAGES: Partial<Record<number, string>> = {
+  400: 'That legal concept is not one Rivell knows.',
+  404: 'That candidate could not be found.',
+  409: 'A published or rejected candidate cannot be corrected.',
+  500: 'The legal concept could not be corrected.',
+  503: 'The knowledge service is unavailable right now.',
 }
 
 const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
@@ -735,7 +755,7 @@ export async function uploadKnowledge(
     bodySerializer: () => formData,
   })
 
-  if (!data) throw new UploadApiError(response.status)
+  if (!data) throw new UploadApiError(response.status, KNOWLEDGE_UPLOAD_MESSAGES)
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
 }
 
@@ -815,6 +835,19 @@ async function rejectCandidate(candidateId: string, note?: string): Promise<Cand
   return parseApiResult(data, parseCandidate, 'candidate')
 }
 
+async function correctConcept(candidateId: string, primary: string): Promise<Candidate> {
+  const client = createApiClient()
+  const { data, response } = await client.POST('/api/knowledge/candidates/{id}/concept', {
+    params: { path: { id: candidateId } },
+    body: { primary },
+  })
+
+  if (!data) {
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, CONCEPT_MESSAGES, 'The legal concept could not be corrected.'))
+  }
+  return parseApiResult(data, parseCandidate, 'candidate')
+}
+
 export interface BulkApprovalResult {
   approvedIds: string[]
   skipped: Record<string, string>
@@ -846,7 +879,7 @@ async function bulkApproveCandidates(
   return parseApiResult(data, parseBulkApprovalResult, 'bulk approval')
 }
 
-async function publishKnowledge(
+export async function publishKnowledge(
   candidateIds: string[],
   supersededCandidates: Record<string, string> | undefined,
   note?: string,
@@ -989,6 +1022,20 @@ function useCandidateReviewInvalidation() {
   }
 }
 
+export interface ConceptCorrectionVariables {
+  candidateId: string
+  /** A LegalConcept name, or an empty string to clear the concept. */
+  primary: string
+}
+
+export function useCorrectCandidateConcept(): UseMutationResult<Candidate, Error, ConceptCorrectionVariables> {
+  const invalidate = useCandidateReviewInvalidation()
+  return useMutation({
+    mutationFn: ({ candidateId, primary }: ConceptCorrectionVariables) => correctConcept(candidateId, primary),
+    onSuccess: invalidate,
+  })
+}
+
 export interface CandidateReviewVariables {
   candidateId: string
   note?: string
@@ -1083,6 +1130,3 @@ export function usePublishKnowledge(): UseMutationResult<
   })
 }
 
-export function originalArtifactUrl(artifactId: string): string {
-  return `${apiBaseUrl}/api/knowledge/artifacts/${encodeURIComponent(artifactId)}/original`
-}

@@ -20,9 +20,19 @@ import { buildCatalog, type Catalog } from '../lib/knowledgeCatalog'
  * the read surfaces must then refetch instead of showing the old published set for 30 seconds.
  * 'catalog' can never collide with a source or publication id.
  */
-const readKeys = {
+export const readKeys = {
   artifacts: [...knowledgeKeys.artifacts, 'catalog'] as const,
   publications: [...knowledgeKeys.publications, 'catalog'] as const,
+}
+
+/** Every publication the backend returns (it caps the list at 100), under the shared read key. */
+export function useAllPublicationsQuery(enabled = true) {
+  return useQuery({
+    retry: knowledgeRetry,
+    queryKey: readKeys.publications,
+    queryFn: () => fetchPublications(KNOWLEDGE_READ_LIMIT),
+    enabled,
+  })
 }
 
 export interface KnowledgeCatalogState {
@@ -51,11 +61,7 @@ export function useKnowledgeCatalog(): KnowledgeCatalogState {
     refetchInterval: (query) =>
       query.state.data?.some((artifact) => isProcessingArtifact(artifact.ingestStatus)) ? 3000 : false,
   })
-  const publications = useQuery({
-    retry: knowledgeRetry,
-    queryKey: readKeys.publications,
-    queryFn: () => fetchPublications(KNOWLEDGE_READ_LIMIT),
-  })
+  const publications = useAllPublicationsQuery()
 
   // Only extracted sources have candidates. A source still extracting, or one that failed, has none yet.
   const extracted = useMemo(

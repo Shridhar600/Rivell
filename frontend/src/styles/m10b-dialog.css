@@ -1,0 +1,130 @@
+/* Modal dialog and side sheet (M10B-F6). Ported from the canonical dialog, .dlg, .dlg2 and .sheet
+   rules in rivell-knowledge-v1.html and rivell-knowledge-compile-v1.html. Tokens only. Used by the
+   Add knowledge and Publish dialogs and the source sheet; nothing else depends on it. */
+
+.rv-dlg {
+  width: min(520px, 92vw);
+  max-height: 92vh;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-dialog);
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: var(--sh-overlay);
+}
+.rv-dlg::backdrop {
+  background: color-mix(in srgb, var(--text) 30%, transparent);
+}
+.rv-dlg__in {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+}
+.rv-dlg h2 {
+  margin: 0;
+  font: 500 22px/1.2 var(--doc);
+  letter-spacing: -0.01em;
+}
+.rv-dlg p {
+  margin: 0;
+  color: var(--text-2);
+}
+.rv-dlg__lb {
+  margin-bottom: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+.rv-dlg__note {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.rv-dlg__list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+}
+.rv-dlg__list li + li {
+  margin-top: 4px;
+}
+.rv-dlg__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.rv-dlg__foot .rv-btn {
+  height: 34px;
+}
+.rv-dlg :focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+  border-radius: var(--r-md);
+}
+
+/* The confirmation: the compact dialog of the compile prototype (.dlg), with its sans heading. */
+.rv-dlg--confirm {
+  width: min(460px, 92vw);
+}
+.rv-dlg--confirm h2 {
+  font: 600 17px/1.3 var(--font);
+  letter-spacing: normal;
+}
+
+/* The side sheet: the same element, pinned to the right edge. */
+.rv-dlg--sheet {
+  width: min(460px, 100vw);
+  max-height: none;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0 0 0 auto;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  box-shadow: -18px 0 44px -18px color-mix(in srgb, var(--text) 25%, transparent);
+}
+.rv-dlg--sheet[open] {
+  display: flex;
+  flex-direction: column;
+}
+.rv-dlg--sheet::backdrop {
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rv-dlg--sheet[open] {
+    animation: rv-sheet-in 0.22s var(--ease);
+  }
+  @keyframes rv-sheet-in {
+    from {
+      transform: translateX(24px);
+      opacity: 0;
+    }
+  }
+}
+
+.rv-dlg__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rv-dlg__field .rv-dlg__lb {
+  margin: 0;
+}
+.rv-dlg__field textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  box-shadow: var(--sh-xs);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+.rv-dlg__field textarea:focus {
+  outline: none;
+  border-color: var(--text-3);
+  box-shadow: var(--rv-focus);
+}

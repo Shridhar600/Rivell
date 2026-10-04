@@ -3,7 +3,6 @@ import { useKnowledgeCatalog } from '../../api/knowledgeRead'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
 import { AddKnowledgeButton, KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
-import { LinkButton } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/State'
 import { longDate } from '../../lib/dates'
 import { ARTIFACT_TYPE_LABELS } from '../../lib/knowledgeLabels'
@@ -33,7 +32,7 @@ function Sources({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
         <EmptyState
           title="No sources yet"
           message="Upload a playbook or clause library. The original is kept here unchanged."
-          action={<LinkButton to="/knowledge/new">Add knowledge</LinkButton>}
+          action={<AddKnowledgeButton />}
         />
       ) : (
         <ul className="rv-k-list" aria-label="Sources">

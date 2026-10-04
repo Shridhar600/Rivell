@@ -105,23 +105,12 @@ describe('Clause detail', () => {
     expect(screen.getByText('Customer may audit once a year.')).toBeInTheDocument()
   })
 
-  it('links to playbook positions on the same legal concept, and only then', async () => {
+  it('never links a clause to a playbook position, even on the same legal concept', async () => {
     await open('/knowledge/clauses/LIMITATION_OF_LIABILITY')
-    const related = screen.getByText('Playbook positions on the same legal concept').closest('div') as HTMLElement
-    expect(within(related).getByText('Limitation of Liability')).toBeInTheDocument()
-    expect(within(related).getByText('Commercial MSA Playbook')).toBeInTheDocument()
-    expect(within(related).getByRole('link', { name: /Open position/ })).toHaveAttribute('href', '/knowledge/playbooks/pb?position=p1')
-  })
-
-  it('shows no playbook relation for a clause without a legal concept, whatever its title resembles', async () => {
-    const world = buildWorld()
-    // A playbook position titled exactly like the clause, with no concept in common.
-    world.candidates.pb?.push(candidate({ id: 'p9', artifactId: 'pb', rawLabel: 'Audit Rights', contentText: 'Annual audit.' }))
-    world.publications[0]?.items.push({ id: 'i9', candidateId: 'p9', supersededCandidateId: null, action: 'ADD' })
-    stubKnowledgeApi(world)
-    renderKnowledge('/knowledge/clauses/candidate-c3')
-    await screen.findByRole('heading', { level: 1, name: 'Audit Rights' })
-    expect(screen.queryByText(/same legal concept/)).not.toBeInTheDocument()
+    // The playbook publishes a position on this same concept. Shared classification is not a relation.
+    expect(screen.queryByText(/same legal concept/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Open position/ })).not.toBeInTheDocument()
+    expect(document.querySelector('a[href^="/knowledge/playbooks/"]')).toBeNull()
   })
 
   it('copies the approved wording', async () => {

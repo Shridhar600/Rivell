@@ -107,3 +107,94 @@ export function sourceLocation(sourceNodes: KnowledgeNode[]): string | null {
   const numbering = sourceNodes.find((node) => node.numberingLabel)?.numberingLabel
   return numbering ?? null
 }
+
+export interface SourcePassage {
+  id: string
+  kind: SourceBlockKind
+  text: string
+  /** The sheet and row, or the numbering label, only as far as the extraction recorded it. */
+  location: string | null
+}
+
+function passageLocation(node: KnowledgeNode | undefined, byId: ReadonlyMap<string, KnowledgeNode>): string | null {
+  if (!node) return null
+  if (node.nodeType === 'TABLE_ROW' || node.nodeType === 'SPREADSHEET_ROW') {
+    let sheet: string | null = node.sheetName
+    for (let parent = node.parentId ? byId.get(node.parentId) : undefined; parent && !sheet; ) {
+      sheet = parent.sheetName
+      parent = parent.parentId ? byId.get(parent.parentId) : undefined
+    }
+    // Row indexes are zero-based in the extraction; a person counts rows from one.
+    const row = node.rowIndex !== null ? `row ${node.rowIndex + 1}` : null
+    return [sheet ? `Sheet "${sheet}"` : null, row].filter(Boolean).join(', ') || null
+  }
+  return node.numberingLabel
+}
+
+export function indexNodes(nodes: KnowledgeNode[]): Map<string, KnowledgeNode> {
+  return new Map(nodes.map((node) => [node.id, node]))
+}
+
+/** The passages of one candidate within already-built blocks, so a list does not rebuild the structure per row. */
+export function passagesIn(blocks: SourceBlock[], byId: ReadonlyMap<string, KnowledgeNode>, candidateId: string): SourcePassage[] {
+  return blocks
+    .filter((block) => block.candidateIds.includes(candidateId))
+    .map((block) => ({ id: block.id, kind: block.kind, text: block.text, location: passageLocation(byId.get(block.id), byId) }))
+}
+
+/**
+ * The source passages one candidate was extracted from, in reading order: exactly the nodes its
+ * extraction unit recorded. There is no page number and no sub-paragraph span, because the
+ * extraction records neither.
+ */
+export function candidatePassages(candidate: Candidate, units: ExtractionUnit[], nodes: KnowledgeNode[]): SourcePassage[] {
+  return passagesIn(sourceBlocks(nodes, highlightMap([candidate], units)), indexNodes(nodes), candidate.id)
+}
+
+export interface ContextWindow {
+  before: SourceBlock[]
+  focus: SourceBlock[]
+  after: SourceBlock[]
+  /** More source exists above or below what is shown. */
+  moreBefore: boolean
+  moreAfter: boolean
+}
+
+/**
+ * The candidate's passages with a few blocks of the original around them, so a reviewer can read
+ * what comes before and after. It is a window onto the extracted original, not the whole document.
+ */
+export function contextWindow(blocks: SourceBlock[], candidateId: string, radius = 3): ContextWindow | null {
+  const marked = blocks.flatMap((block, position) => (block.candidateIds.includes(candidateId) ? [position] : []))
+  const first = marked[0]
+  const last = marked[marked.length - 1]
+  if (first === undefined || last === undefined) return null
+  const start = Math.max(0, first - radius)
+  const end = Math.min(blocks.length, last + 1 + radius)
+  return {
+    before: blocks.slice(start, first),
+    focus: blocks.slice(first, last + 1),
+    after: blocks.slice(last + 1, end),
+    moreBefore: start > 0,
+    moreAfter: end < blocks.length,
+  }
+}
+
+/**
+ * Where each candidate sits in its source, from the extraction unit's recorded nodes. Built once
+ * for a whole list, so a long compilation does not search the structure per row.
+ */
+export function candidateLocations(candidates: Candidate[], units: ExtractionUnit[], nodes: KnowledgeNode[]): Map<string, string | null> {
+  const unitById = new Map(units.map((unit) => [unit.id, unit]))
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  const found = new Map<string, string | null>()
+  for (const candidate of candidates) {
+    const unit = unitById.get(candidate.extractionUnitId)
+    const sourceNodes = (unit?.sourceNodeIds ?? []).map((id) => byId.get(id)).filter((node): node is KnowledgeNode => node !== undefined)
+    const first = sourceNodes[0]
+    const sheet = sourceNodes.find((node) => node.sheetName)?.sheetName
+    const label = sheet ? passageLocation(first, byId) : sourceLocation(sourceNodes)
+    found.set(candidate.id, label ?? null)
+  }
+  return found
+}

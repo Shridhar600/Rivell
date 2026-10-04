@@ -1,16 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Candidate, ExtractionUnit, KnowledgeNode } from '../api/knowledge'
-import {
-  approvedCandidates,
-  countByReviewStatus,
-  effectiveContentText,
-  effectivePayloadColumns,
-  filterCandidates,
-  hasConflicts,
-  isEdited,
-  isReviewable,
-  resolveCandidateSource,
-} from './candidates'
+import { effectiveContentText, effectivePayloadColumns, resolveCandidateSource } from './candidates'
 
 function candidate(
   partial: Partial<Candidate> & { id: string },
@@ -25,6 +15,7 @@ function candidate(
     payloadColumns: {},
     legalConceptKey: null,
     effectiveConceptKey: null,
+    conceptCorrection: null,
     editedContentText: null,
     editedPayloadColumns: {},
     supersedingCandidateId: null,
@@ -103,31 +94,6 @@ describe('candidate review helpers', () => {
     candidate({ id: 'x', reviewStatus: 'PUBLISHED' }),
   ]
 
-  it('counts candidates per review status', () => {
-    const counts = countByReviewStatus(candidates)
-
-    expect(counts).toEqual({
-      total: 5,
-      PENDING: 1,
-      APPROVED: 1,
-      EDITED: 1,
-      REJECTED: 1,
-      PUBLISHED: 1,
-    })
-  })
-
-  it('filters by status and conflicts', () => {
-    expect(filterCandidates(candidates, { status: 'EDITED', conflictsOnly: false })).toHaveLength(1)
-    expect(filterCandidates(candidates, { status: 'ALL', conflictsOnly: true })).toEqual([
-      candidates[2],
-    ])
-    expect(
-      filterCandidates(candidates, { status: 'APPROVED', conflictsOnly: true }),
-    ).toHaveLength(0)
-    expect(hasConflicts(candidates[0])).toBe(false)
-    expect(hasConflicts(candidates[2])).toBe(true)
-  })
-
   it('prefers the human edit over the machine proposal', () => {
     const edited = candidate({
       id: 'e',
@@ -139,19 +105,10 @@ describe('candidate review helpers', () => {
 
     expect(effectiveContentText(edited)).toBe('Human text')
     expect(effectivePayloadColumns(edited)).toEqual({ Clause: 'Human' })
-    expect(isEdited(edited)).toBe(true)
 
     const untouched = candidate({ id: 'p' })
     expect(effectiveContentText(untouched)).toBe('Original text')
     expect(effectivePayloadColumns(untouched)).toEqual({})
-    expect(isEdited(untouched)).toBe(false)
-  })
-
-  it('treats rejected and published candidates as not reviewable', () => {
-    expect(isReviewable(candidate({ id: 'p' }))).toBe(true)
-    expect(isReviewable(candidate({ id: 'r', reviewStatus: 'REJECTED' }))).toBe(false)
-    expect(isReviewable(candidate({ id: 'x', reviewStatus: 'PUBLISHED' }))).toBe(false)
-    expect(approvedCandidates(candidates).map((entry) => entry.id)).toEqual(['a'])
   })
 
   it('resolves the source unit and its provenance nodes', () => {

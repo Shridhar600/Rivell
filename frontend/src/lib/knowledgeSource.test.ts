@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { highlightMap, sourceBlocks, sourceLocation } from './knowledgeSource'
+import { candidatePassages, contextWindow, highlightMap, sourceBlocks, sourceLocation } from './knowledgeSource'
 import { candidate, node, unit } from '../test/knowledgeFixtures'
 
 const docNodes = [
@@ -56,5 +56,55 @@ describe('source lineage', () => {
     expect(sourceLocation([node({ id: 'x', nodeType: 'HEADING', numberingLabel: '4.2' })])).toBe('4.2')
     expect(sourceLocation([node({ id: 'x', nodeType: 'PARAGRAPH' })])).toBeNull()
     expect(sourceLocation([])).toBeNull()
+  })
+})
+
+describe('candidate passages and context', () => {
+  const nodes = [
+    node({ id: 'body', nodeType: 'BODY' }),
+    node({ id: 'h1', nodeType: 'HEADING', parentId: 'body', ordinal: 0, bodyIndex: 0, text: 'Liability', numberingLabel: '4.2' }),
+    node({ id: 'p1', nodeType: 'PARAGRAPH', parentId: 'body', ordinal: 1, bodyIndex: 1, text: 'Cap at twelve months.' }),
+    node({ id: 'p2', nodeType: 'PARAGRAPH', parentId: 'body', ordinal: 2, bodyIndex: 2, text: 'Payment in 45 days.' }),
+    node({ id: 'p3', nodeType: 'PARAGRAPH', parentId: 'body', ordinal: 3, bodyIndex: 3, text: 'Notices in writing.' }),
+    node({ id: 'p4', nodeType: 'PARAGRAPH', parentId: 'body', ordinal: 4, bodyIndex: 4, text: 'Entire agreement.' }),
+  ]
+  const units = [unit({ id: 'u', artifactId: 'a1', sourceNodeIds: ['h1', 'p1'] })]
+  const target = candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'u' })
+
+  it('returns exactly the nodes the extraction unit recorded, with their numbering label', () => {
+    const passages = candidatePassages(target, units, nodes)
+    expect(passages.map((entry) => [entry.id, entry.text, entry.location])).toEqual([
+      ['h1', 'Liability', '4.2'],
+      ['p1', 'Cap at twelve months.', null],
+    ])
+  })
+
+  it('returns no passage for a candidate whose unit is missing, instead of guessing one', () => {
+    expect(candidatePassages(candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'gone' }), units, nodes)).toEqual([])
+  })
+
+  it('numbers spreadsheet rows from one, because the extraction counts from zero', () => {
+    const sheet = [
+      node({ id: 'wb', nodeType: 'WORKBOOK' }),
+      node({ id: 'sh', nodeType: 'SHEET', parentId: 'wb', sheetName: 'Clauses' }),
+      node({ id: 'row', nodeType: 'SPREADSHEET_ROW', parentId: 'sh', rowIndex: 13 }),
+      node({ id: 'cell', nodeType: 'SPREADSHEET_CELL', parentId: 'row', text: 'Mutual' }),
+    ]
+    const found = candidatePassages(candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'u' }), [unit({ id: 'u', artifactId: 'a1', sourceNodeIds: ['row'] })], sheet)
+    expect(found[0]?.location).toBe('Sheet "Clauses", row 14')
+  })
+
+  it('windows the original around the passage and says when more exists', () => {
+    const blocks = sourceBlocks(nodes, highlightMap([target], units))
+    const around = contextWindow(blocks, 'c', 1)
+    expect(around?.focus.map((block) => block.id)).toEqual(['h1', 'p1'])
+    expect(around?.before).toEqual([])
+    expect(around?.after.map((block) => block.id)).toEqual(['p2'])
+    expect(around?.moreBefore).toBe(false)
+    expect(around?.moreAfter).toBe(true)
+  })
+
+  it('has no window for a candidate with no marked passage', () => {
+    expect(contextWindow(sourceBlocks(nodes, new Map()), 'c')).toBeNull()
   })
 })

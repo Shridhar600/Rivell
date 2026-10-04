@@ -17,7 +17,6 @@ import { longDate } from '../../lib/dates'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 import {
   artifactName,
-  clauseGroups,
   playbookPositions,
   type Catalog,
   type PlaybookView,
@@ -110,11 +109,6 @@ function PlaybookDetail({
   // Below this width the shell hides its detail panel, so the detail moves under the list.
   const compact = useMediaQuery('(max-width: 1180px)')
   const showInspector = tab === 'positions'
-  const clause = selected
-    ? (clauseGroups(catalog.clauseLibrary, catalog.index).find(
-        (group) => group.conceptKey !== null && group.conceptKey === selected.effectiveConceptKey,
-      ) ?? null)
-    : null
   const selectedPublication = selected ? (catalog.index.added.get(selected.id) ?? null) : null
 
   return (
@@ -190,7 +184,6 @@ function PlaybookDetail({
                 candidate={selected}
                 artifact={playbook.artifact}
                 publication={selectedPublication}
-                clause={clause}
               />
             </div>
           ) : null}
@@ -204,7 +197,6 @@ function PlaybookDetail({
               candidate={selected}
               artifact={playbook.artifact}
               publication={selectedPublication}
-              clause={clause}
             />
           ) : (
             <p className="rv-insp__note">Select a position to see its wording and where it came from.</p>

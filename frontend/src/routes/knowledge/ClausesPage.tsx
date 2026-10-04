@@ -7,7 +7,6 @@ import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/r
 import { KnowledgeTabs } from '../../components/knowledge/read/KnowledgeTabs'
 import { VersionBanner } from '../../components/knowledge/read/VersionBanner'
 import { VersionTimeline } from '../../components/knowledge/read/VersionTimeline'
-import { LinkButton } from '../../components/ui/Button'
 import { Chip } from '../../components/ui/Status'
 import { EmptyState } from '../../components/ui/State'
 import { longDate } from '../../lib/dates'
@@ -62,7 +61,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
       crumbs={CRUMBS}
       title="Clause library"
       lede={LEDE}
-      actions={<AddKnowledgeButton />}
+      actions={<AddKnowledgeButton preset="clause-library" />}
       meta={
         viewing ? (
           <>
@@ -81,7 +80,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
             <KnowledgeLinkRow
               key={source.artifact.id}
               accent
-              to={`/knowledge/artifacts/${source.artifact.id}`}
+              to={`/knowledge/compilations/${source.artifact.id}`}
               type="CLAUSE_LIBRARY"
               title={artifactName(source.artifact)}
               detail={`${reviewedText(source) ? `${reviewedText(source)}. ` : ''}Nothing is used in reviews until you publish it.`}
@@ -95,7 +94,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
         <EmptyState
           title="No clause library is published"
           message="Approved clause wording appears here once you publish a clause library."
-          action={<LinkButton to="/knowledge/new">Add knowledge</LinkButton>}
+          action={<AddKnowledgeButton />}
         />
       ) : (
         <>

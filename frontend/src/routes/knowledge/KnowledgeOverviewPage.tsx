@@ -54,7 +54,7 @@ function Overview({ catalog, state }: { catalog: Catalog; state: ReturnType<type
               <KnowledgeLinkRow
                 key={source.artifact.id}
                 accent
-                to={`/knowledge/artifacts/${source.artifact.id}`}
+                to={`/knowledge/compilations/${source.artifact.id}`}
                 type={source.artifact.artifactType}
                 title={artifactName(source.artifact)}
                 detail={`From ${source.artifact.filename}${reviewedText(source) ? `, ${reviewedText(source)}` : ''}`}
