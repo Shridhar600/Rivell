@@ -20,6 +20,7 @@ import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.knowledge.KnowledgeIngestionService;
 import com.rivell.workbench.knowledge.KnowledgePublicationService;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
+import com.rivell.workbench.knowledge.ReviewCategory;
 import com.rivell.workbench.knowledge.ReviewStatus;
 
 /**
@@ -112,6 +113,32 @@ final class DemoKnowledgeSeeder {
         }
         publications.publish(v2Approved.stream().map(KnowledgeCandidate::id).toList(),
                 supersede, NOTE + " (supersedes the first playbook)");
+    }
+
+    /**
+     * K07: a routine grouped-review group. Ingesting the routine playbook must leave genuinely
+     * bulk-eligible candidates behind: PENDING and ROUTINE under the real categorization, with
+     * an empty review-reason set. Nothing here approves, reclassifies or otherwise nudges a
+     * candidate into eligibility; if the domain stops classifying these units as routine the
+     * seed fails loudly rather than presenting an ineligible group as reviewable in bulk.
+     */
+    void seedRoutineGroup() {
+        var artifact = ensureArtifact(DemoDocuments.ROUTINE_PLAYBOOK, ArtifactType.PLAYBOOK);
+        if (artifact.ingestStatus() != IngestStatus.EXTRACTED) {
+            throw new IllegalStateException(
+                    "Routine playbook did not compile: " + artifact.ingestStatus());
+        }
+        var routine = queries.getCandidates(artifact.id()).stream()
+                .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PENDING)
+                .filter(candidate -> candidate.reviewCategory() == ReviewCategory.ROUTINE)
+                .toList();
+        if (routine.size() < 2) {
+            throw new IllegalStateException("K07 needs at least 2 PENDING ROUTINE candidates for "
+                    + "grouped approval, but the domain produced " + routine.size()
+                    + " from " + DemoDocuments.ROUTINE_PLAYBOOK);
+        }
+        log.info("demo scenario: routine grouped review ready ({} candidates, reasons={})",
+                routine.size(), routine.get(0).reviewReasons());
     }
 
     boolean escalationTriggerPublished() {

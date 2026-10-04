@@ -421,7 +421,9 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             ReviewStatus reviewStatus, String editedContentText,
             CandidatePayload editedPayload, SemanticFields editedSemanticFields,
             ApplicabilityScope scope, UUID supersedingCandidateId, String reviewNote,
-            Instant reviewedAt, Instant updatedAt) {
+            Instant reviewedAt, Instant updatedAt,
+            List<ConflictSignal> conflictSignals, ReviewCategory reviewCategory,
+            Set<ReviewReason> reviewReasons) {
         jdbcClient.sql("""
                         update knowledge_candidate
                         set review_status = :reviewStatus, edited_content_text = :editedContentText,
@@ -433,6 +435,9 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                             party_perspective = :partyPerspective, paper_source = :paperSource,
                             jurisdiction = :jurisdiction, effective_from = :effectiveFrom,
                             effective_to = :effectiveTo,
+                            conflict_signals = :conflictSignals::jsonb,
+                            review_category = :reviewCategory,
+                            review_reasons = :reviewReasons::jsonb,
                             review_note = :reviewNote,
                             reviewed_at = :reviewedAt, updated_at = :updatedAt
                         where id = :id and organization_id = :organizationId
@@ -453,6 +458,9 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .param("reviewNote", reviewNote)
                 .param("reviewedAt", toTimestamp(reviewedAt))
                 .param("updatedAt", Timestamp.from(updatedAt))
+                .param("conflictSignals", writeConflictSignals(conflictSignals))
+                .param("reviewCategory", reviewCategory == null ? null : reviewCategory.name())
+                .param("reviewReasons", writeReviewReasons(reviewReasons))
                 .param("id", candidateId)
                 .param("organizationId", organizationId)
                 .param("expectedStatus", expectedStatus.name())
@@ -920,7 +928,16 @@ private String writeUuidList(List<UUID> values) {
                     columns.put(field.getKey(), field.getValue().asText());
                 }
             }
-            return new CandidatePayload(columns);
+            var columnOrder = new java.util.ArrayList<String>();
+            var recorded = node.get("columnOrder");
+            if (recorded != null && recorded.isArray()) {
+                for (var element : recorded) {
+                    if (element.isTextual()) {
+                        columnOrder.add(element.asText());
+                    }
+                }
+            }
+            return new CandidatePayload(columns, columnOrder);
         } catch (IOException e) {
             throw new IllegalStateException("Could not read candidate payload", e);
         }

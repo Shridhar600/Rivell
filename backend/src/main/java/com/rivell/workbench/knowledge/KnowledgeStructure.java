@@ -120,15 +120,11 @@ final class KnowledgeStructure {
                         ? rowCells.get(0).text()
                         : columns.values().stream().filter(value -> !value.isBlank())
                                 .findFirst().orElse("");
-                var contentText = rowCells.stream()
-                        .map(KnowledgeSourceNode::text)
-                        .filter(text -> text != null && !text.isBlank())
-                        .reduce((a, b) -> a + " | " + b)
-                        .orElse(null);
+                var payload = new CandidatePayload(columns);
                 candidates.add(new KnowledgeCandidate(
                         UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                         candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                        rawLabel, contentText, new CandidatePayload(columns), null, null,
+                        rawLabel, payload.render(), payload, null, null,
                         null, null,
                         SemanticFields.EMPTY, null, List.of(),
                         null, null, null, scope, List.of(), null, null,
@@ -180,11 +176,11 @@ final class KnowledgeStructure {
                 return List.of();
             }
             var rawLabel = columns.values().iterator().next();
-            var contentText = String.join(" | ", columns.values());
+            var payload = new CandidatePayload(columns);
             return List.of(new KnowledgeCandidate(
                     UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                     candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                    rawLabel, contentText, new CandidatePayload(columns), null, null,
+                    rawLabel, payload.render(), payload, null, null,
                     null, null,
                     SemanticFields.EMPTY, null, List.of(),
                     null, null, null, scope, List.of(), null, null,

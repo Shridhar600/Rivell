@@ -147,8 +147,36 @@ public record KnowledgeCandidate(
         return reviewStatus == ReviewStatus.PUBLISHED;
     }
 
+    /**
+     * The single authoritative wording of this candidate: what review, conflict analysis,
+     * publication and every published read must consume.
+     *
+     * <p>Resolution order, most specific human act first:
+     * <ol>
+     *   <li>explicit human wording, or the wording rendered from the human's corrected
+     *       structured columns when a correction changed only columns;</li>
+     *   <li>the rendered human columns, for any path that stores a correction without wording;</li>
+     *   <li>the machine wording captured at extraction.</li>
+     * </ol>
+     *
+     * <p>The machine wording is deliberately not re-derived from the stored payload at read time:
+     * the payload is held in {@code jsonb}, which does not preserve object key order, so a
+     * re-render could place "Fallback" before "Preferred" and misrepresent the source row. The
+     * machine wording was captured in true source order at extraction and stored as text.
+     *
+     * <p>Before this rule existed a human spreadsheet-column correction was stored but inert:
+     * {@code editedPayload} was persisted while wording, duplicate/conflict analysis and
+     * publication all kept reading the original {@code contentText}, so publication silently
+     * discarded the correction (AD 6.8, 6.11).
+     */
     public String effectiveContentText() {
-        return editedContentText != null ? editedContentText : contentText;
+        if (editedContentText != null) {
+            return editedContentText;
+        }
+        if (editedPayload != null && !editedPayload.columns().isEmpty()) {
+            return editedPayload.render();
+        }
+        return contentText;
     }
 
     public Set<PositionRole> effectivePositions() {

@@ -139,8 +139,8 @@ def msa_body(title):
     ])
 
 
-def playbook_body(title, fallback_cap='2 times'):
-    return contract(title, [
+def playbook_sections(fallback_cap='2 times'):
+    return [
         ('Confidentiality', [
             'Preferred: a confidentiality term of at least three years.',
             'Fallback: two years, extended only for trade secrets.',
@@ -163,7 +163,44 @@ def playbook_body(title, fallback_cap='2 times'):
             'New York or Delaware governing law is acceptable.',
             'Exclusive jurisdiction in the governing law state is preferred.',
         ]),
+    ]
+
+
+def playbook_body(title, fallback_cap='2 times'):
+    return contract(title, playbook_sections(fallback_cap))
+
+
+def routine_playbook_body(title):
+    # Two guidance units that a reviewer can clear as routine. Each is recognised by the
+    # scripted provider as one confident legal concept and expresses no negotiating
+    # position: no preferred/fallback/prohibited/escalation/commentary language, no
+    # approval gate and no scope narrowing. Under the real categorizer that leaves the
+    # review reasons empty, so the candidate is ROUTINE and genuinely bulk-approvable.
+    # Nothing here is a state insert - the eligibility is whatever the domain decides.
+    return contract(title, [
+        ('Confidentiality', [
+            'The receiving party must protect the disclosing party confidential '
+            'information using the same degree of care it applies to its own.',
+        ]),
+        ('Indemnification', [
+            'The supplier must indemnify the customer against third-party claims '
+            'arising from the supplier breach of its obligations.',
+        ]),
     ])
+
+
+def draft_playbook_body(title):
+    # Adds one unit that openly contradicts published policy: the published playbook caps
+    # liability, this draft proposes uncapped exposure. The contradiction is detected by
+    # comparing the real texts, so the candidate earns a genuine conflict signal instead of
+    # a fabricated one. It stays unpublished, like the rest of the draft.
+    sections = playbook_sections() + [
+        ('Liability - Draft Revision', [
+            'Preferred: total liability is uncapped and the supplier accepts unlimited '
+            'exposure for this engagement.',
+        ]),
+    ]
+    return contract(title, sections)
 
 
 def clause_library_body(title):
@@ -235,7 +272,9 @@ demo_docx('Rivell Demo Playbook v2.docx',
 demo_docx('Rivell Demo Clause Library.docx',
           clause_library_body('Clause Library (Demonstration)'))
 demo_docx('Rivell Demo Draft Playbook.docx',
-          playbook_body('Negotiation Playbook (Draft)'))
+          draft_playbook_body('Negotiation Playbook (Draft)'))
+demo_docx('Rivell Demo Routine Playbook.docx',
+          routine_playbook_body('Negotiation Playbook (Routine, Demonstration)'))
 (OUT / 'Unreadable Playbook.docx').write_bytes(
     b'This is not a DOCX package. It is deliberately unreadable.')
 

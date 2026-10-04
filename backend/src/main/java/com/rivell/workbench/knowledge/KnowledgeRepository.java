@@ -2,6 +2,7 @@ package com.rivell.workbench.knowledge;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.time.Instant;
 
@@ -54,6 +55,11 @@ public interface KnowledgeRepository {
             KnowledgeCandidate updated, ReviewStatus expectedStatus,
             UUID correctedBy, java.time.Instant updatedAt);
 
+    /**
+     * Persists a pre-publication review transition together with the candidate's derived
+     * conditions. Callers that do not re-derive conditions pass the candidate's current values,
+     * so conditions are only ever changed deliberately (see CandidateReviewService.edit).
+     */
     void updateReviewState(
             UUID candidateId,
             UUID organizationId,
@@ -66,7 +72,10 @@ public interface KnowledgeRepository {
             UUID supersedingCandidateId,
             String reviewNote,
             Instant reviewedAt,
-            Instant updatedAt);
+            Instant updatedAt,
+            List<ConflictSignal> conflictSignals,
+            ReviewCategory reviewCategory,
+            Set<ReviewReason> reviewReasons);
 
     List<KnowledgeCandidate> findPublishedCandidates(UUID organizationId);
 

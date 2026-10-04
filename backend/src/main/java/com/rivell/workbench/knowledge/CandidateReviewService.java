@@ -15,10 +15,17 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
 
 /**
- * Human review of knowledge candidates: approve, edit, reject. Transitions are explicit
+     * Human review of knowledge candidates: approve, edit, reject. Transitions are explicit
  * and pre-publication only; a published candidate is immutable organizational knowledge
  * (Architecture Decision #6.4). Edits preserve the machine-proposed content and record
  * the human result separately (Architecture Decision #5.18 principle).
+ *
+ * <p>An edit also re-derives the candidate's conditions. Conflict, duplicate, supersession and
+ * review-risk categorization are computed from the candidate's <em>effective</em> wording,
+ * effective concept, effective positions and applicability scope (AD 6.9/7.15), and those are
+ * exactly the inputs a human correction can change. {@link #edit} already refuses a no-op
+ * correction, so recomputing here means "a determining input changed" rather than "something was
+ * touched", and an edit that leaves a condition intact leaves it genuinely intact.
  */
 public class CandidateReviewService {
 
@@ -80,7 +87,17 @@ public class CandidateReviewService {
                     && !semanticChanged && !scopeChanged) {
                 throw new IllegalArgumentException("An edit must change content, payload, scope, or semantic fields");
             }
-            return new KnowledgeCandidate(
+            // A corrected column is a correction to the wording, so render it the way extraction
+            // renders machine wording, in the source's column order rather than the arbitrary key
+            // order a client or jsonb round trip hands back. Without this the structured
+            // correction was stored and then ignored by every consumer of effectiveContentText().
+            var correctedPayload = payload == null ? null : candidate.payload().correctedBy(payload);
+            var correctedWording = contentText != null && !contentText.isBlank()
+                    ? contentText
+                    : correctedPayload != null && !correctedPayload.columns().isEmpty()
+                            ? correctedPayload.render()
+                            : candidate.editedContentText();
+            var edited = new KnowledgeCandidate(
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
@@ -89,13 +106,30 @@ public class CandidateReviewService {
                     candidate.semanticFields(),
                     !editedSemantic.equals(SemanticFields.EMPTY) ? editedSemantic : candidate.editedSemanticFields(),
                     candidate.interpretations(),
-                    contentText != null ? contentText : candidate.editedContentText(),
-                    payload != null ? payload : candidate.editedPayload(),
+                    correctedWording,
+                    correctedPayload != null ? correctedPayload : candidate.editedPayload(),
                     candidate.supersedingCandidateId(), scope != null ? scope : candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
                     Texts.normalize(note), Instant.now(),
                     candidate.createdAt(), Instant.now());
+            return recomputeConditions(edited, candidate.artifactId());
         });
+    }
+
+    /**
+     * Re-derives conflict/duplicate/supersession signals and review-risk categorization for an
+     * edited candidate against currently published organizational truth (AD 6.9/7.15). The
+     * machine interpretation and the human correction are both untouched; only the derived
+     * conditions are refreshed.
+     */
+    private KnowledgeCandidate recomputeConditions(KnowledgeCandidate candidate, UUID artifactId) {
+        var signals = conflictDetector.inspect(candidate,
+                repository.findPublishedCandidates(candidate.organizationId()));
+        var withSignals = candidate.withConflictSignals(signals);
+        var assessment = repository.findArtifact(artifactId, candidate.organizationId())
+                .map(KnowledgeArtifact::assessment).orElse(null);
+        var categorization = categorizer.categorize(withSignals, assessment);
+        return withSignals.withReviewOutcome(categorization.category(), categorization.reasons());
     }
 
     public KnowledgeCandidate reject(UUID candidateId, String note) {
@@ -193,7 +227,8 @@ public class CandidateReviewService {
                 updated.editedPayload(), updated.editedSemanticFields(), updated.scope(),
                 updated.supersedingCandidateId(),
                 updated.reviewNote(), updated.reviewedAt(),
-                updated.updatedAt());
+                updated.updatedAt(), updated.conflictSignals(),
+                updated.reviewCategory(), updated.reviewReasons());
         return updated;
     }
 

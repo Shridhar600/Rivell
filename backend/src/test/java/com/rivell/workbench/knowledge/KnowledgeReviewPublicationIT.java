@@ -345,6 +345,72 @@ class KnowledgeReviewPublicationIT {
                 .isInstanceOf(InvalidPublicationException.class);
     }
 
+    /**
+     * A correction that changes wording changes an input the duplicate test actually compares
+     * (the effective wording), so the duplicate condition must be re-derived rather than left
+     * stale. Before B6 the edit stored the correction and left the ingestion-time DUPLICATE
+     * signal in place, so the reviewer and the server both kept reporting a conflict that no
+     * longer existed (AD 6.9).
+     */
+    @Test
+    void wordingCorrectionRecomputesAndClearsTheDuplicate() {
+        var published = firstVariant(ingestClauseLibrary());
+        reviewService.approve(published.id(), null);
+        publicationService.publish(List.of(published.id()), null, "v1");
+
+        var duplicate = firstVariant(ingestClauseLibrary());
+        assertThat(duplicate.conflictSignals())
+                .as("an identical clause library row is an exact duplicate of published knowledge")
+                .anyMatch(signal -> signal.conflictType() == ConflictType.DUPLICATE);
+        assertThat(duplicate.reviewReasons()).contains(ReviewReason.DUPLICATE_DETECTED);
+
+        var resolved = reviewService.edit(duplicate.id(),
+                "Liability is uncapped for this engagement.", null, null, null, "no longer a duplicate");
+
+        assertThat(resolved.conflictSignals())
+                .as("the duplicate condition must be recomputed from the corrected wording")
+                .noneMatch(signal -> signal.conflictType() == ConflictType.DUPLICATE);
+        assertThat(resolved.reviewReasons()).doesNotContain(ReviewReason.DUPLICATE_DETECTED);
+
+        var reloaded = queryService.getCandidate(duplicate.id());
+        assertThat(reloaded.conflictSignals())
+                .as("the recomputed condition must be persisted, not just returned")
+                .noneMatch(signal -> signal.conflictType() == ConflictType.DUPLICATE);
+        assertThat(reloaded.reviewReasons()).doesNotContain(ReviewReason.DUPLICATE_DETECTED);
+    }
+
+    /**
+     * The mirror rule: a correction that touches nothing any condition compares must leave the
+     * condition standing. Positions do not participate in exact-duplicate detection, so a
+     * positions-only correction is genuinely irrelevant and the duplicate must survive it.
+     * Recomputation must not be a blanket "something was edited, clear the flags" reset.
+     */
+    @Test
+    void irrelevantCorrectionLeavesTheDuplicateIntact() {
+        var published = firstVariant(ingestClauseLibrary());
+        reviewService.approve(published.id(), null);
+        publicationService.publish(List.of(published.id()), null, "v1");
+
+        var duplicate = firstVariant(ingestClauseLibrary());
+        assertThat(duplicate.conflictSignals())
+                .anyMatch(signal -> signal.conflictType() == ConflictType.DUPLICATE);
+
+        var edited = reviewService.edit(duplicate.id(), null, null, null,
+                new SemanticFields(Set.of(PositionRole.PREFERRED), null, null, null, null),
+                "restate as our preferred position");
+
+        assertThat(edited.effectiveContentText())
+                .as("the wording the duplicate test compares is untouched")
+                .isEqualTo(duplicate.contentText());
+        assertThat(edited.conflictSignals())
+                .as("an irrelevant correction must not clear a genuine conflict")
+                .anyMatch(signal -> signal.conflictType() == ConflictType.DUPLICATE);
+        assertThat(queryService.getCandidate(duplicate.id()).conflictSignals())
+                .anyMatch(signal -> signal.conflictType() == ConflictType.DUPLICATE);
+        assertThat(queryService.getCandidate(duplicate.id()).reviewReasons())
+                .contains(ReviewReason.DUPLICATE_DETECTED);
+    }
+
     private KnowledgeArtifact ingestClauseLibrary() {
         try (var stream = getClass().getClassLoader()
                 .getResourceAsStream("fixtures/clause-library.docx")) {

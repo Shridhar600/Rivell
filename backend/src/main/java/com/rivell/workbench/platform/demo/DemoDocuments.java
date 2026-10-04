@@ -30,6 +30,7 @@ final class DemoDocuments {
     static final String PLAYBOOK_V2 = "Rivell Demo Playbook v2.docx";
     static final String CLAUSE_LIBRARY = "Rivell Demo Clause Library.docx";
     static final String DRAFT_PLAYBOOK = "Rivell Demo Draft Playbook.docx";
+    static final String ROUTINE_PLAYBOOK = "Rivell Demo Routine Playbook.docx";
     static final String UNREADABLE_PLAYBOOK = "Unreadable Playbook.docx";
 
     private static final String PREFIX = "demo/documents/";

@@ -31,6 +31,7 @@ public final class DemoScenarioCatalog {
     public static final String K04_SOURCE_LINEAGE = "K04";
     public static final String K05_COMPILATION_IN_REVIEW = "K05";
     public static final String K06_INGESTION_FAILURE = "K06";
+    public static final String K07_ROUTINE_GROUPED_REVIEW = "K07";
 
     private static final List<DemoScenario> ALL = List.of(
             review(R01_READY, "Vendor NDA - Ready for review",
@@ -131,7 +132,12 @@ public final class DemoScenarioCatalog {
             knowledge(K06_INGESTION_FAILURE, "Knowledge ingestion failure",
                     "Unreadable Playbook.docx",
                     "artifact ingest_status FAILED with no candidates",
-                    "knowledge reads; failure state"));
+                    "knowledge reads; failure state"),
+            knowledge(K07_ROUTINE_GROUPED_REVIEW, "Routine grouped review",
+                    "Rivell Demo Routine Playbook.docx",
+                    "two or more candidates left PENDING and ROUTINE by the real "
+                            + "categorization, so grouped approval can be exercised live",
+                    "knowledge reads; review queue grouped approval"));
 
     private DemoScenarioCatalog() {
     }

@@ -130,7 +130,9 @@ public class KnowledgePublicationService {
                                 ReviewStatus.PUBLISHED, candidate.editedContentText(),
                                 candidate.editedPayload(), candidate.editedSemanticFields(),
                                 candidate.scope(), candidate.supersedingCandidateId(),
-                                candidate.reviewNote(), candidate.reviewedAt(), now);
+                                candidate.reviewNote(), candidate.reviewedAt(), now,
+                                candidate.conflictSignals(), candidate.reviewCategory(),
+                                candidate.reviewReasons());
                     }
                     // published inside the transaction: AFTER_COMMIT listeners fire post-commit
                     eventPublisher.publishEvent(new KnowledgePublishedEvent(

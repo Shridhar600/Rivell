@@ -189,6 +189,9 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
     }
 
     private double cueProbability(String questionName, Object state) {
+        if (isConflictPair(state)) {
+            return conflictRelationshipCue(questionName, state);
+        }
         var combined = (headingOf(state) + " " + cues(state)).toLowerCase();
         return switch (questionName) {
             case "concept_limitation_of_liability" ->
@@ -229,6 +232,81 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
             default -> ABSENT;
         };
     }
+
+    /**
+     * Answers the knowledge conflict comparison from the two texts it is actually given.
+     *
+     * <p>Without this the provider had no access to the pair at all, so every comparison
+     * returned "no" and a candidate could never be shown genuinely contradicting published
+     * policy. The answers are still cue-driven rather than unconditional: a contradiction is
+     * proposed only when one side states an uncapped exposure while the other states a
+     * quantified limit, which is the clearest case of two positions that cannot both be
+     * followed. Supersession intent is recognised only from explicit replacement language.
+     */
+    private static boolean isConflictPair(Object state) {
+        return state instanceof Map<?, ?> pair
+                && pair.get("new") instanceof Map<?, ?>
+                && pair.get("published") instanceof Map<?, ?>;
+    }
+
+    private static String sideText(Object side) {
+        if (side instanceof Map<?, ?> map && map.get("text") instanceof String text) {
+            return text.toLowerCase();
+        }
+        return "";
+    }
+
+    private double conflictRelationshipCue(String questionName, Object pair) {
+        var candidate = sideText(((Map<?, ?>) pair).get("new"));
+        var published = sideText(((Map<?, ?>) pair).get("published"));
+        return switch (questionName) {
+            case "contradicts" -> {
+                var candidateProposesUncapped = proposesUncappedExposure(candidate);
+                var publishedProposesUncapped = proposesUncappedExposure(published);
+                var candidateStatesLimit = statesLimit(candidate);
+                var publishedStatesLimit = statesLimit(published);
+                yield candidateProposesUncapped && publishedStatesLimit
+                        || publishedProposesUncapped && candidateStatesLimit
+                        ? PROBABILITY : ABSENT;
+            }
+            case "supersedes" ->
+                    REPLACEMENT_LANGUAGE.matcher(candidate).find() ? PROBABILITY : ABSENT;
+            default -> ABSENT;
+        };
+    }
+
+    /**
+     * True only when the text actually <em>proposes</em> uncapped exposure. A playbook line that
+     * prohibits uncapped liability mentions the same words while agreeing with a capped clause, so
+     * treating any mention as a proposal invents a conflict that does not exist.
+     */
+    private static boolean proposesUncappedExposure(String text) {
+        var mentionsUncapped = text.contains("uncapped") || text.contains("unlimited")
+                || text.contains("no cap") || text.contains("without limit");
+        return mentionsUncapped && !rejectsUncapped(text);
+    }
+
+    private static boolean rejectsUncapped(String text) {
+        return text.contains("prohibited") || text.contains("not acceptable")
+                || text.contains("never acceptable") || text.contains("reject")
+                || text.contains("avoid") || text.contains("must be capped");
+    }
+
+    private static boolean statesLimit(String text) {
+        return text.contains("shall not exceed") || text.contains("should not exceed")
+                || text.contains("capped at") || text.contains("maximum of")
+                || COMPILED_MULTIPLE.matcher(text).find();
+    }
+
+    private static final java.util.regex.Pattern COMPILED_MULTIPLE =
+            java.util.regex.Pattern.compile(
+                    "(\\d+(?:\\.\\d+)?|one|two|three|four|five)\\s+times",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    private static final java.util.regex.Pattern REPLACEMENT_LANGUAGE =
+            java.util.regex.Pattern.compile(
+                    "\\b(replace|supersede|supersedes|no longer apply|withdrawn|updated policy)\\b",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private double present(String combined, String cue) {
         return combined.contains(cue) ? PROBABILITY : 0.02;
