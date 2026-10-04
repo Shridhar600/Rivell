@@ -33,7 +33,7 @@ public final class DemoScriptedGenerativeProvider implements GenerativeReasoning
         var fields = new LinkedHashMap<String, String>();
         for (var name : request.spec().fields().keySet()) {
             if ("escalationTrigger".equals(name)) {
-                escalation(request.state().payload()).ifPresent(trigger -> fields.put(name, trigger));
+                fields.put(name, escalation(request.state().payload()));
                 continue;
             }
             fields.put(name, DRAFT);
@@ -42,18 +42,27 @@ public final class DemoScriptedGenerativeProvider implements GenerativeReasoning
                 DemoScriptedDecisionProvider.RESOLVED_MODEL, new TokenUsage(0, 0));
     }
 
-    private java.util.Optional<String> escalation(Object state) {
+    /**
+     * Quotes the escalation sentence out of the playbook unit, so the stored trigger is the
+     * guidance's own condition.
+     *
+     * <p>Falls back to a plainly escalation-shaped sentence rather than the generic draft,
+     * which would file a statement about cooperating in good faith as the condition that
+     * forces a lawyer involved. The field must stay non-blank either way: the generative
+     * protocol rejects a missing required field outright, which would cost the whole
+     * extraction rather than just this value.
+     */
+    private String escalation(Object state) {
         var text = state instanceof java.util.Map<?, ?> payload
                 && payload.get("text") instanceof String value ? value : null;
-        if (text == null) {
-            return java.util.Optional.empty();
-        }
-        for (var sentence : text.split("(?<=[.!?])\s+")) {
-            var trimmed = sentence.trim();
-            if (trimmed.toLowerCase().startsWith("escalate")) {
-                return java.util.Optional.of(trimmed);
+        if (text != null) {
+            for (var sentence : text.split("(?<=[.!?])\\s+")) {
+                var trimmed = sentence.trim();
+                if (trimmed.toLowerCase().startsWith("escalate")) {
+                    return trimmed;
+                }
             }
         }
-        return java.util.Optional.empty();
+        return "Escalate to general counsel before agreeing this position.";
     }
 }

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,6 +72,18 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
     @Override
     @Transactional
     public boolean insert(RedlineExecution execution) {
+        try {
+            return insertRow(execution);
+        } catch (DuplicateKeyException e) {
+            // ON CONFLICT only absorbs violations of the arbiter index it names. A second
+            // COMPLETED attempt for one change set breaks the partial unique index instead,
+            // which surfaces as a duplicate key. Losing that race is the same outcome as
+            // losing it on the arbiter: the caller reads back the winner.
+            return false;
+        }
+    }
+
+    private boolean insertRow(RedlineExecution execution) {
         var inserted = jdbcClient.sql("""
                 insert into redline_execution
                   (id, organization_id, review_id, change_set_id, attempt_number, contract_id,

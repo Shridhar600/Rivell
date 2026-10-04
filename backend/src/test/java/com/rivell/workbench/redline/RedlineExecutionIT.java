@@ -850,26 +850,106 @@ class RedlineExecutionIT {
         assertThat(row.get(0).get("redline").get("status").asText()).isEqualTo("FAILED");
     }
 
+    /**
+     * The one behaviour that justifies the endpoint: a retry that succeeds. Attempt 1 fails on
+     * a semantics drift, the correction is reverted, and attempt 2 completes and verifies.
+     * Without this, the failure path is heavily covered and the success path is not covered at
+     * all, and the reviews-list projection's reason for reporting the newest attempt is
+     * unproven.
+     */
+    @Test
+    void retrySucceedsWhenTheCauseIsNoLongerPresentAndKeepsThePriorFailure() throws Exception {
+        var fixture = analyzedNdaWithAbsenceFindings();
+        resolveAllActionable(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var originalConcept = driftSemanticsOfPinnedVersion(reviewId);
+
+        var first = redlineExpectingFailure(reviewId);
+        assertThat(first.get("failureCode").asText()).isEqualTo("APPROVED_SEMANTICS_DRIFT");
+
+        restoreSemantics(reviewId, originalConcept);
+
+        var result = mockMvc.perform(post("/api/reviews/{id}/redline/retry", reviewId))
+                .andExpect(status().isOk())
+                .andReturn();
+        var retried = json(result).get("data");
+
+        assertThat(retried.get("attempt").asInt()).isEqualTo(2);
+        assertThat(retried.get("status").asText()).isEqualTo("COMPLETED");
+        assertThat(retried.get("outcome").asText()).isEqualTo("REDLINE_GENERATED");
+        assertThat(retried.get("downloadAvailable").asBoolean()).isTrue();
+
+        assertThat(countExecutions(reviewId))
+                .as("the failed attempt is still on record beside the successful one")
+                .isEqualTo(2);
+        assertThat(countArtifacts(reviewId))
+                .as("only the verified attempt stores an artifact")
+                .isEqualTo(1);
+        assertThat(artifactFiles(reviewId)).isEqualTo(1);
+
+        // The recorded failure is untouched, not rewritten into the success.
+        var attempts = jdbcClient.sql("""
+                select attempt_number || '|' || status || '|' || coalesce(failure_code,'-')
+                from redline_execution where review_id = :reviewId order by attempt_number
+                """).param("reviewId", reviewId).query(String.class).list();
+        assertThat(attempts).containsExactly(
+                "1|FAILED|APPROVED_SEMANTICS_DRIFT", "2|COMPLETED|-");
+
+        // Only a fully verified artifact is downloadable.
+        var downloaded = downloadBytes(reviewId);
+        assertThat(downloaded).isNotEmpty();
+        assertThat(readRedline(reviewId).get("attempt").asInt()).isEqualTo(2);
+
+        // And the list reports the newest attempt rather than the earlier failure.
+        var rows = json(mockMvc.perform(get("/api/reviews?limit=50"))
+                .andExpect(status().isOk())
+                .andReturn()).get("data").get("items");
+        var row = new java.util.ArrayList<JsonNode>();
+        rows.forEach(item -> {
+            if (item.get("id").asText().equals(reviewId.toString())) {
+                row.add(item);
+            }
+        });
+        assertThat(row).hasSize(1);
+        assertThat(row.get(0).get("redline").get("status").asText()).isEqualTo("COMPLETED");
+        assertThat(row.get(0).get("redline").get("downloadAvailable").asBoolean()).isTrue();
+    }
+
+    /** The concept the drifted clause had before this test corrected it. */
+    private LegalConcept driftSemanticsOfPinnedVersion(UUID reviewId) {
+        var changeSet = changeSetRepository.findByReview(organizationId(), reviewId).orElseThrow();
+        var contractId = changeSet.contractId();
+        var clause = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
+                .filter(c -> c.effectivePrimaryConcept().get() != LegalConcept.GOVERNING_LAW)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no classified clause to correct"));
+        var original = clause.effectivePrimaryConcept().get();
+        enrichmentService.correctClause(contractId, 1, clause.id(),
+                new com.rivell.workbench.contracts.FactCorrection(
+                        "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
+        return original;
+    }
+
+    private void restoreSemantics(UUID reviewId, LegalConcept concept) {
+        var changeSet = changeSetRepository.findByReview(organizationId(), reviewId).orElseThrow();
+        var contractId = changeSet.contractId();
+        var clauseId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
+                .filter(c -> c.effectivePrimaryConcept().get() == LegalConcept.GOVERNING_LAW)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no corrected clause to restore"))
+                .id();
+        enrichmentService.correctClause(contractId, 1, clauseId,
+                new com.rivell.workbench.contracts.FactCorrection(
+                        concept.name(), Map.of(), UUID.randomUUID()));
+    }
+
     private JsonNode retryExpectingFailure(UUID reviewId) throws Exception {
         mockMvc.perform(post("/api/reviews/{id}/redline/retry", reviewId))
                 .andExpect(status().isConflict());
         return readRedline(reviewId);
-    }
-
-    private void driftSemanticsOfPinnedVersion(UUID reviewId) {
-        var changeSet = changeSetRepository.findByReview(organizationId(), reviewId).orElseThrow();
-        var contractId = changeSet.contractId();
-        // Must pick a clause whose concept is not already GOVERNING_LAW, otherwise the
-        // correction is a no-op, nothing drifts and the redline legitimately succeeds.
-        var clauseSemanticsId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
-                .filter(c -> c.effectivePrimaryConcept().isPresent())
-                .filter(c -> c.effectivePrimaryConcept().get() != LegalConcept.GOVERNING_LAW)
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("no classified clause to correct"))
-                .id();
-        enrichmentService.correctClause(contractId, 1, clauseSemanticsId,
-                new com.rivell.workbench.contracts.FactCorrection(
-                        "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
     }
 
     private record Fixture(Review review, ReviewAnalysisRun run, List<Finding> findings) {

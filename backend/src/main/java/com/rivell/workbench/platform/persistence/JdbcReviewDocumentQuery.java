@@ -40,7 +40,7 @@ class JdbcReviewDocumentQuery implements ReviewDocumentQuery {
                   on sa.id = cv.source_artifact_id
                  and sa.organization_id = :organizationId
                 where cv.id = :contractVersionId
-                  and sa.organization_id = :organizationId
+                  and cv.organization_id = :organizationId
                 """)
                 .param("organizationId", organizationId)
                 .param("contractVersionId", contractVersionId)

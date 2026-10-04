@@ -118,9 +118,18 @@ public class HomeDemoSeeder implements ApplicationRunner {
                 artifactsAndPublications);
     }
 
+    /**
+     * Every seeded artifact must be present before the seed is skipped.
+     *
+     * <p>Checking only the playbook would strand a database seeded by an earlier build: it
+     * would report itself complete and never gain the clause library, leaving the demo review
+     * with findings that carry no proposed language.
+     */
     private boolean alreadySeeded() {
-        return knowledgeQuery.listArtifacts(null).stream()
-                .anyMatch(artifact -> PLAYBOOK.equals(artifact.filename()));
+        var filenames = knowledgeQuery.listArtifacts(null).stream()
+                .map(artifact -> artifact.filename())
+                .collect(java.util.stream.Collectors.toSet());
+        return filenames.contains(PLAYBOOK) && filenames.contains(CLAUSE_LIBRARY);
     }
 
     private Map<String, UUID> seedContracts() {
@@ -161,7 +170,7 @@ public class HomeDemoSeeder implements ApplicationRunner {
             return 0;
         }
         publication.publish(published, Map.of(), "Rivell demo publication");
-        return 1;
+        return List.of(PLAYBOOK, CLAUSE_LIBRARY).size();
     }
 
     private void publish(SeededArtifact artifact, List<UUID> approved) {

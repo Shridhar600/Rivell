@@ -9,6 +9,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,6 +32,13 @@ import org.testcontainers.utility.DockerImageName;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rivell.workbench.contracts.ContractIngestionService;
+import com.rivell.workbench.contracts.ContractEnrichmentService;
+import com.rivell.workbench.contracts.ContractType;
+import com.rivell.workbench.contracts.Jurisdiction;
+import com.rivell.workbench.contracts.PaperSource;
+import com.rivell.workbench.contracts.PartyRole;
+import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
@@ -89,6 +97,18 @@ class ReviewSummaryMetadataIT {
 
     @Autowired
     ReviewAnalysisService analysisService;
+
+    @Autowired
+    ReviewDocumentQuery documentQuery;
+
+    @Autowired
+    ContractIngestionService contractIngestionService;
+
+    @Autowired
+    ContractEnrichmentService enrichmentService;
+
+    @Autowired
+    ReviewService reviewService;
 
     @BeforeEach
     void freshOrganization() {
@@ -172,64 +192,150 @@ class ReviewSummaryMetadataIT {
     }
 
     @Test
-    void aReviewInAnotherOrganizationSeesNoDocument() throws Exception {
-        var reviewId = reviewedContract();
-
-        identityProvider.use(new UserIdentity(
-                UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
-
-        mockMvc.perform(get("/api/reviews/{id}", reviewId))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void proposalCountsAreZeroBeforeAnyRunAndNeverIncludeADeletion() throws Exception {
+    void aReviewWithNoRunProposesNothing() throws Exception {
         var created = createReview(corpusBuilder.buildMainCorpus(organizationId())
                 .contract().contractId(), ReviewPackRegistry.MSA_PACK);
-        var reviewId = UUID.fromString(created.get("id").asText());
+        var proposed = summary(UUID.fromString(created.get("id").asText()))
+                .get("proposedChanges");
 
-        var summary = summary(reviewId);
-        assertThat(summary.get("findings").asInt()).isZero();
-        assertThat(summary.get("proposedChanges").get("replace").asInt()).isZero();
-        assertThat(summary.get("proposedChanges").get("insert").asInt()).isZero();
-        assertThat(summary.get("proposedChanges").get("delete").asInt())
-                .as("deletion is a human choice at decision time, never a machine proposal")
-                .isZero();
+        assertThat(proposed.get("replace").asInt()).isZero();
+        assertThat(proposed.get("insert").asInt()).isZero();
     }
 
+    /**
+     * Counts are asserted by what they mean to a reviewer, never by re-running the aggregate
+     * the server already ran.
+     *
+     * <p>The distinction that matters: a replacement Rivell actually wrote is actionable now,
+     * while an insertion is a gap it detected and cannot fill. ACCEPT is valid only for the
+     * first, so the domain is the oracle — these tests use it to prove the counts never claim
+     * a proposal the domain would refuse.
+     */
     @Test
-    void proposalCountsMatchTheFindingsTheyAreDerivedFrom() throws Exception {
+    void everyCountedReplacementIsOneTheDomainCanAccept() throws Exception {
         var reviewId = analyzedReview();
         var proposed = summary(reviewId).get("proposedChanges");
 
-        // Counted from the source rows of the same generation the summary reports, so the
-        // aggregate is compared against the truth rather than against itself.
-        var rows = jdbcClient.sql("""
-                select count(*) filter (where subject_kind = 'CLAUSE'
-                    and proposed_language is not null) as replace_count,
-                       count(*) filter (where subject_kind = 'ABSENCE'
-                    and proposed_action = 'ADD_REQUIRED_PROVISION') as insert_count
-                from finding
-                where run_id = (select id from review_analysis_run
-                    where review_id = :reviewId and status = 'COMPLETED'
-                    order by run_number desc limit 1)
-                """).param("reviewId", reviewId).query((rs, n) ->
-                        rs.getInt("replace_count") + "|" + rs.getInt("insert_count"))
-                .single();
+        var replaceable = new java.util.ArrayList<JsonNode>();
+        var gaps = new java.util.ArrayList<JsonNode>();
+        for (var finding : findings(reviewId)) {
+            var detail = findingDetail(reviewId, finding.get("id").asText());
+            var language = detail.get("proposedLanguage");
+            if (language != null && !language.isNull()) {
+                replaceable.add(finding);
+            } else if (finding.get("proposedAction").asText().equals("ADD_REQUIRED_PROVISION")) {
+                gaps.add(finding);
+            }
+        }
 
-        assertThat(proposed.get("replace").asInt() + "|" + proposed.get("insert").asInt())
-                .isEqualTo(rows);
+        assertThat(proposed.get("replace").asInt()).isEqualTo(replaceable.size());
+        assertThat(proposed.get("insert").asInt()).isEqualTo(gaps.size());
         assertThat(proposed.get("delete").asInt())
-                .as("no machine proposal is ever a deletion")
+                .as("a deletion is only ever a human choice at decision time")
                 .isZero();
 
-        var total = jdbcClient.sql("select count(*) from finding where run_id = "
-                + "(select id from review_analysis_run where review_id = '"
-                + reviewId + "' and status = 'COMPLETED' order by run_number desc limit 1)")
-                .query(Integer.class).single();
-        assertThat(proposed.get("replace").asInt() + proposed.get("insert").asInt())
-                .as("only Findings that actually propose a change are counted")
-                .isLessThanOrEqualTo(total);
+        for (var finding : replaceable) {
+            assertThat(acceptStatus(reviewId, finding.get("id").asText()))
+                    .as("a counted replacement must be acceptable, or the count overstates "
+                            + "what Rivell can hand a reviewer")
+                    .isEqualTo(200);
+        }
+        for (var finding : gaps) {
+            assertThat(acceptStatus(reviewId, finding.get("id").asText()))
+                    .as("a counted insertion carries no wording, so ACCEPT must be refused; "
+                            + "if this ever changes, insert means drafted insertions and the "
+                            + "contract has to say so")
+                    .isEqualTo(409);
+        }
+    }
+
+    /**
+     * The same claims on a review whose Findings are absent provisions. This is the shape that
+     * exposed the original defect, where an absence Finding with no proposed wording was being
+     * reported as a drafted insertion.
+     */
+    @Test
+    void anAbsenceFindingIsCountedAsAGapAndNotAsADraftedInsertion() throws Exception {
+        var bytes = java.nio.file.Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/m5-nda-counterparty.docx"));
+        var ingested = contractIngestionService.ingest("m5-nda-counterparty.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new java.io.ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.NDA, PartyRole.RECEIVING_PARTY,
+                        PaperSource.COUNTERPARTY_PAPER, Jurisdiction.US,
+                        ReviewPackRegistry.MSA_PACK));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+        analysisService.analyze(organizationId(), review.id());
+
+        var gapFindings = new java.util.ArrayList<JsonNode>();
+        for (var finding : findings(review.id())) {
+            if (finding.get("proposedAction").asText().equals("ADD_REQUIRED_PROVISION")) {
+                gapFindings.add(finding);
+            }
+        }
+        assertThat(gapFindings)
+                .as("this fixture is only meaningful with a missing required provision")
+                .isNotEmpty();
+
+        var proposed = summary(review.id()).get("proposedChanges");
+        assertThat(proposed.get("insert").asInt()).isEqualTo(gapFindings.size());
+        assertThat(proposed.get("replace").asInt())
+                .as("a Finding with no wording is not a replacement proposal either")
+                .isZero();
+
+        for (var finding : gapFindings) {
+            var detail = findingDetail(review.id(), finding.get("id").asText());
+            assertThat(detail.get("proposedLanguage").isNull())
+                    .as("Rivell proposed no wording for this gap")
+                    .isTrue();
+            assertThat(acceptStatus(review.id(), finding.get("id").asText()))
+                    .as("so ACCEPT is refused, and the count must not imply otherwise")
+                    .isEqualTo(409);
+        }
+    }
+
+    @Test
+    void theDocumentQueryIsOrganizationScopedOnBothSides() {
+        var reviewId = reviewedContractQuietly();
+        var versionId = jdbcClient.sql(
+                "select contract_version_id from review where id = :id")
+                .param("id", reviewId).query(UUID.class).single();
+        var foreignOrg = UUID.randomUUID();
+
+        assertThat(documentQuery.find(organizationId(), versionId)).isPresent();
+        assertThat(documentQuery.find(foreignOrg, versionId))
+                .as("another organization cannot read this version's document")
+                .isEmpty();
+        assertThat(documentQuery.find(organizationId(), UUID.randomUUID()))
+                .as("a version this organization does not own resolves to nothing")
+                .isEmpty();
+    }
+
+    private List<JsonNode> findings(UUID reviewId) throws Exception {
+        var result = mockMvc.perform(get("/api/reviews/{id}/findings?limit=200", reviewId))
+                .andExpect(status().isOk())
+                .andReturn();
+        var items = json(result).get("data").get("items");
+        var list = new java.util.ArrayList<JsonNode>();
+        items.forEach(list::add);
+        return list;
+    }
+
+    private JsonNode findingDetail(UUID reviewId, String findingId) throws Exception {
+        return json(mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}",
+                        reviewId, findingId))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+    }
+
+    private int acceptStatus(UUID reviewId, String findingId) throws Exception {
+        return mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .put("/api/reviews/{id}/findings/{findingId}/decision",
+                        reviewId, findingId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expectedVersion\":0,\"action\":\"ACCEPT\"}"))
+                .andReturn().getResponse().getStatus();
     }
 
     /**
@@ -284,6 +390,15 @@ class ReviewSummaryMetadataIT {
                 .as("this test is only meaningful with findings to count")
                 .isPositive();
         return reviewId;
+    }
+
+    /** Creates a review and swallows the checked exception for non-throwing callers. */
+    private UUID reviewedContractQuietly() {
+        try {
+            return reviewedContract();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private UUID reviewedContract() throws Exception {

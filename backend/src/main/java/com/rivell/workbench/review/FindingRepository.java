@@ -49,10 +49,15 @@ public interface FindingRepository {
     int countFindings(UUID organizationId, UUID runId);
 
     /**
-     * Counts the executable change proposals in one generation. A Finding on an absent
-     * provision proposes an insertion; a Finding on an existing clause proposes a
-     * replacement only when it actually carries replacement wording. Deletion is never a
-     * machine proposal and is reported as zero.
+     * Counts what one generation proposes, per change kind.
+     *
+     * <p>A replacement is counted only when the Finding carries replacement wording, because
+     * that is the proposal a reviewer can act on immediately. An insertion is counted when a
+     * required provision is absent; Rivell detects that gap but proposes no wording for it, so
+     * it is a detected gap rather than a drafted insertion. Deletion is never a machine
+     * proposal and is always zero.
+     *
+     * <p>See {@link ProposedChangeCounts} for why the three numbers are not interchangeable.
      */
     ProposedChangeCounts countProposedChanges(UUID organizationId, UUID runId);
 

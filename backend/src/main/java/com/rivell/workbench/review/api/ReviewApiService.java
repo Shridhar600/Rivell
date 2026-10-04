@@ -372,7 +372,8 @@ public class ReviewApiService {
      * so a summary never mixes one generation's totals with another's breakdown. A review
      * with no run yet proposes nothing.
      */
-    private ProposedChangeCounts proposedChanges(UUID organizationId, Optional<ReviewAnalysisRun> counted) {
+    private ProposedChangeCounts proposedChanges(
+            UUID organizationId, Optional<ReviewAnalysisRun> counted) {
         return counted
                 .map(run -> findingRepository.countProposedChanges(organizationId, run.id()))
                 .orElse(ProposedChangeCounts.NONE);
