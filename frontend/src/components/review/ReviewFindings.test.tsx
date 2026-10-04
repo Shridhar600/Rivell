@@ -21,11 +21,11 @@ import {
   fixtureClauseFindingSummary,
   fixtureCompletedReviewSummary,
   fixtureCrossClauseFindingDetail,
-  fixtureFindingList,
+  fixtureFailedReviewSummary,
   fixtureGenerativeFindingDetail,
   fixturePolicyMissingFindingDetail,
-  fixtureQueuedReviewSummary,
 } from './testFixtures'
+import { fixtureHumanReview } from './workflowFixtures'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -49,7 +49,7 @@ const detailById: Record<string, unknown> = {
 
 /**
  * The review's findings, as the list endpoint would actually return them for this review. Every id
- * here has a detail below, so the list and the detail endpoint agree; the workspace now only requests
+ * here has a detail below, so the list and the detail endpoint agree; the workspace only requests
  * a finding it can see in this review's own list.
  */
 const absenceFinding = (id: string, concept: string) => ({
@@ -94,6 +94,32 @@ function renderWorkspace(initialEntry = '/reviews/c1/analysis/r-1', options: Stu
   return { api, router }
 }
 
+/** The workspace's three regions. A closed command palette also holds role=option nodes, so the
+ *  Findings list is always reached through its own listbox. */
+const findingsList = () => within(screen.getByRole('listbox', { name: 'Findings list' }))
+async function findFindingsList() {
+  return within(await screen.findByRole('listbox', { name: 'Findings list' }))
+}
+const detailPane = () => screen.getByRole('complementary', { name: 'Finding detail' })
+const contractPane = () => screen.getByRole('main', { name: 'Contract' })
+
+/** A section of the detail panel. Its header is plain text, not a heading. */
+function section(title: string): HTMLElement {
+  const header = within(detailPane()).getByText(title)
+  return header.closest('.rv-ws-sec') as HTMLElement
+}
+
+/** Waits for the detail panel to show the finding with this title. */
+async function findDetailTitle(title: string | RegExp) {
+  // The pane is looked up again on every attempt: it is redrawn as the finding loads.
+  return waitFor(() => within(detailPane()).getByRole('heading', { level: 2, name: title }))
+}
+
+/** Waits for a section header to appear in the detail panel. */
+async function findDetailText(text: string) {
+  return waitFor(() => within(detailPane()).getByText(text))
+}
+
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn()
 })
@@ -105,62 +131,53 @@ afterEach(() => {
 
 describe('findings list', () => {
   it('lists findings with distinguishable subjects and opens one', async () => {
+    const { router } = renderWorkspace('/reviews/c1/analysis/r-1', {
+      humanReview: fixtureHumanReview({ actionableFindings: 6, remainingFindings: 6 }),
+    })
+
+    const clauseRow = await (await findFindingsList()).findByRole('option', {
+      name: /6\. Limitation of Liability/,
+    })
+    // Decision state shows only once the server's decisions and human review have loaded.
+    await waitFor(() => expect(clauseRow).toHaveTextContent('Needs decision · Liability cap deviation'))
+
+    const absenceRow = findingsList().getByRole('option', { name: /Missing: Limitation of liability/ })
+    expect(absenceRow).toHaveTextContent('Missing required provision')
+    expect(absenceRow).toHaveTextContent('Not in contract')
+    expect(clauseRow).not.toHaveTextContent('Not in contract')
+
+    // The navigator counts what the server says is unresolved.
+    expect(
+      within(screen.getByRole('complementary', { name: 'Findings' })).getByText('6 unresolved'),
+    ).toBeInTheDocument()
+
+    await userEvent.click(absenceRow)
+
+    expect(await findDetailTitle('Missing: Limitation of liability')).toBeInTheDocument()
+    expect(router.state.location.search).toContain('finding=f-2')
+    expect(absenceRow).toHaveAttribute('aria-selected', 'true')
+    expect(clauseRow).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('selects the first finding when the URL names none, and records it in the URL', async () => {
+    const { router } = renderWorkspace()
+
+    expect(await findDetailTitle('6. Limitation of Liability')).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.search).toContain('finding=f-1'))
+    expect(
+      findingsList().getByRole('option', { name: /6\. Limitation of Liability/ }),
+    ).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('does not show decision state until the server state it comes from has loaded', async () => {
+    // No human-review state is available, so the list names the issue but claims no decision state.
     renderWorkspace()
 
-    const clauseRow = await screen.findByRole('button', {
+    const clauseRow = await (await findFindingsList()).findByRole('option', {
       name: /6\. Limitation of Liability/,
     })
     expect(clauseRow).toHaveTextContent('Liability cap deviation')
-    expect(clauseRow).toHaveTextContent('High')
-    expect(clauseRow).toHaveTextContent('Review required')
-
-    expect(
-      screen.getByRole('button', { name: /Missing: Limitation of liability/ }),
-    ).toHaveTextContent('Missing required provision')
-
-    await userEvent.click(clauseRow)
-
-    expect(
-      await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' }),
-    ).toBeInTheDocument()
-  })
-
-  it('maps filters to real API query parameters', async () => {
-    const { api, router } = renderWorkspace('/reviews/c1/analysis/r-1', {
-      findingsResponse: (url) => {
-        const both =
-          url.includes('severity=HIGH') && url.includes('classification=BLOCKING')
-        return jsonResponse(
-          envelope(
-            both
-              ? { items: [fixtureAbsenceFindingSummary], truncated: false }
-              : fixtureFindingList,
-          ),
-        )
-      },
-    })
-
-    expect(await screen.findByRole('button', { name: /Missing: Limitation/ })).toBeInTheDocument()
-
-    await userEvent.selectOptions(screen.getByLabelText('Severity'), 'HIGH')
-    await userEvent.selectOptions(screen.getByLabelText('Classification'), 'BLOCKING')
-
-    await waitFor(() =>
-      expect(router.state.location.search).toContain('severity=HIGH'),
-    )
-    await waitFor(() =>
-      expect(router.state.location.search).toContain('classification=BLOCKING'),
-    )
-    await waitFor(() =>
-      expect(screen.queryByRole('button', { name: /Liability cap deviation/ })).not.toBeInTheDocument(),
-    )
-
-    const listCalls = api.requests.filter((request) => request.url.includes('/findings?'))
-    const lastCall = listCalls[listCalls.length - 1]
-    const params = new URL(lastCall.url).searchParams
-    expect(params.get('severity')).toBe('HIGH')
-    expect(params.get('classification')).toBe('BLOCKING')
-    expect(params.get('limit')).toBe('100')
+    expect(clauseRow).not.toHaveTextContent(/Needs decision|Accepted|Rejected|Escalated|Informational/)
   })
 
   it('keeps two findings on the same clause distinct', async () => {
@@ -179,10 +196,31 @@ describe('findings list', () => {
       },
     })
 
-    const rows = await screen.findAllByRole('button', { name: /6\. Limitation of Liability/ })
+    const rows = await (await findFindingsList()).findAllByRole('option', { name: /6\. Limitation of Liability/ })
     expect(rows).toHaveLength(2)
     expect(rows[0]).toHaveTextContent('Liability cap deviation')
     expect(rows[1]).toHaveTextContent('Liability cap uncertainty')
+  })
+
+  it('requests the review findings with a fixed limit and never forwards URL filters', async () => {
+    // Severity, classification and concept filters no longer exist in the workspace. A stale link
+    // carrying them must not reach the API.
+    const { api } = renderWorkspace(
+      '/reviews/c1/analysis/r-1?severity=HIGH&classification=BLOCKING&concept=CONFIDENTIALITY',
+    )
+
+    await (await findFindingsList()).findByRole('option', { name: /6\. Limitation of Liability/ })
+    const listCalls = api.requests.filter((request) => request.url.includes('/findings?'))
+    expect(listCalls.length).toBeGreaterThan(0)
+    for (const call of listCalls) {
+      const params = new URL(call.url).searchParams
+      expect(params.get('limit')).toBe('100')
+      expect(params.has('severity')).toBe(false)
+      expect(params.has('classification')).toBe(false)
+      expect(params.has('concept')).toBe(false)
+    }
+    expect(screen.queryByLabelText('Severity')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Classification')).not.toBeInTheDocument()
   })
 
   it('does not request findings until the review is terminal', async () => {
@@ -196,27 +234,6 @@ describe('findings list', () => {
     expect(api.requests.filter((request) => request.url.includes('/findings'))).toHaveLength(0)
   })
 
-  it('clears the selected finding when filters change', async () => {
-    const { router } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-2')
-    expect(await screen.findByRole('heading', { name: 'Missing provision' })).toBeInTheDocument()
-
-    await userEvent.selectOptions(screen.getByLabelText('Severity'), 'HIGH')
-
-    await waitFor(() => expect(router.state.location.search).toContain('severity=HIGH'))
-    expect(router.state.location.search).not.toContain('finding=')
-    expect(
-      await screen.findByText(/Select a finding to see its observation/),
-    ).toBeInTheDocument()
-  })
-
-  it('ignores filter values the API cannot express', async () => {
-    const { api } = renderWorkspace('/reviews/c1/analysis/r-1?severity=BOGUS')
-
-    expect(await screen.findByLabelText('Severity')).toHaveValue('')
-    const listCalls = api.requests.filter((request) => request.url.includes('/findings?'))
-    expect(listCalls[0].url).not.toContain('severity=')
-  })
-
   it('renders a safe error state when findings cannot be loaded', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1', { findingsStatus: 500 })
 
@@ -226,7 +243,11 @@ describe('findings list', () => {
   })
 
   it('renders a safe error state when analysis detail cannot be loaded', async () => {
-    renderWorkspace('/reviews/c1/analysis/r-1', { reviewProgressStatus: 500 })
+    // The analysis lifecycle panel sits in the centre column for a review that is not COMPLETED.
+    renderWorkspace('/reviews/c1/analysis/r-1', {
+      reviewSummary: fixtureFailedReviewSummary,
+      reviewProgressStatus: 500,
+    })
 
     await userEvent.click(await screen.findByText('Analysis detail'))
     expect(await screen.findByText('Analysis detail is unavailable.')).toBeInTheDocument()
@@ -237,10 +258,13 @@ describe('findings list', () => {
       reviewSummary: { ...fixtureCompletedReviewSummary, status: 'CANCELLED' },
     })
 
-    expect(
-      await screen.findByText(/does not recognise\. Findings below are the latest persisted/),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/does not recognise/)).toBeInTheDocument()
+    await (await findFindingsList()).findByRole('option', { name: /6\. Limitation of Liability/ })
     expect(api.requests.filter((request) => request.url.includes('/findings?'))).toHaveLength(1)
+    // No decision controls are offered for a review the server has not reported as COMPLETED.
+    expect(
+      within(detailPane()).getByText('Decisions open when the automated analysis completes.'),
+    ).toBeInTheDocument()
   })
 })
 
@@ -248,38 +272,77 @@ describe('finding detail', () => {
   it('separates observation, policy basis and recommendation with approved language', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
-    expect(await screen.findByRole('heading', { name: 'Observation' })).toBeInTheDocument()
-    expect(
-      screen.getByText(/liability cap above the organization’s preferred position/),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Why' })).toBeInTheDocument()
-    expect(screen.getByText('Policy basis')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Recommended action' })).toBeInTheDocument()
+    await findDetailTitle('6. Limitation of Liability')
+    const found = section('Rivell found')
+    expect(found).toHaveTextContent(/liability cap above the organization’s preferred position/)
+    expect(found).toHaveTextContent('Liability cap above the preferred position')
+    expect(found).toHaveTextContent(
+      'Policy basis: Published policy prefers a cap of two times the fees paid over a twelve-month period.',
+    )
+    expect(found).toHaveTextContent(
+      'Recommendation: Use the approved fallback wording. Replace the clause with the approved fallback wording for the liability cap.',
+    )
 
-    expect(
-      screen.getByRole('heading', { level: 3, name: 'Approved language' }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Approved')).toBeInTheDocument()
-    expect(
-      screen.getByText(/two times the fees paid in the twelve months/),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('AI-proposed language')).not.toBeInTheDocument()
-    expect(screen.queryByText(/Accept|Reject|Escalate|Resolved/)).not.toBeInTheDocument()
+    // The proposed wording is labelled with where it came from.
+    const proposed = section('Proposed language')
+    expect(proposed).toHaveTextContent(/two times the fees paid in the twelve months/)
+    expect(proposed).toHaveTextContent('Approved organizational drafting')
+    expect(proposed).toHaveTextContent('Publication 2')
+    expect(within(detailPane()).queryByText('Machine-proposed')).not.toBeInTheDocument()
+
+    // The policy position is shown on its own, apart from what Rivell concluded, under the
+    // truthful heading: the frozen policy evidence, not a single authored "your position".
+    expect(within(detailPane()).queryByText('Against your position')).not.toBeInTheDocument()
+    const position = section('Policy position')
+    const cell = (label: string) => within(position).getByRole('group', { name: label })
+    expect(cell('Contract')).toHaveTextContent('3×')
+    expect(cell('Contract')).toHaveTextContent('Liability cap')
+    expect(cell('Contract')).toHaveTextContent('Preceding 12-month fees')
+    expect(cell('Preferred')).toHaveTextContent('Liability must be capped at fees paid in the preceding 12 months.')
+    expect(cell('Fallback')).toHaveTextContent('Liability must be capped at fees paid in the preceding 12 months.')
+    expect(position).toHaveTextContent('Escalate: Uncapped liability or consequential damages')
   })
 
-  it('synchronizes a clause finding with its exact contract source', async () => {
+  it('shows the exact clause text under "In the contract" and in the document', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
-    expect(await screen.findByRole('heading', { name: 'Contract clause' })).toBeInTheDocument()
-    const source = screen.getByRole('article', { name: 'Contract clause source' })
+    await findDetailTitle('6. Limitation of Liability')
+    // The clause is its heading and the top-level passages after it, up to the next heading.
+    await waitFor(() =>
+      expect(section('In the contract')).toHaveTextContent(
+        '6.3 The exclusions in Section 6.2 do not apply to breaches of Section 8.',
+      ),
+    )
+    const source = section('In the contract')
     expect(source).toHaveTextContent('6. Limitation of Liability')
     expect(source).not.toHaveTextContent('1. Definitions')
     expect(source).not.toHaveTextContent('5. Termination')
     expect(source).not.toHaveTextContent('Schedule A')
-    expect(source).not.toHaveTextContent('6.3 The exclusions')
+    expect(within(source).getByRole('button', { name: 'Show in document' })).toBeInTheDocument()
+
+    // The same clause is marked as selected in the centre document, and only that clause.
+    const selected = contractPane().querySelector('[data-sel="1"]') as HTMLElement
+    expect(selected).not.toBeNull()
+    expect(selected).toHaveTextContent('6. Limitation of Liability')
+    expect(selected).toHaveTextContent('6.3 The exclusions in Section 6.2')
+    expect(selected).not.toHaveTextContent('5. Termination')
+    expect(selected).not.toHaveTextContent('Schedule A')
+    expect(contractPane().querySelectorAll('[data-sel="1"]')).toHaveLength(1)
+  })
+
+  it('says so when the clause text for this version is not available', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      findingDetailResponse: () =>
+        jsonResponse(envelope({ ...fixtureClauseFindingDetail, subjectHeadingNodeId: 'node-missing' })),
+    })
+
+    await findDetailText('Rivell found')
+    expect(section('In the contract')).toHaveTextContent(
+      'The clause text for this version is not available.',
+    )
     expect(
-      screen.getByRole('link', { name: 'View clause in contract' }),
-    ).toHaveAttribute('href', '/reviews/c1?view=document&node=node-6')
+      within(section('In the contract')).queryByRole('button', { name: 'Show in document' }),
+    ).not.toBeInTheDocument()
   })
 
   it('reads the contract version pinned by the review, never the latest version', async () => {
@@ -290,73 +353,38 @@ describe('finding detail', () => {
       },
     })
 
-    expect(await screen.findByRole('heading', { name: 'Contract clause' })).toBeInTheDocument()
+    await findDetailTitle('6. Limitation of Liability')
+    await waitFor(() => expect(section('In the contract')).toHaveTextContent('6.3 The exclusions'))
     const structureCalls = api.requests.filter((request) => request.url.includes('/structure'))
     expect(structureCalls).toHaveLength(1)
     expect(structureCalls[0].url).toContain('/versions/1/structure')
 
     expect(
-      screen.queryByRole('link', { name: 'View clause in contract' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/This review is pinned to v1; the contract's current version is v2/),
+      await screen.findByText(/This review is pinned to v1; the contract.s current version is v2/),
     ).toBeInTheDocument()
   })
 
   it('represents an absence finding without a document location', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-2')
 
-    expect(await screen.findByRole('heading', { name: 'Missing provision' })).toBeInTheDocument()
-    expect(screen.getByText('Required provision missing:')).toBeInTheDocument()
-    expect(screen.getByText(/Presence · Limitation of liability/)).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Contract clause' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /View clause in contract/ })).not.toBeInTheDocument()
-  })
+    await findDetailTitle('Missing: Limitation of liability')
+    const pane = within(detailPane())
+    expect(detailPane()).toHaveTextContent('No location in contract')
+    expect(section('Rivell found')).toHaveTextContent('Required provision missing')
+    expect(section('Rivell found')).toHaveTextContent(
+      'No limitation of liability provision was found in this contract.',
+    )
+    expect(section('In the contract')).toHaveTextContent(
+      'No source passage. This provision appears absent in this contract version.',
+    )
+    expect(pane.queryByRole('button', { name: 'Show in document' })).not.toBeInTheDocument()
+    // No evidence was recorded, so no Sources are listed and no source is invented.
+    expect(pane.queryByText('Sources')).not.toBeInTheDocument()
 
-  it('labels generative language as machine-proposed, never approved', async () => {
-    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-5')
-
-    expect(await screen.findByRole('heading', { name: 'AI-proposed language' })).toBeInTheDocument()
-    expect(screen.getByText('Machine-proposed')).toBeInTheDocument()
-    expect(
-      screen.getByText(/It is not approved organizational language/),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('Approved')).not.toBeInTheDocument()
-  })
-
-  it('keeps policy-missing findings honest about absent policy', async () => {
-    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-3')
-
-    expect(
-      await screen.findByText(/No organizational policy covers this clause/),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/does not establish policy\./),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Approved language' })).not.toBeInTheDocument()
-  })
-
-  it('preserves policy ambiguity without selecting a winner', async () => {
-    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-4')
-
-    expect(
-      await screen.findByText(/Rivell did not choose between them/),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/More than one published policy applies/)).toBeInTheDocument()
-  })
-
-  it('renders uncertainty factors without a confidence percentage', async () => {
-    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-3')
-
-    expect(await screen.findByRole('heading', { name: 'System assessment' })).toBeInTheDocument()
-    expect(screen.getByText('Policy evidence missing')).toBeInTheDocument()
-    expect(screen.queryByText(/%/)).not.toBeInTheDocument()
-  })
-
-  it('shows a safe state when the selected finding cannot be loaded', async () => {
-    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', { findingDetailStatus: 404 })
-
-    expect(await screen.findByText('This finding could not be loaded.')).toBeInTheDocument()
+    // In the centre, the absent provision is a card, not a place in the text.
+    expect(contractPane()).toHaveTextContent('Expected provision not found: Limitation of liability')
+    expect(contractPane().querySelectorAll('[data-sel="1"]')).toHaveLength(1)
+    expect(contractPane().querySelector('[data-sel="1"]')).toHaveTextContent('Expected provision not found')
   })
 
   it('never fabricates a clause source for an absence finding with a stale node id', async () => {
@@ -367,21 +395,91 @@ describe('finding detail', () => {
         ),
     })
 
-    expect(await screen.findByRole('heading', { name: 'Missing provision' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Contract clause' })).not.toBeInTheDocument()
+    await findDetailTitle('Missing: Limitation of liability')
+    await waitFor(() =>
+      expect(section('In the contract')).toHaveTextContent('No source passage.'),
+    )
+    expect(section('In the contract')).not.toHaveTextContent('6.3 The exclusions')
     expect(
-      screen.queryByRole('link', { name: 'View clause in contract' }),
+      within(detailPane()).queryByRole('button', { name: 'Show in document' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('labels generative language as machine-proposed, never approved', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-5')
+
+    await findDetailText('Proposed language')
+    const proposed = section('Proposed language')
+    expect(proposed).toHaveTextContent(/Neither party’s aggregate liability/)
+    expect(proposed).toHaveTextContent('Machine-proposed')
+    expect(proposed).toHaveTextContent(/not approved organizational language/)
+    expect(within(detailPane()).queryByText('Approved organizational drafting')).not.toBeInTheDocument()
+    expect(section('Rivell found')).toHaveTextContent('AI-proposed explanation:')
+  })
+
+  it('keeps policy-missing findings honest about absent policy', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-3')
+
+    await findDetailText('Rivell found')
+    expect(section('Rivell found')).toHaveTextContent(
+      /No organizational policy covers this clause.*does not establish policy\./,
+    )
+    // There is no policy to put against the contract, and no wording to propose. The contract has
+    // typed facts, but a lone contract slot is not a policy position, so the section is not drawn.
+    expect(within(detailPane()).queryByText('Policy position')).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByRole('group', { name: 'Preferred' })).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByRole('group', { name: 'Fallback' })).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByText('Proposed language')).not.toBeInTheDocument()
+  })
+
+  it('preserves policy ambiguity without selecting a winner', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-4')
+
+    await findDetailText('Rivell found')
+    const found = section('Rivell found')
+    expect(found).toHaveTextContent(/Rivell did not choose between them/)
+    expect(found).toHaveTextContent(/More than one published policy applies/)
+    expect(found).toHaveTextContent('The applicable policies disagree; no rule was chosen.')
+    // Both policies stay reachable, told apart by number, so neither is presented as the answer.
+    expect(within(found).getByRole('button', { name: 'Policy 1' })).toBeInTheDocument()
+    expect(within(found).getByRole('button', { name: 'Policy 2' })).toBeInTheDocument()
+    // Every cited item that holds a role is kept: nothing is dropped to the first.
+    const position = section('Policy position')
+    expect(within(within(position).getByRole('group', { name: 'Preferred' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
+    expect(within(within(position).getByRole('group', { name: 'Fallback' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
+    expect(within(position).getAllByText(/Escalate: Uncapped liability/)).toHaveLength(2)
+    // The source of each one stays reachable.
+    expect(within(position).getAllByRole('button', { name: /Open source: Policy, publication 2/ }).length).toBeGreaterThanOrEqual(4)
+    // No contract slot was sent, so there is no Contract cell.
+    expect(within(position).queryByRole('group', { name: 'Contract' })).not.toBeInTheDocument()
+  })
+
+  it('renders uncertainty factors without a confidence percentage', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-3')
+
+    await findDetailText('Rivell found')
+    expect(section('Sources')).toHaveTextContent('Policy evidence missing')
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument()
+  })
+
+  it('shows a safe state when the selected finding cannot be loaded', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', { findingDetailStatus: 404 })
+
+    expect(await screen.findByText('This finding could not be loaded.')).toBeInTheDocument()
   })
 
   it('renders a cross-clause finding without faking counterpart navigation', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-6')
 
+    await findDetailText('Rivell found')
+    expect(section('Rivell found')).toHaveTextContent(/not covered by a survival provision/)
+    expect(section('In the contract')).toHaveTextContent('6. Limitation of Liability')
     expect(
-      await screen.findByText(/not covered by a survival provision/),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Contract clause' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /related|corresponding|counterpart/i })).not.toBeInTheDocument()
+      within(detailPane()).queryByRole('button', { name: /related|corresponding|counterpart/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(detailPane()).queryByRole('link', { name: /related|corresponding|counterpart/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('does not claim approved language when the drafting evidence id is absent', async () => {
@@ -392,42 +490,116 @@ describe('finding detail', () => {
         ),
     })
 
-    expect(await screen.findByRole('heading', { name: 'Observation' })).toBeInTheDocument()
+    await findDetailText('Rivell found')
     expect(
-      screen.queryByRole('heading', { level: 3, name: 'Approved language' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByText(/two times the fees paid in the twelve months/),
+      within(detailPane()).queryByText('Approved organizational drafting'),
     ).not.toBeInTheDocument()
   })
 })
 
 describe('finding evidence amendment', () => {
-  it('groups resolved evidence by authority and links claims to exact items', async () => {
+  it('lists the evidence as Sources, and opens each claim reference on the exact item', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
-    expect(await screen.findByRole('heading', { name: 'Evidence' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Policy' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Approved drafting' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Current contract' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Precedent' })).toBeInTheDocument()
+    await findDetailTitle('6. Limitation of Liability')
+    const sources = section('Sources')
+    // At most three sources are shown; the rest are one click away.
+    expect(within(sources).getByRole('button', { name: /^Policy/ })).toHaveTextContent(
+      'Liability must be capped at fees paid',
+    )
+    expect(within(sources).getByRole('button', { name: /^Approved drafting/ })).toBeInTheDocument()
+    expect(within(sources).getByRole('button', { name: /^Current contract/ })).toHaveTextContent(
+      '6. Limitation of Liability',
+    )
+    expect(within(sources).queryByRole('button', { name: /^Precedent/ })).not.toBeInTheDocument()
+    await userEvent.click(within(sources).getByRole('button', { name: 'Show all 4 sources' }))
+    expect(within(sources).getByRole('button', { name: /^Precedent/ })).toBeInTheDocument()
+    expect(within(sources).getByRole('button', { name: 'Show fewer sources' })).toBeInTheDocument()
 
-    expect(document.getElementById('finding-evidence-e-contract')).not.toBeNull()
-    expect(document.getElementById('finding-evidence-e-drafting')).not.toBeNull()
+    // A claim names the evidence it rests on, and the reference opens exactly that item.
+    const found = section('Rivell found')
+    await userEvent.click(within(found).getByRole('button', { name: 'Policy' }))
+    const sheet = screen.getByRole('dialog', { name: 'Source' })
+    expect(sheet).toHaveTextContent('Liability must be capped at fees paid in the preceding 12 months.')
+    expect(sheet).not.toHaveTextContent('The aggregate liability of each party shall not exceed')
 
-    expect(document.querySelectorAll('a[href="#finding-evidence-e-policy"]').length).toBeGreaterThan(0)
-    expect(document.querySelectorAll('a[href="#finding-evidence-e-drafting"]').length).toBeGreaterThan(0)
+    await userEvent.click(within(found).getByRole('button', { name: 'Approved drafting' }))
+    const drafting = screen.getByRole('dialog', { name: 'Source' })
+    expect(drafting).toHaveTextContent(
+      'The aggregate liability of each party shall not exceed the fees paid in the twelve months preceding the claim.',
+    )
+    expect(drafting).not.toHaveTextContent('Liability must be capped at fees paid')
   })
 
-  it('navigates cross-clause counterparts from backend-provided source identity', async () => {
-    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-6')
+  it('opens a Source row as the full evidence card the analysis recorded', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
-    expect(await screen.findByRole('heading', { name: 'Related provisions' })).toBeInTheDocument()
-    const counterpart = document.querySelector(
-      'a[href="/reviews/c1?view=document&node=node-5"]',
+    await findDetailTitle('6. Limitation of Liability')
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Policy/ }))
+
+    const sheet = screen.getByRole('dialog', { name: 'Source' })
+    const card = within(sheet).getByRole('article')
+    expect(card).toHaveTextContent('Policy')
+    // The full card carries what a one-line row cannot: positions, approval and escalation.
+    expect(card).toHaveTextContent('Approval required')
+    expect(card).toHaveTextContent('Uncapped liability or consequential damages')
+  })
+
+  it('tells several sources of one authority apart by number', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-4')
+
+    await findDetailText('Rivell found')
+    const found = section('Rivell found')
+    await userEvent.click(within(found).getByRole('button', { name: 'Policy 2' }))
+    expect(screen.getByRole('dialog', { name: 'Source' })).toHaveTextContent(
+      'Liability must be capped at fees paid',
     )
-    expect(counterpart).not.toBeNull()
-    expect(document.querySelector('a[href*="node-63"]')).toBeNull()
+  })
+
+  it('opens a related clause from the source identity the backend recorded', async () => {
+    const { router } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-6')
+
+    await findDetailText('Sources')
+    // Two current-contract sources: the clause itself and the related one (cl5 -> node-5).
+    const rows = within(section('Sources')).getAllByRole('button', { name: /^Current contract/ })
+    expect(rows).toHaveLength(2)
+    await userEvent.click(rows[1])
+
+    const sheet = screen.getByRole('dialog', { name: 'Source' })
+    expect(sheet).toHaveTextContent('3. Fees. Fees are invoiced monthly and payable within 30 days.')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Open clause semantics' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c1'))
+    const search = new URLSearchParams(router.state.location.search)
+    expect(search.get('view')).toBe('semantics')
+    expect(search.get('clause')).toBe('node-5')
+    expect(router.state.location.search).not.toContain('node-63')
+  })
+
+  it('opens a source region in the contract document when the review is on the current version', async () => {
+    const { router } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    await findDetailTitle('6. Limitation of Liability')
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Current contract/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Source' })
+    await userEvent.click(within(sheet).getByRole('button', { name: '6. Limitation of Liability' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c1'))
+    expect(router.state.location.search).toBe('?view=document&node=node-6')
+  })
+
+  it('offers no deep link into the document when the review is pinned to an older version', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      contractSummary: {
+        ...fixtureContractSummary,
+        latestVersion: { ...fixtureContractSummary.latestVersion, versionNumber: 2 },
+      },
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Current contract/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Source' })
+    expect(within(sheet).queryByText('View in document:')).not.toBeInTheDocument()
   })
 
   it('fails safely when a claim references evidence missing from the response', async () => {
@@ -443,11 +615,24 @@ describe('finding evidence amendment', () => {
         ),
     })
 
-    expect(
-      await screen.findByText(/not available in this response; they are not shown as grounded/),
-    ).toBeInTheDocument()
-    expect(screen.getByText('unavailable in this response')).toBeInTheDocument()
-    expect(document.querySelector('a[href="#finding-evidence-e-missing"]')).toBeNull()
+    await findDetailText('Rivell found')
+    const found = section('Rivell found')
+    expect(found).toHaveTextContent(
+      /Some statements cite evidence this response does not include\. They are not shown as grounded\./,
+    )
+    expect(found).toHaveTextContent('unavailable in this response')
+    // The missing reference is text, never a button that opens something else.
+    expect(within(found).queryByRole('button', { name: /missing/i })).not.toBeInTheDocument()
+    // References the response does hold remain usable.
+    expect(within(found).getByRole('button', { name: 'Approved drafting' })).toBeInTheDocument()
+  })
+
+  it('shows no missing-evidence warning when every claim reference resolves', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    await findDetailText('Rivell found')
+    expect(within(detailPane()).queryByText(/cite evidence this response does not include/)).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByText('unavailable in this response')).not.toBeInTheDocument()
   })
 
   it('does not claim approved language when the drafting evidence is unresolvable', async () => {
@@ -461,9 +646,9 @@ describe('finding evidence amendment', () => {
         ),
     })
 
-    expect(await screen.findByRole('heading', { name: 'Observation' })).toBeInTheDocument()
+    await findDetailText('Rivell found')
     expect(
-      screen.queryByRole('heading', { level: 3, name: 'Approved language' }),
+      within(detailPane()).queryByText('Approved organizational drafting'),
     ).not.toBeInTheDocument()
   })
 
@@ -485,8 +670,10 @@ describe('finding evidence amendment', () => {
       findings: { items: [], truncated: false },
     })
 
+    // The centre column carries the limitation as a note; the navigator reports what was recorded.
+    expect(await screen.findByText(/Review coverage is limited for:/)).toBeInTheDocument()
     expect(
-      await screen.findByText(/No findings were recorded, but review coverage is limited/),
+      await screen.findByText(/No findings\. The automated review recorded none/),
     ).toBeInTheDocument()
     expect(
       screen.queryByText('Every planned check completed without findings.'),
@@ -495,10 +682,13 @@ describe('finding evidence amendment', () => {
 
   it('says the pack context is unavailable when the snapshot is missing', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1', {
-      reviewSummary: { ...fixtureQueuedReviewSummary, snapshot: null },
+      reviewSummary: { ...fixtureCompletedReviewSummary, snapshot: null },
     })
 
-    const heading = await screen.findByText('Contract pack')
+    // The frozen context lives in the Review notes sheet.
+    await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
+    const sheet = screen.getByRole('dialog', { name: 'Review notes' })
+    const heading = within(sheet).getByText('Contract pack')
     const row = heading.closest('.data-list__row') as HTMLElement
     expect(within(row).getByText('Pack context unavailable')).toBeInTheDocument()
   })
@@ -506,7 +696,11 @@ describe('finding evidence amendment', () => {
   it('uses only resolved evidence and never rebuilds retrieval', async () => {
     const { api } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
-    await screen.findByRole('heading', { name: 'Evidence' })
+    await findDetailTitle('6. Limitation of Liability')
+    // Opening a source reads the evidence already in the finding. It requests nothing.
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Policy/ }))
+    expect(screen.getByRole('dialog', { name: 'Source' })).toHaveTextContent('Liability must be capped')
+
     expect(api.requests.filter((request) => request.url.includes('/api/retrieval/'))).toHaveLength(0)
     expect(
       api.requests.filter(
@@ -528,7 +722,9 @@ describe('finding evidence amendment', () => {
       },
     })
 
-    const heading = await screen.findByText('Review state')
+    await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
+    const sheet = screen.getByRole('dialog', { name: 'Review notes' })
+    const heading = within(sheet).getByText('Review state')
     const context = heading.closest('dl') as HTMLElement
     expect(within(context).getByText('United Kingdom')).toBeInTheDocument()
     expect(within(context).getByText('Customer')).toBeInTheDocument()
@@ -550,14 +746,16 @@ describe('finding evidence amendment', () => {
       findings: { items: [], truncated: false },
     })
 
-    expect(await screen.findByRole('heading', { name: 'Review coverage' })).toBeInTheDocument()
-    expect(screen.getByText('Reviewed as a primary clause')).toBeInTheDocument()
-    expect(screen.getByText('Detected as a secondary mention only')).toBeInTheDocument()
-    expect(screen.getByText('Not found in the contract')).toBeInTheDocument()
-    expect(screen.getByText('Coverage not established')).toBeInTheDocument()
-    expect(screen.getByText(/Review coverage is limited for:/)).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
+    const sheet = within(screen.getByRole('dialog', { name: 'Review notes' }))
+    expect(await sheet.findByRole('heading', { name: 'Review coverage' })).toBeInTheDocument()
+    expect(sheet.getByText('Reviewed as a primary clause')).toBeInTheDocument()
+    expect(sheet.getByText('Detected as a secondary mention only')).toBeInTheDocument()
+    expect(sheet.getByText('Not found in the contract')).toBeInTheDocument()
+    expect(sheet.getByText('Coverage not established')).toBeInTheDocument()
+    expect(sheet.getByText(/Review coverage is limited for:/)).toBeInTheDocument()
     expect(
-      await screen.findByText(/recorded no findings, but review coverage is limited/),
+      await screen.findByText(/No findings\. The automated review recorded none/),
     ).toBeInTheDocument()
     expect(api.requests.filter((r) => r.url.includes('/findings?')).length).toBeGreaterThan(0)
   })
@@ -567,53 +765,40 @@ describe('review workspace authority and network guards', () => {
   it('reads persisted state only: no create, no evidence, no trace requests on load', async () => {
     const { api } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
-    await screen.findByRole('heading', { name: 'Observation' })
+    await findDetailTitle('6. Limitation of Liability')
 
     expect(api.requests.filter((request) => request.method === 'POST')).toHaveLength(0)
     expect(api.requests.filter((request) => request.url.includes('/retrieval/'))).toHaveLength(0)
   })
 
-  it('introduces no human-decision or provider vocabulary', async () => {
-    stubContractApi({
-      reviewSummary: fixtureCompletedReviewSummary,
-      findings: fixtureFindingList,
-      findingDetailResponse: () => jsonResponse(envelope(fixtureClauseFindingDetail)),
-    })
-    const first = render(
-      <AppProviders>
-        <RouterProvider
-          router={createMemoryRouter(appRoutes, {
-            initialEntries: ['/reviews/c1/analysis/r-1?finding=f-1'],
-          })}
-        />
-      </AppProviders>,
-    )
-    await screen.findByRole('heading', { level: 3, name: 'Approved language' })
-    const approvedText = document.body.textContent ?? ''
-    expect(approvedText).toMatch(/Approved language/)
-    expect(approvedText).not.toMatch(/ApprovedChange|Mark as approved|Resolved/)
-    expect(approvedText).not.toMatch(/\bJev\b|OpenAI|OpenRouter|embedding|rerank/i)
-    expect(
-      screen.queryByRole('button', { name: /Accept|Reject|Approve|Escalate|Resolve/i }),
-    ).not.toBeInTheDocument()
-    first.unmount()
+  it('offers no decision controls and no provider vocabulary without the server workflow state', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
-    stubContractApi({
-      reviewSummary: fixtureCompletedReviewSummary,
-      findings: findingsForThisReview,
-      findingDetailResponse: () => jsonResponse(envelope(fixtureGenerativeFindingDetail)),
-    })
-    render(
-      <AppProviders>
-        <RouterProvider
-          router={createMemoryRouter(appRoutes, {
-            initialEntries: ['/reviews/c1/analysis/r-1?finding=f-5'],
-          })}
-        />
-      </AppProviders>,
-    )
-    await screen.findByRole('heading', { level: 3, name: 'AI-proposed language' })
-    const generativeText = document.body.textContent ?? ''
-    expect(generativeText).not.toMatch(/Approved language/)
+    await findDetailTitle('6. Limitation of Liability')
+    expect(
+      within(detailPane()).getByText(
+        'Decision controls are unavailable until the review workflow state is available.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(detailPane()).queryByRole('button', { name: /^(Accept|Edit|Reject|Escalate)$/ }),
+    ).not.toBeInTheDocument()
+
+    const text = document.body.textContent ?? ''
+    expect(text).toMatch(/Approved organizational drafting/)
+    expect(text).not.toMatch(/ApprovedChange|Mark as approved/)
+    expect(text).not.toMatch(/\bJev\b|OpenAI|OpenRouter|embedding|rerank/i)
+    // Progress and finalize readiness are the server's. With no human review they are not drawn.
+    expect(screen.queryByText(/ of \d+ resolved/)).not.toBeInTheDocument()
+  })
+
+  it('does not call machine-proposed language approved', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-5')
+
+    await findDetailText('Proposed language')
+    const text = document.body.textContent ?? ''
+    expect(text).toMatch(/Machine-proposed/)
+    expect(text).not.toMatch(/Approved organizational drafting/)
+    expect(text).not.toMatch(/\bJev\b|OpenAI|OpenRouter|embedding|rerank/i)
   })
 })

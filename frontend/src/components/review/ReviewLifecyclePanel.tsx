@@ -12,7 +12,7 @@ import {
 } from '../../lib/reviews'
 import { LoadingState } from '../LoadingState'
 
-function AnalysisWarnings({
+export function AnalysisWarnings({
   summary,
 }: {
   summary: Pick<ReviewSummary, 'analysisWarnings' | 'analysisWarningsTruncated'>

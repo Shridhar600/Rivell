@@ -1,0 +1,414 @@
+import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
+import type { EvidenceItem } from '../../api/retrieval'
+import type { FindingClaim, FindingDetail } from '../../api/reviews'
+import type { HumanDecision } from '../../api/workflow'
+import { conceptLabel } from '../../lib/contractSemantics'
+import { authorityLabel } from '../../lib/evidence'
+import {
+  absenceClaims,
+  claimKindLabel,
+  classificationLabel,
+  findingSubjectLabel,
+  issueFamilyLabel,
+  observationKindLabel,
+  policyNoteText,
+  proposedActionLabel,
+  qualityFactorRows,
+  recommendationClaims,
+  whyClaims,
+} from '../../lib/reviews'
+import { dateTime } from '../../lib/dates'
+import { policyPositionView } from '../../lib/positionComparison'
+import { findingState, isWordingGrounded, languageAuthority, proposedChangeType } from '../../lib/workspace'
+import { Button } from '../ui/Button'
+import { BookIcon, ChevronIcon } from '../ui/Icon'
+import { ErrorState, LoadingState } from '../ui/State'
+import { DecisionComposer } from './DecisionComposer'
+import { PolicyPosition } from './PolicyPosition'
+import type { DecisionFlow } from './useDecisionFlow'
+import { CheckIcon, EditIcon, EscalateIcon, CloseIcon, LockIcon } from './WorkspaceIcons'
+
+const SOURCES_SHOWN = 3
+
+/** Where focus lands after Finalize, so it is not lost when the Finalize button becomes disabled. */
+export const SUMMARY_LINK_ID = 'rv-ws-summary-link'
+
+interface Props {
+  finding: FindingDetail | undefined
+  hasSelection: boolean
+  isPending: boolean
+  isError: boolean
+  onRetry: () => void
+  position: { index: number; total: number } | null
+  context: string | null
+  regionLabels: Map<string, string>
+  /** The clause as received, from the pinned contract structure. */
+  currentText: string | null
+  decision: HumanDecision | null
+  decisionsLoaded: boolean
+  decisionsTruncated: boolean
+  /** Whether the server's workflow state is available, so a decision can be recorded at all. */
+  canDecide: boolean
+  analysisComplete: boolean
+  isFinalized: boolean
+  /** Size of the frozen approved change set, once it has loaded. */
+  frozenChanges: number | null
+  flow: DecisionFlow
+  onShowInDocument: () => void
+  onOpenSource: (evidenceId: string) => void
+  onOpenHistory: () => void
+  /** The review summary, where the frozen change set and its redline are handled. */
+  summaryPath: string
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`
+}
+
+/** Each statement lists the evidence it rests on. A reference the response lacks is said so. */
+function ClaimEvidence({ claim, items, onOpen }: { claim: FindingClaim; items: Map<string, EvidenceItem>; onOpen: (id: string) => void }) {
+  if (claim.evidenceItemIds.length === 0) return null
+  return (
+    <>
+      {' '}
+      <span className="rv-ws-refs">
+        Evidence:{' '}
+        {claim.evidenceItemIds.map((id, index) => {
+          const item = items.get(id)
+          // Several items of one authority are told apart by their place in the finding's evidence.
+          const same = item ? [...items.values()].filter((other) => other.authorityClass === item.authorityClass) : []
+          const label = item
+            ? `${authorityLabel(item.authorityClass)}${same.length > 1 ? ` ${same.indexOf(item) + 1}` : ''}`
+            : null
+          return (
+            <span key={id}>
+              {index > 0 ? ', ' : ''}
+              {label ? (
+                <button type="button" className="rv-ws-link" onClick={() => onOpen(id)}>
+                  {label}
+                </button>
+              ) : (
+                'unavailable in this response'
+              )}
+            </span>
+          )
+        })}
+      </span>
+    </>
+  )
+}
+
+function sourceRow(item: EvidenceItem, regionLabels: Map<string, string>): { title: string; detail: string } {
+  const region = item.provenanceNodeIds.map((id) => regionLabels.get(id)).find(Boolean)
+  const subject = region ?? (item.legalConcept ? conceptLabel(item.legalConcept) : '')
+  const snippet = item.text.replace(/\s+/g, ' ').trim()
+  return { title: authorityLabel(item.authorityClass), detail: [subject, snippet].filter(Boolean).join(' · ') }
+}
+
+/**
+ * Once finalized, the frozen state stays reachable whatever the selected finding is doing: a
+ * finding that fails to load, or a review with no findings, must not hide it. The Workspace owns
+ * decisions and Finalize. The frozen change set and its redline belong to the review summary.
+ */
+function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'summaryPath'>) {
+  if (!props.isFinalized) return null
+  return (
+    <div className="rv-ws-phase">
+      <div className="rv-ws-phase-head">
+        <LockIcon />
+        <div>
+          <b>Approved changes frozen</b>
+          <p>
+            {props.frozenChanges === null
+              ? 'The approved change set is immutable.'
+              : `${plural(props.frozenChanges, 'executable change', 'executable changes')} in the immutable approved change set.`}
+          </p>
+        </div>
+      </div>
+      <div className="rv-ws-phase-actions">
+        <Link id={SUMMARY_LINK_ID} className="rv-btn rv-btn--primary" to={props.summaryPath}>
+          View review summary
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+export function FindingPanel(props: Props) {
+  const { finding, flow, decision } = props
+  const [showAll, setShowAll] = useState(false)
+
+  // The loading, empty and error states share the host elements of the full panel, and the frozen
+  // card is keyed, so the card is never remounted as the finding arrives.
+  const shell = (content: ReactNode) => (
+    <aside className="rv-ws-pane rv-ws-dt" aria-label="Finding detail">
+      <div key="in" className="rv-ws-dt-in">
+        {content}
+        <FrozenCard key="frozen" {...props} />
+      </div>
+    </aside>
+  )
+  if (!props.hasSelection || (!finding && !props.isPending && !props.isError)) {
+    return shell(<p className="rv-ws-state">Select a finding to see Rivell’s analysis and record your decision.</p>)
+  }
+  if (props.isPending) {
+    return shell(<LoadingState label="Loading finding…" />)
+  }
+  if (props.isError || !finding) {
+    return shell(<ErrorState message="This finding could not be loaded." onRetry={props.onRetry} />)
+  }
+
+  const items = new Map(finding.evidenceItems.map((item) => [item.evidenceId, item]))
+  const why = whyClaims(finding.claims)
+  const recommendations = recommendationClaims(finding.claims)
+  const absences = absenceClaims(finding.claims)
+  const quality = qualityFactorRows(finding.quality)
+  const note = policyNoteText(finding)
+  const position = policyPositionView(finding.positionComparison)
+  const change = proposedChangeType(finding)
+  const grounded = isWordingGrounded(finding)
+  const authority = !grounded ? null : languageAuthority(finding, items.get(finding.approvedDraftingEvidenceId ?? '')?.publicationNumber ?? null)
+  const state = findingState(finding, decision)
+  const sources = showAll ? finding.evidenceItems : finding.evidenceItems.slice(0, SOURCES_SHOWN)
+  const edited = decision?.action === 'EDIT' && decision.approvedLanguage !== finding.proposedLanguage
+  const eligible = flow.acceptEligibility.eligible
+  const reason = flow.acceptEligibility.eligible ? '' : flow.acceptEligibility.reason
+  const missingEvidence = finding.claims.some((claim) => claim.evidenceItemIds.some((id) => !items.has(id)))
+  const title = findingSubjectLabel(finding, props.regionLabels)
+
+  return (
+    <aside className="rv-ws-pane rv-ws-dt" aria-label="Finding detail">
+      <p className="rv-visually-hidden" role="status">
+        {props.position ? `Finding ${props.position.index} of ${props.position.total}: ${title}` : title}
+      </p>
+      <div key="in" className="rv-ws-dt-in">
+        <div className="rv-ws-kicker">
+          <span className={`rv-ws-typ${change ? ` rv-ws-typ--${change}` : ''}`}>
+            {change ?? classificationLabel(finding.reviewClassification)}
+          </span>
+          {finding.subjectKind === 'ABSENCE' ? 'No location in contract' : issueFamilyLabel(finding.issueFamily)}
+          <span className="rv-ws-sp" />
+          {props.position ? `${props.position.index} of ${props.position.total}` : null}
+        </div>
+        <h2>{title}</h2>
+        {props.context ? <div className="rv-ws-ctx">{props.context}</div> : null}
+
+        <div className="rv-ws-sec">
+          <div className="rv-ws-sec-h">Rivell found</div>
+          <div className="rv-ws-machine">
+            <p>
+              {finding.observationText}
+              <br />
+              <span className="rv-ws-authority">{observationKindLabel(finding.observationKind)}</span>
+            </p>
+            {absences.map((claim) => (
+              <p key={claim.ordinal}>
+                {claim.text}
+                <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
+              </p>
+            ))}
+            {why.map((claim) => (
+              <p key={claim.ordinal}>
+                <span className="rv-ws-authority">{claimKindLabel(claim.claimKind)}: </span>
+                {claim.text}
+                <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
+              </p>
+            ))}
+            <p>
+              <b>Recommendation:</b> {proposedActionLabel(finding.proposedAction)}.
+              {recommendations.map((claim) => (
+                <span key={claim.ordinal}>
+                  {' '}
+                  {claim.text}
+                  <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
+                </span>
+              ))}
+            </p>
+            {note ? <p>{note}</p> : null}
+            {missingEvidence ? (
+              <p className="rv-ws-warn">Some statements cite evidence this response does not include. They are not shown as grounded.</p>
+            ) : null}
+          </div>
+        </div>
+
+        {position ? <PolicyPosition view={position} openable={new Set(items.keys())} onOpenSource={props.onOpenSource} /> : null}
+
+        <div className="rv-ws-sec">
+          <div className="rv-ws-sec-h">
+            In the contract
+            {finding.subjectKind === 'CLAUSE' && props.currentText ? (
+              <button type="button" className="rv-ws-link" onClick={props.onShowInDocument}>
+                Show in document
+              </button>
+            ) : null}
+          </div>
+          <div className="rv-ws-incl">
+            {finding.subjectKind === 'ABSENCE'
+              ? 'No source passage. This provision appears absent in this contract version.'
+              : (props.currentText ?? 'The clause text for this version is not available.')}
+          </div>
+        </div>
+
+        {finding.proposedLanguage && grounded ? (
+          <div className="rv-ws-sec">
+            <div className="rv-ws-sec-h">Proposed language</div>
+            <div className="rv-ws-prop">
+              <ins>{finding.proposedLanguage}</ins>
+            </div>
+            {authority ? (
+              <div className="rv-ws-authority">
+                <b>{authority.strong}</b>
+                <span>{authority.rest}</span>
+              </div>
+            ) : null}
+            {edited ? <div className="rv-ws-src">Current human edit differs from the proposed wording.</div> : null}
+          </div>
+        ) : null}
+
+        {finding.evidenceItems.length > 0 ? (
+          <div className="rv-ws-sec">
+            <div className="rv-ws-sec-h">Sources</div>
+            {sources.map((item) => {
+              const row = sourceRow(item, props.regionLabels)
+              return (
+                <button key={item.evidenceId} type="button" className="rv-ws-srow" onClick={() => props.onOpenSource(item.evidenceId)}>
+                  <span className="rv-ws-sico">
+                    <BookIcon className="rv-icon" />
+                  </span>
+                  <span className="rv-ws-stxt">
+                    <b>{row.title}</b>
+                    <small>{row.detail}</small>
+                  </span>
+                  <ChevronIcon className="rv-icon rv-ws-chev-r" />
+                </button>
+              )
+            })}
+            {finding.evidenceItems.length > SOURCES_SHOWN ? (
+              <button type="button" className="rv-ws-link" onClick={() => setShowAll((value) => !value)}>
+                {showAll ? 'Show fewer sources' : `Show all ${finding.evidenceItems.length} sources`}
+              </button>
+            ) : null}
+            {quality.map((row) => (
+              <div key={row} className="rv-ws-caption">
+                {row}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {decision && props.decisionsLoaded ? (
+          <div className="rv-ws-meta">
+            <div className="rv-ws-meta-top">
+              <strong>{state.label}</strong>
+              <small>
+                Revision {decision.revision} · {dateTime(decision.decidedAt) || 'Saved'}
+              </small>
+            </div>
+            {decision.comment ? <p>{decision.comment}</p> : null}
+            <div className="rv-ws-meta-actions">
+              {props.isFinalized ? null : (
+                <button
+                  type="button"
+                  className="rv-ws-link"
+                  onClick={() => document.getElementById('rv-ws-decide')?.scrollIntoView({ block: 'end', behavior: 'smooth' })}
+                >
+                  Change decision
+                </button>
+              )}
+              {decision.revision > 1 ? (
+                <button type="button" className="rv-ws-link" onClick={props.onOpenHistory}>
+                  History ({decision.revision})
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {props.decisionsTruncated ? (
+          <p className="rv-ws-caption">Only the most recent decisions are loaded, so an earlier decision may not be shown.</p>
+        ) : null}
+
+        {flow.compose ? (
+          <DecisionComposer
+            key={`${finding.id}-${flow.compose}`}
+            kind={flow.compose}
+            finding={finding}
+            currentText={props.currentText}
+            initialLanguage={decision?.action === 'EDIT' ? (decision.approvedLanguage ?? '') : ''}
+            isSubmitting={flow.isSubmitting}
+            error={flow.error}
+            onSubmit={flow.submit}
+            onCancel={flow.cancel}
+          />
+        ) : flow.error ? (
+          <p className="rv-ws-error" role="alert">
+            {flow.error}
+          </p>
+        ) : null}
+
+        <FrozenCard key="frozen" {...props} />
+      </div>
+
+      <div className="rv-ws-decide" id="rv-ws-decide">
+        {props.isFinalized ? (
+          <div className="rv-ws-lock">
+            <LockIcon />
+            <div>
+              <b>Decision frozen: {decision ? state.label : 'None'}</b>
+              <div>This review is finalized. Approved changes are immutable.</div>
+            </div>
+          </div>
+        ) : !props.analysisComplete ? (
+          <p className="rv-ws-caption">Decisions open when the automated analysis completes.</p>
+        ) : !props.canDecide || !props.decisionsLoaded ? (
+          <p className="rv-ws-caption">Decision controls are unavailable until the review workflow state is available.</p>
+        ) : flow.readOnly ? (
+          <p className="rv-ws-caption">Decision controls are read-only for this account.</p>
+        ) : (
+          <>
+            <div className="rv-ws-decide-h">
+              <span>Your decision{decision ? `: ${state.label}` : ''}</span>
+              <span>Rivell’s recommendation is kept separately</span>
+            </div>
+            <div className="rv-ws-dbtns">
+              <Button
+                aria-pressed={decision?.action === 'ACCEPT'}
+                disabled={flow.isSubmitting || !eligible}
+                title={eligible ? 'Shortcut A' : reason}
+                onClick={() => flow.decide('ACCEPT')}
+              >
+                <CheckIcon />
+                Accept
+              </Button>
+              <Button aria-pressed={decision?.action === 'EDIT'} disabled={flow.isSubmitting} title="Shortcut E" onClick={() => flow.decide('EDIT')}>
+                <EditIcon />
+                Edit
+              </Button>
+              <Button
+                className="rv-ws-rej"
+                aria-pressed={decision?.action === 'REJECT'}
+                disabled={flow.isSubmitting}
+                title="Shortcut R"
+                onClick={() => flow.decide('REJECT')}
+              >
+                <CloseIcon />
+                Reject
+              </Button>
+              <Button
+                className="rv-ws-esc"
+                aria-pressed={decision?.action === 'ESCALATE'}
+                disabled={flow.isSubmitting}
+                title="Shortcut S"
+                onClick={() => flow.decide('ESCALATE')}
+              >
+                <EscalateIcon />
+                Escalate
+              </Button>
+            </div>
+            {!eligible && !decision ? <div className="rv-ws-caption">Accept unavailable: {reason}</div> : null}
+          </>
+        )}
+      </div>
+    </aside>
+  )
+}

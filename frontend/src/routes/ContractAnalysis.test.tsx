@@ -103,8 +103,11 @@ describe('review creation', () => {
     ])
 
     await screen.findByRole('heading', { name: 'Analysis state' }, { timeout: 5000 })
-    expect(screen.getByRole('heading', { name: 'Master Services Agreement' })).toBeInTheDocument()
-    expect(screen.getByText('Analysis queued')).toBeInTheDocument()
+    // The workspace route renders outside the sidebar shell: the contract title sits in its top bar.
+    expect(
+      within(screen.getByRole('banner')).getByText('Master Services Agreement'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/The review is queued/)).toBeInTheDocument()
   })
 
   it('creates a pack-less review when no pack is selected', async () => {

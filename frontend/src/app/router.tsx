@@ -30,7 +30,6 @@ export const appRoutes = [
         children: [
           { path: 'reviews/:contractId', element: <ContractPage /> },
           { path: 'reviews/:contractId/analysis', element: <ContractAnalysisPage /> },
-          { path: 'reviews/:contractId/analysis/:reviewId', element: <ReviewWorkspacePage /> },
           { path: 'reviews/:contractId/evidence', element: <EvidenceInspectorPage /> },
           { path: 'knowledge', element: <KnowledgePage /> },
           { path: 'knowledge/new', element: <KnowledgeNewPage /> },
@@ -41,6 +40,9 @@ export const appRoutes = [
       },
     ],
   },
+  // The workspace is full-bleed and carries its own top bar, as in the canonical design, so it
+  // renders outside the sidebar shell.
+  { path: '/reviews/:contractId/analysis/:reviewId', element: <ReviewWorkspacePage /> },
 ]
 
 export const router = createBrowserRouter(appRoutes)

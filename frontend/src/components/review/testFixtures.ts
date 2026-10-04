@@ -135,6 +135,40 @@ import {
   fixtureRelatedContractItem,
 } from '../evidence/testFixtures'
 
+const contractPositionSlot = {
+  evidenceItemId: 'e-contract',
+  authorityClass: 'CURRENT_CONTRACT',
+  legalConcept: 'LIMITATION_OF_LIABILITY',
+  facts: fixtureContractItem.contractFacts,
+}
+
+function policyPositionSlot(evidenceItemId: string) {
+  return {
+    evidenceItemId,
+    authorityClass: 'POLICY',
+    legalConcept: 'LIMITATION_OF_LIABILITY',
+    publicationNumber: 2,
+    text: fixturePolicyItem.text,
+  }
+}
+
+function escalationSlot(evidenceItemId: string) {
+  return {
+    evidenceItemId,
+    authorityClass: 'POLICY',
+    publicationNumber: 2,
+    trigger: 'Uncapped liability or consequential damages',
+  }
+}
+
+/** What the server groups from a finding whose one policy item carries both roles and an escalation. */
+export const fixtureFullPositionComparison = {
+  contract: [contractPositionSlot],
+  preferred: [policyPositionSlot('e-policy')],
+  fallback: [policyPositionSlot('e-policy')],
+  escalation: [escalationSlot('e-policy')],
+}
+
 export const fixtureClauseFindingSummary = {
   id: 'f-1',
   subjectKind: 'CLAUSE',
@@ -220,6 +254,7 @@ export const fixtureClauseFindingDetail = {
     fixtureCompatiblePrecedent,
   ],
   evidenceItemIds: ['e-contract', 'e-policy', 'e-drafting', 'e-precedent-1'],
+  positionComparison: fixtureFullPositionComparison,
   signalIds: ['s-1', 's-2', 's-3'],
   absenceBasis: null,
 }
@@ -244,6 +279,7 @@ export const fixtureAbsenceFindingDetail = {
   ],
   evidenceItems: [],
   evidenceItemIds: [],
+  positionComparison: null,
   signalIds: ['s-4'],
   absenceBasis: { planCheckId: 'pc-1', checkKey: 'PRESENCE:LIMITATION_OF_LIABILITY' },
 }
@@ -293,6 +329,8 @@ export const fixturePolicyMissingFindingDetail = {
     { ...fixtureContractItem, sourceClauseId: 'cl6' },
     fixtureCompatiblePrecedent,
   ],
+  // The contract has typed facts, but no policy position exists to compare them with.
+  positionComparison: { contract: [contractPositionSlot], preferred: [], fallback: [], escalation: [] },
 }
 
 export const fixtureAmbiguousPolicyFindingDetail = {
@@ -327,6 +365,13 @@ export const fixtureAmbiguousPolicyFindingDetail = {
     },
   ],
   evidenceItems: [fixturePolicyItem, { ...fixturePolicyItem, evidenceId: 'e-policy-2' }],
+  // Two cited items hold each role. The server keeps both, in evidence order.
+  positionComparison: {
+    contract: [],
+    preferred: [policyPositionSlot('e-policy'), policyPositionSlot('e-policy-2')],
+    fallback: [policyPositionSlot('e-policy'), policyPositionSlot('e-policy-2')],
+    escalation: [escalationSlot('e-policy'), escalationSlot('e-policy-2')],
+  },
 }
 
 export const fixtureGenerativeFindingDetail = {
@@ -404,4 +449,5 @@ export const fixtureCrossClauseFindingDetail = {
     { ...fixtureRelatedContractItem, sourceClauseId: 'cl5', provenanceNodeIds: ['node-63'] },
   ],
   evidenceItemIds: ['e-contract', 'e-related'],
+  positionComparison: { contract: [contractPositionSlot], preferred: [], fallback: [], escalation: [] },
 }

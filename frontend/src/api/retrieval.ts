@@ -87,7 +87,7 @@ export type PolicyFacts = {
   escalationTrigger: string | null
 }
 
-type EvidenceContractFact = {
+export type EvidenceContractFact = {
   factSchema: string
   schemaVersion: number
   values: Record<string, string>
@@ -205,7 +205,7 @@ function parsePolicyFacts(value: unknown, what: string): PolicyFacts | null {
   }
 }
 
-function parseContractFact(value: unknown, what: string): EvidenceContractFact {
+export function parseContractFact(value: unknown, what: string): EvidenceContractFact {
   const fact = asRecord(value, what)
   return {
     factSchema: readString(fact, 'factSchema', what),
