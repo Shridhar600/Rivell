@@ -54,6 +54,20 @@ class RedlineController {
         return ApiResult.ok(apiService.trigger(id));
     }
 
+    @Operation(summary = "Retry the frozen approved change set after a FAILED redline "
+            + "execution")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "403", description = "Missing reviews:redline",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "No FAILED execution to retry, or "
+                    + "the retry failed deterministically (full report via GET)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
+    @PostMapping("/reviews/{id}/redline/retry")
+    ApiResult<RedlineExecutionView> retry(@PathVariable UUID id) {
+        return ApiResult.ok(apiService.retry(id));
+    }
+
     @Operation(summary = "Read the redline execution state and per-change report")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses(@ApiResponse(responseCode = "404",

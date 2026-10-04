@@ -48,6 +48,14 @@ public interface FindingRepository {
 
     int countFindings(UUID organizationId, UUID runId);
 
+    /**
+     * Counts the executable change proposals in one generation. A Finding on an absent
+     * provision proposes an insertion; a Finding on an existing clause proposes a
+     * replacement only when it actually carries replacement wording. Deletion is never a
+     * machine proposal and is reported as zero.
+     */
+    ProposedChangeCounts countProposedChanges(UUID organizationId, UUID runId);
+
     record AbsenceBasis(UUID planCheckId, String checkKey) {
     }
 }

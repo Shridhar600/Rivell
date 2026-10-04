@@ -266,8 +266,13 @@ class JdbcReviewListQuery implements ReviewListQuery {
         // a redline. A failed execution can hold changes that verified individually, so
         // reporting its partial count as a verified total would claim success the domain
         // withheld; an execution with nothing to redline verified nothing at all.
+        //
+        // A review can hold several attempts after a retry, so the newest attempt is the one
+        // reported. Without that, a review whose retry succeeded would still render as failed,
+        // and the map below would reject the duplicate review key outright.
         return jdbcClient.sql("""
-                select e.review_id, e.status, e.outcome, e.completed_at,
+                select distinct on (e.review_id)
+                       e.review_id, e.status, e.outcome, e.completed_at,
                        (a.id is not null) as download_available,
                        case
                            when e.status = 'COMPLETED' and e.outcome = 'REDLINE_GENERATED'
@@ -284,6 +289,7 @@ class JdbcReviewListQuery implements ReviewListQuery {
                  and a.organization_id = e.organization_id
                 where e.organization_id = :organizationId
                   and e.review_id = any(:reviewIds)
+                order by e.review_id, e.attempt_number desc
                 """)
                 .param("organizationId", organizationId)
                 .param("reviewIds", reviewIds.toArray(UUID[]::new))

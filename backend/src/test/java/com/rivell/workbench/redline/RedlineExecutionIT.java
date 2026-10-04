@@ -49,6 +49,7 @@ import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
+import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -697,6 +698,178 @@ class RedlineExecutionIT {
 
         mockMvc.perform(post("/api/reviews/{id}/redline", UUID.randomUUID()))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void retryAppendsANewAttemptAndLeavesThePriorFailureIntact() throws Exception {
+        var fixture = analyzedNdaWithAbsenceFindings();
+        resolveAllActionable(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        driftSemanticsOfPinnedVersion(reviewId);
+
+        var first = redlineExpectingFailure(reviewId);
+        assertThat(first.get("attempt").asInt()).isEqualTo(1);
+        var frozenSet = readApprovedChangeSet(reviewId).toString();
+
+        var retried = retryExpectingFailure(reviewId);
+
+        assertThat(retried.get("attempt").asInt()).isEqualTo(2);
+        assertThat(retried.get("id").asText()).isNotEqualTo(first.get("id").asText());
+        assertThat(retried.get("failureCode").asText()).isEqualTo("APPROVED_SEMANTICS_DRIFT");
+        assertThat(countExecutions(reviewId)).isEqualTo(2);
+
+        // The first attempt is preserved verbatim: a retry must never rewrite a recorded
+        // failure into a success.
+        var attempts = jdbcClient.sql("""
+                select attempt_number, status, failure_code
+                from redline_execution where review_id = :reviewId order by attempt_number
+                """).param("reviewId", reviewId)
+                .query((rs, n) -> rs.getInt("attempt_number") + "|" + rs.getString("status")
+                        + "|" + rs.getString("failure_code")).list();
+        assertThat(attempts).containsExactly(
+                "1|FAILED|APPROVED_SEMANTICS_DRIFT", "2|FAILED|APPROVED_SEMANTICS_DRIFT");
+
+        // The frozen change set is untouched by a retry.
+        assertThat(readApprovedChangeSet(reviewId).toString()).isEqualTo(frozenSet);
+        assertThat(countArtifacts(reviewId)).isZero();
+        assertThat(artifactFiles(reviewId)).isZero();
+        assertThat(readRedline(reviewId).get("attempt").asInt()).isEqualTo(2);
+    }
+
+    @Test
+    void retryNeverPublishesAnArtifactAndDownloadStaysRefused() throws Exception {
+        var fixture = analyzedNdaWithAbsenceFindings();
+        resolveAllActionable(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        driftSemanticsOfPinnedVersion(reviewId);
+        redlineExpectingFailure(reviewId);
+
+        retryExpectingFailure(reviewId);
+
+        assertThat(countArtifacts(reviewId))
+                .as("a failed attempt stores no artifact, so there is nothing to download")
+                .isZero();
+        assertThat(artifactFiles(reviewId)).isZero();
+        mockMvc.perform(get("/api/reviews/{id}/redline/download", reviewId))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void retryIsRefusedWhenTheLatestAttemptSucceeded() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        var done = redline(reviewId);
+        assertThat(done.get("status").asText()).isEqualTo("COMPLETED");
+
+        mockMvc.perform(post("/api/reviews/{id}/redline/retry", reviewId))
+                .andExpect(status().isConflict());
+
+        assertThat(countExecutions(reviewId))
+                .as("a completed redline is not retried, so no second artifact appears")
+                .isEqualTo(1);
+        assertThat(countArtifacts(reviewId)).isEqualTo(1);
+    }
+
+    @Test
+    void retryIsRefusedWhenNoExecutionExistsToRetry() throws Exception {
+        var fixture = analyzedMainCorpus();
+        acceptFallback(fixture);
+        finalize(fixture.review().id());
+
+        mockMvc.perform(post("/api/reviews/{id}/redline/retry", fixture.review().id()))
+                .andExpect(status().isConflict());
+
+        assertThat(countExecutions(fixture.review().id())).isZero();
+    }
+
+    @Test
+    void retryIsRefusedWithoutTheRedlinePermission() throws Exception {
+        var fixture = analyzedNdaWithAbsenceFindings();
+        resolveAllActionable(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        driftSemanticsOfPinnedVersion(reviewId);
+        redlineExpectingFailure(reviewId);
+
+        identityProvider.use(new com.rivell.workbench.organization.UserIdentity(
+                UUID.randomUUID(), organizationId(), Set.of("REVIEWER")));
+
+        mockMvc.perform(post("/api/reviews/{id}/redline/retry", reviewId))
+                .andExpect(status().isForbidden());
+
+        assertThat(countExecutions(reviewId)).isEqualTo(1);
+    }
+
+    @Test
+    void retryIsTenantScoped() throws Exception {
+        var fixture = analyzedNdaWithAbsenceFindings();
+        resolveAllActionable(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        driftSemanticsOfPinnedVersion(reviewId);
+        redlineExpectingFailure(reviewId);
+        var before = countExecutions(reviewId);
+
+        identityProvider.use(new com.rivell.workbench.organization.UserIdentity(
+                UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
+
+        // Same status the ordinary trigger gives when the change set is not visible, so a
+        // review in another organization is indistinguishable from one that does not exist.
+        mockMvc.perform(post("/api/reviews/{id}/redline/retry", reviewId))
+                .andExpect(status().isConflict());
+        assertThat(countExecutions(reviewId))
+                .as("another tenant cannot append an attempt to this review")
+                .isEqualTo(before);
+    }
+
+    @Test
+    void theReviewsListReportsTheLatestAttemptRatherThanFailing() throws Exception {
+        var fixture = analyzedNdaWithAbsenceFindings();
+        resolveAllActionable(fixture);
+        finalize(fixture.review().id());
+        var reviewId = fixture.review().id();
+        driftSemanticsOfPinnedVersion(reviewId);
+        redlineExpectingFailure(reviewId);
+        retryExpectingFailure(reviewId);
+
+        var rows = json(mockMvc.perform(get("/api/reviews?limit=50"))
+                .andExpect(status().isOk())
+                .andReturn()).get("data").get("items");
+
+        var row = new java.util.ArrayList<JsonNode>();
+        rows.forEach(item -> {
+            if (item.get("id").asText().equals(reviewId.toString())) {
+                row.add(item);
+            }
+        });
+        assertThat(row).as("a review with two attempts still appears exactly once").hasSize(1);
+        assertThat(row.get(0).get("redline").get("status").asText()).isEqualTo("FAILED");
+    }
+
+    private JsonNode retryExpectingFailure(UUID reviewId) throws Exception {
+        mockMvc.perform(post("/api/reviews/{id}/redline/retry", reviewId))
+                .andExpect(status().isConflict());
+        return readRedline(reviewId);
+    }
+
+    private void driftSemanticsOfPinnedVersion(UUID reviewId) {
+        var changeSet = changeSetRepository.findByReview(organizationId(), reviewId).orElseThrow();
+        var contractId = changeSet.contractId();
+        // Must pick a clause whose concept is not already GOVERNING_LAW, otherwise the
+        // correction is a no-op, nothing drifts and the redline legitimately succeeds.
+        var clauseSemanticsId = enrichmentService.getSemantics(contractId, 1).clauses().stream()
+                .filter(c -> c.effectivePrimaryConcept().isPresent())
+                .filter(c -> c.effectivePrimaryConcept().get() != LegalConcept.GOVERNING_LAW)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no classified clause to correct"))
+                .id();
+        enrichmentService.correctClause(contractId, 1, clauseSemanticsId,
+                new com.rivell.workbench.contracts.FactCorrection(
+                        "GOVERNING_LAW", Map.of(), UUID.randomUUID()));
     }
 
     private record Fixture(Review review, ReviewAnalysisRun run, List<Finding> findings) {

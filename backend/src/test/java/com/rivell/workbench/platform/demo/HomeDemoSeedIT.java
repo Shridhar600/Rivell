@@ -103,10 +103,78 @@ class HomeDemoSeedIT {
                     .isNotBlank();
         }
 
-        var completed = items.get(0);
+        var completed = completedRow(items);
         assertThat(completed.get("plannedChecks").asInt())
                 .as("a completed review reports a real plan and real executions")
                 .isPositive();
+        assertThat(completed.get("findings").asInt())
+                .as("a completed demo review finds real issues, so the Review Workspace "
+                        + "has something truthful to show")
+                .isPositive();
+    }
+
+    @Test
+    void theCompletedSeedReviewHasFindingsWhoseEvidenceResolves() throws Exception {
+        var completedId = completedReviewId();
+
+        var findings = json(mockMvc.perform(get("/api/reviews/{id}/findings", completedId))
+                .andExpect(status().isOk())
+                .andReturn()).get("data").get("items");
+        assertThat(findings).isNotEmpty();
+
+        for (var finding : findings) {
+            var detail = json(mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}",
+                            completedId, finding.get("id").asText()))
+                    .andExpect(status().isOk())
+                    .andReturn()).get("data");
+
+            assertThat(detail.get("evidenceItemIds")).isNotNull();
+            var resolved = detail.get("evidenceItems");
+            var resolvedIds = new java.util.ArrayList<String>();
+            resolved.forEach(item -> resolvedIds.add(item.get("evidenceId").asText()));
+            detail.get("evidenceItemIds").forEach(id ->
+                    assertThat(resolvedIds).contains(id.asText()));
+        }
+    }
+
+    @Test
+    void theSeededSummaryReportsItsPinnedDocumentAndProposalCounts() throws Exception {
+        var summary = json(mockMvc.perform(get("/api/reviews/{id}", completedReviewId()))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+
+        assertThat(summary.get("document").get("contractFilename").asText())
+                .isEqualTo("Northstar Vendor MSA.docx");
+        assertThat(summary.get("document").get("uploadedAt").asText()).isNotBlank();
+        assertThat(summary.get("document").get("sizeBytes").asLong()).isPositive();
+
+        var proposed = summary.get("proposedChanges");
+        assertThat(proposed.get("replace").asInt() + proposed.get("insert").asInt())
+                .as("the demo review proposes at least one executable change")
+                .isPositive();
+        assertThat(proposed.get("delete").asInt())
+                .as("deletion is never a machine proposal")
+                .isZero();
+    }
+
+    private JsonNode completedRow(JsonNode items) {
+        for (var item : items) {
+            if ("COMPLETED".equals(item.get("status").asText())) {
+                return item;
+            }
+        }
+        throw new AssertionError("the seed must create a completed review");
+    }
+
+    private UUID completedReviewId() {
+        return jdbcClient.sql("""
+                select id from review
+                where status = 'COMPLETED'
+                  and id in (select review_id from finding)
+                order by created_at desc
+                limit 1
+                """)
+                .query(UUID.class).single();
     }
 
     @Test

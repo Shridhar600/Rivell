@@ -27,7 +27,7 @@ import com.rivell.workbench.redline.RedlineVerificationStatus;
 class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
 
     private static final String EXECUTION_COLUMNS = """
-            id, organization_id, review_id, change_set_id, contract_id,
+            id, organization_id, review_id, change_set_id, attempt_number, contract_id,
             contract_version_id, contract_version_number, change_set_version,
             status, outcome, failure_code, failure_detail, renderer_version,
             placement_strategy_version, source_sha256, semantics_digest, change_count, requested_by,
@@ -45,6 +45,7 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
         return jdbcClient.sql("select " + EXECUTION_COLUMNS + """
                 from redline_execution
                 where organization_id = :organizationId and review_id = :reviewId
+                order by attempt_number desc limit 1
                 """)
                 .param("organizationId", organizationId)
                 .param("reviewId", reviewId)
@@ -58,6 +59,7 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
         return jdbcClient.sql("select " + EXECUTION_COLUMNS + """
                 from redline_execution
                 where organization_id = :organizationId and change_set_id = :changeSetId
+                order by attempt_number desc limit 1
                 """)
                 .param("organizationId", organizationId)
                 .param("changeSetId", changeSetId)
@@ -71,22 +73,23 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
     public boolean insert(RedlineExecution execution) {
         var inserted = jdbcClient.sql("""
                 insert into redline_execution
-                  (id, organization_id, review_id, change_set_id, contract_id,
+                  (id, organization_id, review_id, change_set_id, attempt_number, contract_id,
                    contract_version_id, contract_version_number, change_set_version,
                    status, outcome, failure_code, failure_detail, renderer_version,
                    placement_strategy_version, source_sha256, semantics_digest, change_count,
                    requested_by, started_at, completed_at)
-                values (:id, :organizationId, :reviewId, :changeSetId, :contractId,
+                values (:id, :organizationId, :reviewId, :changeSetId, :attemptNumber, :contractId,
                    :contractVersionId, :contractVersionNumber, :changeSetVersion,
                    :status, :outcome, :failureCode, :failureDetail, :rendererVersion,
                    :placementStrategyVersion, :sourceSha256, :semanticsDigest, :changeCount,
                    :requestedBy, :startedAt, :completedAt)
-                on conflict (change_set_id) do nothing
+                on conflict (change_set_id, attempt_number) do nothing
                 """)
                 .param("id", execution.id())
                 .param("organizationId", execution.organizationId())
                 .param("reviewId", execution.reviewId())
                 .param("changeSetId", execution.changeSetId())
+                .param("attemptNumber", execution.attemptNumber())
                 .param("contractId", execution.contractId())
                 .param("contractVersionId", execution.contractVersionId())
                 .param("contractVersionNumber", execution.contractVersionNumber())
@@ -172,7 +175,8 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
 
     private RedlineExecution withChildren(Header header) {
         return new RedlineExecution(header.id(), header.organizationId(), header.reviewId(),
-                header.changeSetId(), header.contractId(), header.contractVersionId(),
+                header.changeSetId(), header.attemptNumber(), header.contractId(),
+                header.contractVersionId(),
                 header.contractVersionNumber(), header.changeSetVersion(), header.status(),
                 header.outcome(), header.failureCode(), header.failureDetail(),
                 header.rendererVersion(), header.placementStrategyVersion(),
@@ -245,6 +249,7 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
                 rs.getObject("organization_id", UUID.class),
                 rs.getObject("review_id", UUID.class),
                 rs.getObject("change_set_id", UUID.class),
+                rs.getInt("attempt_number"),
                 rs.getObject("contract_id", UUID.class),
                 rs.getObject("contract_version_id", UUID.class),
                 rs.getInt("contract_version_number"),
@@ -266,8 +271,9 @@ class JdbcRedlineExecutionRepository implements RedlineExecutionRepository {
     }
 
     private record Header(
-            UUID id, UUID organizationId, UUID reviewId, UUID changeSetId, UUID contractId,
-            UUID contractVersionId, int contractVersionNumber, int changeSetVersion,
+            UUID id, UUID organizationId, UUID reviewId, UUID changeSetId, int attemptNumber,
+            UUID contractId, UUID contractVersionId, int contractVersionNumber,
+            int changeSetVersion,
             RedlineExecutionStatus status, RedlineOutcome outcome,
             RedlineFailureCode failureCode, String failureDetail, String rendererVersion,
             String placementStrategyVersion, String sourceSha256, String semanticsDigest,

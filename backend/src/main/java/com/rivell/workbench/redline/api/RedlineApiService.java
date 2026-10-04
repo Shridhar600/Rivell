@@ -23,6 +23,10 @@ public class RedlineApiService {
         return toView(executionService.execute(reviewId));
     }
 
+    public RedlineExecutionView retry(UUID reviewId) {
+        return toView(executionService.retry(reviewId));
+    }
+
     public RedlineExecutionView find(UUID reviewId) {
         return toView(executionService.find(reviewId));
     }
@@ -45,6 +49,7 @@ public class RedlineApiService {
         return new RedlineExecutionView(execution.id(), execution.reviewId(),
                 execution.changeSetId(), execution.contractId(),
                 execution.contractVersionNumber(), execution.changeSetVersion(),
+                execution.attemptNumber(),
                 execution.status().name(),
                 execution.outcome() == null ? null : execution.outcome().name(),
                 execution.failureCode() == null ? null : execution.failureCode().name(),
