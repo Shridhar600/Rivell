@@ -89,6 +89,17 @@ export function redlineFailureTitle(code: string): string {
   )
 }
 
+/**
+ * Retry is offered only for the one recorded failure the frozen inputs do not determine:
+ * APPROVED_SEMANTICS_DRIFT, which is raised when the contract's semantics changed after
+ * approval. If that later change is reverted, re-executing the same frozen change set can
+ * succeed. Every other failure code follows from the frozen inputs, so a rerun would
+ * reproduce it and no Retry is offered.
+ */
+export function redlineRetryAvailable(execution: RedlineExecution): boolean {
+  return execution.status === 'FAILED' && execution.failureCode === 'APPROVED_SEMANTICS_DRIFT'
+}
+
 export function redlinePlacementLabel(placement: string | null): string | null {
   if (placement === null) return null
   const afterClause = /^AFTER_CLAUSE\[([^\]]+)\]$/.exec(placement)

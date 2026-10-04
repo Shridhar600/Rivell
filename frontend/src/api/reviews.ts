@@ -16,6 +16,7 @@ import {
   malformed,
   parseApiResult,
   readArray,
+  readNumber,
   readOptionalBoolean,
   readOptionalNullableNumber,
   readOptionalNullableString,
@@ -103,6 +104,24 @@ export type ReviewRun = {
   status: RunStatus
 }
 
+export type ReviewDocument = {
+  contractFilename: string
+  uploadedAt: string
+  sizeBytes: number
+}
+
+/**
+ * Rivell's own proposals for the counted generation. These are orientation before anyone
+ * decides, never a count of approved changes, and the three kinds are not equivalent:
+ * `replace` carries replacement wording, `insert` is a detected gap Rivell proposes no
+ * wording for, and `delete` is always zero because deletion is a human decision only.
+ */
+export type ProposedChangeCounts = {
+  replace: number
+  insert: number
+  delete: number
+}
+
 export type ReviewSummary = {
   id: string
   contractId: string
@@ -120,6 +139,8 @@ export type ReviewSummary = {
   failedChecks: number
   signals: number
   findings: number
+  proposedChanges: ProposedChangeCounts
+  document: ReviewDocument | null
   snapshot: ReviewSnapshot | null
   coverage: ReviewCoverage[]
   analysisWarnings: AnalysisWarning[]
@@ -392,6 +413,25 @@ function parseSnapshot(value: unknown, what: string): ReviewSnapshot | null {
   }
 }
 
+function parseProposedChangeCounts(value: unknown, what: string): ProposedChangeCounts {
+  const counts = value === null || value === undefined ? {} : asRecord(value, what)
+  return {
+    replace: readOptionalNumber(counts, 'replace', what),
+    insert: readOptionalNumber(counts, 'insert', what),
+    delete: readOptionalNumber(counts, 'delete', what),
+  }
+}
+
+function parseReviewDocument(value: unknown, what: string): ReviewDocument | null {
+  if (value === null || value === undefined) return null
+  const document = asRecord(value, what)
+  return {
+    contractFilename: readString(document, 'contractFilename', what),
+    uploadedAt: readString(document, 'uploadedAt', what),
+    sizeBytes: readNumber(document, 'sizeBytes', what),
+  }
+}
+
 function parseCoverage(value: unknown, what: string): ReviewCoverage {
   const coverage = asRecord(value, what)
   const state = readOptionalNullableString(coverage, 'coverage', what)
@@ -447,6 +487,8 @@ export function parseReviewSummary(value: unknown, what = 'review summary'): Rev
     failedChecks: readOptionalNumber(summary, 'failedChecks', what),
     signals: readOptionalNumber(summary, 'signals', what),
     findings: readOptionalNumber(summary, 'findings', what),
+    proposedChanges: parseProposedChangeCounts(summary.proposedChanges, what),
+    document: parseReviewDocument(summary.document, what),
     snapshot: parseSnapshot(summary.snapshot, what),
     coverage: readArray(summary, 'coverage', what, parseCoverage),
     analysisWarnings: readArray(summary, 'analysisWarnings', what, parseAnalysisWarning),

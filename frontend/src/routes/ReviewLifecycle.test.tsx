@@ -137,6 +137,11 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
     const link = screen.getAllByRole('link', { name: 'Open Review Workspace' })[0]
     expect(link).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
     expect(screen.getByLabelText('Findings by classification')).toBeInTheDocument()
+    // Rivell's own proposals are orientation only, and the kinds are not interchangeable.
+    const proposals = screen.getByLabelText('What Rivell proposes')
+    expect(proposals).toHaveTextContent('1Replacement wording')
+    expect(proposals).toHaveTextContent('1Missing provisions to draft')
+    expect(screen.getByText(/proposes no wording for it; a person authors the clause/)).toBeInTheDocument()
     // Nothing on this page can decide a Finding.
     for (const name of ['Accept', 'Reject', 'Escalate', 'Edit']) {
       expect(screen.queryByRole('button', { name: new RegExp(`^${name}`) })).not.toBeInTheDocument()
@@ -144,6 +149,15 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
     expect(calls(api, '/decision', 'PUT')).toHaveLength(0)
     await userEvent.click(link)
     expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
+  })
+
+  it('shows no proposals when Rivell proposes nothing, instead of a zero row', async () => {
+    completed(fixtureHumanReview({ status: 'NOT_STARTED' }), {
+      reviewSummary: { ...fixtureCompletedReviewSummary, proposedChanges: { replace: 0, insert: 0, delete: 0 } },
+    })
+    renderAt(PATH)
+    await screen.findByRole('heading', { name: '2 Findings are ready for human review' })
+    expect(screen.queryByLabelText('What Rivell proposes')).not.toBeInTheDocument()
   })
 
   it('in review: shows the server decided count and a bar of real segments, not a percentage', async () => {
@@ -293,6 +307,26 @@ describe('finalized: the frozen change set and the redline', () => {
     expect(screen.getByRole('heading', { name: 'Verified redline' })).toBeInTheDocument()
   })
 
+  it('fails closed when the downloaded bytes do not match the recorded artifact', async () => {
+    stubContractApi(
+      finalizedOptions({
+        redline: fixtureRedlineExecution(),
+        redlineDownloadResponse: () =>
+          new Response(new Uint8Array(10), {
+            status: 200,
+            headers: {
+              'Content-Type':
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            },
+          }),
+      }),
+    )
+    renderAt(PATH)
+    await userEvent.click(await screen.findByRole('button', { name: 'Download tracked DOCX' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not be downloaded')
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
   it('failed redline: fails closed with no download, no retry, and no partial-success look', async () => {
     const api = stubContractApi(finalizedOptions({ redline: fixtureFailedRedlineExecution('TARGET_NOT_FOUND') }))
     renderAt(PATH)
@@ -305,6 +339,49 @@ describe('finalized: the frozen change set and the redline', () => {
     expect(screen.queryByRole('button', { name: 'Generate redline' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Verified redline' })).not.toBeInTheDocument()
     expect(calls(api, '/redline', 'POST')).toHaveLength(0)
+  })
+
+  it('recoverable failure: offers Retry only for approved semantics drift and retries the frozen change set', async () => {
+    let api: ReturnType<typeof stubContractApi>
+    api = stubContractApi(
+      finalizedOptions({
+        redline: fixtureFailedRedlineExecution('APPROVED_SEMANTICS_DRIFT'),
+        redlineRetryResponse: () => {
+          api.setRedline(fixtureRedlineExecution({ attempt: 2 }))
+          return jsonResponse(envelope(fixtureRedlineExecution({ attempt: 2 })))
+        },
+      }),
+    )
+    renderAt(PATH)
+    expect(await screen.findByRole('heading', { name: 'Redline failed' })).toBeInTheDocument()
+    const retry = screen.getByRole('button', { name: 'Retry redline' })
+    await userEvent.click(retry)
+    await waitFor(() => expect(calls(api, '/redline/retry', 'POST')).toHaveLength(1))
+    expect(await screen.findByRole('heading', { name: 'Verified redline' })).toBeInTheDocument()
+    // A retry never falls back to a fresh trigger on the same frozen change set.
+    expect(calls(api, '/redline', 'POST').filter((request) => !request.url.includes('/retry'))).toHaveLength(0)
+  })
+
+  it('a retry that fails again keeps the recorded failure and shows the attempt, never the server detail', async () => {
+    const first = fixtureFailedRedlineExecution('APPROVED_SEMANTICS_DRIFT')
+    const second = fixtureFailedRedlineExecution('APPROVED_SEMANTICS_DRIFT', { attempt: 2 })
+    let api: ReturnType<typeof stubContractApi>
+    api = stubContractApi(
+      finalizedOptions({
+        redline: first,
+        redlineRetryResponse: () => {
+          api.setRedline(second)
+          return jsonResponse({ code: '409', title: 'x', detail: 'server detail text' }, 409)
+        },
+      }),
+    )
+    renderAt(PATH)
+    await screen.findByRole('heading', { name: 'Redline failed' })
+    await userEvent.click(screen.getByRole('button', { name: 'Retry redline' }))
+    await waitFor(() => expect(calls(api, '/redline/retry', 'POST')).toHaveLength(1))
+    expect(await screen.findByText(/Attempt 2/)).toBeInTheDocument()
+    expect(screen.queryByText(/server detail text/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Download/ })).not.toBeInTheDocument()
   })
 
   it('a failed generation shows the recorded failure, not a second error', async () => {
@@ -472,15 +549,25 @@ describe('the pinned version', () => {
     expect(screen.getByText('v2, immutable')).toBeInTheDocument()
   })
 
-  it('does not present the latest version’s file name as the pinned version’s', async () => {
+  it('names the document the Review itself reports, never the contract’s latest', async () => {
     stubContractApi({
-      reviewSummary: { ...fixtureQueuedReviewSummary, contractVersionNumber: 2 },
+      reviewSummary: {
+        ...fixtureQueuedReviewSummary,
+        contractVersionNumber: 2,
+        document: {
+          contractFilename: 'pinned-at-v2.docx',
+          uploadedAt: '2026-09-25T08:55:00Z',
+          sizeBytes: 4096,
+        },
+      },
     })
     renderAt(PATH)
     await screen.findByRole('heading', { name: 'Waiting for analysis to start' })
-    // The stubbed contract's latest version (v1) is msa.docx; this Review pins v2, so that name is not used.
+    const rail = screen.getByRole('complementary', { name: 'Details' })
+    expect(within(rail).getByText('pinned-at-v2.docx')).toBeInTheDocument()
+    expect(within(rail).getByText('4.0 KB')).toBeInTheDocument()
+    // The stubbed contract's latest version (v1) is msa.docx; the Review reports its own document.
     expect(screen.queryByText('msa.docx')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Master Services Agreement')
   })
 
   it('uses the frozen review context, not the contract’s current profile', async () => {

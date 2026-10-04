@@ -72,7 +72,7 @@ afterEach(() => {
 })
 
 describe('review creation', () => {
-  it('confirms the profile, sends one explicit-pack review, and opens the workspace', async () => {
+  it('confirms the profile, sends one explicit-pack review, and opens the Review Overview', async () => {
     const api = stubContractApi({
       reviews: fixtureReviewList,
       createReviewSummary: fixtureQueuedReviewSummary,
@@ -92,7 +92,7 @@ describe('review creation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Start review' }))
 
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1'),
+      expect(router.state.location.pathname).toBe('/reviews/c1/overview/r-1'),
     )
     const creates = createRequests(api)
     expect(creates).toHaveLength(1)
@@ -102,12 +102,10 @@ describe('review creation', () => {
       'contractPackKey',
     ])
 
-    await screen.findByRole('heading', { name: 'Analysis state' }, { timeout: 5000 })
-    // The workspace route renders outside the sidebar shell: the contract title sits in its top bar.
-    expect(
-      within(screen.getByRole('banner')).getByText('Master Services Agreement'),
-    ).toBeInTheDocument()
-    expect(screen.getByText(/The review is queued/)).toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'Waiting for analysis to start' }, { timeout: 5000 })
+    // The lifecycle surface is the Review's own page: it carries the way back and the way to start another.
+    expect(screen.getByRole('link', { name: 'Contract reviews' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Start review' })).toHaveAttribute('href', '/reviews/new')
   })
 
   it('creates a pack-less review when no pack is selected', async () => {
@@ -301,7 +299,7 @@ describe('review creation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Re-check reviews' }))
 
     const link = await screen.findByRole('link', { name: 'Open the created review' })
-    expect(link).toHaveAttribute('href', '/reviews/c1/analysis/r-99')
+    expect(link).toHaveAttribute('href', '/reviews/c1/overview/r-99')
     expect(screen.queryByRole('button', { name: 'Start review' })).not.toBeInTheDocument()
     expect(createRequests(api)).toHaveLength(1)
     expect(router.state.location.pathname).toBe('/reviews/c1/analysis')
@@ -483,12 +481,12 @@ describe('review history', () => {
     expect(screen.getByText('Completed')).toBeInTheDocument()
 
     const links = screen.getAllByRole('link', { name: /Open review/ })
-    expect(links[0]).toHaveAttribute('href', '/reviews/c1/analysis/r-2')
+    expect(links[0]).toHaveAttribute('href', '/reviews/c1/overview/r-2')
     expect(links[0]).toHaveAccessibleName(/Analyzing/)
 
     await userEvent.click(links[1])
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1'),
+      expect(router.state.location.pathname).toBe('/reviews/c1/overview/r-1'),
     )
   })
 

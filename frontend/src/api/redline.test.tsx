@@ -68,6 +68,7 @@ const generatedPayload = {
   contractId: 'c-1',
   contractVersionNumber: 1,
   changeSetVersion: 1,
+  attempt: 1,
   status: 'COMPLETED',
   outcome: 'REDLINE_GENERATED',
   failureCode: null,

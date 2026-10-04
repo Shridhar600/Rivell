@@ -9,6 +9,7 @@ import {
   redlineExecutionTitle,
   redlineFailureTitle,
   redlinePlacementLabel,
+  redlineRetryAvailable,
   redlineTriggerErrorNotice,
   redlineVerificationLabel,
   redlineVerificationOutcome,
@@ -22,6 +23,7 @@ function fixtureExecution(overrides: Partial<RedlineExecution> = {}): RedlineExe
     contractId: 'c-1',
     contractVersionNumber: 1,
     changeSetVersion: 1,
+    attempt: 1,
     status: 'COMPLETED',
     outcome: 'REDLINE_GENERATED',
     failureCode: null,
@@ -406,5 +408,17 @@ describe('trigger error classification', () => {
     const notices = kinds.map((kind) => redlineTriggerErrorNotice(kind))
     expect(new Set(notices).size).toBe(kinds.length)
     for (const notice of notices) expect(notice.length).toBeGreaterThan(10)
+  })
+})
+
+describe('retry eligibility', () => {
+  it('offers a retry only for approved semantics drift, the one failure a later correction can change', () => {
+    expect(
+      redlineRetryAvailable(fixtureExecution({ status: 'FAILED', outcome: null, failureCode: 'APPROVED_SEMANTICS_DRIFT' })),
+    ).toBe(true)
+    expect(
+      redlineRetryAvailable(fixtureExecution({ status: 'FAILED', outcome: null, failureCode: 'TARGET_NOT_FOUND' })),
+    ).toBe(false)
+    expect(redlineRetryAvailable(fixtureExecution())).toBe(false)
   })
 })

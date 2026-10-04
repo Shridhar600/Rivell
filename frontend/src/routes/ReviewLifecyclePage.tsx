@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useContractQuery, isContractNotFoundError } from '../api/contracts'
-import { usePinnedFilenameList, useSemanticsWhen, useStructureWhen } from '../api/lifecycleReads'
+import { useSemanticsWhen, useStructureWhen } from '../api/lifecycleReads'
 import {
   isRedlineForbiddenError,
   isRedlineNotFoundError,
   RedlineApiError,
   useRedlineExecutionQuery,
+  useRetryRedline,
   useTriggerRedline,
 } from '../api/redline'
 import {
@@ -76,6 +77,7 @@ export function ReviewLifecyclePage() {
   const changeSetQuery = useApprovedChangeSetQuery(reviewId, finalized)
   const redlineQuery = useRedlineExecutionQuery(reviewId, finalized)
   const trigger = useTriggerRedline(reviewId)
+  const retry = useRetryRedline(reviewId)
   const findingsQuery = useFindingsQuery(reviewId, {}, completed)
   const decisionsQuery = useCurrentDecisionsQuery(reviewId, finalized)
   const packsQuery = useReviewPacksQuery()
@@ -84,8 +86,9 @@ export function ReviewLifecyclePage() {
   const redlineNotStarted = redlineQuery.isError && isRedlineNotFoundError(redlineQuery.error)
   const changeSet = changeSetQuery.data ?? null
 
+  const redlineRunning = trigger.isPending || retry.isPending
   const facts = summary
-    ? { summary, humanReview, changeSet, redline: execution, redlineRunning: trigger.isPending }
+    ? { summary, humanReview, changeSet, redline: execution, redlineRunning }
     : null
   const key = facts ? lifecycleKey(facts) : null
   const tab: LifecycleTab = key ? resolveTab(key, requestedTab) : 'redline'
@@ -99,12 +102,7 @@ export function ReviewLifecyclePage() {
     [semantics, structureQuery.data],
   )
 
-  const latest = contractQuery.data?.latestVersion ?? null
-  const pinnedIsLatest = latest !== null && pinnedVersion !== undefined && latest.versionNumber === pinnedVersion
-  const reviewList = usePinnedFilenameList(contractId, summary !== undefined && !pinnedIsLatest)
-  const pinnedFilename = pinnedIsLatest
-    ? latest.filename
-    : (reviewList.data?.items.find((item) => item.id === reviewId)?.contractFilename ?? null)
+  const pinnedFilename = summary?.document?.contractFilename ?? null
 
   const profile = summary?.snapshot?.profile ?? null
   const packKey = profile?.contractPackKey ?? null
@@ -118,9 +116,9 @@ export function ReviewLifecyclePage() {
   useEffect(() => {
     // After a generation the result replaces the Generate card. Moving focus to its heading lets a
     // keyboard or screen-reader user land on what happened instead of on a vanished button.
-    if (wasRunning.current && !trigger.isPending) redlineHeadingRef.current?.focus()
-    wasRunning.current = trigger.isPending
-  }, [trigger.isPending])
+    if (wasRunning.current && !redlineRunning) redlineHeadingRef.current?.focus()
+    wasRunning.current = redlineRunning
+  }, [redlineRunning])
 
   const title = pinnedFilename ?? contractQuery.data?.title ?? 'Contract review'
   const workspaceTo = workspacePath(contractId, reviewId)
@@ -186,9 +184,10 @@ export function ReviewLifecyclePage() {
   const redlineFailedToLoad = finalized && redlineQuery.isError && !redlineNotStarted
   const redlineForbidden = redlineQuery.isError && isRedlineForbiddenError(redlineQuery.error)
 
-  const triggerKind = trigger.isError
+  const failedTrigger = trigger.isError ? trigger : retry.isError ? retry : null
+  const triggerKind = failedTrigger
     ? classifyTriggerError({
-        status: trigger.error instanceof RedlineApiError ? trigger.error.status : null,
+        status: failedTrigger.error instanceof RedlineApiError ? failedTrigger.error.status : null,
         execution,
         executionStateKnown: redlineNotStarted || redlineQuery.isSuccess,
       })
@@ -302,9 +301,10 @@ export function ReviewLifecyclePage() {
               sourceFilename={pinnedFilename}
               changeSet={changeSet}
               execution={execution}
-              generating={trigger.isPending}
+              generating={redlineRunning}
               notice={triggerNotice}
               onGenerate={() => trigger.mutate()}
+              onRetry={() => retry.mutate()}
               onOpenReport={() => goToTab('report')}
               headingRef={redlineHeadingRef}
             />
@@ -342,7 +342,7 @@ export function ReviewLifecyclePage() {
       {key ? <Journey steps={journey(key, humanReview)} /> : null}
       {body}
     </>,
-    <LifecycleRail summary={summary} filename={pinnedFilename} packLabel={packLabel} events={activityEvents(facts)} />,
+    <LifecycleRail summary={summary} document={summary.document} packLabel={packLabel} events={activityEvents(facts)} />,
   )
 }
 

@@ -125,7 +125,7 @@ export function useStartReview() {
         queryClient.setQueryData(reviewKeys.summary(summary.id), summary)
         void queryClient.invalidateQueries({ queryKey: reviewKeys.history() })
         void queryClient.invalidateQueries({ queryKey: reviewKeys.list(contractId) })
-        if (mounted.current) navigate(`/reviews/${contractId}/analysis/${summary.id}`)
+        if (mounted.current) navigate(`/reviews/${contractId}/overview/${summary.id}`)
       } catch (error) {
         report({ phase: 'failed', failure: describeFailure(stage, error, stored.current?.contractId ?? null) })
       } finally {

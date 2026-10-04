@@ -188,7 +188,7 @@ export function reviewRowView(review: ReviewListItem): ReviewRowView {
   const contractType = review.context?.contractType
   return {
     id: review.id,
-    to: `/reviews/${review.contractId}/analysis/${review.id}`,
+    to: `/reviews/${review.contractId}/overview/${review.id}`,
     title: review.contractFilename?.trim() || 'Untitled contract',
     versionChip: review.contractVersionNumber === null ? null : `v${review.contractVersionNumber}`,
     typeChip: contractType ? (CONTRACT_TYPE_LABELS[contractType] ?? contractType) : null,

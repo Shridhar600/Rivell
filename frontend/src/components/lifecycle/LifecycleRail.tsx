@@ -1,24 +1,25 @@
 import { Link } from 'react-router'
-import type { ReviewSummary } from '../../api/reviews'
+import type { ReviewDocument, ReviewSummary } from '../../api/reviews'
 import { contextRows, pluralise, type ContextRow } from '../../lib/lifecycleView'
 import { dateTime } from '../../lib/dates'
+import { formatBytes } from '../../lib/knowledgeLabels'
 import type { ActivityEvent } from '../../lib/reviewLifecycle'
 import { ArrowIcon } from './icons'
 
 interface Props {
   summary: ReviewSummary
-  /** The pinned version's file name, when the API makes it known. */
-  filename: string | null
+  /** The pinned version's uploaded document, as the Review itself reports it. */
+  document: ReviewDocument | null
   packLabel: string | null
   events: ActivityEvent[]
 }
 
 /**
  * The Inspector content, ported from the canonical `insHub()`. Every value is read from the
- * Review itself: the version it pins, the context frozen at creation, and the moments the server
- * recorded.
+ * Review itself: the version it pins, the document behind that version, the context frozen at
+ * creation, and the moments the server recorded.
  */
-export function LifecycleRail({ summary, filename, packLabel, events }: Props) {
+export function LifecycleRail({ summary, document, packLabel, events }: Props) {
   const snapshot = summary.snapshot
   const profile = snapshot?.profile ?? null
   const version = summary.contractVersionNumber
@@ -34,16 +35,28 @@ export function LifecycleRail({ summary, filename, packLabel, events }: Props) {
       <div>
         <h3>Contract version</h3>
         <dl className="rv-lc-fdl rv-lc-fdl--rail">
-          {filename ? (
+          {document ? (
             <div>
               <dt>File</dt>
-              <dd>{filename}</dd>
+              <dd>{document.contractFilename}</dd>
             </div>
           ) : null}
           <div>
             <dt>Version</dt>
             <dd>{version !== null ? `v${version}, immutable` : 'Not recorded'}</dd>
           </div>
+          {document ? (
+            <div>
+              <dt>Uploaded</dt>
+              <dd>{dateTime(document.uploadedAt)}</dd>
+            </div>
+          ) : null}
+          {document ? (
+            <div>
+              <dt>Size</dt>
+              <dd>{formatBytes(document.sizeBytes)}</dd>
+            </div>
+          ) : null}
         </dl>
       </div>
       <div>

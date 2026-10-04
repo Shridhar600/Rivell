@@ -63,7 +63,7 @@ export function ReviewHistoryList({
                 </span>
                 <Link
                   className="link-button"
-                  to={`/reviews/${contractId}/analysis/${review.id}`}
+                  to={`/reviews/${contractId}/overview/${review.id}`}
                   aria-label={`Open review ${review.contractVersionNumber !== null ? `v${review.contractVersionNumber}` : 'unknown version'}, ${reviewStatusLabel(review.status)}, created ${formatTimestamp(review.createdAt)}`}
                 >
                   Open review

@@ -4,7 +4,6 @@ import {
   fetchContractStructure,
   type StructureResponse,
 } from './contracts'
-import { fetchReviewList, reviewKeys, type ReviewListResponse } from './reviews'
 import { fetchSemantics, semanticsKeys, type SemanticContract } from './semantics'
 
 /**
@@ -33,20 +32,5 @@ export function useStructureWhen(
     queryKey: ['contract', contractId, 'structure', versionNumber],
     queryFn: versionNumber === undefined ? skipToken : () => fetchContractStructure(contractId, versionNumber),
     enabled: enabled && versionNumber !== undefined && Boolean(contractId),
-  })
-}
-
-/**
- * The contract's review list, read only to learn the file name of the version a Review pins when
- * that is not the latest version. The Review itself does not carry a file name.
- */
-export function usePinnedFilenameList(
-  contractId: string,
-  enabled: boolean,
-): UseQueryResult<ReviewListResponse, Error> {
-  return useQuery({
-    queryKey: reviewKeys.list(contractId),
-    queryFn: () => fetchReviewList(contractId),
-    enabled: enabled && Boolean(contractId),
   })
 }

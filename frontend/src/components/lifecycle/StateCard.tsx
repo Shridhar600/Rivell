@@ -1,4 +1,4 @@
-import type { FindingSummary, ReviewSummary } from '../../api/reviews'
+import type { FindingSummary, ProposedChangeCounts, ReviewSummary } from '../../api/reviews'
 import type { SemanticContract } from '../../api/semantics'
 import type { HumanReview } from '../../api/workflow'
 import { metadataFieldLabel } from '../../lib/contractSemantics'
@@ -225,6 +225,33 @@ export function StateCard(props: Props) {
   }
 }
 
+/**
+ * What Rivell itself proposes, before anyone decides. Replacements carry drafted wording and are
+ * the only executable proposal; detected missing provisions are counted because a person must
+ * author the clause. Deletion is a human decision only and is never a machine proposal, so it is
+ * not shown as one.
+ */
+function ProposedChanges({ counts }: { counts: ProposedChangeCounts }) {
+  if (counts.replace === 0 && counts.insert === 0) return null
+  return (
+    <>
+      <Stat3
+        label="What Rivell proposes"
+        stats={[
+          { figure: counts.replace, label: 'Replacement wording' },
+          { figure: counts.insert, label: 'Missing provisions to draft' },
+        ]}
+      />
+      {counts.insert > 0 ? (
+        <p className="rv-lc-quiet">
+          For each missing provision Rivell detected the gap but proposes no wording for it; a person
+          authors the clause.
+        </p>
+      ) : null}
+    </>
+  )
+}
+
 /** Real check counts from the review summary. No percentage: a count is not a progress promise. */
 function CheckCounts({ summary }: { summary: ReviewSummary }) {
   if (summary.plannedChecks <= 0) return null
@@ -274,6 +301,7 @@ function ReadyForReview({ summary, findings, findingsComplete, semantics, worksp
               stats={classificationCounts(findings).map((entry) => ({ figure: entry.count, label: entry.label }))}
             />
           ) : null}
+          <ProposedChanges counts={summary.proposedChanges} />
         </LcBody>
         <LcFoot>
           <Spacer />

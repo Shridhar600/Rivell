@@ -4,7 +4,7 @@ import { RedlineDownloadIntegrityError, downloadRedline, isRedlineForbiddenError
 import type { ApprovedChangeSet } from '../../api/workflow'
 import { changeSetFigures, pluralise } from '../../lib/lifecycleView'
 import type { LifecycleKey } from '../../lib/reviewLifecycle'
-import { redlineFailureTitle, redlineVerificationOutcome } from '../../lib/redline'
+import { redlineFailureTitle, redlineRetryAvailable, redlineVerificationOutcome } from '../../lib/redline'
 import { saveFile } from '../../lib/saveFile'
 import { Button } from '../ui/Button'
 import { CompleteIcon, RunningIcon } from '../ui/Icon'
@@ -23,6 +23,7 @@ interface Props {
   /** A safe sentence about a failed request, or null. */
   notice: string | null
   onGenerate: () => void
+  onRetry: () => void
   onOpenReport: () => void
   headingRef: Ref<HTMLHeadingElement>
 }
@@ -178,7 +179,8 @@ function Verified({
   )
 }
 
-function Failed({ execution, headingRef, onOpenReport }: Props & { execution: RedlineExecution }) {
+function Failed({ execution, headingRef, onOpenReport, onRetry }: Props & { execution: RedlineExecution }) {
+  const retryable = redlineRetryAvailable(execution)
   return (
     <LcCard label="Redline failed">
       <LcBody>
@@ -200,6 +202,9 @@ function Failed({ execution, headingRef, onOpenReport }: Props & { execution: Re
           verified document is available.
         </p>
         {execution.failureCode ? <p className="rv-lc-quiet">{redlineFailureTitle(execution.failureCode)}</p> : null}
+        {execution.attempt > 1 ? (
+          <p className="rv-lc-quiet">Attempt {execution.attempt} on the same frozen ApprovedChangeSet also failed.</p>
+        ) : null}
         <Checks
           items={[
             { text: 'ApprovedChangeSet remains frozen and intact' },
@@ -209,7 +214,18 @@ function Failed({ execution, headingRef, onOpenReport }: Props & { execution: Re
       </LcBody>
       <LcFoot>
         <Button onClick={onOpenReport}>View diagnostic report</Button>
-        <Spacer note="Generating again returns this same recorded result; the redline for a frozen change set is executed once." />
+        <Spacer
+          note={
+            retryable
+              ? 'This failure came from a contract semantics change after approval. If that change has since been reverted, Retry executes the same frozen change set again; otherwise it fails the same way.'
+              : 'This failure is determined by the frozen inputs; running the same change set again would produce the same result.'
+          }
+        />
+        {retryable ? (
+          <Button variant="primary" onClick={onRetry}>
+            Retry redline
+          </Button>
+        ) : null}
       </LcFoot>
     </LcCard>
   )

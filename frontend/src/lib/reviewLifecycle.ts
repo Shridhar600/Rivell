@@ -270,7 +270,7 @@ export function activityEvents(facts: LifecycleFacts): ActivityEvent[] {
 }
 
 /** The route a "Start another review" action points at. One place, so it moves in one edit. */
-export const START_REVIEW_PATH = '/reviews'
+export const START_REVIEW_PATH = '/reviews/new'
 export const REVIEWS_PATH = '/reviews'
 
 export function workspacePath(contractId: string, reviewId: string): string {

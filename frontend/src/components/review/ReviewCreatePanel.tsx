@@ -70,7 +70,7 @@ export function ReviewCreatePanel({
       { contractPackKey: packKey || null, clientRequestId: requestId() },
       {
         onSuccess: (summary) =>
-          navigate(`/reviews/${contractId}/analysis/${summary.id}`),
+          navigate(`/reviews/${contractId}/overview/${summary.id}`),
         onError: (error) => {
           const failure = classifyCreateOutcome(reviewErrorStatus(error))
           setOutcome(failure)
@@ -199,7 +199,7 @@ export function ReviewCreatePanel({
             A review was created while the outcome was unknown.{' '}
             <Link
               className="link-button"
-              to={`/reviews/${contractId}/analysis/${foundReviewId}`}
+              to={`/reviews/${contractId}/overview/${foundReviewId}`}
             >
               Open the created review
             </Link>

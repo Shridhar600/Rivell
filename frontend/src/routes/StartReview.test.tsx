@@ -188,7 +188,7 @@ describe('Start Review: the three requests', () => {
     await userEvent.selectOptions(pack, 'NDA_PACK')
     await userEvent.click(startButton())
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/analysis/r-new'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/overview/r-new'))
     expect(calls.map((call) => call.step)).toEqual(['upload', 'enrich', 'create'])
     expect(calls[1].body).toEqual({
       contractType: 'NDA',
@@ -206,7 +206,7 @@ describe('Start Review: the three requests', () => {
     const router = renderPage()
     await fill({ type: 'OTHER' })
     await userEvent.click(startButton())
-    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/analysis/r-new'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/overview/r-new'))
     expect(calls[1].body).toEqual({ contractType: 'OTHER', jurisdiction: 'UNSPECIFIED' })
     expect(Object.keys(calls[2].body ?? {})).toEqual(['clientRequestId'])
   })
@@ -259,7 +259,7 @@ describe('Start Review: the three requests', () => {
     expect(within(alert).getByRole('link', { name: 'Open the stored contract' })).toHaveAttribute('href', '/reviews/c9')
 
     await userEvent.click(startButton())
-    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/analysis/r-new'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/overview/r-new'))
     expect(calls.map((call) => call.step)).toEqual(['upload', 'enrich', 'enrich', 'create'])
   })
 
@@ -274,7 +274,7 @@ describe('Start Review: the three requests', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('cannot create a second review')
 
     await userEvent.click(startButton())
-    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/analysis/r-new'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/overview/r-new'))
     // Confirmed once, not again: the context did not change.
     expect(calls.map((call) => call.step)).toEqual(['upload', 'enrich', 'create', 'create'])
     expect(calls[2].body?.clientRequestId).toMatch(UUID)
@@ -293,7 +293,7 @@ describe('Start Review: the three requests', () => {
 
     await userEvent.selectOptions(screen.getByLabelText('Contract type'), 'MSA')
     await userEvent.click(startButton())
-    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/analysis/r-new'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/overview/r-new'))
     expect(calls.map((call) => call.step)).toEqual(['upload', 'enrich', 'create', 'enrich', 'create'])
     expect(calls[3].body).toMatchObject({ contractType: 'MSA' })
     expect(calls[4].body?.clientRequestId).not.toBe(calls[2].body?.clientRequestId)

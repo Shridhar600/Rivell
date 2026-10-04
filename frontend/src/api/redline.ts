@@ -72,6 +72,7 @@ export type RedlineExecution = {
   contractId: string
   contractVersionNumber: number
   changeSetVersion: number
+  attempt: number
   status: RedlineExecutionStatus
   outcome: RedlineOutcome | null
   failureCode: RedlineFailureCode | null
@@ -147,6 +148,7 @@ export function parseRedlineExecution(
     contractId: readString(execution, 'contractId', what),
     contractVersionNumber: readNumber(execution, 'contractVersionNumber', what),
     changeSetVersion: readNumber(execution, 'changeSetVersion', what),
+    attempt: readNumber(execution, 'attempt', what),
     status: readStatus(execution, 'status', REDLINE_EXECUTION_STATUSES),
     outcome: readNullableStatus(execution, 'outcome', REDLINE_OUTCOMES),
     failureCode: readNullableStatus(execution, 'failureCode', REDLINE_FAILURE_CODES),
@@ -222,6 +224,19 @@ export async function triggerRedline(reviewId: string): Promise<RedlineExecution
   return parseApiResult(data, parseRedlineExecution, 'redline execution')
 }
 
+/**
+ * Re-runs a persisted FAILED attempt against the same frozen ApprovedChangeSet. The prior
+ * attempt is kept; the server appends the next numbered attempt.
+ */
+export async function retryRedline(reviewId: string): Promise<RedlineExecution> {
+  const client = createApiClient()
+  const { data, response } = await client.POST('/api/reviews/{id}/redline/retry', {
+    params: { path: { id: reviewId } },
+  })
+  if (!data) throw new RedlineApiError(response.status)
+  return parseApiResult(data, parseRedlineExecution, 'redline execution')
+}
+
 function filenameFromDisposition(header: string | null): string | null {
   if (!header) return null
   const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header)
@@ -280,6 +295,23 @@ export function useTriggerRedline(
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => triggerRedline(reviewId),
+    retry: false,
+    networkMode: 'always',
+    onSuccess: (execution) => {
+      queryClient.setQueryData(redlineKeys.execution(reviewId), execution)
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: redlineKeys.execution(reviewId) })
+    },
+  })
+}
+
+export function useRetryRedline(
+  reviewId: string,
+): UseMutationResult<RedlineExecution, Error, void> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => retryRedline(reviewId),
     retry: false,
     networkMode: 'always',
     onSuccess: (execution) => {

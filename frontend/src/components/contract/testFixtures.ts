@@ -456,6 +456,7 @@ export type StubOptions = {
   redline?: unknown
   redlineStatus?: number
   redlineTriggerResponse?: () => Response | Promise<Response>
+  redlineRetryResponse?: () => Response | Promise<Response>
   redlineDownloadResponse?: () => Response | Promise<Response>
 }
 
@@ -686,6 +687,10 @@ export function stubContractApi(options: StubOptions = {}) {
           'Content-Disposition': "attachment; filename*=UTF-8''acme-msa-v1-redline.docx",
         },
       })
+    }
+    if (method === 'POST' && /\/api\/reviews\/[^/?]+\/redline\/retry$/.test(url)) {
+      if (options.redlineRetryResponse) return await options.redlineRetryResponse()
+      return jsonResponse(envelope(redline))
     }
     if (method === 'POST' && /\/api\/reviews\/[^/?]+\/redline$/.test(url)) {
       if (options.redlineTriggerResponse) return await options.redlineTriggerResponse()

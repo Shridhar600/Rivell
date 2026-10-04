@@ -32,6 +32,12 @@ export const fixtureQueuedReviewSummary = {
   failedChecks: 0,
   signals: 0,
   findings: 0,
+  proposedChanges: { replace: 0, insert: 0, delete: 0 },
+  document: {
+    contractFilename: 'msa.docx',
+    uploadedAt: '2026-09-25T08:55:00Z',
+    sizeBytes: 51200,
+  },
   snapshot: {
     profile: {
       contractType: 'MSA',
@@ -72,6 +78,7 @@ export const fixtureCompletedReviewSummary = {
   degradedChecks: 1,
   signals: 5,
   findings: 2,
+  proposedChanges: { replace: 1, insert: 1, delete: 0 },
   analysisWarnings: [
     {
       checkKey: 'LIABILITY_CAP:LIMITATION_OF_LIABILITY',

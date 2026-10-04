@@ -129,7 +129,7 @@ describe('Reviews page', () => {
     stubApi({ first: { items: SEEDED } })
     renderReviews()
     const row = await screen.findByRole('link', { name: /Atlas Mutual NDA\.docx/ })
-    expect(row).toHaveAttribute('href', '/reviews/con-r1/analysis/r1')
+    expect(row).toHaveAttribute('href', '/reviews/con-r1/overview/r1')
   })
 
   it('shows the declared context as chips and as the canonical second line', async () => {
