@@ -1550,6 +1550,40 @@ export interface components {
             /** Format: date-time */
             timestamp?: string;
         };
+        ContextView: {
+            contractType?: string;
+            ourSideRole?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+        };
+        FinalizationSummaryView: {
+            /** Format: date-time */
+            finalizedAt?: string;
+            /** Format: int32 */
+            approvedChanges?: number;
+        };
+        HumanReviewSummaryView: {
+            status?: string;
+            /** Format: int32 */
+            actionableFindings?: number;
+            /** Format: int32 */
+            resolvedFindings?: number;
+            /** Format: int32 */
+            remainingFindings?: number;
+            /** Format: int32 */
+            escalated?: number;
+            readyToFinalize?: boolean;
+            blockers?: string[];
+        };
+        RedlineSummaryView: {
+            status?: string;
+            outcome?: string;
+            /** Format: int32 */
+            verifiedChangeCount?: number;
+            downloadAvailable?: boolean;
+            /** Format: date-time */
+            completedAt?: string;
+        };
         ReviewListItemView: {
             /** Format: uuid */
             id?: string;
@@ -1558,6 +1592,8 @@ export interface components {
             /** Format: int32 */
             contractVersionNumber?: number;
             contractFilename?: string;
+            /** Format: date-time */
+            uploadedAt?: string;
             status?: string;
             failure?: components["schemas"]["FailureView"];
             /** Format: date-time */
@@ -1582,6 +1618,10 @@ export interface components {
             signals?: number;
             /** Format: int32 */
             findings?: number;
+            context?: components["schemas"]["ContextView"];
+            humanReview?: components["schemas"]["HumanReviewSummaryView"];
+            finalization?: components["schemas"]["FinalizationSummaryView"];
+            redline?: components["schemas"]["RedlineSummaryView"];
         };
         ReviewListResponse: {
             items?: components["schemas"]["ReviewListItemView"][];
@@ -1723,6 +1763,21 @@ export interface components {
             absence?: boolean;
             evidenceItemIds?: string[];
         };
+        ContractPositionSlot: {
+            /** Format: uuid */
+            evidenceItemId?: string;
+            authorityClass?: string;
+            legalConcept?: string;
+            facts?: components["schemas"]["LegalFact"][];
+        };
+        EscalationSlot: {
+            /** Format: uuid */
+            evidenceItemId?: string;
+            authorityClass?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
+            trigger?: string;
+        };
         FindingDetailView: {
             /** Format: uuid */
             id?: string;
@@ -1762,10 +1817,26 @@ export interface components {
             claims?: components["schemas"]["ClaimView"][];
             evidenceItemIds?: string[];
             evidenceItems?: components["schemas"]["EvidenceItemResponse"][];
+            positionComparison?: components["schemas"]["FindingPositionComparison"];
             signalIds?: string[];
             absenceBasis?: components["schemas"]["AbsenceBasisView"];
             /** Format: date-time */
             createdAt?: string;
+        };
+        FindingPositionComparison: {
+            contract?: components["schemas"]["ContractPositionSlot"][];
+            preferred?: components["schemas"]["PolicyPositionSlot"][];
+            fallback?: components["schemas"]["PolicyPositionSlot"][];
+            escalation?: components["schemas"]["EscalationSlot"][];
+        };
+        PolicyPositionSlot: {
+            /** Format: uuid */
+            evidenceItemId?: string;
+            authorityClass?: string;
+            legalConcept?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
+            text?: string;
         };
         ApiResultDecisionListResponse: {
             data?: components["schemas"]["DecisionListResponse"];

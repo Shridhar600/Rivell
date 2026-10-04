@@ -46,4 +46,25 @@ public interface ReviewListQuery {
 
     /** Finding totals per counted run. */
     Map<UUID, Integer> countFindings(UUID organizationId, Collection<UUID> runIds);
+
+    /**
+     * Finalization state per review, absent for a review that has not been finalized.
+     *
+     * <p>The approved-change count is the frozen change set's own size, aggregated in SQL
+     * so a finalized review with nothing approved still reports an honest zero instead of
+     * disappearing from the result.
+     */
+    Map<UUID, ReviewListFinalization> findFinalizations(
+            UUID organizationId, Collection<UUID> reviewIds);
+
+    /**
+     * Redline state per review, absent for a review no redline was ever requested for.
+     *
+     * <p>At most one execution can exist per review: a change set is unique per review and
+     * an execution is unique per change set. A verified-change count is reported only for
+     * an execution that completed and produced a redline, so a failed run's internally
+     * verified changes are never surfaced as a verified total.
+     */
+    Map<UUID, ReviewListRedline> findRedlines(
+            UUID organizationId, Collection<UUID> reviewIds);
 }

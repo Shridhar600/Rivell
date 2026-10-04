@@ -138,7 +138,7 @@ export function HomePage() {
                 <PlusIcon className="rv-icon" />
                 Add knowledge
               </LinkButton>
-              <LinkButton to="/reviews" variant="primary">
+              <LinkButton to="/reviews/new" variant="primary">
                 <DocumentIcon className="rv-icon" />
                 Start a review
               </LinkButton>
@@ -173,7 +173,7 @@ export function HomePage() {
                 title="Nothing needs your attention"
                 message="Start a review, or add a playbook or clause library to begin."
                 action={
-                  <LinkButton to="/reviews" variant="primary" compact>
+                  <LinkButton to="/reviews/new" variant="primary" compact>
                     <DocumentIcon className="rv-icon" />
                     Start a review
                   </LinkButton>

@@ -57,7 +57,7 @@ export function ContractAnalysisPage() {
           message="The contract's semantic analysis state could not be loaded."
           onRetry={() => void semanticsQuery.refetch()}
         />
-      ) : status && status !== 'READY' && status !== 'UNKNOWN' ? (
+      ) : status !== 'READY' ? (
         <section className="panel" aria-labelledby="analysis-gate-heading">
           <h2 id="analysis-gate-heading">Semantic analysis is not ready</h2>
           <p>

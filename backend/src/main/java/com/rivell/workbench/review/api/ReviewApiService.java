@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,17 +29,25 @@ import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.Review;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
 import com.rivell.workbench.review.ReviewAnalysisRun;
+import com.rivell.workbench.review.ReviewExecutionCounts;
+import com.rivell.workbench.review.ReviewHumanReviewListInput;
+import com.rivell.workbench.review.ReviewHumanReviewListQuery;
+import com.rivell.workbench.review.ReviewHumanReviewSummary;
+import com.rivell.workbench.review.ReviewListFinalization;
 import com.rivell.workbench.review.ReviewListQuery;
+import com.rivell.workbench.review.ReviewListRedline;
 import com.rivell.workbench.review.ReviewListRow;
 import com.rivell.workbench.review.ReviewListRunState;
 import com.rivell.workbench.review.ReviewAnalysisService;
 import com.rivell.workbench.review.ReviewCheckExecution;
 import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
+import com.rivell.workbench.review.FindingPositionComparison;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.ReviewPackRegistry;
 import com.rivell.workbench.review.ReviewPlanCheck;
 import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewService;
+import com.rivell.workbench.review.ReviewStatus;
 import com.rivell.workbench.review.UnauthorizedReviewAccessException;
 
 /**
@@ -63,6 +72,7 @@ public class ReviewApiService {
     private final ContractQueryService contractQueryService;
     private final ReviewPackRegistry reviewPackRegistry;
     private final ReviewListQuery reviewListQuery;
+    private final ReviewHumanReviewListQuery reviewHumanReviewListQuery;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
 
@@ -75,6 +85,7 @@ public class ReviewApiService {
             ContractQueryService contractQueryService,
             ReviewPackRegistry reviewPackRegistry,
             ReviewListQuery reviewListQuery,
+            ReviewHumanReviewListQuery reviewHumanReviewListQuery,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         this.reviewService = reviewService;
@@ -85,6 +96,7 @@ public class ReviewApiService {
         this.contractQueryService = contractQueryService;
         this.reviewPackRegistry = reviewPackRegistry;
         this.reviewListQuery = reviewListQuery;
+        this.reviewHumanReviewListQuery = reviewHumanReviewListQuery;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
     }
@@ -185,17 +197,31 @@ public class ReviewApiService {
         var executions = reviewListQuery.countExecutions(organizationId, countedRunIds);
         var signals = reviewListQuery.countSignals(organizationId, countedRunIds);
         var findings = reviewListQuery.countFindings(organizationId, countedRunIds);
+        var finalizations = reviewListQuery.findFinalizations(organizationId, reviewIds);
+        var redlines = reviewListQuery.findRedlines(organizationId, reviewIds);
+
+        var humanInputs = page.stream()
+                .map(row -> humanReviewInput(row, runStates.get(row.reviewId()),
+                        planned.getOrDefault(row.reviewId(), 0),
+                        executions, finalizations.containsKey(row.reviewId())))
+                .toList();
+        var humanReviews = reviewHumanReviewListQuery.findProgress(
+                organizationId, humanInputs);
 
         var items = new ArrayList<ReviewListItemView>(page.size());
         for (var row : page) {
             var state = runStates.get(row.reviewId());
             var countedRunId = state == null ? null : state.countedRunId();
             var counts = countedRunId == null ? null : executions.get(countedRunId);
+            var human = humanReviews.get(row.reviewId());
+            var finalization = finalizations.get(row.reviewId());
+            var redline = redlines.get(row.reviewId());
             items.add(new ReviewListItemView(
                     row.reviewId(),
                     row.contractId(),
                     row.contractVersionNumber(),
                     row.contractFilename(),
+                    row.uploadedAt(),
                     row.status(),
                     failure(row.failureReason()),
                     row.createdAt(),
@@ -209,9 +235,64 @@ public class ReviewApiService {
                     counts == null ? 0 : counts.degraded(),
                     counts == null ? 0 : counts.failed(),
                     countedRunId == null ? 0 : signals.getOrDefault(countedRunId, 0),
-                    countedRunId == null ? 0 : findings.getOrDefault(countedRunId, 0)));
+                    countedRunId == null ? 0 : findings.getOrDefault(countedRunId, 0),
+                    context(row),
+                    humanReview(human),
+                    finalization == null ? null : new ReviewListItemView.FinalizationSummaryView(
+                            finalization.finalizedAt(), finalization.approvedChanges()),
+                    redline == null ? null : new ReviewListItemView.RedlineSummaryView(
+                            redline.status(), redline.outcome(),
+                            redline.verifiedChangeCount(), redline.downloadAvailable(),
+                            redline.completedAt())));
         }
         return List.copyOf(items);
+    }
+
+    /**
+     * Lifecycle meaning for one row, handed to the batched human-review read.
+     *
+     * <p>Analysis counts as complete only when the review completed and a completed
+     * generation exists, which is the same rule the human-review read applies, so the two
+     * surfaces cannot disagree about whether a review may be decided on yet.
+     */
+    private static ReviewHumanReviewListInput humanReviewInput(
+            ReviewListRow row, ReviewListRunState state, int plannedChecks,
+            Map<UUID, ReviewExecutionCounts> executions, boolean finalized) {
+        var countedRunId = state == null ? null : state.countedRunId();
+        var completedRunId = state == null ? null : state.latestCompletedRunId();
+        var counts = countedRunId == null ? null : executions.get(countedRunId);
+        var analysisComplete = ReviewStatus.COMPLETED.name().equals(row.status())
+                && completedRunId != null;
+        return new ReviewHumanReviewListInput(
+                row.reviewId(),
+                countedRunId,
+                analysisComplete,
+                plannedChecks,
+                counts == null ? 0 : counts.completed(),
+                finalized,
+                row.contractId(),
+                row.contractVersionNumber());
+    }
+
+    private static ReviewListItemView.ContextView context(ReviewListRow row) {
+        var context = row.context();
+        return new ReviewListItemView.ContextView(
+                context.contractType(),
+                context.ourSideRole(),
+                context.paperSource(),
+                context.jurisdiction());
+    }
+
+    private static ReviewListItemView.HumanReviewSummaryView humanReview(
+            ReviewHumanReviewSummary summary) {
+        return new ReviewListItemView.HumanReviewSummaryView(
+                summary.status(),
+                summary.actionableFindings(),
+                summary.resolvedFindings(),
+                summary.remainingFindings(),
+                summary.escalated(),
+                summary.readyToFinalize(),
+                summary.blockers());
     }
 
     public FindingListResponse findings(
@@ -550,7 +631,8 @@ public class ReviewApiService {
                                 claim.claimKind(), claim.text(), claim.absence(),
                                 claim.evidenceItemIds()))
                         .toList(),
-                finding.evidenceItemIds(), evidenceItems, finding.signalIds(), absenceBasis,
+                finding.evidenceItemIds(), evidenceItems,
+                FindingPositionComparison.from(evidenceItems), finding.signalIds(), absenceBasis,
                 finding.createdAt());
     }
 

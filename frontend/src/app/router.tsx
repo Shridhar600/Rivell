@@ -10,6 +10,7 @@ import { KnowledgePage } from '../routes/KnowledgePage'
 import { KnowledgePublicationPage } from '../routes/KnowledgePublicationPage'
 import { KnowledgePublicationsPage } from '../routes/KnowledgePublicationsPage'
 import { ReviewsPage } from '../routes/ReviewsPage'
+import { StartReviewPage } from '../routes/StartReviewPage'
 import { ReviewWorkspacePage } from '../routes/ReviewWorkspacePage'
 
 export const appRoutes = [
@@ -18,11 +19,12 @@ export const appRoutes = [
     element: <AppShell />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'reviews', element: <ReviewsPage /> },
+      { path: 'reviews/new', element: <StartReviewPage /> },
       {
-        // Temporary F1 seam: these surfaces keep their existing layout until F2/F3 restyle them.
+        // Temporary seam: these surfaces keep their existing layout until they are restyled.
         element: <LegacySurface />,
         children: [
-          { path: 'reviews', element: <ReviewsPage /> },
           { path: 'reviews/:contractId', element: <ContractPage /> },
           { path: 'reviews/:contractId/analysis', element: <ContractAnalysisPage /> },
           { path: 'reviews/:contractId/evidence', element: <EvidenceInspectorPage /> },
