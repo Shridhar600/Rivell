@@ -236,7 +236,7 @@ public class CandidateReviewService {
         var candidate = repository.findCandidate(candidateId, identity.organizationId())
                 .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
         var updated = change.apply(candidate);
-        repository.updateReviewState(
+        var applied = repository.updateReviewState(
                 updated.id(), identity.organizationId(), candidate.reviewStatus(),
                 updated.reviewStatus(), updated.editedContentText(),
                 updated.editedPayload(), updated.editedSemanticFields(), updated.scope(),
@@ -244,6 +244,11 @@ public class CandidateReviewService {
                 updated.reviewNote(), updated.reviewedAt(),
                 updated.updatedAt(), updated.conflictSignals(),
                 updated.reviewCategory(), updated.reviewReasons());
+        if (!applied) {
+            // Somebody else moved the candidate between the read and this write. Reporting the
+            // intended state anyway would hand the caller a candidate it does not hold.
+            throw new InvalidCandidateReviewStateException(candidate, operation);
+        }
         return updated;
     }
 

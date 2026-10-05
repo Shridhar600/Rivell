@@ -416,7 +416,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
 
     @Override
     @Transactional
-    public void updateReviewState(
+    public boolean updateReviewState(
             UUID candidateId, UUID organizationId, ReviewStatus expectedStatus,
             ReviewStatus reviewStatus, String editedContentText,
             CandidatePayload editedPayload, SemanticFields editedSemanticFields,
@@ -424,7 +424,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             Instant reviewedAt, Instant updatedAt,
             List<ConflictSignal> conflictSignals, ReviewCategory reviewCategory,
             Set<ReviewReason> reviewReasons) {
-        jdbcClient.sql("""
+        var updateCount = jdbcClient.sql("""
                         update knowledge_candidate
                         set review_status = :reviewStatus, edited_content_text = :editedContentText,
                             edited_payload = :editedPayload::jsonb,
@@ -465,6 +465,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .param("organizationId", organizationId)
                 .param("expectedStatus", expectedStatus.name())
                 .update();
+        return updateCount > 0;
     }
 
     @Override
