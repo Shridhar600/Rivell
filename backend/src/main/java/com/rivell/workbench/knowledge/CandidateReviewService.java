@@ -88,11 +88,14 @@ public class CandidateReviewService {
                     && !semanticChanged && !scopeChanged) {
                 throw new IllegalArgumentException("An edit must change content, payload, scope, or semantic fields");
             }
-            // A corrected column is a correction to the wording, so render it the way extraction
-            // renders machine wording, in the source's column order rather than the arbitrary key
-            // order a client or jsonb round trip hands back. Without this the structured
-            // correction was stored and then ignored by every consumer of effectiveContentText().
-            var correctedPayload = payload == null ? null : candidate.payload().correctedBy(payload);
+            // A structured correction is a set of corrected values, not wording: it composes onto
+            // the values already corrected, so a second correction does not drop the first, and its
+            // rendering is derived on read rather than stored.
+            var base = candidate.editedPayload() != null
+                    && !candidate.editedPayload().columns().isEmpty()
+                    ? candidate.editedPayload()
+                    : candidate.payload();
+            var correctedPayload = payload == null ? null : base.correctedBy(payload);
             if (payloadChanged && correctedPayload.render() == null) {
                 // Blanking every cell is not a correction: it carries no wording, so it would be
                 // stored, recompute conditions and move the candidate to EDITED while changing
@@ -101,17 +104,15 @@ public class CandidateReviewService {
                 throw new IllegalArgumentException(
                         "A structured correction must keep at least one non-blank column value");
             }
-            // Correction precedence, and it is the same precedence effectiveContentText() reads:
-            // explicit human wording, then the human's corrected columns, then the machine wording.
-            // A later cell fix must not silently discard wording the human already wrote, so a
-            // prior human correction outranks a rendering. The structured correction is still
-            // persisted, which is what keeps it recoverable and auditable.
-            var statedWording = contentText != null && !contentText.isBlank()
+            // Correction provenance, and it is a single rule: editedContentText is wording a human
+            // typed, and only that. A derived rendering is never written here, because a stored
+            // rendering is indistinguishable from human prose and the next structured correction
+            // read it back as explicit wording, outranked its own fresh rendering and never took
+            // effect. effectiveContentText() resolves wording from explicit text, then the
+            // corrected columns, then the machine text, so nothing is derived twice.
+            var explicitWording = contentText != null && !contentText.isBlank()
                     ? contentText
                     : candidate.editedContentText();
-            var correctedWording = statedWording != null && !statedWording.isBlank()
-                    ? statedWording
-                    : correctedPayload == null ? null : correctedPayload.render();
             var edited = new KnowledgeCandidate(
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,
@@ -121,7 +122,7 @@ public class CandidateReviewService {
                     candidate.semanticFields(),
                     !editedSemantic.equals(SemanticFields.EMPTY) ? editedSemantic : candidate.editedSemanticFields(),
                     candidate.interpretations(),
-                    correctedWording,
+                    explicitWording,
                     correctedPayload != null ? correctedPayload : candidate.editedPayload(),
                     candidate.supersedingCandidateId(), scope != null ? scope : candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),

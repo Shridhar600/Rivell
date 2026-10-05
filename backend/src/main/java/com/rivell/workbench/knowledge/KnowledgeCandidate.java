@@ -30,6 +30,13 @@ public record KnowledgeCandidate(
         SemanticFields semanticFields,
         SemanticFields editedSemanticFields,
         List<FieldInterpretation> interpretations,
+        /**
+         * Wording a human typed, and nothing else. A structured correction is not wording: it is a
+         * set of corrected values in {@code editedPayload}, and its rendering is derived on read by
+         * {@link #effectiveContentText()}. Keeping derived wording out of this field is what makes
+         * the provenance unambiguous - a stored value here is always explicit human text, so a later
+         * correction can never mistake an older machine rendering for a person's decision.
+         */
         String editedContentText,
         CandidatePayload editedPayload,
         UUID supersedingCandidateId,

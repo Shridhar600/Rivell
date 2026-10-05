@@ -64,19 +64,26 @@ public record CandidatePayload(Map<String, String> columns, List<String> columnO
     /**
      * The human's corrected values, carried in this payload's authoritative column order.
      *
-     * <p>A correction replaces values; it does not reorder the source. The submitted map arrives
-     * from a client (and from {@code jsonb}) in an arbitrary key order, so taking its order would
-     * let a correction silently restate a spreadsheet row as "Fallback | Preferred". Columns the
-     * correction introduces are appended after the known ones.
+     * <p>A correction replaces the values it names and leaves the others alone, so corrections
+     * compose: correcting one cell and then another keeps both. Replacing the whole value set
+     * would silently drop the earlier correction whenever a client submitted only the cell it
+     * had just changed.
+     *
+     * <p>A correction does not reorder the source. The submitted map arrives from a client (and
+     * from {@code jsonb}) in an arbitrary key order, so taking its order would let a correction
+     * restate a spreadsheet row as "Fallback | Preferred". Columns the correction introduces are
+     * appended after the known ones.
      */
-    public CandidatePayload correctedBy(CandidatePayload corrected) {
+    public CandidatePayload correctedBy(CandidatePayload correction) {
+        var values = new LinkedHashMap<>(columns);
+        values.putAll(correction.columns());
         var order = new ArrayList<String>(orderedKeys());
-        for (var key : corrected.columns().keySet()) {
+        for (var key : correction.columns().keySet()) {
             if (!order.contains(key)) {
                 order.add(key);
             }
         }
-        return new CandidatePayload(corrected.columns(), order);
+        return new CandidatePayload(values, order);
     }
 
     /**
