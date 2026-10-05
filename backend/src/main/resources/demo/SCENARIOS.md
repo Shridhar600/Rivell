@@ -73,11 +73,11 @@ being seeded as a fabricated row.
 | K04 | Source lineage | source nodes to extraction unit to candidate to publication item all resolve | playbook v1 | asserted by the catalog test |
 | K05 | Compilation in review - Rivell Demo Draft Playbook | ingested with candidates PENDING, never published | draft playbook | illustrates compilation in review, and carries a genuine `CONTRADICTS_EXISTING` candidate: its uncapped-liability draft openly contradicts the published cap |
 | K06 | Knowledge ingestion failure - Unreadable Playbook | `ingest_status = FAILED` with no candidates | invalid bytes | real persisted failure state; there is no compilation-failure entity |
-| K07 | Routine grouped review - Rivell Demo Routine Playbook | candidates left `PENDING` and `ROUTINE` with an empty reason set | routine playbook | eligibility is produced by the real categorizer, never inserted; two or more bulk-approvable candidates so `Review all` then `Approve all` can be exercised live |
+| K07 | Routine grouped review - Rivell Demo Routine Playbook | candidates left `PENDING` and `ROUTINE` with an empty reason set | routine playbook | eligibility is produced by the real categorizer, never inserted; two or more bulk-approvable candidates so `Review all` then `Approve all` can be exercised live; bulk approval re-derives eligibility against current published knowledge, and once the group has been approved a reseed reports the scenario as already exercised instead of rebuilding it |
 
 ## Expected totals
 
-From a clean database: 14 contracts, 12 reviews, 5 knowledge artifacts, 2 publications, and
+From a clean database: 14 contracts, 12 reviews, 6 knowledge artifacts, 2 publications, and
 the findings listed above. Seed runtime is reported by the summary log; the scenario catalog
 test also reports it. A few dozen entities, not thousands.
 

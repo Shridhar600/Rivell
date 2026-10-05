@@ -117,10 +117,53 @@ class KnowledgeReviewPublicationIT {
     @Autowired
     MutableIdentityProvider identityProvider;
 
+    @Autowired
+    @org.springframework.beans.factory.annotation.Qualifier("jdbcKnowledgeRepository")
+    KnowledgeRepository rawRepository;
+
+    @Autowired
+    org.springframework.jdbc.core.simple.JdbcClient jdbc;
+
     @org.junit.jupiter.api.BeforeEach
     void freshOrganization() {
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
+    }
+
+    /**
+     * Review reasons reach persistence as a Set, and an immutable Set's iteration order is not
+     * specified - it varies between JVM runs. Persisting the iteration order therefore rewrote
+     * the same candidate's row with different bytes after a restart, which is churn on a row that
+     * did not change and noise for anything comparing stored rows.
+     */
+    @Test
+    void reviewReasonsArePersistedInAStableOrder() throws Exception {
+        var artifact = ingestClauseLibrary();
+        var candidate = firstVariant(artifact);
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var reasons = new java.util.LinkedHashSet<ReviewReason>(List.of(
+                ReviewReason.SUPERSESSION_PROPOSED,
+                ReviewReason.DUPLICATE_DETECTED,
+                ReviewReason.CONFLICT_DETECTED));
+        assertThat(reasons)
+                .as("the reasons are supplied in an order that is not alphabetical")
+                .containsExactly(ReviewReason.SUPERSESSION_PROPOSED,
+                        ReviewReason.DUPLICATE_DETECTED, ReviewReason.CONFLICT_DETECTED);
+
+        rawRepository.updateReviewState(
+                candidate.id(), organizationId, ReviewStatus.PENDING, ReviewStatus.EDITED,
+                null, null, null, candidate.scope(), null, "ordering probe",
+                java.time.Instant.now(), java.time.Instant.now(),
+                List.of(), ReviewCategory.ELEVATED, reasons);
+
+        var stored = jdbc.sql("select review_reasons from knowledge_candidate where id = :id")
+                .param("id", candidate.id())
+                .query(String.class)
+                .single();
+        assertThat(new com.fasterxml.jackson.databind.ObjectMapper().readTree(stored))
+                .as("reasons are stored sorted by name, whatever order the set was built in")
+                .isEqualTo(new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                        "[\"CONFLICT_DETECTED\",\"DUPLICATE_DETECTED\",\"SUPERSESSION_PROPOSED\"]"));
     }
 
     @Test

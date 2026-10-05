@@ -490,11 +490,13 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
 
         // Clauses are anchored to the heading node they were extracted under, so their meaningful order
         // is the order those headings appear in the document. Ordering by the same recursive
-        // sort_path the document read uses keeps a contract's clauses in reading order on every
-        // read, instead of whatever order the storage engine happens to return them in.
-        // SemanticsDigest sorts clauses itself, so the review snapshot pin is unaffected either
-        // way. The heading-node id is only a tie-break for a clause whose node is missing, where
-        // no document position exists; the left join keeps such a clause readable rather than
+        // sort_path the document read uses keys a contract's clauses to reading order on every
+        // read. The previous query had no ORDER BY at all, and the unique index on
+        // (semantics_id, heading_node_id) served it, so it returned heading-node id order: stable,
+        // but meaningless in production, where document node ids are random UUIDs.
+        // SemanticsDigest sorts clauses itself, so the review snapshot pin was never affected.
+        // The heading-node id is only a tie-break for a clause whose node is missing, where no
+        // document position exists; the left join keeps such a clause readable rather than
         // dropping it.
         var clauses = jdbcClient.sql("""
                         with recursive tree as (

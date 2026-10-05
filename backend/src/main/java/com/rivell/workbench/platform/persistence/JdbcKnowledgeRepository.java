@@ -1080,7 +1080,11 @@ private String writeUuidList(List<UUID> values) {
 
     private String writeReviewReasons(java.util.Set<ReviewReason> reasons) {
         try {
-            return objectMapper.writeValueAsString(reasons.stream().map(Enum::name).toList());
+            // Sorted by name: a Set has no specified iteration order, and an immutable Set's
+            // varies between JVM runs, so persisting the iteration order rewrote an unchanged
+            // row with different bytes after a restart.
+            return objectMapper.writeValueAsString(
+                    reasons.stream().map(Enum::name).sorted().toList());
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Could not serialize review reasons", e);
         }
