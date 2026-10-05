@@ -279,9 +279,19 @@ public class CandidateReviewService {
                     skipped.put(candidateId, "not pending");
                     continue;
                 }
-                if (loaded.reviewCategory() != ReviewCategory.ROUTINE) {
-                    skipped.put(candidateId, "review-risk category "
-                            + (loaded.reviewCategory() == null ? "UNSET" : loaded.reviewCategory()));
+                // Bulk approval is the only review path that approves without a human reading the
+                // row, so it must not act on a category captured at extraction: another candidate
+                // may have been published since, which can turn this one into a duplicate or a
+                // contradiction. The stored category stays a snapshot (DW-053 covers the
+                // individually reviewed and published paths); the decision is re-derived here and
+                // the refusal names the condition that made the candidate ineligible.
+                var current = recomputeConditions(loaded, loaded.artifactId());
+                if (current.reviewCategory() != ReviewCategory.ROUTINE) {
+                    skipped.put(candidateId, "no longer eligible for bulk approval: "
+                            + (current.reviewCategory() == null
+                                    ? "UNSET" : current.reviewCategory())
+                            + (current.reviewReasons().isEmpty()
+                                    ? "" : " " + current.reviewReasons()));
                     continue;
                 }
                 approved.add(approve(candidateId, null).id());

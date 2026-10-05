@@ -26,6 +26,8 @@ import com.rivell.workbench.knowledge.KnowledgeArtifact;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
 import com.rivell.workbench.knowledge.PublicationAction;
 import com.rivell.workbench.knowledge.ReviewCategory;
+import com.rivell.workbench.knowledge.CandidateReviewService;
+import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.knowledge.ReviewStatus;
 import com.rivell.workbench.redline.ApprovedChangeSet;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
@@ -99,6 +101,9 @@ class DemoScenarioCatalogIT {
 
     @Autowired
     KnowledgeQueryService knowledgeQueries;
+
+    @Autowired
+    CandidateReviewService candidateReview;
 
     private UUID organizationId() {
         return UUID.fromString("00000000-0000-0000-0000-000000000002");
@@ -420,6 +425,56 @@ class DemoScenarioCatalogIT {
                 ) duplicates
                 """).query(Long.class).single();
         assertThat(duplicateReviews).as("no contract may accumulate duplicate reviews").isZero();
+    }
+
+    /**
+     * K07 is meant to be exercised: the reviewer opens Review all and presses Approve all. The
+     * next start with the demo seed enabled must then still boot. The seeder may not fabricate
+     * fresh PENDING candidates to make the group look untouched again, and it may not undo the
+     * approval a person already gave; it has to recognise that the scenario was already run.
+     */
+    @Test
+    void theSeedSurvivesTheRoutineGroupHavingBeenExercised() {
+        var routineArtifact = knowledgeQueries.listArtifacts(null).stream()
+                .filter(artifact -> DemoDocuments.ROUTINE_PLAYBOOK.equals(artifact.filename()))
+                .findFirst()
+                .orElseThrow();
+        var routine = knowledgeQueries.getCandidates(routineArtifact.id()).stream()
+                .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PENDING)
+                .filter(candidate -> candidate.reviewCategory() == ReviewCategory.ROUTINE)
+                .toList();
+        assertThat(routine)
+                .as("K07 must leave genuinely bulk-eligible candidates behind")
+                .hasSizeGreaterThanOrEqualTo(2);
+        var ineligible = knowledgeQueries.getCandidates(routineArtifact.id()).stream()
+                .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PENDING)
+                .filter(candidate -> candidate.reviewCategory() != ReviewCategory.ROUTINE)
+                .toList();
+
+        var approved = candidateReview.bulkApprove(
+                routine.stream().map(KnowledgeCandidate::id).toList());
+        assertThat(approved.skipped()).isEmpty();
+        assertThat(approved.approvedIds()).hasSameSizeAs(routine);
+
+        var refused = candidateReview.bulkApprove(
+                ineligible.stream().map(KnowledgeCandidate::id).toList());
+        assertThat(refused.approvedIds())
+                .as("the elevated unit stays out of the group even when it is requested")
+                .isEmpty();
+        assertThat(refused.skipped().keySet()).containsExactlyElementsOf(
+                ineligible.stream().map(KnowledgeCandidate::id).toList());
+
+        var before = counts();
+        seeder.seed();
+        var after = counts();
+
+        assertThat(after)
+                .as("a reseed after the demo flow must not add rows in any domain table")
+                .isEqualTo(before);
+        routine.forEach(candidate -> assertThat(
+                knowledgeQueries.getCandidate(candidate.id()).reviewStatus())
+                .as("the human approval must not be undone by a reseed")
+                .isEqualTo(ReviewStatus.APPROVED));
     }
 
     @Test
