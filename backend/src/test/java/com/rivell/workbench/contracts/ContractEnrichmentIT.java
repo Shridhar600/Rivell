@@ -315,6 +315,9 @@ public class ContractEnrichmentIT {
     @Autowired
     ContractQueryService queryService;
 
+    @Autowired
+    org.springframework.jdbc.core.simple.JdbcClient jdbc;
+
     @Test
     void ndaEnrichesIntoTypedSemanticContract() throws Exception {
         var bytes = fixtureBytes("m5-nda-counterparty.docx");
@@ -368,6 +371,115 @@ public class ContractEnrichmentIT {
                         ReviewQualityNote.AMBIGUOUS_PARTY_ROLES);
         assertThat(semantics.observations().decisionExecutionCount()).isPositive();
     }
+
+    /**
+     * DW-051: clause order is document order. The clause read had no ORDER BY, so the order a
+     * contract's clauses came back in depended on physical row layout: the semantics API listed
+     * them in an arbitrary order that could change after any update, and the demo's clause picker
+     * chose a different clause from run to run. This asserts the order is the one the document
+     * itself has, which is the only order that means anything for a contract.
+     */
+    @Test
+    void clausesAreReadInDocumentOrder() throws Exception {
+        var bytes = fixtureBytes("m5-msa-services.docx");
+        var ingested = ingestionService.ingest("m5-msa-services.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(bytes));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+
+        var documentOrder = queryService.getStructure(ingested.contractId(), 1).nodes().stream()
+                .map(node -> node.id())
+                .toList();
+        assertThat(documentOrder)
+                .as("the fixture must have enough nodes for the ordering to be meaningful")
+                .hasSizeGreaterThan(3);
+
+        assertThat(clausePositions(semantics, documentOrder))
+                .as("every clause must be anchored to a real document node")
+                .doesNotContain(-1);
+        assertThat(clausePositions(semantics, documentOrder))
+                .as("clauses must be returned in the order their headings appear in the document")
+                .isSorted();
+        assertThat(semantics.clauses())
+                .as("the fixture must actually produce several clauses to order")
+                .hasSizeGreaterThanOrEqualTo(3);
+
+        // Asserting document order on a freshly built contract proves nothing: the read is served
+        // by the unique index on (semantics_id, heading_node_id), so it returns heading-node id
+        // order, which only looks like document order when the ids happen to ascend with the
+        // document. They are random UUIDs in production. Exchange the ids of two heading nodes so
+        // id order provably contradicts document order while the document itself is untouched,
+        // then read again. Only a read that imposes the document order can pass.
+        swapHeadingNodeIds(semantics);
+
+        // The document's own reading order is unchanged by the swap, but its node ids are new,
+        // so the expected order has to be read again rather than reused.
+        var documentOrderAfterSwap = queryService.getStructure(ingested.contractId(), 1).nodes()
+                .stream().map(node -> node.id()).toList();
+        assertThat(documentOrderAfterSwap)
+                .as("exchanging two ids must not disturb the document itself")
+                .containsExactlyInAnyOrderElementsOf(documentOrder);
+
+        var reread = queryService.getSemanticsForOrganization(
+                        identityService.currentIdentity().organizationId(),
+                        ingested.contractId(), 1)
+                .orElseThrow();
+        assertThat(clausePositions(reread, documentOrderAfterSwap))
+                .as("clause order must come from the document, not from heading-node id order")
+                .doesNotContain(-1)
+                .isSorted();
+    }
+
+    private List<Integer> clausePositions(ContractSemantics semantics, List<UUID> documentOrder) {
+        return semantics.clauses().stream()
+                .map(clause -> documentOrder.indexOf(clause.headingNodeId()))
+                .toList();
+    }
+
+    /**
+     * Exchanges the ids of two clause heading nodes, and repoints the clause rows at them, so the
+     * order the (semantics_id, heading_node_id) index yields contradicts the document order. Only
+     * childless nodes are used, so the document tree and its reading order stay intact.
+     */
+    private void swapHeadingNodeIds(ContractSemantics semantics) {
+        var clauses = semantics.clauses();
+        assertThat(clauses).hasSizeGreaterThanOrEqualTo(2);
+        var first = clauses.get(0).headingNodeId();
+        var last = clauses.get(clauses.size() - 1).headingNodeId();
+        assertThat(first).isNotEqualTo(last);
+        for (var nodeId : List.of(first, last)) {
+            assertThat(jdbc.sql("select count(*) from document_node where parent_id = :id")
+                    .param("id", nodeId)
+                    .query(Long.class)
+                    .single())
+                    .as("only childless nodes can trade ids without disturbing the tree")
+                    .isZero();
+        }
+        jdbc.sql(contractClauseSemanticsSwap).param("to", ZERO).param("from", first).update();
+        jdbc.sql(contractClauseSemanticsSwap).param("to", first).param("from", last).update();
+        jdbc.sql(contractClauseSemanticsSwap).param("to", last).param("from", ZERO).update();
+        jdbc.sql("update document_node set id = :to where id = :from")
+                .param("to", ZERO).param("from", first).update();
+        jdbc.sql("update document_node set id = :to where id = :from")
+                .param("to", first).param("from", last).update();
+        jdbc.sql("update document_node set id = :to where id = :from")
+                .param("to", last).param("from", ZERO).update();
+    }
+
+    /**
+     * Three-step swap through a sentinel: (semantics_id, heading_node_id) is unique, so a
+     * two-step exchange would transiently duplicate a key.
+     */
+    private static final String contractClauseSemanticsSwap =
+            "update contract_clause_semantics set heading_node_id = :to where heading_node_id = :from";
+
+    private void swap(String sql, UUID from, UUID to) {
+        jdbc.sql(sql).param("to", to).param("from", from).update();
+    }
+
+    private static final UUID ZERO = new UUID(0L, 0L);
 
     @Test
     void msaExtractsTypedLegalFactsAndRelationships() throws Exception {

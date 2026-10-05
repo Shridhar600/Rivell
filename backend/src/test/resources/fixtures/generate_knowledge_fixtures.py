@@ -128,6 +128,31 @@ clause_library_body = (
     + '<w:sectPr/>'
 )
 
+# A table whose header row labels two different columns "Cap". Both cells carry a different
+# value, so a payload keyed by header label silently drops one of them.
+duplicate_header_playbook_body = (
+    p('Duplicate Header Playbook', 'Title')
+    + p('Caps', 'Heading1')
+    + p('Two columns share the header label Cap.')
+    + '<w:tbl><w:tr>'
+    + '<w:tc><w:p><w:r><w:t>Clause</w:t></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>Cap</w:t></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>Cap</w:t></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>Note</w:t></w:r></w:p></w:tc>'
+    + '</w:tr><w:tr>'
+    + '<w:tc><w:p><w:r><w:t>Liability cap</w:t></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>1x annual fees</w:t></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>3x annual fees</w:t></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>first tier</w:t></w:r></w:p></w:tc>'
+    + '</w:tr><w:tr>'
+    + '<w:tc><w:p><w:r><w:t>Indemnity cap</w:t></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>2x annual fees</w:t></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>4x annual fees</w:t></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>second tier</w:t></w:r></w:p></w:tc>'
+    + '</w:tr></w:tbl>'
+    + '<w:sectPr/>'
+)
+
 sheet1 = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetData>
@@ -149,6 +174,7 @@ sheet2 = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 if __name__ == '__main__':
     write_docx('knowledge-playbook.docx', playbook_body)
     write_docx('clause-library.docx', clause_library_body)
+    write_docx('duplicate-header-playbook.docx', duplicate_header_playbook_body)
     write_zip('knowledge-matrix.xlsx', {
         '[Content_Types].xml': XLSX_CONTENT_TYPES,
         '_rels/.rels': XLSX_RELS,

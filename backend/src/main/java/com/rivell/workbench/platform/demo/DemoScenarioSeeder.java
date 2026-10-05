@@ -86,6 +86,7 @@ final class DemoScenarioSeeder {
         var seededContracts = contracts.seed();
         knowledge.publishBootstrap();
         knowledge.seedDraftAndFailure();
+        knowledge.seedRoutineGroup();
         var seededReviews = reviews.seed(seededContracts);
         knowledge.publishPlaybookV2();
 

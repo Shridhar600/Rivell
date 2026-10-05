@@ -2,6 +2,7 @@ package com.rivell.workbench.knowledge;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.time.Instant;
 
@@ -54,7 +55,18 @@ public interface KnowledgeRepository {
             KnowledgeCandidate updated, ReviewStatus expectedStatus,
             UUID correctedBy, java.time.Instant updatedAt);
 
-    void updateReviewState(
+    /**
+     * Persists a pre-publication review transition together with the candidate's derived
+     * conditions. Callers that do not re-derive conditions pass the candidate's current values,
+     * so conditions are only ever changed deliberately (see CandidateReviewService.edit).
+     *
+     * <p>This is a compare-and-set on the review status and the caller's responsibility is to
+     * check the answer: returns false when the expected status no longer held, which means
+     * somebody else moved the candidate first. Reporting success for a transition that wrote
+     * nothing would let a caller believe it holds a state it does not - the publication path
+     * would commit items for a candidate that is still EDITED.
+     */
+    boolean updateReviewState(
             UUID candidateId,
             UUID organizationId,
             ReviewStatus expectedStatus,
@@ -66,7 +78,10 @@ public interface KnowledgeRepository {
             UUID supersedingCandidateId,
             String reviewNote,
             Instant reviewedAt,
-            Instant updatedAt);
+            Instant updatedAt,
+            List<ConflictSignal> conflictSignals,
+            ReviewCategory reviewCategory,
+            Set<ReviewReason> reviewReasons);
 
     List<KnowledgeCandidate> findPublishedCandidates(UUID organizationId);
 

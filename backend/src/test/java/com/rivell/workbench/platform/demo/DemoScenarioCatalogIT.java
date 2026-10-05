@@ -20,9 +20,14 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import com.rivell.workbench.knowledge.ConflictType;
 import com.rivell.workbench.knowledge.IngestStatus;
 import com.rivell.workbench.knowledge.KnowledgeArtifact;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
+import com.rivell.workbench.knowledge.PublicationAction;
+import com.rivell.workbench.knowledge.ReviewCategory;
+import com.rivell.workbench.knowledge.CandidateReviewService;
+import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.knowledge.ReviewStatus;
 import com.rivell.workbench.redline.ApprovedChangeSet;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
@@ -96,6 +101,9 @@ class DemoScenarioCatalogIT {
 
     @Autowired
     KnowledgeQueryService knowledgeQueries;
+
+    @Autowired
+    CandidateReviewService candidateReview;
 
     private UUID organizationId() {
         return UUID.fromString("00000000-0000-0000-0000-000000000002");
@@ -299,6 +307,103 @@ class DemoScenarioCatalogIT {
                 .isNotEmpty();
     }
 
+    /**
+     * K07 must be genuinely actionable live, not merely present: the grouped-approval UI can
+     * only offer "Approve all" for candidates the server itself calls eligible. Eligibility is
+     * asserted from the seeded rows, so it can only hold if the real extraction,
+     * classification and categorization produced it.
+     */
+    @Test
+    void routineGroupIsGenuinelyBulkEligibleAfterAFreshSeed() {
+        var routine = knowledgeQueries.listArtifacts(null).stream()
+                .filter(artifact -> "Rivell Demo Routine Playbook.docx".equals(artifact.filename()))
+                .findFirst()
+                .orElseThrow();
+
+        var candidates = knowledgeQueries.getCandidates(routine.id());
+        var bulkEligible = candidates.stream()
+                .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PENDING)
+                .filter(candidate -> candidate.reviewCategory() == ReviewCategory.ROUTINE)
+                .toList();
+
+        assertThat(bulkEligible)
+                .as("K07 needs at least two candidates to form a group the UI can bulk approve")
+                .hasSizeGreaterThanOrEqualTo(2);
+        assertThat(bulkEligible).allSatisfy(candidate -> {
+            assertThat(candidate.reviewReasons())
+                    .as("ROUTINE means no review risk reason at all")
+                    .isEmpty();
+            assertThat(candidate.conflictSignals())
+                    .as("a bulk-approvable candidate carries no conflict signal")
+                    .isEmpty();
+            assertThat(candidate.effectiveConceptKey())
+                    .as("classification confidence is part of why these are routine")
+                    .isNotNull();
+        });
+
+        // The artifact also yields the disclaimer section, which states no legal concept and is
+        // therefore honestly ELEVATED. K07 must not quietly promote it into the bulk group, and
+        // the server rule that defines the group must keep it out.
+        var elevated = candidates.stream()
+                .filter(candidate -> candidate.reviewCategory() != ReviewCategory.ROUTINE)
+                .toList();
+        assertThat(elevated)
+                .as("the disclaimer keeps its truthful risk category instead of being grouped")
+                .isNotEmpty();
+        assertThat(elevated).allSatisfy(candidate -> assertThat(candidate.reviewReasons())
+                .as("an ineligible candidate must say why it needs individual review")
+                .isNotEmpty());
+        assertThat(bulkEligible)
+                .as("the bulk group is exactly the PENDING ROUTINE set the server would accept")
+                .containsExactlyElementsOf(candidates.stream()
+                        .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PENDING)
+                        .filter(candidate -> candidate.reviewCategory() == ReviewCategory.ROUTINE)
+                        .toList());
+    }
+
+    /**
+     * The demo has to contain live instances of each condition a reviewer is asked to judge, and
+     * they must be derived by the real domain rather than asserted into the seed. This measures
+     * what a fresh seed actually produced: a genuine contradiction between a draft candidate and
+     * published policy, exact duplicates, explicit supersede items in a publication, and a routine
+     * bulk-approvable group.
+     */
+    @Test
+    void seededKnowledgeCoversConflictDuplicateSupersessionAndRoutine() {
+        var candidates = knowledgeQueries.listArtifacts(null).stream()
+                .flatMap(artifact -> knowledgeQueries.getCandidates(artifact.id()).stream())
+                .toList();
+
+        assertThat(candidates)
+                .as("a genuine contradiction must exist for the conflict review path to be demonstrable")
+                .anySatisfy(candidate -> assertThat(candidate.conflictSignals())
+                        .anyMatch(signal -> signal.conflictType() == ConflictType.CONTRADICTS_EXISTING));
+        assertThat(candidates)
+                .as("exact duplicates must be detected against published knowledge")
+                .anySatisfy(candidate -> assertThat(candidate.conflictSignals())
+                        .anyMatch(signal -> signal.conflictType() == ConflictType.DUPLICATE));
+        assertThat(knowledgeQueries.listPublications(null))
+                .as("supersession is recorded explicitly, never as a silent overwrite")
+                .anySatisfy(publication -> assertThat(publication.items())
+                        .anyMatch(item -> item.action() == PublicationAction.SUPERSEDE));
+        assertThat(candidates)
+                .as("the routine group exists for grouped approval")
+                .anySatisfy(candidate -> assertThat(candidate.reviewCategory())
+                        .isEqualTo(ReviewCategory.ROUTINE));
+
+        // A published candidate must never carry a conflict it did not earn. The draft playbook
+        // prohibits uncapped liability while published policy caps it: those agree, so a text
+        // matcher that simply spotted the word "uncapped" would invent a conflict here.
+        var contradictingPublished = candidates.stream()
+                .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PUBLISHED)
+                .filter(candidate -> candidate.conflictSignals().stream()
+                        .anyMatch(signal -> signal.conflictType() == ConflictType.CONTRADICTS_EXISTING))
+                .toList();
+        assertThat(contradictingPublished)
+                .as("published knowledge must not carry a fabricated contradiction")
+                .isEmpty();
+    }
+
     @Test
     void rerunningTheSeedIsIdempotent() {
         var before = counts();
@@ -309,7 +414,7 @@ class DemoScenarioCatalogIT {
         assertThat(summary.contracts()).isEqualTo(14);
         assertThat(summary.reviews()).isEqualTo(12);
         assertThat(summary.findings()).isEqualTo(22);
-        assertThat(summary.knowledgeSources()).isEqualTo(5);
+        assertThat(summary.knowledgeSources()).isEqualTo(6);
         assertThat(summary.publications()).isEqualTo(2);
         assertThat(summary.escalationTriggerPublished()).isTrue();
 
@@ -320,6 +425,56 @@ class DemoScenarioCatalogIT {
                 ) duplicates
                 """).query(Long.class).single();
         assertThat(duplicateReviews).as("no contract may accumulate duplicate reviews").isZero();
+    }
+
+    /**
+     * K07 is meant to be exercised: the reviewer opens Review all and presses Approve all. The
+     * next start with the demo seed enabled must then still boot. The seeder may not fabricate
+     * fresh PENDING candidates to make the group look untouched again, and it may not undo the
+     * approval a person already gave; it has to recognise that the scenario was already run.
+     */
+    @Test
+    void theSeedSurvivesTheRoutineGroupHavingBeenExercised() {
+        var routineArtifact = knowledgeQueries.listArtifacts(null).stream()
+                .filter(artifact -> DemoDocuments.ROUTINE_PLAYBOOK.equals(artifact.filename()))
+                .findFirst()
+                .orElseThrow();
+        var routine = knowledgeQueries.getCandidates(routineArtifact.id()).stream()
+                .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PENDING)
+                .filter(candidate -> candidate.reviewCategory() == ReviewCategory.ROUTINE)
+                .toList();
+        assertThat(routine)
+                .as("K07 must leave genuinely bulk-eligible candidates behind")
+                .hasSizeGreaterThanOrEqualTo(2);
+        var ineligible = knowledgeQueries.getCandidates(routineArtifact.id()).stream()
+                .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PENDING)
+                .filter(candidate -> candidate.reviewCategory() != ReviewCategory.ROUTINE)
+                .toList();
+
+        var approved = candidateReview.bulkApprove(
+                routine.stream().map(KnowledgeCandidate::id).toList());
+        assertThat(approved.skipped()).isEmpty();
+        assertThat(approved.approvedIds()).hasSameSizeAs(routine);
+
+        var refused = candidateReview.bulkApprove(
+                ineligible.stream().map(KnowledgeCandidate::id).toList());
+        assertThat(refused.approvedIds())
+                .as("the elevated unit stays out of the group even when it is requested")
+                .isEmpty();
+        assertThat(refused.skipped().keySet()).containsExactlyElementsOf(
+                ineligible.stream().map(KnowledgeCandidate::id).toList());
+
+        var before = counts();
+        seeder.seed();
+        var after = counts();
+
+        assertThat(after)
+                .as("a reseed after the demo flow must not add rows in any domain table")
+                .isEqualTo(before);
+        routine.forEach(candidate -> assertThat(
+                knowledgeQueries.getCandidate(candidate.id()).reviewStatus())
+                .as("the human approval must not be undone by a reseed")
+                .isEqualTo(ReviewStatus.APPROVED));
     }
 
     @Test

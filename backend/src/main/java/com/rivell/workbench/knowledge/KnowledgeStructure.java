@@ -1,16 +1,16 @@
 package com.rivell.workbench.knowledge;
 
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.TreeMap;
-import java.util.HashMap;
-import java.time.Instant;
-import java.util.Comparator;
+import java.util.UUID;
 
 /**
  * Segmentation of the deterministic source-node tree into coherent regions
@@ -77,13 +77,13 @@ final class KnowledgeStructure {
     static final class TableRegion implements Region {
         private final KnowledgeSourceNode table;
         private final Map<Integer, List<KnowledgeSourceNode>> cellsByRow;
-        private final List<String> headerLabels;
+        private final List<String> columnKeys;
 
         TableRegion(KnowledgeSourceNode table, Map<Integer, List<KnowledgeSourceNode>> rowsByOrdinal,
-                List<String> headerLabels) {
+                List<String> columnKeys) {
             this.table = table;
             this.cellsByRow = Collections.unmodifiableMap(rowsByOrdinal);
-            this.headerLabels = headerLabels;
+            this.columnKeys = columnKeys;
         }
 
         @Override
@@ -111,24 +111,17 @@ final class KnowledgeStructure {
                 var columns = new LinkedHashMap<String, String>();
                 for (int i = 0; i < rowCells.size(); i++) {
                     var cell = rowCells.get(i);
-                    var header = i < headerLabels.size() && !headerLabels.get(i).isBlank()
-                            ? headerLabels.get(i)
-                            : "Column " + (i + 1);
-                    columns.put(header, cell.text() == null ? "" : cell.text());
+                    columns.put(columnKeys.get(i), cell.text() == null ? "" : cell.text());
                 }
                 var rawLabel = rowCells.get(0).text() != null && !rowCells.get(0).text().isBlank()
                         ? rowCells.get(0).text()
                         : columns.values().stream().filter(value -> !value.isBlank())
                                 .findFirst().orElse("");
-                var contentText = rowCells.stream()
-                        .map(KnowledgeSourceNode::text)
-                        .filter(text -> text != null && !text.isBlank())
-                        .reduce((a, b) -> a + " | " + b)
-                        .orElse(null);
+                var payload = new CandidatePayload(columns);
                 candidates.add(new KnowledgeCandidate(
                         UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                         candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                        rawLabel, contentText, new CandidatePayload(columns), null, null,
+                        rawLabel, payload.render(), payload, null, null,
                         null, null,
                         SemanticFields.EMPTY, null, List.of(),
                         null, null, null, scope, List.of(), null, null,
@@ -180,11 +173,11 @@ final class KnowledgeStructure {
                 return List.of();
             }
             var rawLabel = columns.values().iterator().next();
-            var contentText = String.join(" | ", columns.values());
+            var payload = new CandidatePayload(columns);
             return List.of(new KnowledgeCandidate(
                     UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                     candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                    rawLabel, contentText, new CandidatePayload(columns), null, null,
+                    rawLabel, payload.render(), payload, null, null,
                     null, null,
                     SemanticFields.EMPTY, null, List.of(),
                     null, null, null, scope, List.of(), null, null,
@@ -279,12 +272,40 @@ final class KnowledgeStructure {
             rowsByOrdinal.put(row.ordinal(), cellsOf(row, byId));
         }
         var headerLabels = new ArrayList<String>();
+        var width = 0;
         if (!rowsByOrdinal.isEmpty()) {
             for (var cell : rowsByOrdinal.firstEntry().getValue()) {
                 headerLabels.add(cell.text() == null ? "" : cell.text());
             }
         }
-        return new TableRegion(table, rowsByOrdinal, headerLabels);
+        for (var cells : rowsByOrdinal.values()) {
+            width = Math.max(width, cells.size());
+        }
+        return new TableRegion(table, rowsByOrdinal, columnKeys(headerLabels, width));
+    }
+
+    /**
+     * A header label is not a unique column name in real documents: a duplicated column keeps its
+     * label, and a two-tier header can repeat one. Because the payload is keyed by label, an
+     * unnumbered repeat silently dropped the second cell from the authoritative wording, so a row
+     * read as if the source said something it did not. Repeated labels are numbered in reading
+     * order, once per table, so every row of the same table resolves a column to the same key and
+     * a correction saved against it still attaches to the same cell.
+     */
+    private static List<String> columnKeys(List<String> headerLabels, int width) {
+        var keys = new ArrayList<String>(width);
+        var taken = new HashSet<String>();
+        for (int i = 0; i < width; i++) {
+            var label = i < headerLabels.size() ? headerLabels.get(i) : null;
+            var base = label == null || label.isBlank() ? "Column " + (i + 1) : label.strip();
+            var key = base;
+            for (int suffix = 2; taken.contains(key); suffix++) {
+                key = base + " (" + suffix + ")";
+            }
+            taken.add(key);
+            keys.add(key);
+        }
+        return List.copyOf(keys);
     }
 
     private static List<KnowledgeSourceNode> cellsOf(

@@ -125,12 +125,25 @@ public class KnowledgePublicationService {
                 transactionTemplate.executeWithoutResult(status -> {
                     repository.insertPublication(publication);
                     for (var candidate : candidates) {
-                        repository.updateReviewState(
+                        // The compare-and-set is the integrity boundary of this transaction. An
+                        // edit committed after validation demoted the candidate to EDITED, so
+                        // this matches no row: throwing rolls the publication back rather than
+                        // committing items for a candidate that was never approved in this state.
+                        // The conflict is surfaced, never retried, because a retry would publish
+                        // whatever the edit produced without the approval that was validated.
+                        var applied = repository.updateReviewState(
                                 candidate.id(), organizationId, candidate.reviewStatus(),
                                 ReviewStatus.PUBLISHED, candidate.editedContentText(),
                                 candidate.editedPayload(), candidate.editedSemanticFields(),
                                 candidate.scope(), candidate.supersedingCandidateId(),
-                                candidate.reviewNote(), candidate.reviewedAt(), now);
+                                candidate.reviewNote(), candidate.reviewedAt(), now,
+                                candidate.conflictSignals(), candidate.reviewCategory(),
+                                candidate.reviewReasons());
+                        if (!applied) {
+                            throw new InvalidPublicationException(candidate.id(),
+                                    "it changed state during publication and was no longer "
+                                            + "APPROVED when published");
+                        }
                     }
                     // published inside the transaction: AFTER_COMMIT listeners fire post-commit
                     eventPublisher.publishEvent(new KnowledgePublishedEvent(

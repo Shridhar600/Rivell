@@ -20,6 +20,7 @@ import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.knowledge.KnowledgeIngestionService;
 import com.rivell.workbench.knowledge.KnowledgePublicationService;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
+import com.rivell.workbench.knowledge.ReviewCategory;
 import com.rivell.workbench.knowledge.ReviewStatus;
 
 /**
@@ -112,6 +113,51 @@ final class DemoKnowledgeSeeder {
         }
         publications.publish(v2Approved.stream().map(KnowledgeCandidate::id).toList(),
                 supersede, NOTE + " (supersedes the first playbook)");
+    }
+
+    /**
+     * K07: a routine grouped-review group. Ingesting the routine playbook must leave genuinely
+     * bulk-eligible candidates behind: PENDING and ROUTINE under the real categorization, with
+     * an empty review-reason set. Nothing here approves, reclassifies or otherwise nudges a
+     * candidate into eligibility; if the domain stops classifying these units as routine the
+     * seed fails loudly rather than presenting an ineligible group as reviewable in bulk.
+     *
+     * <p>The scenario is meant to be exercised - Review all, then Approve all - so a later start
+     * finds the group already approved. That is recognised rather than repaired: fabricating
+     * fresh PENDING candidates would undo what the reviewer just did and make the demo lie about
+     * its own state, so the seeder reports that the scenario has already been run. The loud
+     * failure still guards a fresh seed, where an ineligible group would mean the domain stopped
+     * producing routine candidates at all.
+     */
+    void seedRoutineGroup() {
+        var artifact = ensureArtifact(DemoDocuments.ROUTINE_PLAYBOOK, ArtifactType.PLAYBOOK);
+        if (artifact.ingestStatus() != IngestStatus.EXTRACTED) {
+            throw new IllegalStateException(
+                    "Routine playbook did not compile: " + artifact.ingestStatus());
+        }
+        var candidates = queries.getCandidates(artifact.id());
+        var routine = candidates.stream()
+                .filter(candidate -> candidate.reviewCategory() == ReviewCategory.ROUTINE)
+                .toList();
+        var alreadyReviewed = candidates.stream()
+                .anyMatch(candidate -> candidate.reviewStatus() != ReviewStatus.PENDING);
+        if (routine.size() < 2 && !alreadyReviewed) {
+            throw new IllegalStateException("K07 needs at least 2 PENDING ROUTINE candidates for "
+                    + "grouped approval, but the domain produced " + routine.size()
+                    + " from " + DemoDocuments.ROUTINE_PLAYBOOK);
+        }
+        var pending = routine.stream()
+                .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PENDING)
+                .toList();
+        if (pending.size() >= 2) {
+            log.info("demo scenario: routine grouped review ready ({} candidates, reasons={})",
+                    pending.size(), pending.get(0).reviewReasons());
+            return;
+        }
+        log.info("demo scenario: routine grouped review already exercised by the demo flow "
+                + "({} approved, published or rejected; {} still pending) - leaving the "
+                + "reviewer's decisions untouched",
+                candidates.size() - pending.size(), pending.size());
     }
 
     boolean escalationTriggerPublished() {

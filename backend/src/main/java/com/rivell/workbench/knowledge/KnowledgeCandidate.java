@@ -30,6 +30,13 @@ public record KnowledgeCandidate(
         SemanticFields semanticFields,
         SemanticFields editedSemanticFields,
         List<FieldInterpretation> interpretations,
+        /**
+         * Wording a human typed, and nothing else. A structured correction is not wording: it is a
+         * set of corrected values in {@code editedPayload}, and its rendering is derived on read by
+         * {@link #effectiveContentText()}. Keeping derived wording out of this field is what makes
+         * the provenance unambiguous - a stored value here is always explicit human text, so a later
+         * correction can never mistake an older machine rendering for a person's decision.
+         */
         String editedContentText,
         CandidatePayload editedPayload,
         UUID supersedingCandidateId,
@@ -147,8 +154,50 @@ public record KnowledgeCandidate(
         return reviewStatus == ReviewStatus.PUBLISHED;
     }
 
+    /**
+     * The single authoritative wording of this candidate: what review, conflict analysis,
+     * publication and every published read must consume.
+     *
+     * <p>Resolution order, most specific human act first:
+     * <ol>
+     *   <li>explicit human wording, or the wording rendered from the human's corrected
+     *       structured columns when a correction changed only columns;</li>
+     *   <li>the rendered human columns, for any path that stores a correction without wording;</li>
+     *   <li>the machine wording captured at extraction.</li>
+     * </ol>
+     *
+     * <p>The machine wording is deliberately not re-derived from the stored payload at read time:
+     * the payload is held in {@code jsonb}, which does not preserve object key order, so a
+     * re-render could place "Fallback" before "Preferred" and misrepresent the source row. The
+     * machine wording was captured in true source order at extraction and stored as text.
+     *
+     * <p>Before this rule existed a human spreadsheet-column correction was stored but inert:
+     * {@code editedPayload} was persisted while wording, duplicate/conflict analysis and
+     * publication all kept reading the original {@code contentText}, so publication silently
+     * discarded the correction (AD 6.8, 6.11).
+     */
     public String effectiveContentText() {
-        return editedContentText != null ? editedContentText : contentText;
+        return firstReadable(editedContentText,
+                editedPayload == null ? null : editedPayload.render(),
+                contentText);
+    }
+
+    /**
+     * The wording invariant, one layer at a time: an explicit human correction wins, then the
+     * human's corrected columns, then the machine wording. A layer that is absent or blank is
+     * skipped rather than accepted, so a blank correction can never make a candidate with valid
+     * machine wording read as blank or null - published knowledge would be invisible, and
+     * {@code EvidenceIndexService} hashes this wording before indexing, so it would also silently
+     * never become retrievable. A candidate whose source carries no readable wording at all is
+     * legitimately null and is not indexed.
+     */
+    private static String firstReadable(String... layers) {
+        for (var layer : layers) {
+            if (layer != null && !layer.isBlank()) {
+                return layer;
+            }
+        }
+        return null;
     }
 
     public Set<PositionRole> effectivePositions() {

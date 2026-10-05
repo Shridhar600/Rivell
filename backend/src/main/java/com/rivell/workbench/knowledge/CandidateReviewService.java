@@ -15,10 +15,17 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
 
 /**
- * Human review of knowledge candidates: approve, edit, reject. Transitions are explicit
+     * Human review of knowledge candidates: approve, edit, reject. Transitions are explicit
  * and pre-publication only; a published candidate is immutable organizational knowledge
  * (Architecture Decision #6.4). Edits preserve the machine-proposed content and record
  * the human result separately (Architecture Decision #5.18 principle).
+ *
+ * <p>An edit also re-derives the candidate's conditions. Conflict, duplicate, supersession and
+ * review-risk categorization are computed from the candidate's <em>effective</em> wording,
+ * effective concept, effective positions and applicability scope (AD 6.9/7.15), and those are
+ * exactly the inputs a human correction can change. {@link #edit} already refuses a no-op
+ * correction, so recomputing here means "a determining input changed" rather than "something was
+ * touched", and an edit that leaves a condition intact leaves it genuinely intact.
  */
 public class CandidateReviewService {
 
@@ -76,11 +83,37 @@ public class CandidateReviewService {
             var editedSemantic = semanticFields == null ? SemanticFields.EMPTY : semanticFields;
             var semanticChanged = !editedSemantic.equals(SemanticFields.EMPTY);
             var scopeChanged = scope != null;
-            if ((contentText == null || contentText.isBlank()) && payload == null
+            var payloadChanged = payload != null && !payload.columns().isEmpty();
+            if ((contentText == null || contentText.isBlank()) && !payloadChanged
                     && !semanticChanged && !scopeChanged) {
                 throw new IllegalArgumentException("An edit must change content, payload, scope, or semantic fields");
             }
-            return new KnowledgeCandidate(
+            // A structured correction is a set of corrected values, not wording: it composes onto
+            // the values already corrected, so a second correction does not drop the first, and its
+            // rendering is derived on read rather than stored.
+            var base = candidate.editedPayload() != null
+                    && !candidate.editedPayload().columns().isEmpty()
+                    ? candidate.editedPayload()
+                    : candidate.payload();
+            var correctedPayload = payload == null ? null : base.correctedBy(payload);
+            if (payloadChanged && correctedPayload.render() == null) {
+                // Blanking every cell is not a correction: it carries no wording, so it would be
+                // stored, recompute conditions and move the candidate to EDITED while changing
+                // nothing a reader can see. Refuse it instead of silently keeping the machine
+                // wording behind an edit that looks like it cleared the row.
+                throw new IllegalArgumentException(
+                        "A structured correction must keep at least one non-blank column value");
+            }
+            // Correction provenance, and it is a single rule: editedContentText is wording a human
+            // typed, and only that. A derived rendering is never written here, because a stored
+            // rendering is indistinguishable from human prose and the next structured correction
+            // read it back as explicit wording, outranked its own fresh rendering and never took
+            // effect. effectiveContentText() resolves wording from explicit text, then the
+            // corrected columns, then the machine text, so nothing is derived twice.
+            var explicitWording = contentText != null && !contentText.isBlank()
+                    ? contentText
+                    : candidate.editedContentText();
+            var edited = new KnowledgeCandidate(
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
@@ -89,13 +122,30 @@ public class CandidateReviewService {
                     candidate.semanticFields(),
                     !editedSemantic.equals(SemanticFields.EMPTY) ? editedSemantic : candidate.editedSemanticFields(),
                     candidate.interpretations(),
-                    contentText != null ? contentText : candidate.editedContentText(),
-                    payload != null ? payload : candidate.editedPayload(),
+                    explicitWording,
+                    correctedPayload != null ? correctedPayload : candidate.editedPayload(),
                     candidate.supersedingCandidateId(), scope != null ? scope : candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
                     Texts.normalize(note), Instant.now(),
                     candidate.createdAt(), Instant.now());
+            return recomputeConditions(edited, candidate.artifactId());
         });
+    }
+
+    /**
+     * Re-derives conflict/duplicate/supersession signals and review-risk categorization for an
+     * edited candidate against currently published organizational truth (AD 6.9/7.15). The
+     * machine interpretation and the human correction are both untouched; only the derived
+     * conditions are refreshed.
+     */
+    private KnowledgeCandidate recomputeConditions(KnowledgeCandidate candidate, UUID artifactId) {
+        var signals = conflictDetector.inspect(candidate,
+                repository.findPublishedCandidates(candidate.organizationId()));
+        var withSignals = candidate.withConflictSignals(signals);
+        var assessment = repository.findArtifact(artifactId, candidate.organizationId())
+                .map(KnowledgeArtifact::assessment).orElse(null);
+        var categorization = categorizer.categorize(withSignals, assessment);
+        return withSignals.withReviewOutcome(categorization.category(), categorization.reasons());
     }
 
     public KnowledgeCandidate reject(UUID candidateId, String note) {
@@ -187,13 +237,20 @@ public class CandidateReviewService {
         var candidate = repository.findCandidate(candidateId, identity.organizationId())
                 .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
         var updated = change.apply(candidate);
-        repository.updateReviewState(
+        var applied = repository.updateReviewState(
                 updated.id(), identity.organizationId(), candidate.reviewStatus(),
                 updated.reviewStatus(), updated.editedContentText(),
                 updated.editedPayload(), updated.editedSemanticFields(), updated.scope(),
                 updated.supersedingCandidateId(),
                 updated.reviewNote(), updated.reviewedAt(),
-                updated.updatedAt());
+                updated.updatedAt(), updated.conflictSignals(),
+                updated.reviewCategory(), updated.reviewReasons());
+        if (!applied) {
+            // Somebody else moved the candidate between the read and this write. Reporting the
+            // intended state anyway would hand the caller a candidate it does not hold.
+            throw InvalidCandidateReviewStateException.lostConcurrentTransition(
+                    candidate, operation);
+        }
         return updated;
     }
 
@@ -224,12 +281,31 @@ public class CandidateReviewService {
                     skipped.put(candidateId, "not pending");
                     continue;
                 }
-                if (loaded.reviewCategory() != ReviewCategory.ROUTINE) {
-                    skipped.put(candidateId, "review-risk category "
-                            + (loaded.reviewCategory() == null ? "UNSET" : loaded.reviewCategory()));
+                // Bulk approval is the only review path that approves without a human reading the
+                // row, so it must not act on a category captured at extraction: another candidate
+                // may have been published since, which can turn this one into a duplicate or a
+                // contradiction. The stored category stays a snapshot (DW-053 covers the
+                // individually reviewed and published paths); the decision is re-derived here and
+                // the refusal names the condition that made the candidate ineligible.
+                var current = recomputeConditions(loaded, loaded.artifactId());
+                if (current.reviewCategory() != ReviewCategory.ROUTINE) {
+                    skipped.put(candidateId, "no longer eligible for bulk approval: "
+                            + (current.reviewCategory() == null
+                                    ? "UNSET" : current.reviewCategory())
+                            + (current.reviewReasons().isEmpty()
+                                    ? "" : " " + current.reviewReasons()));
                     continue;
                 }
-                approved.add(approve(candidateId, null).id());
+                try {
+                    approved.add(approve(candidateId, null).id());
+                } catch (InvalidCandidateReviewStateException conflict) {
+                    // One candidate losing the compare-and-set is that candidate's outcome, not the
+                    // batch's: BulkApprovalResult already reports per-candidate skips, so letting
+                    // the exception escape would turn a partial success into a failure and leave
+                    // the other approvals unapplied. Integrity is unchanged - the candidate that
+                    // lost the race is not approved, and it stays in whatever state it now holds.
+                    skipped.put(candidateId, "changed state during approval");
+                }
             }
         });
         return new BulkApprovalResult(List.copyOf(approved), java.util.Map.copyOf(skipped));
