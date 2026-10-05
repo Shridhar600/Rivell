@@ -140,7 +140,10 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
               )}
             </Field>
           ))}
-          <small>Column values are recorded with the candidate. Rivell uses the wording above.</small>
+          <small>
+            Column values are recorded with the candidate and are published as the corrected wording. Wording you
+            set above takes precedence over them.
+          </small>
         </fieldset>
       ) : null}
 

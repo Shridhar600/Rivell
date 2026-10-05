@@ -189,7 +189,7 @@ describe('candidate correction', () => {
     const { form } = await openEdit('v1', world)
     expect(within(form).getByLabelText('Role')).toHaveValue('PREFERRED')
     expect(within(form).getByLabelText('Variant')).toHaveValue('Mutual, standard')
-    expect(within(form).getByText(/Rivell uses the wording above/)).toBeInTheDocument()
+    expect(within(form).getByText(/are published as the corrected wording/)).toBeInTheDocument()
     await userEvent.selectOptions(within(form).getByLabelText('Role'), 'FALLBACK')
     await save()
     await waitFor(() => expect(editCalls(world)).toHaveLength(1))
