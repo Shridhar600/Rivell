@@ -50,14 +50,20 @@ describe('structured interpretation', () => {
     const rows = interpretationRows(
       make({
         candidateType: 'CLAUSE_VARIANT',
+        contentText: 'Mutual | Capped at 12 months',
         payloadColumns: { Variant: 'Mutual', Wording: 'Capped at 12 months' },
         editedPayloadColumns: { Variant: 'Mutual', Wording: 'Capped at 6 months' },
       }),
     )
     expect(row(rows, 'column:Variant')).toMatchObject({ value: 'Mutual', machine: null, corrected: false })
     expect(row(rows, 'column:Wording')).toMatchObject({ value: 'Capped at 6 months', machine: 'Rivell extracted: Capped at 12 months', corrected: true })
-    // The text Rivell uses is its own row. Editing a column does not change it.
-    expect(row(rows, 'wording')).toMatchObject({ corrected: false })
+    // The text Rivell uses is one value resolved from wording then corrected columns, so a
+    // column-only correction changes it: the corrected wording is shown with the machine row.
+    expect(row(rows, 'wording')).toMatchObject({
+      value: 'Mutual | Capped at 6 months',
+      machine: 'Rivell extracted: Mutual | Capped at 12 months',
+      corrected: true,
+    })
   })
 
   it('shows the reviewer concept correction and what Rivell classified', () => {

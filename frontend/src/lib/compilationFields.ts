@@ -136,11 +136,17 @@ export function interpretationRows(candidate: Candidate): FieldRow[] {
     }
   }
 
-  // The wording Rivell uses in reviews is the candidate's text. Edited spreadsheet columns are
-  // recorded with the candidate but are not what retrieval or a publication reads, so the text is
-  // always shown first and the columns, where there are any, follow as the source's own cells.
+  // The wording Rivell uses in reviews, in retrieval and in a publication is one value, resolved
+  // from explicit human wording, then the human's corrected columns, then the machine wording. A
+  // column-only correction therefore changes this text even though it changed no wording field, so
+  // the text is shown first and the columns, where there are any, follow as the source's own cells.
   const text = effectiveContentText(candidate)
-  const textChanged = candidate.editedContentText !== null && candidate.editedContentText !== candidate.contentText
+  const columnsDiverge = Object.keys(candidate.editedPayloadColumns).some(
+    (name) => candidate.editedPayloadColumns[name] !== candidate.payloadColumns[name],
+  )
+  const textChanged =
+    (candidate.editedContentText !== null && candidate.editedContentText !== candidate.contentText) ||
+    columnsDiverge
   rows.push({
     key: 'wording',
     label: isClause ? 'Approved wording' : 'Wording',

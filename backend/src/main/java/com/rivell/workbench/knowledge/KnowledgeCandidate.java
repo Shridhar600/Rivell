@@ -160,10 +160,9 @@ public record KnowledgeCandidate(
      *
      * <p>Resolution order, most specific human act first:
      * <ol>
-     *   <li>explicit human wording, or the wording rendered from the human's corrected
-     *       structured columns when a correction changed only columns;</li>
-     *   <li>the rendered human columns, for any path that stores a correction without wording;</li>
-     *   <li>the machine wording captured at extraction.</li>
+     *   <li>explicit human wording, the text a person typed;</li>
+     *   <li>the wording rendered from the human's corrected structured columns;</li>
+     *   <li>the machine/source wording captured at extraction.</li>
      * </ol>
      *
      * <p>The machine wording is deliberately not re-derived from the stored payload at read time:
