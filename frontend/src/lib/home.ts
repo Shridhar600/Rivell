@@ -1,240 +1,176 @@
-import type { ArtifactSummary, ArtifactType, Publication } from '../api/knowledge'
-import type { ReviewStatus } from '../api/reviews'
+import type { ReviewListItem } from '../api/reviews'
 import { shortDate } from './dates'
+import { reviewRowView, type Lifecycle, type LifecycleKey } from './reviewHistory'
 
-export type HomeGroupKey = 'needs_action' | 'running' | 'failed' | 'extracted' | 'completed'
-export type HomeTone = 'active' | 'attention' | 'danger' | 'neutral' | 'complete'
+/**
+ * Home is the Review work queue. It answers four questions: what needs me, what is running, what
+ * finished, and where I left off. Knowledge has its own area, so nothing about Knowledge appears here.
+ *
+ * Every Review is placed by `reviewLifecycle` (through `reviewRowView`), the same function the
+ * Reviews page uses, so Home and Reviews can never disagree. Readiness and human attention are the
+ * server's facts. Nothing here computes them.
+ */
 
-export const HOME_GROUP_LABELS: Record<HomeGroupKey, string> = {
-  needs_action: 'Needs action',
+/** Home's three sections. They are the Reviews page's `needs`, `running` and `done` groups. */
+export type HomeSectionKey = 'needs' | 'running' | 'done'
+
+export const HOME_SECTION_LABELS: Record<HomeSectionKey, string> = {
+  needs: 'Needs you',
   running: 'Running',
-  failed: 'Failed',
-  extracted: 'Extracted',
-  // Deliberately not "Recently": /api/knowledge/publications is unbounded and carries no recency
-  // field, so the old label was a time claim the data cannot support.
-  completed: 'Completed',
+  done: 'Recently completed',
 }
 
-interface MappedState {
-  group: HomeGroupKey
-  label: string
-  tone: HomeTone
-}
+/** Result rows shown on Home. The Reviews page keeps the full history. */
+export const RECENT_RESULTS_LIMIT = 5
 
-const UNKNOWN_STATE: MappedState = { group: 'needs_action', label: 'Status unknown', tone: 'neutral' }
-
-/**
- * `ingestStatus` never changes after extraction, so it cannot prove that a source still awaits
- * human review: once every candidate is published, the summary still reads EXTRACTED. The label
- * therefore states only what the field proves. Whether outstanding review work exists is a
- * backend gap, recorded in DEFERRED_WORK.md.
- */
-const INGEST_STATE: Record<string, MappedState> = {
-  RECEIVED: { group: 'running', label: 'Queued for compilation', tone: 'active' },
-  EXTRACTING: { group: 'running', label: 'Compiling', tone: 'active' },
-  EXTRACTED: { group: 'extracted', label: 'Extracted', tone: 'neutral' },
-  FAILED: { group: 'failed', label: 'Ingestion failed', tone: 'danger' },
-}
-
-/**
- * COMPLETED means analysis finished. It says nothing about whether decisions remain: a finalized
- * review reports COMPLETED too. Outstanding human work lives on HumanReviewView
- * (actionableFindings / remainingFindings), one read per review, so this must not claim it.
- */
-const REVIEW_STATE: Record<string, MappedState> = {
-  ANALYSIS_QUEUED: { group: 'running', label: 'Analysis queued', tone: 'active' },
-  ANALYZING: { group: 'running', label: 'Analyzing', tone: 'active' },
-  COMPLETED: { group: 'completed', label: 'Analysis complete', tone: 'complete' },
-  FAILED: { group: 'failed', label: 'Analysis failed', tone: 'danger' },
-}
-
-export function mapIngestStatus(status: string | null | undefined): MappedState {
-  return (status && INGEST_STATE[status]) || UNKNOWN_STATE
-}
-
-export function mapReviewStatus(status: string | null | undefined): MappedState {
-  return (status && REVIEW_STATE[status]) || UNKNOWN_STATE
-}
-
-const ARTIFACT_CHIPS: Record<ArtifactType, string> = {
-  PLAYBOOK: 'Playbook',
-  CLAUSE_LIBRARY: 'Clause library',
-  TEMPLATE: 'Template',
-  EXECUTED_PRECEDENT: 'Precedent',
-  NEGOTIATION_HISTORY: 'Negotiation history',
-  EXTERNAL_REFERENCE: 'External reference',
-}
-
-export type HomeItemKind = 'review' | 'knowledge_artifact' | 'knowledge_publication'
-
-export interface HomeWorkItem {
-  id: string
-  kind: HomeItemKind
-  title: string
-  meta: string | null
-  chip: string | null
-  stateLabel: string
-  tone: HomeTone
-  group: HomeGroupKey
-  /** Short, honest date for the WorkRow time column. Never a relative guess. */
-  timeLabel: string
-  /** The raw API timestamp behind `timeLabel`, for a full date in the inspector. */
-  timeValue: string
-  /** How to label that timestamp truthfully: `createdAt` is an "Added" time, not an "Updated" one. */
-  timeLabelKind: 'added' | 'updated'
-  /** Real in-product route for the primary action. */
-  to: string
-  primaryActionLabel: string
-  /** One truthful line of guidance, or null. */
-  guidance: string | null
-  /** Real facts for the inspector's property list. The date is added separately from `timeValue`. */
-  details: HomeDetail[]
-}
+export type HomeTone = 'active' | 'attention' | 'danger' | 'neutral' | 'complete'
 
 export interface HomeDetail {
   label: string
   value: string
 }
 
-export function knowledgeItemView(artifact: ArtifactSummary): HomeWorkItem {
-  const state = mapIngestStatus(artifact.ingestStatus)
-  return {
-    id: `artifact:${artifact.id}`,
-    kind: 'knowledge_artifact',
-    title: artifact.filename,
-    meta: null,
-    chip: ARTIFACT_CHIPS[artifact.artifactType] ?? 'Knowledge source',
-    stateLabel: state.label,
-    tone: state.tone,
-    group: state.group,
-    timeLabel: shortDate(artifact.createdAt),
-    timeValue: artifact.createdAt,
-    timeLabelKind: 'added',
-    to: `/knowledge/artifacts/${artifact.id}`,
-    primaryActionLabel: 'Open knowledge source',
-    guidance: knowledgeGuidance(state),
-    details: [{ label: 'Type', value: ARTIFACT_CHIPS[artifact.artifactType] ?? 'Knowledge source' }],
-  }
-}
-
-function knowledgeGuidance(state: MappedState): string | null {
-  switch (state.label) {
-    case 'Extracted':
-      // ingestStatus cannot say whether review work is outstanding, so it says only what happened.
-      return 'Compilation finished. Nothing from this source is used until it is published.'
-    case 'Ingestion failed':
-      return 'Nothing from this source was published.'
-    case 'Compiling':
-    case 'Queued for compilation':
-      return 'You can leave this page. This source keeps moving until compilation finishes, or it stops in Failed.'
-    default:
-      return null
-  }
-}
-
-export function publicationItemView(publication: Publication): HomeWorkItem {
-  return {
-    id: `publication:${publication.id}`,
-    kind: 'knowledge_publication',
-    title: `Knowledge publication ${publication.publicationNumber}`,
-    meta: publication.note,
-    chip: null,
-    stateLabel: 'Published',
-    tone: 'complete',
-    group: 'completed',
-    timeLabel: shortDate(publication.createdAt),
-    timeValue: publication.createdAt,
-    timeLabelKind: 'added',
-    to: `/knowledge/publications/${publication.id}`,
-    primaryActionLabel: 'View publication',
-    guidance: 'Published knowledge is an immutable versioned snapshot.',
-    details: [
-      { label: 'Number', value: String(publication.publicationNumber) },
-      ...(publication.note?.trim() ? [{ label: 'Note', value: publication.note.trim() }] : []),
-    ],
-  }
-}
-
-/**
- * The subset of `ReviewListItemView` Home needs. `contractTitle` and decision counts stay absent:
- * the read model carries a filename and a findings total, but nothing that says how much of that
- * work still awaits a human. Outstanding decisions live on `HumanReviewView`, one read per review.
- */
-export interface HomeReviewSummary {
+export interface HomeReview {
   id: string
-  contractId: string
-  filename: string | null
-  contractVersionNumber: number | null
-  status: ReviewStatus | string
-  createdAt: string
-  startedAt: string | null
-  completedAt: string | null
-  findings: number
+  title: string
+  /** Version and progress, for the row's second line. */
+  meta: string | null
+  /** Decision or result progress where the list proves one, such as "5 of 8 decided". */
+  progress: string | null
+  chip: string | null
+  stateLabel: string
+  tone: HomeTone
+  /** Null for a Review whose state the server did not describe. Home claims nothing about it. */
+  section: HomeSectionKey | null
+  lifecycle: LifecycleKey
+  /** Waiting for analysis to start, as opposed to analyzing. */
+  queued: boolean
+  /** Short, honest date for the row's time column. Never a relative guess. */
+  timeLabel: string
+  /** The raw API timestamp behind `timeLabel`, for a full date in the inspector. */
+  timeValue: string
+  /** The time is when the Review was added, or when something last happened to it. */
+  timeLabelKind: 'added' | 'updated'
+  /** The Review's front door. The workspace is reached from there. */
+  to: string
+  primaryActionLabel: string
+  guidance: string | null
+  details: HomeDetail[]
 }
 
-export function reviewItemView(review: HomeReviewSummary): HomeWorkItem {
-  const state = mapReviewStatus(review.status)
-  const time = review.completedAt ?? review.startedAt ?? review.createdAt
-  const timeKind = review.completedAt ? 'updated' : review.startedAt ? 'updated' : 'added'
-  return {
-    id: `review:${review.id}`,
-    kind: 'review',
-    title: review.filename?.trim() || 'Untitled contract',
-    meta: review.findings > 0 ? `${review.findings} ${review.findings === 1 ? 'finding' : 'findings'}` : null,
-    chip: review.contractVersionNumber === null ? null : `v${review.contractVersionNumber}`,
-    stateLabel: state.label,
-    tone: state.tone,
-    group: state.group,
-    timeLabel: shortDate(time),
-    timeValue: time,
-    timeLabelKind: timeKind,
-    to: `/reviews/${review.contractId}/analysis/${review.id}`,
-    primaryActionLabel: 'Open review',
-    guidance: reviewGuidance(state),
-    details: reviewDetails(review, state),
-  }
+const FAILURE_KEYS: readonly LifecycleKey[] = ['failed', 'rl_failed']
+
+function toneOf(lifecycle: Lifecycle): HomeTone {
+  if (FAILURE_KEYS.includes(lifecycle.key)) return 'danger'
+  if (lifecycle.group === 'needs') return 'attention'
+  if (lifecycle.group === 'running') return 'active'
+  if (lifecycle.group === 'done') return 'complete'
+  return 'neutral'
 }
 
-/**
- * Only facts the read model proves. A finding count is shown once analysis is finished: before
- * that, zero means "not yet", and "No findings" would be a claim the data cannot support.
- */
-function reviewDetails(review: HomeReviewSummary, state: MappedState): HomeDetail[] {
+const GUIDANCE: Partial<Record<LifecycleKey, string>> = {
+  queued: 'You can leave this page. Analysis starts on its own.',
+  analyzing: 'You can leave this page. Analysis keeps running.',
+  failed: 'The contract is unchanged. Open the review to see what stopped it.',
+  completed: 'Nothing is decided yet. Your decisions are recorded separately from the recommendations.',
+  progress: 'Open the review to continue deciding.',
+  blocked: 'An escalated Finding blocks finalizing until it is resolved.',
+  ready: 'Every decision is made. Finalizing is yours to do.',
+  degraded: 'Analysis finished, but no planned check completed, so there is nothing to finalize.',
+  finalized: 'Finalized. The decisions are frozen.',
+  finalized_zero: 'Finalized with no approved changes, so no redline was needed.',
+  rl_verified: 'Generated from the frozen decisions and checked against the result.',
+  rl_failed: 'The redline could not be produced. The frozen decisions are unchanged.',
+}
+
+/** When something last happened to the Review, by the most specific fact the server gives. */
+function timeOf(review: ReviewListItem): { value: string; kind: 'added' | 'updated' } {
+  const updated =
+    review.redline?.completedAt ?? review.finalization?.finalizedAt ?? review.completedAt ?? review.startedAt
+  return updated ? { value: updated, kind: 'updated' } : { value: review.createdAt, kind: 'added' }
+}
+
+function detailsOf(review: ReviewListItem, lifecycle: Lifecycle, typeLabel: string | null): HomeDetail[] {
   const details: HomeDetail[] = []
   if (review.contractVersionNumber !== null) {
     details.push({ label: 'Contract version', value: `v${review.contractVersionNumber}` })
   }
-  if (state.label === 'Analysis complete') {
-    details.push({
-      label: 'Findings',
-      value: review.findings === 0 ? 'None' : String(review.findings),
-    })
+  if (typeLabel) details.push({ label: 'Agreement', value: typeLabel })
+  const human = review.humanReview
+  // A finding count means nothing until analysis has finished: before that, zero is "not yet".
+  const analysed = lifecycle.group === 'needs' || lifecycle.group === 'done'
+  if (analysed && lifecycle.key !== 'failed') {
+    details.push({ label: 'Findings', value: review.findings === 0 ? 'None' : String(review.findings) })
+  }
+  if (human && (lifecycle.key === 'progress' || lifecycle.key === 'blocked' || lifecycle.key === 'ready')) {
+    details.push({ label: 'Decided', value: `${human.resolvedFindings} of ${human.actionableFindings}` })
+    if (human.escalated > 0) details.push({ label: 'Escalated', value: String(human.escalated) })
+  }
+  if (review.finalization) {
+    details.push({ label: 'Approved changes', value: String(review.finalization.approvedChanges) })
+  }
+  const verified = review.redline?.verifiedChangeCount
+  if (lifecycle.key === 'rl_verified' && verified !== null && verified !== undefined) {
+    details.push({ label: 'Verified changes', value: String(verified) })
   }
   return details
 }
 
-function reviewGuidance(state: MappedState): string | null {
-  if (state.label === 'Analysis failed') return 'The source document is unchanged.'
-  if (state.group === 'running') return 'You can leave this page.'
-  return null
-}
-
-export interface HomeGroups {
-  needsAction: HomeWorkItem[]
-  running: HomeWorkItem[]
-  failed: HomeWorkItem[]
-  extracted: HomeWorkItem[]
-  completed: HomeWorkItem[]
-}
-
-export function buildHomeGroups(items: readonly HomeWorkItem[]): HomeGroups {
-  const groups: HomeGroups = { needsAction: [], running: [], failed: [], extracted: [], completed: [] }
-  for (const item of items) {
-    if (item.group === 'needs_action') groups.needsAction.push(item)
-    else if (item.group === 'running') groups.running.push(item)
-    else if (item.group === 'failed') groups.failed.push(item)
-    else if (item.group === 'extracted') groups.extracted.push(item)
-    else groups.completed.push(item)
+export function homeReview(review: ReviewListItem): HomeReview {
+  const row = reviewRowView(review)
+  const { lifecycle } = row
+  const time = timeOf(review)
+  // The row's second line is the real progress where the list proves one, and the version otherwise.
+  const progress = row.progress === '—' ? null : row.progress
+  const meta = [row.versionChip, progress].filter(Boolean).join(' · ')
+  return {
+    id: review.id,
+    title: row.title,
+    meta: meta || null,
+    progress,
+    chip: row.typeChip,
+    stateLabel: lifecycle.label,
+    tone: toneOf(lifecycle),
+    section: lifecycle.group,
+    lifecycle: lifecycle.key,
+    queued: lifecycle.key === 'queued',
+    timeLabel: shortDate(time.value),
+    timeValue: time.value,
+    timeLabelKind: time.kind,
+    to: row.to,
+    primaryActionLabel: 'Open review',
+    guidance: GUIDANCE[lifecycle.key] ?? null,
+    details: detailsOf(review, lifecycle, row.typeChip),
   }
-  return groups
+}
+
+export interface HomeSections {
+  needs: HomeReview[]
+  running: HomeReview[]
+  /** Newest first, capped. `doneTotal` is how many finished Reviews were loaded. */
+  done: HomeReview[]
+  doneTotal: number
+  /** Loaded Reviews the server did not describe, which Home cannot place. They remain on Reviews. */
+  unplaced: number
+}
+
+/**
+ * Splits loaded Reviews into sections. A failure sorts to the top of Needs you, so it is never
+ * buried under routine work. Results are ordered by when they finished.
+ */
+export function buildHomeSections(reviews: readonly ReviewListItem[]): HomeSections {
+  const sections: HomeSections = { needs: [], running: [], done: [], doneTotal: 0, unplaced: 0 }
+  const finished: { view: HomeReview; at: number }[] = []
+  for (const review of reviews) {
+    const view = homeReview(review)
+    if (view.section === 'needs') sections.needs.push(view)
+    else if (view.section === 'running') sections.running.push(view)
+    else if (view.section === 'done') finished.push({ view, at: Date.parse(view.timeValue) || 0 })
+    else sections.unplaced += 1
+  }
+  sections.needs.sort((left, right) => Number(right.tone === 'danger') - Number(left.tone === 'danger'))
+  finished.sort((left, right) => right.at - left.at)
+  sections.doneTotal = finished.length
+  sections.done = finished.slice(0, RECENT_RESULTS_LIMIT).map((entry) => entry.view)
+  return sections
 }

@@ -207,6 +207,14 @@ export function CautionIcon({ className }: IconProps) {
 }
 
 
+export function OverviewIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M2.5 3.5h4.5v4.5H2.5zM9 3.5h4.5v4.5H9zM2.5 10h4.5v2.5H2.5zM9 10h4.5v2.5H9z" />
+    </svg>
+  )
+}
+
 export function ClauseIcon({ className }: IconProps) {
   return (
     <svg {...base} className={className}>

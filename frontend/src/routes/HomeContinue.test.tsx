@@ -6,6 +6,7 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { appRoutes } from '../app/router'
 import { RESUME_KEY, readResume, writeResume, type ResumeRecord } from '../lib/resume'
+import { humanWire, reviewWire } from '../test/reviewListFixtures'
 
 /**
  * "Continue where you left off" is device-local state shown beside real reads. These tests pin the
@@ -18,26 +19,7 @@ function envelope(data: unknown) {
 }
 
 function review(id: string, filename: string, status = 'COMPLETED', findings = 3) {
-  return {
-    id,
-    contractId: `con-${id}`,
-    contractVersionNumber: 1,
-    contractFilename: filename,
-    status,
-    failure: null,
-    createdAt: '2026-10-02T08:00:00Z',
-    startedAt: null,
-    completedAt: status === 'COMPLETED' ? '2026-10-02T09:00:00Z' : null,
-    activeRunNumber: null,
-    activeRunStatus: null,
-    latestRunStatus: null,
-    plannedChecks: 6,
-    completedChecks: 0,
-    degradedChecks: 0,
-    failedChecks: 0,
-    signals: 0,
-    findings,
-  }
+  return reviewWire(id, status, filename, { findings, humanReview: humanWire() })
 }
 
 function stubApi(options: { reviews?: unknown[]; nextCursor?: string | null; reviewsStatus?: number }) {
@@ -92,7 +74,7 @@ describe('Continue where you left off', () => {
   it('is absent on a first visit, when nothing was saved', async () => {
     stubApi({ reviews: [review('r1', 'Atlas Mutual NDA.docx')] })
     renderHome()
-    await screen.findByRole('region', { name: 'Completed' })
+    await screen.findByRole('region', { name: 'Needs you' })
     expect(screen.queryByRole('region', { name: 'Continue where you left off' })).not.toBeInTheDocument()
     expect(screen.queryByText(/continue where you left off/i)).not.toBeInTheDocument()
   })
@@ -125,9 +107,9 @@ describe('Continue where you left off', () => {
     expect(card).toHaveTextContent('Analyzing')
   })
 
-  it('never fabricates decision progress, a next step or a position', async () => {
+  it('never fabricates decision progress, a next step or a position when the server reported none', async () => {
     writeResume(RECORD)
-    stubApi({ reviews: [review('r1', 'Atlas Mutual NDA.docx')] })
+    stubApi({ reviews: [reviewWire('r1', 'COMPLETED', 'Atlas Mutual NDA.docx')] })
     renderHome()
     const card = await screen.findByRole('region', { name: 'Continue where you left off' })
     const text = card.textContent ?? ''
@@ -149,7 +131,7 @@ describe('Continue where you left off', () => {
     writeResume(RECORD)
     stubApi({ reviews: [review('someone-else', 'Other.docx')] })
     renderHome()
-    await screen.findByRole('region', { name: 'Completed' })
+    await screen.findByRole('region', { name: 'Needs you' })
     expect(screen.queryByRole('region', { name: 'Continue where you left off' })).not.toBeInTheDocument()
     await waitFor(() => expect(readResume()).toBeNull())
   })
@@ -167,8 +149,9 @@ describe('Continue where you left off', () => {
     globalThis.localStorage.setItem(RESUME_KEY, '{"v":1,"reviewId":"../../x"}')
     stubApi({ reviews: [review('r1', 'Atlas Mutual NDA.docx')] })
     renderHome()
-    await screen.findByRole('region', { name: 'Completed' })
+    await screen.findByRole('region', { name: 'Needs you' })
     expect(screen.queryByRole('region', { name: 'Continue where you left off' })).not.toBeInTheDocument()
+    expect(globalThis.localStorage.getItem(RESUME_KEY)).toBeNull()
   })
 
   it('can be dismissed, which clears the saved place', async () => {
@@ -186,7 +169,80 @@ describe('Continue where you left off', () => {
     stubApi({ reviews: [review('r1', 'Atlas Mutual NDA.docx')] })
     renderHome()
     const card = await screen.findByRole('region', { name: 'Continue where you left off' })
-    const group = await screen.findByRole('region', { name: 'Completed' })
+    const group = await screen.findByRole('region', { name: 'Needs you' })
     expect(card.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
+
+  it('shows the live decision progress the server reported, and nothing the browser made up', async () => {
+    writeResume(RECORD)
+    stubApi({ reviews: [review('r1', 'Atlas Mutual NDA.docx')] })
+    renderHome()
+    const card = await screen.findByRole('region', { name: 'Continue where you left off' })
+    expect(card).toHaveTextContent('5 of 8 decided')
+    expect(card).toHaveTextContent('In review')
+  })
 })
+
+describe('Continue keeps only a valid destination', () => {
+  const STALE_ADDRESSES = [
+    '/knowledge/artifacts/art-1',
+    '/knowledge/new',
+    '/knowledge/compilations/art-1',
+    'rivell-review-v5.html',
+    'https://evil.example/',
+    '//evil.example/reviews',
+    '/reviews/con-r1/analysis',
+    '#',
+  ]
+
+  it('retains a saved Review and sends Continue to its workspace', async () => {
+    writeResume(RECORD)
+    stubApi({ reviews: [review('r1', 'Atlas Mutual NDA.docx')] })
+    renderHome()
+    const card = await screen.findByRole('region', { name: 'Continue where you left off' })
+    expect(within(card).getByRole('link', { name: 'Continue review' })).toHaveAttribute('href', '/reviews/con-r1/analysis/r1')
+    expect(readResume()).toEqual(RECORD)
+  })
+
+  it.each(STALE_ADDRESSES)('discards a saved place that carries the retired address %s', async (address) => {
+    globalThis.localStorage.setItem(RESUME_KEY, JSON.stringify({ v: 1, ...RECORD, route: address }))
+    stubApi({ reviews: [review('r1', 'Atlas Mutual NDA.docx')] })
+    renderHome()
+    await screen.findByRole('region', { name: 'Needs you' })
+    expect(screen.queryByRole('region', { name: 'Continue where you left off' })).not.toBeInTheDocument()
+    expect(globalThis.localStorage.getItem(RESUME_KEY)).toBeNull()
+  })
+
+  it.each([
+    '/reviews',
+    '/reviews/con-r1/overview/r1',
+    '/reviews/con-r1/overview/r1/findings',
+    '/reviews/con-r1/analysis/r1',
+  ])('accepts a saved address that is still a Review destination: %s', async (address) => {
+    globalThis.localStorage.setItem(RESUME_KEY, JSON.stringify({ v: 1, ...RECORD, route: address }))
+    stubApi({ reviews: [review('r1', 'Atlas Mutual NDA.docx')] })
+    renderHome()
+    const card = await screen.findByRole('region', { name: 'Continue where you left off' })
+    // Whatever was stored, the link is rebuilt from the ids, never followed from storage.
+    expect(within(card).getByRole('link', { name: 'Continue review' })).toHaveAttribute('href', '/reviews/con-r1/analysis/r1')
+  })
+
+  it('discards a saved place from a retired record version', async () => {
+    globalThis.localStorage.setItem(RESUME_KEY, JSON.stringify({ v: 0, ...RECORD }))
+    stubApi({ reviews: [review('r1', 'Atlas Mutual NDA.docx')] })
+    renderHome()
+    await screen.findByRole('region', { name: 'Needs you' })
+    expect(screen.queryByText(/continue where you left off/i)).not.toBeInTheDocument()
+    expect(globalThis.localStorage.getItem(RESUME_KEY)).toBeNull()
+  })
+
+  it('goes nowhere when the saved Review is gone, so Continue never opens a dead page', async () => {
+    writeResume(RECORD)
+    stubApi({ reviews: [review('other', 'Other.docx')] })
+    renderHome()
+    await screen.findByRole('region', { name: 'Needs you' })
+    expect(screen.queryByRole('link', { name: 'Continue review' })).not.toBeInTheDocument()
+    await waitFor(() => expect(readResume()).toBeNull())
+  })
+})
+
