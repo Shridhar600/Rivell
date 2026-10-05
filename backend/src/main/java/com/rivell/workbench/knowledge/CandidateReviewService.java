@@ -83,7 +83,8 @@ public class CandidateReviewService {
             var editedSemantic = semanticFields == null ? SemanticFields.EMPTY : semanticFields;
             var semanticChanged = !editedSemantic.equals(SemanticFields.EMPTY);
             var scopeChanged = scope != null;
-            if ((contentText == null || contentText.isBlank()) && payload == null
+            var payloadChanged = payload != null && !payload.columns().isEmpty();
+            if ((contentText == null || contentText.isBlank()) && !payloadChanged
                     && !semanticChanged && !scopeChanged) {
                 throw new IllegalArgumentException("An edit must change content, payload, scope, or semantic fields");
             }
@@ -92,11 +93,25 @@ public class CandidateReviewService {
             // order a client or jsonb round trip hands back. Without this the structured
             // correction was stored and then ignored by every consumer of effectiveContentText().
             var correctedPayload = payload == null ? null : candidate.payload().correctedBy(payload);
-            var correctedWording = contentText != null && !contentText.isBlank()
+            if (payloadChanged && correctedPayload.render() == null) {
+                // Blanking every cell is not a correction: it carries no wording, so it would be
+                // stored, recompute conditions and move the candidate to EDITED while changing
+                // nothing a reader can see. Refuse it instead of silently keeping the machine
+                // wording behind an edit that looks like it cleared the row.
+                throw new IllegalArgumentException(
+                        "A structured correction must keep at least one non-blank column value");
+            }
+            // Correction precedence, and it is the same precedence effectiveContentText() reads:
+            // explicit human wording, then the human's corrected columns, then the machine wording.
+            // A later cell fix must not silently discard wording the human already wrote, so a
+            // prior human correction outranks a rendering. The structured correction is still
+            // persisted, which is what keeps it recoverable and auditable.
+            var statedWording = contentText != null && !contentText.isBlank()
                     ? contentText
-                    : correctedPayload != null && !correctedPayload.columns().isEmpty()
-                            ? correctedPayload.render()
-                            : candidate.editedContentText();
+                    : candidate.editedContentText();
+            var correctedWording = statedWording != null && !statedWording.isBlank()
+                    ? statedWording
+                    : correctedPayload == null ? null : correctedPayload.render();
             var edited = new KnowledgeCandidate(
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,

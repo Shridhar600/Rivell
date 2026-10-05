@@ -170,13 +170,27 @@ public record KnowledgeCandidate(
      * discarded the correction (AD 6.8, 6.11).
      */
     public String effectiveContentText() {
-        if (editedContentText != null) {
-            return editedContentText;
+        return firstReadable(editedContentText,
+                editedPayload == null ? null : editedPayload.render(),
+                contentText);
+    }
+
+    /**
+     * The wording invariant, one layer at a time: an explicit human correction wins, then the
+     * human's corrected columns, then the machine wording. A layer that is absent or blank is
+     * skipped rather than accepted, so a blank correction can never make a candidate with valid
+     * machine wording read as blank or null - published knowledge would be invisible, and
+     * {@code EvidenceIndexService} hashes this wording before indexing, so it would also silently
+     * never become retrievable. A candidate whose source carries no readable wording at all is
+     * legitimately null and is not indexed.
+     */
+    private static String firstReadable(String... layers) {
+        for (var layer : layers) {
+            if (layer != null && !layer.isBlank()) {
+                return layer;
+            }
         }
-        if (editedPayload != null && !editedPayload.columns().isEmpty()) {
-            return editedPayload.render();
-        }
-        return contentText;
+        return null;
     }
 
     public Set<PositionRole> effectivePositions() {

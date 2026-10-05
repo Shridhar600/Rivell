@@ -203,6 +203,67 @@ class KnowledgeColumnCorrectionIT {
                 .isEqualTo(MACHINE_ROW);
     }
 
+    /**
+     * Reviewer finding 4: a human who first states the rule in words and then fixes the cell it
+     * came from must not lose their words. The structured correction is recorded either way, but
+     * the authoritative wording stays the human's own text.
+     */
+    @Test
+    void aLaterColumnCorrectionDoesNotEraseEarlierHumanWording() throws Exception {
+        var artifact = ingestMatrix();
+        var candidate = liabilityCapRow(artifact);
+        var humanWording = "Liability capped at three times annual fees";
+
+        var stated = reviewService.edit(candidate.id(), humanWording,
+                null, null, null, "state the cap in words");
+        assertThat(stated.effectiveContentText()).isEqualTo(humanWording);
+
+        var correctedColumns = new LinkedHashMap<>(candidate.payload().columns());
+        correctedColumns.put("Preferred", "3x annual fees");
+        var afterCellFix = reviewService.edit(candidate.id(), null,
+                new CandidatePayload(correctedColumns), null, null, "fix the cell");
+
+        assertThat(afterCellFix.effectiveContentText())
+                .as("an earlier human correction must survive a later structured correction")
+                .isEqualTo(humanWording);
+        assertThat(afterCellFix.editedContentText())
+                .as("the human wording stays auditable, not overwritten by the rendering")
+                .isEqualTo(humanWording);
+        assertThat(afterCellFix.editedPayload().columns())
+                .as("the structured correction is still recorded alongside the wording")
+                .containsEntry("Preferred", "3x annual fees");
+        assertThat(afterCellFix.reviewNote())
+                .as("the later correction's note is kept, so the audit trail is the latest action")
+                .isEqualTo("fix the cell");
+        assertThat(queryService.getCandidate(candidate.id()).effectiveContentText())
+                .as("the precedence holds after a reload, not only in memory")
+                .isEqualTo(humanWording);
+    }
+
+    /**
+     * The reverse order is the same rule read from the other side: fresh wording wins over an
+     * earlier structured correction, and the correction is not lost.
+     */
+    @Test
+    void freshHumanWordingSupersedesAnEarlierStructuredCorrection() throws Exception {
+        var artifact = ingestMatrix();
+        var candidate = liabilityCapRow(artifact);
+        var correctedColumns = new LinkedHashMap<>(candidate.payload().columns());
+        correctedColumns.put("Preferred", "3x annual fees");
+
+        var corrected = reviewService.edit(candidate.id(), null,
+                new CandidatePayload(correctedColumns), null, null, "fix the cell");
+        assertThat(corrected.effectiveContentText()).isEqualTo(CORRECTED_ROW);
+
+        var restated = reviewService.edit(candidate.id(), "Liability capped at 3x fees",
+                null, null, null, "restate it");
+
+        assertThat(restated.effectiveContentText()).isEqualTo("Liability capped at 3x fees");
+        assertThat(restated.editedPayload().columns())
+                .as("the earlier structured correction is still recoverable")
+                .containsEntry("Preferred", "3x annual fees");
+    }
+
     private KnowledgeCandidate liabilityCapRow(KnowledgeArtifact artifact) {
         return queryService.getCandidates(artifact.id()).stream()
                 .filter(row -> "1x annual fees".equals(row.payload().columns().get("Preferred")))
