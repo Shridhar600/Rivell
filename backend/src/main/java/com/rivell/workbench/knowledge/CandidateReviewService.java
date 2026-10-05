@@ -248,7 +248,8 @@ public class CandidateReviewService {
         if (!applied) {
             // Somebody else moved the candidate between the read and this write. Reporting the
             // intended state anyway would hand the caller a candidate it does not hold.
-            throw new InvalidCandidateReviewStateException(candidate, operation);
+            throw InvalidCandidateReviewStateException.lostConcurrentTransition(
+                    candidate, operation);
         }
         return updated;
     }
@@ -295,7 +296,16 @@ public class CandidateReviewService {
                                     ? "" : " " + current.reviewReasons()));
                     continue;
                 }
-                approved.add(approve(candidateId, null).id());
+                try {
+                    approved.add(approve(candidateId, null).id());
+                } catch (InvalidCandidateReviewStateException conflict) {
+                    // One candidate losing the compare-and-set is that candidate's outcome, not the
+                    // batch's: BulkApprovalResult already reports per-candidate skips, so letting
+                    // the exception escape would turn a partial success into a failure and leave
+                    // the other approvals unapplied. Integrity is unchanged - the candidate that
+                    // lost the race is not approved, and it stays in whatever state it now holds.
+                    skipped.put(candidateId, "changed state during approval");
+                }
             }
         });
         return new BulkApprovalResult(List.copyOf(approved), java.util.Map.copyOf(skipped));

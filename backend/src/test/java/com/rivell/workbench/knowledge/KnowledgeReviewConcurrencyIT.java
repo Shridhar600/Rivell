@@ -41,7 +41,10 @@ import com.rivell.workbench.organization.UserIdentity;
  * that the first compare-and-set performs the competing edit on its own connection and waits for
  * it to commit, which is exactly what a second user's edit does at that moment.
  */
-@SpringBootTest
+// The scripted provider is what makes semantic compilation succeed without an API key, and only a
+// confidently classified candidate is ROUTINE, which is what bulk approval requires. Each test uses
+// its own organization, so the demo seed this property also triggers cannot affect the assertions.
+@SpringBootTest(properties = "rivell.demo.seed-enabled=true")
 @Testcontainers
 class KnowledgeReviewConcurrencyIT {
 
@@ -193,8 +196,11 @@ class KnowledgeReviewConcurrencyIT {
                 .param("org", organizationId).query(Long.class).single())
                 .as("the publication must not commit against a candidate that was no longer approved")
                 .isZero();
-        assertThat(jdbc.sql("select count(*) from knowledge_publication_item")
-                .query(Long.class).single())
+        assertThat(jdbc.sql("""
+                select count(*) from knowledge_publication_item i
+                join knowledge_publication p on p.id = i.publication_id
+                where p.organization_id = :org
+                """).param("org", organizationId).query(Long.class).single())
                 .isZero();
     }
 
@@ -214,7 +220,41 @@ class KnowledgeReviewConcurrencyIT {
     }
 
     /**
-     * The contract the other two tests rely on, asserted directly: the compare-and-set reports
+     * A compare-and-set lost inside a bulk approval is one candidate's outcome, not the batch's.
+     * BulkApprovalResult already reports per-candidate skips, so aborting the whole batch because
+     * one candidate moved under the reviewer turned a partial success into a failure and left the
+     * other approvals unapplied. The integrity guarantee is unchanged: the candidate that lost the
+     * race is not approved.
+     */
+    @Test
+    void aCandidateThatLosesTheRaceIsReportedWithoutAbortingTheBatch() throws Exception {
+        var artifact = ingestRoutinePlaybook();
+        var routine = queryService.getCandidates(artifact.id()).stream()
+                .filter(candidate -> candidate.reviewStatus() == ReviewStatus.PENDING)
+                .filter(candidate -> candidate.reviewCategory() == ReviewCategory.ROUTINE)
+                .toList();
+        assertThat(routine).hasSizeGreaterThanOrEqualTo(2);
+        var loser = routine.get(0);
+        var winner = routine.get(1);
+        concurrentEdit.arm(() -> reviewService.edit(loser.id(), "edited by the other user",
+                null, null, null, "a second user got there first"));
+
+        var result = reviewService.bulkApprove(
+                java.util.List.of(loser.id(), winner.id()));
+
+        assertThat(result.approvedIds())
+                .as("the candidate that did not lose the race must still be approved")
+                .containsExactly(winner.id());
+        assertThat(result.skipped()).containsOnlyKeys(loser.id());
+        assertThat(queryService.getCandidate(loser.id()).reviewStatus())
+                .as("integrity: the candidate that lost the race is not approved")
+                .isEqualTo(ReviewStatus.EDITED);
+        assertThat(queryService.getCandidate(winner.id()).reviewStatus())
+                .isEqualTo(ReviewStatus.APPROVED);
+    }
+
+    /**
+     * The contract the other tests rely on, asserted directly: the compare-and-set reports
      * whether it matched a row, and a caller that ignores that answer is relying on luck.
      */
     @Test
@@ -240,6 +280,19 @@ class KnowledgeReviewConcurrencyIT {
         var artifact = ingestMatrix();
         var candidate = queryService.getCandidates(artifact.id()).get(0);
         return reviewService.approve(candidate.id(), "approved");
+    }
+
+    private KnowledgeArtifact ingestRoutinePlaybook() throws Exception {
+        try (var stream = getClass().getClassLoader()
+                .getResourceAsStream("demo/documents/Rivell Demo Routine Playbook.docx")) {
+            assertThat(stream).as("demo routine playbook").isNotNull();
+            return ingestionService.ingest("routine.docx",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ArtifactType.PLAYBOOK,
+                    new ArtifactManifest(Set.of(), null, null, null, null, null, null, null,
+                            "Rivell local demo scenario data"),
+                    stream);
+        }
     }
 
     private KnowledgeArtifact ingestMatrix() throws Exception {
