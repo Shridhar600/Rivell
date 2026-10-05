@@ -797,6 +797,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("jurisdiction"),
                 readDate(rs, "effective_from"),
                 readDate(rs, "effective_to"));
+        var machinePayload = readPayload(rs.getString("payload"), rs.getString("content_text"));
+        var recoveredOrder = machinePayload.columnOrder();
         return new KnowledgeCandidate(
                 uuid(rs, "id"),
                 uuid(rs, "artifact_id"),
@@ -806,7 +808,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 ReviewStatus.valueOf(rs.getString("review_status")),
                 rs.getString("raw_label"),
                 rs.getString("content_text"),
-                readPayload(rs.getString("payload")),
+                machinePayload,
                 rs.getString("legal_concept_key"),
                 rs.getString("concept_correction"),
                 uuid(rs, "concept_corrected_by"),
@@ -815,7 +817,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 readSemanticFields(rs.getString("edited_semantic_fields")),
                 readInterpretations(rs.getString("interpretations")),
                 rs.getString("edited_content_text"),
-                readPayload(rs.getString("edited_payload")),
+                readPayload(rs.getString("edited_payload"), rs.getString("content_text"),
+                        recoveredOrder),
                 uuid(rs, "superseding_candidate_id"),
                 scope,
                 readConflictSignals(rs.getString("conflict_signals")),
@@ -911,7 +914,17 @@ private String writeUuidList(List<UUID> values) {
         }
     }
 
-    private CandidatePayload readPayload(String json) {
+    private CandidatePayload readPayload(String json, String machineWording) {
+        return readPayload(json, machineWording, java.util.List.of());
+    }
+
+    /**
+     * Reads a persisted payload. A payload written before column order was recorded recovers it
+     * from the machine wording (see {@link CandidatePayload#withRecoveredOrder}), so a legacy row
+     * keeps reading left to right instead of in the order {@code jsonb} returns keys.
+     */
+    private CandidatePayload readPayload(
+            String json, String machineWording, java.util.List<String> verifiedOrder) {
         if (json == null || json.isBlank()) {
             return CandidatePayload.EMPTY;
         }
@@ -937,7 +950,8 @@ private String writeUuidList(List<UUID> values) {
                     }
                 }
             }
-            return new CandidatePayload(columns, columnOrder);
+            return new CandidatePayload(columns, columnOrder)
+                    .withRecoveredOrder(machineWording, verifiedOrder);
         } catch (IOException e) {
             throw new IllegalStateException("Could not read candidate payload", e);
         }

@@ -80,6 +80,74 @@ public record CandidatePayload(Map<String, String> columns, List<String> columnO
     }
 
     /**
+     * Recovers the source order of a payload that was persisted before the order was recorded.
+     *
+     * <p>The machine wording is the reliable record of source order: extraction rendered it left
+     * to right, so it can be replayed against the stored values to recover which value came
+     * first. Recovery is applied only when the wording is exactly the rendering of those values -
+     * same number of readable values, each matching an unconsumed one. If the stored wording is
+     * unrelated to the columns, or a value itself contains the separator, nothing is recovered
+     * and the payload keeps the order the database returned rather than claiming a source order it
+     * cannot prove.
+     *
+     * <p>A human correction over the same columns no longer matches the machine wording, so its
+     * order comes from {@code verifiedOrder}, the order already recovered for the machine
+     * payload of the same row. Columns the correction introduced keep their own order at the end.
+     */
+    public CandidatePayload withRecoveredOrder(String machineWording, List<String> verifiedOrder) {
+        if (!columnOrder.isEmpty() || columns.isEmpty()) {
+            return this;
+        }
+        var matched = matchOrderTo(machineWording);
+        if (matched != null) {
+            return new CandidatePayload(columns, matched);
+        }
+        if (verifiedOrder == null || verifiedOrder.isEmpty()
+                || !columns.keySet().containsAll(verifiedOrder)) {
+            return this;
+        }
+        return new CandidatePayload(columns, verifiedOrder);
+    }
+
+    private List<String> matchOrderTo(String machineWording) {
+        if (machineWording == null || machineWording.isBlank()) {
+            return null;
+        }
+        var readable = new ArrayList<String>();
+        for (var part : machineWording.split("\\|", -1)) {
+            var value = part.strip();
+            if (!value.isEmpty()) {
+                readable.add(value);
+            }
+        }
+        var unmatched = new LinkedHashMap<String, String>();
+        for (var entry : columns.entrySet()) {
+            if (entry.getValue() != null && !entry.getValue().isBlank()) {
+                unmatched.put(entry.getKey(), entry.getValue());
+            }
+        }
+        if (unmatched.size() != readable.size()) {
+            return null;
+        }
+        var order = new ArrayList<String>(readable.size());
+        for (var value : readable) {
+            String match = null;
+            for (var entry : unmatched.entrySet()) {
+                if (value.equals(entry.getValue())) {
+                    match = entry.getKey();
+                    break;
+                }
+            }
+            if (match == null) {
+                return null;
+            }
+            unmatched.remove(match);
+            order.add(match);
+        }
+        return order;
+    }
+
+    /**
      * The single canonical wording rendering of structured source values: the non-blank cell
      * values in authoritative column order, separated by {@code " | "}. Extraction renders
      * machine wording this way and a human column correction is rendered the same way, so the
