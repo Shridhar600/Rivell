@@ -416,6 +416,7 @@ export const fixtureStructure = {
 export type StubOptions = {
   contractSummary?: unknown
   taxonomy?: unknown
+  taxonomyStatus?: number
   semantics?: SemanticContract | null
   semanticsStatus?: number
   enrichmentResponse?: () => Response
@@ -502,6 +503,12 @@ export function stubContractApi(options: StubOptions = {}) {
     requests.push({ method, url, body })
 
     if (method === 'GET' && url.includes('/api/taxonomy/concepts')) {
+      if (options.taxonomyStatus && options.taxonomyStatus !== 200) {
+        return jsonResponse(
+          { code: String(options.taxonomyStatus), title: 'Error', detail: 'x' },
+          options.taxonomyStatus,
+        )
+      }
       return jsonResponse(options.taxonomy ?? taxonomyFixture)
     }
     if (method === 'GET' && /\/api\/contracts\/c1$/.test(url)) {

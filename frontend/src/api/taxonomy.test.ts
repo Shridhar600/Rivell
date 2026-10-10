@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  conceptLabel,
   parseTaxonomy,
   taxonomyGroups,
   taxonomyLabels,
@@ -56,16 +55,15 @@ describe('parseTaxonomy', () => {
 describe('taxonomy labels', () => {
   const taxonomy = parseTaxonomy(payload) as Taxonomy
 
-  it('labels keys from the API and humanizes keys the taxonomy does not know', () => {
-    expect(conceptLabel(taxonomy, 'ONWARD_DISCLOSURE')).toBe('Disclosure to representatives')
-    expect(conceptLabel(taxonomy, 'RETIRED_TOPIC')).toBe('Retired topic')
-    expect(conceptLabel(undefined, 'RETIRED_TOPIC')).toBe('Retired topic')
-  })
-
   it('maps every parent and leaf key to its label', () => {
     const labels = taxonomyLabels(taxonomy)
+    expect(labels.get('ONWARD_DISCLOSURE')).toBe('Disclosure to representatives')
     expect(labels.get('TERM')).toBe('Term')
     expect(labels.get('CONFIDENTIALITY')).toBe('Confidentiality')
+  })
+
+  it('knows no labels before the taxonomy answers', () => {
+    expect(taxonomyLabels(undefined).size).toBe(0)
   })
 })
 

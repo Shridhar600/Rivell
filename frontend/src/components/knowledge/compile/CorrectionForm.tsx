@@ -42,6 +42,8 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
   const scopeDiffs = scopeDifferences(candidate, artifact)
   const conceptDisabled = pending || taxonomy.isPending || taxonomy.isError
   const selectedIsLeaf = draft.concept === '' || taxonomy.leaves.some((leaf) => leaf.key === draft.concept)
+  const selectedKnown =
+    selectedIsLeaf || taxonomy.parents.some((parent) => parent.key === draft.concept)
 
   const semantic = (change: Partial<SemanticDraft>) => setDraft((previous) => ({ ...previous, semantic: { ...previous.semantic, ...change } }))
   const scope = (key: keyof typeof draft.scope) => (event: { target: { value: string } }) =>
@@ -74,7 +76,9 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
               {selectedIsLeaf ? null : (
                 <option value={draft.concept}>
                   {humanizeCode(draft.concept)}
-                  {!taxonomy.isPending && !taxonomy.isError ? ' (not in the current taxonomy)' : ''}
+                  {!taxonomy.isPending && !taxonomy.isError && !selectedKnown
+                    ? ' (not in the current taxonomy)'
+                    : ''}
                 </option>
               )}
               {taxonomy.groups.map((group) => (

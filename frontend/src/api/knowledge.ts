@@ -253,7 +253,7 @@ export interface Candidate {
   legalConceptKey: string | null
   /** The human correction when one exists, otherwise the classified concept. Absent when neither is set. */
   effectiveConceptKey: string | null
-  /** A reviewer's LegalConcept correction. An empty string means the reviewer cleared the concept. */
+  /** A reviewer's taxonomy-key correction. An empty string means the reviewer cleared the concept. */
   conceptCorrection: string | null
   classifiedConcepts: Record<string, number>
   positions: PositionRole[]
@@ -1024,7 +1024,7 @@ function useCandidateReviewInvalidation() {
 
 export interface ConceptCorrectionVariables {
   candidateId: string
-  /** A LegalConcept name, or an empty string to clear the concept. */
+  /** A taxonomy key, or an empty string to clear the concept. */
   primary: string
 }
 

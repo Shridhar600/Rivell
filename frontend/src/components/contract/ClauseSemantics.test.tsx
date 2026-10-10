@@ -172,6 +172,64 @@ describe('clause semantics', () => {
     })
   })
 
+  it('disables the classification picker and says so when the taxonomy cannot be loaded', async () => {
+    stubContractApi({ taxonomyStatus: 503 })
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const editor = within(document.querySelector('.clause-detail') as HTMLElement)
+      .getByText('Correct classification')
+      .closest('details') as HTMLElement
+
+    await waitFor(() => {
+      expect(within(editor).getByLabelText('Primary concept')).toBeDisabled()
+    })
+    expect(
+      await within(editor).findByText(/legal topic list could not be loaded/i, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    expect(
+      within(editor).getByRole('button', { name: 'Save classification' }),
+    ).toBeDisabled()
+  })
+
+  it('shows readable words for an old classification the taxonomy no longer knows', async () => {
+    stubContractApi({
+      semantics: fixtureSemantics({
+        clauses: [
+          {
+            id: 'cl1',
+            headingNodeId: 'node-1',
+            regionKind: 'CLAUSE',
+            heading: '1. Definitions',
+            primaryConcept: null,
+            secondaryConcepts: [],
+            correctedPrimaryConcept: 'LEGACY_TOPIC',
+            machineFacts: [],
+            effectiveFacts: [],
+            interpretations: [],
+            corrected: true,
+          },
+        ],
+      }),
+    })
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-1')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const list = document.querySelector('.clause-list') as HTMLElement
+    const primary = document.querySelector('.clause-concept-primary') as HTMLElement
+    await waitFor(() => {
+      expect(within(primary).getByText('Legacy topic')).toBeInTheDocument()
+    })
+    expect(within(list).getByText('Legacy topic')).toBeInTheDocument()
+    expect(screen.queryByText('LEGACY_TOPIC')).not.toBeInTheDocument()
+
+    const editor = within(document.querySelector('.clause-detail') as HTMLElement)
+      .getByText('Correct classification')
+      .closest('details') as HTMLElement
+    const option = await within(editor).findByRole('option', { name: /Legacy topic/ })
+    expect(option).toHaveTextContent('Legacy topic (not in the current taxonomy)')
+  })
+
   it('shows a human classification on an unclassified clause everywhere', async () => {
     stubContractApi({
       semantics: fixtureSemantics({

@@ -47,6 +47,10 @@ function ConceptEditor({
   const [error, setError] = useState<string | null>(null)
   const pickerDisabled = correct.isPending || taxonomy.isPending || taxonomy.isError
   const selectedIsLeaf = selected === '' || taxonomy.leaves.some((leaf) => leaf.key === selected)
+  const selectedKnown =
+    selected === '' ||
+    selectedIsLeaf ||
+    taxonomy.parents.some((parent) => parent.key === selected)
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -74,7 +78,9 @@ function ConceptEditor({
             {selectedIsLeaf ? null : (
               <option value={selected}>
                 {humanizeCode(selected)}
-                {!taxonomy.isPending && !taxonomy.isError ? ' (not in the current taxonomy)' : ''}
+                {!taxonomy.isPending && !taxonomy.isError && !selectedKnown
+                  ? ' (not in the current taxonomy)'
+                  : ''}
               </option>
             )}
             {taxonomy.groups.map((group) => (
@@ -105,7 +111,7 @@ function ConceptEditor({
             {error}
           </p>
         ) : null}
-        <button type="submit" disabled={correct.isPending}>
+        <button type="submit" disabled={pickerDisabled}>
           {correct.isPending ? 'Saving…' : 'Save classification'}
         </button>
       </form>

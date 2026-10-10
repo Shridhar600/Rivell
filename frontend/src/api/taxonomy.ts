@@ -39,7 +39,7 @@ export interface TaxonomyGroup {
   leaves: TaxonomyConcept[]
 }
 
-export function parseTaxonomyConcept(value: unknown, what = 'taxonomy'): TaxonomyConcept {
+function parseTaxonomyConcept(value: unknown, what = 'taxonomy'): TaxonomyConcept {
   const concept = asRecord(value, what)
   return {
     key: readString(concept, 'key', what),
@@ -79,11 +79,6 @@ export function taxonomyLabels(taxonomy: Taxonomy | undefined): Map<string, stri
     labels.set(concept.key, concept.label)
   }
   return labels
-}
-
-/** A missing key is old data, not a failure: show readable words, never the raw key. */
-export function conceptLabel(taxonomy: Taxonomy | undefined, key: string): string {
-  return taxonomyLabels(taxonomy).get(key) ?? humanizeCode(key)
 }
 
 export function taxonomyGroups(taxonomy: Taxonomy | undefined): TaxonomyGroup[] {

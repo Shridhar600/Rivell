@@ -329,16 +329,6 @@ export function absenceClaims(claims: FindingClaim[]): FindingClaim[] {
     .sort((left, right) => left.ordinal - right.ordinal)
 }
 
-export function findingConceptLabels(finding: FindingDetail, label: ConceptLabel): string[] {
-  const concepts =
-    finding.concepts.length > 0
-      ? finding.concepts
-      : [finding.concept, finding.secondaryConcept].filter(
-          (concept): concept is string => Boolean(concept),
-        )
-  return concepts.map((concept) => label(concept))
-}
-
 export function policyNoteText(
   finding: Pick<FindingDetail, 'issueFamily'>,
 ): string | null {
