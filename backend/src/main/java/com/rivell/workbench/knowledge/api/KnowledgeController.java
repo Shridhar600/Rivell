@@ -166,7 +166,7 @@ class KnowledgeController {
         return ApiResult.ok(queryService.getUnits(id).stream()
                 .map(unit -> new ExtractionUnitView(
                         unit.id(), unit.artifactId(), unit.ordinal(), unit.kind(),
-                        unit.title(), unit.contentText(), unit.sourceNodeIds()))
+                        unit.title(), unit.contentText(), unit.sourceNodeIds(), unit.recordKind()))
                 .toList());
     }
 

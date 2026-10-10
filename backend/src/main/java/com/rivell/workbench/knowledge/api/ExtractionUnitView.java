@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.rivell.workbench.knowledge.ExtractionUnitKind;
+import com.rivell.workbench.knowledge.KnowledgeRecordKind;
 
 public record ExtractionUnitView(
         UUID id,
@@ -12,5 +13,6 @@ public record ExtractionUnitView(
         ExtractionUnitKind kind,
         String title,
         String contentText,
-        List<UUID> sourceNodeIds) {
+        List<UUID> sourceNodeIds,
+        KnowledgeRecordKind recordKind) {
 }

@@ -281,14 +281,14 @@ class ExtractionUnitConceptClassificationIT {
     void rejectsUnitsWithoutText() throws Exception {
         var artifact = ingest("fixtures/knowledge-playbook.docx", "empty.docx");
 
-        assertThatThrownBy(() -> classifier.classify(artifact.id(), tableUnitId(artifact)))
+        assertThatThrownBy(() -> classifier.classify(artifact.id(), textlessUnitId(artifact)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("no text to classify");
     }
 
-    private java.util.UUID tableUnitId(KnowledgeArtifact artifact) {
+    private java.util.UUID textlessUnitId(KnowledgeArtifact artifact) {
         return queryService.getUnits(artifact.id()).stream()
-                .filter(unit -> unit.kind() == ExtractionUnitKind.TABLE)
+                .filter(unit -> unit.contentText() == null || unit.contentText().isBlank())
                 .findFirst().orElseThrow()
                 .id();
     }

@@ -7,7 +7,9 @@ import java.util.UUID;
 /**
  * One coherent source region of a knowledge artifact. Units reference the exact
  * {@link KnowledgeSourceNode}s they were derived from, keeping the provenance chain
- * candidate → unit → node(s) → artifact always resolvable.
+ * candidate → unit → node(s) → artifact always resolvable. {@code recordKind} is the
+ * {@code knowledge-record-kind} outcome; null until the semantic compilation decides it
+ * (or when the decision could not run).
  */
 public record ExtractionUnit(
         UUID id,
@@ -16,7 +18,8 @@ public record ExtractionUnit(
         ExtractionUnitKind kind,
         String title,
         String contentText,
-        List<UUID> sourceNodeIds) {
+        List<UUID> sourceNodeIds,
+        KnowledgeRecordKind recordKind) {
 
     public ExtractionUnit {
         Objects.requireNonNull(id, "id");
@@ -29,5 +32,10 @@ public record ExtractionUnit(
             throw new IllegalArgumentException("Extraction unit must reference source nodes");
         }
         sourceNodeIds = List.copyOf(sourceNodeIds);
+    }
+
+    public ExtractionUnit withRecordKind(KnowledgeRecordKind newRecordKind) {
+        return new ExtractionUnit(id, artifactId, ordinal, kind, title, contentText,
+                sourceNodeIds, newRecordKind);
     }
 }
