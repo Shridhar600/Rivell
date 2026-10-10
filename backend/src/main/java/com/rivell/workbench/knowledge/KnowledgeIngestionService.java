@@ -182,7 +182,7 @@ public class KnowledgeIngestionService {
     }
 
     private static String extractorName(KnowledgeStructureExtractor extractor) {
-        return extractor.getClass().getSimpleName().contains("Docx") ? "rivell-docx-parser-2" : "unknown";
+        return extractor.getClass().getSimpleName().contains("Docx") ? "rivell-docx-parser-3" : "unknown";
     }
 
     private static String extensionOf(String filename) {

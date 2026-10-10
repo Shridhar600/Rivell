@@ -206,6 +206,47 @@ class ReviewListProjectionIT {
      * {@code GET /api/reviews/{id}/human-review} the frontend would be told two
      * different truths about the same review.
      */
+    /**
+     * A version with no HEADING nodes (a short letter agreement, or a layout the parser
+     * cannot segment) must still list. One such review used to fail the whole list with a
+     * 500, taking every other review on the page down with it.
+     */
+    @Test
+    void aReviewOfAContractWithNoHeadingsStillListsAlongsideOthers() throws Exception {
+        var headed = contractIngestionService.ingest("m5-nda-counterparty.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(Files.readAllBytes(Path.of(
+                        "src/test/resources/fixtures/m5-nda-counterparty.docx"))));
+        var headingless = contractIngestionService.ingest("letter-agreement.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(headinglessLetterAgreement()));
+        var profile = new ReviewProfile(ContractType.NDA, PartyRole.CUSTOMER,
+                PaperSource.THIRD_PARTY, Jurisdiction.UK);
+        enrichmentService.enrich(headed.contractId(), 1, profile);
+        enrichmentService.enrich(headingless.contractId(), 1, profile);
+        var headedReview = reviewService.create(headed.contractId(), 1, null, null);
+        var headinglessReview = reviewService.create(headingless.contractId(), 1, null, null);
+        analysisService.analyze(organizationId(), headedReview.id());
+        analysisService.analyze(organizationId(), headinglessReview.id());
+
+        rowFor(headedReview.id());
+        var row = rowFor(headinglessReview.id());
+        assertThat(row.get("humanReview").get("actionableFindings").asInt())
+                .isEqualTo(humanReviewEndpointInt(headinglessReview.id(), "actionableFindings"));
+    }
+
+    private static byte[] headinglessLetterAgreement() throws Exception {
+        var pkg = org.docx4j.openpackaging.packages.WordprocessingMLPackage.createPackage();
+        var body = pkg.getMainDocumentPart();
+        body.addParagraphOfText("Dear Ms Rowe,");
+        body.addParagraphOfText("We will keep the information you share about the pilot "
+                + "confidential and use it only to evaluate the pilot.");
+        body.addParagraphOfText("This letter is governed by the laws of England and Wales.");
+        var out = new java.io.ByteArrayOutputStream();
+        pkg.save(out);
+        return out.toByteArray();
+    }
+
     @Test
     void humanReviewCountsAndReadinessMatchTheHumanReviewEndpoint() throws Exception {
         var fixture = analyzedCarveOutConflict();

@@ -257,18 +257,23 @@ class JdbcReviewHumanReviewListQuery implements ReviewHumanReviewListQuery {
                 """)
                 .param("organizationId", organizationId)
                 .param("reviewIds", reviewIds)
-                .query((rs, rowNum) -> Map.entry(
+                .query((rs, rowNum) -> new HeadingRow(
                         rs.getObject("review_id", UUID.class),
                         rs.getObject("heading_node_id", UUID.class)))
                 .list();
 
+        // A version with no HEADING nodes yields one row with a null heading id; the review
+        // still needs its (empty) entry.
         var headings = new HashMap<UUID, Set<UUID>>();
         for (var row : rows) {
-            var ids = headings.computeIfAbsent(row.getKey(), key -> new HashSet<UUID>());
-            if (row.getValue() != null) {
-                ids.add(row.getValue());
+            var ids = headings.computeIfAbsent(row.reviewId(), key -> new HashSet<UUID>());
+            if (row.headingNodeId() != null) {
+                ids.add(row.headingNodeId());
             }
         }
         return headings;
+    }
+
+    private record HeadingRow(UUID reviewId, UUID headingNodeId) {
     }
 }
