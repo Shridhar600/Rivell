@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 import { EvidenceBundleView } from './EvidenceBundleView'
+import { taxonomyJsonResponse } from '../../test/taxonomyFixtures'
 import {
   fixtureApplicabilityScope,
   fixtureBundle,
@@ -13,6 +15,24 @@ import {
   fixtureRegionLabels,
 } from './testFixtures'
 
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes('/api/taxonomy/concepts')) return taxonomyJsonResponse()
+      return new Response(JSON.stringify({ code: '404', title: 'Not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }),
+  )
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
 function renderBundle(
   overrides: Parameters<typeof fixtureBundle>[0] = {},
   props: Partial<Parameters<typeof EvidenceBundleView>[0]> = {},
@@ -20,16 +40,18 @@ function renderBundle(
   const onNavigateToNode = vi.fn()
   const onOpenClauseSemantics = vi.fn()
   render(
-    <MemoryRouter>
-      <EvidenceBundleView
-        bundle={fixtureBundle(overrides)}
-        regionLabels={fixtureRegionLabels}
-        clauseHeadings={fixtureClauseHeadings}
-        onNavigateToNode={onNavigateToNode}
-        onOpenClauseSemantics={onOpenClauseSemantics}
-        {...props}
-      />
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <EvidenceBundleView
+          bundle={fixtureBundle(overrides)}
+          regionLabels={fixtureRegionLabels}
+          clauseHeadings={fixtureClauseHeadings}
+          onNavigateToNode={onNavigateToNode}
+          onOpenClauseSemantics={onOpenClauseSemantics}
+          {...props}
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
   return { onNavigateToNode, onOpenClauseSemantics }
 }

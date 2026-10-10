@@ -29,7 +29,8 @@ import {
   type DecisionListResponse,
 } from '../api/workflow'
 import { useSemanticsQuery } from '../api/semantics'
-import { buildRegionLabelMap, CONTRACT_TYPE_LABELS, conceptLabel } from '../lib/contractSemantics'
+import { useTaxonomy } from '../api/taxonomy'
+import { buildRegionLabelMap, CONTRACT_TYPE_LABELS } from '../lib/contractSemantics'
 import { clearResumeFor, writeResume } from '../lib/resume'
 import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun, runStatusLabel } from '../lib/reviews'
 import {
@@ -166,6 +167,7 @@ interface WorkspaceProps {
 }
 
 function Workspace({ contractId, reviewId, contract, summary, onRefresh }: WorkspaceProps) {
+  const { labelFor } = useTaxonomy()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -360,7 +362,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const paletteItems: PaletteItem[] = [
     ...findings.map((f) => ({
       group: 'Findings',
-      label: findingSubjectLabel(f, regionLabels),
+      label: findingSubjectLabel(f, regionLabels, labelFor),
       hint: decisionsLoaded ? findingState(f, decisions.get(f.id)).label : undefined,
       icon: <DocumentIcon className="rv-icon" />,
       run: () => selectFinding(f.id),
@@ -397,7 +399,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     })),
     ...(finding?.evidenceItems ?? []).map((item) => ({
       group: 'Sources',
-      label: `Source: ${item.legalConcept ? conceptLabel(item.legalConcept) : item.sourceType}`,
+      label: `Source: ${item.legalConcept ? labelFor(item.legalConcept) : item.sourceType}`,
       icon: <BookIcon className="rv-icon" />,
       run: () => setSheet({ kind: 'source', evidenceId: item.evidenceId }),
     })),
@@ -430,7 +432,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   if (pinnedVersion !== undefined && pinnedVersion !== latestVersion) {
     noteLines.push(`This review is pinned to v${pinnedVersion}; the contract’s current version is v${latestVersion}.`)
   }
-  const coverageNote = coverageLimitationSummary(summary.coverage)
+  const coverageNote = coverageLimitationSummary(summary.coverage, labelFor)
   if (coverageNote) noteLines.push(coverageNote)
   if (analysisCompleted && summary.failedChecks > 0) {
     noteLines.push('Some checks did not complete. Review the analysis warnings.')
@@ -595,7 +597,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           )
         ) : null}
         {sheet?.kind === 'history' && selectedId ? (
-          <DecisionHistorySheet reviewId={reviewId} findingId={selectedId} title={finding ? findingSubjectLabel(finding, regionLabels) : ''} />
+          <DecisionHistorySheet reviewId={reviewId} findingId={selectedId} title={finding ? findingSubjectLabel(finding, regionLabels, labelFor) : ''} />
         ) : null}
         {sheet?.kind === 'notes' ? (
           <>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import type { ReviewSummary } from '../../api/reviews'
 import { useReviewProgressQuery } from '../../api/reviews'
+import { useTaxonomy } from '../../api/taxonomy'
 import {
   analysisWarningMessage,
   checkKeyLabel,
@@ -17,6 +18,7 @@ export function AnalysisWarnings({
 }: {
   summary: Pick<ReviewSummary, 'analysisWarnings' | 'analysisWarningsTruncated'>
 }) {
+  const { labelFor } = useTaxonomy()
   if (summary.analysisWarnings.length === 0) return null
   return (
     <div className="analysis-warnings">
@@ -27,8 +29,8 @@ export function AnalysisWarnings({
       <ul>
         {summary.analysisWarnings.map((warning, index) => (
           <li key={`${warning.checkKey}-${index}`}>
-            <span className="analysis-warnings__check" title={warning.checkKey}>
-              {checkKeyLabel(warning.checkKey)}
+            <span className="analysis-warnings__check">
+              {checkKeyLabel(warning.checkKey, labelFor)}
             </span>{' '}
             {analysisWarningMessage(warning)}
           </li>

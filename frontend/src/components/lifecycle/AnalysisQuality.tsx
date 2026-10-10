@@ -1,4 +1,5 @@
 import type { ReviewSummary } from '../../api/reviews'
+import { useTaxonomy } from '../../api/taxonomy'
 import {
   analysisWarningMessage,
   checkKeyLabel,
@@ -13,7 +14,8 @@ import {
  * only when there is something to say, and kept small so diagnostics never become the page.
  */
 export function AnalysisQuality({ summary }: { summary: ReviewSummary }) {
-  const coverage = coverageLimitationSummary(summary.coverage)
+  const { labelFor } = useTaxonomy()
+  const coverage = coverageLimitationSummary(summary.coverage, labelFor)
   const newer = hasNewerRun(summary)
   if (summary.analysisWarnings.length === 0 && !coverage && !newer) return null
   return (
@@ -32,7 +34,7 @@ export function AnalysisQuality({ summary }: { summary: ReviewSummary }) {
           <ul>
             {summary.analysisWarnings.map((warning, index) => (
               <li key={`${warning.checkKey}-${index}`}>
-                <b>{checkKeyLabel(warning.checkKey)}</b> {analysisWarningMessage(warning)}
+                <b>{checkKeyLabel(warning.checkKey, labelFor)}</b> {analysisWarningMessage(warning)}
               </li>
             ))}
           </ul>

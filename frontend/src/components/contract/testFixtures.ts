@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 import type { SemanticContract } from '../../api/semantics'
 import type { StructureNode } from '../../lib/documentTree'
+import { taxonomyFixture } from '../../test/taxonomyFixtures'
 
 export type RecordedRequest = {
   method: string
@@ -222,7 +223,7 @@ export function fixtureSemantics(
         headingNodeId: 'node-5',
         regionKind: 'CLAUSE',
         heading: '5. Termination',
-        primaryConcept: 'TERM_TERMINATION',
+        primaryConcept: 'TERM',
         secondaryConcepts: [],
         correctedPrimaryConcept: null,
         machineFacts: [
@@ -414,6 +415,7 @@ export const fixtureStructure = {
 
 export type StubOptions = {
   contractSummary?: unknown
+  taxonomy?: unknown
   semantics?: SemanticContract | null
   semanticsStatus?: number
   enrichmentResponse?: () => Response
@@ -499,6 +501,9 @@ export function stubContractApi(options: StubOptions = {}) {
     }
     requests.push({ method, url, body })
 
+    if (method === 'GET' && url.includes('/api/taxonomy/concepts')) {
+      return jsonResponse(options.taxonomy ?? taxonomyFixture)
+    }
     if (method === 'GET' && /\/api\/contracts\/c1$/.test(url)) {
       return jsonResponse(envelope(options.contractSummary ?? fixtureContractSummary))
     }

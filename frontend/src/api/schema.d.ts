@@ -151,7 +151,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Correct or clear a candidate's LegalConcept (machine proposal preserved) */
+        /** Correct or clear a candidate's concept (machine proposal preserved) */
         post: operations["correctConcept"];
         delete?: never;
         options?: never;
@@ -325,6 +325,23 @@ export interface paths {
         put?: never;
         /** Create a review for a contract version (optional explicit pack) */
         post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/concepts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the legal topics clauses and playbook positions are classified against */
+        get: operations["concepts"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -907,8 +924,7 @@ export interface components {
             targetKind?: string;
             /** Format: uuid */
             targetHeadingNodeId?: string;
-            /** @enum {string} */
-            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            absenceConcept?: string;
             approvedLanguage?: string;
             languageSource?: string;
             /** Format: uuid */
@@ -1247,21 +1263,17 @@ export interface components {
             timestamp?: string;
         };
         ConceptView: {
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            concept?: string;
             /** Format: double */
             probability?: number;
         };
-        MetadataView: {
+        ExecutionView: {
             /** Format: uuid */
             executionId?: string;
             specId?: string;
             /** Format: int32 */
             specVersion?: number;
-            /** Format: int32 */
-            stateSchemaVersion?: number;
             providerId?: string;
-            requestedModelAlias?: string;
             resolvedModel?: string;
             /** Format: int64 */
             durationMs?: number;
@@ -1271,6 +1283,11 @@ export interface components {
             inputTokens?: number;
             /** Format: int32 */
             outputTokens?: number;
+        };
+        MetadataView: {
+            /** Format: int32 */
+            taxonomyVersion?: number;
+            executions?: components["schemas"]["ExecutionView"][];
         };
         UnitConceptClassificationView: {
             /** Format: uuid */
@@ -1448,7 +1465,7 @@ export interface components {
             };
         };
         ConceptCorrection: {
-            /** @description Corrected primary concept as a LegalConcept name; any known LegalConcept is accepted (unknown names are rejected) and becomes the effective primary even if previously unclassified. null leaves the current correction unchanged; blank clears the concept correction */
+            /** @description Corrected primary concept as a taxonomy key; any known key is accepted (unknown names are rejected) and becomes the effective primary even if previously unclassified. null leaves the current correction unchanged; blank clears the concept correction */
             primary: string;
         };
         ReviewProfileInput: {
@@ -1510,8 +1527,7 @@ export interface components {
             delete?: number;
         };
         ReviewCoverageView: {
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            concept?: string;
             /** @enum {string} */
             expectation?: "REQUIRED" | "EXPECTED" | "OPTIONAL";
             /** @enum {string} */
@@ -1567,6 +1583,12 @@ export interface components {
             knowledgePinNumber?: number;
             /** Format: date */
             effectiveOn?: string;
+        };
+        TaxonomyResponse: {
+            /** Format: int32 */
+            version: number;
+            parents: components["schemas"]["ConceptView"][];
+            leaves: components["schemas"]["ConceptView"][];
         };
         ApiResultSystemStatusResponse: {
             data?: components["schemas"]["SystemStatusResponse"];
@@ -1758,12 +1780,9 @@ export interface components {
             subjectKind?: "CLAUSE" | "ABSENCE";
             /** Format: uuid */
             subjectHeadingNodeId?: string;
-            /** @enum {string} */
-            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            secondaryConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            absenceConcept?: string;
+            concept?: string;
+            secondaryConcept?: string;
             /** @enum {string} */
             issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
             observationKind?: string;
@@ -1825,13 +1844,10 @@ export interface components {
             subjectKind?: "CLAUSE" | "ABSENCE";
             /** Format: uuid */
             subjectHeadingNodeId?: string;
-            /** @enum {string} */
-            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            secondaryConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            concepts?: ("CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW")[];
+            absenceConcept?: string;
+            concept?: string;
+            secondaryConcept?: string;
+            concepts?: string[];
             /** @enum {string} */
             issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
             observationKind?: string;
@@ -2743,7 +2759,7 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResultCandidateView"];
                 };
             };
-            /** @description Unknown LegalConcept or missing primary value */
+            /** @description Unknown concept or missing primary value */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3336,6 +3352,26 @@ export interface operations {
             };
         };
     };
+    concepts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyResponse"];
+                };
+            };
+        };
+    };
     status: {
         parameters: {
             query?: never;
@@ -3527,7 +3563,7 @@ export interface operations {
     findings: {
         parameters: {
             query?: {
-                concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+                concept?: string;
                 classification?: "BLOCKING" | "REVIEW_REQUIRED" | "INFORMATIONAL";
                 severity?: "HIGH" | "MEDIUM" | "LOW";
                 limit?: number;

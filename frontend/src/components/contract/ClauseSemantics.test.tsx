@@ -105,6 +105,7 @@ describe('clause semantics', () => {
       .getByText('Correct classification')
       .closest('details') as HTMLElement
 
+    await within(editor).findByRole('option', { name: 'Indemnification' })
     await userEvent.selectOptions(
       within(editor).getByLabelText('Primary concept'),
       'INDEMNIFICATION',
@@ -122,7 +123,9 @@ describe('clause semantics', () => {
         ),
       ).toBe(true)
     })
-    const request = api.requests.find((item) => item.url.endsWith('/concepts'))
+    const request = api.requests.find(
+      (item) => item.method === 'POST' && item.url.endsWith('/concepts'),
+    )
     expect(request?.body).toEqual({ primary: 'INDEMNIFICATION' })
 
     await waitFor(() => {
@@ -140,6 +143,35 @@ describe('clause semantics', () => {
     ).toBeInTheDocument()
   })
 
+  it('lists the taxonomy leaves grouped by parent and sends the chosen leaf', async () => {
+    const api = stubContractApi()
+    renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
+
+    await screen.findByRole('heading', { name: 'Clause semantics' })
+    const editor = within(document.querySelector('.clause-detail') as HTMLElement)
+      .getByText('Correct classification')
+      .closest('details') as HTMLElement
+
+    const group = await within(editor).findByRole('group', { name: 'Confidentiality' })
+    // ONWARD_DISCLOSURE's label is not its humanized key, so finding it proves the API label is used.
+    expect(
+      within(group).getByRole('option', { name: 'Disclosure to representatives' }),
+    ).toBeInTheDocument()
+    await userEvent.selectOptions(
+      within(editor).getByLabelText('Primary concept'),
+      'ONWARD_DISCLOSURE',
+    )
+    await userEvent.click(
+      within(editor).getByRole('button', { name: 'Save classification' }),
+    )
+    await waitFor(() => {
+      const request = api.requests.find(
+        (item) => item.method === 'POST' && item.url.endsWith('/concepts'),
+      )
+      expect(request?.body).toEqual({ primary: 'ONWARD_DISCLOSURE' })
+    })
+  })
+
   it('shows a human classification on an unclassified clause everywhere', async () => {
     stubContractApi({
       semantics: fixtureSemantics({
@@ -151,7 +183,7 @@ describe('clause semantics', () => {
             heading: '1. Definitions',
             primaryConcept: null,
             secondaryConcepts: [],
-            correctedPrimaryConcept: 'CONFIDENTIALITY',
+            correctedPrimaryConcept: 'CONFIDENTIALITY_OBLIGATIONS',
             machineFacts: [],
             effectiveFacts: [],
             interpretations: [],
@@ -166,12 +198,12 @@ describe('clause semantics', () => {
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const list = document.querySelector('.clause-list') as HTMLElement
-    expect(within(list).getByText(/Confidentiality/)).toBeInTheDocument()
+    expect(within(list).getByText(/Confidentiality obligations/)).toBeInTheDocument()
     expect(within(list).queryByText('No primary concept')).not.toBeInTheDocument()
     const primary = document.querySelector(
       '.clause-concept-primary',
     ) as HTMLElement
-    expect(within(primary).getByText('Confidentiality')).toBeInTheDocument()
+    expect(within(primary).getByText('Confidentiality obligations')).toBeInTheDocument()
 
     await userEvent.click(
       screen.getByRole('button', { name: 'View clause in document' }),
@@ -184,7 +216,7 @@ describe('clause semantics', () => {
     const summaryConcept = document.querySelector(
       '.clause-summary__concept',
     ) as HTMLElement
-    expect(within(summaryConcept).getByText('Confidentiality')).toBeInTheDocument()
+    expect(within(summaryConcept).getByText('Confidentiality obligations')).toBeInTheDocument()
   })
 
   it('corrects fact values and keeps the machine interpretation visible', async () => {
@@ -241,6 +273,7 @@ describe('clause semantics', () => {
     const conceptEditor = within(detail)
       .getByText('Correct classification')
       .closest('details') as HTMLElement
+    await within(conceptEditor).findByRole('option', { name: 'Indemnification' })
     await userEvent.selectOptions(
       within(conceptEditor).getByLabelText('Primary concept'),
       'INDEMNIFICATION',
@@ -497,6 +530,7 @@ describe('clause semantics', () => {
     const editor = within(document.querySelector('.clause-detail') as HTMLElement)
       .getByText('Correct classification')
       .closest('details') as HTMLElement
+    await within(editor).findByRole('option', { name: 'Governing law' })
     await userEvent.selectOptions(
       within(editor).getByLabelText('Primary concept'),
       'GOVERNING_LAW',
@@ -508,7 +542,7 @@ describe('clause semantics', () => {
       .getByText('Correct classification')
       .closest('details') as HTMLElement
     expect(within(nextEditor).getByLabelText('Primary concept')).toHaveValue(
-      'TERM_TERMINATION',
+      'TERM',
     )
   })
 

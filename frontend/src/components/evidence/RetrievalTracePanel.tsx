@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { RetrievalTrace } from '../../api/retrieval'
 import { useRetrievalTraceQuery } from '../../api/retrieval'
+import { useTaxonomy } from '../../api/taxonomy'
 import {
   degradationMessage,
   traceRequestEntries,
@@ -9,7 +10,8 @@ import {
 } from '../../lib/evidence'
 
 function TraceContent({ trace }: { trace: RetrievalTrace }) {
-  const requestEntries = traceRequestEntries(trace.request)
+  const { labelFor } = useTaxonomy()
+  const requestEntries = traceRequestEntries(trace.request, labelFor)
   const shortEntries = requestEntries.filter((entry) => !entry.long)
   const longEntries = requestEntries.filter((entry) => entry.long)
   const stages = Object.values(trace.stages)

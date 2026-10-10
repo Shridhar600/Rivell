@@ -13,9 +13,9 @@ import {
   useEvidenceBundle,
 } from '../../api/retrieval'
 import { useSemanticsQuery } from '../../api/semantics'
+import { useTaxonomy } from '../../api/taxonomy'
 import {
   buildRegionLabelMap,
-  conceptLabel,
   effectivePrimaryConcept,
 } from '../../lib/contractSemantics'
 import { humanizeCode } from '../../lib/domainLabels'
@@ -57,6 +57,7 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
   const selectedClauseId = selectedClause?.id ?? null
   const effectiveConcept = selectedClause ? effectivePrimaryConcept(selectedClause) : null
   const canBuild = selectedClauseId !== null && effectiveConcept !== null
+  const { labelFor } = useTaxonomy()
 
   const build = useBuildEvidence(contractId, versionNumber ?? 0)
   const bundleQuery = useEvidenceBundle(contractId, versionNumber ?? 0, selectedClauseId)
@@ -120,7 +121,7 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
   })()
 
   const staleNote = bundle
-    ? staleClassificationNote(bundle.request.legalConcept, effectiveConcept)
+    ? staleClassificationNote(bundle.request.legalConcept, effectiveConcept, labelFor)
     : null
   const buildError =
     build.isError && build.variables?.clauseId === selectedClauseId ? build.error : null
@@ -230,7 +231,7 @@ export function EvidenceInspector({ contractId }: { contractId: string }) {
             </div>
             <div className="data-list__row">
               <dt>Legal concept</dt>
-              <dd>{effectiveConcept ? conceptLabel(effectiveConcept) : 'No primary concept'}</dd>
+              <dd>{effectiveConcept ? labelFor(effectiveConcept) : 'No primary concept'}</dd>
             </div>
             {bundle && bundle.request.effectiveOn ? (
               <div className="data-list__row">

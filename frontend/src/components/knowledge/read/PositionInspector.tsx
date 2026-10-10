@@ -2,6 +2,7 @@ import { Fragment } from 'react'
 import { Link } from 'react-router'
 import type { ArtifactSummary, Candidate } from '../../../api/knowledge'
 import { useExtractionUnitsQuery, useKnowledgeStructureQuery } from '../../../api/knowledge'
+import { useTaxonomy } from '../../../api/taxonomy'
 import { longDate } from '../../../lib/dates'
 import { resolveCandidateSource } from '../../../lib/candidates'
 import { positionText, type PublicationRef } from '../../../lib/knowledgeCatalog'
@@ -22,13 +23,14 @@ interface PositionInspectorProps {
  * is implied here.
  */
 export function PositionInspector({ candidate, artifact, publication }: PositionInspectorProps) {
+  const { labelFor } = useTaxonomy()
   const units = useExtractionUnitsQuery(artifact.id)
   const structure = useKnowledgeStructureQuery(artifact.id)
   const located =
     units.data && structure.data ? resolveCandidateSource(candidate, units.data, structure.data) : null
   const location = located ? sourceLocation(located.nodes) : null
   const roles = positionRoles(candidate)
-  const concept = conceptName(candidate)
+  const concept = conceptName(candidate, labelFor)
   const text = positionText(candidate)
   const escalation = candidate.escalationTrigger?.trim()
 

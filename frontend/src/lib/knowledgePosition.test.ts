@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { conceptName, positionRoles, positionRow, scopeLine, scopeRows } from './knowledgePosition'
+import { humanizeCode } from './domainLabels'
 import { candidate } from '../test/knowledgeFixtures'
 
 const base = { id: 'c', artifactId: 'a' }
@@ -72,7 +73,7 @@ describe('roles and scope', () => {
   })
 
   it('names the legal concept only when one is set', () => {
-    expect(conceptName(candidate({ ...base, effectiveConceptKey: 'LIMITATION_OF_LIABILITY' }))).toBe('Limitation of liability')
-    expect(conceptName(candidate(base))).toBeNull()
+    expect(conceptName(candidate({ ...base, effectiveConceptKey: 'LIMITATION_OF_LIABILITY' }), humanizeCode)).toBe('Limitation of liability')
+    expect(conceptName(candidate(base), humanizeCode)).toBeNull()
   })
 })

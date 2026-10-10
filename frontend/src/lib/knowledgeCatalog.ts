@@ -1,6 +1,6 @@
 import type { ArtifactSummary, ArtifactType, Candidate, Publication } from '../api/knowledge'
+import type { ConceptLabel } from '../api/taxonomy'
 import { effectiveContentText } from './candidates'
-import { conceptLabel } from './contractSemantics'
 
 /**
  * The read model behind the Knowledge surfaces.
@@ -210,7 +210,12 @@ export interface ClauseLibraryView {
 }
 
 /** Clauses grouped by legal concept, as of a publication number. With no number, as of now. */
-export function clauseGroups(view: ClauseLibraryView, index: PublicationIndex, at?: number): ClauseGroup[] {
+export function clauseGroups(
+  view: ClauseLibraryView,
+  index: PublicationIndex,
+  label: ConceptLabel,
+  at?: number,
+): ClauseGroup[] {
   const groups = new Map<string, ClauseGroup>()
   for (const { candidate, artifact } of view.published) {
     if (!isLiveAt(index, candidate.id, at)) continue
@@ -221,7 +226,7 @@ export function clauseGroups(view: ClauseLibraryView, index: PublicationIndex, a
     if (!group) {
       group = {
         key,
-        title: candidate.effectiveConceptKey ? conceptLabel(candidate.effectiveConceptKey) : candidate.rawLabel,
+        title: candidate.effectiveConceptKey ? label(candidate.effectiveConceptKey) : candidate.rawLabel,
         conceptKey: candidate.effectiveConceptKey,
         variants: [],
       }

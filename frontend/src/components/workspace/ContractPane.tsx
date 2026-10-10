@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import type { FindingDetail, FindingSummary } from '../../api/reviews'
+import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
-import { conceptLabel } from '../../lib/contractSemantics'
 import type { StructureNode, TreeNode } from '../../lib/documentTree'
 import {
   clauseBody,
@@ -208,13 +208,14 @@ function Sequence({ nodes, ctx }: { nodes: readonly TreeNode[]; ctx: Ctx }) {
 
 /** A finding about a provision the contract lacks has no location, so it is a card, not a clause. */
 function AbsenceCards({ ctx, findings }: { ctx: Ctx; findings: FindingSummary[] }) {
+  const { labelFor } = useTaxonomy()
   const cards = findings.filter((finding) => finding.subjectKind === 'ABSENCE')
   return (
     <>
       {cards.map((finding) => {
         const change = executableChange(ctx.decisions.get(finding.id))
         if (ctx.mode === 'final' && !change) return null
-        const name = finding.absenceConcept ? conceptLabel(finding.absenceConcept) : 'Provision'
+        const name = finding.absenceConcept ? labelFor(finding.absenceConcept) : 'Provision'
         return (
           <div
             key={finding.id}

@@ -6,6 +6,7 @@ import { RouterProvider } from 'react-router/dom'
 import { appRoutes } from '../../app/router'
 import type { ArtifactSummary, Candidate, ExtractionUnit, KnowledgeNode, Publication } from '../../api/knowledge'
 import { artifact, candidate, node, unit } from '../../test/knowledgeFixtures'
+import { taxonomyJsonResponse } from '../../test/taxonomyFixtures'
 
 /**
  * A server for the compilation tests that behaves the way the real one does, for the rules the UI
@@ -229,6 +230,10 @@ export function startFakeServer(fake: Fake) {
       }
       fake.calls.push({ method, path, body })
       const key = (verb: string, id: string) => `${verb} ${id}`
+
+      if (method === 'GET' && path === '/api/taxonomy/concepts') {
+        return taxonomyJsonResponse()
+      }
 
       if (method === 'POST' && path === '/api/knowledge/artifacts') {
         if (fake.holdUpload) await fake.holdUpload

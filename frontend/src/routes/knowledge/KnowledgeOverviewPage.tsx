@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import { useKnowledgeCatalog } from '../../api/knowledgeRead'
+import { useTaxonomy } from '../../api/taxonomy'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
 import { AddKnowledgeButton, KnowledgeFrame } from '../../components/knowledge/read/KnowledgeFrame'
 import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
@@ -32,7 +33,8 @@ function recentTarget(entry: RecentPublication): string {
 }
 
 function Overview({ catalog, state }: { catalog: Catalog; state: ReturnType<typeof useKnowledgeCatalog> }) {
-  const clauses = clauseGroups(catalog.clauseLibrary, catalog.index)
+  const { labelFor } = useTaxonomy()
+  const clauses = clauseGroups(catalog.clauseLibrary, catalog.index, labelFor)
   const variantCount = clauses.reduce((sum, group) => sum + group.variants.length, 0)
   return (
     <KnowledgeFrame

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router'
 import { useKnowledgeCatalog } from '../../api/knowledgeRead'
+import { useTaxonomy } from '../../api/taxonomy'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
 import { AddKnowledgeButton, KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
@@ -26,6 +27,7 @@ export function ClausesPage() {
 }
 
 function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeof useKnowledgeCatalog> }) {
+  const { labelFor } = useTaxonomy()
   const [params, setParams] = useSearchParams()
   const library = catalog.clauseLibrary
   const tab: Tab = params.get('tab') === 'history' ? 'history' : 'clauses'
@@ -33,7 +35,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
   const requested = Number(params.get('publication'))
   const viewing = library.versions.find((entry) => entry.publication.number === requested) ?? current
   const isCurrent = viewing === current
-  const groups = clauseGroups(library, catalog.index, viewing?.publication.number)
+  const groups = clauseGroups(library, catalog.index, labelFor, viewing?.publication.number)
   const compiling = catalog.inCompilation.filter((source) => source.artifact.artifactType === 'CLAUSE_LIBRARY')
 
   const update = useCallback(

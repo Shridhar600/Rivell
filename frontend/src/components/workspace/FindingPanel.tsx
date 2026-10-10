@@ -2,8 +2,9 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { EvidenceItem } from '../../api/retrieval'
 import type { FindingClaim, FindingDetail } from '../../api/reviews'
+import type { ConceptLabel } from '../../api/taxonomy'
+import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
-import { conceptLabel } from '../../lib/contractSemantics'
 import { authorityLabel } from '../../lib/evidence'
 import {
   absenceClaims,
@@ -99,9 +100,9 @@ function ClaimEvidence({ claim, items, onOpen }: { claim: FindingClaim; items: M
   )
 }
 
-function sourceRow(item: EvidenceItem, regionLabels: Map<string, string>): { title: string; detail: string } {
+function sourceRow(item: EvidenceItem, regionLabels: Map<string, string>, label: ConceptLabel): { title: string; detail: string } {
   const region = item.provenanceNodeIds.map((id) => regionLabels.get(id)).find(Boolean)
-  const subject = region ?? (item.legalConcept ? conceptLabel(item.legalConcept) : '')
+  const subject = region ?? (item.legalConcept ? label(item.legalConcept) : '')
   const snippet = item.text.replace(/\s+/g, ' ').trim()
   return { title: authorityLabel(item.authorityClass), detail: [subject, snippet].filter(Boolean).join(' · ') }
 }
@@ -137,6 +138,7 @@ function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'summar
 
 export function FindingPanel(props: Props) {
   const { finding, flow, decision } = props
+  const { labelFor } = useTaxonomy()
   const [showAll, setShowAll] = useState(false)
 
   // The loading, empty and error states share the host elements of the full panel, and the frozen
@@ -175,7 +177,7 @@ export function FindingPanel(props: Props) {
   const eligible = flow.acceptEligibility.eligible
   const reason = flow.acceptEligibility.eligible ? '' : flow.acceptEligibility.reason
   const missingEvidence = finding.claims.some((claim) => claim.evidenceItemIds.some((id) => !items.has(id)))
-  const title = findingSubjectLabel(finding, props.regionLabels)
+  const title = findingSubjectLabel(finding, props.regionLabels, labelFor)
 
   return (
     <aside className="rv-ws-pane rv-ws-dt" aria-label="Finding detail">
@@ -270,7 +272,7 @@ export function FindingPanel(props: Props) {
           <div className="rv-ws-sec">
             <div className="rv-ws-sec-h">Sources</div>
             {sources.map((item) => {
-              const row = sourceRow(item, props.regionLabels)
+              const row = sourceRow(item, props.regionLabels, labelFor)
               return (
                 <button key={item.evidenceId} type="button" className="rv-ws-srow" onClick={() => props.onOpenSource(item.evidenceId)}>
                   <span className="rv-ws-sico">

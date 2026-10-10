@@ -88,8 +88,8 @@ describe('review lifecycle states', () => {
     expect(
       within(sheet).getByText('An external analysis provider was unavailable for this check.'),
     ).toBeInTheDocument()
-    const check = within(sheet).getByTitle('LIABILITY_CAP:LIMITATION_OF_LIABILITY')
-    expect(check).toHaveTextContent('Liability cap · Limitation of liability')
+    const check = within(sheet).getByText('Liability cap · Limitation of liability')
+    expect(check).toBeInTheDocument()
   })
 
   it('renders a technical failure distinctly and never leaks the raw reason', async () => {

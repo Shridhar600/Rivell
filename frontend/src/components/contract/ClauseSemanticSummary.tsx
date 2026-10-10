@@ -1,6 +1,6 @@
 import type { SemanticClause } from '../../api/semantics'
+import { useTaxonomy } from '../../api/taxonomy'
 import {
-  conceptLabel,
   effectivePrimaryConcept,
   machinePrimaryConcept,
   regionKindLabel,
@@ -13,6 +13,7 @@ export function ClauseSemanticSummary({
   clause: SemanticClause
   onOpen: () => void
 }) {
+  const { labelFor } = useTaxonomy()
   const factCount = clause.effectiveFacts.length
 
   const isClause = clause.regionKind === 'CLAUSE'
@@ -26,7 +27,7 @@ export function ClauseSemanticSummary({
         <p className="clause-summary__concept">
           <span className="clause-summary__label">Primary concept</span>
           <span className="chip chip--primary">
-            {conceptLabel(effectivePrimaryConcept(clause) as string)}
+            {labelFor(effectivePrimaryConcept(clause) as string)}
           </span>
         </p>
       ) : (
@@ -35,14 +36,14 @@ export function ClauseSemanticSummary({
       {machinePrimaryConcept(clause) ? (
         <p className="clause-summary__machine">
           Rivell originally classified this clause as{' '}
-          {conceptLabel(machinePrimaryConcept(clause) as string)}.
+          {labelFor(machinePrimaryConcept(clause) as string)}.
         </p>
       ) : null}
       {clause.secondaryConcepts.length > 0 ? (
         <p className="clause-summary__concept">
           <span className="clause-summary__label">Also relates to</span>
           <span>
-            {clause.secondaryConcepts.map((concept) => conceptLabel(concept)).join(', ')}
+            {clause.secondaryConcepts.map((concept) => labelFor(concept)).join(', ')}
           </span>
         </p>
       ) : null}

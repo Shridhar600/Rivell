@@ -1,24 +1,24 @@
 import type { FindingSummary, ReviewSnapshotProfile } from '../api/reviews'
 import type { RedlineExecution, RedlineExecutionChange } from '../api/redline'
+import type { ConceptLabel } from '../api/taxonomy'
 import type { DocumentNode } from '../api/contracts'
 import type { ApprovedChange, ApprovedChangeSet, HumanDecision, HumanReview } from '../api/workflow'
 import {
   CONTRACT_TYPE_LABELS,
   JURISDICTION_LABELS,
   PAPER_SOURCE_LABELS,
-  conceptLabel,
   roleLabel,
 } from './contractSemantics'
 import { redlineFailureTitle, redlinePlacementLabel, redlineVerificationOutcome } from './redline'
 import { changeSetCounts, changeTargetLabel, decisionStateLabel } from './workflow'
 
 /** A short, human name for a Finding, from the facts the server sent about it. */
-export function findingTitle(finding: FindingSummary | undefined): string | null {
+export function findingTitle(finding: FindingSummary | undefined, label: ConceptLabel): string | null {
   if (!finding) return null
   if (finding.subjectKind === 'ABSENCE' && finding.absenceConcept) {
-    return `Missing: ${conceptLabel(finding.absenceConcept)}`
+    return `Missing: ${label(finding.absenceConcept)}`
   }
-  return finding.concept ? conceptLabel(finding.concept) : null
+  return finding.concept ? label(finding.concept) : null
 }
 
 export interface ClassificationCount {
@@ -44,14 +44,18 @@ export function classificationCounts(findings: FindingSummary[]): Classification
  * The first Finding the server still lists as undecided. Null when the server names none, or when
  * the Finding is not in the list this page holds, so a wrong label is never guessed.
  */
-export function nextUnresolvedTitle(humanReview: HumanReview, findings: FindingSummary[]): string | null {
+export function nextUnresolvedTitle(
+  humanReview: HumanReview,
+  findings: FindingSummary[],
+  label: ConceptLabel,
+): string | null {
   const pending = humanReview.blockers.find(
     (blocker) =>
       (blocker.code === 'UNRESOLVED_BLOCKING_FINDINGS' || blocker.code === 'UNRESOLVED_REVIEW_REQUIRED_FINDINGS') &&
       blocker.findingIds.length > 0,
   )
   const id = pending?.findingIds[0]
-  return id ? findingTitle(findings.find((finding) => finding.id === id)) : null
+  return id ? findingTitle(findings.find((finding) => finding.id === id), label) : null
 }
 
 /** One segment per Finding that needs a decision; filled for each one decided. */
@@ -90,14 +94,19 @@ export function changeTitle(
   change: ApprovedChange,
   finding: FindingSummary | undefined,
   regionLabels: Map<string, string>,
+  label: ConceptLabel,
 ): string {
-  return findingTitle(finding) ?? changeTargetLabel(change, regionLabels)
+  return findingTitle(finding, label) ?? changeTargetLabel(change, regionLabels, label)
 }
 
 /** Where the change lands. An insertion has no reviewer-chosen place, so it says so. */
-export function changeLocation(change: ApprovedChange, regionLabels: Map<string, string>): string {
+export function changeLocation(
+  change: ApprovedChange,
+  regionLabels: Map<string, string>,
+  label: ConceptLabel,
+): string {
   if (change.actionType === 'INSERT') return 'Placement resolved during redline execution'
-  return changeTargetLabel(change, regionLabels)
+  return changeTargetLabel(change, regionLabels, label)
 }
 
 /** The outcome chip on a change row: the human decision it came from. */
@@ -161,13 +170,14 @@ export function reportLocation(
   approved: ApprovedChange | undefined,
   regionLabels: Map<string, string>,
   failedOverall: boolean,
+  label: ConceptLabel,
 ): string {
   if (change.actionType === 'INSERT') {
     if (change.status !== 'APPLIED') return 'Not resolved safely'
-    return redlinePlacementLabel(change.placement) ?? 'Placement recorded by Rivell'
+    return redlinePlacementLabel(change.placement, label) ?? 'Placement recorded by Rivell'
   }
   if (change.resolvedTarget) return change.resolvedTarget
-  if (approved) return changeTargetLabel(approved, regionLabels)
+  if (approved) return changeTargetLabel(approved, regionLabels, label)
   return failedOverall ? 'Not resolved' : 'Target not recorded'
 }
 

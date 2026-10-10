@@ -64,9 +64,9 @@ const findingsForThisReview = {
     fixtureClauseFindingSummary,
     fixtureAbsenceFindingSummary,
     absenceFinding('f-3', 'GOVERNING_LAW'),
-    absenceFinding('f-4', 'CONFIDENTIALITY'),
+    absenceFinding('f-4', 'CONFIDENTIALITY_OBLIGATIONS'),
     absenceFinding('f-5', 'INDEMNIFICATION'),
-    absenceFinding('f-6', 'TERM_TERMINATION'),
+    absenceFinding('f-6', 'TERM'),
   ],
   truncated: false,
 }
@@ -206,7 +206,7 @@ describe('findings list', () => {
     // Severity, classification and concept filters no longer exist in the workspace. A stale link
     // carrying them must not reach the API.
     const { api } = renderWorkspace(
-      '/reviews/c1/analysis/r-1?severity=HIGH&classification=BLOCKING&concept=CONFIDENTIALITY',
+      '/reviews/c1/analysis/r-1?severity=HIGH&classification=BLOCKING&concept=CONFIDENTIALITY_OBLIGATIONS',
     )
 
     await (await findFindingsList()).findByRole('option', { name: /6\. Limitation of Liability/ })
@@ -738,8 +738,8 @@ describe('finding evidence amendment', () => {
         findings: 0,
         coverage: [
           { concept: 'LIMITATION_OF_LIABILITY', expectation: 'REQUIRED', coverage: 'PRESENT_PRIMARY' },
-          { concept: 'CONFIDENTIALITY', expectation: 'EXPECTED', coverage: 'PRESENT_SECONDARY_ONLY' },
-          { concept: 'TERM_TERMINATION', expectation: 'REQUIRED', coverage: 'ABSENT' },
+          { concept: 'CONFIDENTIALITY_OBLIGATIONS', expectation: 'EXPECTED', coverage: 'PRESENT_SECONDARY_ONLY' },
+          { concept: 'TERM', expectation: 'REQUIRED', coverage: 'ABSENT' },
           { concept: 'INDEMNIFICATION', expectation: 'OPTIONAL', coverage: 'UNKNOWN' },
         ],
       },

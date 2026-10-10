@@ -1,5 +1,6 @@
 import { useRef, type ReactNode, type RefObject } from 'react'
 import type { ArtifactDetail, Candidate } from '../../../api/knowledge'
+import { useTaxonomy } from '../../../api/taxonomy'
 import { interpretationRows, hasHumanCorrection } from '../../../lib/compilationFields'
 import { artifactFormat } from '../../../lib/knowledgeCatalog'
 import { kindLabel } from '../../../lib/compilation'
@@ -60,8 +61,9 @@ function SourceCard({ artifact, source, onContext }: { artifact: ArtifactDetail;
 }
 
 function InterpretationCard({ candidate, artifact, editing }: { candidate: Candidate; artifact: ArtifactDetail; editing: ReactNode | null }) {
+  const { labelFor } = useTaxonomy()
   const corrected = hasHumanCorrection(candidate, artifact)
-  const rows = interpretationRows(candidate)
+  const rows = interpretationRows(candidate, labelFor)
   return (
     <section className="rv-kc-xcard" aria-label="Structured interpretation">
       <div className="rv-kc-xh">
