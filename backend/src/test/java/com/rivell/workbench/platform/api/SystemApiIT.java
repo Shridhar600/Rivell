@@ -128,7 +128,8 @@ class SystemApiIT {
                         "/api/knowledge/publications",
                         "/api/knowledge/publications/{id}",
                         "/api/retrieval/evidence",
-                        "/api/retrieval/traces/{id}");
+                        "/api/retrieval/traces/{id}",
+                        "/api/taxonomy/concepts");
         assertThat(openApi.at("/paths/~1api~1system~1status/get/responses/200/content/application~1json/schema/$ref")
                 .asText()).endsWith("SystemStatusResponse");
 
