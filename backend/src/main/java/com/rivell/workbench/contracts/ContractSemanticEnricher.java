@@ -95,7 +95,7 @@ public final class ContractSemanticEnricher {
                 counters.questions += topic.questions();
                 classifications.put(region.headingNodeId(), new ConceptClassification(
                         topic.topics(), topic.secondaryTopics(), topic.probabilities()));
-            } catch (SemanticDecisionException e) {
+            } catch (SemanticDecisionException | IllegalArgumentException e) {
                 counters.providerDegraded = true;
                 classifications.put(region.headingNodeId(),
                         new ConceptClassification(List.of(), List.of(), Map.of()));

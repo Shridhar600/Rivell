@@ -80,9 +80,9 @@ public final class CorpusScriptedProvider implements SemanticDecisionProvider {
     }
 
     /**
-     * The fixture fixtures predate the 90-topic taxonomy, so the expected main subject
-     * of an ambiguous clause follows the core-concept order the old vocabulary used
-     * (the mapped LegalConcept enum order), not the registry's arbitrary leaf order.
+     * The fixtures predate the 90-topic taxonomy, so the expected main subject
+     * of an ambiguous clause follows the core-concept order the retired vocabulary
+     * used, not the registry's arbitrary leaf order.
      */
     private static final List<String> CORE_ORDER = List.of(
             "CONFIDENTIALITY_OBLIGATIONS", "TERM", "LIMITATION_OF_LIABILITY",

@@ -79,7 +79,7 @@ public class ContractEnrichmentIT {
 
         @Bean
         @Primary
-        SemanticDecisionProvider fakeSemanticDecisionProvider() {
+        CueScriptedProvider fakeSemanticDecisionProvider() {
             return new CueScriptedProvider();
         }
 
@@ -147,6 +147,9 @@ public class ContractEnrichmentIT {
      */
     public static final class CueScriptedProvider implements SemanticDecisionProvider {
 
+        /** When set, the primary-topic choice selects a label that is not a candidate. */
+        volatile boolean corruptPrimaryTopic;
+
         @Override
         public String id() {
             return "fake";
@@ -170,6 +173,12 @@ public class ContractEnrichmentIT {
 
         private ChoiceAnswer choiceAnswer(
                 String name, ChoiceQuestion choice, Object state) {
+            if (corruptPrimaryTopic && name.equals("primary_topic")) {
+                var probabilities = new java.util.LinkedHashMap<String, Double>();
+                probabilities.put("NOT_A_CANDIDATE_TOPIC", 0.92);
+                choice.criteria().keySet().forEach(option -> probabilities.putIfAbsent(option, 0.02));
+                return new ChoiceAnswer("NOT_A_CANDIDATE_TOPIC", 0.92, probabilities);
+            }
             var selected = switch (name) {
                 case "primary_topic" -> primaryConceptCue(choice, state);
                 case "governing_law" -> stateText(state).contains("England") ? "UK" : "US";
@@ -289,6 +298,9 @@ public class ContractEnrichmentIT {
 
     @Autowired
     ContractIngestionService ingestionService;
+
+    @Autowired
+    CueScriptedProvider fakeProvider;
 
     @Autowired
     MutableIdentity identityService;
@@ -559,6 +571,31 @@ public class ContractEnrichmentIT {
                 .orElseThrow();
         assertThat(lol.primaryConcept()).contains(CoreConcepts.LIMITATION_OF_LIABILITY);
         assertThat(lol.secondaryConcepts()).contains(CoreConcepts.INDEMNIFICATION);
+    }
+
+    /**
+     * A provider that names a primary topic which is not one of the candidate topics is a
+     * protocol failure, not a server error: enrichment degrades and reports it, exactly as
+     * the retired concept vocabulary's unknown-label handling did.
+     */
+    @Test
+    void bogusPrimaryTopicDegradesEnrichmentInsteadOfFailing() throws Exception {
+        var bytes = fixtureBytes("m5-dual-concept.docx");
+        var ingested = ingestionService.ingest("m5-dual-concept.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+
+        fakeProvider.corruptPrimaryTopic = true;
+        try {
+            var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                    ReviewProfile.minimal(ContractType.MSA));
+
+            assertThat(semantics.enrichmentStatus()).isEqualTo(EnrichmentStatus.READY);
+            assertThat(semantics.observations().providerDegraded()).isTrue();
+            assertThat(semantics.quality().notes())
+                    .contains(ReviewQualityNote.PROVIDER_DEGRADATION);
+        } finally {
+            fakeProvider.corruptPrimaryTopic = false;
+        }
     }
 
     @Test
