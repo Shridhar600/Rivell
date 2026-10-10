@@ -14,7 +14,6 @@ import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
 import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.taxonomy.CoreConcepts;
-import com.rivell.workbench.taxonomy.TaxonomyProperties;
 import com.rivell.workbench.taxonomy.TopicClassifier;
 
 /**
@@ -30,19 +29,16 @@ public final class ContractSemanticEnricher {
     private final ContractFactExtractor factExtractor;
     private final ContractEnrichmentProperties properties;
     private final TopicClassifier topicClassifier;
-    private final TaxonomyProperties taxonomyProperties;
 
     public ContractSemanticEnricher(
             SemanticDecisionService decisionService,
             ContractFactExtractor factExtractor,
             ContractEnrichmentProperties properties,
-            TopicClassifier topicClassifier,
-            TaxonomyProperties taxonomyProperties) {
+            TopicClassifier topicClassifier) {
         this.decisionService = decisionService;
         this.factExtractor = factExtractor;
         this.properties = properties;
         this.topicClassifier = topicClassifier;
-        this.taxonomyProperties = taxonomyProperties;
     }
 
     public record Result(
@@ -95,7 +91,7 @@ public final class ContractSemanticEnricher {
                 counters.questions += topic.questions();
                 classifications.put(region.headingNodeId(), new ConceptClassification(
                         topic.topics(), topic.secondaryTopics(), topic.probabilities()));
-            } catch (SemanticDecisionException | IllegalArgumentException e) {
+            } catch (SemanticDecisionException e) {
                 counters.providerDegraded = true;
                 classifications.put(region.headingNodeId(),
                         new ConceptClassification(List.of(), List.of(), Map.of()));
@@ -409,7 +405,7 @@ public final class ContractSemanticEnricher {
                 if (execution.answers().get("governing_law")
                         instanceof com.rivell.workbench.intelligence.ChoiceAnswer answer
                         && answer.probabilities().getOrDefault(answer.selected(), 0.0)
-                                >= taxonomyProperties.primaryThreshold()
+                                >= properties.governingLawThreshold()
                         && !"UNSPECIFIED".equals(answer.selected())) {
                     return List.of(new MetadataFact(UUID.randomUUID(),
                             clause.contractVersionId(), MetadataField.GOVERNING_LAW,

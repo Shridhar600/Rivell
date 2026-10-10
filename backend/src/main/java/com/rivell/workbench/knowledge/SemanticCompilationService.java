@@ -86,7 +86,7 @@ public class SemanticCompilationService {
                 try {
                     enriched = interpret(candidate, artifact, unit);
                     budget--;
-                } catch (SemanticDecisionException | IllegalArgumentException e) {
+                } catch (SemanticDecisionException e) {
                     LoggerFactory.getLogger(SemanticCompilationService.class)
                             .warn("Semantic interpretation degraded for candidate {} ({} {})",
                             candidate.id(), e.getClass().getSimpleName(), e.getMessage());

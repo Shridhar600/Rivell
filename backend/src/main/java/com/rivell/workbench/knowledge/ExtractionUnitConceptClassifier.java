@@ -49,14 +49,13 @@ public class ExtractionUnitConceptClassifier {
         TopicClassification classification;
         try {
             classification = topicClassifier.classify(unit.title(), unit.contentText());
-        } catch (SemanticDecisionException | IllegalArgumentException e) {
+        } catch (SemanticDecisionException e) {
             throw new ConceptClassificationUnavailableException(
                     "The semantic classification service is not available", e);
         }
         return new UnitConceptClassification(
                 unit.id(), unit.artifactId(), classification.topics(),
                 classification.probabilities(), classification.topics().isEmpty(),
-                classification.taxonomyVersion(), classification.decisionExecutions(),
-                classification.questions());
+                classification.taxonomyVersion(), classification.executions());
     }
 }

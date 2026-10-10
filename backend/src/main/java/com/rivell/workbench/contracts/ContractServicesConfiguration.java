@@ -64,10 +64,9 @@ class ContractServicesConfiguration {
             SemanticDecisionService decisionService,
             ContractFactExtractor factExtractor,
             ContractEnrichmentProperties properties,
-            com.rivell.workbench.taxonomy.TopicClassifier topicClassifier,
-            com.rivell.workbench.taxonomy.TaxonomyProperties taxonomyProperties) {
+            com.rivell.workbench.taxonomy.TopicClassifier topicClassifier) {
         return new ContractSemanticEnricher(decisionService, factExtractor, properties,
-                topicClassifier, taxonomyProperties);
+                topicClassifier);
     }
 
     @Bean

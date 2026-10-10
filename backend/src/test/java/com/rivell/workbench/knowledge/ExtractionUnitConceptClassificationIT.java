@@ -217,8 +217,8 @@ class ExtractionUnitConceptClassificationIT {
                 .isEqualTo(0.94);
 
         assertThat(classification.taxonomyVersion()).isPositive();
-        assertThat(classification.decisionExecutions()).isEqualTo(1);
-        assertThat(classification.questions()).isPositive();
+        assertThat(classification.executions()).singleElement()
+                .satisfies(execution -> assertThat(execution.specId()).isEqualTo("section-topics"));
 
         var request = fakeProvider.lastRequest();
         @SuppressWarnings("unchecked")

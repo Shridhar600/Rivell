@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.rivell.workbench.intelligence.DecisionExecutionMetadata;
 import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
@@ -19,11 +20,11 @@ public record UnitConceptClassification(
         Map<ConceptKey, Double> conceptProbabilities,
         boolean noneMatched,
         int taxonomyVersion,
-        int decisionExecutions,
-        int questions) {
+        List<DecisionExecutionMetadata> executions) {
 
     public UnitConceptClassification {
         proposedConcepts = List.copyOf(proposedConcepts);
+        executions = List.copyOf(executions);
         conceptProbabilities = new LinkedHashMap<>(conceptProbabilities);
     }
 }

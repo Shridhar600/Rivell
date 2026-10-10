@@ -3,6 +3,7 @@ package com.rivell.workbench.knowledge.api;
 import java.util.List;
 import java.util.UUID;
 
+import com.rivell.workbench.intelligence.DecisionExecutionMetadata;
 import com.rivell.workbench.knowledge.UnitConceptClassification;
 
 /**
@@ -30,15 +31,33 @@ public record UnitConceptClassificationView(
                 classification.unitId(), classification.artifactId(),
                 proposed, evaluated, classification.noneMatched(),
                 new MetadataView(classification.taxonomyVersion(),
-                        classification.decisionExecutions(), classification.questions()));
+                        classification.executions().stream().map(ExecutionView::from).toList()));
     }
 
     public record ConceptView(String concept, double probability) {
     }
 
-    public record MetadataView(
-            int taxonomyVersion,
-            int decisionExecutions,
-            int questions) {
+    public record MetadataView(int taxonomyVersion, List<ExecutionView> executions) {
+    }
+
+    /** One model call behind the proposal: which spec, which model, how long, what it cost. */
+    public record ExecutionView(
+            UUID executionId,
+            String specId,
+            int specVersion,
+            String providerId,
+            String resolvedModel,
+            long durationMs,
+            int questionCount,
+            int inputTokens,
+            int outputTokens) {
+
+        private static ExecutionView from(DecisionExecutionMetadata metadata) {
+            var usage = metadata.usage();
+            return new ExecutionView(metadata.executionId(), metadata.specId(), metadata.specVersion(),
+                    metadata.providerId(), metadata.resolvedModel(), metadata.durationMs(),
+                    metadata.questionCount(), usage == null ? 0 : usage.inputTokens(),
+                    usage == null ? 0 : usage.outputTokens());
+        }
     }
 }

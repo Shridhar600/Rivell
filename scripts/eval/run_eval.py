@@ -214,14 +214,14 @@ def write_report(out, results, meta):
     lines = [f"# Eval run {meta['runId']}", "",
              f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}", ""]
     tot = {k: 0 for k in ("sx", "sm", "cl", "cc", "ix", "id", "cs", "fa", "pos", "posf", "cand", "candc")}
-    lines += ["## Knowledge", "", "| File | Candidates | With concept | Positions found | Unmatched candidates |",
-              "|---|---|---|---|---|"]
+    lines += ["## Knowledge", "", "| File | Candidates | With concept | Positions whole | Positions split | Unmatched candidates |",
+              "|---|---|---|---|---|---|"]
     for r in results:
         for k in r["knowledge"]:
             tot["pos"] += k["expectedPositions"]; tot["posf"] += k["positionsFound"]
             tot["cand"] += k["candidates"]; tot["candc"] += k["candidatesWithConcept"]
             lines.append(f"| {k['file']} | {k['candidates']} | {pct(k['candidatesWithConcept'], k['candidates'])} "
-                         f"| {pct(k['positionsFound'], k['expectedPositions'])} | {k['unmatchedCandidates']} |")
+                         f"| {pct(k['positionsFound'], k['expectedPositions'])} | {k.get('positionsSplit', 0)} | {k['unmatchedCandidates']} |")
     lines += ["", "## Contracts", "",
               "| File | Review | Sections matched | Clauses classified | Findings (absence) | Issues detected | False-alarm sections |",
               "|---|---|---|---|---|---|---|"]
@@ -244,7 +244,7 @@ def write_report(out, results, meta):
               f"- Sections matched: {pct(tot['sm'], tot['sx'])}",
               f"- Clauses classified: {pct(tot['cc'], tot['cl'])}",
               f"- Knowledge candidates with concept: {pct(tot['candc'], tot['cand'])}",
-              f"- Playbook positions found: {pct(tot['posf'], tot['pos'])}",
+              f"- Positions found whole (preferred + walk-away in one candidate): {pct(tot['posf'], tot['pos'])}",
               f"- Planted issues detected (section-level): {pct(tot['id'], tot['ix'])}",
               f"- False-alarm compliant sections: {pct(tot['fa'], tot['cs'])}", "",
               "| Issue category | Detected |", "|---|---|"]

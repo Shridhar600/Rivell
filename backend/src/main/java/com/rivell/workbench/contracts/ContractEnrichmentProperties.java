@@ -13,6 +13,7 @@ public record ContractEnrichmentProperties(
         double verificationThreshold,
         double disputedThreshold,
         double relationshipThreshold,
+        double governingLawThreshold,
         int maxRegions,
         int maxRelationshipPairs,
         int maxGenerativeExtractions) {
@@ -29,6 +30,9 @@ public record ContractEnrichmentProperties(
         }
         if (relationshipThreshold <= 0.0) {
             relationshipThreshold = 0.80;
+        }
+        if (governingLawThreshold <= 0.0) {
+            governingLawThreshold = 0.80;
         }
         if (maxRegions <= 0) {
             maxRegions = 60;

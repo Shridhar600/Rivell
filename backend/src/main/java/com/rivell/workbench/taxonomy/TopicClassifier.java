@@ -8,6 +8,7 @@ import java.util.Map;
 
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.ChoiceQuestion;
+import com.rivell.workbench.intelligence.DecisionExecution;
 import com.rivell.workbench.intelligence.DecisionSpec;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.intelligence.QuestionPack;
@@ -50,7 +51,8 @@ public final class TopicClassifier {
      */
     public TopicClassification classify(String heading, String text) {
         var state = new SectionState(heading, truncate(text));
-        var answers = decisions.evaluate(topicsSpec, state).answers();
+        var topicsExecution = decisions.evaluate(topicsSpec, state);
+        var answers = topicsExecution.answers();
         var probabilities = new LinkedHashMap<ConceptKey, Double>();
         for (var leaf : registry.leaves()) {
             var name = questionName(leaf.key());
@@ -67,28 +69,37 @@ public final class TopicClassifier {
         var questions = registry.leaves().size();
         if (topics.size() <= 1) {
             var primary = topics.isEmpty() ? null : topics.getFirst();
-            return new TopicClassification(topics, primary, probabilities, registry.version(), 1, questions);
+            return new TopicClassification(topics, primary, probabilities, registry.version(),
+                    List.of(topicsExecution.metadata()), questions);
         }
-        var primary = primaryTopic(state, topics);
-        return new TopicClassification(topics, primary, probabilities, registry.version(), 2, questions + 1);
+        var candidates = topics.subList(0, Math.min(topics.size(), properties.maxPrimaryCandidates()));
+        var primaryExecution = decisions.evaluate(primarySpec(candidates), state);
+        return new TopicClassification(topics, primaryTopic(primaryExecution, candidates), probabilities,
+                registry.version(), List.of(topicsExecution.metadata(), primaryExecution.metadata()),
+                questions + 1);
     }
 
-    private ConceptKey primaryTopic(SectionState state, List<ConceptKey> topics) {
-        var candidates = topics.subList(0, Math.min(topics.size(), properties.maxPrimaryCandidates()));
+    private DecisionSpec primarySpec(List<ConceptKey> candidates) {
         var criteria = new LinkedHashMap<String, String>();
         for (var key : candidates) {
             var concept = registry.require(key);
             criteria.put(key.value(), concept.label() + ": " + concept.definition());
         }
-        var spec = new DecisionSpec(PRIMARY_SPEC, registry.version(),
+        return new DecisionSpec(PRIMARY_SPEC, registry.version(),
                 "Choose the main subject of a section among the topics it expresses.",
                 SectionState.SCHEMA_VERSION,
                 new QuestionPack(Map.of("primary_topic", new ChoiceQuestion(
                         "Which single topic is the main subject of this section? "
                                 + "The section may also deal with the others in passing.",
                         criteria))));
-        if (!(decisions.evaluate(spec, state).answers().get("primary_topic") instanceof ChoiceAnswer answer)) {
+    }
+
+    private ConceptKey primaryTopic(DecisionExecution execution, List<ConceptKey> candidates) {
+        if (!(execution.answers().get("primary_topic") instanceof ChoiceAnswer answer)) {
             throw new ProviderProtocolException("Missing primary topic answer");
+        }
+        if (candidates.stream().map(ConceptKey::value).noneMatch(answer.selected()::equals)) {
+            throw new ProviderProtocolException("Primary topic " + answer.selected() + " was not offered");
         }
         var ranked = new ArrayList<>(answer.probabilities().values());
         ranked.sort(Comparator.reverseOrder());

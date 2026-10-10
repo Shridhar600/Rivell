@@ -39,28 +39,40 @@ def _content_words(text):
     return {w for w in _WORD.findall((text or "").lower()) if w not in _STOP and len(w) > 2}
 
 
+def _overlap(want, have):
+    return len(want & have) / len(want) if want else 1.0
+
+
 def score_knowledge(answer, candidates):
+    """A position counts as found only when ONE candidate carries both its preferred text and its
+    walk-away (when the playbook has one): a position split across rows is not usable for review."""
     concepts = [c for c in candidates if c.get("effectiveConceptKey")]
     positions = answer.get("positions", []) if answer else []
-    matched_candidates, found = set(), 0
+    texts = {c["id"]: _content_words(c.get("contentText")) for c in candidates}
+    matched_candidates, found, partial = set(), 0, 0
     for pos in positions:
-        want = _content_words(" ".join(filter(None, [pos.get("preferred"), pos.get("walkAway")])))
-        if not want:
+        preferred = _content_words(pos.get("preferred"))
+        walk_away = _content_words(pos.get("walkAway"))
+        if not preferred:
             continue
-        best, best_overlap = None, 0.0
-        for c in candidates:
-            have = _content_words(c.get("contentText"))
-            overlap = len(want & have) / len(want)
-            if overlap > best_overlap:
-                best, best_overlap = c["id"], overlap
-        if best_overlap >= 0.5:
+        best, best_score, any_part = None, 0.0, False
+        for cid, have in texts.items():
+            p, w = _overlap(preferred, have), _overlap(walk_away, have)
+            any_part |= p >= 0.5 or (walk_away and w >= 0.5)
+            score = min(p, w)
+            if score > best_score:
+                best, best_score = cid, score
+        if best_score >= 0.5:
             found += 1
             matched_candidates.add(best)
+        elif any_part:
+            partial += 1
     return {
         "expectedPositions": len(positions),
         "candidates": len(candidates),
         "candidatesWithConcept": len(concepts),
         "positionsFound": found,
+        "positionsSplit": partial,
         "unmatchedCandidates": len(candidates) - len(matched_candidates) if positions else None,
         "conceptsUsed": sorted({c["effectiveConceptKey"] for c in concepts}),
     }
