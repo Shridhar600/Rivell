@@ -106,7 +106,7 @@ public final class SignalHeadingDetector implements HeadingDetector {
             if (beforeAnyStructure && (p.centred() || p.allCaps())) {
                 return new HeadingDecision(Kind.TITLE, null, Set.of("LEADING_EMPHASIS"), true);
             }
-            if (next != null && isBodyLike(next)) {
+            if (p.followedByTable() || next != null && isBodyLike(next)) {
                 return new HeadingDecision(Kind.HEADING, 1, Set.of("EMPHASIS"), true);
             }
         }

@@ -266,7 +266,8 @@ def main():
     if missing:
         sys.exit(f"missing environment variables: {', '.join(missing)}")
     manifest = json.loads((args.corpus / "manifest.json").read_text())
-    orgs = [o for o in manifest["orgs"] if not args.org or o["id"] in args.org]
+    all_orgs = manifest.get("orgs") or manifest.get("organisations") or []
+    orgs = [o for o in all_orgs if not args.org or o["id"] in args.org]
 
     run_id = time.strftime("%Y%m%d-%H%M%S")
     out = args.out / run_id

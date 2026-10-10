@@ -15,6 +15,8 @@ package com.rivell.workbench.platform.parsing;
  * @param runInTitle     a short emphasised phrase that opens the paragraph and is followed
  *                       by body text in the same paragraph (e.g. "Term." in "5. Term. This…"),
  *                       or null
+ * @param followedByTable the next block-level element after this paragraph (ignoring blank
+ *                       paragraphs) is a table
  */
 public record ParagraphFeatures(
         String text,
@@ -25,9 +27,15 @@ public record ParagraphFeatures(
         boolean allEmphasised,
         boolean allCaps,
         boolean centred,
-        String runInTitle) {
+        String runInTitle,
+        boolean followedByTable) {
 
     public boolean isBlank() {
         return text == null || text.isBlank();
+    }
+
+    ParagraphFeatures withFollowedByTable() {
+        return new ParagraphFeatures(text, styleId, styleName, outlineLevel, numberingLabel,
+                allEmphasised, allCaps, centred, runInTitle, true);
     }
 }

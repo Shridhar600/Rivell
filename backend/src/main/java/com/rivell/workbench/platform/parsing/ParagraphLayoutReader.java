@@ -28,6 +28,10 @@ final class ParagraphLayoutReader {
     private static final Pattern LEADING_LABEL = Pattern.compile(
             "(?i)^\\s*(?:(?:article|section|clause)\\s+)?"
                     + "(?:[0-9]{1,3}(?:\\.[0-9]{1,3}){0,4}|[ivxlc]{1,6}|\\([a-z0-9]{1,4}\\))[.)]?\\s+");
+    /** "Schedule 1 Fees" needs no closing punctuation: the label already marks a heading. */
+    private static final Pattern KEYWORD_START = Pattern.compile(
+            "(?i)^(?:article|section|clause|part|schedule|exhibit|annex|appendix)\\s+"
+                    + "(?:[0-9]{1,3}(?:\\.[0-9]{1,3}){0,4}|[ivxlc]{1,6}|[a-z])\\b");
     private static final int MIN_RUN_IN_BODY_CHARS = 20;
 
     private final WordprocessingMLPackage wordPackage;
@@ -66,7 +70,7 @@ final class ParagraphLayoutReader {
                 outline != null && outline <= 8 ? outline : null,
                 numberingLabel(paragraph, styleId),
                 marked.allEmphasised(), marked.allCaps(visible), centred,
-                runInTitle(visible, marked));
+                runInTitle(visible, marked), false);
     }
 
     private org.docx4j.wml.PPr effectivePPr(P paragraph) {
@@ -166,7 +170,8 @@ final class ParagraphLayoutReader {
 
     /**
      * "5. Term. This Agreement…": an emphasised phrase right after any leading label,
-     * closed by punctuation, followed by ordinary body text in the same paragraph.
+     * closed by punctuation (or opened by a keyword label such as "Schedule 1"), followed by
+     * ordinary body text in the same paragraph.
      */
     private static String runInTitle(String text, MarkedText marked) {
         var label = LEADING_LABEL.matcher(text);
@@ -190,7 +195,9 @@ final class ParagraphLayoutReader {
         var rest = text.substring(lastEmphasised + 1).strip();
         var closed = title.endsWith(".") || title.endsWith(":")
                 || rest.startsWith(".") || rest.startsWith(":")
-                || rest.startsWith("–") || rest.startsWith("—") || rest.startsWith("-");
+                || rest.startsWith("–") || rest.startsWith("—") || rest.startsWith("-")
+                || KEYWORD_START.matcher(text.strip()).find()
+                        && !rest.isEmpty() && Character.isUpperCase(rest.codePointAt(0));
         var bodyChars = rest.replaceFirst("^[.:–—-]+", "").strip().length();
         if (!closed || bodyChars < MIN_RUN_IN_BODY_CHARS || !title.chars().anyMatch(Character::isLetter)) {
             return null;

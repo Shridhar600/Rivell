@@ -99,6 +99,46 @@ class DocxStructuralParserTest {
     }
 
     @Test
+    void recoversUnnumberedBoldHeadingsIncludingOnesThatIntroduceATable() {
+        var result = parse("fixtures/blind-sow-table-introduced-headings.docx");
+
+        assertHeadingsInOrder(result, "Scope of Services", "Definitions", "Deliverables and Acceptance",
+                "Milestones, Fees and Payment", "Governance, Roles and Responsibilities", "Key Personnel",
+                "Super-Users and Training", "Assumptions and Dependencies", "Variations",
+                "Intellectual Property in Project Deliverables", "Data Protection and Security",
+                "Subcontracting", "Liability Under this Statement of Work", "Governing Law and Jurisdiction",
+                "Reporting Pack Specification");
+    }
+
+    @Test
+    void recoversUnderlinedRunInHeadingsIncludingAnUnpunctuatedSchedule() {
+        var result = parse("fixtures/blind-nda-run-in-headings.docx");
+
+        assertHeadingsInOrder(result, "1. Purpose.", "2. Definition of Confidential Information.",
+                "3. Obligations of the Recipient.", "4. Permitted Disclosures.", "5. Residual Knowledge.",
+                "6. Return or Destruction.", "7. Compliance Warranties.",
+                "8. Evaluation Outcome and Reference Rights.", "9. Term and Survival.",
+                "10. Governing Law and Dispute Resolution.", "11. General.",
+                "12. No Licence and No Warranty.", "13. Clean Room Protocol.",
+                "Schedule 1 Information Expected to be Disclosed");
+    }
+
+    private static void assertHeadingsInOrder(com.rivell.workbench.contracts.ParseResult result, String... expectedPrefixes) {
+        assertThat(result.status()).isEqualTo(ParseStatus.OK);
+        var headings = result.nodes().stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.HEADING)
+                .map(com.rivell.workbench.contracts.DocumentNode::text).toList();
+        var cursor = 0;
+        for (var expected : expectedPrefixes) {
+            while (cursor < headings.size() && !headings.get(cursor).contains(expected)) {
+                cursor++;
+            }
+            assertThat(cursor).as("heading '%s' in %s", expected, headings).isLessThan(headings.size());
+            cursor++;
+        }
+    }
+
+    @Test
     void parsesTableWithNestedRowsAndCells() {
         var result = parse("fixtures/with-table.docx");
         var nodes = result.nodes();

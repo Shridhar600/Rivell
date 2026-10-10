@@ -204,6 +204,17 @@ public class DocxStructuralParser implements DocumentStructureParser {
                     out.add(layout.read(paragraph, textOf(paragraph)));
                 } else if (element instanceof SdtBlock sdtBlock) {
                     collect(sdtBlock.getSdtContent().getContent(), layout, out);
+                } else if (element instanceof Tbl) {
+                    markLastTextBeforeTable(out);
+                }
+            }
+        }
+
+        private static void markLastTextBeforeTable(List<ParagraphFeatures> out) {
+            for (int i = out.size() - 1; i >= 0; i--) {
+                if (!out.get(i).isBlank()) {
+                    out.set(i, out.get(i).withFollowedByTable());
+                    return;
                 }
             }
         }
