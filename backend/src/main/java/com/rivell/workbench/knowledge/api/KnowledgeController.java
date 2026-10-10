@@ -190,11 +190,11 @@ class KnowledgeController {
         return ApiResult.ok(toCandidateView(queryService.getCandidate(id)));
     }
 
-    /** Human LegalConcept correction before publication (DW-017): set or clear. */
-    @Operation(summary = "Correct or clear a candidate's LegalConcept (machine proposal preserved)")
+    /** Human concept correction before publication (DW-017): set or clear. */
+    @Operation(summary = "Correct or clear a candidate's concept (machine proposal preserved)")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Unknown LegalConcept or missing primary value",
+            @ApiResponse(responseCode = "400", description = "Unknown concept or missing primary value",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -426,7 +426,12 @@ class KnowledgeController {
                 candidate.conceptCorrectedBy(),
                 candidate.conceptCorrectedAt(),
                 candidate.effectiveConceptKey(),
-                candidate.semanticFields().conceptProbabilities(),
+                candidate.semanticFields().conceptProbabilities().entrySet().stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                entry -> entry.getKey().value(),
+                                java.util.Map.Entry::getValue,
+                                (left, right) -> left,
+                                java.util.LinkedHashMap::new)),
                 candidate.effectivePositions(),
                 candidate.effectiveVariantRole(),
                 candidate.effectiveEscalationTrigger(),

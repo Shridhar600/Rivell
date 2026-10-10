@@ -35,7 +35,7 @@ import com.rivell.workbench.contracts.FactSchema;
 import com.rivell.workbench.contracts.Interpretation;
 import com.rivell.workbench.contracts.InterpretationKind;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.contracts.LegalFact;
 import com.rivell.workbench.contracts.MetadataFact;
 import com.rivell.workbench.contracts.MetadataField;
@@ -810,11 +810,11 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
 
     private Map<String, Object> classification(ConceptClassification classification) {
         var payload = new LinkedHashMap<String, Object>();
-        payload.put("concepts", names(classification.concepts()));
-        payload.put("secondaryConcepts", names(classification.secondaryConcepts()));
+        payload.put("concepts", conceptNames(classification.concepts()));
+        payload.put("secondaryConcepts", conceptNames(classification.secondaryConcepts()));
         var probabilities = new LinkedHashMap<String, Object>();
         for (var entry : classification.probabilities().entrySet()) {
-            probabilities.put(entry.getKey().name(), entry.getValue());
+            probabilities.put(entry.getKey().value(), entry.getValue());
         }
         payload.put("probabilities", probabilities);
         return payload;
@@ -825,25 +825,25 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         if (node == null) {
             return new ConceptClassification(List.of(), List.of(), Map.of());
         }
-        var concepts = new ArrayList<LegalConcept>();
+        var concepts = new ArrayList<ConceptKey>();
         for (var element : node.path("concepts")) {
-            var concept = parseEnum(LegalConcept.class, element.asText());
+            var concept = conceptOrNull(element.asText());
             if (concept != null) {
                 concepts.add(concept);
             }
         }
-        var secondaries = new ArrayList<LegalConcept>();
+        var secondaries = new ArrayList<ConceptKey>();
         for (var element : node.path("secondaryConcepts")) {
-            var concept = parseEnum(LegalConcept.class, element.asText());
+            var concept = conceptOrNull(element.asText());
             if (concept != null) {
                 secondaries.add(concept);
             }
         }
-        var probabilities = new LinkedHashMap<LegalConcept, Double>();
+        var probabilities = new LinkedHashMap<ConceptKey, Double>();
         var probabilityNode = node.path("probabilities");
         if (probabilityNode.isObject()) {
             probabilityNode.fields().forEachRemaining(entry -> {
-                var concept = parseEnum(LegalConcept.class, entry.getKey());
+                var concept = conceptOrNull(entry.getKey());
                 if (concept != null && entry.getValue().isNumber()) {
                     probabilities.put(concept, entry.getValue().asDouble());
                 }
@@ -961,6 +961,22 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
 
     private List<String> names(List<? extends Enum<?>> values) {
         return values.stream().map(Enum::name).toList();
+    }
+
+    private static List<String> conceptNames(List<ConceptKey> values) {
+        return values.stream().map(ConceptKey::value).toList();
+    }
+
+    /** Tolerant parse: a malformed stored key is skipped, never a read failure. */
+    private static ConceptKey conceptOrNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return ConceptKey.of(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private List<String> uuids(List<UUID> values) {

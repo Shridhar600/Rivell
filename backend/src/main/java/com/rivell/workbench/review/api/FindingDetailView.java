@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.review.ClaimKind;
 import com.rivell.workbench.review.FindingClassification;
 import com.rivell.workbench.review.FindingPositionComparison;
@@ -29,10 +28,10 @@ public record FindingDetailView(
         UUID runId,
         FindingSubjectKind subjectKind,
         UUID subjectHeadingNodeId,
-        LegalConcept absenceConcept,
-        LegalConcept concept,
-        LegalConcept secondaryConcept,
-        List<LegalConcept> concepts,
+        String absenceConcept,
+        String concept,
+        String secondaryConcept,
+        List<String> concepts,
         IssueFamily issueFamily,
         String observationKind,
         String observationText,

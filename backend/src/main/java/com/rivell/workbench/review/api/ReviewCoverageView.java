@@ -1,6 +1,5 @@
 package com.rivell.workbench.review.api;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.review.CheckExpectation;
 
 /**
@@ -9,7 +8,7 @@ import com.rivell.workbench.review.CheckExpectation;
  * so the review cannot silently look fully assessed.
  */
 public record ReviewCoverageView(
-        LegalConcept concept,
+        String concept,
         CheckExpectation expectation,
         Coverage coverage) {
 

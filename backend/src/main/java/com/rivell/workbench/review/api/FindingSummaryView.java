@@ -3,7 +3,6 @@ package com.rivell.workbench.review.api;
 import java.time.Instant;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.review.FindingClassification;
 import com.rivell.workbench.review.FindingSeverity;
 import com.rivell.workbench.review.FindingSubjectKind;
@@ -16,9 +15,9 @@ public record FindingSummaryView(
         UUID id,
         FindingSubjectKind subjectKind,
         UUID subjectHeadingNodeId,
-        LegalConcept absenceConcept,
-        LegalConcept concept,
-        LegalConcept secondaryConcept,
+        String absenceConcept,
+        String concept,
+        String secondaryConcept,
         IssueFamily issueFamily,
         String observationKind,
         FindingSeverity severity,

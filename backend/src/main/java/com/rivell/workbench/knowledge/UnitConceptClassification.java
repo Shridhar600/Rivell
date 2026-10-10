@@ -5,20 +5,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
-import com.rivell.workbench.intelligence.DecisionExecutionMetadata;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
- * Semantic classification proposal for one extraction unit: per-concept probabilities,
- * the concepts proposed above the task threshold, and the execution provenance.
+ * Semantic classification proposal for one extraction unit: per-topic probabilities,
+ * the topics proposed at or above the task threshold, and the taxonomy execution
+ * provenance.
  */
 public record UnitConceptClassification(
         UUID unitId,
         UUID artifactId,
-        List<LegalConcept> proposedConcepts,
-        Map<LegalConcept, Double> conceptProbabilities,
+        List<ConceptKey> proposedConcepts,
+        Map<ConceptKey, Double> conceptProbabilities,
         boolean noneMatched,
-        DecisionExecutionMetadata metadata) {
+        int taxonomyVersion,
+        int decisionExecutions,
+        int questions) {
 
     public UnitConceptClassification {
         proposedConcepts = List.copyOf(proposedConcepts);

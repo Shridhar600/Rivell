@@ -1,5 +1,7 @@
 package com.rivell.workbench.retrieval;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -21,7 +23,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.intelligence.DecisionExecutionRequest;
 import com.rivell.workbench.intelligence.ModelBinding;
 import com.rivell.workbench.intelligence.ModelPolicy;
@@ -97,13 +98,13 @@ class CandidateConceptCorrectionIT {
                 @Override
                 public ProviderExecutionResult execute(DecisionExecutionRequest request) {
                     if (request.pack().questions().keySet().stream()
-                            .noneMatch(name -> name.startsWith("concept_"))) {
+                            .noneMatch(name -> name.startsWith("topic_"))) {
                         return corpusCues.execute(request);
                     }
                     var answers = new java.util.LinkedHashMap<String, SemanticAnswer>();
                     for (var entry : request.pack().questions().entrySet()) {
                         answers.put(entry.getKey(),
-                                entry.getKey().startsWith("concept_")
+                                entry.getKey().startsWith("topic_")
                                         ? new com.rivell.workbench.intelligence.YesNoAnswer(0.02)
                                         : corpusCues.execute(request).answers().get(entry.getKey()));
                     }
@@ -189,12 +190,12 @@ class CandidateConceptCorrectionIT {
 
         // human review corrects the concept before publication
         var corrected = reviewService.correctConcept(precedent.clause().id(),
-                LegalConcept.LIMITATION_OF_LIABILITY.name());
+                CoreConcepts.LIMITATION_OF_LIABILITY.value());
         assertThat(corrected.legalConceptKey()).isNull();
         assertThat(corrected.conceptCorrection())
-                .isEqualTo(LegalConcept.LIMITATION_OF_LIABILITY.name());
+                .isEqualTo(CoreConcepts.LIMITATION_OF_LIABILITY.value());
         assertThat(corrected.effectiveConceptKey())
-                .isEqualTo(LegalConcept.LIMITATION_OF_LIABILITY.name());
+                .isEqualTo(CoreConcepts.LIMITATION_OF_LIABILITY.value());
 
         reviewService.correctConcept(precedent.clause().id(), "");
         var cleared = knowledgeQueries.getCandidate(precedent.clause().id());
@@ -203,7 +204,7 @@ class CandidateConceptCorrectionIT {
 
         // change back, then approve + publish — publication consumes the effective concept
         reviewService.correctConcept(precedent.clause().id(),
-                LegalConcept.LIMITATION_OF_LIABILITY.name());
+                CoreConcepts.LIMITATION_OF_LIABILITY.value());
         var approved = reviewService.approve(precedent.clause().id(), null);
         var publication = publicationService.publish(
                 java.util.List.of(approved.id()), java.util.Map.of(), "dw-017 flow");
@@ -211,12 +212,12 @@ class CandidateConceptCorrectionIT {
 
         var published = knowledgeQueries.getCandidate(precedent.clause().id());
         assertThat(published.effectiveConceptKey())
-                .isEqualTo(LegalConcept.LIMITATION_OF_LIABILITY.name());
+                .isEqualTo(CoreConcepts.LIMITATION_OF_LIABILITY.value());
         assertThat(published.legalConceptKey()).isNull();
 
         // M6 retrieval discovers it through published truth alone
         var request = EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 UUID.randomUUID(), 1, UUID.randomUUID(),
                 "Supplier's total aggregate liability shall not exceed three times "
                         + "the fees paid in the preceding twelve months.",
@@ -230,7 +231,7 @@ class CandidateConceptCorrectionIT {
         assertThat(bundle.precedentItems())
                 .anySatisfy(item -> {
                     assertThat(item.sourceCandidateId()).isEqualTo(approved.id());
-                    assertThat(item.legalConcept()).isEqualTo(LegalConcept.LIMITATION_OF_LIABILITY);
+                    assertThat(item.legalConcept()).isEqualTo(CoreConcepts.LIMITATION_OF_LIABILITY);
                 });
     }
 
@@ -245,7 +246,7 @@ class CandidateConceptCorrectionIT {
 
         var approved = reviewService.approve(
                 reviewService.correctConcept(precedent.clause().id(),
-                        LegalConcept.LIMITATION_OF_LIABILITY.name()).id(), null);
+                        CoreConcepts.LIMITATION_OF_LIABILITY.value()).id(), null);
         var publication = publicationService.publish(
                 java.util.List.of(approved.id()), java.util.Map.of(),
                 "published before tenant probe");
@@ -254,14 +255,14 @@ class CandidateConceptCorrectionIT {
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), UUID.randomUUID(), java.util.Set.of("ADMIN")));
         assertThatThrownBy(() -> reviewService.correctConcept(
-                precedent.clause().id(), LegalConcept.CONFIDENTIALITY.name()))
+                precedent.clause().id(), CoreConcepts.CONFIDENTIALITY_OBLIGATIONS.value()))
                 .isInstanceOf(com.rivell.workbench.knowledge.KnowledgeCandidateNotFoundException.class);
 
         // published knowledge is immutable: no post-publication correction
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), organizationId, java.util.Set.of("ADMIN")));
         assertThatThrownBy(() -> reviewService.correctConcept(
-                precedent.clause().id(), LegalConcept.CONFIDENTIALITY.name()))
+                precedent.clause().id(), CoreConcepts.CONFIDENTIALITY_OBLIGATIONS.value()))
                 .isInstanceOf(com.rivell.workbench.knowledge.InvalidCandidateReviewStateException.class);
     }
 
@@ -272,13 +273,13 @@ class CandidateConceptCorrectionIT {
 
         reviewService.reject(precedent.clause().id(), "not acceptable");
         assertThatThrownBy(() -> reviewService.correctConcept(
-                precedent.clause().id(), LegalConcept.LIMITATION_OF_LIABILITY.name()))
+                precedent.clause().id(), CoreConcepts.LIMITATION_OF_LIABILITY.value()))
                 .isInstanceOf(com.rivell.workbench.knowledge.InvalidCandidateReviewStateException.class);
 
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), organizationId, java.util.Set.of("VIEWER")));
         assertThatThrownBy(() -> reviewService.correctConcept(
-                precedent.clause().id(), LegalConcept.LIMITATION_OF_LIABILITY.name()))
+                precedent.clause().id(), CoreConcepts.LIMITATION_OF_LIABILITY.value()))
                 .isInstanceOf(com.rivell.workbench.knowledge.UnauthorizedKnowledgeAccessException.class);
     }
 
@@ -288,12 +289,12 @@ class CandidateConceptCorrectionIT {
         var precedent = ingestUnclassifiedPrecedent(organizationId);
 
         reviewService.correctConcept(precedent.clause().id(),
-                LegalConcept.LIMITATION_OF_LIABILITY.name());
+                CoreConcepts.LIMITATION_OF_LIABILITY.value());
         reviewService.approve(precedent.clause().id(), "approved on the corrected concept");
 
         // a second correction invalidates the recorded approval: demote to EDITED
         var corrected = reviewService.correctConcept(precedent.clause().id(),
-                LegalConcept.CONFIDENTIALITY.name());
+                CoreConcepts.CONFIDENTIALITY_OBLIGATIONS.value());
         assertThat(corrected.reviewStatus()).isEqualTo(com.rivell.workbench.knowledge.ReviewStatus.EDITED);
         assertThat(corrected.conceptCorrectedBy()).isNotNull();
         assertThat(corrected.conceptCorrectedAt()).isNotNull();
@@ -302,7 +303,7 @@ class CandidateConceptCorrectionIT {
         assertThat(reloaded.reviewStatus()).isEqualTo(com.rivell.workbench.knowledge.ReviewStatus.EDITED);
         assertThat(reloaded.conceptCorrectedBy()).isEqualTo(identityProvider.currentIdentity().userId());
         assertThat(reloaded.conceptCorrectedAt()).isNotNull();
-        assertThat(reloaded.effectiveConceptKey()).isEqualTo(LegalConcept.CONFIDENTIALITY.name());
+        assertThat(reloaded.effectiveConceptKey()).isEqualTo(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS.value());
 
         // re-approval consumes the effective concept; publication succeeds
         var approved = reviewService.approve(precedent.clause().id(), "re-approved");
@@ -310,7 +311,7 @@ class CandidateConceptCorrectionIT {
                 java.util.List.of(approved.id()), java.util.Map.of(), "correction re-approval");
         assertThat(publication.publicationNumber()).isPositive();
         var published = knowledgeQueries.getCandidate(precedent.clause().id());
-        assertThat(published.effectiveConceptKey()).isEqualTo(LegalConcept.CONFIDENTIALITY.name());
+        assertThat(published.effectiveConceptKey()).isEqualTo(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS.value());
         assertThat(published.legalConceptKey()).isNull();
     }
 
@@ -322,7 +323,7 @@ class CandidateConceptCorrectionIT {
         // the machine concept is unclassified with low confidence: the categorizer
         // runs on the effective concept, so a correction must recompute the outcome
         var corrected = reviewService.correctConcept(precedent.clause().id(),
-                LegalConcept.LIMITATION_OF_LIABILITY.name());
+                CoreConcepts.LIMITATION_OF_LIABILITY.value());
         assertThat(corrected.reviewCategory()).isNotNull();
         assertThat(corrected.reviewReasons())
                 .contains(com.rivell.workbench.knowledge.ReviewReason.LOW_CLASSIFICATION_CONFIDENCE);

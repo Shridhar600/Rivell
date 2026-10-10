@@ -8,7 +8,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.rivell.workbench.foundation.DocumentStorage;
-import com.rivell.workbench.intelligence.DecisionSpec;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
@@ -18,11 +17,6 @@ import com.rivell.workbench.organization.IdentityProvider;
         KnowledgeUploadProperties.class, ConceptClassificationProperties.class,
         SemanticPolicyProperties.class})
 class KnowledgeServicesConfiguration {
-
-    @Bean
-    DecisionSpec extractionUnitConceptSpec() {
-        return ExtractionUnitConceptSpec.spec();
-    }
 
     @Bean
     GenerativeFieldExtractor generativeFieldExtractor(
@@ -43,13 +37,13 @@ class KnowledgeServicesConfiguration {
     SemanticCompilationService semanticCompilationService(
             com.rivell.workbench.intelligence.SemanticDecisionService decisionService,
             SemanticPolicyProperties policyProperties,
-            ConceptClassificationProperties conceptProperties,
             DuplicateConflictDetector conflictDetector,
             GenerativeFieldExtractor generativeFieldExtractor,
-            CandidateReviewCategorizer categorizer) {
+            CandidateReviewCategorizer categorizer,
+            com.rivell.workbench.taxonomy.TopicClassifier topicClassifier) {
         return new SemanticCompilationService(
-                decisionService, policyProperties, conceptProperties, conflictDetector,
-                generativeFieldExtractor, categorizer);
+                decisionService, policyProperties, conflictDetector,
+                generativeFieldExtractor, categorizer, topicClassifier);
     }
 
     @Bean
@@ -96,10 +90,11 @@ class KnowledgeServicesConfiguration {
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
             DuplicateConflictDetector conflictDetector,
-            CandidateReviewCategorizer categorizer) {
+            CandidateReviewCategorizer categorizer,
+            com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry) {
         return new CandidateReviewService(
                 knowledgeRepository, transactionTemplate, identityProvider,
-                authorizationService, conflictDetector, categorizer);
+                authorizationService, conflictDetector, categorizer, conceptRegistry);
     }
 
     @Bean
@@ -117,13 +112,10 @@ class KnowledgeServicesConfiguration {
     @Bean
     ExtractionUnitConceptClassifier extractionUnitConceptClassifier(
             KnowledgeRepository knowledgeRepository,
-            SemanticDecisionService semanticDecisionService,
-            DecisionSpec extractionUnitConceptSpec,
-            ConceptClassificationProperties properties,
+            com.rivell.workbench.taxonomy.TopicClassifier topicClassifier,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         return new ExtractionUnitConceptClassifier(
-                knowledgeRepository, semanticDecisionService, extractionUnitConceptSpec,
-                properties, identityProvider, authorizationService);
+                knowledgeRepository, topicClassifier, identityProvider, authorizationService);
     }
 }

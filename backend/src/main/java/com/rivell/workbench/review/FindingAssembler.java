@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Deterministic signal-to-Finding consolidation (spec §6/§7). Pure domain logic: no
@@ -35,7 +35,7 @@ public final class FindingAssembler {
     private static String consolidationKey(RawReviewSignal signal) {
         var subject = signal.subjectKind() == FindingSubjectKind.CLAUSE
                 ? signal.subjectHeadingNodeId().toString()
-                : signal.absenceConcept().name();
+                : signal.absenceConcept().value();
         return signal.subjectKind().name() + ":" + subject + ":" + signal.issueFamily().name();
     }
 
@@ -109,24 +109,24 @@ public final class FindingAssembler {
     private static Observation observation(RawReviewSignal signal) {
         if (signal.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return new Observation("MISSING_REQUIRED_CONCEPT",
-                    "The required provision " + signal.concept().name()
+                    "The required provision " + signal.concept().value()
                             + " is missing from this contract.");
         }
         if (signal.signalType() == SignalType.EXPECTED_CONCEPT_ABSENT) {
             return new Observation("EXPECTED_CONCEPT_ABSENT",
-                    "The expected provision " + signal.concept().name()
+                    "The expected provision " + signal.concept().value()
                             + " was not found in this contract.");
         }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE) {
             return new Observation("POLICY_UNAVAILABLE",
-                    "No applicable published policy exists for " + signal.concept().name()
+                    "No applicable published policy exists for " + signal.concept().value()
                             + "; no deviation judgment was made and precedent does not "
                             + "substitute for policy.");
         }
         if (signal.signalType() == SignalType.POLICY_AMBIGUOUS) {
             return new Observation("AMBIGUOUS_POLICY",
                     "Multiple conflicting published policies apply to "
-                            + signal.concept().name()
+                            + signal.concept().value()
                             + "; no rule was chosen and the ambiguity is preserved.");
         }
         if (signal.signalType() == SignalType.POLICY_DEVIATION
@@ -205,7 +205,7 @@ public final class FindingAssembler {
                     + "for all confidentiality provisions; the limitation requires human "
                     + "review.";
             default -> "The check recorded unresolved uncertainty for "
-                    + signal.concept().name() + ".";
+                    + signal.concept().value() + ".";
         };
     }
 
@@ -283,7 +283,7 @@ public final class FindingAssembler {
         var absenceSubject = primary.subjectKind() == FindingSubjectKind.ABSENCE;
         if (absenceSubject) {
             claims.add(FindingClaim.of(0, ClaimKind.ABSENCE_BASIS,
-                    "No clause in this contract carries " + primary.absenceConcept().name()
+                    "No clause in this contract carries " + primary.absenceConcept().value()
                             + "; the absence is the observation.",
                     true, List.of()));
         } else {
@@ -391,8 +391,8 @@ public final class FindingAssembler {
         return order.indexOf(left) >= order.indexOf(right) ? left : right;
     }
 
-    private static List<LegalConcept> concepts(List<RawReviewSignal> group) {
-        var concepts = new LinkedHashSet<LegalConcept>();
+    private static List<ConceptKey> concepts(List<RawReviewSignal> group) {
+        var concepts = new LinkedHashSet<ConceptKey>();
         for (var signal : group) {
             concepts.add(signal.concept());
             if (signal.secondaryConcept() != null) {

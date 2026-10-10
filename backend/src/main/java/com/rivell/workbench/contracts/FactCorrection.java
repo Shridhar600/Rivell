@@ -3,6 +3,8 @@ package com.rivell.workbench.contracts;
 import java.util.Map;
 import java.util.UUID;
 
+import com.rivell.workbench.taxonomy.ConceptKey;
+
 /**
  * Human correction of one clause's semantic interpretation. Either a primary-concept
  * correction or a fact-values correction; the machine proposal is never erased.
@@ -25,8 +27,8 @@ public record FactCorrection(String primaryConcept, Map<String, String> factValu
         }
     }
 
-    public static FactCorrection ofPrimary(LegalConcept concept) {
-        return new FactCorrection(concept.name(), Map.of(), UUID.randomUUID());
+    public static FactCorrection ofPrimary(ConceptKey concept) {
+        return new FactCorrection(concept.value(), Map.of(), UUID.randomUUID());
     }
 
     public static FactCorrection ofFacts(Map<String, String> values) {

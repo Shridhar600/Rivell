@@ -1,5 +1,7 @@
 package com.rivell.workbench.retrieval;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDate;
@@ -19,7 +21,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus.Corpus;
@@ -155,10 +156,10 @@ class AuthorityAwareEvidenceFlowIT {
         var organizationId = identityProvider.currentIdentity().organizationId();
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
         return EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 LocalDate.of(2026, 9, 24), KnowledgePin.at(corpus.latestPublicationNumber()));
@@ -178,7 +179,7 @@ class AuthorityAwareEvidenceFlowIT {
         assertThat(bundle.policyItems()).hasSize(1);
         var policy = bundle.policyItems().get(0);
         assertThat(policy.authorityClass()).isEqualTo(AuthorityClass.POLICY);
-        assertThat(policy.legalConcept()).isEqualTo(LegalConcept.LIMITATION_OF_LIABILITY);
+        assertThat(policy.legalConcept()).isEqualTo(CoreConcepts.LIMITATION_OF_LIABILITY);
         assertThat(policy.text()).contains("The total liability of Supplier shall not exceed");
         assertThat(policy.policyFacts()).isNotNull();
         // provenance: the publication that made the rule visible at the pinned state
@@ -287,7 +288,7 @@ class AuthorityAwareEvidenceFlowIT {
         var semantics = enrichmentService.getSemantics(contract.contractId(), 1);
         return semantics.clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
     }
 
@@ -362,7 +363,7 @@ class AuthorityAwareEvidenceFlowIT {
                 M6EvidenceCorpus.MSA_US_CUSTOMER, null);
         var contract = ingestAndEnrichMsa();
         var request = EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 contract.contractId(), 1,
                 contractClauseId(contract), M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
                 M6EvidenceCorpus.msaProfile(), LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
@@ -387,7 +388,7 @@ class AuthorityAwareEvidenceFlowIT {
                 M6EvidenceCorpus.msaManifest2026(), null);
         var contract = ingestAndEnrichMsa();
         var request = EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 contract.contractId(), 1, contractClauseId(contract),
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
@@ -414,10 +415,10 @@ class AuthorityAwareEvidenceFlowIT {
 
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
         var bundle = evidenceService.build(EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 LocalDate.of(2026, 9, 24), KnowledgePin.LATEST));
@@ -444,12 +445,11 @@ class AuthorityAwareEvidenceFlowIT {
         var organizationB = identityProvider.currentIdentity().organizationId();
 
         var request = EvidenceRequest.forClauseReview(
-                organizationA, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationA, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1,
                 corpus.semantics().clauses().stream()
                         .filter(clause -> clause.primaryConcept().isPresent()
-                                && clause.primaryConcept().get()
-                                        == LegalConcept.LIMITATION_OF_LIABILITY)
+                                && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                         .findFirst().orElseThrow().id(),
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
@@ -458,7 +458,7 @@ class AuthorityAwareEvidenceFlowIT {
 
         // org B sees none of org A's knowledge or index state
         var orgBBundle = evidenceService.build(EvidenceRequest.forClauseReview(
-                organizationB, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationB, CoreConcepts.LIMITATION_OF_LIABILITY,
                 UUID.randomUUID(), 1, UUID.randomUUID(),
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 LocalDate.of(2026, 9, 24), KnowledgePin.LATEST));
@@ -473,7 +473,7 @@ class AuthorityAwareEvidenceFlowIT {
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
 
         // the request-side ReviewProfile carries NO pack (it has no pack field at
@@ -482,7 +482,7 @@ class AuthorityAwareEvidenceFlowIT {
         // still applies: an absent pack must neither be fabricated nor exclude
         // otherwise-applicable knowledge.
         var request = EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
                 new com.rivell.workbench.contracts.ReviewProfile(
@@ -513,7 +513,7 @@ class AuthorityAwareEvidenceFlowIT {
         // selects MSA_PACK must NOT see the NDA_PACK-declared rule — pack is a
         // hard applicability dimension when explicitly declared
         var msaPackRequest = EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
                 new com.rivell.workbench.contracts.ReviewProfile(
@@ -534,7 +534,7 @@ class AuthorityAwareEvidenceFlowIT {
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
 
         // a rule that declares NO pack applies under any explicitly selected pack
@@ -544,7 +544,7 @@ class AuthorityAwareEvidenceFlowIT {
                         "US", "en", null, null, null), null);
 
         var msaPackRequest = EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
                 new com.rivell.workbench.contracts.ReviewProfile(
@@ -565,7 +565,7 @@ class AuthorityAwareEvidenceFlowIT {
         // alone (the MSA contract type matches their declarations) while the
         // wildcard-pack rule stays applicable
         var ndaPackRequest = EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
                 new com.rivell.workbench.contracts.ReviewProfile(
@@ -604,11 +604,11 @@ class AuthorityAwareEvidenceFlowIT {
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
 
         var latestRequest = EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 LocalDate.of(2026, 9, 24), KnowledgePin.at(corpus.latestPublicationNumber()));
@@ -618,7 +618,7 @@ class AuthorityAwareEvidenceFlowIT {
                 .doesNotContain("2025 policy standard");
 
         var pinnedRequest = EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 LocalDate.of(2026, 9, 24), KnowledgePin.at(1));

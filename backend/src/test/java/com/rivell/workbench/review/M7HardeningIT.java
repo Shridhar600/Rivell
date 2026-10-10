@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
@@ -25,7 +27,6 @@ import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -116,7 +117,7 @@ class M7HardeningIT {
                 .filter(execution -> execution.detail().containsKey("coverage"))
                 .filter(execution -> reviewRepository.findPlanChecks(organizationId, review.id())
                         .stream().anyMatch(check -> check.id().equals(execution.planCheckId())
-                                && check.concept() == LegalConcept.CONFIDENTIALITY))
+                                && check.concept().equals(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS)))
                 .findFirst().orElseThrow();
         assertThat(confPresence.detail()).containsEntry("present", true);
         assertThat(confPresence.detail()).containsEntry("coverage", "PRESENT_SECONDARY_ONLY");
@@ -138,7 +139,7 @@ class M7HardeningIT {
                 .filter(execution -> execution.detail().containsKey("coverage"))
                 .filter(execution -> reviewRepository.findPlanChecks(organizationId, review.id())
                         .stream().anyMatch(check -> check.id().equals(execution.planCheckId())
-                                && check.concept() == LegalConcept.CONFIDENTIALITY))
+                                && check.concept().equals(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS)))
                 .findFirst().orElseThrow();
         assertThat(confPresence.detail()).containsEntry("coverage", "PRESENT_PRIMARY");
         assertThat(reviewRepository.findPlanChecks(organizationId, review.id()))
@@ -287,7 +288,7 @@ class M7HardeningIT {
                 .map(clause -> clause.id()).findFirst().orElseThrow();
         var counterpartClauseId = semantics.clauses().stream()
                 .filter(clause -> clause.effectivePrimaryConcept()
-                        .filter(concept -> concept == LegalConcept.INDEMNIFICATION)
+                        .filter(concept -> concept.equals(CoreConcepts.INDEMNIFICATION))
                         .isPresent())
                 .map(clause -> clause.id()).findFirst().orElseThrow();
         assertThat(items).extracting(EvidenceItem::sourceClauseId)

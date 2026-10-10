@@ -1,5 +1,7 @@
 package com.rivell.workbench.redline;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -22,7 +24,6 @@ import org.docx4j.wml.RunIns;
 import org.docx4j.wml.Text;
 import org.junit.jupiter.api.Test;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.platform.parsing.RedlineFixturePipeline;
 import com.rivell.workbench.platform.docx.DocxRedlineRenderer;
 
@@ -111,13 +112,13 @@ class DocxRedlineRendererTest {
         var versionId = UUID.randomUUID();
         var structure = RedlineFixturePipeline.parse("m9-insert.docx", contractId, versionId);
         var concepts = RedlineFixturePipeline.concepts(structure, Map.of(
-                "2. Indemnification", LegalConcept.INDEMNIFICATION,
-                "3. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "4. Term and Survival", LegalConcept.TERM_TERMINATION,
-                "5. Governing Law", LegalConcept.GOVERNING_LAW));
+                "2. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "3. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "4. Term and Survival", CoreConcepts.TERM,
+                "5. Governing Law", CoreConcepts.GOVERNING_LAW));
         var setId = UUID.randomUUID();
         var change = RedlineTestStructures.insert(setId, 0,
-                LegalConcept.LIMITATION_OF_LIABILITY,
+                CoreConcepts.LIMITATION_OF_LIABILITY,
                 "Aggregate liability shall not exceed the fees paid.");
         var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
                 List.of(change));
@@ -148,17 +149,17 @@ class DocxRedlineRendererTest {
         var structure = RedlineFixturePipeline.parse("m9-multi-change.docx", contractId,
                 versionId);
         var concepts = RedlineFixturePipeline.concepts(structure, Map.of(
-                "1. Limitation of Liability", LegalConcept.LIMITATION_OF_LIABILITY,
-                "3. Indemnification", LegalConcept.INDEMNIFICATION,
-                "4. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "5. Governing Law", LegalConcept.GOVERNING_LAW));
+                "1. Limitation of Liability", CoreConcepts.LIMITATION_OF_LIABILITY,
+                "3. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "4. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "5. Governing Law", CoreConcepts.GOVERNING_LAW));
         var setId = UUID.randomUUID();
         var replace = RedlineTestStructures.replace(setId, 0,
                 RedlineFixturePipeline.headingId(structure, "1. Limitation of Liability"),
                 "Liability is capped at the fees paid in the prior twelve months.");
         var delete = RedlineTestStructures.delete(setId, 1,
                 RedlineFixturePipeline.headingId(structure, "2. Non-Solicitation"));
-        var insert = RedlineTestStructures.insert(setId, 2, LegalConcept.TERM_TERMINATION,
+        var insert = RedlineTestStructures.insert(setId, 2, CoreConcepts.TERM,
                 "Either party may terminate for material breach after thirty days notice.");
         var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
                 List.of(replace, delete, insert));

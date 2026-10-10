@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.contracts.LegalFact;
 import com.rivell.workbench.knowledge.ApplicabilityScope;
 import com.rivell.workbench.knowledge.PositionRole;
@@ -26,7 +26,7 @@ public record EvidenceItem(
         UUID sourceCandidateId,
         UUID sourceContractVersionId,
         UUID sourceClauseId,
-        LegalConcept legalConcept,
+        ConceptKey legalConcept,
         ApplicabilityScope applicabilityScope,
         String text,
         PolicyFacts policyFacts,
@@ -66,7 +66,7 @@ public record EvidenceItem(
             UUID sourceCandidateId,
             UUID sourceContractVersionId,
             UUID sourceClauseId,
-            LegalConcept legalConcept,
+            ConceptKey legalConcept,
             ApplicabilityScope applicabilityScope,
             String text,
             PolicyFacts policyFacts,

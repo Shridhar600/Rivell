@@ -266,6 +266,44 @@ class ContractSemanticsApiIT {
     @Autowired
     com.rivell.workbench.contracts.ContractEnrichmentIT.MutableIdentity identityService;
 
+    /**
+     * Done-4 flow: a blind, naturally typed NDA enriches through the taxonomy and the
+     * semantics endpoint exposes clause concepts as taxonomy keys, not the retired enum.
+     */
+    @Test
+    void blindNdaEnrichmentExposesTaxonomyConceptKeys() throws Exception {
+        var contractId = uploadFixture("blind-mutual-nda-typed-headings.docx");
+
+        mockMvc.perform(post("/api/contracts/{id}/versions/1/enrichment", contractId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"contractType": "NDA"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.enrichmentStatus").value("READY"));
+
+        var semantics = mockMvc.perform(get(
+                        "/api/contracts/{id}/versions/1/semantics", contractId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(
+                        "$.data.clauses[?(@.primaryConcept=='CONFIDENTIALITY_OBLIGATIONS')]")
+                        .isNotEmpty())
+                .andExpect(jsonPath(
+                        "$.data.clauses[?(@.primaryConcept=='GOVERNING_LAW')]")
+                        .isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+
+        var clauses = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(semantics).get("data").get("clauses");
+        var keys = new java.util.LinkedHashSet<String>();
+        for (var clause : clauses) {
+            if (clause.hasNonNull("primaryConcept")) {
+                keys.add(clause.get("primaryConcept").asText());
+            }
+        }
+        assertThat(keys).contains("CONFIDENTIALITY_OBLIGATIONS", "GOVERNING_LAW");
+        assertThat(keys).allMatch(key -> key.matches("[A-Z][A-Z0-9_]{1,63}"));
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     static class MutableIdentityConfiguration {
 

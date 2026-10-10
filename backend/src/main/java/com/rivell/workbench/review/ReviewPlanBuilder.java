@@ -9,7 +9,8 @@ import java.util.UUID;
 
 import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.contracts.ContractSemantics;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
 
 /**
  * Deterministic plan construction from snapshot-frozen inputs. Pack definitions own
@@ -18,8 +19,8 @@ import com.rivell.workbench.contracts.LegalConcept;
  */
 public final class ReviewPlanBuilder {
 
-    private static final Map<LegalConcept, CheckMechanism> SUPPORTED_CLAUSE_CHECKS =
-            Map.of(LegalConcept.LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP);
+    private static final Map<ConceptKey, CheckMechanism> SUPPORTED_CLAUSE_CHECKS =
+            Map.of(CoreConcepts.LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP);
 
     private final ReviewPackRegistry packs;
 
@@ -71,9 +72,9 @@ public final class ReviewPlanBuilder {
         return List.copyOf(checks);
     }
 
-    private static Map<LegalConcept, List<ClauseSemantics>> clausesByConcept(
+    private static Map<ConceptKey, List<ClauseSemantics>> clausesByConcept(
             ContractSemantics semantics) {
-        var byConcept = new LinkedHashMap<LegalConcept, List<ClauseSemantics>>();
+        var byConcept = new LinkedHashMap<ConceptKey, List<ClauseSemantics>>();
         for (var clause : semantics.clauses()) {
             clause.effectivePrimaryConcept().ifPresent(concept ->
                     byConcept.computeIfAbsent(concept, key -> new ArrayList<>()).add(clause));
@@ -83,7 +84,7 @@ public final class ReviewPlanBuilder {
 
     private static ReviewPlanCheck presenceCheck(
             UUID reviewId, UUID organizationId, Instant createdAt, int ordinal,
-            LegalConcept concept, CheckExpectation expectation) {
+            ConceptKey concept, CheckExpectation expectation) {
         return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,
                 "PRESENCE:" + concept, CheckFamily.CONCEPT_PRESENCE, expectation,
                 CheckMechanism.PRESENCE, concept, null, null, createdAt);
@@ -91,7 +92,7 @@ public final class ReviewPlanBuilder {
 
     private static ReviewPlanCheck clauseCheck(
             UUID reviewId, UUID organizationId, Instant createdAt, int ordinal,
-            LegalConcept concept, CheckMechanism mechanism, UUID subjectHeadingNodeId) {
+            ConceptKey concept, CheckMechanism mechanism, UUID subjectHeadingNodeId) {
         return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,
                 "CLAUSE:" + mechanism + ":" + concept + ":" + subjectHeadingNodeId,
                 CheckFamily.CLAUSE_REVIEW, null, mechanism, concept, null,

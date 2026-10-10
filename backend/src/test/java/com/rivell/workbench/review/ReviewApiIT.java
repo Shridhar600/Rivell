@@ -736,13 +736,13 @@ class ReviewApiIT {
                 .andReturn()).get("data");
 
         assertThat(progress.get("coverage")).anySatisfy(entry -> {
-            assertThat(entry.get("concept").asText()).isEqualTo("CONFIDENTIALITY");
+            assertThat(entry.get("concept").asText()).isEqualTo("CONFIDENTIALITY_OBLIGATIONS");
             assertThat(entry.get("expectation").asText()).isEqualTo("REQUIRED");
             assertThat(entry.get("coverage").asText())
                     .isEqualTo("PRESENT_SECONDARY_ONLY");
         });
         assertThat(progress.get("coverage")).anySatisfy(entry -> {
-            assertThat(entry.get("concept").asText()).isEqualTo("TERM_TERMINATION");
+            assertThat(entry.get("concept").asText()).isEqualTo("TERM");
             assertThat(entry.get("coverage").asText()).isEqualTo("PRESENT_PRIMARY");
         });
     }

@@ -1,5 +1,7 @@
 package com.rivell.workbench.workflow;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -370,7 +372,7 @@ class FinalizationIT {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no classified clause to correct"));
         var replacement = clause.effectivePrimaryConcept().orElseThrow()
-                == com.rivell.workbench.contracts.LegalConcept.GOVERNING_LAW
+                .equals(com.rivell.workbench.taxonomy.CoreConcepts.GOVERNING_LAW)
                         ? "LIMITATION_OF_LIABILITY" : "GOVERNING_LAW";
         enrichmentService.correctClause(corpus.contract().contractId(), 1, clause.id(),
                 new com.rivell.workbench.contracts.FactCorrection(

@@ -1,5 +1,7 @@
 package com.rivell.workbench.retrieval;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
@@ -144,7 +146,7 @@ class RetrievalEvaluationIT {
                 .filter(clause -> clause.primaryConcept().isPresent())
                 .findFirst().orElseThrow().id();
         var request = EvidenceRequest.forClauseReview(
-                organizationId, com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, com.rivell.workbench.taxonomy.CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 java.time.LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);

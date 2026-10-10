@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -36,7 +38,6 @@ import com.rivell.workbench.contracts.ContractVersionNotFoundException;
 import com.rivell.workbench.contracts.EnrichmentFailedException;
 import com.rivell.workbench.contracts.EnrichmentInProgressException;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -247,11 +248,11 @@ class ReviewCreationIT {
         assertThat(checks).filteredOn(check -> check.family() == CheckFamily.CONCEPT_PRESENCE)
                 .extracting(ReviewPlanCheck::concept, ReviewPlanCheck::expectation)
                 .containsExactlyInAnyOrder(
-                        tuple(LegalConcept.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED),
-                        tuple(LegalConcept.CONFIDENTIALITY, CheckExpectation.REQUIRED),
-                        tuple(LegalConcept.TERM_TERMINATION, CheckExpectation.EXPECTED),
-                        tuple(LegalConcept.INDEMNIFICATION, CheckExpectation.EXPECTED),
-                        tuple(LegalConcept.GOVERNING_LAW, CheckExpectation.OPTIONAL));
+                        tuple(CoreConcepts.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED),
+                        tuple(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CheckExpectation.REQUIRED),
+                        tuple(CoreConcepts.TERM, CheckExpectation.EXPECTED),
+                        tuple(CoreConcepts.INDEMNIFICATION, CheckExpectation.EXPECTED),
+                        tuple(CoreConcepts.GOVERNING_LAW, CheckExpectation.OPTIONAL));
 
         var headingNodeIds = corpus.semantics().clauses().stream()
                 .map(ClauseSemantics::headingNodeId).toList();
@@ -261,7 +262,7 @@ class ReviewCreationIT {
         assertThat(clauseChecks).isNotEmpty();
         assertThat(clauseChecks).allSatisfy(check -> {
             assertThat(check.mechanism()).isEqualTo(CheckMechanism.LIABILITY_CAP);
-            assertThat(check.concept()).isEqualTo(LegalConcept.LIMITATION_OF_LIABILITY);
+            assertThat(check.concept()).isEqualTo(CoreConcepts.LIMITATION_OF_LIABILITY);
             assertThat(headingNodeIds).contains(check.subjectHeadingNodeId());
         });
 
@@ -293,12 +294,12 @@ class ReviewCreationIT {
         assertThat(crossChecks.stream()
                 .filter(check -> check.mechanism() == CheckMechanism.CONFIDENTIALITY_SURVIVAL)
                 .count()).isEqualTo(
-                        clausesByConcept.getOrDefault(LegalConcept.CONFIDENTIALITY,
+                        clausesByConcept.getOrDefault(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
                                 java.util.List.of()).size());
         assertThat(crossChecks.stream()
                 .filter(check -> check.mechanism() == CheckMechanism.CARVE_OUT_CONSISTENCY)
                 .count()).isEqualTo(
-                        clausesByConcept.getOrDefault(LegalConcept.LIMITATION_OF_LIABILITY,
+                        clausesByConcept.getOrDefault(CoreConcepts.LIMITATION_OF_LIABILITY,
                                 java.util.List.of()).size());
 
         var rebuilt = reviewPlanBuilder.build(
@@ -526,10 +527,10 @@ class ReviewCreationIT {
 
         var confidentiality = semantics.clauses().stream()
                 .filter(clause -> clause.effectivePrimaryConcept()
-                        .filter(concept -> concept == LegalConcept.CONFIDENTIALITY).isPresent())
+                        .filter(concept -> concept.equals(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS)).isPresent())
                 .findFirst().orElseThrow();
         var bundle = evidenceService.build(EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.CONFIDENTIALITY, ingested.contractId(), 1,
+                organizationId, CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, ingested.contractId(), 1,
                 confidentiality.id(), confidentiality.contentText(), profile,
                 snapshot.effectiveOn(), KnowledgePin.none()));
         assertThat(bundle.policyItems()).isEmpty();

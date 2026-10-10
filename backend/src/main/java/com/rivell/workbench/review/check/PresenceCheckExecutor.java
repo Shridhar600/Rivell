@@ -29,7 +29,7 @@ public final class PresenceCheckExecutor implements ReviewCheckExecutor {
         var check = context.check();
         var primaryPresent = context.semantics().clauses().stream().anyMatch(clause ->
                 clause.effectivePrimaryConcept()
-                        .filter(concept -> concept == check.concept()).isPresent());
+                        .filter(concept -> concept.equals(check.concept())).isPresent());
         var secondaryPresent = context.semantics().clauses().stream().anyMatch(clause ->
                 clause.secondaryConcepts().contains(check.concept()));
         if (primaryPresent || secondaryPresent) {

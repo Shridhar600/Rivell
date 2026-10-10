@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -28,7 +30,6 @@ import org.testcontainers.utility.DockerImageName;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -266,10 +267,10 @@ class ReviewAnalysisIT {
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple(SignalType.MISSING_REQUIRED_CONCEPT,
                                 IssueFamily.MISSING_REQUIRED_PROVISION,
-                                LegalConcept.LIMITATION_OF_LIABILITY),
+                                CoreConcepts.LIMITATION_OF_LIABILITY),
                         org.assertj.core.groups.Tuple.tuple(SignalType.EXPECTED_CONCEPT_ABSENT,
                                 IssueFamily.EXPECTED_PROVISION_ABSENT,
-                                LegalConcept.INDEMNIFICATION));
+                                CoreConcepts.INDEMNIFICATION));
         assertThat(signals).allSatisfy(signal -> {
             assertThat(signal.subjectKind()).isEqualTo(FindingSubjectKind.ABSENCE);
             assertThat(signal.subjectHeadingNodeId()).isNull();
@@ -415,7 +416,7 @@ class ReviewAnalysisIT {
             Map<java.util.UUID, com.rivell.workbench.retrieval.EvidenceItem> items) {
         var request = new com.rivell.workbench.retrieval.EvidenceRequest(organizationId(),
                 com.rivell.workbench.retrieval.RetrievalPurpose.CLAUSE_REVIEW,
-                com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY,
+                com.rivell.workbench.taxonomy.CoreConcepts.LIMITATION_OF_LIABILITY,
                 UUID.randomUUID(), 1, UUID.randomUUID(), "text",
                 com.rivell.workbench.contracts.ReviewProfile.minimal(
                         com.rivell.workbench.contracts.ContractType.MSA),
@@ -458,7 +459,7 @@ class ReviewAnalysisIT {
         return new RawReviewSignal(UUID.randomUUID(), organizationId(), UUID.randomUUID(),
                 UUID.randomUUID(), UUID.randomUUID(), type,
                 com.rivell.workbench.review.FindingSubjectKind.CLAUSE, UUID.randomUUID(), null,
-                com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY, null,
+                com.rivell.workbench.taxonomy.CoreConcepts.LIMITATION_OF_LIABILITY, null,
                 com.rivell.workbench.review.IssueFamily.LIABILITY_CAP_UNCERTAIN,
                 new com.rivell.workbench.review.DeviationUncertainPayload("policy_not_comparable"),
                 evidence, "spec", 1, null, null, "VERIFIED", "fake", null, Map.of(), key,

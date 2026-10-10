@@ -1,5 +1,7 @@
 package com.rivell.workbench.contracts;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -76,13 +78,13 @@ class SemanticContractModelTest {
         var clause = new ClauseSemantics(UUID.randomUUID(), VERSION_ID, NODE_ID,
                 ContractRegionSegmenter.SemanticRegionKind.CLAUSE,
                 List.of(UUID.randomUUID()), "Supplier liability shall not exceed three times fees...",
-                new ConceptClassification(List.of(LegalConcept.LIMITATION_OF_LIABILITY),
-                        List.of(LegalConcept.INDEMNIFICATION),
-                        Map.of(LegalConcept.LIMITATION_OF_LIABILITY, 0.93)),
+                new ConceptClassification(List.of(CoreConcepts.LIMITATION_OF_LIABILITY),
+                        List.of(CoreConcepts.INDEMNIFICATION),
+                        Map.of(CoreConcepts.LIMITATION_OF_LIABILITY, 0.93)),
                 List.of(liabilityFacts), List.of(), FactCorrection.NONE, null);
 
-        assertThat(clause.primaryConcept()).contains(LegalConcept.LIMITATION_OF_LIABILITY);
-        assertThat(clause.secondaryConcepts()).containsExactly(LegalConcept.INDEMNIFICATION);
+        assertThat(clause.primaryConcept()).contains(CoreConcepts.LIMITATION_OF_LIABILITY);
+        assertThat(clause.secondaryConcepts()).containsExactly(CoreConcepts.INDEMNIFICATION);
         assertThat(clause.facts()).hasSize(1);
     }
 

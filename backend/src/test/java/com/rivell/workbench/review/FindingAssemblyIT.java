@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
@@ -22,7 +24,6 @@ import org.testcontainers.utility.DockerImageName;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -197,7 +198,7 @@ class FindingAssemblyIT {
                     .isEqualTo(ProposedLanguageSource.NONE);
         });
         var missing = findings.stream()
-                .filter(finding -> finding.concept() == LegalConcept.LIMITATION_OF_LIABILITY)
+                .filter(finding -> finding.concept().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow();
         assertThat(missing.severity()).isEqualTo(FindingSeverity.HIGH);
         assertThat(missing.reviewClassification())
@@ -210,7 +211,7 @@ class FindingAssemblyIT {
             assertThat(claim.evidenceItemIds()).isEmpty();
         });
         var expected = findings.stream()
-                .filter(finding -> finding.concept() == LegalConcept.INDEMNIFICATION)
+                .filter(finding -> finding.concept().equals(CoreConcepts.INDEMNIFICATION))
                 .findFirst().orElseThrow();
         assertThat(expected.reviewClassification())
                 .isEqualTo(FindingClassification.INFORMATIONAL);

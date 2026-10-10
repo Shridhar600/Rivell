@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -10,7 +12,6 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
-import com.rivell.workbench.contracts.LegalConcept;
 
 class FindingAssemblerTest {
 
@@ -33,7 +34,7 @@ class FindingAssemblerTest {
             List<UUID> evidence, String verificationOutcome) {
         return new RawReviewSignal(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, RUN_ID,
                 UUID.randomUUID(), type, FindingSubjectKind.CLAUSE, HEADING_ID, null,
-                LegalConcept.LIMITATION_OF_LIABILITY, null, family, payload, evidence,
+                CoreConcepts.LIMITATION_OF_LIABILITY, null, family, payload, evidence,
                 null, null, null, null, verificationOutcome, null, null, Map.of(),
                 type.name() + ":" + UUID.randomUUID(), NOW);
     }

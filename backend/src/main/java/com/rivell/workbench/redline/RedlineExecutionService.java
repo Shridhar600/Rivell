@@ -14,7 +14,7 @@ import com.rivell.workbench.contracts.ContractNotFoundException;
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractVersionNotFoundException;
 import com.rivell.workbench.contracts.SemanticsDigest;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.foundation.DocumentStorage;
 import com.rivell.workbench.foundation.Hashes;
 import com.rivell.workbench.foundation.StorageKey;
@@ -447,9 +447,9 @@ public class RedlineExecutionService {
         return !SemanticsDigest.of(live.get()).equals(changeSet.semanticsDigest());
     }
 
-    private Map<UUID, LegalConcept> effectiveConcepts(
+    private Map<UUID, ConceptKey> effectiveConcepts(
             UUID organizationId, ApprovedChangeSet changeSet) {
-        var concepts = new HashMap<UUID, LegalConcept>();
+        var concepts = new HashMap<UUID, ConceptKey>();
         contractQueryService
                 .getSemanticsForOrganization(organizationId, changeSet.contractId(),
                         changeSet.contractVersionNumber())

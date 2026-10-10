@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.review.CheckExpectation;
@@ -124,8 +124,8 @@ class JdbcReviewRepository implements ReviewRepository {
                     .param("family", check.family().name())
                     .param("expectation", check.expectation() == null ? null : check.expectation().name())
                     .param("mechanism", check.mechanism().name())
-                    .param("concept", check.concept().name())
-                    .param("secondaryConcept", check.secondaryConcept() == null ? null : check.secondaryConcept().name())
+                    .param("concept", check.concept().value())
+                    .param("secondaryConcept", check.secondaryConcept() == null ? null : check.secondaryConcept().value())
                     .param("subjectHeadingNodeId", check.subjectHeadingNodeId())
                     .param("createdAt", timestamp(check.createdAt()))
                     .update();
@@ -261,8 +261,8 @@ class JdbcReviewRepository implements ReviewRepository {
                         CheckFamily.valueOf(rs.getString("family")),
                         rs.getString("expectation") == null ? null : CheckExpectation.valueOf(rs.getString("expectation")),
                         CheckMechanism.valueOf(rs.getString("mechanism")),
-                        LegalConcept.valueOf(rs.getString("concept")),
-                        rs.getString("secondary_concept") == null ? null : LegalConcept.valueOf(rs.getString("secondary_concept")),
+                        ConceptKey.of(rs.getString("concept")),
+                        rs.getString("secondary_concept") == null ? null : ConceptKey.of(rs.getString("secondary_concept")),
                         rs.getObject("subject_heading_node_id", UUID.class),
                         rs.getTimestamp("created_at").toInstant()))
                 .list();

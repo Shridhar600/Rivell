@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
 
@@ -184,7 +184,7 @@ public class EvidenceService {
     private Map<String, Object> requestOf(EvidenceRequest request, long asOfPublication) {
         var map = new LinkedHashMap<String, Object>();
         map.put("purpose", request.purpose().name());
-        map.put("legalConcept", request.legalConcept().name());
+        map.put("legalConcept", request.legalConcept().value());
         map.put("effectiveOn", request.effectiveOn().toString());
         map.put("knowledgePin", request.knowledgePin().publicationNumber());
         map.put("resolvedAsOfPublication", asOfPublication);
@@ -308,7 +308,7 @@ public class EvidenceService {
                 null,
                 null,
                 candidate.effectiveConceptKey() == null ? null
-                        : LegalConcept.valueOf(candidate.effectiveConceptKey()),
+                        : ConceptKey.of(candidate.effectiveConceptKey()),
                 candidate.scope(),
                 candidate.effectiveContentText(),
                 authority == AuthorityClass.POLICY ? policyFacts(candidate) : null,

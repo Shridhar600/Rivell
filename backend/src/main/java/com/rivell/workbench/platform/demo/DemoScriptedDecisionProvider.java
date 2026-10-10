@@ -73,7 +73,7 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
      */
     private ChoiceAnswer choiceAnswer(String name, ChoiceQuestion choice, Object state) {
         var candidate = switch (name) {
-            case "primary_concept" -> primaryConceptCue(state, choice);
+            case "primary_topic" -> primaryConceptCue(state, choice);
             case "variant_role" -> variantRoleCue(state, choice);
             case "governing_law" -> cues(state).contains("england") ? "UK" : "US";
             case "deviation_type" -> liabilityDeviation(state, choice);
@@ -88,21 +88,39 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
         return new ChoiceAnswer(selected, 0.92, probabilities);
     }
 
+    /**
+     * The demo fixtures predate the 90-topic taxonomy, so the expected main subject of an
+     * ambiguous clause follows the core-concept order the old vocabulary used, not the
+     * registry's arbitrary leaf order.
+     */
+    private static final List<String> CORE_ORDER = List.of(
+            "CONFIDENTIALITY_OBLIGATIONS", "TERM", "LIMITATION_OF_LIABILITY",
+            "INDEMNIFICATION", "GOVERNING_LAW");
+
     private String primaryConceptCue(Object state, ChoiceQuestion choice) {
         var heading = headingOf(state).toLowerCase();
-        var text = cues(state);
-        for (var option : choice.criteria().keySet()) {
+        var text = cues(state).toLowerCase();
+        var ordered = choice.criteria().keySet().stream()
+                .sorted(java.util.Comparator.comparingInt(DemoScriptedDecisionProvider::coreRank))
+                .toList();
+        for (var option : ordered) {
             var cue = option.toLowerCase().replace('_', ' ');
             if (heading.contains(cue) || heading.contains(cue.split(" ")[0])) {
                 return option;
             }
         }
-        for (var option : choice.criteria().keySet()) {
-            if (text.contains(option.toLowerCase().replace('_', ' '))) {
+        for (var option : ordered) {
+            var cue = option.toLowerCase().replace('_', ' ');
+            if (text.contains(cue) || text.contains(cue.split(" ")[0])) {
                 return option;
             }
         }
-        return choice.criteria().keySet().iterator().next();
+        return ordered.get(0);
+    }
+
+    private static int coreRank(String key) {
+        var index = CORE_ORDER.indexOf(key);
+        return index < 0 ? CORE_ORDER.size() : index;
     }
 
     /**
@@ -194,17 +212,17 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
         }
         var combined = (headingOf(state) + " " + cues(state)).toLowerCase();
         return switch (questionName) {
-            case "concept_limitation_of_liability" ->
+            case "topic_limitation_of_liability" ->
                     combined.contains("liability") || combined.contains(" cap ") ? CONFIDENT
                             : ABSENT;
-            case "concept_confidentiality" ->
+            case "topic_confidentiality_obligations" ->
                     combined.contains("confidential") ? CONFIDENT : ABSENT;
-            case "concept_term_termination" ->
+            case "topic_term" ->
                     combined.contains("terminat") || combined.contains(" term ")
                             ? CONFIDENT : ABSENT;
-            case "concept_indemnification" ->
+            case "topic_indemnification" ->
                     combined.contains("indemnif") ? CONFIDENT : ABSENT;
-            case "concept_governing_law" -> combined.contains("govern") ? CONFIDENT : ABSENT;
+            case "topic_governing_law" -> combined.contains("govern") ? CONFIDENT : ABSENT;
             case "role_preferred" -> present(combined, "preferred");
             case "role_fallback" -> present(combined, "fallback");
             case "role_prohibited" -> present(combined, "prohibited");

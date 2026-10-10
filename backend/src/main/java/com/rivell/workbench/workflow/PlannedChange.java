@@ -3,7 +3,7 @@ package com.rivell.workbench.workflow;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.redline.ChangeActionType;
 import com.rivell.workbench.redline.ChangeLanguageSource;
 import com.rivell.workbench.redline.ChangeTargetKind;
@@ -15,7 +15,7 @@ public record PlannedChange(
         ChangeActionType actionType,
         ChangeTargetKind targetKind,
         UUID targetHeadingNodeId,
-        LegalConcept absenceConcept,
+        ConceptKey absenceConcept,
         String approvedLanguage,
         ChangeLanguageSource languageSource,
         UUID approvedDraftingEvidenceId) {

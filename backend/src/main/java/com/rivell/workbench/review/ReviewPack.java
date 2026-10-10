@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Code-owned contract pack: declares WHICH concepts are required/expected/optional and
@@ -18,8 +18,8 @@ public record ReviewPack(
         String displayName,
         String summary,
         String version,
-        Map<LegalConcept, CheckExpectation> conceptExpectations,
-        Map<LegalConcept, CheckMechanism> clauseChecks,
+        Map<ConceptKey, CheckExpectation> conceptExpectations,
+        Map<ConceptKey, CheckMechanism> clauseChecks,
         List<CrossClauseRule> crossClauseChecks) {
 
     public ReviewPack {
@@ -33,7 +33,7 @@ public record ReviewPack(
     }
 
     public record CrossClauseRule(
-            CheckMechanism mechanism, LegalConcept concept, LegalConcept secondaryConcept) {
+            CheckMechanism mechanism, ConceptKey concept, ConceptKey secondaryConcept) {
 
         public CrossClauseRule {
             Objects.requireNonNull(mechanism, "mechanism");

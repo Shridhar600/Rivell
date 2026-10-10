@@ -5,13 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import com.rivell.workbench.contracts.LegalConcept;
-
-import static com.rivell.workbench.contracts.LegalConcept.CONFIDENTIALITY;
-import static com.rivell.workbench.contracts.LegalConcept.GOVERNING_LAW;
-import static com.rivell.workbench.contracts.LegalConcept.INDEMNIFICATION;
-import static com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY;
-import static com.rivell.workbench.contracts.LegalConcept.TERM_TERMINATION;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
 
 /** Code-owned pack registry; M7 MVP ships one versioned constant set. */
 public final class ReviewPackRegistry {
@@ -34,40 +29,40 @@ public final class ReviewPackRegistry {
     }
 
     private static java.util.LinkedHashMap<String, ReviewPack> build() {
-        var msaExpectations = new LinkedHashMap<LegalConcept, CheckExpectation>();
-        msaExpectations.put(LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED);
-        msaExpectations.put(CONFIDENTIALITY, CheckExpectation.REQUIRED);
-        msaExpectations.put(TERM_TERMINATION, CheckExpectation.EXPECTED);
-        msaExpectations.put(INDEMNIFICATION, CheckExpectation.EXPECTED);
-        msaExpectations.put(GOVERNING_LAW, CheckExpectation.OPTIONAL);
+        var msaExpectations = new LinkedHashMap<ConceptKey, CheckExpectation>();
+        msaExpectations.put(CoreConcepts.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED);
+        msaExpectations.put(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CheckExpectation.REQUIRED);
+        msaExpectations.put(CoreConcepts.TERM, CheckExpectation.EXPECTED);
+        msaExpectations.put(CoreConcepts.INDEMNIFICATION, CheckExpectation.EXPECTED);
+        msaExpectations.put(CoreConcepts.GOVERNING_LAW, CheckExpectation.OPTIONAL);
 
         var msa = new ReviewPack(MSA_PACK, "Master Services Agreement Pack",
                 "Completeness, liability-cap, confidentiality-survival, and "
                         + "carve-out consistency review for MSAs.",
                 VERSION, msaExpectations,
-                Map.of(LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP),
+                Map.of(CoreConcepts.LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP),
                 List.of(
                         new ReviewPack.CrossClauseRule(
                                 CheckMechanism.CONFIDENTIALITY_SURVIVAL,
-                                CONFIDENTIALITY, TERM_TERMINATION),
+                                CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CoreConcepts.TERM),
                         new ReviewPack.CrossClauseRule(
                                 CheckMechanism.CARVE_OUT_CONSISTENCY,
-                                LIMITATION_OF_LIABILITY, INDEMNIFICATION)));
+                                CoreConcepts.LIMITATION_OF_LIABILITY, CoreConcepts.INDEMNIFICATION)));
 
-        var ndaExpectations = new LinkedHashMap<LegalConcept, CheckExpectation>();
-        ndaExpectations.put(CONFIDENTIALITY, CheckExpectation.REQUIRED);
-        ndaExpectations.put(TERM_TERMINATION, CheckExpectation.EXPECTED);
-        ndaExpectations.put(LIMITATION_OF_LIABILITY, CheckExpectation.OPTIONAL);
-        ndaExpectations.put(INDEMNIFICATION, CheckExpectation.OPTIONAL);
-        ndaExpectations.put(GOVERNING_LAW, CheckExpectation.OPTIONAL);
+        var ndaExpectations = new LinkedHashMap<ConceptKey, CheckExpectation>();
+        ndaExpectations.put(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CheckExpectation.REQUIRED);
+        ndaExpectations.put(CoreConcepts.TERM, CheckExpectation.EXPECTED);
+        ndaExpectations.put(CoreConcepts.LIMITATION_OF_LIABILITY, CheckExpectation.OPTIONAL);
+        ndaExpectations.put(CoreConcepts.INDEMNIFICATION, CheckExpectation.OPTIONAL);
+        ndaExpectations.put(CoreConcepts.GOVERNING_LAW, CheckExpectation.OPTIONAL);
 
         var nda = new ReviewPack(NDA_PACK, "Mutual NDA Pack",
                 "Confidentiality completeness and survival review for NDAs.",
                 VERSION, ndaExpectations,
-                Map.of(LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP),
+                Map.of(CoreConcepts.LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP),
                 List.of(new ReviewPack.CrossClauseRule(
                         CheckMechanism.CONFIDENTIALITY_SURVIVAL,
-                        CONFIDENTIALITY, TERM_TERMINATION)));
+                        CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CoreConcepts.TERM)));
 
         var packs = new java.util.LinkedHashMap<String, ReviewPack>();
         packs.put(msa.key(), msa);

@@ -1,5 +1,7 @@
 package com.rivell.workbench.workflow;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -27,7 +29,6 @@ import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.redline.ChangeActionType;
 import com.rivell.workbench.redline.ChangeLanguageSource;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.review.ClaimKind;
 import com.rivell.workbench.review.Finding;
 import com.rivell.workbench.review.FindingClaim;
@@ -558,11 +559,11 @@ class ReviewDiagnosticsQueryIT {
                 FindingClassification.REVIEW_REQUIRED,
                 FindingClassification.INFORMATIONAL, FindingClassification.INFORMATIONAL,
                 FindingClassification.INFORMATIONAL, FindingClassification.INFORMATIONAL);
-        var concepts = List.of(LegalConcept.CONFIDENTIALITY, LegalConcept.LIMITATION_OF_LIABILITY,
-                LegalConcept.INDEMNIFICATION, LegalConcept.GOVERNING_LAW,
-                LegalConcept.TERM_TERMINATION, LegalConcept.CONFIDENTIALITY,
-                LegalConcept.LIMITATION_OF_LIABILITY, LegalConcept.INDEMNIFICATION,
-                LegalConcept.GOVERNING_LAW);
+        var concepts = List.of(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CoreConcepts.LIMITATION_OF_LIABILITY,
+                CoreConcepts.INDEMNIFICATION, CoreConcepts.GOVERNING_LAW,
+                CoreConcepts.TERM, CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                CoreConcepts.LIMITATION_OF_LIABILITY, CoreConcepts.INDEMNIFICATION,
+                CoreConcepts.GOVERNING_LAW);
         var now = java.time.Instant.now();
         var findings = new java.util.ArrayList<Finding>();
         for (int i = 0; i < classifications.size(); i++) {

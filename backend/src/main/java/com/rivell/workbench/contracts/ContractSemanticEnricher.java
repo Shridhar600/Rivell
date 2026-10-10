@@ -9,11 +9,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.rivell.workbench.intelligence.ChoiceAnswer;
-import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
+import com.rivell.workbench.taxonomy.TaxonomyProperties;
+import com.rivell.workbench.taxonomy.TopicClassifier;
 
 /**
  * The M5 semantic enrichment engine. Deterministic extraction first; then bounded
@@ -27,14 +29,20 @@ public final class ContractSemanticEnricher {
     private final SemanticDecisionService decisionService;
     private final ContractFactExtractor factExtractor;
     private final ContractEnrichmentProperties properties;
+    private final TopicClassifier topicClassifier;
+    private final TaxonomyProperties taxonomyProperties;
 
     public ContractSemanticEnricher(
             SemanticDecisionService decisionService,
             ContractFactExtractor factExtractor,
-            ContractEnrichmentProperties properties) {
+            ContractEnrichmentProperties properties,
+            TopicClassifier topicClassifier,
+            TaxonomyProperties taxonomyProperties) {
         this.decisionService = decisionService;
         this.factExtractor = factExtractor;
         this.properties = properties;
+        this.topicClassifier = topicClassifier;
+        this.taxonomyProperties = taxonomyProperties;
     }
 
     public record Result(
@@ -82,11 +90,11 @@ public final class ContractSemanticEnricher {
                 break;
             }
             try {
-                var outcome = classifyConcepts(region);
-                counters.decisionExecutions++;
-                counters.questions += LegalConcept.values().length;
-                classifications.put(region.headingNodeId(),
-                        withPrimary(region, outcome, counters, quality));
+                var topic = topicClassifier.classify(region.headingText(), region.contentText());
+                counters.decisionExecutions += topic.decisionExecutions();
+                counters.questions += topic.questions();
+                classifications.put(region.headingNodeId(), new ConceptClassification(
+                        topic.topics(), topic.secondaryTopics(), topic.probabilities()));
             } catch (SemanticDecisionException e) {
                 counters.providerDegraded = true;
                 classifications.put(region.headingNodeId(),
@@ -149,61 +157,6 @@ public final class ContractSemanticEnricher {
         boolean budgetExhausted;
     }
 
-    private record ConceptOutcome(
-            List<LegalConcept> members, Map<LegalConcept, Double> probabilities) {
-    }
-
-    private ConceptOutcome classifyConcepts(ContractRegionSegmenter.Region region)
-            throws SemanticDecisionException {
-        var execution = decisionService.evaluate(M5SemanticSpecs.clauseConcepts(),
-                new M5SemanticStates.ClauseState(region.headingText(),
-                        sample(region.contentText())));
-        var members = new ArrayList<LegalConcept>();
-        var probabilities = new LinkedHashMap<LegalConcept, Double>();
-        for (var concept : LegalConcept.values()) {
-            var answer = execution.answers().get(M5SemanticSpecs.conceptQuestionName(concept));
-            if (answer instanceof YesNoAnswer yesNo) {
-                probabilities.put(concept, yesNo.probability());
-                if (yesNo.probability() >= properties.conceptThreshold()) {
-                    members.add(concept);
-                }
-            } else {
-                throw new ProviderProtocolException(
-                        "Missing concept answer " + M5SemanticSpecs.conceptQuestionName(concept));
-            }
-        }
-        return new ConceptOutcome(members, probabilities);
-    }
-
-    private ConceptClassification withPrimary(
-            ContractRegionSegmenter.Region region, ConceptOutcome outcome,
-            ExecutionCounters counters, LinkedHashSet<ReviewQualityNote> quality)
-            throws SemanticDecisionException {
-        var members = outcome.members();
-        if (members.size() <= 1) {
-            return new ConceptClassification(members, List.of(), outcome.probabilities());
-        }
-        var execution = decisionService.evaluate(
-                M5SemanticSpecs.primaryConcept(members),
-                new M5SemanticStates.PrimaryConceptState(region.headingText(),
-                        sample(region.contentText()), namesOf(members)));
-        counters.decisionExecutions++;
-        counters.questions += 1;
-        if (!(execution.answers().get("primary_concept") instanceof ChoiceAnswer answer)) {
-            throw new ProviderProtocolException("Primary concept answer missing");
-        }
-        var selected = parseConcept(answer.selected());
-        var probability = answer.probabilities().getOrDefault(answer.selected(), 0.0);
-        var secondaries = members.stream()
-                .filter(concept -> concept != selected)
-                .toList();
-        if (probability >= properties.primaryConceptThreshold() && clearWinner(answer)) {
-            return new ConceptClassification(members, secondaries, outcome.probabilities());
-        }
-        quality.add(ReviewQualityNote.NO_PRIMARY_CONCEPT);
-        return new ConceptClassification(members, List.copyOf(members), outcome.probabilities());
-    }
-
     private LegalFactOutcome extractFacts(
             ContractRegionSegmenter.Region region, ConceptClassification classification,
             ExecutionCounters counters, LinkedHashSet<ReviewQualityNote> quality,
@@ -211,8 +164,8 @@ public final class ContractSemanticEnricher {
         var facts = new LinkedHashMap<String, LegalFact>();
         var interpretations = new LinkedHashMap<String, Interpretation>();
         for (var concept : classification.concepts()) {
-            if (concept != LegalConcept.LIMITATION_OF_LIABILITY
-                    && concept != LegalConcept.TERM_TERMINATION) {
+            if (!CoreConcepts.LIMITATION_OF_LIABILITY.equals(concept)
+                    && !CoreConcepts.TERM.equals(concept)) {
                 continue;
             }
             var generativeAllowed = remainingGenerativeBudget > 0;
@@ -444,7 +397,7 @@ public final class ContractSemanticEnricher {
             return List.of();
         }
         for (var clause : clauses) {
-            if (!clause.classification().concepts().contains(LegalConcept.GOVERNING_LAW)) {
+            if (!clause.classification().concepts().contains(CoreConcepts.GOVERNING_LAW)) {
                 continue;
             }
             try {
@@ -456,7 +409,7 @@ public final class ContractSemanticEnricher {
                 if (execution.answers().get("governing_law")
                         instanceof com.rivell.workbench.intelligence.ChoiceAnswer answer
                         && answer.probabilities().getOrDefault(answer.selected(), 0.0)
-                                >= properties.conceptThreshold()
+                                >= taxonomyProperties.primaryThreshold()
                         && !"UNSPECIFIED".equals(answer.selected())) {
                     return List.of(new MetadataFact(UUID.randomUUID(),
                             clause.contractVersionId(), MetadataField.GOVERNING_LAW,
@@ -518,26 +471,5 @@ public final class ContractSemanticEnricher {
         var text = clause.contentText();
         var newline = text.indexOf('\n');
         return newline > 0 ? text.substring(0, newline) : text;
-    }
-
-    private List<String> namesOf(List<LegalConcept> concepts) {
-        return concepts.stream().map(Enum::name).toList();
-    }
-
-    private LegalConcept parseConcept(String value) {
-        try {
-            return LegalConcept.valueOf(value);
-        } catch (IllegalArgumentException e) {
-            throw new ProviderProtocolException("Unknown primary concept label " + value);
-        }
-    }
-
-    private boolean clearWinner(ChoiceAnswer answer) {
-        var probabilities = new ArrayList<>(answer.probabilities().values());
-        probabilities.sort(java.util.Comparator.reverseOrder());
-        if (probabilities.size() < 2) {
-            return true;
-        }
-        return probabilities.get(0) - probabilities.get(1) >= 0.10;
     }
 }

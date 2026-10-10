@@ -1,5 +1,8 @@
 package com.rivell.workbench.retrieval;
 
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -167,8 +170,8 @@ class EvidenceApiServiceIT {
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get()
-                                == com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(
+                                com.rivell.workbench.taxonomy.CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
 
         var response = evidenceApiService.build(new RetrievalRequests.EvidenceBuildRequest(
@@ -225,14 +228,13 @@ class EvidenceApiServiceIT {
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var liabilityClauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get()
-                                == com.rivell.workbench.contracts.LegalConcept
-                                        .LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(
+                                com.rivell.workbench.taxonomy.CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
         // human correction: the clause is actually a confidentiality clause
         enrichmentService.correctClause(corpus.contract().contractId(), 1, liabilityClauseId,
                 com.rivell.workbench.contracts.FactCorrection.ofPrimary(
-                        com.rivell.workbench.contracts.LegalConcept.CONFIDENTIALITY));
+                        com.rivell.workbench.taxonomy.CoreConcepts.CONFIDENTIALITY_OBLIGATIONS));
 
         // the corrected concept drives applicability: no CONFIDENTIALITY policy is
         // published in the corpus → POLICY_MISSING is honest, and the discovery lanes
@@ -240,7 +242,7 @@ class EvidenceApiServiceIT {
         // the LOL evidence the machine concept would wrongly resolve
         var response = evidenceApiService.build(new RetrievalRequests.EvidenceBuildRequest(
                 corpus.contract().contractId(), 1, liabilityClauseId));
-        assertThat(response.request().legalConcept()).isEqualTo("CONFIDENTIALITY");
+        assertThat(response.request().legalConcept()).isEqualTo("CONFIDENTIALITY_OBLIGATIONS");
         assertThat(response.sufficiency()).isEqualTo("POLICY_MISSING");
         // knowledge-side items must follow the corrected concept; current-contract
         // items legitimately carry their own clause concepts
@@ -312,9 +314,8 @@ class EvidenceApiServiceIT {
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get()
-                                == com.rivell.workbench.contracts.LegalConcept
-                                        .LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(
+                                com.rivell.workbench.taxonomy.CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
         var response = evidenceApiService.build(new RetrievalRequests.EvidenceBuildRequest(
                 corpus.contract().contractId(), 1, clauseId));

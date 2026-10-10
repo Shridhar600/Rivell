@@ -1,5 +1,8 @@
 package com.rivell.workbench.redline;
 
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,7 +14,6 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.platform.docx.DocxRedlineRenderer;
 import com.rivell.workbench.platform.docx.DocxRedlineVerifier;
 import com.rivell.workbench.platform.parsing.RedlineFixturePipeline;
@@ -53,7 +55,7 @@ class WordValidationArtifactTest {
                 "2. Non-Solicitation"));
         manifest.add(caseWithPlan("insert-missing-provision", "m9-insert.docx",
                 "INSERT a missing Limitation of Liability provision after Indemnification",
-                insertPlan("m9-insert.docx", LegalConcept.LIMITATION_OF_LIABILITY,
+                insertPlan("m9-insert.docx", CoreConcepts.LIMITATION_OF_LIABILITY,
                         "Liability is capped at fees paid in the prior 12 months."),
                 null));
         manifest.add(caseWithPlan("multi-change", "m9-multi-change.docx",
@@ -180,16 +182,16 @@ class WordValidationArtifactTest {
         return RedlineFixturePipeline.plan(structure, set, Map.of());
     }
 
-    private DocumentExecutionPlan insertPlan(String fixture, LegalConcept concept,
+    private DocumentExecutionPlan insertPlan(String fixture, ConceptKey concept,
             String language) {
         var contractId = UUID.randomUUID();
         var versionId = UUID.randomUUID();
         var structure = RedlineFixturePipeline.parse(fixture, contractId, versionId);
         var concepts = RedlineFixturePipeline.concepts(structure, Map.of(
-                "2. Indemnification", LegalConcept.INDEMNIFICATION,
-                "3. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "4. Term and Survival", LegalConcept.TERM_TERMINATION,
-                "5. Governing Law", LegalConcept.GOVERNING_LAW));
+                "2. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "3. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "4. Term and Survival", CoreConcepts.TERM,
+                "5. Governing Law", CoreConcepts.GOVERNING_LAW));
         var setId = UUID.randomUUID();
         var change = RedlineTestStructures.insert(setId, 0, concept, language);
         var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
@@ -203,17 +205,17 @@ class WordValidationArtifactTest {
         var structure = RedlineFixturePipeline.parse("m9-multi-change.docx", contractId,
                 versionId);
         var concepts = RedlineFixturePipeline.concepts(structure, Map.of(
-                "1. Limitation of Liability", LegalConcept.LIMITATION_OF_LIABILITY,
-                "3. Indemnification", LegalConcept.INDEMNIFICATION,
-                "4. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "5. Governing Law", LegalConcept.GOVERNING_LAW));
+                "1. Limitation of Liability", CoreConcepts.LIMITATION_OF_LIABILITY,
+                "3. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "4. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "5. Governing Law", CoreConcepts.GOVERNING_LAW));
         var setId = UUID.randomUUID();
         var replace = RedlineTestStructures.replace(setId, 0,
                 RedlineFixturePipeline.headingId(structure, "1. Limitation of Liability"),
                 "Liability is capped at the fees paid in the prior twelve months.");
         var delete = RedlineTestStructures.delete(setId, 1,
                 RedlineFixturePipeline.headingId(structure, "2. Non-Solicitation"));
-        var insert = RedlineTestStructures.insert(setId, 2, LegalConcept.TERM_TERMINATION,
+        var insert = RedlineTestStructures.insert(setId, 2, CoreConcepts.TERM,
                 "Either party may terminate for material breach after thirty days notice.");
         var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
                 List.of(replace, delete, insert));

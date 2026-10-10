@@ -11,7 +11,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.rivell.workbench.contracts.ContractQueryService;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.foundation.PageCursor;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
@@ -51,6 +50,8 @@ import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewService;
 import com.rivell.workbench.review.ReviewStatus;
 import com.rivell.workbench.review.UnauthorizedReviewAccessException;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.ConceptRegistry;
 
 /**
  * Composes the review HTTP surface from domain read models and ports: authorization,
@@ -78,6 +79,7 @@ public class ReviewApiService {
     private final ReviewDocumentQuery reviewDocumentQuery;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
+    private final ConceptRegistry conceptRegistry;
 
     public ReviewApiService(
             ReviewService reviewService,
@@ -91,7 +93,8 @@ public class ReviewApiService {
             ReviewHumanReviewListQuery reviewHumanReviewListQuery,
             ReviewDocumentQuery reviewDocumentQuery,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            ConceptRegistry conceptRegistry) {
         this.reviewService = reviewService;
         this.analysisService = analysisService;
         this.reviewRepository = reviewRepository;
@@ -104,6 +107,7 @@ public class ReviewApiService {
         this.reviewDocumentQuery = reviewDocumentQuery;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+        this.conceptRegistry = conceptRegistry;
     }
 
     public ReviewSummaryView create(
@@ -301,20 +305,33 @@ public class ReviewApiService {
     }
 
     public FindingListResponse findings(
-            UUID reviewId, LegalConcept concept, FindingClassification classification,
+            UUID reviewId, String concept, FindingClassification classification,
             FindingSeverity severity, Integer limit) {
         var organizationId = requireRead();
         requireReview(organizationId, reviewId);
+        var conceptKey = requestConcept(concept);
         var activeRun = analysisRepository.findLatestCompletedRun(organizationId, reviewId);
         if (activeRun.isEmpty()) {
             return new FindingListResponse(List.of(), false);
         }
         var bounded = boundedLimit(limit);
         var rows = findingRepository.findFindings(organizationId, activeRun.get().id(),
-                concept, classification, severity, bounded);
+                conceptKey, classification, severity, bounded);
         var truncated = rows.size() > bounded;
         var items = rows.stream().limit(bounded).map(ReviewApiService::toSummary).toList();
         return new FindingListResponse(items, truncated);
+    }
+
+    /** Optional request filter keyed by a taxonomy topic; unknown or malformed is a 400. */
+    private ConceptKey requestConcept(String concept) {
+        if (concept == null || concept.isBlank()) {
+            return null;
+        }
+        var key = ConceptKey.of(concept.trim());
+        if (!conceptRegistry.contains(key)) {
+            throw new IllegalArgumentException("Unknown concept key: " + concept);
+        }
+        return key;
     }
 
     public FindingDetailView finding(UUID reviewId, UUID findingId) {
@@ -601,7 +618,7 @@ public class ReviewApiService {
         }
         var views = new ArrayList<ReviewCoverageView>();
         for (var check : presenceChecks) {
-            views.add(new ReviewCoverageView(check.concept(), check.expectation(),
+            views.add(new ReviewCoverageView(check.concept().value(), check.expectation(),
                     recorded.getOrDefault(check.id(), ReviewCoverageView.Coverage.UNKNOWN)));
         }
         return List.copyOf(views);
@@ -638,10 +655,15 @@ public class ReviewApiService {
 
     private static FindingSummaryView toSummary(Finding finding) {
         return new FindingSummaryView(finding.id(), finding.subjectKind(),
-                finding.subjectHeadingNodeId(), finding.absenceConcept(), finding.concept(),
-                finding.secondaryConcept(), finding.issueFamily(), finding.observationKind(),
+                finding.subjectHeadingNodeId(), name(finding.absenceConcept()),
+                name(finding.concept()), name(finding.secondaryConcept()),
+                finding.issueFamily(), finding.observationKind(),
                 finding.severity(), finding.reviewClassification(), finding.proposedAction(),
                 finding.proposedLanguageSource(), finding.createdAt());
+    }
+
+    private static String name(ConceptKey concept) {
+        return concept == null ? null : concept.value();
     }
 
     private static FindingDetailView toDetail(
@@ -650,8 +672,10 @@ public class ReviewApiService {
             FindingDetailView.AbsenceBasisView absenceBasis) {
         return new FindingDetailView(finding.id(), finding.reviewId(), finding.runId(),
                 finding.subjectKind(), finding.subjectHeadingNodeId(),
-                finding.absenceConcept(), finding.concept(), finding.secondaryConcept(),
-                finding.concepts(), finding.issueFamily(), finding.observationKind(),
+                name(finding.absenceConcept()), name(finding.concept()),
+                name(finding.secondaryConcept()),
+                finding.concepts().stream().map(ConceptKey::value).toList(),
+                finding.issueFamily(), finding.observationKind(),
                 finding.observationText(), finding.severity(),
                 finding.reviewClassification(), finding.proposedAction(),
                 finding.proposedLanguage(), finding.proposedLanguageSource(),

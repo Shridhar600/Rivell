@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
@@ -30,7 +32,6 @@ import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.FactCorrection;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -136,8 +137,8 @@ class M7EvaluationIT {
                 organizationId, run.id(), optionalCheck.id()).orElseThrow().signalCount())
                 .isZero();
         assertThat(analysisRepository.findSignals(organizationId, run.id())).noneMatch(signal ->
-                signal.concept() == LegalConcept.GOVERNING_LAW
-                        || signal.absenceConcept() == LegalConcept.GOVERNING_LAW);
+                signal.concept().equals(CoreConcepts.GOVERNING_LAW)
+                        || signal.absenceConcept().equals(CoreConcepts.GOVERNING_LAW));
         assertThat(analysisRepository.findExecutions(organizationId, run.id()))
                 .allSatisfy(execution -> assertThat(execution.status())
                         .isEqualTo(CheckExecutionStatus.COMPLETED));
@@ -387,7 +388,7 @@ class M7EvaluationIT {
         var contractId = corpus.contract().contractId();
         var liability = enrichmentService.getSemantics(contractId, 1).clauses().stream()
                 .filter(clause -> clause.primaryConcept()
-                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .map(concept -> concept.equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                         .orElse(false))
                 .findFirst().orElseThrow();
 

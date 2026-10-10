@@ -74,7 +74,7 @@ public final class RetrievalResponses {
                 item.sourceCandidateId(),
                 item.sourceContractVersionId(),
                 item.sourceClauseId(),
-                item.legalConcept() == null ? null : item.legalConcept().name(),
+                item.legalConcept() == null ? null : item.legalConcept().value(),
                 item.text(),
                 item.policyFacts() == null ? null : new PolicyFactsResponse(
                         item.policyFacts().positions().stream()

@@ -137,7 +137,7 @@ class ContractSemanticsController {
         }
         var semantics = enrichmentService.correctClause(id, versionNumber, clauseId,
                 com.rivell.workbench.contracts.FactCorrection.ofPrimary(
-                        com.rivell.workbench.contracts.LegalConcept.valueOf(
+                        com.rivell.workbench.taxonomy.ConceptKey.of(
                                 request.primary())));
         return ApiResult.ok(toResponse(id, versionNumber, semantics));
     }
@@ -243,8 +243,10 @@ class ContractSemanticsController {
                 clause.regionKind().name(),
                 heading,
                 clause.contentText(),
-                nameOf(clause.primaryConcept().orElse(null)),
-                clause.secondaryConcepts().stream().map(Enum::name).toList(),
+                clause.primaryConcept()
+                        .map(com.rivell.workbench.taxonomy.ConceptKey::value).orElse(null),
+                clause.secondaryConcepts().stream()
+                        .map(com.rivell.workbench.taxonomy.ConceptKey::value).toList(),
                 correction != null && correction.corrected() && correction.primaryConcept() != null
                         ? correction.primaryConcept() : null,
                 clause.facts().stream()

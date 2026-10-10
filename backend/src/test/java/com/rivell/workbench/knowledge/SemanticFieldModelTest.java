@@ -1,7 +1,5 @@
 package com.rivell.workbench.knowledge;
 
-import com.rivell.workbench.contracts.LegalConcept;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -40,18 +38,6 @@ class SemanticFieldModelTest {
 
         assertThat(new SemanticFields(Set.of(), null, null, null, Map.of()).effectiveVariantRole())
                 .isEqualTo(PositionRole.UNSPECIFIED);
-    }
-
-    @Test
-    void primaryConceptIsHighestProbabilityAboveThreshold() {
-        var concepts = Map.of(
-                LegalConcept.CONFIDENTIALITY, 0.94,
-                LegalConcept.LIMITATION_OF_LIABILITY, 0.71,
-                LegalConcept.GOVERNING_LAW, 0.05);
-
-        assertThat(SemanticFields.primaryConcept(concepts, 0.80))
-                .contains(LegalConcept.CONFIDENTIALITY);
-        assertThat(SemanticFields.primaryConcept(concepts, 0.95)).isEmpty();
     }
 
     @Test

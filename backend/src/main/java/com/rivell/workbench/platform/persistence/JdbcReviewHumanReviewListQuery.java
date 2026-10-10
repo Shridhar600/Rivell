@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.redline.ChangeActionType;
 import com.rivell.workbench.redline.ChangeLanguageSource;
 import com.rivell.workbench.review.Finding;
@@ -215,9 +215,9 @@ class JdbcReviewHumanReviewListQuery implements ReviewHumanReviewListQuery {
                 rs.getString("consolidation_key"),
                 FindingSubjectKind.valueOf(rs.getString("subject_kind")),
                 rs.getObject("subject_heading_node_id", UUID.class),
-                enumOrNull(rs.getString("absence_concept"), LegalConcept.class),
-                LegalConcept.valueOf(rs.getString("concept")),
-                enumOrNull(rs.getString("secondary_concept"), LegalConcept.class),
+                conceptOrNull(rs.getString("absence_concept")),
+                ConceptKey.of(rs.getString("concept")),
+                conceptOrNull(rs.getString("secondary_concept")),
                 IssueFamily.valueOf(rs.getString("issue_family")),
                 rs.getString("observation_kind"),
                 rs.getString("observation_text"),
@@ -235,6 +235,17 @@ class JdbcReviewHumanReviewListQuery implements ReviewHumanReviewListQuery {
 
     private static <E extends Enum<E>> E enumOrNull(String value, Class<E> type) {
         return value == null ? null : Enum.valueOf(type, value);
+    }
+
+    private static ConceptKey conceptOrNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return ConceptKey.of(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /**

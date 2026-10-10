@@ -1,5 +1,7 @@
 package com.rivell.workbench.retrieval;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDate;
@@ -19,7 +21,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
@@ -139,10 +140,10 @@ class RetrievalIndexReconciliationIT {
         var organizationId = identityProvider.currentIdentity().organizationId();
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
         return EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);

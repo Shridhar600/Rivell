@@ -13,6 +13,8 @@ import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.ConceptRegistry;
 
 /**
  * M5 enrichment lifecycle: org-scoped trigger, atomic ENRICHING claim, semantic
@@ -31,6 +33,7 @@ public class ContractEnrichmentService {
     private final TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
+    private final ConceptRegistry conceptRegistry;
 
     public ContractEnrichmentService(
             ContractQueryService queryService,
@@ -39,7 +42,8 @@ public class ContractEnrichmentService {
             ContractSemanticEnricher enricher,
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            ConceptRegistry conceptRegistry) {
         this.queryService = queryService;
         this.contractRepository = contractRepository;
         this.semanticsRepository = semanticsRepository;
@@ -47,6 +51,7 @@ public class ContractEnrichmentService {
         this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+        this.conceptRegistry = conceptRegistry;
     }
 
     public ContractSemantics enrich(UUID contractId, int versionNumber, ReviewProfile profile) {
@@ -233,7 +238,7 @@ public class ContractEnrichmentService {
                     var correctedClause = clause.withCorrection(correction,
                             correctedBy.get(clause.headingNodeId()));
                     if (correction.primaryConcept() != null) {
-                        var effective = LegalConcept.valueOf(correction.primaryConcept());
+                        var effective = ConceptKey.of(correction.primaryConcept());
                         correctedClause = correctedClause.withClassification(
                                 correctedClassification(correctedClause.classification(),
                                         effective));
@@ -266,20 +271,20 @@ public class ContractEnrichmentService {
     }
 
     private ConceptClassification correctedClassification(
-            ConceptClassification classification, LegalConcept effective) {
-        var members = new ArrayList<LegalConcept>(classification.concepts());
+            ConceptClassification classification, ConceptKey effective) {
+        var members = new ArrayList<ConceptKey>(classification.concepts());
         if (!members.contains(effective)) {
             members.add(effective);
         }
-        var reordered = new ArrayList<LegalConcept>();
+        var reordered = new ArrayList<ConceptKey>();
         reordered.add(effective);
         for (var member : members) {
-            if (member != effective) {
+            if (!member.equals(effective)) {
                 reordered.add(member);
             }
         }
         var secondaries = reordered.stream()
-                .filter(concept -> concept != effective)
+                .filter(concept -> !concept.equals(effective))
                 .toList();
         return new ConceptClassification(reordered, secondaries, classification.probabilities());
     }
@@ -287,7 +292,10 @@ public class ContractEnrichmentService {
     private void validateCorrection(ClauseSemantics clause, FactCorrection correction) {
         if (correction.primaryConcept() != null && !correction.primaryConcept().isBlank()) {
             try {
-                LegalConcept.valueOf(correction.primaryConcept());
+                var key = ConceptKey.of(correction.primaryConcept());
+                if (!conceptRegistry.contains(key)) {
+                    throw new InvalidCorrectionException(clause.id(), "Unknown concept");
+                }
             } catch (IllegalArgumentException e) {
                 throw new InvalidCorrectionException(clause.id(), "Unknown concept");
             }

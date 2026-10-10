@@ -12,7 +12,7 @@ import com.rivell.workbench.contracts.ContractRegionSegmenter;
 import com.rivell.workbench.contracts.ContractStructure;
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Deterministic plan resolution: every approved change is resolved against the frozen
@@ -28,7 +28,7 @@ public final class RedlinePlanResolver {
     public DocumentExecutionPlan resolve(
             ApprovedChangeSet set,
             ContractStructure structure,
-            Map<UUID, LegalConcept> effectivePrimaryConcepts,
+            Map<UUID, ConceptKey> effectivePrimaryConcepts,
             String author,
             Instant executedAt,
             String sourceSha256) {
@@ -117,7 +117,7 @@ public final class RedlinePlanResolver {
     private PlannedDocumentOperation insertOperation(
             ApprovedChange change,
             ContractStructure structure,
-            Map<UUID, LegalConcept> effectivePrimaryConcepts,
+            Map<UUID, ConceptKey> effectivePrimaryConcepts,
             List<DocumentNode> nodes) {
         var placement = placementStrategy.resolve(change.absenceConcept(), structure,
                 effectivePrimaryConcepts);
@@ -130,7 +130,7 @@ public final class RedlinePlanResolver {
                 paragraphs);
         return new PlannedDocumentOperation(change.id(), change.ordinal(),
                 ChangeActionType.INSERT, List.of(), insertion, placement.label(),
-                change.absenceConcept().name());
+                change.absenceConcept().value());
     }
 
     private static String label(String value) {

@@ -1,5 +1,7 @@
 package com.rivell.workbench.redline;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
@@ -21,7 +23,6 @@ import org.docx4j.wml.RunIns;
 import org.docx4j.wml.Text;
 import org.junit.jupiter.api.Test;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.platform.parsing.RedlineFixturePipeline;
 import com.rivell.workbench.platform.docx.DocxRedlineRenderer;
 import com.rivell.workbench.platform.docx.DocxRedlineVerifier;
@@ -56,17 +57,17 @@ class DocxRedlineVerifierTest {
         var versionId = UUID.randomUUID();
         var structure = RedlineFixturePipeline.parse(fixture, contractId, versionId);
         var concepts = RedlineFixturePipeline.concepts(structure, Map.of(
-                "1. Limitation of Liability", LegalConcept.LIMITATION_OF_LIABILITY,
-                "3. Indemnification", LegalConcept.INDEMNIFICATION,
-                "4. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "5. Governing Law", LegalConcept.GOVERNING_LAW));
+                "1. Limitation of Liability", CoreConcepts.LIMITATION_OF_LIABILITY,
+                "3. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "4. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "5. Governing Law", CoreConcepts.GOVERNING_LAW));
         var setId = UUID.randomUUID();
         var replace = RedlineTestStructures.replace(setId, 0,
                 RedlineFixturePipeline.headingId(structure, "1. Limitation of Liability"),
                 "Liability is capped at the fees paid in the prior twelve months.");
         var delete = RedlineTestStructures.delete(setId, 1,
                 RedlineFixturePipeline.headingId(structure, "2. Non-Solicitation"));
-        var insert = RedlineTestStructures.insert(setId, 2, LegalConcept.TERM_TERMINATION,
+        var insert = RedlineTestStructures.insert(setId, 2, CoreConcepts.TERM,
                 "Either party may terminate for material breach after thirty days notice.");
         var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
                 List.of(replace, delete, insert));

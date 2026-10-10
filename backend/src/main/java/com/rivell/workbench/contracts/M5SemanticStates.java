@@ -1,6 +1,5 @@
 package com.rivell.workbench.contracts;
 
-import java.util.List;
 import java.util.Map;
 
 import com.rivell.workbench.intelligence.SemanticState;
@@ -30,28 +29,6 @@ final class M5SemanticStates {
                 payload.put("heading", heading);
             }
             payload.put("text", text);
-            return payload;
-        }
-    }
-
-    record PrimaryConceptState(String heading, String text,
-            List<String> concepts) implements SemanticState {
-
-        static final int SCHEMA_VERSION = 1;
-
-        @Override
-        public int schemaVersion() {
-            return SCHEMA_VERSION;
-        }
-
-        @Override
-        public Object payload() {
-            var payload = new java.util.LinkedHashMap<String, Object>();
-            if (heading != null && !heading.isBlank()) {
-                payload.put("heading", heading);
-            }
-            payload.put("text", text);
-            payload.put("concepts", concepts);
             return payload;
         }
     }

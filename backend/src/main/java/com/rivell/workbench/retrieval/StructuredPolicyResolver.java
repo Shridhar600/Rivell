@@ -61,7 +61,7 @@ public class StructuredPolicyResolver {
                 request.organizationId(),
                 asOfPublicationNumber,
                 candidateTypes,
-                request.legalConcept().name(),
+                request.legalConcept().value(),
                 profile.contractPackKey(),
                 profile.contractType() == null ? null : profile.contractType().name(),
                 profile.ourSideRole() == null ? null : profile.ourSideRole().name(),

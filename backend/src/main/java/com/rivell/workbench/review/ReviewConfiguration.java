@@ -124,12 +124,13 @@ class ReviewConfiguration {
             ReviewHumanReviewListQuery reviewHumanReviewListQuery,
             ReviewDocumentQuery reviewDocumentQuery,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry) {
         return new com.rivell.workbench.review.api.ReviewApiService(
                 reviewService, reviewAnalysisService, reviewRepository,
                 reviewAnalysisRepository, findingRepository, contractQueryService,
                     reviewPackRegistry, reviewListQuery,
                 reviewHumanReviewListQuery, reviewDocumentQuery, identityProvider,
-                authorizationService);
+                authorizationService, conceptRegistry);
     }
 }

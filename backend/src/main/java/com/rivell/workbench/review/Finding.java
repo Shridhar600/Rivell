@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Human-reviewable machine proposal: the consolidated issue of one analysis run.
@@ -22,9 +22,9 @@ public record Finding(
         String consolidationKey,
         FindingSubjectKind subjectKind,
         UUID subjectHeadingNodeId,
-        LegalConcept absenceConcept,
-        LegalConcept concept,
-        LegalConcept secondaryConcept,
+        ConceptKey absenceConcept,
+        ConceptKey concept,
+        ConceptKey secondaryConcept,
         IssueFamily issueFamily,
         String observationKind,
         String observationText,
@@ -36,7 +36,7 @@ public record Finding(
         UUID approvedDraftingEvidenceId,
         Map<String, Object> quality,
         Instant createdAt,
-        List<LegalConcept> concepts,
+        List<ConceptKey> concepts,
         List<FindingClaim> claims,
         List<UUID> evidenceItemIds,
         List<UUID> signalIds) {

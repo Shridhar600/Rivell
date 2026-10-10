@@ -1,6 +1,7 @@
 package com.rivell.workbench.knowledge;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -246,11 +247,11 @@ class IntelligentCompilationIT {
     void scriptDefaults() {
         // concepts high for confidentiality playbook rows; all position roles strong
         fakeProvider.script(Map.ofEntries(
-                Map.entry("concept_confidentiality", 0.9),
-                Map.entry("concept_term_termination", 0.1),
-                Map.entry("concept_limitation_of_liability", 0.3),
-                Map.entry("concept_indemnification", 0.05),
-                Map.entry("concept_governing_law", 0.1),
+                Map.entry("topic_confidentiality_obligations", 0.9),
+                Map.entry("topic_term", 0.1),
+                Map.entry("topic_limitation_of_liability", 0.3),
+                Map.entry("topic_indemnification", 0.05),
+                Map.entry("topic_governing_law", 0.1),
                 Map.entry("requires_approval", 0.1)), Map.of());
     }
 
@@ -272,7 +273,7 @@ class IntelligentCompilationIT {
         assertThat(confidential.effectiveRequiresApproval()).isFalse();
         // scripted below the 0.80 approval threshold: honestly no approval requirement
         assertThat(confidential.semanticFields().conceptProbabilities()
-                .get(LegalConcept.CONFIDENTIALITY)).isEqualTo(0.9);
+                .get(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS)).isEqualTo(0.9);
 assertThat(confidential.interpretations())
                 .anyMatch(interpretation -> interpretation.field().equals("positions"));
 
@@ -306,7 +307,7 @@ assertThat(confidential.interpretations())
         assertThat(clause.effectiveContentText())
                 .isEqualTo(clause.contentText());
         assertThat(clause.effectiveVariantRole()).isEqualTo(PositionRole.PREFERRED);
-        assertThat(clause.legalConceptKey()).isEqualTo(LegalConcept.CONFIDENTIALITY.name());
+        assertThat(clause.legalConceptKey()).isEqualTo(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS.value());
     }
 
     @Test
@@ -349,7 +350,7 @@ assertThat(confidential.interpretations())
 
         fakeProvider.script(
                 Map.ofEntries(
-                        Map.entry("concept_confidentiality", 0.9),
+                        Map.entry("topic_confidentiality_obligations", 0.9),
                         Map.entry("contradicts", 0.95),
                         Map.entry("supersedes", 0.02)),
                 Map.of("variant_role", "FALLBACK"));

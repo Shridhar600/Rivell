@@ -12,7 +12,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.redline.ApprovedChange;
 import com.rivell.workbench.redline.ApprovedChangeSet;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
@@ -116,7 +116,7 @@ class JdbcApprovedChangeSetRepository implements ApprovedChangeSetRepository {
                 .param("actionType", change.actionType().name())
                 .param("targetHeadingNodeId", change.targetHeadingNodeId())
                 .param("absenceConcept", change.absenceConcept() == null
-                        ? null : change.absenceConcept().name())
+                        ? null : change.absenceConcept().value())
                 .param("approvedLanguage", change.approvedLanguage())
                 .param("languageSource", change.languageSource().name())
                 .param("approvedDraftingEvidenceId", change.approvedDraftingEvidenceId())
@@ -147,7 +147,7 @@ class JdbcApprovedChangeSetRepository implements ApprovedChangeSetRepository {
                         ChangeTargetKind.valueOf(rs.getString("subject_kind")),
                         rs.getObject("target_heading_node_id", UUID.class),
                         rs.getString("absence_concept") == null ? null
-                                : LegalConcept.valueOf(rs.getString("absence_concept")),
+                                : ConceptKey.of(rs.getString("absence_concept")),
                         rs.getString("approved_language"),
                         ChangeLanguageSource.valueOf(rs.getString("language_source")),
                         rs.getObject("approved_drafting_evidence_id", UUID.class)))

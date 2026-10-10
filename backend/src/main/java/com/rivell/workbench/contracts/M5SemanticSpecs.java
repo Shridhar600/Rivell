@@ -17,8 +17,6 @@ import com.rivell.workbench.intelligence.YesNoQuestion;
  */
 final class M5SemanticSpecs {
 
-    static final String CLAUSE_CONCEPT_SPEC = "contract-clause-legal-concept";
-    static final String PRIMARY_CONCEPT_SPEC = "contract-primary-concept";
     static final String PARTY_ROLE_SPEC = "contract-party-role";
     static final String GOVERNING_LAW_SPEC = "contract-metadata-governing-law";
     static final String FACT_VERIFICATION_SPEC = "contract-fact-verification";
@@ -26,51 +24,7 @@ final class M5SemanticSpecs {
 
     private static final int VERSION = 1;
 
-    private static final Map<LegalConcept, String> CRITERIA = Map.of(
-            LegalConcept.CONFIDENTIALITY,
-            "Confidentiality: obligations to protect another party's confidential information.",
-            LegalConcept.TERM_TERMINATION,
-            "Term and termination: agreement duration, renewal, or termination rights and mechanics.",
-            LegalConcept.LIMITATION_OF_LIABILITY,
-            "Limitation of liability: caps, exclusions, or limitations on damages payable.",
-            LegalConcept.INDEMNIFICATION,
-            "Indemnification: one party compensates the other for losses, claims, or third-party actions.",
-            LegalConcept.GOVERNING_LAW,
-            "Governing law: the jurisdiction whose law governs the agreement.");
-
     private M5SemanticSpecs() {
-    }
-
-    static DecisionSpec clauseConcepts() {
-        var questions = new LinkedHashMap<String, SemanticQuestion>();
-        for (var concept : LegalConcept.values()) {
-            questions.put(conceptQuestionName(concept), new YesNoQuestion(
-                    "Does this contract clause express the legal concept "
-                            + concept.name().toLowerCase().replace('_', ' ') + "?",
-                    CRITERIA.get(concept),
-                    "The clause does not express this legal concept."));
-        }
-        return new DecisionSpec(
-                CLAUSE_CONCEPT_SPEC, VERSION,
-                "Classify a contract clause region against the bounded initial legal-concept "
-                        + "vocabulary.",
-                M5SemanticStates.ClauseState.SCHEMA_VERSION,
-                new QuestionPack(questions));
-    }
-
-    static DecisionSpec primaryConcept(List<LegalConcept> members) {
-        var criteria = new LinkedHashMap<String, String>();
-        for (var member : members) {
-            criteria.put(member.name(), CRITERIA.get(member));
-        }
-        return new DecisionSpec(
-                PRIMARY_CONCEPT_SPEC, VERSION,
-                "Choose which of the identified concepts is the primary subject of the clause.",
-                M5SemanticStates.PrimaryConceptState.SCHEMA_VERSION,
-                new QuestionPack(Map.of("primary_concept", new ChoiceQuestion(
-                        "Which single concept is the primary subject of this clause? "
-                                + "The clause may also express the others secondarily.",
-                        criteria))));
     }
 
     static DecisionSpec partyRoles(List<PartyRole> roles) {
@@ -133,10 +87,6 @@ final class M5SemanticSpecs {
                 "Decide which semantic relationships hold between two narrowed clauses.",
                 M5SemanticStates.RelationshipState.SCHEMA_VERSION,
                 new QuestionPack(questions));
-    }
-
-    static String conceptQuestionName(LegalConcept concept) {
-        return "concept_" + concept.name().toLowerCase();
     }
 
     static String roleQuestionName(PartyRole role) {

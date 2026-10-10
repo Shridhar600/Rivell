@@ -63,8 +63,11 @@ class ContractServicesConfiguration {
     ContractSemanticEnricher contractSemanticEnricher(
             SemanticDecisionService decisionService,
             ContractFactExtractor factExtractor,
-            ContractEnrichmentProperties properties) {
-        return new ContractSemanticEnricher(decisionService, factExtractor, properties);
+            ContractEnrichmentProperties properties,
+            com.rivell.workbench.taxonomy.TopicClassifier topicClassifier,
+            com.rivell.workbench.taxonomy.TaxonomyProperties taxonomyProperties) {
+        return new ContractSemanticEnricher(decisionService, factExtractor, properties,
+                topicClassifier, taxonomyProperties);
     }
 
     @Bean
@@ -75,9 +78,10 @@ class ContractServicesConfiguration {
             ContractSemanticEnricher enricher,
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry) {
         return new ContractEnrichmentService(
                 queryService, contractRepository, semanticsRepository, enricher,
-                transactionTemplate, identityProvider, authorizationService);
+                transactionTemplate, identityProvider, authorizationService, conceptRegistry);
     }
 }

@@ -14,13 +14,13 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
-import com.rivell.workbench.intelligence.DecisionExecution;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.TopicClassifier;
 
 /**
  * The M4 semantic compilation pipeline: attaches machine interpretation to deterministic
@@ -33,24 +33,24 @@ public class SemanticCompilationService {
 
     private final SemanticDecisionService decisionService;
     private final SemanticPolicyProperties properties;
-    private final ConceptClassificationProperties conceptProperties;
     private final DuplicateConflictDetector conflictDetector;
     private final GenerativeFieldExtractor generativeFieldExtractor;
     private final CandidateReviewCategorizer categorizer;
+    private final TopicClassifier topicClassifier;
 
     public SemanticCompilationService(
             SemanticDecisionService decisionService,
             SemanticPolicyProperties properties,
-            ConceptClassificationProperties conceptProperties,
             DuplicateConflictDetector conflictDetector,
             GenerativeFieldExtractor generativeFieldExtractor,
-            CandidateReviewCategorizer categorizer) {
+            CandidateReviewCategorizer categorizer,
+            TopicClassifier topicClassifier) {
         this.decisionService = decisionService;
         this.properties = properties;
-        this.conceptProperties = conceptProperties;
         this.conflictDetector = conflictDetector;
         this.generativeFieldExtractor = generativeFieldExtractor;
         this.categorizer = categorizer;
+        this.topicClassifier = topicClassifier;
     }
 
     public record SemanticCompilation(
@@ -107,9 +107,9 @@ public class SemanticCompilationService {
             KnowledgeCandidate candidate, KnowledgeArtifact artifact, ExtractionUnit unit) {
         var state = new M4SemanticStates.PlaybookUnitState(
                 unit.contentText(), unit.title(), unit.kind(), candidate.payload().columns());
-        var concepts = classifyConcepts(state);
+        var topic = topicClassifier.classify(unit.title(), unit.contentText());
         var fields = new LinkedHashMap<String, FieldInterpretation>();
-        var builder = new SemanticFieldsBuilder(concepts.probabilities());
+        var builder = new SemanticFieldsBuilder(topic.probabilities());
         var provenance = unit.sourceNodeIds();
 
         switch (artifact.artifactType()) {
@@ -120,22 +120,8 @@ public class SemanticCompilationService {
         interpretScopeNarrowing(state, provenance, fields);
 
         var semantic = builder.build();
-        var conceptKey = SemanticFields.primaryConcept(
-                concepts.probabilities(), conceptProperties.conceptThreshold())
-                .map(Enum::name).orElse(null);
+        var conceptKey = topic.primary() == null ? null : topic.primary().value();
         return candidate.withSemanticOutcome(semantic, List.copyOf(fields.values()), conceptKey);
-    }
-
-    private ConceptOutcome classifyConcepts(M4SemanticStates.PlaybookUnitState state) {
-        var execution = decisionService.evaluate(ExtractionUnitConceptSpec.spec(), state);
-        var probabilities = new LinkedHashMap<LegalConcept, Double>();
-        for (var concept : LegalConcept.values()) {
-            var answer = execution.answers().get(ExtractionUnitConceptSpec.questionName(concept));
-            if (answer instanceof YesNoAnswer yesNo) {
-                probabilities.put(concept, yesNo.probability());
-            }
-        }
-        return new ConceptOutcome(execution, probabilities);
     }
 
     private void interpretPlaybook(
@@ -297,19 +283,14 @@ public class SemanticCompilationService {
                 .toList();
     }
 
-    private record ConceptOutcome(
-            DecisionExecution execution,
-            Map<LegalConcept, Double> probabilities) {
-    }
-
     private static final class SemanticFieldsBuilder {
         private Set<PositionRole> positions = Set.of();
         private Boolean requiresApproval;
         private String escalationTrigger;
         private PositionRole variantRole;
-        private Map<LegalConcept, Double> conceptProbabilities;
+        private Map<ConceptKey, Double> conceptProbabilities;
 
-        SemanticFieldsBuilder(Map<LegalConcept, Double> conceptProbabilities) {
+        SemanticFieldsBuilder(Map<ConceptKey, Double> conceptProbabilities) {
             this.conceptProbabilities = conceptProbabilities;
         }
 

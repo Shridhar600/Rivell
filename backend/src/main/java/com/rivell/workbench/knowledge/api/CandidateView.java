@@ -9,7 +9,6 @@ import java.util.UUID;
 
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.ConflictType;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.knowledge.PositionRole;
 import com.rivell.workbench.knowledge.ReviewCategory;
 import com.rivell.workbench.knowledge.ReviewReason;
@@ -36,7 +35,7 @@ public record CandidateView(
         UUID conceptCorrectedBy,
         Instant conceptCorrectedAt,
         String effectiveConceptKey,
-        Map<LegalConcept, Double> classifiedConcepts,
+        Map<String, Double> classifiedConcepts,
         Set<PositionRole> positions,
         PositionRole variantRole,
         String escalationTrigger,

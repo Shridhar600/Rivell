@@ -1,5 +1,7 @@
 package com.rivell.workbench.contracts;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -169,7 +171,7 @@ public class ContractEnrichmentIT {
         private ChoiceAnswer choiceAnswer(
                 String name, ChoiceQuestion choice, Object state) {
             var selected = switch (name) {
-                case "primary_concept" -> primaryConceptCue(choice, state);
+                case "primary_topic" -> primaryConceptCue(choice, state);
                 case "governing_law" -> stateText(state).contains("England") ? "UK" : "US";
                 default -> choice.criteria().keySet().iterator().next();
             };
@@ -179,15 +181,27 @@ public class ContractEnrichmentIT {
             return new ChoiceAnswer(selected, 0.92, probabilities);
         }
 
+        /**
+         * The fixtures predate the 90-topic taxonomy, so the expected main subject of an
+         * ambiguous clause follows the core-concept order the old vocabulary used, not the
+         * registry's arbitrary leaf order.
+         */
+        private static final List<String> CORE_ORDER = List.of(
+                "CONFIDENTIALITY_OBLIGATIONS", "TERM", "LIMITATION_OF_LIABILITY",
+                "INDEMNIFICATION", "GOVERNING_LAW");
+
         private String primaryConceptCue(ChoiceQuestion choice, Object state) {
             var text = stateText(state);
             var heading = stateHeading(state).toLowerCase();
             var body = text.contains("\n")
                     ? text.substring(text.indexOf('\n')).toLowerCase()
                     : "";
+            var ordered = choice.criteria().keySet().stream()
+                    .sorted(java.util.Comparator.comparingInt(CueScriptedProvider::coreRank))
+                    .toList();
             java.util.Optional<String> headingMatch = java.util.Optional.empty();
             java.util.Optional<String> textMatch = java.util.Optional.empty();
-            for (var option : choice.criteria().keySet()) {
+            for (var option : ordered) {
                 var cue = option.toLowerCase().replace('_', ' ');
                 if (headingMatch(heading, cue) && headingMatch.isEmpty()) {
                     headingMatch = java.util.Optional.of(option);
@@ -199,7 +213,12 @@ public class ContractEnrichmentIT {
             if (headingMatch.isPresent()) {
                 return headingMatch.get();
             }
-            return textMatch.orElse(choice.criteria().keySet().iterator().next());
+            return textMatch.orElse(ordered.get(0));
+        }
+
+        private static int coreRank(String key) {
+            var index = CORE_ORDER.indexOf(key);
+            return index < 0 ? CORE_ORDER.size() : index;
         }
 
         private boolean headingMatch(String heading, String cue) {
@@ -208,7 +227,7 @@ public class ContractEnrichmentIT {
         }
 
         private boolean bodyMatch(String body, String cue) {
-            return !body.isBlank() && body.contains(cue);
+            return !body.isBlank() && (body.contains(cue) || body.contains(firstWord(cue)));
         }
 
         private String firstWord(String cue) {
@@ -219,12 +238,12 @@ public class ContractEnrichmentIT {
             var text = stateText(state);
             var lower = text == null ? "" : text.toLowerCase();
             return switch (questionName) {
-                case "concept_confidentiality" -> lower.contains("confidential") ? 0.95 : 0.05;
-                case "concept_term_termination" ->
+                case "topic_confidentiality_obligations" -> lower.contains("confidential") ? 0.95 : 0.05;
+                case "topic_term" ->
                         lower.contains("terminat") || lower.contains("term ") ? 0.95 : 0.05;
-                case "concept_limitation_of_liability" -> lower.contains("liability") ? 0.95 : 0.05;
-                case "concept_indemnification" -> lower.contains("indemnif") ? 0.95 : 0.05;
-                case "concept_governing_law" -> lower.contains("govern") ? 0.95 : 0.05;
+                case "topic_limitation_of_liability" -> lower.contains("liability") ? 0.95 : 0.05;
+                case "topic_indemnification" -> lower.contains("indemnif") ? 0.95 : 0.05;
+                case "topic_governing_law" -> lower.contains("govern") ? 0.95 : 0.05;
                 case "role_disclosing_party" -> lower.contains("disclosing") ? 0.95 : 0.05;
                 case "role_receiving_party" -> lower.contains("receiving") ? 0.95 : 0.05;
                 case "role_customer" -> lower.contains("customer") ? 0.95 : 0.05;
@@ -359,9 +378,9 @@ public class ContractEnrichmentIT {
                 .filter(clause -> !clause.classification().concepts().isEmpty())
                 .flatMap(clause -> clause.classification().concepts().stream())
                 .collect(java.util.stream.Collectors.toSet());
-        assertThat(conceptLabels).contains(LegalConcept.CONFIDENTIALITY);
-        assertThat(conceptLabels).contains(LegalConcept.GOVERNING_LAW);
-        assertThat(conceptLabels).contains(LegalConcept.TERM_TERMINATION);
+        assertThat(conceptLabels).contains(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS);
+        assertThat(conceptLabels).contains(CoreConcepts.GOVERNING_LAW);
+        assertThat(conceptLabels).contains(CoreConcepts.TERM);
 
         // signature blocks are structural regions now: the NDA's real clauses all
         // classify, so the only remaining quality note (if any) is honest state
@@ -492,7 +511,7 @@ public class ContractEnrichmentIT {
 
         var liability = semantics.clauses().stream()
                 .filter(clause -> clause.primaryConcept()
-                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .map(concept -> concept.equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                         .orElse(false))
                 .findFirst()
                 .orElseThrow();
@@ -507,7 +526,7 @@ public class ContractEnrichmentIT {
 
         var termination = semantics.clauses().stream()
                 .filter(clause -> clause.classification().concepts()
-                        .contains(LegalConcept.TERM_TERMINATION))
+                        .contains(CoreConcepts.TERM))
                 .filter(clause -> clause.facts().stream()
                         .anyMatch(fact -> fact.factSchema().equals("termination-facts")))
                 .findFirst()
@@ -538,8 +557,8 @@ public class ContractEnrichmentIT {
                 .filter(clause -> clause.contentText().contains("aggregate liability"))
                 .findFirst()
                 .orElseThrow();
-        assertThat(lol.primaryConcept()).contains(LegalConcept.LIMITATION_OF_LIABILITY);
-        assertThat(lol.secondaryConcepts()).contains(LegalConcept.INDEMNIFICATION);
+        assertThat(lol.primaryConcept()).contains(CoreConcepts.LIMITATION_OF_LIABILITY);
+        assertThat(lol.secondaryConcepts()).contains(CoreConcepts.INDEMNIFICATION);
     }
 
     @Test
@@ -629,13 +648,13 @@ public class ContractEnrichmentIT {
                 ReviewProfile.minimal(ContractType.MSA));
         var liability = semantics.clauses().stream()
                 .filter(clause -> clause.primaryConcept()
-                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .map(concept -> concept.equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                         .orElse(false))
                 .findFirst()
                 .orElseThrow();
 
         var afterConcept = enrichmentService.correctClause(ingested.contractId(), 1,
-                liability.id(), FactCorrection.ofPrimary(LegalConcept.INDEMNIFICATION));
+                liability.id(), FactCorrection.ofPrimary(CoreConcepts.INDEMNIFICATION));
         var afterFacts = enrichmentService.correctClause(ingested.contractId(), 1,
                 liability.id(), FactCorrection.ofFacts(Map.of("liabilityCapMultiple", "2")));
 
@@ -646,7 +665,7 @@ public class ContractEnrichmentIT {
                 .orElseThrow();
 
         assertThat(corrected.correction().primaryConcept())
-                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+                .isEqualTo(CoreConcepts.INDEMNIFICATION.value());
         assertThat(corrected.correction().factValues())
                 .containsEntry("liabilityCapMultiple", "2");
         assertThat(corrected.conceptCorrected()).isTrue();
@@ -661,7 +680,7 @@ public class ContractEnrichmentIT {
                 .orElseThrow()
                 .correction();
         assertThat(reloadedThird.primaryConcept())
-                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+                .isEqualTo(CoreConcepts.INDEMNIFICATION.value());
         assertThat(reloadedThird.factValues())
                 .containsEntry("liabilityCapMultiple", "2")
                 .containsEntry("capBasis", "ANNUAL_FEES");
@@ -677,7 +696,7 @@ public class ContractEnrichmentIT {
                 .orElseThrow()
                 .correction();
         assertThat(cleared.primaryConcept())
-                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+                .isEqualTo(CoreConcepts.INDEMNIFICATION.value());
         assertThat(cleared.factValues())
                 .containsEntry("liabilityCapMultiple", "2")
                 .doesNotContainKey("capBasis");
@@ -690,7 +709,7 @@ public class ContractEnrichmentIT {
                 .findFirst()
                 .orElseThrow();
         assertThat(machineAgain.correction().primaryConcept())
-                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+                .isEqualTo(CoreConcepts.INDEMNIFICATION.value());
         assertThat(machineAgain.correction().factValues())
                 .containsEntry("liabilityCapMultiple", "2");
         assertThat(machineAgain.effectiveFacts().stream()
@@ -755,7 +774,7 @@ public class ContractEnrichmentIT {
         // typed fact → supporting source nodes (exact clause region anchors)
         var liability = semantics.clauses().stream()
                 .filter(clause -> clause.primaryConcept()
-                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .map(concept -> concept.equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                         .orElse(false))
                 .findFirst()
                 .orElseThrow();

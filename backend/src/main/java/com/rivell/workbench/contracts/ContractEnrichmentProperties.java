@@ -9,8 +9,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties("rivell.contracts.enrichment")
 public record ContractEnrichmentProperties(
-        double conceptThreshold,
-        double primaryConceptThreshold,
         double roleThreshold,
         double verificationThreshold,
         double disputedThreshold,
@@ -20,12 +18,6 @@ public record ContractEnrichmentProperties(
         int maxGenerativeExtractions) {
 
     public ContractEnrichmentProperties {
-        if (conceptThreshold <= 0.0) {
-            conceptThreshold = 0.80;
-        }
-        if (primaryConceptThreshold <= 0.0) {
-            primaryConceptThreshold = 0.80;
-        }
         if (roleThreshold <= 0.0) {
             roleThreshold = 0.80;
         }

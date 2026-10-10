@@ -153,7 +153,8 @@ public class WorkflowApiService {
     private static ApprovedChangeView toView(ApprovedChange change) {
         return new ApprovedChangeView(change.id(), change.findingId(), change.decisionId(),
                 change.ordinal(), change.actionType().name(), change.targetKind().name(),
-                change.targetHeadingNodeId(), change.absenceConcept(),
+                change.targetHeadingNodeId(),
+                change.absenceConcept() == null ? null : change.absenceConcept().value(),
                 change.approvedLanguage(), change.languageSource().name(),
                 change.approvedDraftingEvidenceId());
     }
