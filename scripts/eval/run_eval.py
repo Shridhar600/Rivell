@@ -182,6 +182,7 @@ def run_org(api, corpus, org, raw_dir):
         try:
             _, cands, ok = run_knowledge(api, corpus, entry, kind, types, errors)
             approved += ok
+            (raw_dir / f"knowledge-{pathlib.Path(entry).stem}.json").write_text(json.dumps(cands, indent=1))
             score = score_knowledge(load_answer(corpus, entry), cands)
             result["knowledge"].append(dict(score, file=entry, approved=len(ok)))
         except ApiError as e:

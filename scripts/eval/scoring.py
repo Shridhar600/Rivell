@@ -58,7 +58,7 @@ def score_knowledge(answer, candidates):
         best, best_score, any_part = None, 0.0, False
         for cid, have in texts.items():
             p, w = _overlap(preferred, have), _overlap(walk_away, have)
-            any_part |= p >= 0.5 or (walk_away and w >= 0.5)
+            any_part = any_part or p >= 0.5 or (bool(walk_away) and w >= 0.5)
             score = min(p, w)
             if score > best_score:
                 best, best_score = cid, score
