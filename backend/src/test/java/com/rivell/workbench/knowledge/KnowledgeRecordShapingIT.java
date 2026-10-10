@@ -2,6 +2,8 @@ package com.rivell.workbench.knowledge;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -10,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -133,12 +136,18 @@ class KnowledgeRecordShapingIT {
         int kindDecisions;
         int labelDecisions;
         int topicDecisions;
+        boolean failKindCalls;
 
         void reset() {
             executions = 0;
             kindDecisions = 0;
             labelDecisions = 0;
             topicDecisions = 0;
+            failKindCalls = false;
+        }
+
+        void failKindCalls() {
+            failKindCalls = true;
         }
 
         @Override
@@ -152,6 +161,10 @@ class KnowledgeRecordShapingIT {
             var names = request.pack().questions().keySet();
             if (names.contains("record_kind")) {
                 kindDecisions++;
+                if (failKindCalls) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "record kind provider down");
+                }
             }
             if (names.stream().anyMatch(name -> name.startsWith("label_"))) {
                 labelDecisions++;
@@ -385,6 +398,15 @@ class KnowledgeRecordShapingIT {
                 .toList();
         assertThat(candidateUnits).allSatisfy(unit ->
                 assertThat(unit.title()).isEqualTo("Positions"));
+        assertThat(units.stream().filter(unit -> "About this guide".equals(unit.title())))
+                .as("the About sheet is kept as units")
+                .isNotEmpty();
+        assertThat(units.stream().filter(unit -> "Escalation".equals(unit.title())))
+                .as("the Escalation sheet is kept as units")
+                .isNotEmpty();
+        assertThat(units.stream().filter(unit -> "Notes & contacts".equals(unit.title())))
+                .as("the Notes & contacts sheet is kept as units")
+                .isNotEmpty();
         assertThat(units.stream()
                 .filter(unit -> "About this guide".equals(unit.title()))
                 .noneMatch(unit -> unit.recordKind() == KnowledgeRecordKind.POSITION))
@@ -467,6 +489,112 @@ class KnowledgeRecordShapingIT {
                 .as("the non-rule sections are kept with their kind, not dropped")
                 .anyMatch(unit -> unit.recordKind() == KnowledgeRecordKind.DOCUMENT_CONTROL)
                 .anyMatch(unit -> unit.recordKind() == KnowledgeRecordKind.GUIDANCE);
+    }
+
+    @Test
+    void kindProviderFailureKeepsEveryRecordAsACandidate() throws Exception {
+        provider.reset();
+        provider.failKindCalls();
+        var artifact = ingest("fixtures/blind-a-negotiation-playbook.docx",
+                "a-degraded.docx", ArtifactType.PLAYBOOK);
+
+        var units = queryService.getUnits(artifact.id());
+        long contentUnits = units.stream()
+                .filter(unit -> unit.contentText() != null && !unit.contentText().isBlank())
+                .count();
+        var candidates = queryService.getCandidates(artifact.id());
+        assertThat(candidates)
+                .as("fail open: a kind-provider failure must never drop a record")
+                .hasSize((int) contentUnits);
+        assertThat(candidates.stream()
+                .filter(candidate -> candidate.reviewReasons()
+                        .contains(ReviewReason.SEMANTIC_ANALYSIS_UNAVAILABLE))
+                .count())
+                .as("every record whose kind could not be decided says so")
+                .isEqualTo(contentUnits - 25);
+    }
+
+    @Test
+    void sparseXlsxCellsAndOmittedRowsKeepTheirRealColumns() throws Exception {
+        provider.reset();
+        byte[] workbook;
+        try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
+            var sheet = xssf.createSheet("Clauses");
+            var header = sheet.createRow(0);
+            header.createCell(0).setCellValue("Ref");
+            header.createCell(1).setCellValue("Clause topic");
+            header.createCell(2).setCellValue("Approved language");
+            var sparse = sheet.createRow(1);
+            sparse.createCell(1).setCellValue("Confidentiality");
+            sparse.createCell(2).setCellValue(
+                    "Each party shall keep the other party's Confidential Information confidential.");
+            var full = sheet.createRow(2);
+            full.createCell(0).setCellValue("C02");
+            full.createCell(1).setCellValue("Limitation of liability");
+            full.createCell(2).setCellValue(
+                    "Each party's aggregate liability shall not exceed the fees paid in the preceding 12 months.");
+            // row 3 is never materialised: the table ends there
+            var note = sheet.createRow(4);
+            note.createCell(0).setCellValue("Drafting note: keep this for reference.");
+            xssf.write(out);
+            workbook = out.toByteArray();
+        }
+        var manifest = new ArtifactManifest(
+                Set.of("MSA"), "MSA_PACK", "Customer", "Third-Party", "US", "en", null, null, null);
+        var artifact = ingestionService.ingest("sparse-library.xlsx", "application/octet-stream",
+                ArtifactType.CLAUSE_LIBRARY, manifest, new ByteArrayInputStream(workbook));
+
+        var candidates = queryService.getCandidates(artifact.id());
+        assertThat(candidates).hasSize(2);
+        var sparse = candidates.stream()
+                .filter(candidate -> "Confidentiality".equals(
+                        candidate.payload().columns().get("Clause topic")))
+                .findFirst().orElseThrow();
+        assertThat(sparse.payload().columns().get("Approved language"))
+                .as("an omitted Ref cell must not shift the wording under the topic key")
+                .startsWith("Each party shall keep");
+        assertThat(candidates.stream()
+                .filter(candidate -> "C02".equals(candidate.payload().columns().get("Ref")))
+                .findFirst().orElseThrow()
+                .payload().columns().get("Approved language"))
+                .startsWith("Each party's aggregate liability");
+        assertThat(queryService.getUnits(artifact.id()))
+                .as("the row after the omitted blank row is a loose record, not a table row")
+                .anyMatch(unit -> "Drafting note: keep this for reference.".equals(unit.contentText())
+                        && unit.recordKind() == KnowledgeRecordKind.GUIDANCE);
+    }
+
+    @Test
+    void threeColumnRoleLabeledTableIsOnePositionRecord() throws Exception {
+        provider.reset();
+        byte[] workbook;
+        try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
+            var sheet = xssf.createSheet("Positions");
+            var standard = sheet.createRow(0);
+            standard.createCell(0).setCellValue("Standard position");
+            standard.createCell(1).setCellValue("Cap at 12 months fees for all agreements.");
+            standard.createCell(2).setCellValue("Preferred for all deals");
+            var fallback = sheet.createRow(1);
+            fallback.createCell(0).setCellValue("Fallback 1");
+            fallback.createCell(1).setCellValue("Cap at 18 months fees where required.");
+            fallback.createCell(2).setCellValue("Deal desk approval");
+            xssf.write(out);
+            workbook = out.toByteArray();
+        }
+        var manifest = new ArtifactManifest(
+                Set.of("MSA"), "MSA_PACK", "Customer", "Third-Party", "US", "en", null, null, null);
+        var artifact = ingestionService.ingest("three-column.xlsx", "application/octet-stream",
+                ArtifactType.PLAYBOOK, manifest, new ByteArrayInputStream(workbook));
+
+        var candidates = queryService.getCandidates(artifact.id());
+        assertThat(candidates)
+                .as("a role-labeled label|value|note table is one position, not one row per position")
+                .hasSize(1);
+        var candidate = candidates.get(0);
+        assertThat(candidate.payload().columns())
+                .containsKeys("Standard position", "Fallback 1");
+        assertThat(candidate.effectivePositions())
+                .containsExactlyInAnyOrder(PositionRole.PREFERRED, PositionRole.FALLBACK);
     }
 
     private KnowledgeArtifact ingest(String fixture, String filename, ArtifactType type)

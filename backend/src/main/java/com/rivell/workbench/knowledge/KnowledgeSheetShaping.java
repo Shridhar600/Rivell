@@ -61,7 +61,9 @@ final class KnowledgeSheetShaping {
                 continue;
             }
             var end = index + 1;
-            while (end < rows.size() && !rows.get(end).isEmpty()) {
+            while (end < rows.size()
+                    && !rows.get(end).isEmpty()
+                    && rows.get(end).rowIndex() == rows.get(end - 1).rowIndex() + 1) {
                 end++;
             }
             blocks.put(index, end);
@@ -70,6 +72,12 @@ final class KnowledgeSheetShaping {
         return blocks;
     }
 
+    /**
+     * A table starts at a row with at least two label-like cells whose immediately next
+     * row continues the table. A gap in row indexes means the file never materialised that
+     * row, so the next row is not a continuation - without this check an omitted blank row
+     * silently merged two tables.
+     */
     private static boolean isBlockStart(List<KnowledgeTableShaping.Row> rows, int index) {
         var row = rows.get(index);
         if (row.isEmpty()) {
@@ -78,15 +86,11 @@ final class KnowledgeSheetShaping {
         var labelLike = row.nonBlankCells().stream()
                 .filter(cell -> KnowledgeTableShaping.isLabelLike(cell.text()))
                 .count();
-        if (labelLike < 2) {
+        if (labelLike < 2 || index + 1 >= rows.size()) {
             return false;
         }
-        for (int next = index + 1; next < rows.size(); next++) {
-            if (!rows.get(next).isEmpty()) {
-                return true;
-            }
-        }
-        return false;
+        var next = rows.get(index + 1);
+        return !next.isEmpty() && next.rowIndex() == row.rowIndex() + 1;
     }
 
     private static List<SheetRecord> shape(List<KnowledgeTableShaping.Row> blockRows) {

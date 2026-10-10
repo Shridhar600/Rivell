@@ -258,17 +258,16 @@ public class SemanticCompilationService {
             SemanticFieldsBuilder builder, Map<String, FieldInterpretation> fields,
             List<UUID> provenance) {
         var positions = new LinkedHashSet<PositionRole>();
-        var roleNames = new ArrayList<String>();
+        var positionNames = new ArrayList<String>();
         String escalationTrigger = null;
         for (var key : candidate.payload().orderedKeys()) {
             var role = roles.get(key);
             if (role == null) {
                 continue;
             }
-            roleNames.add(role.name());
             var position = role.toPositionRole();
-            if (position != null) {
-                positions.add(position);
+            if (position != null && positions.add(position)) {
+                positionNames.add(role.name());
             }
             if (role == RecordFieldRole.ESCALATION) {
                 escalationTrigger = candidate.payload().columns().get(key);
@@ -278,7 +277,7 @@ public class SemanticCompilationService {
         if (!positions.isEmpty()) {
             fields.put("positions", new FieldInterpretation(
                     "positions", InterpretationKind.DETERMINISTIC,
-                    String.join(",", roleNames),
+                    String.join(",", positionNames),
                     DETERMINISTIC_COLUMN_SPEC, 1,
                     null, provenance, VerificationState.VERIFIED, null));
         }

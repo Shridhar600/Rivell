@@ -16,6 +16,9 @@ final class RecordLabelRoles {
 
     static {
         exact("standard position", RecordFieldRole.PREFERRED);
+        exact("preferred", RecordFieldRole.PREFERRED);
+        exact("preferred position", RecordFieldRole.PREFERRED);
+        exact("preferred standard position", RecordFieldRole.PREFERRED);
         exact("our position", RecordFieldRole.PREFERRED);
         exact("standard", RecordFieldRole.PREFERRED);
         exact("red line", RecordFieldRole.PROHIBITED);
@@ -35,7 +38,6 @@ final class RecordLabelRoles {
         exact("note", RecordFieldRole.COMMENTARY);
         exact("notes", RecordFieldRole.COMMENTARY);
 
-        prefix("preferred", RecordFieldRole.PREFERRED);
         prefix("fallback", RecordFieldRole.FALLBACK);
         prefix("prohibited", RecordFieldRole.PROHIBITED);
         prefix("walk away", RecordFieldRole.PROHIBITED);

@@ -9,9 +9,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Deterministic table shape classification (design §5 item 1). A KEY_VALUE table (at most
- * two populated columns, first-column cells label-like in at least 80% of rows) is one
- * record with label → value fields. A GRID table (a header row of label-like cells
+ * Deterministic table shape classification (design §5 item 1). A KEY_VALUE table is one
+ * record with label → value fields: at most two populated columns, or three columns whose
+ * first column carries known field labels. A GRID table (a header row of label-like cells
  * followed by text rows) yields one record per data row. No model, no heuristics beyond
  * the label-like test.
  */
@@ -23,10 +23,10 @@ final class KnowledgeTableShaping {
     private KnowledgeTableShaping() {
     }
 
-    record Cell(String text, UUID nodeId) {
+    record Cell(String text, UUID nodeId, Integer columnIndex) {
     }
 
-    record Row(UUID rowNodeId, List<Cell> cells) {
+    record Row(UUID rowNodeId, int rowIndex, List<Cell> cells) {
 
         Row {
             cells = List.copyOf(cells);
@@ -62,8 +62,9 @@ final class KnowledgeTableShaping {
         if (nonEmpty.isEmpty()) {
             return new Grid(List.of());
         }
-        var width = nonEmpty.stream().mapToInt(row -> row.nonBlankCells().size()).max().orElse(0);
-        if (width <= 2 && firstColumnLabelLikeRatio(nonEmpty) >= LABEL_LIKE_RATIO) {
+        var width = nonEmpty.stream().mapToInt(KnowledgeTableShaping::populatedWidth).max().orElse(0);
+        if (firstColumnLabelLikeRatio(nonEmpty) >= LABEL_LIKE_RATIO
+                && (width <= 2 || firstColumnRoleRatio(nonEmpty) >= LABEL_LIKE_RATIO)) {
             return keyValue(nonEmpty);
         }
         return grid(nonEmpty);
@@ -115,9 +116,57 @@ final class KnowledgeTableShaping {
 
     private static double firstColumnLabelLikeRatio(List<Row> rows) {
         long labelLike = rows.stream()
-                .filter(row -> !row.cells().isEmpty() && isLabelLike(row.cells().get(0).text()))
+                .filter(row -> {
+                    var first = firstColumnCell(row);
+                    return first != null && isLabelLike(first.text());
+                })
                 .count();
         return (double) labelLike / rows.size();
+    }
+
+    /**
+     * A three-column table is a record, not a grid, when its first column carries known
+     * field labels ("Standard position", "Fallback 1"): those are the table's fields with
+     * an extra value column. A first column of subjects ("Clause", "Liability cap") keeps
+     * the table a grid with a header row.
+     */
+    private static double firstColumnRoleRatio(List<Row> rows) {
+        long known = rows.stream()
+                .filter(row -> {
+                    var first = firstColumnCell(row);
+                    return first != null && RecordLabelRoles.known(first.text()).isPresent();
+                })
+                .count();
+        return (double) known / rows.size();
+    }
+
+    /**
+     * The cell that occupies column 0. A sparse XLSX row may omit it entirely; such a row
+     * has no first-column label and must not count as one.
+     */
+    private static Cell firstColumnCell(Row row) {
+        for (int index = 0; index < row.cells().size(); index++) {
+            if (columnOf(row.cells().get(index), index) == 0) {
+                return row.cells().get(index);
+            }
+        }
+        return null;
+    }
+
+    private static int populatedWidth(Row row) {
+        var width = 0;
+        for (int index = 0; index < row.cells().size(); index++) {
+            var cell = row.cells().get(index);
+            if (cell.text() == null || cell.text().isBlank()) {
+                continue;
+            }
+            width = Math.max(width, columnOf(cell, index) + 1);
+        }
+        return width;
+    }
+
+    private static int columnOf(Cell cell, int position) {
+        return cell.columnIndex() != null ? cell.columnIndex() : position;
     }
 
     private static KeyValue keyValue(List<Row> rows) {
@@ -143,10 +192,8 @@ final class KnowledgeTableShaping {
     private static Grid grid(List<Row> rows) {
         var first = rows.get(0);
         var header = isHeaderRow(first) ? first : null;
-        var width = rows.stream().mapToInt(row -> row.cells().size()).max().orElse(0);
-        var keys = header == null
-                ? columnKeys(List.of(), width)
-                : columnKeys(header.cells().stream().map(Cell::text).toList(), width);
+        var width = rows.stream().mapToInt(KnowledgeTableShaping::populatedWidth).max().orElse(0);
+        var keys = columnKeys(headerLabels(header, width), width);
         var dataRows = header == null ? rows : rows.subList(1, rows.size());
         var shaped = new ArrayList<GridRow>(dataRows.size());
         for (var row : dataRows) {
@@ -155,12 +202,14 @@ final class KnowledgeTableShaping {
             }
             var columns = new LinkedHashMap<String, String>();
             var cells = row.cells();
-            for (int i = 0; i < cells.size(); i++) {
-                var cell = cells.get(i);
+            for (int index = 0; index < cells.size(); index++) {
+                var cell = cells.get(index);
                 if (cell.text() == null || cell.text().isBlank()) {
                     continue;
                 }
-                columns.put(i < keys.size() ? keys.get(i) : "Column " + (i + 1), cell.text());
+                var column = columnOf(cell, index);
+                columns.put(column < keys.size() ? keys.get(column) : "Column " + (column + 1),
+                        cell.text());
             }
             if (columns.isEmpty()) {
                 continue;
@@ -171,6 +220,27 @@ final class KnowledgeTableShaping {
             shaped.add(new GridRow(Collections.unmodifiableMap(columns), List.copyOf(provenance)));
         }
         return new Grid(List.copyOf(shaped));
+    }
+
+    /**
+     * Header labels placed at their real column so a header with a blank column still
+     * resolves every later cell to the column it came from.
+     */
+    private static List<String> headerLabels(Row header, int width) {
+        var labels = new ArrayList<String>(width);
+        for (int column = 0; column < width; column++) {
+            labels.add(null);
+        }
+        if (header != null) {
+            var cells = header.cells();
+            for (int index = 0; index < cells.size(); index++) {
+                var column = columnOf(cells.get(index), index);
+                if (column < width) {
+                    labels.set(column, cells.get(index).text());
+                }
+            }
+        }
+        return labels;
     }
 
     private static boolean isHeaderRow(Row row) {

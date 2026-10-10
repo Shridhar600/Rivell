@@ -50,7 +50,7 @@ final class KnowledgeRecordSemantics {
                     continue;
                 }
                 var key = RecordLabelRoles.normalize(label);
-                if (key.isEmpty() || unknown.containsKey(key)) {
+                if (key.isEmpty() || key.matches("column \\d+") || unknown.containsKey(key)) {
                     continue;
                 }
                 unknown.put(key, label);

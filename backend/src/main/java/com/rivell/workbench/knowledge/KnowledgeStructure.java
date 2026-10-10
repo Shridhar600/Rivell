@@ -261,9 +261,11 @@ final class KnowledgeStructure {
         var rows = new ArrayList<KnowledgeTableShaping.Row>();
         for (var row : rowsOf(table, byId)) {
             var cells = cellsOf(row, byId).stream()
-                    .map(cell -> new KnowledgeTableShaping.Cell(cell.text(), cell.id()))
+                    .map(cell -> new KnowledgeTableShaping.Cell(
+                            cell.text(), cell.id(), cell.columnIndex()))
                     .toList();
-            rows.add(new KnowledgeTableShaping.Row(row.id(), cells));
+            rows.add(new KnowledgeTableShaping.Row(row.id(),
+                    row.rowIndex() == null ? -1 : row.rowIndex(), cells));
         }
         var sectionTitle = open == null ? null : open.headingText();
         var shape = KnowledgeTableShaping.shape(rows);
@@ -302,9 +304,11 @@ final class KnowledgeStructure {
                     .sorted(Comparator.comparingInt(KnowledgeSourceNode::rowIndex))
                     .toList()) {
                 var cells = spreadsheetCells(row, byId).stream()
-                        .map(cell -> new KnowledgeTableShaping.Cell(cell.text(), cell.id()))
+                        .map(cell -> new KnowledgeTableShaping.Cell(
+                                cell.text(), cell.id(), cell.columnIndex()))
                         .toList();
-                rows.add(new KnowledgeTableShaping.Row(row.id(), cells));
+                rows.add(new KnowledgeTableShaping.Row(row.id(),
+                        row.rowIndex() == null ? -1 : row.rowIndex(), cells));
             }
             for (var record : KnowledgeSheetShaping.records(rows)) {
                 addSheetRecord(sheet, record, regions);
