@@ -109,6 +109,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             Map<String, Object> detail) {
         var positions = bundle.policyItems();
         detail.put("positionCount", positions.size());
+        detail.put("positionsTruncated",
+                bundle.degradationWarnings().contains("POLICY_POSITIONS_TRUNCATED"));
         if (positions.isEmpty()) {
             // no applicable position: completed check, no signal, no model call
             return CheckOutcome.completed(List.of(), detail, bundle.traceId());

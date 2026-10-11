@@ -67,7 +67,7 @@ class M7GenerativeLiveSmokeTest {
     }
 
     @Test
-    void openEndedLiabilityProducesTypedCandidateOnSyntheticExoticClause() {
+    void openEndedPositionProducesTypedCandidateOnSyntheticClause() {
         var spec = M7ReasoningSpecs.openEndedPosition();
         var state = new M7ReasoningSpecs.OpenEndedPositionState(
                 1,

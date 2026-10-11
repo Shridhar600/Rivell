@@ -85,24 +85,31 @@ public class EvidenceService {
         var asOfPublication = resolveAsOf(request);
         var topicKeys = topics.stream().map(ConceptKey::value).toList();
         var primaryKey = primaryTopic == null ? null : primaryTopic.value();
-        return assemble(request, asOfPublication,
-                resolver.resolveByTopics(request, Set.of(CandidateType.PLAYBOOK_RULE),
-                        asOfPublication, topicKeys, primaryKey, maxPositions),
-                resolver.resolveByTopics(request, Set.of(CandidateType.CLAUSE_VARIANT),
-                        asOfPublication, topicKeys, primaryKey, maxPositions));
+        var policy = resolver.resolveByTopics(request, Set.of(CandidateType.PLAYBOOK_RULE),
+                asOfPublication, topicKeys, primaryKey, maxPositions);
+        var drafting = resolver.resolveByTopics(request, Set.of(CandidateType.CLAUSE_VARIANT),
+                asOfPublication, topicKeys, primaryKey, maxPositions);
+        var warnings = new java.util.ArrayList<String>();
+        if (policy.truncated() || drafting.truncated()) {
+            // more positions matched than the cap allows; the omission is visible, not silent
+            warnings.add("POLICY_POSITIONS_TRUNCATED");
+        }
+        return assemble(request, asOfPublication, policy, drafting, warnings);
     }
 
     private EvidenceBundle buildInternal(EvidenceRequest request) {
         var asOfPublication = resolveAsOf(request);
         return assemble(request, asOfPublication,
                 resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE), asOfPublication),
-                resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT), asOfPublication));
+                resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT), asOfPublication),
+                List.of());
     }
 
     private EvidenceBundle assemble(
             EvidenceRequest request, long asOfPublication,
             StructuredPolicyResolver.Resolution policyResolution,
-            StructuredPolicyResolver.Resolution draftingResolution) {
+            StructuredPolicyResolver.Resolution draftingResolution,
+            List<String> extraWarnings) {
         var startedAt = clock.instant();
         var stageStart = startedAt;
         var stageTimings = new LinkedHashMap<String, Long>();
@@ -130,10 +137,12 @@ public class EvidenceService {
                 AuthorityClass.POLICY, "PUBLISHED_PLAYBOOK_RULE");
         var draftingItems = items(draftingResolution, request.organizationId(),
                 AuthorityClass.APPROVED_DRAFTING, "PUBLISHED_CLAUSE_VARIANT");
+        var warnings = new java.util.ArrayList<String>(extraWarnings);
+        warnings.addAll(degradationOf(precedentOutcome, currentOutcome));
         var bundle = new EvidenceBundle(UUID.randomUUID(), request,
                 policyItems, draftingItems,
                 precedentOutcome.items(), currentOutcome.items(), List.of(),
-                sufficiency, degradationOf(precedentOutcome, currentOutcome), null);
+                sufficiency, warnings, null);
         var traceId = persistTrace(request, asOfPublication, policyResolution,
                 draftingResolution, precedentOutcome, currentOutcome, bundle,
                 startedAt, stageTimings);

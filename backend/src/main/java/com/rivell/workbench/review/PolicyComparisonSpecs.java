@@ -2,7 +2,6 @@ package com.rivell.workbench.review;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
 import com.rivell.workbench.intelligence.ChoiceQuestion;
 import com.rivell.workbench.intelligence.DecisionSpec;
@@ -55,10 +54,6 @@ public final class PolicyComparisonSpecs {
 
     public static ChoiceQuestion positionQuestion(String instructions) {
         return new ChoiceQuestion(instructions, OPTIONS);
-    }
-
-    public static Set<String> flaggingOptions() {
-        return Set.copyOf(FLAGGING);
     }
 
     private static Map<String, String> options() {

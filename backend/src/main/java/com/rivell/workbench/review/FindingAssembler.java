@@ -50,12 +50,13 @@ public final class FindingAssembler {
         }
         ApprovedDraftingPayload drafting = firstPayload(group,
                 SignalType.APPROVED_DRAFTING_AVAILABLE);
+        EscalationPayload escalation = firstPayload(group, SignalType.ESCALATION_REQUIRED);
         OpenEndedAnalysisPayload openEnded = firstPayload(group,
                 SignalType.OPEN_ENDED_ANALYSIS_RESULT);
 
         var observation = observation(primary);
-        var action = action(primary, drafting, openEnded);
-        var severity = severity(primary);
+        var action = action(primary, drafting, openEnded, escalation);
+        var severity = severity(primary, escalation);
         var quality = quality(group);
         var evidence = evidence(group);
         var concepts = concepts(group);
@@ -218,7 +219,7 @@ public final class FindingAssembler {
 
     private static ProposedAction action(
             RawReviewSignal primary, ApprovedDraftingPayload drafting,
-            OpenEndedAnalysisPayload openEnded) {
+            OpenEndedAnalysisPayload openEnded, EscalationPayload escalation) {
         if (primary.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return ProposedAction.ADD_REQUIRED_PROVISION;
         }
@@ -229,7 +230,8 @@ public final class FindingAssembler {
                 && primary.payload() instanceof PositionDeviationPayload deviation) {
             var category = deviation.category();
             if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(category)) {
-                return ProposedAction.NO_ACTION;
+                return escalation != null
+                        ? ProposedAction.ESCALATE_TO_HUMAN : ProposedAction.NO_ACTION;
             }
             if (PolicyComparisonSpecs.UNCLEAR.equals(category)) {
                 return ProposedAction.REVIEW_AMBIGUITY;
@@ -255,7 +257,8 @@ public final class FindingAssembler {
         return ProposedAction.ESCALATE_TO_HUMAN;
     }
 
-    private static FindingSeverity severity(RawReviewSignal primary) {
+    private static FindingSeverity severity(
+            RawReviewSignal primary, EscalationPayload escalation) {
         if (primary.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return FindingSeverity.HIGH;
         }
@@ -264,11 +267,15 @@ public final class FindingAssembler {
         }
         if (primary.signalType() == SignalType.POLICY_DEVIATION
                 && primary.payload() instanceof PositionDeviationPayload deviation) {
-            return switch (deviation.category()) {
-                case PolicyComparisonSpecs.WALK_AWAY -> FindingSeverity.HIGH;
-                case PolicyComparisonSpecs.WITHIN_FALLBACK -> FindingSeverity.LOW;
-                default -> FindingSeverity.MEDIUM;
-            };
+            if (PolicyComparisonSpecs.WALK_AWAY.equals(deviation.category())) {
+                return FindingSeverity.HIGH;
+            }
+            if (escalation != null) {
+                // the position names an approver: the finding escalates as it did before
+                return FindingSeverity.HIGH;
+            }
+            return PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())
+                    ? FindingSeverity.LOW : FindingSeverity.MEDIUM;
         }
         if (primary.signalType() == SignalType.CROSS_CLAUSE_CONFLICT) {
             return FindingSeverity.HIGH;
@@ -290,7 +297,9 @@ public final class FindingAssembler {
                 return FindingClassification.BLOCKING;
             }
             if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())) {
-                return FindingClassification.INFORMATIONAL;
+                return severity == FindingSeverity.LOW
+                        ? FindingClassification.INFORMATIONAL
+                        : FindingClassification.REVIEW_REQUIRED;
             }
         }
         return FindingClassification.REVIEW_REQUIRED;

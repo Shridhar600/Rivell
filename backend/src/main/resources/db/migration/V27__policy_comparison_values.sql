@@ -1,5 +1,7 @@
--- Policy comparison replaces the liability-only mechanism (design 6a). Legacy values
--- stay admissible so pre-existing rows remain valid; new code never writes them.
+-- Policy comparison replaces the liability-only mechanism (design 6a). The legacy
+-- values stay admissible only so this constraint change succeeds on databases that
+-- still hold pre-change rows; the readers no longer map them and no new code writes
+-- them (design: local/demo data is reseeded, no production data exists).
 alter table review_plan_check drop constraint if exists review_plan_check_mechanism_check;
 alter table review_plan_check add constraint review_plan_check_mechanism_check
     check (mechanism in ('PRESENCE', 'LIABILITY_CAP', 'POLICY_COMPARISON',

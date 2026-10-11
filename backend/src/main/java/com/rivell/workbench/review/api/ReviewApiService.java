@@ -520,9 +520,6 @@ public class ReviewApiService {
         return switch (prefix) {
             case "provider_unavailable" -> new WarningReason("PROVIDER_UNAVAILABLE",
                     "An external analysis provider was unavailable for this check.");
-            case "open_ended_generation_unavailable" -> new WarningReason(
-                    "GENERATION_UNAVAILABLE",
-                    "Candidate language could not be generated for this check.");
             case "classification_uncertain", "cross_clause_classification_uncertain" ->
                     new WarningReason("CLASSIFICATION_UNCERTAIN",
                             "The bounded classification was not confident enough to trust.");
