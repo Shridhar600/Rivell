@@ -187,6 +187,36 @@ class PolicyComparisonFlowIT {
     }
 
     @Test
+    void aClauseWithSeveralTopicsAndNoPrimaryTopicIsStillCompared() throws Exception {
+        // Combined clauses ("Term, Renewal and Termination") often get no primary topic; the
+        // position lookup used to emit ORDER BY (false), which PostgreSQL rejects, so the check
+        // failed and the clause was silently never compared.
+        var organizationId = organizationId();
+        corpusBuilder.publishAll(organizationId,
+                M6EvidenceCorpus.Fixture.PC_PLAYBOOK, M6EvidenceCorpus.msaManifest2026(), null);
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/pc-contract.docx"));
+        var ingested = contractIngestionService.ingest("pc-contract.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        // "3. Confidentiality" carries two topics (confidentiality, term): the primary choice is asked
+        scriptedProvider.indecisivePrimaryHeadings.add("Confidentiality");
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()))
+                .extracting(execution -> execution.status())
+                .doesNotContain(CheckExecutionStatus.FAILED);
+        assertThat(scriptedProvider.indecisivePrimaryAnswers()).isPositive();
+        assertThat(scriptedProvider.policyComparisonCalls())
+                .extracting(LiabilityReviewIT.ReviewScriptedProvider.ComparisonCall::heading)
+                .anyMatch(heading -> heading.contains("Confidentiality"));
+    }
+
+    @Test
     void aClauseNoPositionAddressesIsTriagedAndBecomesAFindingOnlyWhenAdverse() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.PC_PLAYBOOK,

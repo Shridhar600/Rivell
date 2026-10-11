@@ -167,6 +167,14 @@ public class LiabilityReviewIT {
         final java.util.List<String> uncoveredHeadings =
                 java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         volatile Map<String, Double> policyComparisonProbabilities;
+        /** Headings whose primary-topic choice comes back indecisive, so the clause has none. */
+        final java.util.Set<String> indecisivePrimaryHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
+        private final AtomicInteger indecisivePrimaryAnswers = new AtomicInteger();
+
+        public int indecisivePrimaryAnswers() {
+            return indecisivePrimaryAnswers.get();
+        }
         volatile boolean failConsistencyDecision;
         volatile String consistencyAnswerOverride;
         volatile double consistencyTopProbability = 0.9;
@@ -183,6 +191,20 @@ public class LiabilityReviewIT {
         @Override
         public ProviderExecutionResult execute(DecisionExecutionRequest request) {
             totalDecisions.incrementAndGet();
+            if (request.pack().questions().get("primary_topic")
+                    instanceof com.rivell.workbench.intelligence.ChoiceQuestion primary
+                    && request.state().payload() instanceof Map<?, ?> payload
+                    && payload.get("heading") instanceof String heading
+                    && indecisivePrimaryHeadings.stream().anyMatch(heading::contains)) {
+                indecisivePrimaryAnswers.incrementAndGet();
+                var even = new LinkedHashMap<String, Double>();
+                primary.criteria().keySet().forEach(option -> even.put(option,
+                        1.0 / primary.criteria().size()));
+                var first = primary.criteria().keySet().iterator().next();
+                return new ProviderExecutionResult(new LinkedHashMap<>(Map.of("primary_topic",
+                        new com.rivell.workbench.intelligence.ChoiceAnswer(first, even.get(first), even))),
+                        "fake-review-v1", new TokenUsage(1, 1));
+            }
             if (request.pack().questions().containsKey(M7DecisionSpecs.SATISFIES_POLICY)) {
                 var verificationAnswers = new LinkedHashMap<String, SemanticAnswer>();
                 verificationAnswers.put(M7DecisionSpecs.SATISFIES_POLICY,
@@ -388,6 +410,8 @@ public class LiabilityReviewIT {
             failPolicyComparisonDecision = false;
             policyComparisonAnswerOverride = null;
             policyComparisonProbabilities = null;
+            indecisivePrimaryHeadings.clear();
+            indecisivePrimaryAnswers.set(0);
             uncoveredProbability = 0.05;
             uncoveredHeadings.clear();
             failConsistencyDecision = false;

@@ -138,8 +138,11 @@ def score_contract(answer, structure_nodes, clauses, findings):
             # an absence finding counts only when its topic is the provision the key names
             hit = any(_topic_matches(f.get("absenceConcept"), issue.get("playbookRef"))
                       for f in absence)
+        # stricter: a HIGH/MEDIUM planted issue caught by a MEDIUM/HIGH finding in its section
+        serious = any(f.get("severity") in ("MEDIUM", "HIGH")
+                      for sid in issue.get("sectionIds", []) for f in finding_sections.get(sid, []))
         issues.append({"id": issue["id"], "category": issue["category"],
-                       "severity": issue.get("severity"), "detected": hit})
+                       "severity": issue.get("severity"), "detected": hit, "detectedSerious": serious})
 
     compliant = answer.get("compliantSectionIds", [])
     false_alarms = [sid for sid in compliant if sid in finding_sections]

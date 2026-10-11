@@ -152,15 +152,17 @@ public class ReviewDiagnosticsService {
         }
         // Loaded once per request, not once per check: resolving each key separately re-read the
         // whole plan for every execution.
-        var checkKeys = checkKeys(organizationId, run.reviewId());
+        var planChecks = planChecks(organizationId, run.reviewId());
         var checks = new ArrayList<ReviewDiagnosticsView.CheckView>();
         for (var execution : analysisRepository.findExecutions(organizationId, run.id())) {
             var degraded = execution.detail() == null ? null
                     : (String) execution.detail().get("degradedReason");
+            var plan = planChecks.get(execution.planCheckId());
             checks.add(new ReviewDiagnosticsView.CheckView(
-                    checkKeys.getOrDefault(execution.planCheckId(),
-                            execution.planCheckId().toString()),
+                    plan == null ? execution.planCheckId().toString() : plan.checkKey(),
+                    plan == null ? null : plan.subjectHeadingNodeId(),
                     execution.status().name(), execution.signalCount(), degraded,
+                    failureType(execution.detail()),
                     execution.startedAt(), execution.completedAt(),
                     execution.startedAt() == null ? null
                             : Duration.between(execution.startedAt(),
@@ -198,11 +200,21 @@ public class ReviewDiagnosticsService {
         }
     }
 
-    private Map<UUID, String> checkKeys(UUID organizationId, UUID reviewId) {
-        var keys = new java.util.HashMap<UUID, String>();
+    private Map<UUID, com.rivell.workbench.review.ReviewPlanCheck> planChecks(
+            UUID organizationId, UUID reviewId) {
+        var checks = new java.util.HashMap<UUID, com.rivell.workbench.review.ReviewPlanCheck>();
         reviewRepository.findPlanChecks(organizationId, reviewId)
-                .forEach(check -> keys.put(check.id(), check.checkKey()));
-        return keys;
+                .forEach(check -> checks.put(check.id(), check));
+        return checks;
+    }
+
+    /** The exception type of a failed check, never its message (which may quote data). */
+    private static String failureType(Map<String, Object> detail) {
+        if (detail == null || !(detail.get("failureReason") instanceof String reason)) {
+            return null;
+        }
+        var colon = reason.indexOf(':');
+        return colon < 0 ? reason : reason.substring(0, colon);
     }
 
     /**

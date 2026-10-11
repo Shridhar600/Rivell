@@ -566,16 +566,16 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 + " and pp.publication_number <= :asOf ";
         String order;
         if (topicMembership) {
-            // primary-topic match first, then shared-topic count, then publication order;
+            // primary-topic match first (only when the clause has one: PostgreSQL rejects a
+            // constant ORDER BY term), then shared-topic count, then publication order;
             // source (unit) order breaks publication ties deterministically
-            var primaryMatch = query.primaryTopicKey() == null
-                    ? "false"
-                    : "c.effective_concept_key = :primaryTopicKey";
+            var primaryMatch = "";
             if (query.primaryTopicKey() != null) {
+                primaryMatch = " (c.effective_concept_key = :primaryTopicKey) desc,";
                 params.put("primaryTopicKey", query.primaryTopicKey());
             }
             from = from + " join knowledge_extraction_unit u on u.id = c.extraction_unit_id ";
-            order = " order by (" + primaryMatch + ") desc,"
+            order = " order by" + primaryMatch
                     + " cardinality(array(select unnest(c.topic_keys)"
                     + " intersect select unnest(:topicKeys::text[]))) desc,"
                     + " pp.publication_number desc, u.ordinal asc, c.id desc limit :limit";

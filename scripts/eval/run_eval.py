@@ -165,11 +165,17 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
     semantics = api.get(f"{base}/semantics")
     findings = items(api.get(f"/api/reviews/{review['id']}/findings?limit=500"))
     coverage = api.get(f"{base}/coverage")
+    checks = (api.get(f"/api/reviews/{review['id']}/diagnostics").get("analysis") or {}).get("checks") or []
     raw = {"upload": upload, "profile": profile, "enrichmentStatus": enrichment.get("enrichmentStatus"),
            "review": review, "nodes": nodes, "semantics": semantics, "findings": findings,
-           "coverage": coverage}
+           "coverage": coverage, "checks": checks}
     score = score_contract(answer, nodes, semantics.get("clauses", []), findings)
     score["coverage"] = coverage
+    score["checkStatus"] = {}
+    for c in checks:
+        score["checkStatus"][c["status"]] = score["checkStatus"].get(c["status"], 0) + 1
+    score["checkFailures"] = sorted({f"{c['key'].split(':')[0]} {c.get('failureType') or c.get('degradedReason')}"
+                                     for c in checks if c["status"] in ("FAILED", "DEGRADED")})
     if redline and review["status"] == "COMPLETED":
         try:
             raw["redline"] = run_redline(api, review["id"], (corpus / entry).read_bytes(), nodes, entry)
@@ -339,6 +345,23 @@ def usage_report(results):
     return lines
 
 
+def check_line(results):
+    counts = {}
+    for r in results:
+        for c in r["contracts"]:
+            for status, n in (c.get("checkStatus") or {}).items():
+                counts[status] = counts.get(status, 0) + n
+    text = ", ".join(f"{k} {v}" for k, v in sorted(counts.items()))
+    bad = counts.get("FAILED", 0) + counts.get("DEGRADED", 0)
+    return f"- Review checks: {text}" + (" ⚠️ some clauses were not analysed (see Errors)" if bad else "")
+
+
+def serious_caught(results):
+    issues = [i for r in results for c in r["contracts"] for i in c["issues"]
+              if i.get("severity") in ("HIGH", "MEDIUM")]
+    return sum(1 for i in issues if i.get("detectedSerious")), len(issues)
+
+
 def write_report(out, results, meta):
     lines = [f"# Eval run {meta['runId']}", "",
              f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}", ""]
@@ -377,12 +400,16 @@ def write_report(out, results, meta):
               f"- Knowledge candidates with concept: {pct(tot['candc'], tot['cand'])}",
               f"- Positions found whole (preferred + walk-away in one candidate): {pct(tot['posf'], tot['pos'])}",
               f"- Planted issues detected (section-level): {pct(tot['id'], tot['ix'])}",
+              f"- HIGH/MEDIUM planted issues caught by a MEDIUM+ finding: {pct(*serious_caught(results))}",
               f"- False-alarm compliant sections: {pct(tot['fa'], tot['cs'])}"
-              f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})", "",
+              f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})",
+              check_line(results), "",
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]
     lines += coverage_report(results) + redline_report(results) + usage_report(results)
     errs = [f"- {r['org']}: {e}" for r in results for e in r["errors"]]
+    errs += [f"- {c['file']}: checks not completed: {', '.join(c['checkFailures'])}"
+             for r in results for c in r["contracts"] if c.get("checkFailures")]
     lines += ["", "## Errors", ""] + (errs or ["- none"])
     (out / "summary.md").write_text("\n".join(lines) + "\n")
 

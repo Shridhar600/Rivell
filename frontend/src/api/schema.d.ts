@@ -1959,10 +1959,17 @@ export interface components {
         /** @description One planned check and how it ended */
         CheckView: {
             key?: string;
+            /**
+             * Format: uuid
+             * @description Clause the check judged, when it has one
+             */
+            subjectHeadingNodeId?: string;
             status?: string;
             /** Format: int32 */
             signalCount?: number;
             degradedReason?: string;
+            /** @description Exception type of a FAILED check; no message text */
+            failureType?: string;
             /** Format: date-time */
             startedAt?: string;
             /** Format: date-time */
