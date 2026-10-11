@@ -115,7 +115,7 @@ public final class ZipGuard {
         return count;
     }
 
-    static int countTopLevelBodyChildren(byte[] mainDocumentXml) throws IOException {
+    public static int countTopLevelBodyChildren(byte[] mainDocumentXml) throws IOException {
         var counter = new TopLevelBodyCounter();
         try {
             var factory = SAXParserFactory.newInstance();

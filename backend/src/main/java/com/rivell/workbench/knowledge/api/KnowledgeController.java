@@ -431,6 +431,7 @@ class KnowledgeController {
                 candidate.id(), candidate.artifactId(), candidate.extractionUnitId(),
                 candidate.candidateType(), candidate.reviewStatus(), candidate.rawLabel(),
                 candidate.contentText(), candidate.payload().columns(),
+                candidate.effectiveFieldRoles(),
                 candidate.legalConceptKey(),
                 candidate.conceptCorrection(),
                 candidate.conceptCorrectedBy(),
@@ -464,6 +465,7 @@ class KnowledgeController {
                 candidate.scope().jurisdiction(),
                 candidate.scope().effectiveFrom(),
                 candidate.scope().effectiveTo(),
+                candidate.scope().sourceContractTypes(),
                 candidate.conflictSignals().stream()
                         .map(signal -> new CandidateView.ConflictSignalView(
                                 signal.conflictType(), signal.message(),

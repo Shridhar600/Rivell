@@ -214,7 +214,17 @@ class KnowledgeRecordShapingIT {
          * label answers OTHER.
          */
         private static String labelRole(ChoiceQuestion question) {
-            return question.instructions().contains("\"Situation\"") ? "PREFERRED" : "OTHER";
+            var instructions = question.instructions();
+            if (instructions.contains("\"Situation\"") || instructions.contains("\"Our stance\"")) {
+                return "PREFERRED";
+            }
+            if (instructions.contains("\"Can live with\"")) {
+                return "FALLBACK";
+            }
+            if (instructions.contains("\"Never\"")) {
+                return "PROHIBITED";
+            }
+            return instructions.contains("\"Which deals\"") ? "APPLICABILITY" : "OTHER";
         }
 
         private static String declaredType(Object state) {
@@ -639,6 +649,128 @@ class KnowledgeRecordShapingIT {
                 .containsExactlyInAnyOrder("Liability cap", "Indemnity", "Governing law");
         assertThat(candidates).allSatisfy(candidate ->
                 assertThat(candidate.effectivePositions()).containsExactly(PositionRole.PREFERRED));
+    }
+
+    @Autowired
+    CandidateReviewService reviewService;
+
+    @Autowired
+    KnowledgePublicationService publicationService;
+
+    @Test
+    void contractTypeColumnGroupsBecomeOnePositionPerTypeThatAppliesOnlyToThatType()
+            throws Exception {
+        provider.reset();
+        // publishes: its own organization keeps the knowledge away from the other tests
+        var shared = identityProvider.currentIdentity();
+        identityProvider.use(new UserIdentity(UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
+        try {
+            groupedPlaybookAppliesPerContractType();
+        } finally {
+            identityProvider.use(shared);
+        }
+    }
+
+    private void groupedPlaybookAppliesPerContractType() throws Exception {
+        byte[] workbook;
+        try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
+            var sheet = xssf.createSheet("Positions");
+            String[][] rows = {
+                    {"Topic", "NDA", null, "MSA", null, "Governance"},
+                    {"Topic", "Preferred", "Walk-away", "Preferred", "Walk-away", "Approver"},
+                    {"Confidentiality", "Mutual, 3 years from disclosure.", "Perpetual confidentiality.",
+                            "Mutual, 5 years.", "Perpetual confidentiality.", "General Counsel"},
+                    {"Limitation of liability", null, null, "Cap at the fees paid in 12 months.",
+                            "Unlimited liability.", "General Counsel"}};
+            for (int r = 0; r < rows.length; r++) {
+                var row = sheet.createRow(r);
+                for (int c = 0; c < rows[r].length; c++) {
+                    if (rows[r][c] != null) {
+                        row.createCell(c).setCellValue(rows[r][c]);
+                    }
+                }
+            }
+            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 1, 2));
+            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 3, 4));
+            xssf.write(out);
+            workbook = out.toByteArray();
+        }
+        // the manifest declares no type: only the records' own column groups narrow
+        var manifest = new ArtifactManifest(
+                Set.of(), null, null, null, null, "en", null, null, null);
+        var artifact = ingestionService.ingest("grouped.xlsx", "application/octet-stream",
+                ArtifactType.PLAYBOOK, manifest, new ByteArrayInputStream(workbook));
+
+        var candidates = queryService.getCandidates(artifact.id());
+        assertThat(candidates)
+                .as("one position per topic and contract-type group with a value; the label row is no record")
+                .extracting(c -> c.rawLabel() + " " + c.scope().sourceContractTypes())
+                .containsExactlyInAnyOrder("Confidentiality [NDA]", "Confidentiality [MSA]",
+                        "Limitation of liability [MSA]");
+        var ndaConfidentiality = candidates.stream()
+                .filter(c -> c.scope().sourceContractTypes().contains("NDA")).findFirst().orElseThrow();
+        assertThat(ndaConfidentiality.payload().columns())
+                .containsEntry("Preferred", "Mutual, 3 years from disclosure.")
+                .containsEntry("Walk-away", "Perpetual confidentiality.")
+                .containsEntry("Approver", "General Counsel")
+                .doesNotContainValue("Mutual, 5 years.");
+        assertThat(ndaConfidentiality.effectivePositions())
+                .containsExactlyInAnyOrder(PositionRole.PREFERRED, PositionRole.PROHIBITED,
+                        PositionRole.ESCALATION);
+
+        var publication = publicationService.publish(candidates.stream()
+                .map(c -> reviewService.approve(c.id(), null).id()).toList(), Map.of(), "v1");
+        java.util.function.Function<String, List<String>> applicable = contractType ->
+                queryService.listPublishedCandidatesForOrganization(
+                                PublishedKnowledgeQuery.unpublishedNever(
+                                        identityProvider.currentIdentity().organizationId(),
+                                        publication.publicationNumber(), Set.of(), null, null,
+                                        contractType, null, null, null, null))
+                        .stream().map(PublishedCandidate::candidate)
+                        .filter(c -> c.artifactId().equals(artifact.id()))
+                        .map(c -> c.rawLabel() + " " + c.scope().sourceContractTypes())
+                        .toList();
+        assertThat(applicable.apply("MNDA"))
+                .as("a mutual NDA gets the NDA group's position only")
+                .containsExactly("Confidentiality [NDA]");
+        assertThat(applicable.apply("MSA"))
+                .containsExactlyInAnyOrder("Confidentiality [MSA]", "Limitation of liability [MSA]");
+        assertThat(applicable.apply("OTHER"))
+                .as("a type the product does not model cannot be excluded by a record's own types")
+                .hasSize(3);
+    }
+
+    @Test
+    void labelsTheModelResolvedStillTagThePositionAfterPersistence() throws Exception {
+        provider.reset();
+        byte[] workbook;
+        try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
+            var sheet = xssf.createSheet("Stances");
+            String[][] rows = {
+                    {"What it's about", "Which deals", "Our stance", "Can live with", "Never"},
+                    // the fake kind decision reads "our position" as a stance
+                    {"Payment terms", "MSA, SOW", "Our position: Net 30 days from a valid invoice.",
+                            "Net 45 days.", "Net 90 or later."}};
+            for (int r = 0; r < rows.length; r++) {
+                var row = sheet.createRow(r);
+                for (int c = 0; c < rows[r].length; c++) {
+                    row.createCell(c).setCellValue(rows[r][c]);
+                }
+            }
+            xssf.write(out);
+            workbook = out.toByteArray();
+        }
+        var manifest = new ArtifactManifest(Set.of(), null, null, null, null, "en", null, null, null);
+        var artifact = ingestionService.ingest("stances.xlsx", "application/octet-stream",
+                ArtifactType.PLAYBOOK, manifest, new ByteArrayInputStream(workbook));
+
+        var candidate = queryService.getCandidates(artifact.id()).getFirst();
+        assertThat(candidate.effectivePositionFieldValues())
+                .as("review reads the resolved labels as stances, not one unlabelled position")
+                .containsEntry(PositionRole.PREFERRED, List.of("Our position: Net 30 days from a valid invoice."))
+                .containsEntry(PositionRole.FALLBACK, List.of("Net 45 days."))
+                .containsEntry(PositionRole.PROHIBITED, List.of("Net 90 or later."));
+        assertThat(candidate.scope().sourceContractTypes()).containsExactlyInAnyOrder("MSA", "SOW");
     }
 
     private KnowledgeArtifact ingest(String fixture, String filename, ArtifactType type)

@@ -84,6 +84,8 @@ final class DocxTextInventory {
         var segments = new ArrayList<Segment>();
         var open = new ArrayDeque<StringBuilder>();
         var openLocations = new ArrayDeque<Location>();
+        // paragraphs of a text box finish inside their anchor paragraph; they are listed after it
+        var nested = new ArrayDeque<List<Segment>>();
         var names = new ArrayDeque<String>();
         int deleted = 0;
         int textBoxes = 0;
@@ -112,6 +114,7 @@ final class DocxTextInventory {
                         case "tbl" -> tables++;
                         case "p" -> {
                             open.push(new StringBuilder());
+                            nested.push(new ArrayList<>());
                             openLocations.push(fixed != null ? fixed
                                     : textBoxes > 0 ? Location.TEXT_BOX
                                     : tables > 0 ? Location.TABLE : Location.BODY);
@@ -152,9 +155,12 @@ final class DocxTextInventory {
                         case "p" -> {
                             var text = open.pop().toString();
                             var location = openLocations.pop();
+                            var finished = new ArrayList<Segment>();
                             if (!text.isBlank()) {
-                                segments.add(new Segment(part, location, text, fixed == null));
+                                finished.add(new Segment(part, location, text, fixed == null));
                             }
+                            finished.addAll(nested.pop());
+                            (nested.isEmpty() ? segments : nested.peek()).addAll(finished);
                         }
                         default -> {
                         }
@@ -165,6 +171,102 @@ final class DocxTextInventory {
             reader.close();
         }
         return segments;
+    }
+
+    /**
+     * The text boxes of the main part by the index of the top-level body element that anchors
+     * them, each box as its non-blank paragraphs joined by newlines. A box that Word also writes
+     * as a VML fallback is read once (the fallback is skipped); tracked deletions are left out.
+     */
+    static Map<Integer, List<String>> textBoxes(byte[] mainDocumentXml) throws XMLStreamException {
+        var boxes = new LinkedHashMap<Integer, List<String>>();
+        var reader = reader(mainDocumentXml);
+        int depth = 0;
+        int bodyDepth = -1;
+        int bodyIndex = -1;
+        int skipped = 0;
+        int deleted = 0;
+        int boxDepth = 0;
+        boolean inText = false;
+        List<String> paragraphs = null;
+        StringBuilder paragraph = null;
+        try {
+            while (reader.hasNext()) {
+                int event = reader.next();
+                if (event == XMLStreamConstants.START_ELEMENT) {
+                    depth++;
+                    var name = reader.getLocalName();
+                    var ns = reader.getNamespaceURI();
+                    if (skipped > 0 || (MC.equals(ns) && "Fallback".equals(name))) {
+                        skipped++;
+                        continue;
+                    }
+                    if (bodyDepth > 0 && depth == bodyDepth + 1) {
+                        bodyIndex++;
+                    }
+                    if (!W.equals(ns)) {
+                        continue;
+                    }
+                    switch (name) {
+                        case "body" -> bodyDepth = depth;
+                        case "txbxContent" -> {
+                            if (boxDepth++ == 0) {
+                                paragraphs = new ArrayList<>();
+                            }
+                        }
+                        case "p" -> {
+                            if (boxDepth > 0) {
+                                paragraph = new StringBuilder();
+                            }
+                        }
+                        case "del", "moveFrom" -> deleted++;
+                        case "t" -> inText = boxDepth > 0 && deleted == 0;
+                        case "tab", "br", "cr" -> {
+                            if (paragraph != null && deleted == 0) {
+                                paragraph.append(' ');
+                            }
+                        }
+                        default -> {
+                        }
+                    }
+                } else if (event == XMLStreamConstants.CHARACTERS || event == XMLStreamConstants.CDATA) {
+                    if (inText && skipped == 0 && paragraph != null) {
+                        paragraph.append(reader.getText());
+                    }
+                } else if (event == XMLStreamConstants.END_ELEMENT) {
+                    depth--;
+                    if (skipped > 0) {
+                        skipped--;
+                        continue;
+                    }
+                    if (!W.equals(reader.getNamespaceURI())) {
+                        continue;
+                    }
+                    switch (reader.getLocalName()) {
+                        case "t" -> inText = false;
+                        case "del", "moveFrom" -> deleted--;
+                        case "p" -> {
+                            if (paragraph != null && paragraphs != null && !paragraph.toString().isBlank()) {
+                                paragraphs.add(paragraph.toString().strip());
+                            }
+                            paragraph = null;
+                        }
+                        case "txbxContent" -> {
+                            if (--boxDepth == 0 && paragraphs != null && !paragraphs.isEmpty()
+                                    && bodyIndex >= 0) {
+                                boxes.computeIfAbsent(bodyIndex, ignored -> new ArrayList<>())
+                                        .add(String.join("\n", paragraphs));
+                            }
+                        }
+                        default -> {
+                        }
+                    }
+                }
+            }
+        } finally {
+            reader.close();
+        }
+        return boxes;
     }
 
     /** Whether the main document part holds tracked insertions, deletions or moves. */

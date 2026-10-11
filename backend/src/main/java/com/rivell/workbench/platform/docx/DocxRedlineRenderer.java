@@ -14,19 +14,12 @@ import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.docx4j.XmlUtils;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
-import org.docx4j.wml.Br;
-import org.docx4j.wml.CTBookmark;
-import org.docx4j.wml.CTMarkupRange;
-import org.docx4j.wml.CTPerm;
 import org.docx4j.wml.CTPPrChange;
 import org.docx4j.wml.CTTrackChange;
-import org.docx4j.wml.CommentRangeEnd;
-import org.docx4j.wml.CommentRangeStart;
 import org.docx4j.wml.ObjectFactory;
 import org.docx4j.wml.P;
 import org.docx4j.wml.PPr;
 import org.docx4j.wml.ParaRPr;
-import org.docx4j.wml.ProofErr;
 import org.docx4j.wml.R;
 import org.docx4j.wml.RPr;
 import org.docx4j.wml.RunDel;
@@ -85,6 +78,11 @@ public class DocxRedlineRenderer implements RedlineRenderer {
 
         var body = mainBody(wordPackage);
         var content = body.getContent();
+        if (!allBodyContentRepresented(sourceBytes, content)) {
+            // saving would silently drop the elements the package model could not read
+            throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE, null,
+                    "The source document has body content that cannot be carried into a redline.");
+        }
         var paragraphByAnchor = new HashMap<String, P>();
         for (var ref : DocxRedlineSupport.paragraphs(content)) {
             paragraphByAnchor.put(anchorKey(ref.bodyIndex(), ref.paragraphIndex()),
@@ -489,46 +487,18 @@ public class DocxRedlineRenderer implements RedlineRenderer {
     }
 
     private void validateSupportedInline(P paragraph, UUID approvedChangeId, int ordinal) {
-        for (var raw : paragraph.getContent()) {
-            var element = DocxRedlineSupport.unwrap(raw);
-            if (element instanceof PPr || element instanceof ProofErr
-                    || element instanceof CTBookmark || element instanceof CTMarkupRange
-                    || element instanceof CTPerm || element instanceof CommentRangeStart
-                    || element instanceof CommentRangeEnd) {
-                continue;
-            }
-            if (element instanceof R run) {
-                validateRun(run, approvedChangeId, ordinal);
-            } else if (element instanceof P.Hyperlink hyperlink) {
-                for (var rawLinkChild : hyperlink.getContent()) {
-                    var linkChild = DocxRedlineSupport.unwrap(rawLinkChild);
-                    if (linkChild instanceof R run) {
-                        validateRun(run, approvedChangeId, ordinal);
-                    } else if (!(linkChild instanceof ProofErr
-                            || linkChild instanceof CTBookmark
-                            || linkChild instanceof CTMarkupRange
-                            || linkChild instanceof CommentRangeStart
-                            || linkChild instanceof CommentRangeEnd)) {
-                        throw unsupported(approvedChangeId, ordinal);
-                    }
-                }
-            } else {
-                throw unsupported(approvedChangeId, ordinal);
-            }
+        if (!TrackableContent.paragraph(paragraph)) {
+            throw unsupported(approvedChangeId, ordinal);
         }
     }
 
-    private void validateRun(R run, UUID approvedChangeId, int ordinal) {
-        for (var raw : run.getContent()) {
-            var element = DocxRedlineSupport.unwrap(raw);
-            if (element instanceof Text || element instanceof Br || element instanceof R.Cr
-                    || element instanceof R.Tab || element instanceof R.Sym
-                    || element instanceof R.SoftHyphen || element instanceof R.NoBreakHyphen
-                    || element instanceof R.LastRenderedPageBreak
-                    || element instanceof R.Ptab || element instanceof RPr) {
-                continue;
-            }
-            throw unsupported(approvedChangeId, ordinal);
+    private static boolean allBodyContentRepresented(byte[] sourceBytes, List<Object> content) {
+        try {
+            var mainXml = DocxRedlineSupport.entryBytes(sourceBytes, "word/document.xml");
+            return com.rivell.workbench.platform.parsing.ZipGuard.countTopLevelBodyChildren(mainXml)
+                    == content.size();
+        } catch (java.io.IOException e) {
+            return false;
         }
     }
 

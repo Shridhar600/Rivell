@@ -310,6 +310,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                              edited_content_text, edited_payload, superseding_candidate_id,
                              contract_pack_key, declared_contract_types, party_perspective,
                              paper_source, jurisdiction, effective_from, effective_to,
+                             source_contract_types,
                              conflict_signals, review_category, review_reasons,
                              review_note, reviewed_at, created_at, updated_at)
                             values (:id, :artifactId,
@@ -322,7 +323,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                                     :editedContentText, :editedPayload::jsonb, :supersedingCandidateId,
                                     :contractPackKey, :declaredContractTypes::jsonb,
                                     :partyPerspective, :paperSource, :jurisdiction, :effectiveFrom,
-                                    :effectiveTo, :conflictSignals::jsonb, :reviewCategory,
+                                    :effectiveTo, :sourceContractTypes::jsonb,
+                                    :conflictSignals::jsonb, :reviewCategory,
                                     :reviewReasons::jsonb, :reviewNote, :reviewedAt,
                                     :createdAt, :updatedAt)
                             """)
@@ -346,6 +348,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("jurisdiction", candidate.scope().jurisdiction())
                     .param("effectiveFrom", candidate.scope().effectiveFrom())
                     .param("effectiveTo", candidate.scope().effectiveTo())
+                    .param("sourceContractTypes", writeStringSet(candidate.scope().sourceContractTypes()))
                     .param("conflictSignals", writeConflictSignals(candidate.conflictSignals()))
                     .param("semanticFields", writeSemanticFields(candidate.semanticFields()))
                     .param("editedSemanticFields", candidate.editedSemanticFields() == null
@@ -569,6 +572,13 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     + " or exists (select 1 from jsonb_array_elements_text(c.declared_contract_types)"
                     + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = any(:contractTypes::text[])))");
             params.put("contractTypes", topicKeysLiteral(applicableTypeKeys(query.contractType())));
+            // what the record itself says it applies to narrows further; a contract of a type the
+            // product does not model (OTHER) cannot be excluded by it
+            if (!"OTHER".equalsIgnoreCase(query.contractType().trim())) {
+                conditions.add("(c.source_contract_types = '[]'::jsonb"
+                        + " or exists (select 1 from jsonb_array_elements_text(c.source_contract_types)"
+                        + " as st where regexp_replace(lower(st), '[^a-z0-9]', '', 'g') = any(:contractTypes::text[])))");
+            }
         }
         if (query.partyPerspective() != null) {
             conditions.add("(c.party_perspective is null or regexp_replace(lower(c.party_perspective), '[^a-z0-9]', '', 'g')"
@@ -879,7 +889,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("paper_source"),
                 rs.getString("jurisdiction"),
                 readDate(rs, "effective_from"),
-                readDate(rs, "effective_to"));
+                readDate(rs, "effective_to"),
+                readStringSet(rs.getString("source_contract_types")));
         var machinePayload = readPayload(rs.getString("payload"), rs.getString("content_text"));
         var recoveredOrder = machinePayload.columnOrder();
         return new KnowledgeCandidate(
@@ -1058,7 +1069,16 @@ private String writeUuidList(List<UUID> values) {
                     }
                 }
             }
-            return new CandidatePayload(columns, columnOrder)
+            var fieldRoles = new LinkedHashMap<String, String>();
+            var roles = node.get("fieldRoles");
+            if (roles != null && roles.isObject()) {
+                roles.fields().forEachRemaining(role -> {
+                    if (role.getValue().isTextual()) {
+                        fieldRoles.put(role.getKey(), role.getValue().asText());
+                    }
+                });
+            }
+            return new CandidatePayload(columns, columnOrder, fieldRoles)
                     .withRecoveredOrder(machineWording, verifiedOrder);
         } catch (IOException e) {
             throw new IllegalStateException("Could not read candidate payload", e);

@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -164,6 +165,16 @@ public record KnowledgeCandidate(
                 reviewNote, reviewedAt, createdAt, updatedAt);
     }
 
+    public KnowledgeCandidate withScope(ApplicabilityScope newScope) {
+        return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
+                conceptCorrectedBy, conceptCorrectedAt,
+                semanticFields, editedSemanticFields, interpretations,
+                editedContentText, editedPayload, supersedingCandidateId, newScope,
+                conflictSignals, reviewCategory, reviewReasons,
+                reviewNote, reviewedAt, createdAt, updatedAt);
+    }
+
     public KnowledgeCandidate withReviewStatus(ReviewStatus status) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, status, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
@@ -248,6 +259,46 @@ public record KnowledgeCandidate(
     }
 
     /**
+     * The role of one payload label: the code synonym table first, else the role the field-role
+     * decision resolved for this record's source at compile time.
+     */
+    Optional<RecordFieldRole> fieldRole(String label) {
+        var known = RecordLabelRoles.known(label);
+        if (known.isPresent()) {
+            return known;
+        }
+        var resolved = payload.fieldRoles().get(label);
+        if (resolved == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(RecordFieldRole.valueOf(resolved));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** Label -> role name of every payload field with a known or resolved role. */
+    public Map<String, String> effectiveFieldRoles() {
+        var roles = new LinkedHashMap<String, String>();
+        for (var key : payload.orderedKeys()) {
+            fieldRole(key).filter(role -> role != RecordFieldRole.OTHER)
+                    .ifPresent(role -> roles.put(key, role.name()));
+        }
+        return roles;
+    }
+
+    public KnowledgeCandidate withMachinePayload(CandidatePayload machinePayload) {
+        return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
+                candidateType, reviewStatus, rawLabel, contentText, machinePayload, legalConceptKey, topicKeys,
+                conceptCorrection, conceptCorrectedBy, conceptCorrectedAt,
+                semanticFields, editedSemanticFields, interpretations,
+                editedContentText, editedPayload, supersedingCandidateId, scope,
+                conflictSignals, reviewCategory, reviewReasons,
+                reviewNote, reviewedAt, createdAt, updatedAt);
+    }
+
+    /**
      * The role-tagged field values a comparison question needs, in authoritative source
      * order: PREFERRED / FALLBACK (several, ordered) / PROHIBITED / ESCALATION values from
      * the effective payload. A prose candidate with no role-tagged fields returns an empty
@@ -262,8 +313,7 @@ public record KnowledgeCandidate(
             if (value == null || value.isBlank()) {
                 continue;
             }
-            var role = RecordLabelRoles.known(key)
-                    .map(RecordFieldRole::toPositionRole).orElse(null);
+            var role = fieldRole(key).map(RecordFieldRole::toPositionRole).orElse(null);
             if (role == null) {
                 continue;
             }

@@ -14,6 +14,10 @@ import java.util.UUID;
 public final class ContractRegionSegmenter {
 
     private static final int MAX_CONTAINER_WORDS = 12;
+    /** "SCHEDULE 1", also after a list number the heading text carries ("XXVI SCHEDULE 1"). */
+    private static final java.util.regex.Pattern SCHEDULE_HEADING = java.util.regex.Pattern.compile(
+            "(?s)(?:(?:\\d+(?:\\.\\d+)*|[IVXLC]+|[A-Z])[.):]?\\s+)?"
+                    + "(?:SCHEDULE|EXHIBIT|ANNEX|APPENDIX|ATTACHMENT)\\b.*");
 
     /**
      * A DocumentNode is not automatically a legal clause (AD #5.3): the segmenter
@@ -42,7 +46,8 @@ public final class ContractRegionSegmenter {
     /**
      * Headings whose clause a tracked change cannot replace or delete: regions that are not
      * clauses (schedules, signature blocks) and clauses whose body holds anything other than
-     * paragraphs (a table). The redline plan applies the same rule and fails closed; callers use
+     * paragraphs (a table, a text box) or content a tracked change cannot delete (a footnote
+     * reference, a field). The redline plan applies the same rule and fails closed; callers use
      * this to refuse such a change before it is approved.
      */
     public java.util.Set<UUID> untrackableHeadings(List<DocumentNode> nodes) {
@@ -56,8 +61,13 @@ public final class ContractRegionSegmenter {
                 continue;
             }
             var paragraphsOnly = region.textNodeIds().stream().map(byId::get)
-                    .allMatch(node -> node != null && node.nodeType() == DocumentNodeType.PARAGRAPH);
-            if (region.kind() != SemanticRegionKind.CLAUSE || !paragraphsOnly) {
+                    .allMatch(node -> node != null && node.nodeType() == DocumentNodeType.PARAGRAPH
+                            && !node.untrackableContent());
+            // a run-in heading loses its clause text to a replacement, so its content counts too
+            var heading = byId.get(region.headingNodeId());
+            var headingTrimmable = heading == null || heading.runInHeading() == null
+                    || !heading.untrackableContent();
+            if (region.kind() != SemanticRegionKind.CLAUSE || !paragraphsOnly || !headingTrimmable) {
                 untrackable.add(region.headingNodeId());
             }
         }
@@ -102,6 +112,16 @@ public final class ContractRegionSegmenter {
                     }
                 }
                 case PARAGRAPH -> {
+                    if (currentHeading != null && !currentTexts.isEmpty() && isWitnessLine(node)) {
+                        // the execution block after the last clause or schedule is its own
+                        // region: the clause stays reviewable and a replacement never reaches
+                        // the signatures
+                        closeCurrent(regions, currentHeading, currentTexts, currentText);
+                        currentHeading = node;
+                        currentTexts = new ArrayList<>();
+                        currentText = new StringBuilder(node.text().strip());
+                        continue;
+                    }
                     if (currentHeading != null) {
                         currentTexts.add(node.id());
                         if (currentText.length() > 0) {
@@ -115,8 +135,10 @@ public final class ContractRegionSegmenter {
                         preambleTexts.add(node.text() == null ? "" : node.text());
                     }
                 }
-                case TABLE -> {
-                    var tableText = tableText(node, byId);
+                case TABLE, TEXT_BOX -> {
+                    var tableText = node.nodeType() == DocumentNodeType.TEXT_BOX
+                            ? (node.text() == null ? "" : node.text())
+                            : tableText(node, byId);
                     if (currentHeading != null) {
                         currentTexts.add(node.id());
                         if (currentText.length() > 0) {
@@ -195,8 +217,7 @@ public final class ContractRegionSegmenter {
     private SemanticRegionKind regionKind(DocumentNode heading, StringBuilder text) {
         var headingText = heading.text() == null ? "" : heading.text().strip();
         var body = text.toString().toUpperCase(java.util.Locale.ROOT);
-        if (headingText.toUpperCase(java.util.Locale.ROOT)
-                .matches("(?:SCHEDULE|EXHIBIT|ANNEX)\\b.*")) {
+        if (SCHEDULE_HEADING.matcher(headingText.toUpperCase(java.util.Locale.ROOT)).matches()) {
             return SemanticRegionKind.SCHEDULE;
         }
         if (body.contains("IN WITNESS WHEREOF")) {
@@ -206,6 +227,11 @@ public final class ContractRegionSegmenter {
             return SemanticRegionKind.SIGNATURE_BLOCK;
         }
         return SemanticRegionKind.CLAUSE;
+    }
+
+    private static boolean isWitnessLine(DocumentNode paragraph) {
+        return paragraph.text() != null && paragraph.text().strip()
+                .toUpperCase(java.util.Locale.ROOT).startsWith("IN WITNESS");
     }
 
     private UUID bodyIdOf(List<DocumentNode> nodes) {

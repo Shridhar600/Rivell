@@ -137,6 +137,8 @@ public class SemanticCompilationService {
                     throw outcome.failure();
                 }
             }
+            var roles = rolesByCandidate.getOrDefault(candidate.id(), Map.<String, RecordFieldRole>of());
+            enriched = withSourceApplicability(withResolvedFieldRoles(enriched, roles), unit, roles);
             var signals = conflictDetector.inspect(enriched, publishedCandidates);
             var withSignals = enriched.withConflictSignals(signals);
             var categorization = categorizer.categorize(withSignals, assessment);
@@ -239,6 +241,38 @@ public class SemanticCompilationService {
         }
         return candidate.withSemanticOutcome(semantic, List.copyOf(fields.values()),
                 conceptKey, List.copyOf(topicKeys));
+    }
+
+    /**
+     * Keeps the roles the field-role decision resolved for labels the code does not know, so
+     * review reads "Can live with" as the fallback instead of an unlabelled value.
+     */
+    private static KnowledgeCandidate withResolvedFieldRoles(
+            KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles) {
+        var resolved = new LinkedHashMap<String, String>();
+        roles.forEach((label, role) -> {
+            if (RecordLabelRoles.known(label).isEmpty() && role != RecordFieldRole.OTHER) {
+                resolved.put(label, role.name());
+            }
+        });
+        return resolved.isEmpty() ? candidate
+                : candidate.withMachinePayload(candidate.payload().withFieldRoles(resolved));
+    }
+
+    /**
+     * The contract types the record itself says it applies to: its APPLICABILITY field, or a
+     * prose "Applies to:" line. Deterministic; a record that states nothing keeps the scope it
+     * inherited from the manifest.
+     */
+    private static KnowledgeCandidate withSourceApplicability(
+            KnowledgeCandidate candidate, ExtractionUnit unit, Map<String, RecordFieldRole> roles) {
+        var stated = Optional.ofNullable(firstFieldValue(candidate, roles, RecordFieldRole.APPLICABILITY));
+        if (stated.isEmpty() && unit.kind() == ExtractionUnitKind.HEADING_SECTION) {
+            stated = ContractTypeApplicability.statedIn(unit.contentText());
+        }
+        var types = stated.map(ContractTypeApplicability::contractTypes).orElse(Set.of());
+        return types.isEmpty() ? candidate
+                : candidate.withScope(candidate.scope().withSourceContractTypes(types));
     }
 
     /**

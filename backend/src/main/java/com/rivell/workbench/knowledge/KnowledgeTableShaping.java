@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -212,6 +213,12 @@ final class KnowledgeTableShaping {
         var first = rows.get(0);
         var header = isHeaderRow(first) ? first : null;
         var width = rows.stream().mapToInt(KnowledgeTableShaping::populatedWidth).max().orElse(0);
+        if (header != null && rows.size() > 2) {
+            var groups = ColumnGroups.of(header, rows.get(1), width);
+            if (groups != null) {
+                return groupedGrid(rows.subList(2, rows.size()), groups);
+            }
+        }
         var keys = columnKeys(headerLabels(header, width), width);
         var dataRows = header == null ? rows : rows.subList(1, rows.size());
         var shaped = new ArrayList<GridRow>(dataRows.size());
@@ -237,6 +244,114 @@ final class KnowledgeTableShaping {
             provenance.add(row.rowNodeId());
             cells.forEach(cell -> provenance.add(cell.nodeId()));
             shaped.add(new GridRow(Collections.unmodifiableMap(columns), List.copyOf(provenance)));
+        }
+        return new Grid(List.copyOf(shaped));
+    }
+
+    /**
+     * A two-row header: a sparser top row groups the label row beneath it ("NDA | MSA | DPA"
+     * over "Preferred | Fallback | Walk-away" repeated). A group label covers its column and
+     * the blank top cells to its right, as a merged cell does. Groups that repeat another
+     * group's labels are alternatives (one per contract type, say); the rest are shared.
+     */
+    private record ColumnGroups(List<String> labels, List<String> groupOf, Set<String> alternatives) {
+
+        static ColumnGroups of(Row top, Row labelRow, int width) {
+            if (!isHeaderRow(labelRow)
+                    || labelRow.nonBlankCells().size() <= top.nonBlankCells().size()) {
+                return null;
+            }
+            var labels = headerLabels(labelRow, width);
+            var tops = headerLabels(top, width);
+            var groupOf = new ArrayList<String>(width);
+            String current = null;
+            for (int column = 0; column < width; column++) {
+                var group = tops.get(column);
+                if (group != null && !group.isBlank()) {
+                    current = group.strip();
+                }
+                groupOf.add(current);
+            }
+            var labelsByGroup = new LinkedHashMap<String, Set<String>>();
+            for (int column = 0; column < width; column++) {
+                var label = labels.get(column);
+                var group = groupOf.get(column);
+                if (group != null && label != null && !label.isBlank()
+                        && !RecordLabelRoles.normalize(label).equals(RecordLabelRoles.normalize(group))) {
+                    labelsByGroup.computeIfAbsent(group, ignored -> new LinkedHashSet<>())
+                            .add(RecordLabelRoles.normalize(label));
+                }
+            }
+            var alternatives = new LinkedHashSet<String>();
+            for (var a : labelsByGroup.entrySet()) {
+                for (var b : labelsByGroup.entrySet()) {
+                    if (a != b && !Collections.disjoint(a.getValue(), b.getValue())) {
+                        alternatives.add(a.getKey());
+                    }
+                }
+            }
+            return new ColumnGroups(labels, groupOf, Set.copyOf(alternatives));
+        }
+
+        String key(int column) {
+            var label = column < labels.size() ? labels.get(column) : null;
+            return label == null || label.isBlank() ? "Column " + (column + 1) : label.strip();
+        }
+
+        String group(int column) {
+            return column < groupOf.size() ? groupOf.get(column) : null;
+        }
+    }
+
+    /**
+     * One record per data row and alternative group that has a value in it, carrying the shared
+     * columns, that group's columns and the group label as its "Applies to" field. A row with
+     * values in no alternative group is one record of its shared columns.
+     */
+    private static Grid groupedGrid(List<Row> dataRows, ColumnGroups groups) {
+        var shaped = new ArrayList<GridRow>();
+        for (var row : dataRows) {
+            if (row.isEmpty()) {
+                continue;
+            }
+            var filled = new ArrayList<Integer>();
+            var cells = row.cells();
+            for (int index = 0; index < cells.size(); index++) {
+                if (cells.get(index).text() != null && !cells.get(index).text().isBlank()) {
+                    filled.add(index);
+                }
+            }
+            var present = new LinkedHashSet<String>();
+            for (var index : filled) {
+                var group = groups.group(columnOf(cells.get(index), index));
+                if (groups.alternatives().contains(group)) {
+                    present.add(group);
+                }
+            }
+            var targets = present.isEmpty() ? java.util.Collections.<String>singletonList(null)
+                    : List.copyOf(present);
+            for (var target : targets) {
+                var columns = new LinkedHashMap<String, String>();
+                var provenance = new ArrayList<UUID>();
+                provenance.add(row.rowNodeId());
+                var appliesToAdded = false;
+                for (var index : filled) {
+                    var cell = cells.get(index);
+                    var column = columnOf(cell, index);
+                    var group = groups.group(column);
+                    var alternative = groups.alternatives().contains(group);
+                    if (alternative && !group.equals(target)) {
+                        continue;
+                    }
+                    if (alternative && !appliesToAdded) {
+                        columns.put(uniqueKey(columns, "Applies to"), group);
+                        appliesToAdded = true;
+                    }
+                    columns.put(uniqueKey(columns, groups.key(column)), cell.text());
+                    provenance.add(cell.nodeId());
+                }
+                shaped.add(new GridRow(Collections.unmodifiableMap(columns), List.copyOf(provenance)));
+            }
         }
         return new Grid(List.copyOf(shaped));
     }

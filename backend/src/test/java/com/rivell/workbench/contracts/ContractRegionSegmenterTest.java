@@ -140,6 +140,27 @@ class ContractRegionSegmenterTest {
     }
 
     @Test
+    void aClauseWithAFootnoteReferenceOrATextBoxCannotBeReplaced() {
+        var term = heading("2. Term", "2", 0);
+        var footnoted = new DocumentNode(UUID.randomUUID(), VERSION, BODY_ID,
+                DocumentNodeType.PARAGRAPH, 1, "This Agreement lasts three years.", null, null,
+                SourceSpan.ofParagraph("word/document.xml", 1, 1), null, null, true);
+        var keyTerms = heading("3. Key Terms", "3", 2);
+        var box = new DocumentNode(UUID.randomUUID(), VERSION, BODY_ID,
+                DocumentNodeType.TEXT_BOX, 3, "Liability cap: two months of fees.", null, null,
+                new SourceSpan("word/document.xml", 2, null, null, null, null, null, null), null);
+        var fees = heading("4. Fees", "4", 4);
+        var nodes = List.of(BODY_NODE, term, footnoted, keyTerms, box, fees,
+                paragraph("Fees are due monthly.", 5));
+
+        assertThat(new ContractRegionSegmenter().untrackableHeadings(nodes))
+                .containsExactlyInAnyOrder(term.id(), keyTerms.id());
+        assertThat(new ContractRegionSegmenter().segment(nodes).get(1).contentText())
+                .as("the box text is part of its clause for review")
+                .contains("Liability cap: two months of fees.");
+    }
+
+    @Test
     void signatureHeadingsAndSchedulesAreNotClauses() {
         var nodes = List.of(
                 BODY_NODE,
@@ -164,6 +185,30 @@ class ContractRegionSegmenterTest {
         assertThat(byHeading.get("Northwind Customer Group LLC").kind())
                 .isEqualTo(ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK);
         assertThat(byHeading.get("preamble").kind()).isNull();
+    }
+
+    @Test
+    void theExecutionBlockAfterTheLastScheduleIsItsOwnRegion() {
+        var schedule = heading("XXVI SCHEDULE 1 — GOODS, PRICE AND DELIVERY", null, 1);
+        var witness = paragraph("IN WITNESS WHEREOF the parties have executed this Agreement.", 3);
+        var nodes = List.of(
+                BODY_NODE,
+                heading("XXV WORK HEALTH AND SAFETY", null, 0),
+                schedule,
+                paragraph("The Price escalates each year by the greater of 5% or CPI.", 2),
+                witness,
+                paragraph("Signed for Fenwick Engineering Pty Ltd", 4));
+
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        assertThat(regions).extracting(ContractRegionSegmenter.Region::kind).containsExactly(
+                ContractRegionSegmenter.SemanticRegionKind.CLAUSE,
+                ContractRegionSegmenter.SemanticRegionKind.SCHEDULE,
+                ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK);
+        assertThat(regions.get(1).contentText())
+                .as("the schedule keeps its content and loses the signatures")
+                .contains("greater of 5% or CPI").doesNotContain("IN WITNESS");
+        assertThat(regions.get(2).headingNodeId()).isEqualTo(witness.id());
     }
 
     @Test

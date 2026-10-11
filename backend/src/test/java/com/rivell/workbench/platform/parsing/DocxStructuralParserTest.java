@@ -124,6 +124,33 @@ class DocxStructuralParserTest {
     }
 
     @Test
+    void aTextBoxIsHeldOnceAfterItsAnchorAndContentATrackedChangeCannotDeleteIsMarked() {
+        var nodes = parse("fixtures/coverage-mixed-parts.docx").nodes();
+
+        var anchor = nodes.stream().filter(n -> n.text() != null
+                && n.text().startsWith("Commercial summary follows.")).findFirst().orElseThrow();
+        var boxes = nodes.stream()
+                .filter(n -> n.nodeType() == com.rivell.workbench.contracts.DocumentNodeType.TEXT_BOX)
+                .toList();
+        assertThat(boxes).as("DrawingML and its VML fallback are one box").singleElement()
+                .satisfies(box -> {
+                    assertThat(box.text())
+                            .isEqualTo("Key terms: the liability cap is twelve months of fees.");
+                    assertThat(box.parentId()).isEqualTo(anchor.parentId());
+                    assertThat(box.ordinal()).isEqualTo(anchor.ordinal() + 1);
+                    assertThat(box.sourceSpan().bodyIndex()).isEqualTo(anchor.sourceSpan().bodyIndex());
+                });
+        assertThat(anchor.untrackableContent()).as("the anchor run holds a drawing").isTrue();
+        assertThat(nodes).filteredOn(n -> n.text() != null && n.text().startsWith("This Agreement lasts"))
+                .singleElement().as("a footnote reference")
+                .satisfies(n -> assertThat(n.untrackableContent()).isTrue());
+        assertThat(nodes).filteredOn(n -> n.text() != null && n.text().startsWith("Late amounts follow"))
+                .singleElement().as("a field").satisfies(n -> assertThat(n.untrackableContent()).isTrue());
+        assertThat(nodes).filteredOn(n -> n.text() != null && n.text().startsWith("The Customer pays"))
+                .singleElement().satisfies(n -> assertThat(n.untrackableContent()).isFalse());
+    }
+
+    @Test
     void aRunInHeadingRecordsWhichPartOfItsParagraphIsTheHeading() {
         var result = parse("fixtures/blind-nda-run-in-headings.docx");
 
