@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -33,6 +34,7 @@ import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.OpenEndedAnalysisPayload;
 import com.rivell.workbench.review.PolicyComparisonProperties;
 import com.rivell.workbench.review.PolicyComparisonSpecs;
+import com.rivell.workbench.review.PolicyUnavailablePayload;
 import com.rivell.workbench.review.PositionDeviationPayload;
 import com.rivell.workbench.review.RawReviewSignal;
 import com.rivell.workbench.review.SignalType;
@@ -51,9 +53,11 @@ import com.rivell.workbench.taxonomy.ConceptRegistry;
 public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor {
 
     private static final int MAX_CLAUSE_LENGTH = 4000;
+    private static final double ADDRESSED = 0.5;
 
     private final SemanticDecisionService decisionService;
     private final PositionLanguageGenerator languageGenerator;
+    private final UncoveredClauseTriage triage;
     private final EvidenceService evidenceService;
     private final ConceptRegistry conceptRegistry;
     private final PolicyComparisonProperties properties;
@@ -66,6 +70,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             PolicyComparisonProperties properties) {
         this.decisionService = decisionService;
         this.languageGenerator = new PositionLanguageGenerator(reasoningService, decisionService);
+        this.triage = new UncoveredClauseTriage(decisionService);
         this.evidenceService = evidenceService;
         this.conceptRegistry = conceptRegistry;
         this.properties = properties;
@@ -105,10 +110,6 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         detail.put("positionCount", positions.size());
         detail.put("positionsTruncated",
                 bundle.degradationWarnings().contains("POLICY_POSITIONS_TRUNCATED"));
-        if (positions.isEmpty()) {
-            // no applicable position: completed check, no signal, no model call
-            return CheckOutcome.completed(List.of(), detail, bundle.traceId());
-        }
         var state = new PolicyComparisonSpecs.PolicyComparisonState(
                 PolicyComparisonSpecs.STATE_SCHEMA_VERSION,
                 context.snapshot().contractType().name(),
@@ -117,6 +118,11 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 context.headingTexts().getOrDefault(
                         context.check().subjectHeadingNodeId(), ""),
                 truncate(clause.contentText(), MAX_CLAUSE_LENGTH));
+        if (positions.isEmpty()) {
+            // no applicable position: only the uncovered-clause triage runs
+            return CheckOutcome.completed(uncovered(context, clause, bundle, state, detail),
+                    detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
+        }
         DecisionExecution execution;
         try {
             execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
@@ -146,6 +152,10 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             if (judged.judgement().flagged()) {
                 signals.addAll(flaggedSignals(context, clause, bundle, judged, execution, detail));
             }
+        }
+        if (judgedPositions.stream().noneMatch(PolicyComparisonCheckExecutor::addresses)) {
+            // every matched position judged the clause off its subject: the playbook is silent
+            signals.addAll(uncovered(context, clause, bundle, state, detail));
         }
         return CheckOutcome.completed(signals, detail, bundle.traceId())
                 .withCitedEvidence(List.of(bundle));
@@ -212,6 +222,39 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     .dedupeSuffix(judged.key())));
         }
         return signals;
+    }
+
+    private static boolean addresses(JudgedPosition judged) {
+        var probabilities = judged.judgement().probabilities();
+        return probabilities.getOrDefault(PolicyComparisonSpecs.MEETS_PREFERRED, 0.0)
+                + judged.judgement().flagProbability() >= ADDRESSED;
+    }
+
+    /**
+     * A clause no position addresses becomes a finding only when the triage judges it
+     * unusual and against our side.
+     */
+    private List<RawReviewSignal> uncovered(
+            ReviewCheckContext context, ClauseSemantics clause, EvidenceBundle bundle,
+            PolicyComparisonSpecs.PolicyComparisonState state, Map<String, Object> detail) {
+        var evidence = subjectEvidence(bundle, clause.id());
+        var verdict = evidence.isEmpty() ? Optional.<UncoveredClauseTriage.Verdict>empty()
+                : triage.assess(state);
+        verdict.ifPresent(v -> detail.put("uncoveredProbability", v.probability()));
+        if (verdict.isEmpty() || verdict.get().probability() < properties.uncoveredThreshold()) {
+            return List.of();
+        }
+        var execution = verdict.get().execution();
+        return List.of(signal(context, b -> b
+                .signalType(SignalType.POLICY_UNAVAILABLE).issueFamily(IssueFamily.POLICY_UNAVAILABLE)
+                .payload(new PolicyUnavailablePayload(PolicyUnavailablePayload.NOT_COVERED))
+                .evidence(evidence)
+                .decisionSpec(PolicyComparisonSpecs.UNCOVERED_CLAUSE_SPEC,
+                        PolicyComparisonSpecs.UNCOVERED_CLAUSE_VERSION, execution.executionId())
+                .resolvedModel(execution.metadata().resolvedModel())
+                .usage(execution.metadata().usage())
+                .quality(Map.of("uncoveredProbability", verdict.get().probability()))
+                .dedupeSuffix("uncovered")));
     }
 
     private RawReviewSignal generate(

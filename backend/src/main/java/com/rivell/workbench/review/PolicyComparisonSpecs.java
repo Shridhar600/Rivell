@@ -8,6 +8,7 @@ import com.rivell.workbench.intelligence.DecisionSpec;
 import com.rivell.workbench.intelligence.QuestionPack;
 import com.rivell.workbench.intelligence.SemanticQuestion;
 import com.rivell.workbench.intelligence.SemanticState;
+import com.rivell.workbench.intelligence.YesNoQuestion;
 
 /**
  * The {@code policy-comparison} decision (design §6a): one clause against every
@@ -69,6 +70,36 @@ public final class PolicyComparisonSpecs {
         options.put(NOT_ADDRESSED, "The clause does not deal with the subject of this position, or the position "
                 + "is written for a different kind of contract.");
         return java.util.Collections.unmodifiableMap(options);
+    }
+
+    public static final String UNCOVERED_CLAUSE_SPEC = "uncovered-clause";
+    public static final int UNCOVERED_CLAUSE_VERSION = 1;
+    public static final String NEEDS_REVIEW = "needs_review";
+
+    /**
+     * Triage for a clause no published position addresses (measured 2026-10-11 with
+     * {@code jev_uncovered_probe.py} v2): is it unusual for this kind of contract and against
+     * our side? Same state as the comparison.
+     */
+    public static DecisionSpec uncoveredClause() {
+        return new DecisionSpec(
+                UNCOVERED_CLAUSE_SPEC,
+                UNCOVERED_CLAUSE_VERSION,
+                "Triage a contract clause that no playbook position addresses.",
+                STATE_SCHEMA_VERSION,
+                new QuestionPack(Map.of(NEEDS_REVIEW, new YesNoQuestion(
+                        "Our playbook has no position on this clause. Is this clause unusual for "
+                                + "this kind of contract and against our side, so that a lawyer "
+                                + "must review it before signing?",
+                        "It restricts our freedom to deal with others (exclusivity, "
+                                + "non-solicitation, standstill, most-favoured pricing), imposes a "
+                                + "penalty or fixed damages on us, grants the other side rights over "
+                                + "our data, name or materials, or adds another one-sided "
+                                + "obligation, cost or risk for us that this kind of contract does "
+                                + "not normally contain.",
+                        "The clause is normal for this kind of contract: standard mechanics, "
+                                + "boilerplate, ordinary mutual obligations, or terms that protect "
+                                + "us."))));
     }
 
     /** The slice of the review a policy comparison needs. */

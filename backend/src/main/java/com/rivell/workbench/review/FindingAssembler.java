@@ -123,6 +123,14 @@ public final class FindingAssembler {
                     "The expected provision " + signal.concept().value()
                             + " was not found in this contract.");
         }
+        if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
+                && signal.payload() instanceof PolicyUnavailablePayload unavailable
+                && PolicyUnavailablePayload.NOT_COVERED.equals(unavailable.sufficiency())) {
+            return new Observation(PolicyUnavailablePayload.NOT_COVERED,
+                    "No playbook position addresses this clause, and it reads as unusual for "
+                            + "this kind of contract and against our side; a lawyer should "
+                            + "review it.");
+        }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE) {
             return new Observation("POLICY_UNAVAILABLE",
                     "No applicable published policy exists for " + signal.concept().value()

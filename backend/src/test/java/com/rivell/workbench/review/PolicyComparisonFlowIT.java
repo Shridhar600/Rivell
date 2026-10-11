@@ -184,6 +184,36 @@ class PolicyComparisonFlowIT {
     }
 
     @Test
+    void aClauseNoPositionAddressesIsTriagedAndBecomesAFindingOnlyWhenAdverse() throws Exception {
+        var organizationId = organizationId();
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.PC_PLAYBOOK,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/pc-contract.docx"));
+        var ingested = contractIngestionService.ingest("pc-contract.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+        scriptedProvider.uncoveredProbability = 0.9;
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        // the governing-law clause matches no position: triaged, never compared
+        assertThat(scriptedProvider.uncoveredHeadings)
+                .anyMatch(heading -> heading.contains("Governing Law"));
+        var notCovered = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(finding -> finding.issueFamily() == IssueFamily.POLICY_UNAVAILABLE)
+                .toList();
+        assertThat(notCovered).isNotEmpty().allSatisfy(finding -> {
+            assertThat(finding.observationKind()).isEqualTo(PolicyUnavailablePayload.NOT_COVERED);
+            assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
+            assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+        });
+    }
+
+    @Test
     void comparisonProviderFailureIsUncertaintyPerPositionNotSilentPass() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.PC_PLAYBOOK,

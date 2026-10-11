@@ -162,6 +162,10 @@ public class LiabilityReviewIT {
         volatile double policyComparisonTopProbability = 0.9;
         volatile boolean failPolicyComparisonDecision;
         volatile String policyComparisonAnswerOverride;
+        /** Probability the uncovered-clause triage answers for every clause it sees. */
+        volatile double uncoveredProbability = 0.05;
+        final java.util.List<String> uncoveredHeadings =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         volatile Map<String, Double> policyComparisonProbabilities;
         volatile boolean failConsistencyDecision;
         volatile String consistencyAnswerOverride;
@@ -247,6 +251,14 @@ public class LiabilityReviewIT {
                         new ChoiceAnswer(selected, consistencyTopProbability, consistency));
                 return new ProviderExecutionResult(carveAnswers, "fake-review-v1",
                         new TokenUsage(140, 6));
+            }
+            if (request.pack().questions().containsKey(PolicyComparisonSpecs.NEEDS_REVIEW)) {
+                var state = (PolicyComparisonSpecs.PolicyComparisonState) request.state().payload();
+                uncoveredHeadings.add(state.heading());
+                return new ProviderExecutionResult(new LinkedHashMap<>(Map.of(
+                        PolicyComparisonSpecs.NEEDS_REVIEW,
+                        new com.rivell.workbench.intelligence.YesNoAnswer(uncoveredProbability))),
+                        "fake-review-v1", new TokenUsage(90, 2));
             }
             var firstQuestion = request.pack().questions().values().iterator().next();
             if (firstQuestion instanceof ChoiceQuestion firstChoice
@@ -376,6 +388,8 @@ public class LiabilityReviewIT {
             failPolicyComparisonDecision = false;
             policyComparisonAnswerOverride = null;
             policyComparisonProbabilities = null;
+            uncoveredProbability = 0.05;
+            uncoveredHeadings.clear();
             failConsistencyDecision = false;
             consistencyAnswerOverride = null;
             consistencyTopProbability = 0.9;
