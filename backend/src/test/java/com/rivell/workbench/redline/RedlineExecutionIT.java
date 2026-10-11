@@ -284,7 +284,7 @@ class RedlineExecutionIT {
     @Test
     void multipleApprovedChangesExecuteIndependently() throws Exception {
         var fixture = analyzedSource("m9-multi-change-source.docx");
-        var replaceTarget = findingByFamily(fixture, "LIABILITY_CAP_DEVIATION");
+        var replaceTarget = findingByFamily(fixture, "POSITION_NEEDS_FALLBACK");
         var deleteTarget = findingByFamily(fixture, "SURVIVAL_COVERAGE_GAP");
         var absence = absenceFinding(fixture);
         decide(fixture.review().id(), replaceTarget.id(), """

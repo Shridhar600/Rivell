@@ -34,38 +34,47 @@ class M7JevLiveSmokeTest {
     }
 
     @Test
-    void liabilityDeviationOnSyntheticUncappedClause() {
-        var state = new M7DecisionSpecs.LiabilityDeviationState(
-                1,
+    void policyComparisonOnSyntheticUncappedClause() {
+        var state = new PolicyComparisonSpecs.PolicyComparisonState(
+                1, "MSA", "Customer", "Limitation of Liability",
                 "The liability of Supplier under this Agreement is uncapped and unlimited, "
-                        + "however arising.",
-                null, null, null,
+                        + "however arising.");
+        observe("uncapped", state, position(
                 "Total liability should not exceed the fees paid in the preceding 12 months.",
-                "Uncapped or unlimited liability is prohibited.",
-                "Escalate any structure above the preferred position.");
-        observe("uncapped", state);
+                "Uncapped or unlimited liability is prohibited."));
     }
 
     @Test
-    void liabilityDeviationOnSyntheticAbovePreferredClause() {
-        var state = new M7DecisionSpecs.LiabilityDeviationState(
-                1,
+    void policyComparisonOnSyntheticWithinFallbackClause() {
+        var state = new PolicyComparisonSpecs.PolicyComparisonState(
+                1, "MSA", "Customer", "Limitation of Liability",
                 "Supplier's total aggregate liability arising out of or related to this "
                         + "Agreement shall not exceed two times the fees paid in the "
-                        + "preceding 12 months.",
-                "2", "FEES_12_MONTHS", false,
+                        + "preceding 12 months.");
+        observe("within_fallback", state, position(
                 "Total liability should not exceed the fees paid in the preceding 12 months.",
-                "Uncapped or unlimited liability is prohibited.",
-                "Escalate any structure above the preferred position.");
-        observe("above_preferred", state);
+                "Uncapped or unlimited liability is prohibited."));
     }
 
-    private void observe(String label, M7DecisionSpecs.LiabilityDeviationState state) {
-        ProviderExecutionResult result = provider().execute(new DecisionExecutionRequest(
-                "jev-latest", state, M7DecisionSpecs.liabilityDeviation().pack()));
+    private static Map<String, com.rivell.workbench.intelligence.SemanticQuestion> position(
+            String preferred, String walkAway) {
+        var questions = new java.util.LinkedHashMap<
+                String, com.rivell.workbench.intelligence.SemanticQuestion>();
+        questions.put("position_1", PolicyComparisonSpecs.positionQuestion(
+                "Compare the clause with our playbook position on Limitation of Liability.\n"
+                        + "Preferred: " + preferred + "\nWalk-away: " + walkAway));
+        return questions;
+    }
 
-        var answer = (ChoiceAnswer) result.answers().get(M7DecisionSpecs.DEVIATION_TYPE);
-        System.out.println("LIVE-JEV-M7 liability label=" + label
+    private void observe(
+            String label, PolicyComparisonSpecs.PolicyComparisonState state,
+            Map<String, com.rivell.workbench.intelligence.SemanticQuestion> questions) {
+        var spec = PolicyComparisonSpecs.spec(questions);
+        ProviderExecutionResult result = provider().execute(new DecisionExecutionRequest(
+                "jev-latest", state, spec.pack()));
+
+        var answer = (ChoiceAnswer) result.answers().get("position_1");
+        System.out.println("LIVE-JEV-M7 policy-comparison label=" + label
                 + " resolvedModel=" + result.resolvedModel()
                 + " usage=" + result.usage()
                 + " selected=" + answer.selected()
@@ -74,9 +83,7 @@ class M7JevLiveSmokeTest {
 
         assertThat(result.resolvedModel()).isNotBlank();
         assertThat(result.usage().inputTokens()).isPositive();
-        assertThat(answer.selected()).isIn(M7DecisionSpecs.NO_DEVIATION,
-                M7DecisionSpecs.CAP_ABOVE_PREFERRED, M7DecisionSpecs.PROHIBITED_STRUCTURE,
-                M7DecisionSpecs.NOT_COMPARABLE);
+        assertThat(answer.selected()).isIn(PolicyComparisonSpecs.OPTIONS.keySet());
     }
 
     @Test

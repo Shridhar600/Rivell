@@ -629,8 +629,8 @@ class FinalizationIT {
         corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
         var bytes = Files.readAllBytes(
-                Path.of("src/test/resources/fixtures/m7-msa-exotic.docx"));
-        var ingested = contractIngestionService.ingest("m7-msa-exotic.docx",
+                Path.of("src/test/resources/fixtures/m7-msa-uncapped.docx"));
+        var ingested = contractIngestionService.ingest("m7-msa-uncapped.docx",
                 ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
         enrichmentService.enrich(ingested.contractId(), 1,
                 new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,

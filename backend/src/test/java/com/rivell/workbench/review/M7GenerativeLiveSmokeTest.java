@@ -68,8 +68,8 @@ class M7GenerativeLiveSmokeTest {
 
     @Test
     void openEndedLiabilityProducesTypedCandidateOnSyntheticExoticClause() {
-        var spec = M7ReasoningSpecs.openEndedLiability();
-        var state = new M7ReasoningSpecs.OpenEndedLiabilityState(
+        var spec = M7ReasoningSpecs.openEndedPosition();
+        var state = new M7ReasoningSpecs.OpenEndedPositionState(
                 1,
                 "Supplier's aggregate liability shall not exceed the insurance proceeds "
                         + "actually recovered by Supplier in respect of the claim.",

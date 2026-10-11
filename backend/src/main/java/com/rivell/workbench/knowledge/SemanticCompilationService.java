@@ -211,7 +211,13 @@ public class SemanticCompilationService {
 
         var semantic = builder.build();
         var conceptKey = topic.primary() == null ? null : topic.primary().value();
-        return candidate.withSemanticOutcome(semantic, List.copyOf(fields.values()), conceptKey);
+        var topicKeys = new java.util.LinkedHashSet<String>();
+        topic.topics().forEach(key -> topicKeys.add(key.value()));
+        if (conceptKey != null) {
+            topicKeys.add(conceptKey);
+        }
+        return candidate.withSemanticOutcome(semantic, List.copyOf(fields.values()),
+                conceptKey, List.copyOf(topicKeys));
     }
 
     /**

@@ -10,8 +10,9 @@ import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Code-owned contract pack: declares WHICH concepts are required/expected/optional and
- * which typed checks apply. Pack definitions own configuration; the engine owns how a
- * check executes.
+ * which cross-clause checks apply. Clause-level policy comparison is not pack
+ * configuration — every classified clause is compared against the published playbook.
+ * Pack definitions own configuration; the engine owns how a check executes.
  */
 public record ReviewPack(
         String key,
@@ -19,7 +20,6 @@ public record ReviewPack(
         String summary,
         String version,
         Map<ConceptKey, CheckExpectation> conceptExpectations,
-        Map<ConceptKey, CheckMechanism> clauseChecks,
         List<CrossClauseRule> crossClauseChecks) {
 
     public ReviewPack {
@@ -28,7 +28,6 @@ public record ReviewPack(
         Objects.requireNonNull(summary, "summary");
         Objects.requireNonNull(version, "version");
         conceptExpectations = Collections.unmodifiableMap(new LinkedHashMap<>(conceptExpectations));
-        clauseChecks = Collections.unmodifiableMap(new LinkedHashMap<>(clauseChecks));
         crossClauseChecks = List.copyOf(crossClauseChecks);
     }
 

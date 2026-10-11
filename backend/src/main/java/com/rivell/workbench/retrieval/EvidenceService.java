@@ -69,18 +69,46 @@ public class EvidenceService {
         return buildInternal(request);
     }
 
+    /**
+     * Policy-comparison build (design 6a item 2): policy positions and approved drafting
+     * are resolved by topic membership instead of concept equality, capped at
+     * {@code maxPositions}. Everything else — authority, scope filters, lanes, trace —
+     * is the same evidence construction.
+     */
+    public EvidenceBundle buildForPolicyComparison(
+            EvidenceRequest request, java.util.List<ConceptKey> topics,
+            ConceptKey primaryTopic, int maxPositions) {
+        if (topics.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Policy comparison requires at least one clause topic");
+        }
+        var asOfPublication = resolveAsOf(request);
+        var topicKeys = topics.stream().map(ConceptKey::value).toList();
+        var primaryKey = primaryTopic == null ? null : primaryTopic.value();
+        return assemble(request, asOfPublication,
+                resolver.resolveByTopics(request, Set.of(CandidateType.PLAYBOOK_RULE),
+                        asOfPublication, topicKeys, primaryKey, maxPositions),
+                resolver.resolveByTopics(request, Set.of(CandidateType.CLAUSE_VARIANT),
+                        asOfPublication, topicKeys, primaryKey, maxPositions));
+    }
+
     private EvidenceBundle buildInternal(EvidenceRequest request) {
+        var asOfPublication = resolveAsOf(request);
+        return assemble(request, asOfPublication,
+                resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE), asOfPublication),
+                resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT), asOfPublication));
+    }
+
+    private EvidenceBundle assemble(
+            EvidenceRequest request, long asOfPublication,
+            StructuredPolicyResolver.Resolution policyResolution,
+            StructuredPolicyResolver.Resolution draftingResolution) {
         var startedAt = clock.instant();
         var stageStart = startedAt;
         var stageTimings = new LinkedHashMap<String, Long>();
-        var asOfPublication = resolveAsOf(request);
         stageTimings.put("pinResolution",
                 java.time.Duration.between(stageStart, clock.instant()).toMillis());
         stageStart = clock.instant();
-        var policyResolution = resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE),
-                asOfPublication);
-        var draftingResolution = resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT),
-                asOfPublication);
         stageTimings.put("structured",
                 java.time.Duration.between(stageStart, clock.instant()).toMillis());
         stageStart = clock.instant();
@@ -327,10 +355,16 @@ public class EvidenceService {
 
     private EvidenceItem.PolicyFacts policyFacts(
             com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
+        var fields = candidate.effectivePositionFieldValues();
+        var preferred = fields.get(com.rivell.workbench.knowledge.PositionRole.PREFERRED);
+        var prohibited = fields.get(com.rivell.workbench.knowledge.PositionRole.PROHIBITED);
         return new EvidenceItem.PolicyFacts(
                 candidate.effectivePositions(),
                 candidate.effectiveRequiresApproval(),
-                candidate.effectiveEscalationTrigger());
+                candidate.effectiveEscalationTrigger(),
+                preferred == null || preferred.isEmpty() ? null : preferred.getFirst(),
+                fields.getOrDefault(com.rivell.workbench.knowledge.PositionRole.FALLBACK, List.of()),
+                prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst());
     }
 
     private List<String> provenance(UUID organizationId,
