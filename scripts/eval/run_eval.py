@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -113,10 +114,18 @@ def review_profile(answer):
         profile["ourSideRole"] = "RECEIVING_PARTY"
     elif "disclos" in role:
         profile["ourSideRole"] = "DISCLOSING_PARTY"
-    elif any(w in role for w in ("supplier", "provider", "vendor", "processor", "licensor")):
-        profile["ourSideRole"] = "LICENSOR" if "licensor" in role else "SUPPLIER"
-    elif any(w in role for w in ("customer", "client", "controller", "licensee", "buyer")):
-        profile["ourSideRole"] = "LICENSEE" if "licensee" in role else "CUSTOMER"
+    else:
+        # our role comes first ("controller; the counterparty is the processor"); British spelling
+        # of licensee/licensor is common
+        ours = role.split(";")[0]
+        if re.search(r"licen[cs]ee", ours):
+            profile["ourSideRole"] = "LICENSEE"
+        elif re.search(r"licen[cs]or", ours):
+            profile["ourSideRole"] = "LICENSOR"
+        elif any(w in ours for w in ("supplier", "provider", "vendor", "processor")):
+            profile["ourSideRole"] = "SUPPLIER"
+        elif any(w in ours for w in ("customer", "client", "controller", "buyer")):
+            profile["ourSideRole"] = "CUSTOMER"
     if ctype in ("NDA", "MNDA", "ONDA"):
         profile["contractPackKey"] = "NDA_PACK"
     elif ctype == "MSA":
