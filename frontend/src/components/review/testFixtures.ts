@@ -303,7 +303,15 @@ export const fixtureWithinFallbackFindingDetail = {
     flagProbability: 0.74,
     probabilities: { WITHIN_FALLBACK: 0.74 },
   },
-  claims: [clauseClaims[0]],
+  claims: [
+    {
+      ordinal: 0,
+      claimKind: 'OBSERVATION',
+      text: 'The clause departs from the preferred position but stays within a listed fallback.',
+      absence: false,
+      evidenceItemIds: ['e-contract', 'e-policy'],
+    },
+  ],
   positionComparison: withinFallbackComparison,
 }
 

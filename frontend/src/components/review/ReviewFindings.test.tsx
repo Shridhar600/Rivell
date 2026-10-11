@@ -548,9 +548,11 @@ describe('position findings', () => {
     })
 
     await findDetailTitle('6. Limitation of Liability')
-    const pane = within(detailPane())
-    expect(pane.getByText(/approval is needed/i)).toBeInTheDocument()
-    expect(pane.getAllByText(/Uncapped liability or consequential damages/).length).toBeGreaterThan(0)
+    const note = detailPane().querySelector('.rv-ws-note--approval')
+    expect(note).not.toBeNull()
+    // The note itself carries the approval statement and the condition, not only the comparison grid.
+    expect(note).toHaveTextContent('Approval is needed.')
+    expect(note).toHaveTextContent('Escalate when: Uncapped liability or consequential damages.')
   })
 })
 

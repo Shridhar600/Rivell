@@ -156,7 +156,7 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         {uncompiled.length > 0 ? (
           <section className="rv-kc-grp">
             <h3 className="rv-kc-fgrp">
-              <span>Not compiled</span>
+              <span>Other records</span>
               <span>{uncompiled.length}</span>
             </h3>
             <ul className="rv-kc-rows">

@@ -23,7 +23,7 @@ export const fixtureAcceptableFindingDetail = {
   reviewId: 'r-1',
   runId: 'run-1',
   concepts: ['LIMITATION_OF_LIABILITY'],
-  observationText: 'The liability cap is above the preferred position.',
+  observationText: 'The clause is worse for us than every fallback the position lists.',
   proposedLanguage: 'Liability is capped at two times the fees paid.',
   approvedDraftingEvidenceId: 'e-drafting',
   quality: {

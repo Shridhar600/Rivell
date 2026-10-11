@@ -172,7 +172,7 @@ const clauseFindingDetail = {
     {
       ordinal: 0,
       claimKind: 'OBSERVATION',
-      text: "The bounded classification found the liability cap above the organization's preferred position.",
+      text: 'The clause is worse for us than every fallback the position lists.',
       absence: false,
       evidenceItemIds: ['e-clause', 'e-policy'],
     },

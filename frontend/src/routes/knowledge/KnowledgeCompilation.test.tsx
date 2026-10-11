@@ -110,6 +110,17 @@ describe('compilation workspace', () => {
     expect(within(row).queryByRole('button')).not.toBeInTheDocument()
   })
 
+  it('still shows the units that became no candidates when none was compiled at all', async () => {
+    const world = reviewWorld()
+    world.candidates[SRC] = []
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}`)
+    await screen.findByRole('heading', { level: 2, name: 'No candidates were compiled' })
+    const row = (await screen.findByText('How to use this playbook')).closest('.rv-kc-unit') as HTMLElement
+    expect(row).not.toBeNull()
+    expect(row).toHaveTextContent('Guidance')
+  })
+
   it('shows no record kind for data compiled before record kinds existed', async () => {
     const world = reviewWorld()
     world.units[SRC] = (world.units[SRC] ?? []).map((entry) => ({ ...entry, recordKind: null }))

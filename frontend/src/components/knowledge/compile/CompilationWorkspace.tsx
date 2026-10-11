@@ -252,20 +252,6 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       </CompileLayout>
     )
   }
-  if (candidates.length === 0) {
-    return (
-      <CompileLayout top={top}>
-        <div className="rv-kc-center">
-          <EmptyState
-            title="No candidates were compiled"
-            message="Rivell extracted this file but found nothing to turn into knowledge, so there is nothing to review or publish. The original is stored unchanged."
-            action={<LinkButton to={`/knowledge/sources/${artifact.id}`}>Open the source</LinkButton>}
-          />
-        </div>
-      </CompileLayout>
-    )
-  }
-
   const rail = (
     <CandidateRail
       id={railId}
@@ -281,6 +267,20 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       onOpenGroup={openGroup}
     />
   )
+  if (candidates.length === 0) {
+    // No candidate at all: the units the kind gate kept are still shown, so no record is dropped.
+    return (
+      <CompileLayout top={top} rail={uncompiled.length > 0 ? rail : undefined} railOpen={railOpen}>
+        <div className="rv-kc-center">
+          <EmptyState
+            title="No candidates were compiled"
+            message="Rivell extracted this file but found nothing to turn into knowledge, so there is nothing to review or publish. The original is stored unchanged."
+            action={<LinkButton to={`/knowledge/sources/${artifact.id}`}>Open the source</LinkButton>}
+          />
+        </div>
+      </CompileLayout>
+    )
+  }
   const selectedUnit = selected ? (units?.find((entry) => entry.id === selected.extractionUnitId) ?? null) : null
   const showSheet = params.get('context') === '1' && selected !== null
 
