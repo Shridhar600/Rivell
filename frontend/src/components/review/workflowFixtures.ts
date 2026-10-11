@@ -33,6 +33,8 @@ export const fixtureAcceptableFindingDetail = {
     category: 'BEYOND_FALLBACK',
     flagProbability: 0.87,
     probabilities: { BEYOND_FALLBACK: 0.87 },
+    secondaryTopic: false,
+    uncoveredProbability: null,
   },
   claims: [],
   // Accept adopts approved wording, so the evidence it cites is part of the finding, as the backend guarantees.

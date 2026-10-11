@@ -2,7 +2,7 @@ import { Link } from 'react-router'
 import { useKnowledgeCatalog } from '../../api/knowledgeRead'
 import { useTaxonomy } from '../../api/taxonomy'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
-import { AddKnowledgeButton, KnowledgeFrame } from '../../components/knowledge/read/KnowledgeFrame'
+import { KnowledgeFrame } from '../../components/knowledge/read/KnowledgeFrame'
 import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
 import { BookIcon, ClauseIcon, SourceIcon } from '../../components/ui/Icon'
 import {
@@ -41,7 +41,6 @@ function Overview({ catalog, state }: { catalog: Catalog; state: ReturnType<type
       crumbs={CRUMBS}
       title="Knowledge"
       lede="What Rivell knows about how your organization contracts."
-      actions={<AddKnowledgeButton />}
     >
       <CatalogNotices state={state} catalog={catalog} />
 

@@ -19,7 +19,7 @@ export function CurrentContractCard({
   item: EvidenceItem
   regionLabels: Map<string, string>
   clauseHeadings: Map<string, string>
-  /** Absent when the review is pinned to an older version than the one the links would open. */
+  /** Absent where the caller has no document to reveal the node in. */
   onNavigateToNode?: (nodeId: string) => void
   onOpenClauseSemantics?: (headingNodeId: string) => void
 }) {

@@ -285,7 +285,7 @@ describe('workspace decisions — REJECT and ESCALATE', () => {
     const { api } = await renderWorkspace()
     await user.click(await decideBar('Reject'))
     const form = within(screen.getByRole('form', { name: 'Reject Finding' }))
-    expect(form.getByText('No ApprovedChange will be created from this Finding.')).toBeInTheDocument()
+    expect(form.getByText('No approved change will be created from this Finding.')).toBeInTheDocument()
     expect(form.getByRole('textbox', { name: 'Reason' })).toHaveFocus()
     await user.click(form.getByRole('button', { name: 'Reject' }))
     expect(await form.findByText(/comment is required/)).toBeInTheDocument()

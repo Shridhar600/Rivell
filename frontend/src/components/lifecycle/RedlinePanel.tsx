@@ -47,7 +47,7 @@ export function RedlinePanel(props: Props) {
             <h2 tabIndex={-1} ref={headingRef}>
               Review finalized with no approved changes
             </h2>
-            <p>The frozen ApprovedChangeSet is empty. No tracked-change artifact is needed for this review.</p>
+            <p>The frozen approved change set is empty. No tracked-change artifact is needed for this review.</p>
             <Checks items={[{ text: 'Human decisions are read-only' }, { text: 'Original contract remains unchanged' }]} />
           </LcBody>
         </LcCard>
@@ -64,7 +64,7 @@ export function RedlinePanel(props: Props) {
               Generate the redline
             </h2>
             <p>
-              Rivell will execute the frozen ApprovedChangeSet against the original DOCX using deterministic
+              Rivell will execute the frozen approved changes against the original DOCX using deterministic
               targeting and tracked changes. No new legal reasoning occurs here.
             </p>
             <Stat3
@@ -101,7 +101,7 @@ export function RedlinePanel(props: Props) {
               Generating and verifying the redline
             </h2>
             <p role="status">
-              Rivell is executing the frozen ApprovedChangeSet and verifying the result. This page shows the
+              Rivell is executing the frozen approved changes and verifying the result. This page shows the
               outcome as soon as the server records it.
             </p>
           </LcBody>
@@ -140,7 +140,7 @@ function Verified({
               Verified redline
             </h2>
             <p className="rv-lc-prv">
-              <span>Complete ApprovedChangeSet executed</span>
+              <span>All approved changes executed</span>
               <span>Round-trip verification passed</span>
             </p>
           </div>
@@ -167,7 +167,7 @@ function Verified({
           <DownloadTrackedDocx reviewId={reviewId} execution={execution} />
         </div>
         <p className="rv-lc-quiet">
-          Verification is scoped to execution against the frozen ApprovedChangeSet. It is not a claim of
+          Verification is scoped to execution against the frozen approved change set. It is not a claim of
           universal legal correctness or Microsoft Word certification.
         </p>
       </LcBody>
@@ -198,16 +198,16 @@ function Failed({ execution, headingRef, onOpenReport, onRetry }: Props & { exec
           </div>
         </div>
         <p>
-          Rivell could not deterministically execute and verify the complete frozen ApprovedChangeSet. No
+          Rivell could not deterministically execute and verify the complete frozen approved change set. No
           verified document is available.
         </p>
         {execution.failureCode ? <p className="rv-lc-quiet">{redlineFailureTitle(execution.failureCode)}</p> : null}
         {execution.attempt > 1 ? (
-          <p className="rv-lc-quiet">Attempt {execution.attempt} on the same frozen ApprovedChangeSet also failed.</p>
+          <p className="rv-lc-quiet">Attempt {execution.attempt} on the same frozen approved change set also failed.</p>
         ) : null}
         <Checks
           items={[
-            { text: 'ApprovedChangeSet remains frozen and intact' },
+            { text: 'Approved changes remain frozen and intact' },
             { text: 'No verified DOCX is available to download', failed: true },
           ]}
         />
@@ -255,7 +255,7 @@ function NotVerified({ execution, headingRef, onOpenReport }: Props & { executio
         </p>
         <Checks
           items={[
-            { text: 'ApprovedChangeSet remains frozen and intact' },
+            { text: 'Approved changes remain frozen and intact' },
             { text: 'No verified DOCX is available to download', failed: true },
           ]}
         />

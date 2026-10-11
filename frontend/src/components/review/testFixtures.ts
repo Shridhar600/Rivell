@@ -315,6 +315,41 @@ export const fixtureWithinFallbackFindingDetail = {
   positionComparison: withinFallbackComparison,
 }
 
+/**
+ * A LOW informational note whose position governs a topic the clause only touches. It must read as
+ * a related position, never as a breach of the clause itself.
+ */
+export const fixtureRelatedPositionFindingSummary = {
+  ...fixtureWithinFallbackFindingSummary,
+  id: 'f-9',
+  secondaryConcept: 'GOVERNING_LAW',
+  issueFamily: 'POSITION_WALK_AWAY',
+  observationKind: 'POSITION_WALK_AWAY',
+}
+
+export const fixtureRelatedPositionFindingDetail = {
+  ...fixtureWithinFallbackFindingDetail,
+  ...fixtureRelatedPositionFindingSummary,
+  observationText:
+    'The clause contains or permits what the position’s walk-away says we must never accept.',
+  quality: {
+    sufficiency: 'SUFFICIENT',
+    verificationOutcome: null,
+    degradationFlags: [],
+    category: 'WALK_AWAY',
+    flagProbability: 0.9,
+    probabilities: { WALK_AWAY: 0.9 },
+    secondaryTopic: true,
+  },
+  positionComparison: {
+    contract: [contractPositionSlot],
+    preferred: [policyPositionSlot('e-policy')],
+    fallback: [],
+    walkAway: [policyPositionSlot('e-policy')],
+    escalation: [],
+  },
+}
+
 /** The same note, but the position names an approver: approval is needed and the trigger is shown. */
 export const fixtureEscalatedFallbackFindingDetail = {
   ...fixtureWithinFallbackFindingDetail,
@@ -396,6 +431,31 @@ export const fixturePolicyMissingFindingDetail = {
   ],
   // The contract has typed facts, but no policy position exists to compare them with.
   positionComparison: { contract: [contractPositionSlot], preferred: [], fallback: [], walkAway: [], escalation: [] },
+}
+
+/** A clause no playbook position addresses, judged unusual and against our side. */
+export const fixtureNotCoveredFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-10',
+  issueFamily: 'POLICY_UNAVAILABLE',
+  observationKind: 'NOT_COVERED_BY_PLAYBOOK',
+  severity: 'MEDIUM',
+  reviewClassification: 'REVIEW_REQUIRED',
+  proposedAction: 'ESCALATE_TO_HUMAN',
+  proposedLanguageSource: 'NONE',
+}
+
+export const fixtureNotCoveredFindingDetail = {
+  ...fixturePolicyMissingFindingDetail,
+  ...fixtureNotCoveredFindingSummary,
+  observationText:
+    'No playbook position addresses this clause, and it reads as unusual for this kind of contract and against our side; a lawyer should review it.',
+  quality: {
+    sufficiency: 'POLICY_MISSING',
+    verificationOutcome: null,
+    degradationFlags: [],
+    uncoveredProbability: 0.9,
+  },
 }
 
 export const fixtureAmbiguousPolicyFindingDetail = {

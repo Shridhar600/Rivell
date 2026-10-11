@@ -67,15 +67,17 @@ interface KnowledgeFrameProps {
   lede?: string
   /** Chips and status under the title. */
   meta?: ReactNode
-  /** Page-level actions next to the title, before "Add knowledge". */
+  /** Page-level actions next to the title. The Add action is not one of them: the frame owns it. */
   actions?: ReactNode
+  /** The Add action's preset, so the one header action names what this page adds. */
+  addPreset?: AddPreset
   /** False on pages whose detail panel is not shown, so the page takes the panel's column too. */
   withInspector?: boolean
   children: ReactNode
 }
 
 /** The canonical Knowledge page: breadcrumb top bar, then a scrolling page with a serif title. */
-export function KnowledgeFrame({ crumbs, title, lede, meta, actions, withInspector = false, children }: KnowledgeFrameProps) {
+export function KnowledgeFrame({ crumbs, title, lede, meta, actions, addPreset, withInspector = false, children }: KnowledgeFrameProps) {
   const headingRef = useHeadingFocus<HTMLHeadingElement>(title)
   // Said on the page the reviewer lands on right after publishing, until they dismiss it or move on.
   const location = useLocation()
@@ -84,7 +86,7 @@ export function KnowledgeFrame({ crumbs, title, lede, meta, actions, withInspect
   const dismiss = () => void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
   return (
     <div className={`rv-main${withInspector ? '' : ' rv-main--wide'}`}>
-      <TopBar title={<Breadcrumbs crumbs={crumbs} />} actions={<AddKnowledgeButton />} />
+      <TopBar title={<Breadcrumbs crumbs={crumbs} />} actions={<AddKnowledgeButton preset={addPreset} />} />
       <div className="rv-scroll">
         <div className="rv-page">
           {notice ? (

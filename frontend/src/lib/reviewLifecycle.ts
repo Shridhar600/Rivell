@@ -254,7 +254,7 @@ export function activityEvents(facts: LifecycleFacts): ActivityEvent[] {
   }
   const finalizedAt = changeSet?.finalizedAt ?? humanReview?.finalizedAt ?? null
   if (humanReview?.status === 'COMPLETED' && finalizedAt) {
-    events.push({ label: 'Review finalized; ApprovedChangeSet frozen', time: finalizedAt, failed: false })
+    events.push({ label: 'Review finalized; approved changes frozen', time: finalizedAt, failed: false })
   }
   if (redline) {
     if (redline.startedAt) events.push({ label: 'Redline execution started', time: redline.startedAt, failed: false })

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router'
 import { useKnowledgeCatalog } from '../../api/knowledgeRead'
 import { useTaxonomy } from '../../api/taxonomy'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
-import { AddKnowledgeButton, KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
+import { KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
 import { KnowledgeTabs } from '../../components/knowledge/read/KnowledgeTabs'
 import { VersionBanner } from '../../components/knowledge/read/VersionBanner'
@@ -63,7 +63,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
       crumbs={CRUMBS}
       title="Clause library"
       lede={LEDE}
-      actions={<AddKnowledgeButton preset="clause-library" />}
+      addPreset="clause-library"
       meta={
         viewing ? (
           <>
@@ -96,7 +96,6 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
         <EmptyState
           title="No clause library is published"
           message="Approved clause wording appears here once you publish a clause library."
-          action={<AddKnowledgeButton />}
         />
       ) : (
         <>

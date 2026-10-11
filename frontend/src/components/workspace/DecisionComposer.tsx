@@ -73,7 +73,7 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
       }}
     >
       <h3>{title}</h3>
-      {kind === 'REJECT' ? <p>No ApprovedChange will be created from this Finding.</p> : null}
+      {kind === 'REJECT' ? <p>No approved change will be created from this Finding.</p> : null}
       {kind === 'ESCALATE' ? <p>This Finding will remain unresolved and block finalization.</p> : null}
 
       {kind === 'EDIT' ? (

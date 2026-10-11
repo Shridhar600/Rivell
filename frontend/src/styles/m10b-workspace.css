@@ -128,6 +128,44 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The unresolved status is stated once; the server's exact blockers open from it, never clipped. */
+.rv-ws-why {
+  position: relative;
+  max-width: 240px;
+}
+.rv-ws-why summary {
+  cursor: pointer;
+  list-style: none;
+}
+.rv-ws-why summary::-webkit-details-marker {
+  display: none;
+}
+.rv-ws-why summary::after {
+  content: ' ▾';
+  font-size: 9px;
+}
+.rv-ws-why[open] summary::after {
+  content: ' ▴';
+}
+.rv-ws-why-b {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: min(320px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  box-shadow: var(--sh-sm);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
+}
+.rv-ws-why-b div + div {
+  margin-top: 6px;
+}
 
 /* ---------- three regions ---------- */
 .rv-ws-work {
@@ -338,6 +376,16 @@
   background: var(--accent-soft);
   box-shadow: 0 0 0 1.5px var(--accent);
 }
+/* An evidence jump target: distinct from the finding selection, which carries data-sel. */
+.rv-ws-cl--focus {
+  scroll-margin-top: 12px;
+  background: var(--accent-soft);
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+.rv-ws-cl--focus:focus-visible {
+  outline-style: solid;
+}
 .rv-ws-cl del,
 .rv-ws-cl ins {
   white-space: pre-line;
@@ -424,6 +472,11 @@
   background: var(--red-soft);
   color: var(--red);
 }
+/* A related position is context, not a defect: muted, never a change or severity colour. */
+.rv-ws-typ--related {
+  background: var(--side);
+  color: var(--text-3);
+}
 .rv-ws-dt h2 {
   margin: 0;
   font: 500 21px/1.25 var(--doc);
@@ -447,6 +500,29 @@
   color: var(--text-3);
   font-size: 12px;
   font-weight: 500;
+}
+/* The condensed source list: one disclosure, so the panel does not repeat what is above it. */
+.rv-ws-srcs > summary {
+  justify-content: flex-start;
+  cursor: pointer;
+  list-style: none;
+}
+.rv-ws-srcs > summary::-webkit-details-marker {
+  display: none;
+}
+.rv-ws-srcs > summary small {
+  margin-left: auto;
+  padding-right: 8px;
+  color: var(--text-3);
+  font-weight: 400;
+}
+.rv-ws-srcs > summary::after {
+  content: '▾';
+  color: var(--text-3);
+  font-size: 10px;
+}
+.rv-ws-srcs[open] > summary::after {
+  content: '▴';
 }
 .rv-ws-machine {
   padding: 12px 14px;
@@ -607,6 +683,11 @@
 .rv-ws-note--approval {
   border-left-color: var(--amber);
   background: var(--amber-soft);
+}
+/* A related position is a note, not a defect: a neutral edge, no accent or amber. */
+.rv-ws-note--related {
+  border-left-color: var(--line-2);
+  background: var(--side);
 }
 .rv-ws-authority {
   display: flex;

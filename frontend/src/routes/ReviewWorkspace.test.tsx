@@ -103,13 +103,17 @@ describe('workspace layout', () => {
 })
 
 describe('finalize is the server’s decision', () => {
-  it('is disabled and says why while the server reports blockers', async () => {
+  it('is disabled with one compact status while the server reports blockers, and the exact reason is in a disclosure', async () => {
     renderWorkspace(stubContractApi(options()))
-    const finalize = await within(await topBar()).findByRole('button', { name: /Finalize review · 2 unresolved/ })
+    const finalize = await within(await topBar()).findByRole('button', { name: 'Finalize review' })
     expect(finalize).toBeDisabled()
     expect(finalize).toHaveAttribute('title', '1 finding that requires review still needs a decision.')
-    expect(await topBar()).toHaveTextContent('1 finding that requires review still needs a decision.')
     expect(await topBar()).toHaveTextContent('0 of 2 resolved')
+    // The unresolved count is not repeated on the button, and the blocker is not a clipped line.
+    expect(await topBar()).not.toHaveTextContent(/unresolved/)
+    expect(await topBar()).toHaveTextContent('Not ready to finalize')
+    await userEvent.click(within(await topBar()).getByText('Not ready to finalize'))
+    expect(await topBar()).toHaveTextContent('1 finding that requires review still needs a decision.')
   })
 
   it('is enabled only when the server says ready, and finalizes after one confirmation', async () => {
@@ -127,7 +131,7 @@ describe('finalize is the server’s decision', () => {
     await userEvent.click(finalize)
     const dialog = await screen.findByRole('dialog', { name: 'Finalize this review?' })
     expect(dialog).toHaveTextContent('1 approved change (1 accepted, 0 edited)')
-    expect(dialog).toHaveTextContent('1 rejected Finding; no ApprovedChange created')
+    expect(dialog).toHaveTextContent('1 rejected Finding; no approved change created')
     expect(dialog).toHaveTextContent('Redline generation is a separate downstream step.')
     expect(api.requests.filter((r) => r.method === 'POST' && r.url.endsWith('/finalize'))).toHaveLength(0)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Finalize review' }))
