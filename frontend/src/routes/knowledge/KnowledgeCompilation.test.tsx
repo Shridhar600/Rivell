@@ -91,6 +91,34 @@ describe('compilation workspace', () => {
     expect(heading()).toHaveTextContent('Assignment')
   })
 
+  it('labels every candidate with the record kind its unit was compiled as', async () => {
+    await open()
+    const list = rail()
+    expect(within(list).getByRole('button', { name: /Assignment/ })).toHaveTextContent('Position')
+    expect(within(list).getByRole('button', { name: /Subcontracting/ })).toHaveTextContent('Position')
+  })
+
+  it('keeps a unit that became no candidate visible, secondary, with its record kind', async () => {
+    await open()
+    const list = rail()
+    const title = within(list).getByText('How to use this playbook')
+    const row = title.closest('.rv-kc-unit') as HTMLElement
+    expect(row).not.toBeNull()
+    expect(row).toHaveTextContent('Guidance')
+    expect(row).toHaveTextContent('Heading section')
+    // It is reference material, not a candidate: no control to select or decide it.
+    expect(within(row).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('shows no record kind for data compiled before record kinds existed', async () => {
+    const world = reviewWorld()
+    world.units[SRC] = (world.units[SRC] ?? []).map((entry) => ({ ...entry, recordKind: null }))
+    await open(world)
+    const list = rail()
+    expect(within(list).getByRole('button', { name: /Assignment/ })).not.toHaveTextContent('Position')
+    expect(within(list).queryByText('How to use this playbook')).not.toBeInTheDocument()
+  })
+
   it('does not copy the prototype: no search, identity, or sample files', async () => {
     await open()
     expect(screen.queryByText(/Jump to or run/)).not.toBeInTheDocument()

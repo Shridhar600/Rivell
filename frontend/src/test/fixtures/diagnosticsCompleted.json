@@ -64,7 +64,7 @@
           "durationMillis": 1
         },
         {
-          "key": "CLAUSE:LIABILITY_CAP:LIMITATION_OF_LIABILITY:ab5de1ea-8643-453d-a79d-ca30cf1412b5",
+          "key": "CLAUSE:POLICY_COMPARISON:LIMITATION_OF_LIABILITY:ab5de1ea-8643-453d-a79d-ca30cf1412b5",
           "status": "COMPLETED",
           "signalCount": 1,
           "degradedReason": null,

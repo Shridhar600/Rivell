@@ -108,7 +108,7 @@ describe('sidebar', () => {
     ['/reviews/new', 'Reviews'],
     ['/reviews/con-1/overview/rev-1', 'Reviews'],
     ['/knowledge', 'Knowledge'],
-    ['/knowledge/clauses/LIABILITY_CAP', 'Knowledge'],
+    ['/knowledge/clauses/LIMITATION_OF_LIABILITY', 'Knowledge'],
     ['/knowledge/sources/a1', 'Knowledge'],
   ])('marks exactly one destination current on %s: %s', (path, current) => {
     stubApi()

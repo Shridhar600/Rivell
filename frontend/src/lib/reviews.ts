@@ -86,15 +86,18 @@ export function classificationLabel(classification: string): string {
 }
 
 const ISSUE_FAMILY_LABELS: Record<string, string> = {
-  LIABILITY_CAP_DEVIATION: 'Liability cap deviation',
-  LIABILITY_CAP_UNCERTAIN: 'Liability cap uncertainty',
   MISSING_REQUIRED_PROVISION: 'Missing required provision',
   EXPECTED_PROVISION_ABSENT: 'Expected provision absent',
   SURVIVAL_COVERAGE_GAP: 'Survival coverage gap',
   CARVE_OUT_INCONSISTENCY: 'Carve-out inconsistency',
   POLICY_UNAVAILABLE: 'Policy unavailable',
   POLICY_AMBIGUOUS: 'Policy ambiguous',
-  OPEN_ENDED_LIABILITY: 'Open-ended liability',
+  POSITION_WALK_AWAY: 'Breaches walk-away',
+  POSITION_NEEDS_FALLBACK: 'Beyond our fallbacks',
+  POSITION_ACCEPTABLE_FALLBACK: 'Within an acceptable fallback',
+  POSITION_AMBIGUOUS: 'Unclear against our position',
+  POSITION_UNCERTAIN: 'Could not be assessed',
+  OPEN_ENDED_POSITION: 'No approved position available',
 }
 
 export function issueFamilyLabel(family: string): string {
@@ -102,8 +105,6 @@ export function issueFamilyLabel(family: string): string {
 }
 
 const OBSERVATION_KIND_LABELS: Record<string, string> = {
-  CAP_ABOVE_PREFERRED: 'Liability cap above the preferred position',
-  PROHIBITED_STRUCTURE: 'Structure the policy prohibits',
   MISSING_REQUIRED_CONCEPT: 'Required provision missing',
   EXPECTED_CONCEPT_ABSENT: 'Expected provision absent',
   POLICY_UNAVAILABLE: 'Policy unavailable',
@@ -111,11 +112,51 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
   SURVIVAL_COVERAGE_GAP: 'Survival coverage gap',
   CARVE_OUT_INCONSISTENCY: 'Carve-out inconsistency',
   OPEN_ENDED_ANALYSIS_RESULT: 'Open-ended analysis',
+  POSITION_WALK_AWAY: 'Breaches walk-away',
+  POSITION_BEYOND_FALLBACK: 'Beyond our fallbacks',
+  POSITION_WITHIN_FALLBACK: 'Within an acceptable fallback',
+  POSITION_UNCLEAR: 'Unclear against our position',
+}
+
+const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
+  bounded_decision_unavailable: 'Could not be assessed',
 }
 
 export function observationKindLabel(kind: string): string {
-  if (kind.startsWith('UNCERTAINTY:')) return 'Uncertain assessment'
+  if (kind.startsWith('UNCERTAINTY:')) {
+    const reason = kind.slice('UNCERTAINTY:'.length)
+    return UNCERTAINTY_REASON_LABELS[reason] ?? 'Uncertain assessment'
+  }
   return OBSERVATION_KIND_LABELS[kind] ?? humanizeCode(kind)
+}
+
+const COMPARISON_CATEGORY_LABELS: Record<string, string> = {
+  MEETS_PREFERRED: 'Meets the preferred position',
+  WITHIN_FALLBACK: 'Within an acceptable fallback',
+  BEYOND_FALLBACK: 'Beyond every listed fallback',
+  WALK_AWAY: 'Breaches the walk-away',
+  UNCLEAR: 'Unclear against the position',
+  NOT_ADDRESSED: 'Does not address the position',
+}
+
+export function comparisonCategoryLabel(category: string): string {
+  return COMPARISON_CATEGORY_LABELS[category] ?? humanizeCode(category)
+}
+
+/**
+ * The comparison's own assessment in one line: the code-owned category, then the model's flag
+ * probability as a percentage. The probability is the model's estimate, never a certainty, and a
+ * finding whose quality lacks both parts shows no line.
+ */
+export function assessmentSummary(quality: FindingQuality | null): string | null {
+  const parts: string[] = []
+  if (quality?.category) parts.push(comparisonCategoryLabel(quality.category))
+  if (quality?.flagProbability !== null && quality?.flagProbability !== undefined) {
+    parts.push(
+      `Model confidence ${Math.round(quality.flagProbability * 100)}% (an estimate, not a certainty)`,
+    )
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 const CLAIM_KIND_LABELS: Record<string, string> = {

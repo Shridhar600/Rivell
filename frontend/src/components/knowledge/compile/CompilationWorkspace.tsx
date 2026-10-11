@@ -70,6 +70,13 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
   const blocks = useMemo(() => (structureReady ? sourceBlocks(nodes, highlightMap(candidates, units)) : null), [structureReady, nodes, units, candidates])
   const byId = useMemo(() => (nodes ? indexNodes(nodes) : null), [nodes])
   const locations = useMemo(() => (structureReady ? candidateLocations(candidates, units, nodes) : new Map<string, string | null>()), [structureReady, candidates, units, nodes])
+  const unitsById = useMemo(() => new Map((units ?? []).map((entry) => [entry.id, entry])), [units])
+  // Records the compiler kept as units. Only kind-assessed units are shown: without a record kind
+  // there was no kind gate to exclude them, so listing them as "not compiled" would mislead.
+  const uncompiled = useMemo(() => {
+    const compiled = new Set(candidates.map((candidate) => candidate.extractionUnitId))
+    return (units ?? []).filter((entry) => entry.recordKind !== null && !compiled.has(entry.id))
+  }, [units, candidates])
   const index = useMemo(() => (publicationsQuery.data ? buildPublicationIndex(publicationsQuery.data) : null), [publicationsQuery.data])
 
   const update = useCallback(
@@ -266,6 +273,8 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       groups={groups}
       readiness={state}
       locations={locations}
+      unitsById={unitsById}
+      uncompiled={uncompiled}
       selectedId={selected?.id ?? null}
       groupSelected={open?.kind === 'group'}
       onSelect={select}

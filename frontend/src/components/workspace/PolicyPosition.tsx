@@ -36,11 +36,20 @@ export function PolicyPosition({ view, openable, onOpenSource }: Props) {
           {view.columns.map((column) => (
             <div key={column.key} className={column.key === 'contract' ? 'rv-ws-pos-bad' : undefined} role="group" aria-label={column.label}>
               <small>{column.label}</small>
-              {column.entries.map((entry) => (
-                <div key={entry.evidenceId} className="rv-ws-pos-item">
-                  {entry.text !== null ? <b className="rv-ws-clamp">{entry.text}</b> : null}
-                  {entry.facts.map((fact) => (
-                    <div key={fact.title} className="rv-ws-pos-facts">
+              {column.entries.map((entry, index) => (
+                <div key={`${column.key}-${index}`} className="rv-ws-pos-item">
+                  {entry.text !== null ? (
+                    <b className="rv-ws-clamp">
+                      {column.key === 'fallback' && column.entries.length > 1 ? (
+                        <span className="rv-ws-pos-n" aria-hidden="true">
+                          {index + 1}
+                        </span>
+                      ) : null}
+                      {entry.text}
+                    </b>
+                  ) : null}
+                  {entry.facts.map((fact, factIndex) => (
+                    <div key={`${fact.title}-${factIndex}`} className="rv-ws-pos-facts">
                       {showFactTitles ? <span className="rv-ws-pos-ft">{fact.title}</span> : null}
                       {fact.rows.map((row) => (
                         <span key={row.field} className="rv-ws-pos-row">
@@ -60,8 +69,8 @@ export function PolicyPosition({ view, openable, onOpenSource }: Props) {
           ))}
         </div>
       ) : null}
-      {view.escalations.map((escalation) => (
-        <div key={`${escalation.evidenceId}-${escalation.trigger}`} className="rv-ws-src">
+      {view.escalations.map((escalation, index) => (
+        <div key={`${escalation.evidenceId}-${escalation.trigger}-${index}`} className="rv-ws-src">
           Escalate: {escalation.trigger}
           <SourceLink
             evidenceId={escalation.evidenceId}

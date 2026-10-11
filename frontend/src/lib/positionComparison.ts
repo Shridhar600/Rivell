@@ -17,7 +17,7 @@ export interface PositionEntry {
 }
 
 export interface PositionColumn {
-  key: 'contract' | 'preferred' | 'fallback'
+  key: 'contract' | 'preferred' | 'fallback' | 'walkAway'
   label: string
   entries: PositionEntry[]
 }
@@ -50,10 +50,18 @@ export function policyPositionView(comparison: PositionComparison | null): Polic
   if (!comparison) return null
   const preferred = policyEntries(comparison.preferred)
   const fallback = policyEntries(comparison.fallback)
+  const walkAway = policyEntries(comparison.walkAway)
   const escalations = comparison.escalation
     .filter((slot) => slot.trigger.trim() !== '')
     .map((slot) => ({ evidenceId: slot.evidenceItemId, publication: slot.publicationNumber, trigger: slot.trigger }))
-  if (preferred.length === 0 && fallback.length === 0 && escalations.length === 0) return null
+  if (
+    preferred.length === 0 &&
+    fallback.length === 0 &&
+    walkAway.length === 0 &&
+    escalations.length === 0
+  ) {
+    return null
+  }
 
   const contract: PositionEntry[] = comparison.contract.flatMap((slot) => {
     const facts = slot.facts
@@ -75,7 +83,8 @@ export function policyPositionView(comparison: PositionComparison | null): Polic
   const columns: PositionColumn[] = [
     { key: 'contract', label: 'Contract', entries: contract },
     { key: 'preferred', label: 'Preferred', entries: preferred },
-    { key: 'fallback', label: 'Fallback', entries: fallback },
+    { key: 'fallback', label: fallback.length > 1 ? 'Fallbacks' : 'Fallback', entries: fallback },
+    { key: 'walkAway', label: 'Walk-away', entries: walkAway },
   ]
   return { columns: columns.filter((column) => column.entries.length > 0), escalations }
 }

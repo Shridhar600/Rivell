@@ -23,6 +23,7 @@ const view: PolicyPositionView = {
     },
     { key: 'preferred', label: 'Preferred', entries: [policyEntry('p-1', 'Cap at 12 months of fees.')] },
     { key: 'fallback', label: 'Fallback', entries: [policyEntry('p-2', 'Cap at 24 months of fees.')] },
+    { key: 'walkAway', label: 'Walk-away', entries: [policyEntry('p-3', 'Never accept an uncapped liability.')] },
   ],
   escalations: [{ evidenceId: 'p-1', publication: 2, trigger: 'Uncapped liability' }],
 }
@@ -39,7 +40,47 @@ describe('PolicyPosition', () => {
     expect(screen.getByRole('group', { name: 'Contract' })).toHaveTextContent('3×Liability cap')
     expect(screen.getByRole('group', { name: 'Preferred' })).toHaveTextContent('Cap at 12 months of fees.')
     expect(screen.getByRole('group', { name: 'Fallback' })).toHaveTextContent('Cap at 24 months of fees.')
+    expect(screen.getByRole('group', { name: 'Walk-away' })).toHaveTextContent('Never accept an uncapped liability.')
     expect(screen.getByText(/Escalate: Uncapped liability/)).toBeInTheDocument()
+  })
+
+  it('numbers fallbacks when a position lists more than one, and keeps both', () => {
+    const multi: PolicyPositionView = {
+      columns: [
+        {
+          key: 'fallback',
+          label: 'Fallbacks',
+          entries: [policyEntry('p-2', 'First fallback.'), policyEntry('p-2', 'Second fallback.')],
+        },
+      ],
+      escalations: [],
+    }
+    render(<PolicyPosition view={multi} openable={new Set()} onOpenSource={() => undefined} />)
+    const group = screen.getByRole('group', { name: 'Fallbacks' })
+    expect(within(group).getByText('First fallback.')).toBeInTheDocument()
+    expect(within(group).getByText('Second fallback.')).toBeInTheDocument()
+    expect(within(group).getByText('1')).toBeInTheDocument()
+    expect(within(group).getByText('2')).toBeInTheDocument()
+  })
+
+  it('renders several fallbacks from one evidence item without a duplicate React key', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const multi: PolicyPositionView = {
+      columns: [
+        {
+          key: 'fallback',
+          label: 'Fallbacks',
+          entries: [policyEntry('p-2', 'First fallback.'), policyEntry('p-2', 'Second fallback.')],
+        },
+      ],
+      escalations: [],
+    }
+    render(<PolicyPosition view={multi} openable={new Set()} onOpenSource={() => undefined} />)
+    expect(screen.getByText('First fallback.')).toBeInTheDocument()
+    expect(screen.getByText('Second fallback.')).toBeInTheDocument()
+    const complaints = spy.mock.calls.map((call) => String(call[0]))
+    expect(complaints.some((message) => message.includes('same key'))).toBe(false)
+    spy.mockRestore()
   })
 
   it('opens the exact source behind an item', async () => {

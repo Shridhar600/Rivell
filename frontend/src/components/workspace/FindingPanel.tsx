@@ -8,6 +8,7 @@ import type { HumanDecision } from '../../api/workflow'
 import { authorityLabel } from '../../lib/evidence'
 import {
   absenceClaims,
+  assessmentSummary,
   claimKindLabel,
   classificationLabel,
   findingSubjectLabel,
@@ -166,8 +167,16 @@ export function FindingPanel(props: Props) {
   const recommendations = recommendationClaims(finding.claims)
   const absences = absenceClaims(finding.claims)
   const quality = qualityFactorRows(finding.quality)
+  const assessment = assessmentSummary(finding.quality)
   const note = policyNoteText(finding)
   const position = policyPositionView(finding.positionComparison)
+  // A within-fallback finding is a note, not a defect; a position that names an approver makes it
+  // an approval question instead.
+  const withinFallback = finding.issueFamily === 'POSITION_ACCEPTABLE_FALLBACK'
+  const approvalNeeded = withinFallback && finding.proposedAction === 'ESCALATE_TO_HUMAN'
+  const escalationTriggers = (finding.positionComparison?.escalation ?? [])
+    .map((slot) => slot.trigger.trim())
+    .filter((trigger) => trigger !== '')
   const change = proposedChangeType(finding)
   const grounded = isWordingGrounded(finding)
   const authority = !grounded ? null : languageAuthority(finding, items.get(finding.approvedDraftingEvidenceId ?? '')?.publicationNumber ?? null)
@@ -204,6 +213,11 @@ export function FindingPanel(props: Props) {
               <br />
               <span className="rv-ws-authority">{observationKindLabel(finding.observationKind)}</span>
             </p>
+            {assessment ? (
+              <p className="rv-ws-caption" data-testid="finding-assessment">
+                Assessment: {assessment}
+              </p>
+            ) : null}
             {absences.map((claim) => (
               <p key={claim.ordinal}>
                 {claim.text}
@@ -233,6 +247,23 @@ export function FindingPanel(props: Props) {
             ) : null}
           </div>
         </div>
+
+        {withinFallback ? (
+          <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
+            {approvalNeeded ? (
+              <>
+                <b>Approval is needed.</b> This position names an approver, so a human must approve
+                the clause before it can be accepted.
+                {escalationTriggers.length > 0 ? ` Escalate when: ${escalationTriggers.join('; ')}.` : ''}
+              </>
+            ) : (
+              <>
+                <b>This is a note, not a problem.</b> The clause departs from the preferred position
+                but stays within an acceptable fallback; accept and record it.
+              </>
+            )}
+          </p>
+        ) : null}
 
         {position ? <PolicyPosition view={position} openable={new Set(items.keys())} onOpenSource={props.onOpenSource} /> : null}
 

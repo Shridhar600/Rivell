@@ -119,8 +119,21 @@ export function reviewWorld(): Fake {
       node({ id: heading, nodeType: 'HEADING', parentId: 'body', ordinal: position * 2, bodyIndex: position * 2, text: entry.rawLabel, numberingLabel: `${position + 1}.1`, artifactId: SRC }),
       node({ id: para, nodeType: 'PARAGRAPH', parentId: 'body', ordinal: position * 2 + 1, bodyIndex: position * 2 + 1, text: entry.contentText ?? '', artifactId: SRC }),
     )
-    units.push(unit({ id: `u-${entry.id}`, artifactId: SRC, ordinal: position, sourceNodeIds: [heading, para] }))
+    units.push(unit({ id: `u-${entry.id}`, artifactId: SRC, ordinal: position, sourceNodeIds: [heading, para], recordKind: 'POSITION' }))
   })
+  // A record the kind gate kept out of the candidate list: it stays visible as a source unit.
+  units.push(
+    unit({
+      id: 'u-guidance',
+      artifactId: SRC,
+      ordinal: cands.length,
+      kind: 'HEADING_SECTION',
+      title: 'How to use this playbook',
+      contentText: 'Drafting notes for the negotiation team.',
+      recordKind: 'GUIDANCE',
+      sourceNodeIds: [],
+    }),
+  )
   return {
     artifacts: [artifact({ id: SRC, filename: 'Commercial MSA Playbook v4.docx', createdAt: '2026-10-04T09:00:00Z' })],
     candidates: { [SRC]: cands, pub: [peer] },

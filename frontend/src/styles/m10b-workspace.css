@@ -574,6 +574,27 @@
   margin-left: auto;
   white-space: nowrap;
 }
+/* A within-fallback finding reads as a note, not a defect. Approval-needed keeps the same shape,
+   with the "needs a human" amber edge. */
+.rv-ws-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--side);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.rv-ws-note b {
+  color: var(--text);
+  font-weight: 500;
+}
+.rv-ws-note--approval {
+  border-left-color: var(--amber);
+  background: var(--amber-soft);
+}
 .rv-ws-authority {
   display: flex;
   align-items: center;
