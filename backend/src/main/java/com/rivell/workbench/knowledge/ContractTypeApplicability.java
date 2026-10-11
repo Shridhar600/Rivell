@@ -12,8 +12,10 @@ import com.rivell.workbench.contracts.ContractType;
  * Reads what a playbook record says it applies to ("Applies to: MSA, Supply, Services.", a
  * contract-type column group) as contract type codes. Deterministic. A named type the
  * product does not model ("Supply") maps to OTHER, so the record still applies to contracts
- * of that unmodelled kind and not to every modelled type. Text that names no type, says
- * "all", or excludes types returns empty: the record then applies wherever its source does.
+ * of that unmodelled kind and not to every modelled type. Text that says "all", excludes
+ * types, or reads as a sentence returns empty: the record then applies wherever its source
+ * does. Text from a label the code does not know ("Variant: Preferred") narrows only when it
+ * names a modelled type, so a misread label never hides a position.
  */
 final class ContractTypeApplicability {
 
@@ -23,6 +25,8 @@ final class ContractTypeApplicability {
     private static final Pattern SEPARATOR = Pattern.compile("\\s*(?:[,;/|&+\\n]|\\band\\b|\\bor\\b)\\s*");
     private static final Pattern NO_NARROWING = Pattern.compile(
             "\\b(?:all|any|every|general|except|excluding|other than|unless|not)\\b");
+    /** A contract type name is a few words; a longer item is a sentence, not a list of types. */
+    private static final int MAX_TYPE_NAME_WORDS = 6;
 
     private ContractTypeApplicability() {
     }
@@ -36,7 +40,12 @@ final class ContractTypeApplicability {
         return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
     }
 
-    static Set<String> contractTypes(String text) {
+    /**
+     * @param fromKnownLabel the text comes from a label the code knows as applicability ("Applies
+     *     to", "Contract types") or a prose "Applies to:" line; only then may it name unmodelled
+     *     types alone
+     */
+    static Set<String> contractTypes(String text, boolean fromKnownLabel) {
         if (text == null || text.isBlank()) {
             return Set.of();
         }
@@ -47,11 +56,16 @@ final class ContractTypeApplicability {
         var types = new LinkedHashSet<String>();
         for (var token : SEPARATOR.split(normalized)) {
             var name = token.replaceAll("[^a-z0-9 -]", " ").replaceAll("\\s+", " ").strip();
-            if (!name.isEmpty()) {
-                types.add(typeOf(name).name());
+            if (name.isEmpty()) {
+                continue;
             }
+            if (name.split(" ").length > MAX_TYPE_NAME_WORDS) {
+                return Set.of();
+            }
+            types.add(typeOf(name).name());
         }
-        return Set.copyOf(types);
+        var namesModelledType = types.stream().anyMatch(type -> !ContractType.OTHER.name().equals(type));
+        return namesModelledType || fromKnownLabel ? Set.copyOf(types) : Set.of();
     }
 
     private static ContractType typeOf(String name) {

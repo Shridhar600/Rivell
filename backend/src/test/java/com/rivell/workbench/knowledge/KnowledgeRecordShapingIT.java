@@ -210,8 +210,9 @@ class KnowledgeRecordShapingIT {
 
         /**
          * Real Jev (dev eval 2026-10-11) read playbook A's approval-matrix column
-         * "Situation" (values "Fallback 1 used", …) as PREFERRED. Every other unknown
-         * label answers OTHER.
+         * "Situation" (values "Fallback 1 used", …) as PREFERRED, and (2026-10-12) clause
+         * library D's "Variant" (values "Preferred", "Fallback") as APPLICABILITY. Every
+         * other unknown label answers OTHER.
          */
         private static String labelRole(ChoiceQuestion question) {
             var instructions = question.instructions();
@@ -224,7 +225,8 @@ class KnowledgeRecordShapingIT {
             if (instructions.contains("\"Never\"")) {
                 return "PROHIBITED";
             }
-            return instructions.contains("\"Which deals\"") ? "APPLICABILITY" : "OTHER";
+            return instructions.contains("\"Which deals\"") || instructions.contains("\"Variant\"")
+                    ? "APPLICABILITY" : "OTHER";
         }
 
         private static String declaredType(Object state) {
@@ -771,6 +773,36 @@ class KnowledgeRecordShapingIT {
                 .containsEntry(PositionRole.FALLBACK, List.of("Net 45 days."))
                 .containsEntry(PositionRole.PROHIBITED, List.of("Net 90 or later."));
         assertThat(candidate.scope().sourceContractTypes()).containsExactlyInAnyOrder("MSA", "SOW");
+    }
+
+    @Test
+    void aLabelMisreadAsApplicabilityDoesNotHideThePosition() throws Exception {
+        provider.reset();
+        byte[] workbook;
+        try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
+            var sheet = xssf.createSheet("Library");
+            String[][] rows = {
+                    {"Ref", "Clause topic", "Variant", "Approved language"},
+                    {"C08", "Foreground IP", "Preferred",
+                            "Our position: all deliverables vest in the Customer on creation."}};
+            for (int r = 0; r < rows.length; r++) {
+                var row = sheet.createRow(r);
+                for (int c = 0; c < rows[r].length; c++) {
+                    row.createCell(c).setCellValue(rows[r][c]);
+                }
+            }
+            xssf.write(out);
+            workbook = out.toByteArray();
+        }
+        var manifest = new ArtifactManifest(Set.of(), null, null, null, null, "en", null, null, null);
+        var artifact = ingestionService.ingest("library.xlsx", "application/octet-stream",
+                ArtifactType.CLAUSE_LIBRARY, manifest, new ByteArrayInputStream(workbook));
+
+        var candidate = queryService.getCandidates(artifact.id()).getFirst();
+        assertThat(candidate.effectiveFieldRoles()).containsEntry("Variant", "APPLICABILITY");
+        assertThat(candidate.scope().sourceContractTypes())
+                .as("\"Preferred\" names no contract type, so the record applies wherever its source does")
+                .isEmpty();
     }
 
     private KnowledgeArtifact ingest(String fixture, String filename, ArtifactType type)

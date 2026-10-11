@@ -262,15 +262,22 @@ public class SemanticCompilationService {
     /**
      * The contract types the record itself says it applies to: its APPLICABILITY field, or a
      * prose "Applies to:" line. Deterministic; a record that states nothing keeps the scope it
-     * inherited from the manifest.
+     * inherited from the manifest. A label only the model resolved as applicability ("Variant",
+     * "Trigger") narrows only when its value names a contract type the product models.
      */
     private static KnowledgeCandidate withSourceApplicability(
             KnowledgeCandidate candidate, ExtractionUnit unit, Map<String, RecordFieldRole> roles) {
-        var stated = Optional.ofNullable(firstFieldValue(candidate, roles, RecordFieldRole.APPLICABILITY));
-        if (stated.isEmpty() && unit.kind() == ExtractionUnitKind.HEADING_SECTION) {
-            stated = ContractTypeApplicability.statedIn(unit.contentText());
+        var label = firstFieldLabel(candidate, roles, RecordFieldRole.APPLICABILITY);
+        Set<String> types = Set.of();
+        if (label != null) {
+            var codeKnown = RecordLabelRoles.known(label).orElse(null) == RecordFieldRole.APPLICABILITY;
+            types = ContractTypeApplicability.contractTypes(
+                    candidate.payload().columns().get(label), codeKnown);
+        } else if (unit.kind() == ExtractionUnitKind.HEADING_SECTION) {
+            types = ContractTypeApplicability.statedIn(unit.contentText())
+                    .map(text -> ContractTypeApplicability.contractTypes(text, true))
+                    .orElse(Set.of());
         }
-        var types = stated.map(ContractTypeApplicability::contractTypes).orElse(Set.of());
         return types.isEmpty() ? candidate
                 : candidate.withScope(candidate.scope().withSourceContractTypes(types));
     }
@@ -299,11 +306,18 @@ public class SemanticCompilationService {
     private static String firstFieldValue(
             KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles,
             RecordFieldRole wanted) {
+        var label = firstFieldLabel(candidate, roles, wanted);
+        return label == null ? null : candidate.payload().columns().get(label);
+    }
+
+    private static String firstFieldLabel(
+            KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles,
+            RecordFieldRole wanted) {
         for (var key : candidate.payload().orderedKeys()) {
             if (roles.get(key) == wanted) {
                 var value = candidate.payload().columns().get(key);
                 if (value != null && !value.isBlank()) {
-                    return value;
+                    return key;
                 }
             }
         }
