@@ -42,6 +42,9 @@ final class ExecutionLog {
                 .addKeyValue("outcome", "FAILED")
                 .addKeyValue("durationMs", durationMs)
                 .addKeyValue("error", failure.getClass().getSimpleName())
+                // code-written reasons only ("missing required field x"); a raw provider
+                // exception may carry contract text and is never logged
+                .addKeyValue("reason", failure instanceof SemanticDecisionException ? failure.getMessage() : null)
                 .log(EVENT);
     }
 }
