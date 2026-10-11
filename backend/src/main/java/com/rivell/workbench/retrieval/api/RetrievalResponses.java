@@ -81,7 +81,10 @@ public final class RetrievalResponses {
                                 .map(Enum::name)
                                 .collect(java.util.stream.Collectors.toSet()),
                         item.policyFacts().requiresApproval(),
-                        item.policyFacts().escalationTrigger()),
+                        item.policyFacts().escalationTrigger(),
+                        item.policyFacts().preferred(),
+                        item.policyFacts().fallbacks(),
+                        item.policyFacts().prohibited()),
                 item.contractFacts(),
                 item.retrievalReason(),
                 new LaneInfoResponse(
@@ -122,7 +125,10 @@ public final class RetrievalResponses {
     public record PolicyFactsResponse(
             java.util.Set<String> positions,
             Boolean requiresApproval,
-            String escalationTrigger) {
+            String escalationTrigger,
+            String preferred,
+            List<String> fallbacks,
+            String prohibited) {
     }
 
     @Schema(name = "LaneInfoResponse")

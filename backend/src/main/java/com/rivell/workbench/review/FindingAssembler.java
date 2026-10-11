@@ -56,7 +56,7 @@ public final class FindingAssembler {
 
         var observation = observation(primary);
         var action = action(primary, drafting, openEnded, escalation);
-        var severity = severity(primary, escalation);
+        var severity = severity(primary);
         var quality = quality(group);
         var evidence = evidence(group);
         var concepts = concepts(group);
@@ -82,7 +82,7 @@ public final class FindingAssembler {
                 primary.subjectKind(), primary.subjectHeadingNodeId(),
                 primary.absenceConcept(), primary.concept(), primary.secondaryConcept(),
                 primary.issueFamily(), observation.kind(), observation.text(),
-                severity, classification(primary, severity), action, proposedLanguage,
+                severity, classification(primary, escalation), action, proposedLanguage,
                 languageSource, draftingEvidenceId, quality, now, concepts, claims,
                 evidence, group.stream().map(RawReviewSignal::id).toList());
     }
@@ -257,8 +257,7 @@ public final class FindingAssembler {
         return ProposedAction.ESCALATE_TO_HUMAN;
     }
 
-    private static FindingSeverity severity(
-            RawReviewSignal primary, EscalationPayload escalation) {
+    private static FindingSeverity severity(RawReviewSignal primary) {
         if (primary.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return FindingSeverity.HIGH;
         }
@@ -267,15 +266,12 @@ public final class FindingAssembler {
         }
         if (primary.signalType() == SignalType.POLICY_DEVIATION
                 && primary.payload() instanceof PositionDeviationPayload deviation) {
-            if (PolicyComparisonSpecs.WALK_AWAY.equals(deviation.category())) {
-                return FindingSeverity.HIGH;
-            }
-            if (escalation != null) {
-                // the position names an approver: the finding escalates as it did before
-                return FindingSeverity.HIGH;
-            }
-            return PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())
-                    ? FindingSeverity.LOW : FindingSeverity.MEDIUM;
+            // severity follows the category; a named approver changes the action, not the risk
+            return switch (deviation.category()) {
+                case PolicyComparisonSpecs.WALK_AWAY -> FindingSeverity.HIGH;
+                case PolicyComparisonSpecs.WITHIN_FALLBACK -> FindingSeverity.LOW;
+                default -> FindingSeverity.MEDIUM;
+            };
         }
         if (primary.signalType() == SignalType.CROSS_CLAUSE_CONFLICT) {
             return FindingSeverity.HIGH;
@@ -284,7 +280,7 @@ public final class FindingAssembler {
     }
 
     private static FindingClassification classification(
-            RawReviewSignal primary, FindingSeverity severity) {
+            RawReviewSignal primary, EscalationPayload escalation) {
         if (primary.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return FindingClassification.BLOCKING;
         }
@@ -297,7 +293,7 @@ public final class FindingAssembler {
                 return FindingClassification.BLOCKING;
             }
             if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())) {
-                return severity == FindingSeverity.LOW
+                return escalation == null
                         ? FindingClassification.INFORMATIONAL
                         : FindingClassification.REVIEW_REQUIRED;
             }

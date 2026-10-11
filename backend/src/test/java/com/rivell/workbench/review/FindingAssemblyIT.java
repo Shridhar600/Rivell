@@ -137,8 +137,8 @@ class FindingAssemblyIT {
                 .isEqualTo(ProposedLanguageSource.APPROVED_DRAFTING);
         assertThat(finding.proposedLanguage()).contains("two times the fees");
         assertThat(finding.approvedDraftingEvidenceId()).isNotNull();
-        // the position names an approver, so the finding escalates to HIGH as before
-        assertThat(finding.severity()).isEqualTo(FindingSeverity.HIGH);
+        // severity follows the category; the named approver keeps it review-required
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
         assertThat(finding.reviewClassification())
                 .isEqualTo(FindingClassification.REVIEW_REQUIRED);
         assertThat(finding.signalIds()).hasSize(3);
@@ -390,8 +390,7 @@ class FindingAssemblyIT {
                         .equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow();
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.REVIEW_AMBIGUITY);
-        // the liability position names an approver, so the finding escalates to HIGH
-        assertThat(finding.severity()).isEqualTo(FindingSeverity.HIGH);
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
         assertThat(finding.proposedLanguageSource())
                 .isEqualTo(ProposedLanguageSource.NONE);
         assertThat(finding.reviewClassification())

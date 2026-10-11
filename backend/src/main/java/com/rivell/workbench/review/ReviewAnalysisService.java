@@ -254,7 +254,8 @@ public class ReviewAnalysisService {
             Review review, ReviewSnapshot snapshot, ReviewAnalysisRun run,
             ContractSemantics semantics, AnalysisEnvironment environment) {
         var evidenceCache = new ReviewEvidenceCache(evidenceService);
-        var headingTexts = headingTexts(snapshot);        for (var check : reviewRepository.findPlanChecks(review.organizationId(), review.id())) {
+        var headingTexts = headingTexts(snapshot);
+        for (var check : reviewRepository.findPlanChecks(review.organizationId(), review.id())) {
             var existing = analysisRepository.findExecution(
                     review.organizationId(), run.id(), check.id());
             if (existing.isPresent() && existing.get().status().terminal()) {

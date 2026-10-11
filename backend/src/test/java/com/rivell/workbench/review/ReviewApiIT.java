@@ -312,7 +312,7 @@ class ReviewApiIT {
                 .andExpect(jsonPath("$.data.observationKind")
                         .value("POSITION_BEYOND_FALLBACK"))
                 .andExpect(jsonPath("$.data.observationText").isNotEmpty())
-                .andExpect(jsonPath("$.data.severity").value("HIGH"))
+                .andExpect(jsonPath("$.data.severity").value("MEDIUM"))
                 .andExpect(jsonPath("$.data.reviewClassification")
                         .value("REVIEW_REQUIRED"))
                 .andExpect(jsonPath("$.data.proposedAction")

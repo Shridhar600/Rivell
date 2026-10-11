@@ -52,7 +52,7 @@ public class StructuredPolicyResolver {
                 profile.jurisdiction() == Jurisdiction.UNSPECIFIED
                         ? null : profile.jurisdiction().name(),
                 request.effectiveOn(),
-                limit);
+                limit + 1); // one row past the cap reveals truncation
         // system-level read: the request's organization is authoritative and the
         // caller (EvidenceService) already enforced identity/authorization
         var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
