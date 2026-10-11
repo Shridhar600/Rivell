@@ -214,7 +214,7 @@ def pct(n, d):
 def write_report(out, results, meta):
     lines = [f"# Eval run {meta['runId']}", "",
              f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}", ""]
-    tot = {k: 0 for k in ("sx", "sm", "cl", "cc", "ix", "id", "cs", "fa", "pos", "posf", "cand", "candc")}
+    tot = {k: 0 for k in ("sx", "sm", "cl", "cc", "ix", "id", "cs", "fa", "fas", "pos", "posf", "cand", "candc")}
     lines += ["## Knowledge", "", "| File | Candidates | With concept | Positions whole | Positions split | Unmatched candidates |",
               "|---|---|---|---|---|---|"]
     for r in results:
@@ -224,17 +224,19 @@ def write_report(out, results, meta):
             lines.append(f"| {k['file']} | {k['candidates']} | {pct(k['candidatesWithConcept'], k['candidates'])} "
                          f"| {pct(k['positionsFound'], k['expectedPositions'])} | {k.get('positionsSplit', 0)} | {k['unmatchedCandidates']} |")
     lines += ["", "## Contracts", "",
-              "| File | Review | Sections matched | Clauses classified | Findings (absence) | Issues detected | False-alarm sections |",
-              "|---|---|---|---|---|---|---|"]
+              "| File | Review | Sections matched | Clauses classified | Findings (absence) | Issues detected | False-alarm sections | of which MEDIUM+ |",
+              "|---|---|---|---|---|---|---|---|"]
     for r in results:
         for c in r["contracts"]:
             tot["sx"] += c["sectionsExpected"]; tot["sm"] += c["sectionsMatched"]
             tot["cl"] += c["clauses"]; tot["cc"] += c["clausesClassified"]
             tot["ix"] += len(c["issues"]); tot["id"] += c["issuesDetected"]
             tot["cs"] += c["compliantSections"]; tot["fa"] += c["falseAlarmSections"]
+            tot["fas"] += c.get("seriousFalseAlarmSections", 0)
             lines.append(f"| {c['file']} | {c['reviewStatus']} | {pct(c['sectionsMatched'], c['sectionsExpected'])} "
                          f"| {pct(c['clausesClassified'], c['clauses'])} | {c['findings']} ({c['absenceFindings']}) "
-                         f"| {pct(c['issuesDetected'], len(c['issues']))} | {pct(c['falseAlarmSections'], c['compliantSections'])} |")
+                         f"| {pct(c['issuesDetected'], len(c['issues']))} | {pct(c['falseAlarmSections'], c['compliantSections'])} "
+                         f"| {c.get('seriousFalseAlarmSections', 0)} |")
     by_cat = {}
     for r in results:
         for c in r["contracts"]:
@@ -247,7 +249,8 @@ def write_report(out, results, meta):
               f"- Knowledge candidates with concept: {pct(tot['candc'], tot['cand'])}",
               f"- Positions found whole (preferred + walk-away in one candidate): {pct(tot['posf'], tot['pos'])}",
               f"- Planted issues detected (section-level): {pct(tot['id'], tot['ix'])}",
-              f"- False-alarm compliant sections: {pct(tot['fa'], tot['cs'])}", "",
+              f"- False-alarm compliant sections: {pct(tot['fa'], tot['cs'])}"
+              f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})", "",
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]
     errs = [f"- {r['org']}: {e}" for r in results for e in r["errors"]]

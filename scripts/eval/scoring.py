@@ -109,6 +109,8 @@ def score_contract(answer, structure_nodes, clauses, findings):
 
     compliant = answer.get("compliantSectionIds", [])
     false_alarms = [sid for sid in compliant if sid in finding_sections]
+    serious_alarms = [sid for sid in false_alarms
+                      if any(f.get("severity") in ("MEDIUM", "HIGH") for f in finding_sections[sid])]
     return {
         "sectionsExpected": len(expected),
         "headingsDetected": len(detected),
@@ -122,4 +124,5 @@ def score_contract(answer, structure_nodes, clauses, findings):
         "issuesDetected": sum(1 for i in issues if i["detected"]),
         "compliantSections": len(compliant),
         "falseAlarmSections": len(false_alarms),
+        "seriousFalseAlarmSections": len(serious_alarms),
     }
