@@ -325,9 +325,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
      */
     private static boolean governsOnlySecondaryTopic(ClauseSemantics clause, EvidenceItem position) {
         var primary = clause.effectivePrimaryConcept();
-        var facts = position.policyFacts();
-        return primary.isPresent() && facts != null && !facts.topicKeys().isEmpty()
-                && !facts.topicKeys().contains(primary.get().value());
+        return primary.isPresent() && !position.topicKeys().isEmpty()
+                && !position.topicKeys().contains(primary.get().value());
     }
 
     private static boolean wantsLanguage(String category) {
@@ -375,14 +374,13 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     }
 
     /**
-     * Approved wording on the position's own topic, the acceptable second position
-     * (fallback) before the ideal one. A clause on two topics resolves variants for both,
-     * so wording for another topic must not answer this position.
+     * Approved wording that shares a topic with the position, the acceptable second
+     * position (fallback) before the ideal one. A clause on two topics resolves variants
+     * for both, so wording for another topic must not answer this position.
      */
     private static EvidenceItem chooseDrafting(List<EvidenceItem> items, EvidenceItem position) {
         var sameTopic = items.stream()
-                .filter(item -> position.legalConcept() == null || item.legalConcept() == null
-                        || position.legalConcept().equals(item.legalConcept()))
+                .filter(item -> item.topicKeys().stream().anyMatch(position.topicKeys()::contains))
                 .toList();
         return sameTopic.stream()
                 .filter(item -> item.variantRole() == PositionRole.FALLBACK)

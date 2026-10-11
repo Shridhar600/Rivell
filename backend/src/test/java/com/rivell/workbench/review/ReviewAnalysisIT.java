@@ -427,7 +427,7 @@ class ReviewAnalysisIT {
 
     private com.rivell.workbench.retrieval.EvidenceItem evidenceItem(
             java.util.UUID evidenceId) {
-        // Exactly the 20 declared components: only text, retrievalReason and the provenance list
+        // Exactly the 21 declared components: only text, retrievalReason and the provenance list
         // carry meaning here; everything else is a structural null.
         return new com.rivell.workbench.retrieval.EvidenceItem(
                 evidenceId,
@@ -447,6 +447,7 @@ class ReviewAnalysisIT {
                 null,
                 null,
                 List.of(),
+                null,
                 null,
                 null,
                 null);

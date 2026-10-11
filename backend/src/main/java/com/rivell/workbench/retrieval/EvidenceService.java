@@ -359,7 +359,8 @@ public class EvidenceService {
                 match.publicationNumber(),
                 authority == AuthorityClass.APPROVED_DRAFTING
                         ? candidate.effectiveVariantRole()
-                        : null);
+                        : null,
+                candidate.topicKeys());
     }
 
     private EvidenceItem.PolicyFacts policyFacts(
@@ -373,8 +374,7 @@ public class EvidenceService {
                 candidate.effectiveEscalationTrigger(),
                 preferred == null || preferred.isEmpty() ? null : preferred.getFirst(),
                 fields.getOrDefault(com.rivell.workbench.knowledge.PositionRole.FALLBACK, List.of()),
-                prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst(),
-                candidate.topicKeys());
+                prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst());
     }
 
     private List<String> provenance(UUID organizationId,

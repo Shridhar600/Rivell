@@ -38,7 +38,8 @@ public record EvidenceItem(
         List<String> provenanceNodeIds,
         UUID publicationId,
         Long publicationNumber,
-        PositionRole variantRole) {
+        PositionRole variantRole,
+        List<String> topicKeys) {
 
     public EvidenceItem {
         Objects.requireNonNull(evidenceId, "evidenceId");
@@ -55,9 +56,10 @@ public record EvidenceItem(
         }
         laneInfo = laneInfo == null ? LaneInfo.NONE : laneInfo;
         provenanceNodeIds = provenanceNodeIds == null ? List.of() : List.copyOf(provenanceNodeIds);
+        topicKeys = topicKeys == null ? List.of() : List.copyOf(topicKeys);
     }
 
-    /** Non-drafting authority items carry no clause-library variant role. */
+    /** Non-knowledge items carry no clause-library variant role and no topic set. */
     public EvidenceItem(
             UUID evidenceId,
             AuthorityClass authorityClass,
@@ -82,13 +84,13 @@ public record EvidenceItem(
                 sourceContractVersionId, sourceClauseId, legalConcept, applicabilityScope,
                 text, policyFacts, contractFacts, retrievalReason, laneInfo,
                 semanticAssessment, policyCompatibility, provenanceNodeIds, publicationId,
-                publicationNumber, null);
+                publicationNumber, null, List.of());
     }
 
     /**
      * Typed facts of a published playbook rule: position roles, approval requirement,
-     * escalation trigger, the role-tagged field values a comparison question asks from,
-     * and the topics the rule governs. Machine + human-corrected effective values.
+     * escalation trigger, and the role-tagged field values a comparison question asks
+     * from. Machine + human-corrected effective values.
      */
     public record PolicyFacts(
             Set<PositionRole> positions,
@@ -96,18 +98,16 @@ public record EvidenceItem(
             String escalationTrigger,
             String preferred,
             List<String> fallbacks,
-            String prohibited,
-            List<String> topicKeys) {
+            String prohibited) {
 
         public PolicyFacts {
             positions = positions == null ? Set.of() : Set.copyOf(positions);
             fallbacks = fallbacks == null ? List.of() : List.copyOf(fallbacks);
-            topicKeys = topicKeys == null ? List.of() : List.copyOf(topicKeys);
         }
 
         public PolicyFacts(
                 Set<PositionRole> positions, Boolean requiresApproval, String escalationTrigger) {
-            this(positions, requiresApproval, escalationTrigger, null, List.of(), null, List.of());
+            this(positions, requiresApproval, escalationTrigger, null, List.of(), null);
         }
     }
 
