@@ -32,6 +32,7 @@ import com.rivell.workbench.review.DeviationUncertainPayload;
 import com.rivell.workbench.review.EscalationPayload;
 import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.OpenEndedAnalysisPayload;
+import com.rivell.workbench.review.OurSide;
 import com.rivell.workbench.review.PolicyComparisonProperties;
 import com.rivell.workbench.review.PolicyComparisonSpecs;
 import com.rivell.workbench.review.PolicyUnavailablePayload;
@@ -260,7 +261,19 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private RawReviewSignal generate(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
             IssueFamily family, List<UUID> evidence, Map<String, Object> detail) {
-        var proposal = languageGenerator.propose(clause.contentText(), judged.position().text());
+        var headingText = context.headingTexts().getOrDefault(clause.headingNodeId(), "");
+        var runInHeading = context.runInHeadings().get(clause.headingNodeId());
+        var body = PositionLanguageGenerator.body(clause.contentText(), headingText, runInHeading);
+        if (context.untrackableHeadings().contains(clause.headingNodeId()) || body.isBlank()) {
+            // a tracked change cannot carry new wording here: the finding goes to a human
+            detail.put("openEnded", false);
+            return null;
+        }
+        var proposal = languageGenerator.propose(new PositionLanguageGenerator.Draft(
+                OurSide.describe(context.snapshot().ourSideRole()),
+                context.snapshot().contractType().label(),
+                runInHeading != null ? runInHeading : headingText, body,
+                judged.position().text()));
         detail.put("openEnded", proposal.isPresent());
         if (proposal.isEmpty()) {
             // no approved wording and no machine candidate: the finding escalates to a human
@@ -282,7 +295,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                         "verificationExecutionId", verification.executionId() == null
                                 ? "" : verification.executionId().toString(),
                         "verificationSatisfiesProbability", verification.satisfiesProbability(),
-                        "verificationNewRiskProbability", verification.newRiskProbability()))
+                        "verificationRemovalHurtsProbability", verification.removalHurtsProbability(),
+                        "verificationAdditionHurtsProbability",
+                        verification.additionHurtsProbability()))
                 .dedupeSuffix(judged.key()));
     }
 

@@ -212,11 +212,12 @@ public class LiabilityReviewIT {
                                 verificationSatisfiesProbability != null
                                         ? verificationSatisfiesProbability
                                         : verificationSatisfies ? 0.95 : 0.05));
-                verificationAnswers.put(M7DecisionSpecs.INTRODUCED_NEW_RISK,
-                        new com.rivell.workbench.intelligence.YesNoAnswer(
-                                verificationRiskProbability != null
-                                        ? verificationRiskProbability
-                                        : verificationIntroducesRisk ? 0.95 : 0.05));
+                var risk = new com.rivell.workbench.intelligence.YesNoAnswer(
+                        verificationRiskProbability != null
+                                ? verificationRiskProbability
+                                : verificationIntroducesRisk ? 0.95 : 0.05);
+                verificationAnswers.put(M7DecisionSpecs.REMOVAL_HURTS_US, risk);
+                verificationAnswers.put(M7DecisionSpecs.ADDITION_HURTS_US, risk);
                 return new ProviderExecutionResult(verificationAnswers, "fake-review-v1",
                         new TokenUsage(120, 5));
             }

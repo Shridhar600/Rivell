@@ -254,7 +254,7 @@ public class ReviewAnalysisService {
             Review review, ReviewSnapshot snapshot, ReviewAnalysisRun run,
             ContractSemantics semantics, AnalysisEnvironment environment) {
         var evidenceCache = new ReviewEvidenceCache(evidenceService);
-        var headingTexts = headingTexts(snapshot);
+        var structure = structure(snapshot);
         for (var check : reviewRepository.findPlanChecks(review.organizationId(), review.id())) {
             var existing = analysisRepository.findExecution(
                     review.organizationId(), run.id(), check.id());
@@ -274,7 +274,8 @@ public class ReviewAnalysisService {
                 continue;
             }
             var context = new ReviewCheckContext(review, snapshot, check, run.id(),
-                    semantics, environment, evidenceCache, headingTexts, clock.instant());
+                    semantics, environment, evidenceCache, structure.headingTexts(),
+                    structure.runInHeadings(), structure.untrackableHeadings(), clock.instant());
             var outcome = runCheck(check, context, environment);
             var leaseId = lease.get();
             try {
@@ -298,24 +299,38 @@ public class ReviewAnalysisService {
         }
     }
 
+    private record StructureFacts(
+            Map<UUID, String> headingTexts, Map<UUID, String> runInHeadings,
+            java.util.Set<UUID> untrackableHeadings) {
+    }
+
     /**
-     * Structure node text by node id, loaded once per run: the comparison state names
-     * the subject clause heading. A structure read failure leaves the map empty rather
-     * than failing the run; the check still judges the clause text.
+     * Structure facts loaded once per run: node text by node id (the comparison state names the
+     * subject clause heading), the heading part of run-in headings, and the clauses a tracked
+     * change cannot replace. A structure read failure leaves them empty rather than failing the
+     * run; the check still judges the clause text.
      */
-    private Map<UUID, String> headingTexts(ReviewSnapshot snapshot) {
+    private StructureFacts structure(ReviewSnapshot snapshot) {
         try {
-            return contractQueryService.getStructureForOrganization(
+            var nodes = contractQueryService.getStructureForOrganization(
                             snapshot.organizationId(), snapshot.contractId(),
                             snapshot.contractVersionNumber())
-                    .nodes().stream()
-                    .filter(node -> node.text() != null && !node.text().isBlank())
-                    .collect(java.util.stream.Collectors.toUnmodifiableMap(
-                            com.rivell.workbench.contracts.DocumentNode::id,
-                            com.rivell.workbench.contracts.DocumentNode::text,
-                            (first, second) -> first));
+                    .nodes();
+            var texts = new java.util.HashMap<UUID, String>();
+            var runIn = new java.util.HashMap<UUID, String>();
+            for (var node : nodes) {
+                if (node.text() != null && !node.text().isBlank()) {
+                    texts.putIfAbsent(node.id(), node.text());
+                }
+                if (node.runInHeading() != null) {
+                    runIn.put(node.id(), node.runInHeading());
+                }
+            }
+            return new StructureFacts(texts, runIn,
+                    new com.rivell.workbench.contracts.ContractRegionSegmenter()
+                            .untrackableHeadings(nodes));
         } catch (RuntimeException e) {
-            return Map.of();
+            return new StructureFacts(Map.of(), Map.of(), java.util.Set.of());
         }
     }
 

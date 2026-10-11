@@ -117,18 +117,21 @@ class M7JevLiveSmokeTest {
     @Test
     void findingVerificationOnSyntheticCandidate() {
         var state = new M7DecisionSpecs.FindingVerificationState(
-                1,
+                M7DecisionSpecs.FINDING_VERIFICATION_STATE_SCHEMA,
+                "We are the customer. The other party supplies the goods, services or software.",
+                "Total liability should not exceed the fees paid in the preceding 12 months.",
                 "Supplier's total aggregate liability shall not exceed the fees paid in the "
                         + "twelve (12) months preceding the claim.",
-                "Total liability should not exceed the fees paid in the preceding 12 months.",
-                "The liability of Supplier under this Agreement is uncapped and unlimited, "
-                        + "however arising.");
+                java.util.List.of("The liability of Supplier under this Agreement is uncapped and "
+                        + "unlimited, however arising."),
+                java.util.List.of("Supplier's total aggregate liability shall not exceed the fees "
+                        + "paid in the twelve (12) months preceding the claim."));
 
         ProviderExecutionResult result = provider().execute(new DecisionExecutionRequest(
                 "jev-latest", state, M7DecisionSpecs.findingVerification().pack()));
 
         var satisfies = (YesNoAnswer) result.answers().get(M7DecisionSpecs.SATISFIES_POLICY);
-        var newRisk = (YesNoAnswer) result.answers().get(M7DecisionSpecs.INTRODUCED_NEW_RISK);
+        var newRisk = (YesNoAnswer) result.answers().get(M7DecisionSpecs.ADDITION_HURTS_US);
         System.out.println("LIVE-JEV-M7 verification"
                 + " resolvedModel=" + result.resolvedModel()
                 + " usage=" + result.usage()
