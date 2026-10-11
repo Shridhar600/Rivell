@@ -51,4 +51,20 @@ public enum ContractType {
                 .forEach(type -> codes.add(type.name()));
         return Set.copyOf(codes);
     }
+
+    /**
+     * Types a record's own "Applies to" may name for it to apply to a contract of this type:
+     * {@link #applicableCodes()}, plus MSA for a statement of work or a data processing
+     * agreement. Both are made under a master agreement and form part of it, so a position
+     * stated for the MSA (governing law, data export) also governs a SOW or DPA that departs
+     * from it.
+     */
+    public Set<String> recordApplicableCodes() {
+        if (this != SOW && this != DPA) {
+            return applicableCodes();
+        }
+        var codes = new LinkedHashSet<>(applicableCodes());
+        codes.add(MSA.name());
+        return Set.copyOf(codes);
+    }
 }

@@ -737,6 +737,9 @@ class KnowledgeRecordShapingIT {
                 .containsExactly("Confidentiality [NDA]");
         assertThat(applicable.apply("MSA"))
                 .containsExactlyInAnyOrder("Confidentiality [MSA]", "Limitation of liability [MSA]");
+        assertThat(applicable.apply("SOW"))
+                .as("a statement of work is made under the MSA, so the MSA group governs it too")
+                .containsExactlyInAnyOrder("Confidentiality [MSA]", "Limitation of liability [MSA]");
         assertThat(applicable.apply("OTHER"))
                 .as("a type the product does not model cannot be excluded by a record's own types")
                 .hasSize(3);
