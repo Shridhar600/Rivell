@@ -18,12 +18,14 @@ class RivellApi:
     def __init__(self, base_url):
         self.base_url = base_url.rstrip("/")
 
-    def _send(self, method, path, data=None, headers=None):
+    def _send(self, method, path, data=None, headers=None, raw_body=False):
         req = urllib.request.Request(self.base_url + path, data=data, method=method,
                                      headers=headers or {})
         try:
             with urllib.request.urlopen(req, timeout=600) as resp:
                 raw = resp.read()
+                if raw_body:
+                    return raw
         except urllib.error.HTTPError as e:
             raw = e.read()
             try:
@@ -41,7 +43,14 @@ class RivellApi:
         data = json.dumps(body if body is not None else {}).encode()
         return self._send("POST", path, data, {"content-type": "application/json"})
 
-    def upload(self, path, file_path):
+    def put(self, path, body):
+        data = json.dumps(body).encode()
+        return self._send("PUT", path, data, {"content-type": "application/json"})
+
+    def get_bytes(self, path):
+        return self._send("GET", path, raw_body=True)
+
+    def upload(self, path, file_path, content=None):
         boundary = uuid.uuid4().hex
         name = file_path.name
         ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
@@ -49,7 +58,7 @@ class RivellApi:
             f"--{boundary}\r\n".encode(),
             f'Content-Disposition: form-data; name="file"; filename="{name}"\r\n'.encode(),
             f"Content-Type: {ctype}\r\n\r\n".encode(),
-            file_path.read_bytes(),
+            file_path.read_bytes() if content is None else content,
             f"\r\n--{boundary}--\r\n".encode(),
         ])
         return self._send("POST", path, body,

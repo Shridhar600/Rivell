@@ -405,6 +405,83 @@ class DocxRedlineVerifierTest {
         return RedlineFixturePipeline.plan(structure, set, Map.of());
     }
 
+    @Test
+    void partsDocx4jWouldRewriteStayByteIdenticalAndTheRedlineVerifies() throws Exception {
+        // Real Word files carry a settings part (read for the protection check) and often
+        // markup docx4j's schema rejects; saving the whole package used to rewrite both.
+        var fixture = "m9-with-parts.docx";
+        var plan = replacePlan(fixture, "1. Limitation of Liability",
+                "Liability is capped at the fees paid.");
+        var source = withSettingsAndUnusualFooter(RedlineFixturePipeline.fixture(fixture));
+
+        var rendered = renderer.render(source, plan);
+        var report = verifier.verify(source, rendered.bytes(), plan, rendered.changes());
+
+        assertThat(report.passed()).as(String.valueOf(report.failureDetail())).isTrue();
+        var generated = entries(rendered.bytes());
+        var original = entries(source);
+        assertThat(generated.keySet()).containsExactlyElementsOf(original.keySet());
+        for (var name : original.keySet()) {
+            if (!name.equals("word/document.xml")) {
+                assertThat(generated.get(name)).as(name).isEqualTo(original.get(name));
+            }
+        }
+    }
+
+    private static byte[] withSettingsAndUnusualFooter(byte[] bytes) throws Exception {
+        var settings = """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                  <w:zoom w:percent="100"/>
+                  <w:defaultTabStop w:val="720"/>
+                </w:settings>
+                """;
+        var footer = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<w:ftr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
+                + "<w:p><w:r><w:t>Page </w:t><w:fldSimple w:instr=\"PAGE\"><w:r><w:t>1</w:t></w:r>"
+                + "</w:fldSimple></w:r></w:p></w:ftr>";
+        var output = new ByteArrayOutputStream();
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(bytes));
+                var out = new ZipOutputStream(output)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                var raw = zip.readAllBytes();
+                var content = new String(raw, java.nio.charset.StandardCharsets.UTF_8);
+                var name = entry.getName();
+                if (name.equals("[Content_Types].xml")) {
+                    content = content.replace("</Types>", "<Override PartName=\"/word/settings.xml\" "
+                            + "ContentType=\"application/vnd.openxmlformats-officedocument."
+                            + "wordprocessingml.settings+xml\"/></Types>");
+                } else if (name.equals("word/_rels/document.xml.rels")) {
+                    content = content.replace("</Relationships>", "<Relationship Id=\"rIdSettings\" "
+                            + "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/"
+                            + "relationships/settings\" Target=\"settings.xml\"/></Relationships>");
+                } else if (name.equals("word/footer1.xml")) {
+                    content = footer;
+                }
+                out.putNextEntry(new ZipEntry(name));
+                out.write(name.endsWith(".xml") || name.endsWith(".rels")
+                        ? content.getBytes(java.nio.charset.StandardCharsets.UTF_8) : raw);
+                out.closeEntry();
+            }
+            out.putNextEntry(new ZipEntry("word/settings.xml"));
+            out.write(settings.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            out.closeEntry();
+        }
+        return output.toByteArray();
+    }
+
+    private static Map<String, byte[]> entries(byte[] bytes) throws Exception {
+        var entries = new java.util.LinkedHashMap<String, byte[]>();
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(bytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                entries.put(entry.getName(), zip.readAllBytes());
+            }
+        }
+        return entries;
+    }
+
     private static byte[] stripPart(byte[] bytes, String partName) throws Exception {
         var output = new ByteArrayOutputStream();
         try (var zip = new ZipInputStream(new ByteArrayInputStream(bytes));

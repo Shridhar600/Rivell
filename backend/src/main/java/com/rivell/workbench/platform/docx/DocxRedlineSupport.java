@@ -301,6 +301,47 @@ final class DocxRedlineSupport {
         }
     }
 
+    /** The bytes of one package entry; fails when the entry is absent. */
+    static byte[] entryBytes(byte[] packageBytes, String entryName) throws java.io.IOException {
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(packageBytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entryName.equals(entry.getName())) {
+                    return zip.readAllBytes();
+                }
+            }
+        }
+        throw new java.io.IOException("Package entry " + entryName + " is missing");
+    }
+
+    /**
+     * The source package with one entry's bytes replaced. Every other entry is copied byte for
+     * byte, in the source order, so parts the caller never edited cannot change.
+     */
+    static byte[] withEntryReplaced(byte[] sourceBytes, String entryName, byte[] replacement)
+            throws java.io.IOException {
+        var output = new java.io.ByteArrayOutputStream();
+        var replaced = false;
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(sourceBytes));
+                var out = new java.util.zip.ZipOutputStream(output)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                out.putNextEntry(new ZipEntry(entry.getName()));
+                if (entryName.equals(entry.getName())) {
+                    out.write(replacement);
+                    replaced = true;
+                } else {
+                    zip.transferTo(out);
+                }
+                out.closeEntry();
+            }
+        }
+        if (!replaced) {
+            throw new java.io.IOException("Package entry " + entryName + " is missing");
+        }
+        return output.toByteArray();
+    }
+
     static boolean isDocxMainPart(WordprocessingMLPackage wordPackage) {
         try {
             var contentType = wordPackage.getContentTypeManager()

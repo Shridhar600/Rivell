@@ -24,6 +24,7 @@ import sys
 import time
 import uuid
 
+from redline_flow import run_redline
 from rivell_api import ApiError, RivellApi, items
 from scoring import score_contract, score_knowledge
 
@@ -145,25 +146,36 @@ def wait_review(api, review_id, timeout_s=900):
     return api.get(f"/api/reviews/{review_id}")
 
 
-def run_contract(api, corpus, entry, answer, raw_dir):
+def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
+    timings, t0 = {}, time.monotonic()
     upload = api.upload("/api/contracts", corpus / entry)
     cid, version = upload["contractId"], upload["versionNumber"]
     base = f"/api/contracts/{cid}/versions/{version}"
     profile = review_profile(answer)
+    timings["parseS"], t0 = round(time.monotonic() - t0, 1), time.monotonic()
     enrichment = api.post(f"{base}/enrichment", profile)
+    timings["enrichS"], t0 = round(time.monotonic() - t0, 1), time.monotonic()
     review_req = {"clientRequestId": str(uuid.uuid4())}
     if profile.get("contractPackKey"):
         review_req["contractPackKey"] = profile["contractPackKey"]
     review = wait_review(api, api.post(f"{base}/reviews", review_req)["id"])
+    timings["reviewS"], t0 = round(time.monotonic() - t0, 1), time.monotonic()
     structure = api.get(f"{base}/structure")
     nodes = structure if isinstance(structure, list) else structure.get("nodes", [])
     semantics = api.get(f"{base}/semantics")
     findings = items(api.get(f"/api/reviews/{review['id']}/findings?limit=500"))
     raw = {"upload": upload, "profile": profile, "enrichmentStatus": enrichment.get("enrichmentStatus"),
            "review": review, "nodes": nodes, "semantics": semantics, "findings": findings}
-    (raw_dir / f"{pathlib.Path(entry).stem}.json").write_text(json.dumps(raw, indent=1))
     score = score_contract(answer, nodes, semantics.get("clauses", []), findings)
-    score.update(file=entry, parseStatus=upload.get("parseStatus"), profile=profile,
+    if redline and review["status"] == "COMPLETED":
+        try:
+            raw["redline"] = run_redline(api, review["id"], (corpus / entry).read_bytes(), nodes, entry)
+        except (ApiError, TimeoutError) as e:
+            raw["redline"] = {"stage": "error", "error": str(e)[:300]}
+        timings["redlineS"] = round(time.monotonic() - t0, 1)
+        score["redline"] = raw["redline"]
+    (raw_dir / f"{pathlib.Path(entry).stem}.json").write_text(json.dumps(raw, indent=1))
+    score.update(file=entry, parseStatus=upload.get("parseStatus"), profile=profile, timings=timings,
                  enrichmentStatus=enrichment.get("enrichmentStatus"), reviewStatus=review["status"])
     return score
 
@@ -173,7 +185,7 @@ def load_answer(corpus, entry):
     return json.loads(path.read_text()) if path.exists() else {}
 
 
-def run_org(api, corpus, org, raw_dir):
+def run_org(api, corpus, org, raw_dir, redline=True):
     errors = []
     result = {"org": org["id"], "knowledge": [], "contracts": [], "errors": errors}
     contract_answers = {c: load_answer(corpus, c) for c in org["contracts"]}
@@ -197,7 +209,7 @@ def run_org(api, corpus, org, raw_dir):
             errors.append(f"publish: {e}")
     for entry, answer in contract_answers.items():
         try:
-            result["contracts"].append(run_contract(api, corpus, entry, answer, raw_dir))
+            result["contracts"].append(run_contract(api, corpus, entry, answer, raw_dir, redline))
         except (ApiError, TimeoutError) as e:
             errors.append(f"contract {entry}: {e}")
     for path in ("/api/reviews?limit=25", "/api/knowledge/artifacts"):
@@ -208,10 +220,90 @@ def run_org(api, corpus, org, raw_dir):
     return result
 
 
+def model_usage(log_path):
+    """Totals of the backend's metadata-only model_execution log events, by kind and spec."""
+    usage = {}
+    for line in open(log_path, errors="replace"):
+        if "model_execution" not in line:
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if event.get("message") != "model_execution":
+            continue
+        row = usage.setdefault(f"{event.get('kind')}:{event.get('spec')}",
+                               {"calls": 0, "failed": 0, "ms": 0, "inputTokens": 0, "outputTokens": 0})
+        row["calls"] += 1
+        row["failed"] += event.get("outcome") == "FAILED"
+        row["ms"] += int(event.get("durationMs") or 0)
+        row["inputTokens"] += int(event.get("inputTokens") or 0)
+        row["outputTokens"] += int(event.get("outputTokens") or 0)
+    return usage
+
+
 # ---------- report ----------
 
 def pct(n, d):
     return f"{n}/{d} ({100 * n // d}%)" if d else "n/a"
+
+
+CHECKS = ("opens", "preserved", "local", "applied")
+
+
+def redline_report(results):
+    rows = [c for r in results for c in r["contracts"] if "redline" in c]
+    if not rows:
+        return []
+    lines = ["", "## Redline round trip", "",
+             "| File | Accepted / rejected | Changes | Redline | Opens | Original preserved | Changes local "
+             "| Applied | Re-parse (status, headings, sees ins/del) | First problem |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
+    done = clean = 0
+    for c in rows:
+        x = c["redline"]
+        checks = x.get("checks") or {}
+        rp = x.get("reparse") or {}
+        ok = [checks.get(k) for k in CHECKS]
+        done += x.get("redlineStatus") == "COMPLETED"
+        clean += bool(checks) and all(ok)
+        status = x.get("redlineStatus") or f"stopped at {x.get('stage')} {x.get('blockers') or x.get('error') or ''}"
+        if x.get("failureCode"):
+            status += f" {x['failureCode']} {x.get('changeFailures') or ''}"
+        rp_text = (f"{rp.get('parseStatus')}, {rp.get('headings')}/{rp.get('originalHeadings')}, "
+                   f"{'Y' if rp.get('seesInsertedText') else 'N'}/{'Y' if rp.get('seesDeletedText') else 'N'}"
+                   if rp and "error" not in rp else rp.get("error", "-"))
+        problem = (checks.get("problems") or ["-"])[0][:90].replace("|", "/")
+        lines.append(f"| {c['file']} | {x.get('accepted', 0)} / {x.get('rejected', 0)} | {x.get('changes', '-')} "
+                     f"| {status} | " + " | ".join("-" if v is None else ("✅" if v else "❌") for v in ok)
+                     + f" | {rp_text} | {problem} |")
+    lines += ["", f"- Redlines completed: {pct(done, len(rows))}; all four independent checks pass: {pct(clean, len(rows))}"]
+    return lines
+
+
+def usage_report(results):
+    lines = ["", "## Cost and latency", "",
+             "| Org | Model calls | Failed | Input tokens | Output tokens | Model time (s, summed) "
+             "| Contract wall time p50 / max (s) |", "|---|---|---|---|---|---|---|"]
+    by_spec = {}
+    for r in results:
+        u = r.get("modelUsage") or {}
+        tot = {k: sum(v[k] for v in u.values()) for k in ("calls", "failed", "inputTokens", "outputTokens", "ms")}
+        for spec, v in u.items():
+            agg = by_spec.setdefault(spec, {"calls": 0, "failed": 0, "inputTokens": 0, "ms": 0})
+            for k in agg:
+                agg[k] += v[k]
+        walls = sorted(sum(c.get("timings", {}).values()) for c in r["contracts"])
+        wall = f"{walls[len(walls) // 2]:.0f} / {walls[-1]:.0f}" if walls else "-"
+        lines.append(f"| {r['org']} | {tot['calls']} | {tot['failed']} | {tot['inputTokens']} | {tot['outputTokens']} "
+                     f"| {tot['ms'] / 1000:.0f} | {wall} |")
+    failed = sum(v["failed"] for r in results for v in (r.get("modelUsage") or {}).values())
+    if failed:
+        lines += ["", f"- ⚠️ {failed} model calls failed (see the Failed column; check provider keys)."]
+    lines += ["", "| Kind:spec | Calls | Failed | Input tokens | Model time (s) |", "|---|---|---|---|---|"]
+    for spec, v in sorted(by_spec.items(), key=lambda kv: -kv[1]["ms"]):
+        lines.append(f"| {spec} | {v['calls']} | {v['failed']} | {v['inputTokens']} | {v['ms'] / 1000:.0f} |")
+    return lines
 
 
 def write_report(out, results, meta):
@@ -256,6 +348,7 @@ def write_report(out, results, meta):
               f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})", "",
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]
+    lines += redline_report(results) + usage_report(results)
     errs = [f"- {r['org']}: {e}" for r in results for e in r["errors"]]
     lines += ["", "## Errors", ""] + (errs or ["- none"])
     (out / "summary.md").write_text("\n".join(lines) + "\n")
@@ -267,6 +360,7 @@ def main():
     ap.add_argument("--out", required=True, type=pathlib.Path)
     ap.add_argument("--org", action="append", help="limit to these org ids")
     ap.add_argument("--no-build", action="store_true")
+    ap.add_argument("--no-redline", action="store_true", help="skip the redline round trip")
     args = ap.parse_args()
 
     missing = [k for k in ("TYPESAFE_API_KEY", "OPENAI_API_KEY") if not os.environ.get(k)]
@@ -298,9 +392,11 @@ def main():
             if proc.poll() is not None:
                 sys.exit(f"backend for org {org['id']} exited; see {log.name}")
             print(f"org {org['id']}: tenant {org_id}", flush=True)
-            results.append(run_org(api, args.corpus, org, raw_dir))
+            results.append(run_org(api, args.corpus, org, raw_dir, not args.no_redline))
         finally:
             stop_backend(proc, log)
+        if results and results[-1]["org"] == org["id"]:
+            results[-1]["modelUsage"] = model_usage(out / f"backend-{org['id']}.log")
     (out / "results.json").write_text(json.dumps({"meta": meta, "results": results}, indent=1))
     write_report(out, results, meta)
     print(f"report: {out / 'summary.md'}")

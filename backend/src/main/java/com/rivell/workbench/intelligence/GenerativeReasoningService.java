@@ -46,11 +46,16 @@ public class GenerativeReasoningService {
                     binding.providerId(), binding.modelAlias(), result.resolvedModel(),
                     startedAt, Duration.between(startedAt, clock.instant()).toMillis(),
                     DecisionOutcome.COMPLETED, spec.fields().size(), result.usage());
+            ExecutionLog.completed("generation", metadata);
             return new GenerativeExecution(
                     metadata.executionId(), result.fields(), metadata);
         } catch (SemanticDecisionException e) {
+            ExecutionLog.failed("generation", spec.id(), spec.version(), binding.providerId(),
+                    Duration.between(startedAt, clock.instant()).toMillis(), e);
             throw e;
         } catch (RuntimeException e) {
+            ExecutionLog.failed("generation", spec.id(), spec.version(), binding.providerId(),
+                    Duration.between(startedAt, clock.instant()).toMillis(), e);
             throw new ProviderProtocolException(
                     "Generative provider " + binding.providerId() + " failed unexpectedly: "
                             + e.getClass().getSimpleName(), e);

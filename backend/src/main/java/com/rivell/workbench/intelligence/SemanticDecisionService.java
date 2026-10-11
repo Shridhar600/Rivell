@@ -41,11 +41,14 @@ public class SemanticDecisionService {
                     binding.modelAlias(), state, spec.pack()));
             validateAnswers(spec, result.answers());
             var metadata = completedMetadata(spec, binding, result, questionCount(spec), startedAt);
+            ExecutionLog.completed("decision", metadata);
             return new DecisionExecution(
                     metadata.executionId(), spec.id(), spec.version(), result.answers(), metadata);
         } catch (SemanticDecisionException e) {
+            logFailure(spec, binding, startedAt, e);
             throw e;
         } catch (RuntimeException e) {
+            logFailure(spec, binding, startedAt, e);
             throw new ProviderProtocolException(
                     "Provider " + binding.providerId() + " failed unexpectedly: " + e.getClass().getSimpleName(), e);
         }
@@ -74,6 +77,12 @@ public class SemanticDecisionService {
                 binding.providerId(), binding.modelAlias(), result.resolvedModel(),
                 startedAt, Duration.between(startedAt, clock.instant()).toMillis(),
                 DecisionOutcome.COMPLETED, questionCount, result.usage());
+    }
+
+    private void logFailure(DecisionSpec spec, ModelBinding binding, Instant startedAt,
+            RuntimeException failure) {
+        ExecutionLog.failed("decision", spec.id(), spec.version(), binding.providerId(),
+                Duration.between(startedAt, clock.instant()).toMillis(), failure);
     }
 
     private static int questionCount(DecisionSpec spec) {
