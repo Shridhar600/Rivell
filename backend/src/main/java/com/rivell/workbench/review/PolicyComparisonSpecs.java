@@ -20,7 +20,13 @@ import com.rivell.workbench.intelligence.YesNoQuestion;
 public final class PolicyComparisonSpecs {
 
     public static final String POLICY_COMPARISON_SPEC = "policy-comparison";
-    public static final int POLICY_COMPARISON_VERSION = 1;
+    /** v2 (2026-10-11): a position covers several points; a clause is judged on the ones it deals with. */
+    public static final int POLICY_COMPARISON_VERSION = 2;
+
+    /** Sent with every position question (v2). */
+    public static final String PARTIAL_POINTS = "A position can cover several points (for example "
+            + "scope, duration, exceptions, approvals). Judge only the points this clause deals "
+            + "with; a point the clause leaves to another clause counts neither for nor against it.";
     public static final int STATE_SCHEMA_VERSION = 1;
 
     public static final String MEETS_PREFERRED = "MEETS_PREFERRED";
@@ -67,8 +73,8 @@ public final class PolicyComparisonSpecs {
         options.put(WALK_AWAY, "The clause contains or permits what the walk-away says we must never accept.");
         options.put(UNCLEAR, "The clause deals with this subject, but its wording is ambiguous or depends on "
                 + "something outside the contract, so compliance cannot be decided.");
-        options.put(NOT_ADDRESSED, "The clause does not deal with the subject of this position, or the position "
-                + "is written for a different kind of contract.");
+        options.put(NOT_ADDRESSED, "The clause deals with no point of this position (a passing mention is "
+                + "not enough), or the position is written for a different kind of contract.");
         return java.util.Collections.unmodifiableMap(options);
     }
 

@@ -43,6 +43,7 @@ public final class PolicyPositionQuestions {
         var parts = new ArrayList<String>();
         parts.add("Compare the clause with our playbook position on "
                 + topicLabel(position, clause, registry) + ".");
+        parts.add(PolicyComparisonSpecs.PARTIAL_POINTS);
         var facts = position.policyFacts();
         var preferred = facts == null ? null : facts.preferred();
         var fallbacks = facts == null ? List.<String>of() : facts.fallbacks();
