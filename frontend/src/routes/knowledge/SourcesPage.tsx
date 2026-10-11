@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useKnowledgeCatalog } from '../../api/knowledgeRead'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
-import { AddKnowledgeButton, KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
+import { KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
 import { EmptyState } from '../../components/ui/State'
 import { longDate } from '../../lib/dates'
@@ -26,13 +26,12 @@ function Sources({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
     [catalog.sources],
   )
   return (
-    <KnowledgeFrame crumbs={CRUMBS} title="Sources" lede={LEDE} actions={<AddKnowledgeButton />}>
+    <KnowledgeFrame crumbs={CRUMBS} title="Sources" lede={LEDE}>
       <CatalogNotices state={state} catalog={catalog} />
       {sources.length === 0 ? (
         <EmptyState
           title="No sources yet"
           message="Upload a playbook or clause library. The original is kept here unchanged."
-          action={<AddKnowledgeButton />}
         />
       ) : (
         <ul className="rv-k-list" aria-label="Sources">

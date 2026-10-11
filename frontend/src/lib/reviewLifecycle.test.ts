@@ -280,7 +280,7 @@ describe('activityEvents', () => {
       'Review created',
       'Analysis started',
       'Analysis completed',
-      'Review finalized; ApprovedChangeSet frozen',
+      'Review finalized; approved changes frozen',
       'Redline execution started',
       'Redline completed',
     ])

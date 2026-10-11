@@ -5,6 +5,7 @@ import type { StructureNode } from './documentTree'
 import {
   acceptEligibilityFor,
   clauseBody,
+  clauseExcerpt,
   defaultFinding,
   executableChange,
   finalizeSummary,
@@ -173,6 +174,25 @@ describe('clauses from the real, flat structure', () => {
   })
 })
 
+describe('clauseExcerpt', () => {
+  it('keeps about two lines and marks that more follows', () => {
+    expect(clauseExcerpt('3. Fees\n3.1 Pay in thirty days.\n3.2 Late interest applies.')).toBe(
+      '3. Fees\n3.1 Pay in thirty days.…',
+    )
+  })
+
+  it('truncates one very long passage within the character budget', () => {
+    const long = 'x'.repeat(400)
+    const excerpt = clauseExcerpt(`3. Fees\n${long}`)
+    expect(excerpt.length).toBeLessThan(long.length)
+    expect(excerpt.endsWith('…')).toBe(true)
+  })
+
+  it('returns a short clause unchanged, with no invented ellipsis', () => {
+    expect(clauseExcerpt('4. Term\n4.1 Two years.')).toBe('4. Term\n4.1 Two years.')
+  })
+})
+
 describe('finalizeSummary', () => {
   const review = { accepted: 1, edited: 2, rejected: 1 }
 
@@ -180,7 +200,7 @@ describe('finalizeSummary', () => {
     const loaded = [{ type: 'REPLACE' as const }, { type: 'REPLACE' as const }, { type: 'DELETE' as const }]
     expect(finalizeSummary(review, loaded)).toEqual([
       '3 approved changes (1 accepted, 2 edited): 2 replace, 0 insert, 1 delete',
-      '1 rejected Finding; no ApprovedChange created',
+      '1 rejected Finding; no approved change created',
     ])
   })
 

@@ -11,8 +11,9 @@ import {
   assessmentSummary,
   claimKindLabel,
   classificationLabel,
+  findingIssueLabel,
   findingSubjectLabel,
-  issueFamilyLabel,
+  isRelatedPosition,
   observationKindLabel,
   policyNoteText,
   proposedActionLabel,
@@ -22,7 +23,13 @@ import {
 } from '../../lib/reviews'
 import { dateTime } from '../../lib/dates'
 import { policyPositionView } from '../../lib/positionComparison'
-import { findingState, isWordingGrounded, languageAuthority, proposedChangeType } from '../../lib/workspace'
+import {
+  clauseExcerpt,
+  findingState,
+  isWordingGrounded,
+  languageAuthority,
+  proposedChangeType,
+} from '../../lib/workspace'
 import { Button } from '../ui/Button'
 import { BookIcon, ChevronIcon } from '../ui/Icon'
 import { ErrorState, LoadingState } from '../ui/State'
@@ -187,6 +194,9 @@ export function FindingPanel(props: Props) {
   const reason = flow.acceptEligibility.eligible ? '' : flow.acceptEligibility.reason
   const missingEvidence = finding.claims.some((claim) => claim.evidenceItemIds.some((id) => !items.has(id)))
   const title = findingSubjectLabel(finding, props.regionLabels, labelFor)
+  // A position on a topic the clause only touches is a related note, never a defect in the clause.
+  const related = isRelatedPosition(finding)
+  const excerpt = props.currentText ? clauseExcerpt(props.currentText) : null
 
   return (
     <aside className="rv-ws-pane rv-ws-dt" aria-label="Finding detail">
@@ -195,15 +205,29 @@ export function FindingPanel(props: Props) {
       </p>
       <div key="in" className="rv-ws-dt-in">
         <div className="rv-ws-kicker">
-          <span className={`rv-ws-typ${change ? ` rv-ws-typ--${change}` : ''}`}>
-            {change ?? classificationLabel(finding.reviewClassification)}
-          </span>
-          {finding.subjectKind === 'ABSENCE' ? 'No location in contract' : issueFamilyLabel(finding.issueFamily)}
+          {related ? (
+            <span className="rv-ws-typ rv-ws-typ--related">Related position</span>
+          ) : (
+            <span className={`rv-ws-typ${change ? ` rv-ws-typ--${change}` : ''}`}>
+              {change ?? classificationLabel(finding.reviewClassification)}
+            </span>
+          )}
+          {finding.subjectKind === 'ABSENCE'
+            ? 'No location in contract'
+            : related
+              ? 'On a topic the clause only touches'
+              : findingIssueLabel(finding)}
           <span className="rv-ws-sp" />
           {props.position ? `${props.position.index} of ${props.position.total}` : null}
         </div>
         <h2>{title}</h2>
         {props.context ? <div className="rv-ws-ctx">{props.context}</div> : null}
+        {related ? (
+          <p className="rv-ws-note rv-ws-note--related">
+            <b>Related position, not a breach.</b> This position governs a topic the clause only
+            touches, so it is context for review rather than a defect in the clause.
+          </p>
+        ) : null}
 
         <div className="rv-ws-sec">
           <div className="rv-ws-sec-h">Rivell found</div>
@@ -211,11 +235,13 @@ export function FindingPanel(props: Props) {
             <p>
               {finding.observationText}
               <br />
-              <span className="rv-ws-authority">{observationKindLabel(finding.observationKind)}</span>
+              <span className="rv-ws-authority">
+                {related ? 'Related position — secondary topic' : observationKindLabel(finding.observationKind)}
+              </span>
             </p>
             {assessment ? (
               <p className="rv-ws-caption" data-testid="finding-assessment">
-                Assessment: {assessment}
+                Assessment{related ? ' (secondary topic)' : ''}: {assessment}
               </p>
             ) : null}
             {absences.map((claim) => (
@@ -279,7 +305,7 @@ export function FindingPanel(props: Props) {
           <div className="rv-ws-incl">
             {finding.subjectKind === 'ABSENCE'
               ? 'No source passage. This provision appears absent in this contract version.'
-              : (props.currentText ?? 'The clause text for this version is not available.')}
+              : (excerpt ?? 'The clause text for this version is not available.')}
           </div>
         </div>
 
@@ -300,8 +326,13 @@ export function FindingPanel(props: Props) {
         ) : null}
 
         {finding.evidenceItems.length > 0 ? (
-          <div className="rv-ws-sec">
-            <div className="rv-ws-sec-h">Sources</div>
+          // Condensed: the policy position and the proposed wording are above already, so the full
+          // source list is one disclosure away, each item still labelled with its own authority.
+          <details className="rv-ws-sec rv-ws-srcs">
+            <summary className="rv-ws-sec-h">
+              Sources
+              <small>{finding.evidenceItems.length}</small>
+            </summary>
             {sources.map((item) => {
               const row = sourceRow(item, props.regionLabels, labelFor)
               return (
@@ -327,7 +358,7 @@ export function FindingPanel(props: Props) {
                 {row}
               </div>
             ))}
-          </div>
+          </details>
         ) : null}
 
         {decision && props.decisionsLoaded ? (

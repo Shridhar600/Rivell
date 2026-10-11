@@ -333,7 +333,7 @@ describe('finalized: the frozen change set and the redline', () => {
     expect(await screen.findByRole('heading', { name: 'Redline failed' })).toBeInTheDocument()
     expect(screen.getByText('Redline failed', { selector: '.rv-stb' })).toBeInTheDocument()
     expect(screen.getByText('No verified DOCX is available to download')).toBeInTheDocument()
-    expect(screen.getByText('ApprovedChangeSet remains frozen and intact')).toBeInTheDocument()
+    expect(screen.getByText('Approved changes remain frozen and intact')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Download/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Generate redline' })).not.toBeInTheDocument()

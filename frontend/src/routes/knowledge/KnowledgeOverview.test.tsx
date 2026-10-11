@@ -72,13 +72,13 @@ describe('Knowledge overview', () => {
     expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(3)
   })
 
-  it('opens Add knowledge on the same page, as a dialog', async () => {
+  it('opens Add knowledge on the same page, as a dialog, from one header action', async () => {
     stubKnowledgeApi(buildWorld())
     const { router } = renderKnowledge('/knowledge')
     await screen.findByRole('heading', { name: 'Recently published' })
     const buttons = screen.getAllByRole('link', { name: 'Add knowledge' })
-    expect(buttons.length).toBeGreaterThan(0)
-    for (const button of buttons) expect(button).toHaveAttribute('href', '/knowledge?add=1')
+    expect(buttons).toHaveLength(1)
+    expect(buttons[0]).toHaveAttribute('href', '/knowledge?add=1')
 
     await userEvent.click(buttons[0] as HTMLElement)
     const dialog = await screen.findByRole('dialog', { name: 'Add knowledge' })

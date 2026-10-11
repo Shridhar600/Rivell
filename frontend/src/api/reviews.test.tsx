@@ -267,6 +267,8 @@ describe('review parsers', () => {
       category: 'BEYOND_FALLBACK',
       flagProbability: 0.87,
       probabilities: { BEYOND_FALLBACK: 0.87, WALK_AWAY: 0.05 },
+      secondaryTopic: false,
+      uncoveredProbability: null,
     })
     expect(detail.claims.map((claim) => claim.claimKind)).toEqual([
       'OBSERVATION',
@@ -284,6 +286,25 @@ describe('review parsers', () => {
       quality: { ...clauseFindingDetail.quality, flagProbability: 87 },
     })
     expect(detail.quality?.flagProbability).toBeNull()
+  })
+
+  it('reads the related-position flag and the uncovered probability, dropping one off the scale', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: {
+        ...clauseFindingDetail.quality,
+        secondaryTopic: true,
+        uncoveredProbability: 0.9,
+      },
+    })
+    expect(detail.quality?.secondaryTopic).toBe(true)
+    expect(detail.quality?.uncoveredProbability).toBe(0.9)
+
+    const offScale = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: { ...clauseFindingDetail.quality, uncoveredProbability: 90 },
+    })
+    expect(offScale.quality?.uncoveredProbability).toBeNull()
   })
 
   it('parses absence finding detail with plan-check basis and no evidence', () => {

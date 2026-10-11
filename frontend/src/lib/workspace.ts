@@ -178,6 +178,29 @@ export function regionText(nodes: StructureNode[], headingNodeId: string): strin
   return text || null
 }
 
+/** How many characters of a clause the detail panel shows before it stops: about two lines. */
+export const CLAUSE_EXCERPT_CHARS = 180
+
+/**
+ * A short excerpt of the clause as received, so the detail panel does not repeat the document
+ * beside it. Two passages at most, bounded by a character budget; an ellipsis marks anything the
+ * excerpt leaves out. The full clause stays one "Show in document" away.
+ */
+export function clauseExcerpt(text: string, maxChars: number = CLAUSE_EXCERPT_CHARS): string {
+  const trimmed = text.trim()
+  const lines = trimmed.split('\n').filter((line) => line.trim() !== '')
+  const kept: string[] = []
+  let used = 0
+  for (const line of lines) {
+    if (kept.length >= 2) break
+    if (kept.length > 0 && used + line.length > maxChars) break
+    kept.push(line)
+    used += line.length + 1
+  }
+  const excerpt = kept.join('\n')
+  return excerpt.length < trimmed.length ? `${excerpt.trimEnd()}…` : excerpt
+}
+
 /**
  * What the Finalize dialog tells the reviewer will be frozen. Counts are the server's. The split by
  * change type is added only when the loaded decisions account for every approved change.
@@ -195,7 +218,7 @@ export function finalizeSummary(
       : ''
   return [
     `${approved} approved ${approved === 1 ? 'change' : 'changes'} (${review.accepted} accepted, ${review.edited} edited)${split}`,
-    `${review.rejected} rejected ${review.rejected === 1 ? 'Finding' : 'Findings'}; no ApprovedChange created`,
+    `${review.rejected} rejected ${review.rejected === 1 ? 'Finding' : 'Findings'}; no approved change created`,
   ]
 }
 

@@ -272,6 +272,10 @@ export type FindingQuality = {
   flagProbability: number | null
   /** The per-option probabilities the flag probability was summed from. */
   probabilities: Record<string, number>
+  /** True when the position governs a topic the clause only touches, not its own subject. */
+  secondaryTopic: boolean
+  /** The uncovered-clause triage's probability on the same 0–1 scale. An estimate too. */
+  uncoveredProbability: number | null
 }
 
 export type AbsenceBasis = {
@@ -667,6 +671,7 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
   if (value === null || value === undefined) return null
   const quality = asRecord(value, what)
   const flagProbability = readOptionalNullableNumber(quality, 'flagProbability', what)
+  const uncoveredProbability = readOptionalNullableNumber(quality, 'uncoveredProbability', what)
   return {
     sufficiency: readOptionalNullableString(quality, 'sufficiency', what),
     verificationOutcome: readOptionalNullableString(quality, 'verificationOutcome', what),
@@ -678,6 +683,11 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
         ? flagProbability
         : null,
     probabilities: readNumberMap(quality, 'probabilities', what),
+    secondaryTopic: readOptionalBoolean(quality, 'secondaryTopic', what),
+    uncoveredProbability:
+      uncoveredProbability !== null && uncoveredProbability >= 0 && uncoveredProbability <= 1
+        ? uncoveredProbability
+        : null,
   }
 }
 

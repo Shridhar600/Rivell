@@ -179,6 +179,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const [sheet, setSheet] = useState<Sheet | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [finalizeOpen, setFinalizeOpen] = useState(false)
+  // An evidence jump target in this workspace's own document, so "View in document" never leaves it.
+  const [docFocus, setDocFocus] = useState<{ nodeId: string } | null>(null)
   // Set when a Finalize succeeds, so focus can move on once the dialog is closed and the page shows
   // the frozen state. A ref, because moving focus needs no render of its own.
   const focusFrozen = useRef(false)
@@ -232,6 +234,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const selectedId = named ? selectedParam : (fallback?.id ?? null)
   const selectFinding = useCallback(
     (findingId: string) => {
+      setDocFocus(null)
       setSearchParams(
         (current) => {
           const next = new URLSearchParams(current)
@@ -298,6 +301,11 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   }
 
   function showInDocument() {
+    // The same reveal the evidence jump uses, on the selected finding's own clause.
+    if (headingNodeId) {
+      showInDocumentAt(headingNodeId)
+      return
+    }
     setMode('changes')
     setTerm('')
     window.requestAnimationFrame(() =>
@@ -489,7 +497,14 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   )
 
   const sourceItem = sheet?.kind === 'source' ? finding?.evidenceItems.find((item) => item.evidenceId === sheet.evidenceId) : undefined
-  const goToNode = (nodeId: string) => void navigate(`/reviews/${contractId}?view=document&node=${nodeId}`)
+  // "View in document" stays in this workspace: the clause is revealed in the document beside the
+  // panel, keyed by the exact node the evidence recorded, on the version the review pinned.
+  function showInDocumentAt(nodeId: string) {
+    setSheet(null)
+    setMode('changes')
+    setTerm('')
+    setDocFocus({ nodeId })
+  }
   const goToClause = (headingNodeId: string) =>
     void navigate(`/reviews/${contractId}?${new URLSearchParams({ view: 'semantics', section: 'clauses', clause: headingNodeId })}`)
   const contractType = summary.snapshot?.profile?.contractType
@@ -552,6 +567,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           isFinalized={isFinalized}
           remaining={humanReview ? humanReview.remainingFindings : null}
           notes={notes}
+          focusTarget={docFocus}
         />
         <FindingPanel
           finding={finding}
@@ -589,7 +605,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
               item={sourceItem}
               regionLabels={regionLabels}
               clauseHeadings={clauseHeadings}
-              onNavigateToNode={pinnedVersion === latestVersion ? goToNode : undefined}
+              onNavigateToNode={pinnedVersion === latestVersion ? showInDocumentAt : undefined}
               onOpenClauseSemantics={pinnedVersion === latestVersion ? goToClause : undefined}
             />
           ) : (

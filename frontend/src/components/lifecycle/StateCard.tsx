@@ -193,7 +193,7 @@ export function StateCard(props: Props) {
             />
             <Checks
               items={[
-                { text: 'Finalizing freezes the ApprovedChangeSet' },
+                { text: 'Finalizing freezes the approved changes' },
                 { text: 'Human decisions become read-only' },
                 { text: 'Redline execution remains a separate action after Finalize' },
               ]}

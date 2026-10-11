@@ -1,6 +1,6 @@
 import { useKnowledgeCatalog } from '../../api/knowledgeRead'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
-import { AddKnowledgeButton, KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
+import { KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
 import { EmptyState } from '../../components/ui/State'
 import { longDate } from '../../lib/dates'
@@ -27,7 +27,7 @@ function playbookDetail(playbook: PlaybookView): string {
 function Playbooks({ catalog, state }: { catalog: Catalog; state: ReturnType<typeof useKnowledgeCatalog> }) {
   const compiling = catalog.inCompilation.filter((source) => source.artifact.artifactType === 'PLAYBOOK')
   return (
-    <KnowledgeFrame crumbs={CRUMBS} title="Playbooks" lede={LEDE} actions={<AddKnowledgeButton preset="playbook" />}>
+    <KnowledgeFrame crumbs={CRUMBS} title="Playbooks" lede={LEDE} addPreset="playbook">
       <CatalogNotices state={state} catalog={catalog} />
 
       {compiling.length > 0 ? (
@@ -50,7 +50,6 @@ function Playbooks({ catalog, state }: { catalog: Catalog; state: ReturnType<typ
         <EmptyState
           title="No playbook is published"
           message="A playbook appears here once you publish its reviewed positions."
-          action={<AddKnowledgeButton />}
         />
       ) : (
         <ul className="rv-k-list" aria-label="Published playbooks">

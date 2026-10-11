@@ -24,7 +24,11 @@ import {
   fixtureEscalatedFallbackFindingDetail,
   fixtureFailedReviewSummary,
   fixtureGenerativeFindingDetail,
+  fixtureNotCoveredFindingDetail,
+  fixtureNotCoveredFindingSummary,
   fixturePolicyMissingFindingDetail,
+  fixtureRelatedPositionFindingDetail,
+  fixtureRelatedPositionFindingSummary,
   fixtureWithinFallbackFindingDetail,
   fixtureWithinFallbackFindingSummary,
 } from './testFixtures'
@@ -50,6 +54,8 @@ const detailById: Record<string, unknown> = {
   'f-6': fixtureCrossClauseFindingDetail,
   'f-7': fixtureWithinFallbackFindingDetail,
   'f-8': fixtureEscalatedFallbackFindingDetail,
+  'f-9': fixtureRelatedPositionFindingDetail,
+  'f-10': fixtureNotCoveredFindingDetail,
 }
 
 /**
@@ -309,7 +315,7 @@ describe('finding detail', () => {
     expect(position).toHaveTextContent('Escalate: Uncapped liability or consequential damages')
   })
 
-  it('shows the exact clause text under "In the contract" and in the document', async () => {
+  it('shows a short clause excerpt under "In the contract" and marks the clause in the document', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
     await findDetailTitle('6. Limitation of Liability')
@@ -334,6 +340,13 @@ describe('finding detail', () => {
     expect(selected).not.toHaveTextContent('5. Termination')
     expect(selected).not.toHaveTextContent('Schedule A')
     expect(contractPane().querySelectorAll('[data-sel="1"]')).toHaveLength(1)
+
+    // "Show in document" reveals the same clause in place, exactly as an evidence jump does.
+    await userEvent.click(within(source).getByRole('button', { name: 'Show in document' }))
+    const revealed = contractPane().querySelectorAll('[data-focus="1"]')
+    expect(revealed).toHaveLength(1)
+    expect(revealed[0]).toHaveTextContent('6.3 The exclusions in Section 6.2')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
   it('says so when the clause text for this version is not available', async () => {
@@ -438,6 +451,20 @@ describe('finding detail', () => {
     expect(within(detailPane()).queryByText('Proposed language')).not.toBeInTheDocument()
   })
 
+  it('labels a clause no playbook covers as a review item, with the model’s confidence as an estimate', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-10', {
+      findings: { items: [...findingsForThisReview.items, fixtureNotCoveredFindingSummary], truncated: false },
+    })
+
+    await findDetailText('Rivell found')
+    const pane = within(detailPane())
+    expect(pane.getAllByText(/Not covered by playbook — review/).length).toBeGreaterThan(0)
+    expect(pane.queryByText('Policy unavailable')).not.toBeInTheDocument()
+    expect(pane.getByText(/No playbook position addresses this clause/)).toBeInTheDocument()
+    expect(pane.getByText(/Model confidence 90%/)).toBeInTheDocument()
+    expect(pane.getByText(/not a certainty/)).toBeInTheDocument()
+  })
+
   it('preserves policy ambiguity without selecting a winner', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-4')
 
@@ -504,7 +531,9 @@ describe('finding detail', () => {
 })
 
 describe('position findings', () => {
-  const listWith = (...extra: (typeof fixtureWithinFallbackFindingSummary)[]) => ({
+  const listWith = (
+    ...extra: (typeof fixtureWithinFallbackFindingSummary | typeof fixtureRelatedPositionFindingSummary)[]
+  ) => ({
     items: [...findingsForThisReview.items, ...extra],
     truncated: false,
   })
@@ -535,6 +564,19 @@ describe('position findings', () => {
     const pane = within(detailPane())
     expect(pane.getByText(/note, not a problem/i)).toBeInTheDocument()
     expect(pane.getByText(/accept and record/i)).toBeInTheDocument()
+  })
+
+  it('reads a secondary-topic position as a related note, not a breach', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-9', {
+      findings: listWith(fixtureRelatedPositionFindingSummary),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    const label = pane.getByText('Related position')
+    expect(label).toHaveClass('rv-ws-typ--related')
+    expect(pane.getByText(/not a breach/i)).toBeInTheDocument()
+    expect(pane.getByText(/governs a topic the clause only touches/i)).toBeInTheDocument()
   })
 
   it('says approval is needed and shows the escalation condition when the position names an approver', async () => {
@@ -635,7 +677,7 @@ describe('finding evidence amendment', () => {
     expect(router.state.location.search).not.toContain('node-63')
   })
 
-  it('opens a source region in the contract document when the review is on the current version', async () => {
+  it('keeps a source region inside the workspace and highlights the clause it came from', async () => {
     const { router } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
     await findDetailTitle('6. Limitation of Liability')
@@ -643,8 +685,16 @@ describe('finding evidence amendment', () => {
     const sheet = screen.getByRole('dialog', { name: 'Source' })
     await userEvent.click(within(sheet).getByRole('button', { name: '6. Limitation of Liability' }))
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c1'))
-    expect(router.state.location.search).toBe('?view=document&node=node-6')
+    // The legacy contract route is not opened: the evidence targets the workspace's own document.
+    expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Source' })).not.toBeInTheDocument())
+    // The target clause is marked, and only it.
+    const highlighted = contractPane().querySelectorAll('[data-focus="1"]')
+    expect(highlighted).toHaveLength(1)
+    expect(highlighted[0]).toHaveTextContent('6. Limitation of Liability')
+    expect(highlighted[0]).toHaveTextContent('6.3 The exclusions')
+    expect(highlighted[0]).not.toHaveTextContent('5. Termination')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
   it('offers no deep link into the document when the review is pinned to an older version', async () => {

@@ -165,8 +165,8 @@ const SUFFICIENCY_PRESENTATIONS: Record<
     description: 'No approved reusable wording exists for this concept.',
   },
   PRECEDENT_WEAK: {
-    label: 'Precedent evidence weak',
-    description: 'No compatible precedent was found for this concept.',
+    label: 'No comparable past agreement found',
+    description: 'No comparable past agreement was found for this concept. Precedent is evidence only and does not set policy.',
   },
   CONTRACT_CONTEXT_INCOMPLETE: {
     label: 'Contract context incomplete',

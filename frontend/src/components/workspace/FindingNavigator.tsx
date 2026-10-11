@@ -2,7 +2,7 @@ import type { KeyboardEvent } from 'react'
 import type { FindingSummary } from '../../api/reviews'
 import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
-import { findingSubjectLabel, issueFamilyLabel } from '../../lib/reviews'
+import { findingIssueLabel, findingSubjectLabel } from '../../lib/reviews'
 import { findingState, type FindingTone } from '../../lib/workspace'
 import { ErrorState, LoadingState } from '../ui/State'
 import { GlyphEscalated, GlyphOpen, GlyphRejected, GlyphResolved } from './WorkspaceIcons'
@@ -92,7 +92,7 @@ export function FindingNavigator({
                 <b>{findingSubjectLabel(finding, regionLabels, labelFor)}</b>
                 <span>
                   {showState ? `${state.label} · ` : ''}
-                  {issueFamilyLabel(finding.issueFamily)}
+                  {findingIssueLabel(finding)}
                 </span>
                 {finding.subjectKind === 'ABSENCE' ? <div className="rv-ws-miss">Not in contract</div> : null}
               </div>
