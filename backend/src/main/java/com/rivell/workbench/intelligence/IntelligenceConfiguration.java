@@ -33,8 +33,10 @@ class IntelligenceConfiguration {
 
     @Bean
     SemanticDecisionService semanticDecisionService(
-            ModelPolicy modelPolicy, ProviderRegistry providerRegistry, Clock clock) {
-        return new SemanticDecisionService(modelPolicy, providerRegistry, clock);
+            ModelPolicy modelPolicy, ProviderRegistry providerRegistry, Clock clock,
+            IntelligenceProperties properties) {
+        return new SemanticDecisionService(modelPolicy, providerRegistry, clock,
+                new ProviderRetry(properties.retryBackoff()));
     }
 
     @Bean
@@ -76,8 +78,10 @@ class IntelligenceConfiguration {
 
     @Bean
     GenerativeReasoningService generativeReasoningService(
-            ModelPolicy modelPolicy, GenerativeProviderRegistry providerRegistry, Clock clock) {
-        return new GenerativeReasoningService(modelPolicy, providerRegistry, clock);
+            ModelPolicy modelPolicy, GenerativeProviderRegistry providerRegistry, Clock clock,
+            IntelligenceProperties properties) {
+        return new GenerativeReasoningService(modelPolicy, providerRegistry, clock,
+                new ProviderRetry(properties.retryBackoff()));
     }
 
     @Bean

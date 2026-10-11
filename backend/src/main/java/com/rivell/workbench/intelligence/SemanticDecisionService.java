@@ -16,11 +16,18 @@ public class SemanticDecisionService {
     private final ModelPolicy modelPolicy;
     private final ProviderRegistry providerRegistry;
     private final Clock clock;
+    private final ProviderRetry retry;
 
     public SemanticDecisionService(ModelPolicy modelPolicy, ProviderRegistry providerRegistry, Clock clock) {
+        this(modelPolicy, providerRegistry, clock, ProviderRetry.NONE);
+    }
+
+    public SemanticDecisionService(
+            ModelPolicy modelPolicy, ProviderRegistry providerRegistry, Clock clock, ProviderRetry retry) {
         this.modelPolicy = modelPolicy;
         this.providerRegistry = providerRegistry;
         this.clock = clock;
+        this.retry = retry;
     }
 
     public DecisionExecution evaluate(DecisionSpec spec, SemanticState state) {
@@ -37,8 +44,9 @@ public class SemanticDecisionService {
 
         var startedAt = clock.instant();
         try {
-            var result = provider.execute(new DecisionExecutionRequest(
-                    binding.modelAlias(), state, spec.pack()));
+            var request = new DecisionExecutionRequest(binding.modelAlias(), state, spec.pack());
+            var result = retry.call(() -> provider.execute(request), failure -> ExecutionLog.retried(
+                    "decision", spec.id(), spec.version(), binding.providerId(), failure));
             validateAnswers(spec, result.answers());
             var metadata = completedMetadata(spec, binding, result, questionCount(spec), startedAt);
             ExecutionLog.completed("decision", metadata);

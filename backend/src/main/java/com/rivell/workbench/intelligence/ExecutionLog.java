@@ -32,6 +32,20 @@ final class ExecutionLog {
                 .log(EVENT);
     }
 
+    /** One failed attempt that {@link ProviderRetry} will repeat; not a failed execution. */
+    static void retried(String kind, String specId, int specVersion, String providerId,
+            RuntimeException failure) {
+        LOG.atInfo()
+                .addKeyValue("kind", kind)
+                .addKeyValue("spec", specId)
+                .addKeyValue("specVersion", specVersion)
+                .addKeyValue("provider", providerId)
+                .addKeyValue("outcome", "RETRIED")
+                .addKeyValue("error", failure.getClass().getSimpleName())
+                .addKeyValue("reason", failure.getMessage())
+                .log(EVENT);
+    }
+
     static void failed(String kind, String specId, int specVersion, String providerId,
             long durationMs, RuntimeException failure) {
         LOG.atWarn()
