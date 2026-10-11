@@ -217,6 +217,23 @@ class PolicyComparisonFlowIT {
     }
 
     @Test
+    void aReviewCanBeCreatedForEveryContractType() throws Exception {
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/pc-contract.docx"));
+        for (var type : ContractType.values()) {
+            var ingested = contractIngestionService.ingest("pc-contract.docx",
+                    ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+            enrichmentService.enrich(ingested.contractId(), 1,
+                    new ReviewProfile(type, PartyRole.CUSTOMER, PaperSource.THIRD_PARTY,
+                            Jurisdiction.US));
+
+            var review = reviewService.create(ingested.contractId(), 1, null);
+
+            assertThat(review.id()).as(type.name()).isNotNull();
+        }
+    }
+
+    @Test
     void aClauseNoPositionAddressesIsTriagedAndBecomesAFindingOnlyWhenAdverse() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.PC_PLAYBOOK,
