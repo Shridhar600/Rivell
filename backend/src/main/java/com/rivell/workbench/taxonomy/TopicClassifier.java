@@ -79,6 +79,33 @@ public final class TopicClassifier {
                 questions + 1);
     }
 
+    /**
+     * Every leaf of the family a heading names ("Data protection", "Data protection and
+     * privacy", "G-03 Confidentiality"); empty when it names none. A playbook position titled
+     * with a whole family covers the family: its text spreads over several leaves, so no single
+     * leaf passes the topic threshold and the position would otherwise meet no clause (dev2
+     * eval, 2026-10-12). Deterministic; a leaf label ("Confidentiality period") is no family.
+     */
+    public List<ConceptKey> familyLeaves(String heading) {
+        if (heading == null) {
+            return List.of();
+        }
+        var normalized = heading.toLowerCase(java.util.Locale.ROOT)
+                .replaceFirst("^\\s*(?:[a-z]{1,3}[- ]?\\d+[a-z]?|\\d+(?:\\.\\d+)*)[.:)]?\\s+", "")
+                .replaceAll("[^a-z0-9& ]", " ").replaceAll("\\s+", " ").strip();
+        for (var family : registry.parents()) {
+            var label = family.label().toLowerCase(java.util.Locale.ROOT);
+            if (normalized.equals(label) || normalized.startsWith(label + " and ")
+                    || normalized.startsWith(label + " & ")) {
+                return registry.leaves().stream()
+                        .filter(leaf -> family.key().equals(leaf.parentKey()))
+                        .map(com.rivell.workbench.taxonomy.Concept::key)
+                        .toList();
+            }
+        }
+        return List.of();
+    }
+
     private DecisionSpec primarySpec(List<ConceptKey> candidates) {
         var criteria = new LinkedHashMap<String, String>();
         for (var key : candidates) {

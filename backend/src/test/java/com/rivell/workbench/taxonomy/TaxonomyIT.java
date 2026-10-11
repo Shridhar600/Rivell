@@ -140,6 +140,18 @@ class TaxonomyIT {
     }
 
     @Test
+    void aHeadingNamingAWholeFamilyCoversEveryLeafOfIt() {
+        assertThat(classifier.familyLeaves("G-03  Data protection"))
+                .extracting(ConceptKey::value)
+                .contains("SECURITY_MEASURES", "PROCESSOR_DUTIES", "PROCESSING_DETAILS")
+                .doesNotContain("CONFIDENTIALITY_OBLIGATIONS");
+        assertThat(classifier.familyLeaves("Data protection and privacy")).isNotEmpty();
+        assertThat(classifier.familyLeaves("Confidentiality period")).as("a leaf, not the family").isEmpty();
+        assertThat(classifier.familyLeaves("Limitation of liability")).isEmpty();
+        assertThat(classifier.familyLeaves(null)).isEmpty();
+    }
+
+    @Test
     void aSectionMatchingNoTopicStaysUnclassified() {
         var result = classifier.classify("Signatures", "Signed by the authorised representatives of the parties.");
 

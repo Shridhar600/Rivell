@@ -239,6 +239,8 @@ public class SemanticCompilationService {
         if (conceptKey != null) {
             topicKeys.add(conceptKey);
         }
+        topicClassifier.familyLeaves(topicHeading(candidate, roles))
+                .forEach(key -> topicKeys.add(key.value()));
         return candidate.withSemanticOutcome(semantic, List.copyOf(fields.values()),
                 conceptKey, List.copyOf(topicKeys));
     }
