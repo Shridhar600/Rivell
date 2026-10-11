@@ -183,19 +183,29 @@ export const CLAUSE_EXCERPT_CHARS = 180
 
 /**
  * A short excerpt of the clause as received, so the detail panel does not repeat the document
- * beside it. Two passages at most, bounded by a character budget; an ellipsis marks anything the
- * excerpt leaves out. The full clause stays one "Show in document" away.
+ * beside it. At most two passages inside a character budget: a passage that would overflow is cut
+ * at the budget rather than dropped, and an ellipsis marks anything the excerpt leaves out. The
+ * full clause stays one "Show in document" away.
  */
 export function clauseExcerpt(text: string, maxChars: number = CLAUSE_EXCERPT_CHARS): string {
   const trimmed = text.trim()
-  const lines = trimmed.split('\n').filter((line) => line.trim() !== '')
+  const lines = trimmed
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
   const kept: string[] = []
   let used = 0
   for (const line of lines) {
     if (kept.length >= 2) break
-    if (kept.length > 0 && used + line.length > maxChars) break
-    kept.push(line)
-    used += line.length + 1
+    const room = maxChars - used
+    if (room <= 1) break
+    if (line.length <= room) {
+      kept.push(line)
+      used += line.length + 1
+      continue
+    }
+    kept.push(line.slice(0, room - 1).trimEnd())
+    break
   }
   const excerpt = kept.join('\n')
   return excerpt.length < trimmed.length ? `${excerpt.trimEnd()}…` : excerpt

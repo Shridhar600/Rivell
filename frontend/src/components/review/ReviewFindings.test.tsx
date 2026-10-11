@@ -463,6 +463,10 @@ describe('finding detail', () => {
     expect(pane.getByText(/No playbook position addresses this clause/)).toBeInTheDocument()
     expect(pane.getByText(/Model confidence 90%/)).toBeInTheDocument()
     expect(pane.getByText(/not a certainty/)).toBeInTheDocument()
+    // The list names the same kind, not the generic policy-unavailable family.
+    expect(
+      await (await findFindingsList()).findByRole('option', { name: /Not covered by playbook — review/ }),
+    ).toBeInTheDocument()
   })
 
   it('preserves policy ambiguity without selecting a winner', async () => {
@@ -577,6 +581,10 @@ describe('position findings', () => {
     expect(label).toHaveClass('rv-ws-typ--related')
     expect(pane.getByText(/not a breach/i)).toBeInTheDocument()
     expect(pane.getByText(/governs a topic the clause only touches/i)).toBeInTheDocument()
+    // The list carries no quality object, so the code-owned verdict fields must still read as a note.
+    expect(
+      await (await findFindingsList()).findByRole('option', { name: /Related position/ }),
+    ).toBeInTheDocument()
   })
 
   it('says approval is needed and shows the escalation condition when the position names an approver', async () => {
@@ -697,8 +705,8 @@ describe('finding evidence amendment', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
-  it('offers no deep link into the document when the review is pinned to an older version', async () => {
-    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+  it('reveals the clause in the pinned workspace document and keeps latest-version links off', async () => {
+    const { router } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
       contractSummary: {
         ...fixtureContractSummary,
         latestVersion: { ...fixtureContractSummary.latestVersion, versionNumber: 2 },
@@ -708,7 +716,18 @@ describe('finding evidence amendment', () => {
     await findDetailTitle('6. Limitation of Liability')
     await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Current contract/ }))
     const sheet = screen.getByRole('dialog', { name: 'Source' })
-    expect(within(sheet).queryByText('View in document:')).not.toBeInTheDocument()
+    // Clause semantics open the latest version, so a pinned older review does not offer them.
+    expect(
+      within(sheet).queryByRole('button', { name: 'Open clause semantics' }),
+    ).not.toBeInTheDocument()
+
+    // "View in document" still works: the workspace document is the version the review pinned.
+    await userEvent.click(within(sheet).getByRole('button', { name: '6. Limitation of Liability' }))
+    expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Source' })).not.toBeInTheDocument())
+    const highlighted = contractPane().querySelectorAll('[data-focus="1"]')
+    expect(highlighted).toHaveLength(1)
+    expect(highlighted[0]).toHaveTextContent('6.3 The exclusions in Section 6.2')
   })
 
   it('fails safely when a claim references evidence missing from the response', async () => {

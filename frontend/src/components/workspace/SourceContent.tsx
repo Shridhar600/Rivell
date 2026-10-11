@@ -9,8 +9,9 @@ interface Props {
   item: EvidenceItem
   regionLabels: Map<string, string>
   clauseHeadings: Map<string, string>
-  /** Deep links open the contract's latest version, so they are given only when the review matches it. */
+  /** Reveals the node in the workspace document, which is the version the review pinned. */
   onNavigateToNode?: (nodeId: string) => void
+  /** Clause semantics open the contract's latest version, so given only when the review matches it. */
   onOpenClauseSemantics?: (headingNodeId: string) => void
 }
 

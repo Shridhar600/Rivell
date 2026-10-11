@@ -234,7 +234,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const selectedId = named ? selectedParam : (fallback?.id ?? null)
   const selectFinding = useCallback(
     (findingId: string) => {
-      setDocFocus(null)
       setSearchParams(
         (current) => {
           const next = new URLSearchParams(current)
@@ -245,6 +244,15 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       )
     },
     [setSearchParams],
+  )
+  // A reviewer picking a finding leaves the evidence highlight behind; the URL fallback above is
+  // not a pick, so it does not need this.
+  const chooseFinding = useCallback(
+    (findingId: string) => {
+      setDocFocus(null)
+      selectFinding(findingId)
+    },
+    [selectFinding],
   )
   useEffect(() => {
     if (selectedParam === null && fallback) selectFinding(fallback.id)
@@ -271,7 +279,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       const fresh = queryClient.getQueryData<DecisionListResponse>(workflowKeys.decisions(reviewId))
       const latest = new Map((fresh?.items ?? []).map((d) => [d.findingId, d]))
       const next = nextOpenFinding(findings, latest, savedId)
-      if (next && next.id !== savedId) selectFinding(next.id)
+      if (next && next.id !== savedId) chooseFinding(next.id)
     },
   })
   const canDecideNow = analysisCompleted && humanReview !== null && decisionsLoaded && !isFinalized && !flow.readOnly && finding !== undefined
@@ -332,7 +340,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       const step = (by: number) => {
         event.preventDefault()
         const target = findings[Math.min(findings.length - 1, Math.max(0, index + by))]
-        if (target) selectFinding(target.id)
+        if (target) chooseFinding(target.id)
       }
       if (key === 'j' || event.key === 'ArrowDown') step(1)
       else if (key === 'k' || event.key === 'ArrowUp') step(-1)
@@ -373,7 +381,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       label: findingSubjectLabel(f, regionLabels, labelFor),
       hint: decisionsLoaded ? findingState(f, decisions.get(f.id)).label : undefined,
       icon: <DocumentIcon className="rv-icon" />,
-      run: () => selectFinding(f.id),
+      run: () => chooseFinding(f.id),
     })),
     ...(canDecideNow
       ? ([
@@ -543,7 +551,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           isPending={findingsQuery.isPending}
           isError={findingsQuery.isError}
           onRetry={() => void findingsQuery.refetch()}
-          onSelect={selectFinding}
+          onSelect={chooseFinding}
         />
         <ContractPane
           title={contract.title ?? 'Untitled contract'}
@@ -563,7 +571,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           decisions={decisions}
           selectedId={selectedId}
           selected={finding}
-          onSelect={selectFinding}
+          onSelect={chooseFinding}
           isFinalized={isFinalized}
           remaining={humanReview ? humanReview.remainingFindings : null}
           notes={notes}
@@ -605,7 +613,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
               item={sourceItem}
               regionLabels={regionLabels}
               clauseHeadings={clauseHeadings}
-              onNavigateToNode={pinnedVersion === latestVersion ? showInDocumentAt : undefined}
+              onNavigateToNode={showInDocumentAt}
               onOpenClauseSemantics={pinnedVersion === latestVersion ? goToClause : undefined}
             />
           ) : (

@@ -188,6 +188,22 @@ describe('clauseExcerpt', () => {
     expect(excerpt.endsWith('…')).toBe(true)
   })
 
+  it('keeps some clause body even when the first passage exhausts the budget', () => {
+    const long = 'x'.repeat(400)
+    const excerpt = clauseExcerpt(long)
+    expect(excerpt.length).toBeLessThanOrEqual(180)
+    expect(excerpt.endsWith('…')).toBe(true)
+    expect(excerpt).not.toContain('\n')
+  })
+
+  it('still shows the start of the body when the heading and body together exceed the budget', () => {
+    const excerpt = clauseExcerpt(`6. Limitation of Liability\n${'y'.repeat(400)}`)
+    expect(excerpt.startsWith('6. Limitation of Liability\n')).toBe(true)
+    expect(excerpt.split('\n')).toHaveLength(2)
+    expect(excerpt.endsWith('…')).toBe(true)
+    expect(excerpt.length).toBeLessThanOrEqual(181)
+  })
+
   it('returns a short clause unchanged, with no invented ellipsis', () => {
     expect(clauseExcerpt('4. Term\n4.1 Two years.')).toBe('4. Term\n4.1 Two years.')
   })
