@@ -772,6 +772,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contracts/{id}/versions/{versionNumber}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report how much of the uploaded file's text the parsed structure holds */
+        get: operations["getCoverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2294,6 +2311,46 @@ export interface components {
             runStart: number | null;
             /** Format: int32 */
             runEnd: number | null;
+        };
+        ApiResultParseCoverageResponse: {
+            data?: components["schemas"]["ParseCoverageResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        GapView: {
+            part: string;
+            /** @description BODY, TABLE, TEXT_BOX, HEADER, FOOTER, FOOTNOTE, ENDNOTE or COMMENT */
+            location: string;
+            /** Format: int32 */
+            words: number;
+            excerpt: string;
+        };
+        LocationTotalView: {
+            location: string;
+            /** Format: int32 */
+            sourceWords: number;
+            /** Format: int32 */
+            capturedWords: number;
+        };
+        /** @description How much of the uploaded file's text the parsed structure holds, from an independent read of the raw file. checked is false for versions parsed before the check existed or when it could not run. */
+        ParseCoverageResponse: {
+            checked: boolean;
+            /** @description False when the check fell back to whole-paragraph matching */
+            exact: boolean;
+            /** Format: int32 */
+            sourceWords: number;
+            /** Format: int32 */
+            capturedWords: number;
+            /**
+             * Format: int32
+             * @description Structure words with no source counterpart
+             */
+            extraWords: number;
+            totals: components["schemas"]["LocationTotalView"][];
+            /** @description Source text the structure does not hold, in source order */
+            gaps: components["schemas"]["GapView"][];
         };
     };
     responses: never;
@@ -4174,6 +4231,38 @@ export interface operations {
                 };
                 content: {
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                };
+            };
+            /** @description Contract or version does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getCoverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultParseCoverageResponse"];
                 };
             };
             /** @description Contract or version does not exist in this organization */

@@ -89,6 +89,7 @@ class SystemApiIT {
                         "/api/contracts",
                         "/api/contracts/{id}",
                         "/api/contracts/{id}/versions/{versionNumber}/structure",
+                        "/api/contracts/{id}/versions/{versionNumber}/coverage",
                         "/api/contracts/{id}/versions/{versionNumber}/original",
                         "/api/contracts/{id}/versions/{versionNumber}/enrichment",
                         "/api/contracts/{id}/versions/{versionNumber}/semantics",
