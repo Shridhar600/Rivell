@@ -87,6 +87,32 @@ public class StructuredPolicyResolver {
      * nothing) + effective window containing the request's effective date, all within
      * the pinned publication set.
      */
+    /**
+     * Every applicable published candidate of the given families regardless of topic, for a
+     * whole-contract read; same scope rules as {@link #resolve}.
+     */
+    public Resolution resolveAll(
+            EvidenceRequest request, Set<CandidateType> candidateTypes,
+            long asOfPublicationNumber, int limit) {
+        if (asOfPublicationNumber < 1) {
+            return new Resolution(List.of(), asOfPublicationNumber, false);
+        }
+        var profile = request.reviewProfile();
+        var query = PublishedKnowledgeQuery.byTopics(
+                request.organizationId(), asOfPublicationNumber, candidateTypes, Set.of(), null,
+                profile.contractPackKey(),
+                profile.contractType() == null ? null : profile.contractType().name(),
+                profile.ourSideRole() == null ? null : profile.ourSideRole().name(),
+                profile.paperSource() == null ? null : profile.paperSource().name(),
+                profile.jurisdiction() == Jurisdiction.UNSPECIFIED
+                        ? null : profile.jurisdiction().name(),
+                request.effectiveOn(), limit);
+        var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
+        var truncated = candidates.size() > limit;
+        return new Resolution(List.copyOf(truncated ? candidates.subList(0, limit) : candidates),
+                asOfPublicationNumber, truncated);
+    }
+
     public Resolution resolve(
             EvidenceRequest request, Set<CandidateType> candidateTypes,
             long asOfPublicationNumber) {

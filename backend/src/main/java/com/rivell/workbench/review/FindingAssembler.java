@@ -131,6 +131,13 @@ public final class FindingAssembler {
                             + "this kind of contract and against our side; a lawyer should "
                             + "review it.");
         }
+        if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
+                && signal.payload() instanceof PolicyUnavailablePayload unavailable
+                && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())) {
+            return new Observation(PolicyUnavailablePayload.SPOTTED,
+                    "A whole-contract read named this clause as one our side must act on, and no "
+                            + "playbook position check flagged it; a lawyer should review it.");
+        }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE) {
             return new Observation("POLICY_UNAVAILABLE",
                     "No applicable published policy exists for " + signal.concept().value()

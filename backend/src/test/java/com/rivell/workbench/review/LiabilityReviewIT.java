@@ -442,6 +442,9 @@ public class LiabilityReviewIT {
         volatile boolean failOpenEnded;
         volatile String openEndedProposed;
         volatile String openEndedExplanation;
+        /** Headings the whole-contract spotting read names (MEDIUM); every other clause is fine. */
+        final java.util.Set<String> spottedHeadings = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        final AtomicInteger spottingCalls = new AtomicInteger();
 
         @Override
         public String id() {
@@ -461,11 +464,22 @@ public class LiabilityReviewIT {
             failOpenEnded = false;
             openEndedProposed = null;
             openEndedExplanation = null;
+            spottedHeadings.clear();
+            spottingCalls.set(0);
         }
 
         @Override
         public GenerationResult generate(GenerationRequest request) {
             calls.incrementAndGet();
+            if (request.state() instanceof IssueSpottingSpecs.SpottingState spotting) {
+                spottingCalls.incrementAndGet();
+                var lines = spotting.clauses().stream()
+                        .filter(clause -> spottedHeadings.stream().anyMatch(clause.heading()::contains))
+                        .map(clause -> clause.number() + " | MEDIUM | one-sided term against us")
+                        .collect(java.util.stream.Collectors.joining("\n"));
+                return new GenerationResult(Map.of("issues", lines.isEmpty() ? "NONE" : lines),
+                        "fake-gen-v1", new TokenUsage(900, 30));
+            }
             if (request.spec().fields().containsKey("proposedLanguage")) {
                 if (failOpenEnded) {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(

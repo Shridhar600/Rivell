@@ -7,11 +7,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * positions are judged per clause, and a position flags when the summed probability of
  * the four issue-bearing options reaches {@code flagThreshold}. A clause no position
  * addresses becomes a finding when the triage probability reaches
- * {@code uncoveredThreshold} (design §6c).
+ * {@code uncoveredThreshold} (design §6c). {@code issueSpotting} (opt-in, step-6 hybrid) adds
+ * one whole-contract LLM read per run: a clause it names that no check flagged becomes a
+ * needs-review finding.
  */
 @ConfigurationProperties("rivell.review.policy-comparison")
 public record PolicyComparisonProperties(
-        int maxPositions, double flagThreshold, double uncoveredThreshold) {
+        int maxPositions, double flagThreshold, double uncoveredThreshold, boolean issueSpotting) {
 
     public PolicyComparisonProperties {
         maxPositions = maxPositions <= 0 ? 8 : maxPositions;

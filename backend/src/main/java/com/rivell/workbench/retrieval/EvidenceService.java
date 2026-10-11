@@ -109,6 +109,12 @@ public class EvidenceService {
         return assemble(request, asOfPublication, none, none, List.of(), false);
     }
 
+    /** The text of every published playbook position that applies to the request's contract. */
+    public List<String> applicablePositionTexts(EvidenceRequest request, int limit) {
+        return resolver.resolveAll(request, Set.of(CandidateType.PLAYBOOK_RULE), resolveAsOf(request), limit)
+                .candidates().stream().map(KnowledgeCandidate::effectiveContentText).toList();
+    }
+
     private EvidenceBundle buildInternal(EvidenceRequest request) {
         var asOfPublication = resolveAsOf(request);
         return assemble(request, asOfPublication,
