@@ -166,14 +166,19 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             // every matched position judged the clause off its subject: the playbook is silent
             signals.addAll(uncovered(context, clause, bundle, state, detail));
         }
-        signals.addAll(spotted(context, clause, bundle, signals, detail));
+        if (judgedPositions.stream().noneMatch(PolicyComparisonCheckExecutor::addresses)) {
+            // the playbook judged nothing here: the whole-contract read may still point at it
+            signals.addAll(spotted(context, clause, bundle, signals, detail));
+        }
         return CheckOutcome.completed(signals, detail, bundle.traceId())
                 .withCitedEvidence(List.of(bundle));
     }
 
     /**
-     * The whole-contract read (opt-in) named this clause and nothing here flagged it: a
-     * needs-review finding citing the clause. Never a verdict on a position, never wording.
+     * The whole-contract read (opt-in) named this clause, no position addresses it and the
+     * triage did not flag it: a needs-review finding citing the clause. Where a position
+     * judged the clause, that judgment stands (dev eval: letting the read override it put
+     * MEDIUM+ false alarms at 35%). Never a verdict on a position, never wording.
      */
     private List<RawReviewSignal> spotted(
             ReviewCheckContext context, ClauseSemantics clause, EvidenceBundle bundle,
