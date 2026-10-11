@@ -529,6 +529,32 @@ class AuthorityAwareEvidenceFlowIT {
     }
 
     @Test
+    void aRuleDeclaredForTheNdaFamilyAppliesToAMutualNda() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var clauseId = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.primaryConcept().isPresent()
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
+                .findFirst().orElseThrow().id();
+
+        var bundle = evidenceService.build(EvidenceRequest.forClauseReview(
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
+                corpus.contract().contractId(), 1, clauseId,
+                M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT,
+                new com.rivell.workbench.contracts.ReviewProfile(
+                        com.rivell.workbench.contracts.ContractType.MNDA,
+                        com.rivell.workbench.contracts.PartyRole.CUSTOMER,
+                        com.rivell.workbench.contracts.PaperSource.THIRD_PARTY,
+                        com.rivell.workbench.contracts.Jurisdiction.US),
+                LocalDate.of(2026, 9, 24), KnowledgePin.LATEST));
+
+        // the playbook declares NDA; a mutual NDA belongs to that family
+        assertThat(bundle.policyItems()).singleElement()
+                .satisfies(item -> assertThat(item.applicabilityScope().declaredContractTypes())
+                        .contains("NDA"));
+    }
+
+    @Test
     void explicitPackSelectionExcludesByPackAloneAndAcceptsWildcardPackKnowledge() {
         var organizationId = identityProvider.currentIdentity().organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);

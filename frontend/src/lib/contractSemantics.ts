@@ -9,7 +9,17 @@ import type {
   SemanticFact,
 } from '../api/semantics'
 
-export const CONTRACT_TYPES = ['NDA', 'MSA', 'OTHER'] as const satisfies readonly NonNullable<
+export const CONTRACT_TYPES = [
+  'MNDA',
+  'ONDA',
+  'NDA',
+  'MSA',
+  'SAAS',
+  'DPA',
+  'SOW',
+  'SWL',
+  'OTHER',
+] as const satisfies readonly NonNullable<
   ReviewProfileInput['contractType']
 >[]
 
@@ -102,8 +112,14 @@ const ANALYSIS_QUALITY_NOTES = new Set([
 ])
 
 export const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  MNDA: 'Mutual NDA',
+  ONDA: 'One-way NDA',
   NDA: 'NDA',
   MSA: 'MSA',
+  SAAS: 'SaaS',
+  DPA: 'DPA',
+  SOW: 'SOW',
+  SWL: 'Software licence',
   OTHER: 'Other',
 }
 

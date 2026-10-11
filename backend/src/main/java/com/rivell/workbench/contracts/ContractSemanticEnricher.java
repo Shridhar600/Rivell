@@ -227,7 +227,7 @@ public final class ContractSemanticEnricher {
                 var execution = decisionService.evaluate(
                         M5SemanticSpecs.partyRoles(roles),
                         new M5SemanticStates.PartyRoleState(party.rawName(),
-                                profile.contractType().name(),
+                                profile.contractType().label(),
                                 profile.ourSideRole() == null ? null
                                         : profile.ourSideRole().name(),
                                 sample(excerptOf(preambleText, party.rawName()))));

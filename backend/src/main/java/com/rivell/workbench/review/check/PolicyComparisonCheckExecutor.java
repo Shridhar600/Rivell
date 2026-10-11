@@ -112,7 +112,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 bundle.degradationWarnings().contains("POLICY_POSITIONS_TRUNCATED"));
         var state = new PolicyComparisonSpecs.PolicyComparisonState(
                 PolicyComparisonSpecs.STATE_SCHEMA_VERSION,
-                context.snapshot().contractType().name(),
+                context.snapshot().contractType().label(),
                 context.snapshot().ourSideRole() == null
                         ? "" : context.snapshot().ourSideRole().name(),
                 context.headingTexts().getOrDefault(

@@ -72,10 +72,24 @@ def stop_backend(proc, log):
 # Isolated on purpose: the product's input vocabulary is expected to grow.
 
 def contract_type(answer):
+    """Answer-key free text -> the product's contract type code. Order matters: an SOW under an
+    MSA is an SOW; a data processing addendum is a DPA."""
     text = answer.get("contractType", "").lower()
+    if "data processing" in text or "dpa" in text.split():
+        return "DPA"
+    if "statement of work" in text or "sow" in text.split():
+        return "SOW"
+    if "saas" in text or "subscription" in text or "order form" in text:
+        return "SAAS"
+    if "licen" in text:
+        return "SWL"
     if "nda" in text or "non-disclosure" in text or "confidentiality agreement" in text:
+        if "mutual" in text:
+            return "MNDA"
+        if "one-way" in text or "one way" in text or "unilateral" in text:
+            return "ONDA"
         return "NDA"
-    if "master services" in text or "msa" in text:
+    if "master services" in text or "msa" in text.split() or "services agreement" in text:
         return "MSA"
     return "OTHER"
 
@@ -93,7 +107,7 @@ def review_profile(answer):
         profile["jurisdiction"] = "US"
     else:
         profile["jurisdiction"] = "UNSPECIFIED"
-    if "mutual" in answer.get("contractType", "").lower():
+    if "mutual" in answer.get("contractType", "").lower() and ctype in ("NDA", "MNDA", "ONDA"):
         profile["ourSideRole"] = "PARTY_A"
     elif "receiv" in role:
         profile["ourSideRole"] = "RECEIVING_PARTY"
@@ -103,8 +117,10 @@ def review_profile(answer):
         profile["ourSideRole"] = "LICENSOR" if "licensor" in role else "SUPPLIER"
     elif any(w in role for w in ("customer", "client", "controller", "licensee", "buyer")):
         profile["ourSideRole"] = "LICENSEE" if "licensee" in role else "CUSTOMER"
-    if ctype in ("NDA", "MSA"):
-        profile["contractPackKey"] = f"{ctype}_PACK"
+    if ctype in ("NDA", "MNDA", "ONDA"):
+        profile["contractPackKey"] = "NDA_PACK"
+    elif ctype == "MSA":
+        profile["contractPackKey"] = "MSA_PACK"
     return profile
 
 

@@ -103,11 +103,13 @@ final class M5SemanticSpecs {
     }
 
     static List<PartyRole> partyRoleSet(ContractType contractType) {
-        return switch (contractType) {
-            case NDA -> List.of(PartyRole.DISCLOSING_PARTY, PartyRole.RECEIVING_PARTY,
+        return switch (contractType.family()) {
+            case NDA, MNDA, ONDA -> List.of(PartyRole.DISCLOSING_PARTY, PartyRole.RECEIVING_PARTY,
                     PartyRole.PARTY_A, PartyRole.PARTY_B);
-            case MSA -> List.of(PartyRole.CUSTOMER, PartyRole.SUPPLIER,
+            case MSA, SAAS, SOW, DPA -> List.of(PartyRole.CUSTOMER, PartyRole.SUPPLIER,
                     PartyRole.PARTY_A, PartyRole.PARTY_B);
+            case SWL -> List.of(PartyRole.LICENSOR, PartyRole.LICENSEE, PartyRole.CUSTOMER,
+                    PartyRole.SUPPLIER, PartyRole.PARTY_A, PartyRole.PARTY_B);
             case OTHER -> List.of(PartyRole.CUSTOMER, PartyRole.SUPPLIER,
                     PartyRole.DISCLOSING_PARTY, PartyRole.RECEIVING_PARTY,
                     PartyRole.PARTY_A, PartyRole.PARTY_B);

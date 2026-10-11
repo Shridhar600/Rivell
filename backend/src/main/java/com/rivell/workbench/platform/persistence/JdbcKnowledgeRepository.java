@@ -105,6 +105,20 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .update();
     }
 
+    /** Normalized declared-type keys that match a contract of this type (lower-case, alphanumeric). */
+    private static List<String> applicableTypeKeys(String contractType) {
+        java.util.Set<String> codes;
+        try {
+            codes = com.rivell.workbench.contracts.ContractType.valueOf(contractType.trim()).applicableCodes();
+        } catch (IllegalArgumentException e) {
+            codes = java.util.Set.of(contractType);
+        }
+        return codes.stream()
+                .map(code -> code.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]", ""))
+                .sorted()
+                .toList();
+    }
+
     @Override
     public void updateParseCoverage(UUID artifactId, com.rivell.workbench.contracts.ParseCoverage coverage) {
         String json;
@@ -550,10 +564,11 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             params.put("contractPackKey", query.contractPackKey());
         }
         if (query.contractType() != null) {
+            // a source declared for the contract's type, its family or a family member applies
             conditions.add("(c.declared_contract_types = '[]'::jsonb"
                     + " or exists (select 1 from jsonb_array_elements_text(c.declared_contract_types)"
-                    + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = regexp_replace(lower(:contractType), '[^a-z0-9]', '', 'g')))");
-            params.put("contractType", query.contractType());
+                    + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = any(:contractTypes::text[])))");
+            params.put("contractTypes", topicKeysLiteral(applicableTypeKeys(query.contractType())));
         }
         if (query.partyPerspective() != null) {
             conditions.add("(c.party_perspective is null or regexp_replace(lower(c.party_perspective), '[^a-z0-9]', '', 'g')"
