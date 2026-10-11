@@ -1029,6 +1029,9 @@ export interface components {
             positions?: string[];
             requiresApproval?: boolean;
             escalationTrigger?: string;
+            preferred?: string;
+            fallbacks?: string[];
+            prohibited?: string;
         };
         SemanticAssessmentResponse: {
             judgments?: {
@@ -1790,7 +1793,7 @@ export interface components {
             concept?: string;
             secondaryConcept?: string;
             /** @enum {string} */
-            issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
+            issueFamily?: "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "POSITION_WALK_AWAY" | "POSITION_NEEDS_FALLBACK" | "POSITION_ACCEPTABLE_FALLBACK" | "POSITION_AMBIGUOUS" | "POSITION_UNCERTAIN" | "OPEN_ENDED_POSITION";
             observationKind?: string;
             /** @enum {string} */
             severity?: "HIGH" | "MEDIUM" | "LOW";
@@ -1855,7 +1858,7 @@ export interface components {
             secondaryConcept?: string;
             concepts?: string[];
             /** @enum {string} */
-            issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
+            issueFamily?: "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "POSITION_WALK_AWAY" | "POSITION_NEEDS_FALLBACK" | "POSITION_ACCEPTABLE_FALLBACK" | "POSITION_AMBIGUOUS" | "POSITION_UNCERTAIN" | "OPEN_ENDED_POSITION";
             observationKind?: string;
             observationText?: string;
             /** @enum {string} */
@@ -1885,6 +1888,7 @@ export interface components {
             contract?: components["schemas"]["ContractPositionSlot"][];
             preferred?: components["schemas"]["PolicyPositionSlot"][];
             fallback?: components["schemas"]["PolicyPositionSlot"][];
+            walkAway?: components["schemas"]["PolicyPositionSlot"][];
             escalation?: components["schemas"]["EscalationSlot"][];
         };
         PolicyPositionSlot: {
