@@ -30,19 +30,19 @@ class TaxonomyController {
         return new TaxonomyResponse(registry.version(), parents, leaves);
     }
 
-    private static ConceptView view(Concept concept) {
-        return new ConceptView(concept.key().value(), concept.label(),
+    private static TaxonomyConceptView view(Concept concept) {
+        return new TaxonomyConceptView(concept.key().value(), concept.label(),
                 concept.parentKey() == null ? null : concept.parentKey().value(),
                 concept.definition());
     }
 
     record TaxonomyResponse(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int version,
-            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<ConceptView> parents,
-            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<ConceptView> leaves) {
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<TaxonomyConceptView> parents,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<TaxonomyConceptView> leaves) {
     }
 
-    record ConceptView(
+    record TaxonomyConceptView(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String key,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String label,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) String parentKey,

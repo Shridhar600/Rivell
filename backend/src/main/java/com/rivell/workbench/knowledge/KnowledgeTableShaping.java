@@ -10,15 +10,15 @@ import java.util.UUID;
 
 /**
  * Deterministic table shape classification (design §5 item 1). A KEY_VALUE table is one
- * record with label → value fields: at most two populated columns, or three columns whose
- * first column carries known field labels. A GRID table (a header row of label-like cells
- * followed by text rows) yields one record per data row. No model, no heuristics beyond
- * the label-like test.
+ * record with label → value fields: a first column of known field labels, or two populated
+ * columns with label-like first cells and no header row. A GRID table (a header row of
+ * label-like cells followed by text rows) yields one record per data row. No model.
  */
 final class KnowledgeTableShaping {
 
     private static final int MAX_LABEL_WORDS = 8;
     private static final double LABEL_LIKE_RATIO = 0.8;
+    private static final double ROLE_KEYED_RATIO = 0.5;
 
     private KnowledgeTableShaping() {
     }
@@ -63,11 +63,17 @@ final class KnowledgeTableShaping {
             return new Grid(List.of());
         }
         var width = nonEmpty.stream().mapToInt(KnowledgeTableShaping::populatedWidth).max().orElse(0);
-        if (firstColumnLabelLikeRatio(nonEmpty) >= LABEL_LIKE_RATIO
-                && (width <= 2 || firstColumnRoleRatio(nonEmpty) >= LABEL_LIKE_RATIO)) {
+        if (firstColumnLabelLikeRatio(nonEmpty) < LABEL_LIKE_RATIO) {
+            return grid(nonEmpty);
+        }
+        var roleRatio = firstColumnRoleRatio(nonEmpty);
+        if (roleRatio >= LABEL_LIKE_RATIO) {
             return keyValue(nonEmpty);
         }
-        return grid(nonEmpty);
+        // Two columns of "subject | stance" under a header row ("Clause | Our position") are
+        // a grid of positions, not one record whose fields happen to be topics.
+        var subjectGrid = isHeaderRow(nonEmpty.get(0)) && roleRatio < ROLE_KEYED_RATIO;
+        return width <= 2 && !subjectGrid ? keyValue(nonEmpty) : grid(nonEmpty);
     }
 
     /**

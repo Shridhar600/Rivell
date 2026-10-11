@@ -11,11 +11,8 @@ import {
 import { humanizeCode } from '../lib/domainLabels'
 
 /**
- * The legal topics clauses and playbook positions are classified against.
- *
- * The generated OpenAPI schema cannot describe this payload: springdoc collapses the taxonomy's
- * ConceptView onto the knowledge module's ConceptView, so the taxonomy shape is read and checked
- * here against what the endpoint actually returns.
+ * The legal topics clauses and playbook positions are classified against
+ * (`TaxonomyResponse` / `TaxonomyConceptView` in the generated schema), read and checked here.
  */
 export interface TaxonomyConcept {
   key: string

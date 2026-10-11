@@ -1584,11 +1584,17 @@ export interface components {
             /** Format: date */
             effectiveOn?: string;
         };
+        TaxonomyConceptView: {
+            key: string;
+            label: string;
+            parentKey: string | null;
+            definition: string | null;
+        };
         TaxonomyResponse: {
             /** Format: int32 */
             version: number;
-            parents: components["schemas"]["ConceptView"][];
-            leaves: components["schemas"]["ConceptView"][];
+            parents: components["schemas"]["TaxonomyConceptView"][];
+            leaves: components["schemas"]["TaxonomyConceptView"][];
         };
         ApiResultSystemStatusResponse: {
             data?: components["schemas"]["SystemStatusResponse"];
@@ -2120,6 +2126,8 @@ export interface components {
             title?: string;
             contentText?: string;
             sourceNodeIds?: string[];
+            /** @enum {string} */
+            recordKind?: "POSITION" | "WORDING" | "ESCALATION" | "GUIDANCE" | "DOCUMENT_CONTROL" | "OTHER";
         };
         ApiResultListKnowledgeStructureNodeView: {
             data?: components["schemas"]["KnowledgeStructureNodeView"][];

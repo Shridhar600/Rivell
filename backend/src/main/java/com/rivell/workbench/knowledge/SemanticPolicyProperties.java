@@ -34,7 +34,7 @@ public record SemanticPolicyProperties(
         jurisdictionProposal = threshold(jurisdictionProposal, 0.80);
         conflictProposal = threshold(conflictProposal, 0.80);
         supersedeProposal = threshold(supersedeProposal, 0.80);
-        maxInterpretedCandidates = maxInterpretedCandidates <= 0 ? 50 : maxInterpretedCandidates;
+        maxInterpretedCandidates = maxInterpretedCandidates <= 0 ? 300 : maxInterpretedCandidates;
     }
 
     private static double threshold(double value, double fallback) {

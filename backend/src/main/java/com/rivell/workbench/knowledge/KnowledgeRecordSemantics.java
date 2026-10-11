@@ -78,6 +78,9 @@ final class KnowledgeRecordSemantics {
             }
             return resolved;
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
+            org.slf4j.LoggerFactory.getLogger(KnowledgeRecordSemantics.class)
+                    .warn("Field role decision unavailable for artifact {} ({} {})",
+                            artifact.id(), e.getClass().getSimpleName(), e.getMessage());
             return Map.of();
         }
     }

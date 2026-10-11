@@ -597,6 +597,39 @@ class KnowledgeRecordShapingIT {
                 .containsExactlyInAnyOrder(PositionRole.PREFERRED, PositionRole.FALLBACK);
     }
 
+    @Test
+    void twoColumnSubjectTableUnderAHeaderRowIsOnePositionPerRow() throws Exception {
+        provider.reset();
+        byte[] workbook;
+        try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
+            var sheet = xssf.createSheet("Summary");
+            String[][] rows = {
+                    {"Clause", "Our position"},
+                    {"Liability cap", "Fees paid in the prior 12 months."},
+                    {"Indemnity", "Mutual, limited to third-party IP claims."},
+                    {"Governing law", "England and Wales."}};
+            for (int i = 0; i < rows.length; i++) {
+                var row = sheet.createRow(i);
+                row.createCell(0).setCellValue(rows[i][0]);
+                row.createCell(1).setCellValue(rows[i][1]);
+            }
+            xssf.write(out);
+            workbook = out.toByteArray();
+        }
+        var manifest = new ArtifactManifest(
+                Set.of("MSA"), "MSA_PACK", "Customer", "Third-Party", "US", "en", null, null, null);
+        var artifact = ingestionService.ingest("summary.xlsx", "application/octet-stream",
+                ArtifactType.PLAYBOOK, manifest, new ByteArrayInputStream(workbook));
+
+        var candidates = queryService.getCandidates(artifact.id());
+        assertThat(candidates)
+                .as("each subject row is its own position, not a field of one record")
+                .extracting(KnowledgeCandidate::rawLabel)
+                .containsExactlyInAnyOrder("Liability cap", "Indemnity", "Governing law");
+        assertThat(candidates).allSatisfy(candidate ->
+                assertThat(candidate.effectivePositions()).containsExactly(PositionRole.PREFERRED));
+    }
+
     private KnowledgeArtifact ingest(String fixture, String filename, ArtifactType type)
             throws Exception {
         var manifest = new ArtifactManifest(
