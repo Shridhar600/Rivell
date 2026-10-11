@@ -581,7 +581,7 @@ describe('position findings', () => {
     expect(label).toHaveClass('rv-ws-typ--related')
     expect(pane.getByText(/not a breach/i)).toBeInTheDocument()
     expect(pane.getByText(/governs a topic the clause only touches/i)).toBeInTheDocument()
-    // The list carries no quality object, so the code-owned verdict fields must still read as a note.
+    // The list reads the server's relatedPosition flag, not the severity.
     expect(
       await (await findFindingsList()).findByRole('option', { name: /Related position/ }),
     ).toBeInTheDocument()

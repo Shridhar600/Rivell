@@ -656,7 +656,8 @@ public class ReviewApiService {
                 name(finding.concept()), name(finding.secondaryConcept()),
                 finding.issueFamily(), finding.observationKind(),
                 finding.severity(), finding.reviewClassification(), finding.proposedAction(),
-                finding.proposedLanguageSource(), finding.createdAt());
+                finding.proposedLanguageSource(),
+                Boolean.TRUE.equals(finding.quality().get("secondaryTopic")), finding.createdAt());
     }
 
     private static String name(ConceptKey concept) {

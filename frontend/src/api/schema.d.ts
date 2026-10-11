@@ -1803,6 +1803,7 @@ export interface components {
             proposedAction?: "USE_APPROVED_FALLBACK" | "ADD_REQUIRED_PROVISION" | "REVIEW_AMBIGUITY" | "ESCALATE_TO_HUMAN" | "CONSIDER_GENERATED_LANGUAGE" | "NO_ACTION";
             /** @enum {string} */
             proposedLanguageSource?: "APPROVED_DRAFTING" | "GENERATIVE" | "NONE";
+            relatedPosition?: boolean;
             /** Format: date-time */
             createdAt?: string;
         };

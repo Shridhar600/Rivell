@@ -396,21 +396,6 @@ export function isRelatedPosition(
 }
 
 /**
- * The same related-position note seen from a summary, which carries no quality object. The backend
- * records a secondary-topic deviation LOW and INFORMATIONAL; a walk-away it actually stands behind
- * is HIGH and BLOCKING. Only the code-owned verdict fields are read, nothing is inferred.
- */
-export function isRelatedPositionSummary(
-  finding: Pick<FindingSummary, 'issueFamily' | 'severity' | 'reviewClassification'>,
-): boolean {
-  return (
-    finding.issueFamily === 'POSITION_WALK_AWAY' &&
-    finding.severity === 'LOW' &&
-    finding.reviewClassification === 'INFORMATIONAL'
-  )
-}
-
-/**
  * The issue line a finding is listed under. A clause no playbook position addresses is its own
  * kind: the family alone would read as the older "policy unavailable" case.
  */

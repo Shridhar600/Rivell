@@ -246,6 +246,8 @@ export type FindingSummary = {
   reviewClassification: FindingClassification
   proposedAction: string
   proposedLanguageSource: string
+  /** True when the position governs a topic the clause only touches: a LOW note, not a breach. */
+  relatedPosition: boolean
   createdAt: string
 }
 
@@ -635,6 +637,7 @@ function parseFindingSummary(value: unknown, what: string): FindingSummary {
     proposedAction: readOptionalNullableString(finding, 'proposedAction', what) ?? 'UNKNOWN',
     proposedLanguageSource:
       readOptionalNullableString(finding, 'proposedLanguageSource', what) ?? 'UNKNOWN',
+    relatedPosition: readOptionalBoolean(finding, 'relatedPosition', what),
     createdAt: readOptionalNullableString(finding, 'createdAt', what) ?? '',
   }
 }

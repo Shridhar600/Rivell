@@ -47,6 +47,7 @@ function summaryOf(detail: FindingDetail): FindingSummary {
     reviewClassification: detail.reviewClassification,
     proposedAction: detail.proposedAction,
     proposedLanguageSource: detail.proposedLanguageSource,
+    relatedPosition: detail.relatedPosition,
     createdAt: detail.createdAt,
   }
 }

@@ -15,6 +15,7 @@ export const fixtureAcceptableFinding = {
   reviewClassification: 'REVIEW_REQUIRED',
   proposedAction: 'USE_APPROVED_FALLBACK',
   proposedLanguageSource: 'APPROVED_DRAFTING',
+  relatedPosition: false,
   createdAt: '2026-09-26T09:01:10Z',
 } satisfies FindingSummary
 

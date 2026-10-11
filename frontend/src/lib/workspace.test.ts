@@ -32,6 +32,7 @@ function finding(id: string, overrides: Partial<FindingSummary> = {}): FindingSu
     reviewClassification: 'REVIEW_REQUIRED',
     proposedAction: 'ESCALATE_TO_HUMAN',
     proposedLanguageSource: 'NONE',
+    relatedPosition: false,
     createdAt: '2026-10-01T00:00:00Z',
     ...overrides,
   }
