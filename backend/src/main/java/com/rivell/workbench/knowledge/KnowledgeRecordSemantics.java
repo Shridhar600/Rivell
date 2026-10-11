@@ -24,10 +24,13 @@ final class KnowledgeRecordSemantics {
 
     static final String FIELD_ROLE_SPEC = "knowledge-field-role";
     static final String RECORD_KIND_SPEC = "knowledge-record-kind";
-    static final int SPEC_VERSION = 1;
+    static final int FIELD_ROLE_VERSION = 1;
+    static final int RECORD_KIND_VERSION = 2;
 
     private static final int MAX_RECORD_TEXT = 2000;
     private static final int MAX_SAMPLE_VALUE = 160;
+    private static final java.util.Set<RecordFieldRole> STANCE_ROLES = java.util.EnumSet.of(
+            RecordFieldRole.PREFERRED, RecordFieldRole.FALLBACK, RecordFieldRole.PROHIBITED);
 
     private final SemanticDecisionService decisions;
 
@@ -87,7 +90,8 @@ final class KnowledgeRecordSemantics {
 
     /**
      * The kind of one record. A record with a PREFERRED, FALLBACK or PROHIBITED field is a
-     * POSITION without a call. Any other record goes through one Choice.
+     * POSITION without a call when that label is in the code synonym table. Any other
+     * record goes through one Choice.
      *
      * @throws com.rivell.workbench.intelligence.SemanticDecisionException when the
      *     provider fails; the caller fails open and keeps the record as a candidate.
@@ -95,9 +99,12 @@ final class KnowledgeRecordSemantics {
     Optional<KnowledgeRecordKind> decideKind(
             KnowledgeArtifact artifact, ExtractionUnit unit, KnowledgeCandidate candidate,
             Map<String, RecordFieldRole> roles) {
-        if (roles.containsValue(RecordFieldRole.PREFERRED)
-                || roles.containsValue(RecordFieldRole.FALLBACK)
-                || roles.containsValue(RecordFieldRole.PROHIBITED)) {
+        // Only a code-known stance label proves a position; a label the model resolved
+        // (e.g. an approval matrix's "Situation" read as PREFERRED) still needs the kind call.
+        var knownStance = roles.entrySet().stream().anyMatch(entry ->
+                STANCE_ROLES.contains(entry.getValue())
+                        && RecordLabelRoles.known(entry.getKey()).isPresent());
+        if (knownStance) {
             return Optional.of(KnowledgeRecordKind.POSITION);
         }
         var state = new RecordKindState(
@@ -148,7 +155,7 @@ final class KnowledgeRecordSemantics {
                             + "knowledge record (" + sample + ")?",
                     roleCriteria()));
         }
-        return new DecisionSpec(FIELD_ROLE_SPEC, SPEC_VERSION,
+        return new DecisionSpec(FIELD_ROLE_SPEC, FIELD_ROLE_VERSION,
                 "Classify the role of an unrecognised field label in a knowledge record so its "
                         + "values reach the right semantic field.",
                 FieldRoleState.SCHEMA_VERSION, new QuestionPack(questions));
@@ -175,12 +182,13 @@ final class KnowledgeRecordSemantics {
                 + "prefers, accepts as a fallback, or refuses.");
         criteria.put("WORDING", "Approved contract wording to use.");
         criteria.put("ESCALATION", "Who must approve a deviation, or how to escalate.");
-        criteria.put("GUIDANCE", "Explains how to use the document or a process, or defines "
-                + "terms; takes no stance on a contract term.");
+        criteria.put("GUIDANCE", "Explains how to use the document, a process or a wording "
+                + "variant (drafting notes, when-to-use notes), or defines terms; is not itself "
+                + "contract wording and takes no stance on a contract term.");
         criteria.put("DOCUMENT_CONTROL", "Title, version, owner, classification, review dates, "
                 + "change history, contacts.");
         criteria.put("OTHER", "None of the above.");
-        return new DecisionSpec(RECORD_KIND_SPEC, SPEC_VERSION,
+        return new DecisionSpec(RECORD_KIND_SPEC, RECORD_KIND_VERSION,
                 "Classify what one knowledge record is, so only positions and approved wording "
                         + "become candidates.",
                 RecordKindState.SCHEMA_VERSION,

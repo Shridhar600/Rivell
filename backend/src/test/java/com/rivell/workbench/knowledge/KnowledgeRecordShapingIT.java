@@ -201,9 +201,18 @@ class KnowledgeRecordShapingIT {
                 case "artifact_class" -> declaredType(state);
                 case "record_kind" -> recordKind(state);
                 default -> name.startsWith("label_")
-                        ? "OTHER"
+                        ? labelRole(question)
                         : question.criteria().keySet().iterator().next();
             };
+        }
+
+        /**
+         * Real Jev (dev eval 2026-10-11) read playbook A's approval-matrix column
+         * "Situation" (values "Fallback 1 used", …) as PREFERRED. Every other unknown
+         * label answers OTHER.
+         */
+        private static String labelRole(ChoiceQuestion question) {
+            return question.instructions().contains("\"Situation\"") ? "PREFERRED" : "OTHER";
         }
 
         private static String declaredType(Object state) {

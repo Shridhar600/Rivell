@@ -71,9 +71,22 @@ final class KnowledgeTableShaping {
             return keyValue(nonEmpty);
         }
         // Two columns of "subject | stance" under a header row ("Clause | Our position") are
-        // a grid of positions, not one record whose fields happen to be topics.
-        var subjectGrid = isHeaderRow(nonEmpty.get(0)) && roleRatio < ROLE_KEYED_RATIO;
+        // a grid of positions: a short header over sentence values. Short label-like values
+        // ("Version | 2.2") stay one key-value record even when the first row looks like a header.
+        var subjectGrid = isHeaderRow(nonEmpty.get(0)) && roleRatio < ROLE_KEYED_RATIO
+                && sentenceValueRatio(nonEmpty.subList(1, nonEmpty.size())) >= ROLE_KEYED_RATIO;
         return width <= 2 && !subjectGrid ? keyValue(nonEmpty) : grid(nonEmpty);
+    }
+
+    private static double sentenceValueRatio(List<Row> rows) {
+        if (rows.isEmpty()) {
+            return 0.0;
+        }
+        long sentences = rows.stream()
+                .map(Row::nonBlankCells)
+                .filter(cells -> cells.size() > 1 && !isLabelLike(cells.getLast().text()))
+                .count();
+        return (double) sentences / rows.size();
     }
 
     /**
