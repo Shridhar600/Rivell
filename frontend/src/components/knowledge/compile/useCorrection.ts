@@ -17,7 +17,7 @@ export interface CorrectionDraft {
   columns: Record<string, string>
   scope: ScopeDraft
   semantic: SemanticDraft
-  /** A LegalConcept name, or an empty string for "not classified". */
+  /** A taxonomy key, or an empty string for "not classified". */
   concept: string
   note: string
 }

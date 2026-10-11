@@ -1,10 +1,10 @@
 import type { Candidate, PositionRole } from '../api/knowledge'
+import type { ConceptLabel } from '../api/taxonomy'
 import { longDate } from './dates'
 import {
   CONTRACT_TYPE_LABELS,
   JURISDICTION_LABELS,
   PAPER_SOURCE_LABELS,
-  conceptLabel,
   humanizeCode,
   roleLabel,
 } from './contractSemantics'
@@ -93,8 +93,8 @@ export function scopeRows(candidate: Candidate): ScopeRow[] {
   return rows
 }
 
-export function conceptName(candidate: Candidate): string | null {
-  return candidate.effectiveConceptKey ? conceptLabel(candidate.effectiveConceptKey) : null
+export function conceptName(candidate: Candidate, label: ConceptLabel): string | null {
+  return candidate.effectiveConceptKey ? label(candidate.effectiveConceptKey) : null
 }
 
 /** The contract types a set of passages was declared for, e.g. "NDA, MSA". Empty when none was declared. */

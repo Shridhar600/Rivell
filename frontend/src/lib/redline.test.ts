@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ApprovedChange } from '../api/workflow'
 import type { RedlineExecution } from '../api/redline'
 import { REDLINE_FAILURE_CODES } from '../api/redline'
+import { humanizeCode } from './domainLabels'
 import {
   buildRedlineChangeRows,
   classifyTriggerError,
@@ -80,7 +81,7 @@ const approvedChanges: ApprovedChange[] = [
     actionType: 'INSERT',
     targetKind: 'ABSENCE',
     targetHeadingNodeId: null,
-    absenceConcept: 'CONFIDENTIALITY',
+    absenceConcept: 'CONFIDENTIALITY_OBLIGATIONS',
     approvedLanguage: 'Confidential information shall be protected.',
     languageSource: 'HUMAN_EDIT',
     approvedDraftingEvidenceId: null,
@@ -148,15 +149,15 @@ describe('execution titles and labels', () => {
   })
 
   it('formats backend placement labels without inferring placement', () => {
-    expect(redlinePlacementLabel('AFTER_CLAUSE[CONFIDENTIALITY]')).toBe(
-      'After clause: Confidentiality',
+    expect(redlinePlacementLabel('AFTER_CLAUSE[CONFIDENTIALITY_OBLIGATIONS]', humanizeCode)).toBe(
+      'After clause: Confidentiality obligations',
     )
-    expect(redlinePlacementLabel('BEFORE_SIGNATURE_BLOCK')).toBe(
+    expect(redlinePlacementLabel('BEFORE_SIGNATURE_BLOCK', humanizeCode)).toBe(
       'Before the signature block',
     )
-    expect(redlinePlacementLabel('END_OF_BODY')).toBe('At the end of the document')
-    expect(redlinePlacementLabel(null)).toBeNull()
-    expect(redlinePlacementLabel('SOMEWHERE_ELSE')).toBe('Placement recorded by Rivell')
+    expect(redlinePlacementLabel('END_OF_BODY', humanizeCode)).toBe('At the end of the document')
+    expect(redlinePlacementLabel(null, humanizeCode)).toBeNull()
+    expect(redlinePlacementLabel('SOMEWHERE_ELSE', humanizeCode)).toBe('Placement recorded by Rivell')
   })
 })
 
@@ -204,8 +205,8 @@ describe('change report rows', () => {
           status: 'APPLIED',
           verification: 'VERIFIED',
           failureCode: null,
-          placement: 'AFTER_CLAUSE[CONFIDENTIALITY]',
-          resolvedTarget: 'CONFIDENTIALITY',
+          placement: 'AFTER_CLAUSE[CONFIDENTIALITY_OBLIGATIONS]',
+          resolvedTarget: 'CONFIDENTIALITY_OBLIGATIONS',
           paragraphsDeleted: 0,
           paragraphsInserted: 1,
         },
@@ -227,6 +228,7 @@ describe('change report rows', () => {
     const rows = buildRedlineChangeRows(execution, {
       approvedChanges,
       regionLabels,
+      label: humanizeCode,
     })
     expect(rows).toHaveLength(3)
     expect(rows[0]).toMatchObject({
@@ -241,8 +243,8 @@ describe('change report rows', () => {
     })
     expect(rows[1]).toMatchObject({
       actionLabel: 'Insert provision',
-      targetLabel: 'Missing provision: Confidentiality',
-      placementLabel: 'After clause: Confidentiality',
+      targetLabel: 'Missing provision: Confidentiality obligations',
+      placementLabel: 'After clause: Confidentiality obligations',
       paragraphSummary: '1 paragraph inserted',
       findingId: 'f-2',
     })
@@ -268,8 +270,8 @@ describe('change report rows', () => {
         },
       ],
     })
-    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels })
-    expect(rows[0].targetLabel).toBe('Missing provision: Confidentiality')
+    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels, label: humanizeCode })
+    expect(rows[0].targetLabel).toBe('Missing provision: Confidentiality obligations')
     expect(rows[0].placementLabel).toBe('Before the signature block')
   })
 
@@ -299,7 +301,7 @@ describe('change report rows', () => {
         },
       ],
     })
-    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels })
+    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels, label: humanizeCode })
     expect(rows[0].targetLabel).toBe('8. Limitation of Liability')
     expect(rows[1].targetLabel).toBe('5. Term and Renewal')
   })
@@ -325,6 +327,7 @@ describe('change report rows', () => {
     const rows = buildRedlineChangeRows(execution, {
       approvedChanges: [],
       regionLabels,
+      label: humanizeCode,
     })
     expect(rows[0]).toMatchObject({
       actionLabel: 'Contract change',

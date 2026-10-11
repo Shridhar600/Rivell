@@ -12,6 +12,7 @@ import {
   versionsOf,
 } from './knowledgeCatalog'
 import { artifact, candidate, publication } from '../test/knowledgeFixtures'
+import { humanizeCode } from './domainLabels'
 
 const pb = artifact({ id: 'pb', filename: 'Commercial MSA Playbook.docx' })
 const cl = artifact({ id: 'cl', artifactType: 'CLAUSE_LIBRARY', filename: 'Clauses.xlsx' })
@@ -102,7 +103,7 @@ describe('catalog', () => {
   })
 
   it('groups clause variants by their typed legal concept and never by title', () => {
-    const groups = clauseGroups(catalog.clauseLibrary, catalog.index)
+    const groups = clauseGroups(catalog.clauseLibrary, catalog.index, humanizeCode)
     const liability = groups.find((g) => g.conceptKey === 'LIMITATION_OF_LIABILITY')
     expect(liability?.variants.map((v) => v.candidate.id)).toEqual(['c1', 'c2'])
     // A variant with no concept is its own clause, however similar its label is to another.
@@ -113,7 +114,7 @@ describe('catalog', () => {
   })
 
   it('reads the clause library as of an older publication', () => {
-    const at2 = clauseGroups(catalog.clauseLibrary, catalog.index, 2)
+    const at2 = clauseGroups(catalog.clauseLibrary, catalog.index, humanizeCode, 2)
     expect(at2.find((g) => g.conceptKey === 'LIMITATION_OF_LIABILITY')?.variants).toHaveLength(1)
     expect(catalog.clauseLibrary.versions.map((v) => v.publication.number)).toEqual([3, 2])
     expect(catalog.clauseLibrary.latest?.number).toBe(3)

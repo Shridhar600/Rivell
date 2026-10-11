@@ -1,13 +1,14 @@
 import type { EvidenceItem } from '../../api/retrieval'
-import { conceptLabel } from '../../lib/contractSemantics'
+import { useTaxonomy } from '../../api/taxonomy'
 import { authorityLabel, policyPositionLabels } from '../../lib/evidence'
 import { ApplicabilityScopeSummary } from './ApplicabilityScopeSummary'
 import { EvidenceItemSource } from './EvidenceItemSource'
 import { EvidenceText } from './EvidenceText'
 
 export function PolicyEvidenceCard({ item }: { item: EvidenceItem }) {
+  const { labelFor } = useTaxonomy()
   const headingId = `evidence-${item.evidenceId}`
-  const heading = item.legalConcept ? conceptLabel(item.legalConcept) : 'Policy rule'
+  const heading = item.legalConcept ? labelFor(item.legalConcept) : 'Policy rule'
   const positions = item.policyFacts ? policyPositionLabels(item.policyFacts.positions) : []
 
   return (

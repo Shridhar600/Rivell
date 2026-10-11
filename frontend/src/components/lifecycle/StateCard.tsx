@@ -1,5 +1,6 @@
 import type { FindingSummary, ProposedChangeCounts, ReviewSummary } from '../../api/reviews'
 import type { SemanticContract } from '../../api/semantics'
+import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanReview } from '../../api/workflow'
 import { metadataFieldLabel } from '../../lib/contractSemantics'
 import {
@@ -358,7 +359,8 @@ function InProgress({
   findings,
   workspaceTo,
 }: Props & { humanReview: HumanReview }) {
-  const next = nextUnresolvedTitle(humanReview, findings)
+  const { labelFor } = useTaxonomy()
+  const next = nextUnresolvedTitle(humanReview, findings, labelFor)
   const segments = decisionSegments(humanReview)
   return (
     <LcCard label="Review in progress">

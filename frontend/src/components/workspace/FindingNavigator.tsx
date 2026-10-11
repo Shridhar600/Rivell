@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from 'react'
 import type { FindingSummary } from '../../api/reviews'
+import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
 import { findingSubjectLabel, issueFamilyLabel } from '../../lib/reviews'
 import { findingState, type FindingTone } from '../../lib/workspace'
@@ -47,6 +48,7 @@ export function FindingNavigator({
   onRetry,
   onSelect,
 }: Props) {
+  const { labelFor } = useTaxonomy()
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>, id: string) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -87,7 +89,7 @@ export function FindingNavigator({
             >
               <Glyph className={`rv-icon rv-ws-g--${state.tone}`} />
               <div>
-                <b>{findingSubjectLabel(finding, regionLabels)}</b>
+                <b>{findingSubjectLabel(finding, regionLabels, labelFor)}</b>
                 <span>
                   {showState ? `${state.label} · ` : ''}
                   {issueFamilyLabel(finding.issueFamily)}

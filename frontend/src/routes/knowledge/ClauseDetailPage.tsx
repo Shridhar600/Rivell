@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useExtractionUnitsQuery, useKnowledgeStructureQuery } from '../../api/knowledge'
 import { useKnowledgeCatalog } from '../../api/knowledgeRead'
+import { useTaxonomy } from '../../api/taxonomy'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
 import { KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { LinkButton } from '../../components/ui/Button'
@@ -24,6 +25,7 @@ import { sourceLocation } from '../../lib/knowledgeSource'
 export function ClauseDetailPage() {
   const { clauseKey: rawKey = '' } = useParams()
   const key = decodeURIComponent(rawKey)
+  const { labelFor } = useTaxonomy()
   const [params] = useSearchParams()
   const state = useKnowledgeCatalog()
   const crumbs: Crumb[] = [{ label: 'Knowledge', to: '/knowledge' }, { label: 'Clause library', to: '/knowledge/clauses' }, { label: 'Clause' }]
@@ -33,7 +35,7 @@ export function ClauseDetailPage() {
         const requested = Number(params.get('publication'))
         const versions = catalog.clauseLibrary.versions
         const at = versions.some((entry) => entry.publication.number === requested) ? requested : undefined
-        const group = clauseGroups(catalog.clauseLibrary, catalog.index, at).find((entry) => entry.key === key)
+        const group = clauseGroups(catalog.clauseLibrary, catalog.index, labelFor, at).find((entry) => entry.key === key)
         if (group) return <ClauseDetail catalog={catalog} group={group} state={state} />
         return (
           <KnowledgeFrame crumbs={crumbs} title="Clause not found">

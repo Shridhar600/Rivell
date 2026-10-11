@@ -1,9 +1,9 @@
 import type { ArtifactDetail, Candidate, Interpretation, VerificationState } from '../api/knowledge'
+import type { ConceptLabel } from '../api/taxonomy'
 import { effectiveContentText, effectivePayloadColumns } from './candidates'
 import { scopeRows } from './knowledgePosition'
 import {
   approvalDiverge,
-  conceptLabel,
   escalationDiverge,
   formatBoolean,
   formatPositions,
@@ -76,14 +76,15 @@ export function hasHumanCorrection(candidate: Candidate, artifact?: ArtifactDeta
   return artifact ? scopeDifferences(candidate, artifact).length > 0 : false
 }
 
-export function interpretationRows(candidate: Candidate): FieldRow[] {
+export function interpretationRows(candidate: Candidate, label: ConceptLabel): FieldRow[] {
   const rows: FieldRow[] = []
   const isPlaybook = candidate.candidateType === 'PLAYBOOK_RULE'
   const isClause = candidate.candidateType === 'CLAUSE_VARIANT'
 
   // The reviewer's own correction, when there is one, takes the place of the machine concept.
-  const concept = conceptLabel(candidate.effectiveConceptKey)
-  const classified = conceptLabel(machineConcept(candidate))
+  const concept = candidate.effectiveConceptKey ? label(candidate.effectiveConceptKey) : null
+  const machine = machineConcept(candidate)
+  const classified = machine ? label(machine) : null
   rows.push({
     key: 'concept',
     label: 'Legal concept',

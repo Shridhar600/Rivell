@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { HumanDecision, HumanReview } from '../api/workflow'
+import { humanizeCode } from './domainLabels'
 import {
   acceptEligibility,
   blockerLabel,
@@ -320,18 +321,21 @@ describe('change set view-model', () => {
       changeTargetLabel(
         { targetKind: 'CLAUSE', targetHeadingNodeId: 'node-6', absenceConcept: null },
         regionLabels,
+        humanizeCode,
       ),
     ).toBe('6. Limitation of Liability')
     expect(
       changeTargetLabel(
-        { targetKind: 'ABSENCE', targetHeadingNodeId: null, absenceConcept: 'CONFIDENTIALITY' },
+        { targetKind: 'ABSENCE', targetHeadingNodeId: null, absenceConcept: 'CONFIDENTIALITY_OBLIGATIONS' },
         regionLabels,
+        humanizeCode,
       ),
-    ).toBe('Missing provision: Confidentiality')
+    ).toBe('Missing provision: Confidentiality obligations')
     expect(
       changeTargetLabel(
         { targetKind: 'CLAUSE', targetHeadingNodeId: null, absenceConcept: null },
         regionLabels,
+        humanizeCode,
       ),
     ).toBe('Clause')
   })

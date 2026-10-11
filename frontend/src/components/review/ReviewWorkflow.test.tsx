@@ -647,8 +647,8 @@ describe('approved change set', () => {
           id: 'f-2',
           subjectKind: 'ABSENCE',
           subjectHeadingNodeId: null,
-          absenceConcept: 'CONFIDENTIALITY',
-          concept: 'CONFIDENTIALITY',
+          absenceConcept: 'CONFIDENTIALITY_OBLIGATIONS',
+          concept: 'CONFIDENTIALITY_OBLIGATIONS',
           issueFamily: 'MISSING_REQUIRED_PROVISION',
           proposedAction: 'ADD_REQUIRED_PROVISION',
           proposedLanguageSource: 'NONE',
@@ -657,7 +657,7 @@ describe('approved change set', () => {
           ...fixtureAcceptableFinding,
           id: 'f-3',
           subjectHeadingNodeId: 'node-5',
-          concept: 'TERM_TERMINATION',
+          concept: 'TERM',
           issueFamily: 'EXPECTED_PROVISION_ABSENT',
         },
       ],
@@ -703,7 +703,7 @@ describe('approved change set', () => {
     // Replace: the approved language stands in for the clause.
     expect(contract.getByText('Liability is capped at two times the fees paid.')).toBeInTheDocument()
     // Insert: the language is shown, but no location is claimed for it.
-    expect(contract.getByText('Approved insertion: Confidentiality')).toBeInTheDocument()
+    expect(contract.getByText('Approved insertion: Confidentiality obligations')).toBeInTheDocument()
     expect(
       contract.getByText(/Confidential information shall be protected for five years\./),
     ).toBeInTheDocument()

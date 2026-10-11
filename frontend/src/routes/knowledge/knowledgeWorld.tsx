@@ -6,6 +6,7 @@ import { RouterProvider } from 'react-router/dom'
 import { appRoutes } from '../../app/router'
 import type { ArtifactSummary, Candidate, ExtractionUnit, KnowledgeNode, Publication } from '../../api/knowledge'
 import { artifact, candidate, node, publication, unit } from '../../test/knowledgeFixtures'
+import { taxonomyJsonResponse } from '../../test/taxonomyFixtures'
 
 export interface World {
   artifacts: ArtifactSummary[]
@@ -144,6 +145,7 @@ export function stubKnowledgeApi(world: World, options: StubOptions = {}) {
       const url = new URL(request.url)
       calls.push({ method: request.method, path: url.pathname })
       const path = url.pathname
+      if (path === '/api/taxonomy/concepts') return taxonomyJsonResponse()
       if (path === '/api/knowledge/artifacts') {
         if (gate) await gate
         if ((options.listStatus ?? 200) !== 200) {

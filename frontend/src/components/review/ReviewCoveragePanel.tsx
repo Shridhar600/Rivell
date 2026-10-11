@@ -1,5 +1,5 @@
 import type { ReviewCoverage } from '../../api/reviews'
-import { conceptLabel } from '../../lib/contractSemantics'
+import { useTaxonomy } from '../../api/taxonomy'
 import {
   coverageExpectationLabel,
   coverageLabel,
@@ -8,8 +8,9 @@ import {
 } from '../../lib/reviews'
 
 export function ReviewCoveragePanel({ coverage }: { coverage: ReviewCoverage[] }) {
+  const { labelFor } = useTaxonomy()
   if (coverage.length === 0) return null
-  const limitation = coverageLimitationSummary(coverage)
+  const limitation = coverageLimitationSummary(coverage, labelFor)
 
   return (
     <section className="panel" aria-labelledby="review-coverage-heading">
@@ -21,7 +22,7 @@ export function ReviewCoveragePanel({ coverage }: { coverage: ReviewCoverage[] }
       <ul className="coverage-list">
         {coverage.map((entry) => (
           <li key={entry.concept} className="coverage-list__item">
-            <span className="coverage-list__concept">{conceptLabel(entry.concept)}</span>
+            <span className="coverage-list__concept">{labelFor(entry.concept)}</span>
             <span className="coverage-list__expectation">
               {coverageExpectationLabel(entry.expectation)}
             </span>

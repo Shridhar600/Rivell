@@ -351,7 +351,7 @@ describe('pinned and stale context', () => {
 
   it('notes when the contract classification changed after the build', async () => {
     const stale = fixtureBundle({
-      request: { ...fixtureBundle().request, legalConcept: 'CONFIDENTIALITY' },
+      request: { ...fixtureBundle().request, legalConcept: 'CONFIDENTIALITY_OBLIGATIONS' },
     })
     stubContractApi({ evidenceBundle: stale, trace: fixtureTrace })
     renderRoute('/reviews/c1/evidence?clause=node-6')
@@ -360,7 +360,7 @@ describe('pinned and stale context', () => {
     await buildEvidence()
 
     expect(
-      await screen.findByText(/built with the classification Confidentiality/i),
+      await screen.findByText(/built with the classification Confidentiality obligations/i),
     ).toBeInTheDocument()
     expect(
       screen.getByText(/current classification is Limitation of liability/i),

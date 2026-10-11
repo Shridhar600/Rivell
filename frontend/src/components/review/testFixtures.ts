@@ -52,7 +52,7 @@ export const fixtureQueuedReviewSummary = {
   },
   coverage: [
     { concept: 'LIMITATION_OF_LIABILITY', expectation: 'REQUIRED', coverage: 'PRESENT_PRIMARY' },
-    { concept: 'CONFIDENTIALITY', expectation: 'EXPECTED', coverage: 'PRESENT_PRIMARY' },
+    { concept: 'CONFIDENTIALITY_OBLIGATIONS', expectation: 'EXPECTED', coverage: 'PRESENT_PRIMARY' },
   ],
   analysisWarnings: [],
   analysisWarningsTruncated: false,
@@ -430,8 +430,8 @@ export const fixtureGenerativeFindingDetail = {
 export const fixtureCrossClauseFindingDetail = {
   ...fixtureClauseFindingDetail,
   id: 'f-6',
-  concept: 'CONFIDENTIALITY',
-  concepts: ['CONFIDENTIALITY'],
+  concept: 'CONFIDENTIALITY_OBLIGATIONS',
+  concepts: ['CONFIDENTIALITY_OBLIGATIONS'],
   issueFamily: 'SURVIVAL_COVERAGE_GAP',
   observationKind: 'SURVIVAL_COVERAGE_GAP',
   observationText: 'Confidentiality obligations are not covered by a survival provision.',

@@ -9,7 +9,7 @@ import type {
   FindingQuality,
 } from '../api/reviews'
 import { humanizeCode } from './domainLabels'
-import { conceptLabel } from './contractSemantics'
+import type { ConceptLabel } from '../api/taxonomy'
 
 const REVIEW_STATUS_LABELS: Record<string, string> = {
   ANALYSIS_QUEUED: 'Analysis queued',
@@ -145,10 +145,10 @@ export function proposedActionLabel(action: string): string {
   return PROPOSED_ACTION_LABELS[action] ?? humanizeCode(action)
 }
 
-export function checkKeyLabel(checkKey: string): string {
+export function checkKeyLabel(checkKey: string, label: ConceptLabel): string {
   const [mechanism, concept] = checkKey.split(':')
   if (!concept) return humanizeCode(checkKey)
-  return `${humanizeCode(mechanism)} · ${conceptLabel(concept)}`
+  return `${humanizeCode(mechanism)} · ${label(concept)}`
 }
 
 const SUFFICIENCY_LABELS: Record<string, string> = {
@@ -256,11 +256,14 @@ export function coverageLimitations(coverage: ReviewCoverage[]): ReviewCoverage[
   return coverage.filter((entry) => entry.coverage !== 'PRESENT_PRIMARY')
 }
 
-export function coverageLimitationSummary(coverage: ReviewCoverage[]): string | null {
+export function coverageLimitationSummary(
+  coverage: ReviewCoverage[],
+  label: ConceptLabel,
+): string | null {
   const limited = coverageLimitations(coverage)
   if (limited.length === 0) return null
   const parts = limited.map(
-    (entry) => `${conceptLabel(entry.concept)} (${coverageLabel(entry.coverage).toLowerCase()})`,
+    (entry) => `${label(entry.concept)} (${coverageLabel(entry.coverage).toLowerCase()})`,
   )
   return `Review coverage is limited for: ${parts.join('; ')}.`
 }
@@ -271,15 +274,16 @@ export function findingSubjectLabel(
     'subjectKind' | 'subjectHeadingNodeId' | 'absenceConcept' | 'concept'
   >,
   regionLabels: Map<string, string>,
+  label: ConceptLabel,
 ): string {
   if (finding.subjectKind === 'ABSENCE' && finding.absenceConcept) {
-    return `Missing: ${conceptLabel(finding.absenceConcept)}`
+    return `Missing: ${label(finding.absenceConcept)}`
   }
   if (finding.subjectKind === 'CLAUSE' && finding.subjectHeadingNodeId) {
-    const label = regionLabels.get(finding.subjectHeadingNodeId)
-    if (label) return label
+    const region = regionLabels.get(finding.subjectHeadingNodeId)
+    if (region) return region
     return finding.concept
-      ? `Clause · ${conceptLabel(finding.concept)}`
+      ? `Clause · ${label(finding.concept)}`
       : 'Clause source unavailable'
   }
   return 'Subject unavailable'
@@ -323,16 +327,6 @@ export function absenceClaims(claims: FindingClaim[]): FindingClaim[] {
   return claims
     .filter((claim) => ABSENCE_CLAIM_KINDS.has(claim.claimKind) || claim.absence)
     .sort((left, right) => left.ordinal - right.ordinal)
-}
-
-export function findingConceptLabels(finding: FindingDetail): string[] {
-  const concepts =
-    finding.concepts.length > 0
-      ? finding.concepts
-      : [finding.concept, finding.secondaryConcept].filter(
-          (concept): concept is string => Boolean(concept),
-        )
-  return concepts.map((concept) => conceptLabel(concept))
 }
 
 export function policyNoteText(

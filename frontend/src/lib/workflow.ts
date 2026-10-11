@@ -6,7 +6,7 @@ import type {
   HumanReview,
   HumanReviewStatus,
 } from '../api/workflow'
-import { conceptLabel } from './contractSemantics'
+import type { ConceptLabel } from '../api/taxonomy'
 
 export function decisionActionLabel(action: DecisionAction): string {
   switch (action) {
@@ -248,10 +248,11 @@ export function changeTargetLabel(
     absenceConcept: string | null
   },
   regionLabels: Map<string, string>,
+  label: ConceptLabel,
 ): string {
   if (change.targetKind === 'ABSENCE') {
     return change.absenceConcept
-      ? `Missing provision: ${conceptLabel(change.absenceConcept)}`
+      ? `Missing provision: ${label(change.absenceConcept)}`
       : 'Missing provision'
   }
   const nodeId = change.targetHeadingNodeId
