@@ -117,7 +117,7 @@ class TaxonomyIT {
     void servesTheSeededTaxonomyEveryLeafUnderAParent() throws Exception {
         mockMvc.perform(get("/api/taxonomy/concepts"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.version").value(2))
                 .andExpect(jsonPath("$.parents.length()").value(14))
                 .andExpect(jsonPath("$.leaves.length()").value(90))
                 .andExpect(jsonPath("$.leaves[?(@.key == 'LIMITATION_OF_LIABILITY')].parentKey")
