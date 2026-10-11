@@ -158,12 +158,13 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var evidence = union(List.of(judged.position().evidenceId()),
                 subjectEvidence(bundle, clause.id()));
         validateEvidence(bundle, evidence);
+        var secondaryTopic = governsOnlySecondaryTopic(clause, judged.position());
         var signals = new ArrayList<RawReviewSignal>();
         signals.add(signal(context, b -> b
                 .signalType(SignalType.POLICY_DEVIATION).issueFamily(family)
                 .payload(new PositionDeviationPayload(judged.position().sourceCandidateId(),
                         judged.judgement().category(), judged.judgement().flagProbability(),
-                        judged.judgement().probabilities()))
+                        judged.judgement().probabilities(), secondaryTopic))
                 .evidence(evidence)
                 .decisionSpec(PolicyComparisonSpecs.POLICY_COMPARISON_SPEC,
                         PolicyComparisonSpecs.POLICY_COMPARISON_VERSION,
@@ -174,7 +175,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                         "category", judged.judgement().category(),
                         "flagProbability", judged.judgement().flagProbability(),
                         "confidence", confidence(execution, judged),
-                        "probabilities", judged.judgement().probabilities()))
+                        "probabilities", judged.judgement().probabilities(),
+                        "secondaryTopic", secondaryTopic))
                 .dedupeSuffix(judged.key())));
         if (wantsLanguage(judged.judgement().category())) {
             var drafting = chooseDrafting(bundle.approvedDraftingItems(), judged.position());
@@ -187,7 +189,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                         .evidence(List.of(drafting.evidenceId()))
                         .quality(Map.of("draftingAvailable", true))
                         .dedupeSuffix(judged.key())));
-            } else {
+            } else if (!secondaryTopic) {
                 var proposal = generate(context, clause, judged, family, evidence, detail);
                 if (proposal != null) {
                     signals.add(proposal);
@@ -270,6 +272,19 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 .filter(clause -> clause.headingNodeId()
                         .equals(context.check().subjectHeadingNodeId()))
                 .findFirst().orElse(null);
+    }
+
+    /**
+     * A position that does not cover the clause's primary topic matched through a topic the
+     * clause only touches: its judgment is less reliable, so it becomes a note, never an
+     * alarm. A clause without a primary topic, or a position stored before topic sets, counts
+     * as a primary match.
+     */
+    private static boolean governsOnlySecondaryTopic(ClauseSemantics clause, EvidenceItem position) {
+        var primary = clause.effectivePrimaryConcept();
+        var facts = position.policyFacts();
+        return primary.isPresent() && facts != null && !facts.topicKeys().isEmpty()
+                && !facts.topicKeys().contains(primary.get().value());
     }
 
     private static boolean wantsLanguage(String category) {

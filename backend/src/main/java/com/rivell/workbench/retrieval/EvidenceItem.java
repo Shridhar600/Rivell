@@ -87,8 +87,8 @@ public record EvidenceItem(
 
     /**
      * Typed facts of a published playbook rule: position roles, approval requirement,
-     * escalation trigger, and the role-tagged field values a comparison question asks
-     * from. Machine + human-corrected effective values.
+     * escalation trigger, the role-tagged field values a comparison question asks from,
+     * and the topics the rule governs. Machine + human-corrected effective values.
      */
     public record PolicyFacts(
             Set<PositionRole> positions,
@@ -96,16 +96,18 @@ public record EvidenceItem(
             String escalationTrigger,
             String preferred,
             List<String> fallbacks,
-            String prohibited) {
+            String prohibited,
+            List<String> topicKeys) {
 
         public PolicyFacts {
             positions = positions == null ? Set.of() : Set.copyOf(positions);
             fallbacks = fallbacks == null ? List.of() : List.copyOf(fallbacks);
+            topicKeys = topicKeys == null ? List.of() : List.copyOf(topicKeys);
         }
 
         public PolicyFacts(
                 Set<PositionRole> positions, Boolean requiresApproval, String escalationTrigger) {
-            this(positions, requiresApproval, escalationTrigger, null, List.of(), null);
+            this(positions, requiresApproval, escalationTrigger, null, List.of(), null, List.of());
         }
     }
 

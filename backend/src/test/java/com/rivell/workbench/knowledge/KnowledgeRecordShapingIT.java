@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Set;
 import java.util.UUID;
 
@@ -132,17 +133,18 @@ class KnowledgeRecordShapingIT {
      */
     static final class CorpusDecisionProvider implements SemanticDecisionProvider {
 
-        int executions;
-        int kindDecisions;
-        int labelDecisions;
-        int topicDecisions;
-        boolean failKindCalls;
+        // compilation runs decisions concurrently: counters must be thread-safe
+        final AtomicInteger executions = new AtomicInteger();
+        final AtomicInteger kindDecisions = new AtomicInteger();
+        final AtomicInteger labelDecisions = new AtomicInteger();
+        final AtomicInteger topicDecisions = new AtomicInteger();
+        volatile boolean failKindCalls;
 
         void reset() {
-            executions = 0;
-            kindDecisions = 0;
-            labelDecisions = 0;
-            topicDecisions = 0;
+            executions.set(0);
+            kindDecisions.set(0);
+            labelDecisions.set(0);
+            topicDecisions.set(0);
             failKindCalls = false;
         }
 
@@ -157,20 +159,20 @@ class KnowledgeRecordShapingIT {
 
         @Override
         public ProviderExecutionResult execute(DecisionExecutionRequest request) {
-            executions++;
+            executions.incrementAndGet();
             var names = request.pack().questions().keySet();
             if (names.contains("record_kind")) {
-                kindDecisions++;
+                kindDecisions.incrementAndGet();
                 if (failKindCalls) {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                             "record kind provider down");
                 }
             }
             if (names.stream().anyMatch(name -> name.startsWith("label_"))) {
-                labelDecisions++;
+                labelDecisions.incrementAndGet();
             }
             if (names.stream().anyMatch(name -> name.startsWith("topic_"))) {
-                topicDecisions++;
+                topicDecisions.incrementAndGet();
             }
             var answers = new LinkedHashMap<String, SemanticAnswer>();
             for (var entry : request.pack().questions().entrySet()) {
@@ -367,17 +369,17 @@ class KnowledgeRecordShapingIT {
                 .as("position provenance resolves beyond the table node alone")
                 .isTrue();
 
-        System.out.println("JE-CALLS fixture A: total=" + provider.executions
-                + " kind=" + provider.kindDecisions
-                + " label=" + provider.labelDecisions
-                + " topic=" + provider.topicDecisions);
-        assertThat(provider.labelDecisions)
+        System.out.println("JE-CALLS fixture A: total=" + provider.executions.get()
+                + " kind=" + provider.kindDecisions.get()
+                + " label=" + provider.labelDecisions.get()
+                + " topic=" + provider.topicDecisions.get());
+        assertThat(provider.labelDecisions.get())
                 .as("unknown labels are one decision per artifact")
                 .isEqualTo(1);
         var contentUnits = units.stream()
                 .filter(unit -> unit.contentText() != null && !unit.contentText().isBlank())
                 .count();
-        assertThat(provider.kindDecisions)
+        assertThat(provider.kindDecisions.get())
                 .as("one kind decision per non-position record, never per cell")
                 .isEqualTo((int) contentUnits - 25);
     }
@@ -437,11 +439,11 @@ class KnowledgeRecordShapingIT {
                 .as("non-rule sheet content is kept as units, with its kind")
                 .isTrue();
 
-        System.out.println("JE-CALLS fixture B: total=" + provider.executions
-                + " kind=" + provider.kindDecisions
-                + " label=" + provider.labelDecisions
-                + " topic=" + provider.topicDecisions);
-        assertThat(provider.labelDecisions).isEqualTo(1);
+        System.out.println("JE-CALLS fixture B: total=" + provider.executions.get()
+                + " kind=" + provider.kindDecisions.get()
+                + " label=" + provider.labelDecisions.get()
+                + " topic=" + provider.topicDecisions.get());
+        assertThat(provider.labelDecisions.get()).isEqualTo(1);
     }
 
     @Test

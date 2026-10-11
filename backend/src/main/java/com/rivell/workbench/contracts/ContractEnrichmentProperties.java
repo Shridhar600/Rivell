@@ -16,7 +16,8 @@ public record ContractEnrichmentProperties(
         double governingLawThreshold,
         int maxRegions,
         int maxRelationshipPairs,
-        int maxGenerativeExtractions) {
+        int maxGenerativeExtractions,
+        int classificationConcurrency) {
 
     public ContractEnrichmentProperties {
         if (roleThreshold <= 0.0) {
@@ -35,13 +36,16 @@ public record ContractEnrichmentProperties(
             governingLawThreshold = 0.80;
         }
         if (maxRegions <= 0) {
-            maxRegions = 60;
+            maxRegions = 200;
         }
         if (maxRelationshipPairs <= 0) {
             maxRelationshipPairs = 8;
         }
         if (maxGenerativeExtractions <= 0) {
             maxGenerativeExtractions = 4;
+        }
+        if (classificationConcurrency <= 0) {
+            classificationConcurrency = 8;
         }
     }
 }

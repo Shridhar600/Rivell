@@ -25,7 +25,7 @@ final class KnowledgeRecordSemantics {
     static final String FIELD_ROLE_SPEC = "knowledge-field-role";
     static final String RECORD_KIND_SPEC = "knowledge-record-kind";
     static final int FIELD_ROLE_VERSION = 1;
-    static final int RECORD_KIND_VERSION = 2;
+    static final int RECORD_KIND_VERSION = 3;
 
     private static final int MAX_RECORD_TEXT = 2000;
     private static final int MAX_SAMPLE_VALUE = 160;
@@ -107,6 +107,13 @@ final class KnowledgeRecordSemantics {
         if (knownStance) {
             return Optional.of(KnowledgeRecordKind.POSITION);
         }
+        // a record titled only as a note ("Drafting note", "Note on the fallback") explains
+        // wording; the model reads its imperative text as a stance
+        if (KnowledgeTableShaping.isLabelLike(candidate.rawLabel())
+                && RecordLabelRoles.known(candidate.rawLabel())
+                        .filter(role -> role == RecordFieldRole.COMMENTARY).isPresent()) {
+            return Optional.of(KnowledgeRecordKind.GUIDANCE);
+        }
         var state = new RecordKindState(
                 artifact.filename(),
                 unit.title(),
@@ -180,11 +187,12 @@ final class KnowledgeRecordSemantics {
         var criteria = new LinkedHashMap<String, String>();
         criteria.put("POSITION", "States the organisation's stance on a contract term: what it "
                 + "prefers, accepts as a fallback, or refuses.");
-        criteria.put("WORDING", "Approved contract wording to use.");
+        criteria.put("WORDING", "Contains approved contract wording to use, one or more "
+                + "variants, even when notes on when or how to use it come with the wording.");
         criteria.put("ESCALATION", "Who must approve a deviation, or how to escalate.");
-        criteria.put("GUIDANCE", "Explains how to use the document, a process or a wording "
-                + "variant (drafting notes, when-to-use notes), or defines terms; is not itself "
-                + "contract wording and takes no stance on a contract term.");
+        criteria.put("GUIDANCE", "Only explains how to use the document, a process or a "
+                + "wording variant, or only defines terms: it contains no contract wording of its "
+                + "own and takes no stance on a contract term.");
         criteria.put("DOCUMENT_CONTROL", "Title, version, owner, classification, review dates, "
                 + "change history, contacts.");
         criteria.put("OTHER", "None of the above.");

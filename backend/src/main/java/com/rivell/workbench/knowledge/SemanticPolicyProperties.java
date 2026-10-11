@@ -20,7 +20,8 @@ public record SemanticPolicyProperties(
         double verificationDisputed,
         double conflictProposal,
         double supersedeProposal,
-        int maxInterpretedCandidates) {
+        int maxInterpretedCandidates,
+        int compileConcurrency) {
 
     public SemanticPolicyProperties {
         artifactTypeMatch = threshold(artifactTypeMatch, 0.70);
@@ -35,6 +36,7 @@ public record SemanticPolicyProperties(
         conflictProposal = threshold(conflictProposal, 0.80);
         supersedeProposal = threshold(supersedeProposal, 0.80);
         maxInterpretedCandidates = maxInterpretedCandidates <= 0 ? 300 : maxInterpretedCandidates;
+        compileConcurrency = compileConcurrency <= 0 ? 8 : compileConcurrency;
     }
 
     private static double threshold(double value, double fallback) {

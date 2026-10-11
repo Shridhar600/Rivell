@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
+import com.rivell.workbench.intelligence.BoundedParallel;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
@@ -86,18 +87,17 @@ public class SemanticCompilationService {
         var eligible = new ArrayList<KnowledgeCandidate>(candidates.size());
         var rolesByCandidate = new LinkedHashMap<UUID, Map<String, RecordFieldRole>>();
         for (var candidate : candidates) {
+            rolesByCandidate.put(candidate.id(), fieldRoles(candidate, labelRoles));
+        }
+        // record decisions are independent per record: run them concurrently, keep source order
+        var kinds = BoundedParallel.map(candidates, properties.compileConcurrency(),
+                candidate -> recordSemantics.decideKind(artifact,
+                        unitsById.get(candidate.extractionUnitId()), candidate,
+                        rolesByCandidate.get(candidate.id())));
+        for (int index = 0; index < candidates.size(); index++) {
+            var candidate = candidates.get(index);
             var unit = unitsById.get(candidate.extractionUnitId());
-            var roles = fieldRoles(candidate, labelRoles);
-            rolesByCandidate.put(candidate.id(), roles);
-            Optional<KnowledgeRecordKind> kind;
-            try {
-                kind = recordSemantics.decideKind(artifact, unit, candidate, roles);
-            } catch (SemanticDecisionException e) {
-                LoggerFactory.getLogger(SemanticCompilationService.class)
-                        .warn("Record kind unavailable for unit {} ({} {})",
-                                unit.id(), e.getClass().getSimpleName(), e.getMessage());
-                kind = Optional.empty();
-            }
+            var kind = kindOf(kinds.get(index), unit);
             if (kind.isEmpty()) {
                 semanticAvailable = false;
                 kindUnavailable.add(unit.id());
@@ -110,25 +110,31 @@ public class SemanticCompilationService {
             }
         }
 
-        var budget = properties.maxInterpretedCandidates();
+        var interpretable = Math.min(eligible.size(), properties.maxInterpretedCandidates());
+        var interpreted = BoundedParallel.map(eligible.subList(0, interpretable),
+                properties.compileConcurrency(),
+                candidate -> interpret(candidate, artifact,
+                        unitsById.get(candidate.extractionUnitId()),
+                        rolesByCandidate.getOrDefault(candidate.id(), Map.of())));
+        if (interpretable < eligible.size()) {
+            semanticAvailable = false;
+        }
         var compiled = new ArrayList<KnowledgeCandidate>(eligible.size());
-        for (var candidate : eligible) {
+        for (int index = 0; index < eligible.size(); index++) {
+            var candidate = eligible.get(index);
             var unit = unitsById.get(candidate.extractionUnitId());
-            KnowledgeCandidate enriched;
-            if (budget <= 0) {
-                semanticAvailable = false;
-                enriched = candidate;
-            } else {
-                try {
-                    enriched = interpret(candidate, artifact, unit,
-                            rolesByCandidate.getOrDefault(candidate.id(), Map.of()));
-                    budget--;
-                } catch (SemanticDecisionException e) {
+            var enriched = candidate;
+            if (index < interpretable) {
+                var outcome = interpreted.get(index);
+                if (outcome.failure() == null) {
+                    enriched = outcome.value();
+                } else if (outcome.failure() instanceof SemanticDecisionException e) {
                     LoggerFactory.getLogger(SemanticCompilationService.class)
                             .warn("Semantic interpretation degraded for candidate {} ({} {})",
                             candidate.id(), e.getClass().getSimpleName(), e.getMessage());
                     semanticAvailable = false;
-                    enriched = candidate;
+                } else {
+                    throw outcome.failure();
                 }
             }
             var signals = conflictDetector.inspect(enriched, publishedCandidates);
@@ -156,11 +162,26 @@ public class SemanticCompilationService {
                 compiledUnits);
     }
 
+    private static Optional<KnowledgeRecordKind> kindOf(
+            BoundedParallel.Outcome<Optional<KnowledgeRecordKind>> outcome, ExtractionUnit unit) {
+        if (outcome.failure() == null) {
+            return outcome.value();
+        }
+        if (outcome.failure() instanceof SemanticDecisionException e) {
+            LoggerFactory.getLogger(SemanticCompilationService.class)
+                    .warn("Record kind unavailable for unit {} ({} {})",
+                            unit.id(), e.getClass().getSimpleName(), e.getMessage());
+            return Optional.empty();
+        }
+        throw outcome.failure();
+    }
+
     private static boolean eligibleForCandidates(
             ArtifactType artifactType, KnowledgeRecordKind kind) {
+        // a playbook rule written as model contract wording ("Kaveri may terminate for
+        // material breach…") is still the playbook's preferred position
         return switch (artifactType) {
-            case PLAYBOOK -> kind == KnowledgeRecordKind.POSITION;
-            case CLAUSE_LIBRARY -> kind == KnowledgeRecordKind.POSITION
+            case PLAYBOOK, CLAUSE_LIBRARY -> kind == KnowledgeRecordKind.POSITION
                     || kind == KnowledgeRecordKind.WORDING;
             default -> true;
         };

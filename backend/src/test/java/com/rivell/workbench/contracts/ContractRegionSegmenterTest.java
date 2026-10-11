@@ -23,9 +23,13 @@ class ContractRegionSegmenterTest {
     }
 
     private static DocumentNode heading(String text, String label, int ordinal) {
+        return heading(text, label, ordinal, 1);
+    }
+
+    private static DocumentNode heading(String text, String label, int ordinal, int level) {
         return new DocumentNode(UUID.randomUUID(), VERSION, BODY_ID,
-                DocumentNodeType.HEADING, ordinal, text, 1, label,
-                SourceSpan.ofParagraph("word/document.xml", ordinal, ordinal), "Heading1");
+                DocumentNodeType.HEADING, ordinal, text, level, label,
+                SourceSpan.ofParagraph("word/document.xml", ordinal, ordinal), "Heading" + level);
     }
 
     private static DocumentNode title(String text, int ordinal) {
@@ -73,6 +77,26 @@ class ContractRegionSegmenterTest {
         assertThat(services.contentText()).startsWith("Services\n2.1 Supplier");
         assertThat(regions.get(2).headingText()).isEqualTo("Limitation of Liability");
         assertThat(regions.get(3).contentText()).contains("Sections 5 and 6 survive");
+    }
+
+    @Test
+    void aBodylessHeadingOverSubClausesIsNotAClause() {
+        var nodes = List.of(
+                BODY_NODE,
+                heading("Confidentiality", "5", 0, 1),
+                heading("Confidential Information", "5.1", 1, 2),
+                paragraph("Each party shall keep the other's information confidential.", 2),
+                heading("Return of Information", "5.2", 3, 2),
+                paragraph("On request each party shall return or destroy the information.", 4),
+                heading("Term", "6", 5, 1),
+                heading("Notices", "7", 6, 1),
+                paragraph("Notices are given in writing.", 7));
+
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        assertThat(regions).extracting(ContractRegionSegmenter.Region::headingText)
+                .containsExactly("Confidential Information", "Return of Information", "Term",
+                        "Notices");
     }
 
     @Test

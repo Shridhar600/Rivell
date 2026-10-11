@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.rivell.workbench.intelligence.BoundedParallel;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
@@ -73,28 +74,34 @@ public final class ContractSemanticEnricher {
         var clauses = new ArrayList<ClauseSemantics>();
 
         var classifications = new LinkedHashMap<UUID, ConceptClassification>();
-        for (var region : regions) {
-            if (region.isPreamble()) {
-                continue;
-            }
-            if (region.kind() == ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK) {
-                continue;
-            }
-            if (regionBudget-- <= 0) {
-                quality.add(ReviewQualityNote.BUDGET_EXHAUSTED);
-                counters.budgetExhausted = true;
-                break;
-            }
-            try {
-                var topic = topicClassifier.classify(region.headingText(), region.contentText());
+        var classifiable = regions.stream()
+                .filter(region -> !region.isPreamble())
+                .filter(region -> region.kind()
+                        != ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK)
+                .toList();
+        if (classifiable.size() > regionBudget) {
+            quality.add(ReviewQualityNote.BUDGET_EXHAUSTED);
+            counters.budgetExhausted = true;
+            classifiable = classifiable.subList(0, regionBudget);
+        }
+        // one topic decision per region, independent of the others: run them concurrently
+        var topics = BoundedParallel.map(classifiable, properties.classificationConcurrency(),
+                region -> topicClassifier.classify(region.headingText(), region.contentText()));
+        for (int index = 0; index < classifiable.size(); index++) {
+            var region = classifiable.get(index);
+            var outcome = topics.get(index);
+            if (outcome.failure() == null) {
+                var topic = outcome.value();
                 counters.decisionExecutions += topic.decisionExecutions();
                 counters.questions += topic.questions();
                 classifications.put(region.headingNodeId(), new ConceptClassification(
                         topic.topics(), topic.secondaryTopics(), topic.probabilities()));
-            } catch (SemanticDecisionException e) {
+            } else if (outcome.failure() instanceof SemanticDecisionException) {
                 counters.providerDegraded = true;
                 classifications.put(region.headingNodeId(),
                         new ConceptClassification(List.of(), List.of(), Map.of()));
+            } else {
+                throw outcome.failure();
             }
         }
 

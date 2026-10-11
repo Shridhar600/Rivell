@@ -154,6 +154,7 @@ class PolicyComparisonFlowIT {
                 .findFirst().orElseThrow();
         var payload = (PositionDeviationPayload) deviation.payload();
         assertThat(payload.category()).isEqualTo(PolicyComparisonSpecs.WALK_AWAY);
+        assertThat(payload.secondaryTopic()).isFalse();
         assertThat(payload.positionCandidateId()).isEqualTo(candidateId(playbook,
                 "Limitation of Liability"));
         assertThat(deviation.decisionSpecId()).isEqualTo(

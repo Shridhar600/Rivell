@@ -94,6 +94,26 @@ class FindingAssemblerTest {
         }
     }
 
+    private static RawReviewSignal walkAway(boolean secondaryTopic) {
+        return signal(SignalType.POLICY_DEVIATION, IssueFamily.POSITION_WALK_AWAY,
+                new PositionDeviationPayload(UUID.randomUUID(), PolicyComparisonSpecs.WALK_AWAY,
+                        0.9, Map.of(PolicyComparisonSpecs.WALK_AWAY, 0.9), secondaryTopic),
+                List.of(UUID.randomUUID()), null);
+    }
+
+    @Test
+    void aPositionOnATopicTheClauseOnlyTouchesIsANoteAndNeverMasksItsOwnTopic() {
+        var note = assembler.assemble(run(), List.of(walkAway(true)), NOW).get(0);
+        assertThat(note.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(note.reviewClassification()).isEqualTo(FindingClassification.INFORMATIONAL);
+
+        // same clause, same family: the position on the clause's own topic decides
+        var both = assembler.assemble(run(), List.of(walkAway(true), walkAway(false)), NOW);
+        assertThat(both).hasSize(1);
+        assertThat(both.get(0).severity()).isEqualTo(FindingSeverity.HIGH);
+        assertThat(both.get(0).reviewClassification()).isEqualTo(FindingClassification.BLOCKING);
+    }
+
     @Test
     void missingPolicyClaimDoesNotAssertAResolvedPolicy() {
         var unavailable = signal(SignalType.POLICY_UNAVAILABLE, IssueFamily.POLICY_UNAVAILABLE,

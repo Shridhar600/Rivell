@@ -78,6 +78,38 @@ def score_knowledge(answer, candidates):
     }
 
 
+def _section_locator(structure_nodes, section_to_node):
+    """Maps a heading node to the answer-key section that contains it: a sub-clause heading
+    (5.2) belongs to the last matched section heading (5) before it in document order."""
+    order = {n["id"]: i for i, n in enumerate(structure_nodes)}
+    starts = sorted((order[node], sid) for sid, node in section_to_node.items() if node in order)
+    exact = {node: sid for sid, node in section_to_node.items()}
+
+    def section_of(node_id):
+        if node_id in exact:
+            return exact[node_id]
+        index = order.get(node_id)
+        if index is None:
+            return None
+        owner = None
+        for start, sid in starts:
+            if start > index:
+                break
+            owner = sid
+        return owner
+    return section_of
+
+
+def _stems(text):
+    return {w[:5] for w in _WORD.findall((text or "").lower().replace("_", " "))
+            if w not in _STOP and len(w) > 3}
+
+
+def _topic_matches(concept_key, playbook_ref):
+    ref = re.sub(r"^\s*[A-Z]+\d+\s*", "", playbook_ref or "")
+    return bool(_stems(concept_key) & _stems(ref))
+
+
 def score_contract(answer, structure_nodes, clauses, findings):
     detected = [(n["id"], n.get("text") or "") for n in structure_nodes
                 if n.get("nodeType") == "HEADING"]
@@ -92,18 +124,20 @@ def score_contract(answer, structure_nodes, clauses, findings):
     classified = [c for c in clauses if c.get("correctedPrimaryConcept") or c.get("primaryConcept")]
     absence = [f for f in findings if f.get("subjectKind") == "ABSENCE"]
     located = [f for f in findings if f.get("subjectHeadingNodeId")]
+    section_of = _section_locator(structure_nodes, section_to_node)
     finding_sections = {}
     for f in located:
-        sid = node_to_section.get(f["subjectHeadingNodeId"])
+        sid = section_of(f["subjectHeadingNodeId"])
         if sid:
             finding_sections.setdefault(sid, []).append(f)
 
     issues = []
     for issue in answer.get("expectedIssues", []):
-        if issue["category"] == "MISSING_PROVISION":
-            hit = bool(absence)
-        else:
-            hit = any(sid in finding_sections for sid in issue.get("sectionIds", []))
+        hit = any(sid in finding_sections for sid in issue.get("sectionIds", []))
+        if issue["category"] == "MISSING_PROVISION" and not hit:
+            # an absence finding counts only when its topic is the provision the key names
+            hit = any(_topic_matches(f.get("absenceConcept"), issue.get("playbookRef"))
+                      for f in absence)
         issues.append({"id": issue["id"], "category": issue["category"],
                        "severity": issue.get("severity"), "detected": hit})
 

@@ -373,7 +373,8 @@ public class EvidenceService {
                 candidate.effectiveEscalationTrigger(),
                 preferred == null || preferred.isEmpty() ? null : preferred.getFirst(),
                 fields.getOrDefault(com.rivell.workbench.knowledge.PositionRole.FALLBACK, List.of()),
-                prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst());
+                prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst(),
+                candidate.topicKeys());
     }
 
     private List<String> provenance(UUID organizationId,

@@ -44,6 +44,7 @@ final class RecordLabelRoles {
         prefix("approver", RecordFieldRole.ESCALATION);
         prefix("escalat", RecordFieldRole.ESCALATION);
         prefix("drafting note", RecordFieldRole.COMMENTARY);
+        prefix("note on", RecordFieldRole.COMMENTARY);
         prefix("rationale", RecordFieldRole.COMMENTARY);
         prefix("when to use", RecordFieldRole.COMMENTARY);
         prefix("commentary", RecordFieldRole.COMMENTARY);

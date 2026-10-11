@@ -94,13 +94,19 @@ public final class FindingAssembler {
                 SignalType.POLICY_UNAVAILABLE, SignalType.POLICY_AMBIGUOUS,
                 SignalType.DEVIATION_UNCERTAIN, SignalType.CROSS_CLAUSE_UNCERTAIN,
                 SignalType.OPEN_ENDED_ANALYSIS_RESULT)) {
+            // a position on the clause's own topic outranks one on a topic it only touches
             var match = group.stream().filter(signal -> signal.signalType() == type)
-                    .findFirst();
+                    .min(java.util.Comparator.comparing(FindingAssembler::secondaryTopic));
             if (match.isPresent()) {
                 return match;
             }
         }
         return java.util.Optional.empty();
+    }
+
+    private static boolean secondaryTopic(RawReviewSignal signal) {
+        return signal.payload() instanceof PositionDeviationPayload deviation
+                && deviation.secondaryTopic();
     }
 
     private record Observation(String kind, String text) {
@@ -266,7 +272,11 @@ public final class FindingAssembler {
         }
         if (primary.signalType() == SignalType.POLICY_DEVIATION
                 && primary.payload() instanceof PositionDeviationPayload deviation) {
-            // severity follows the category; a named approver changes the action, not the risk
+            // severity follows the category; a named approver changes the action, not the risk;
+            // a position on a topic the clause only touches is a note
+            if (deviation.secondaryTopic()) {
+                return FindingSeverity.LOW;
+            }
             return switch (deviation.category()) {
                 case PolicyComparisonSpecs.WALK_AWAY -> FindingSeverity.HIGH;
                 case PolicyComparisonSpecs.WITHIN_FALLBACK -> FindingSeverity.LOW;
@@ -289,6 +299,9 @@ public final class FindingAssembler {
         }
         if (primary.signalType() == SignalType.POLICY_DEVIATION
                 && primary.payload() instanceof PositionDeviationPayload deviation) {
+            if (deviation.secondaryTopic()) {
+                return FindingClassification.INFORMATIONAL;
+            }
             if (PolicyComparisonSpecs.WALK_AWAY.equals(deviation.category())) {
                 return FindingClassification.BLOCKING;
             }
