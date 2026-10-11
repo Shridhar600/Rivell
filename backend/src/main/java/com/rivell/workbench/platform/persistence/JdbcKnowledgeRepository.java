@@ -38,6 +38,7 @@ import com.rivell.workbench.knowledge.KnowledgeArtifact;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.knowledge.KnowledgeNodeType;
 import com.rivell.workbench.knowledge.KnowledgePublication;
+import com.rivell.workbench.knowledge.KnowledgeRecordKind;
 import com.rivell.workbench.knowledge.KnowledgeRepository;
 import com.rivell.workbench.knowledge.KnowledgeSource;
 import com.rivell.workbench.knowledge.KnowledgeSourceNode;
@@ -229,10 +230,11 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             jdbcClient.sql("""
                             insert into knowledge_extraction_unit
                             (id, artifact_id, organization_id, ordinal, kind, title, content_text,
-                             provenance, created_at)
+                             provenance, record_kind, created_at)
                             values (:id, :artifactId,
                                     (select organization_id from knowledge_artifact where id = :artifactId),
-                                    :ordinal, :kind, :title, :contentText, :provenance::jsonb, now())
+                                    :ordinal, :kind, :title, :contentText, :provenance::jsonb,
+                                    :recordKind, now())
                             """)
                     .param("id", unit.id())
                     .param("artifactId", artifactId)
@@ -241,6 +243,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("title", unit.title())
                     .param("contentText", unit.contentText())
                     .param("provenance", writeUuidList(unit.sourceNodeIds()))
+                    .param("recordKind", unit.recordKind() == null ? null : unit.recordKind().name())
                     .update();
         }
     }
@@ -779,6 +782,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     private ExtractionUnit mapUnit(ResultSet rs, int rowNum) throws SQLException {
+        var recordKind = rs.getString("record_kind");
         return new ExtractionUnit(
                 uuid(rs, "id"),
                 uuid(rs, "artifact_id"),
@@ -786,7 +790,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 ExtractionUnitKind.valueOf(rs.getString("kind")),
                 rs.getString("title"),
                 rs.getString("content_text"),
-                readStringSet(rs.getString("provenance")).stream().map(UUID::fromString).toList());
+                readStringSet(rs.getString("provenance")).stream().map(UUID::fromString).toList(),
+                recordKind == null ? null : KnowledgeRecordKind.valueOf(recordKind));
     }
 
     private KnowledgeCandidate mapCandidate(ResultSet rs, int rowNum) throws SQLException {
