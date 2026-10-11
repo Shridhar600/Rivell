@@ -9,7 +9,7 @@ import type {
   FindingQuality,
 } from '../api/reviews'
 import { humanizeCode } from './domainLabels'
-import { conceptLabel } from './contractSemantics'
+import type { ConceptLabel } from '../api/taxonomy'
 
 const REVIEW_STATUS_LABELS: Record<string, string> = {
   ANALYSIS_QUEUED: 'Analysis queued',
@@ -86,15 +86,18 @@ export function classificationLabel(classification: string): string {
 }
 
 const ISSUE_FAMILY_LABELS: Record<string, string> = {
-  LIABILITY_CAP_DEVIATION: 'Liability cap deviation',
-  LIABILITY_CAP_UNCERTAIN: 'Liability cap uncertainty',
   MISSING_REQUIRED_PROVISION: 'Missing required provision',
   EXPECTED_PROVISION_ABSENT: 'Expected provision absent',
   SURVIVAL_COVERAGE_GAP: 'Survival coverage gap',
   CARVE_OUT_INCONSISTENCY: 'Carve-out inconsistency',
   POLICY_UNAVAILABLE: 'Policy unavailable',
   POLICY_AMBIGUOUS: 'Policy ambiguous',
-  OPEN_ENDED_LIABILITY: 'Open-ended liability',
+  POSITION_WALK_AWAY: 'Breaches walk-away',
+  POSITION_NEEDS_FALLBACK: 'Beyond our fallbacks',
+  POSITION_ACCEPTABLE_FALLBACK: 'Within an acceptable fallback',
+  POSITION_AMBIGUOUS: 'Unclear against our position',
+  POSITION_UNCERTAIN: 'Could not be assessed',
+  OPEN_ENDED_POSITION: 'No approved position available',
 }
 
 export function issueFamilyLabel(family: string): string {
@@ -102,20 +105,59 @@ export function issueFamilyLabel(family: string): string {
 }
 
 const OBSERVATION_KIND_LABELS: Record<string, string> = {
-  CAP_ABOVE_PREFERRED: 'Liability cap above the preferred position',
-  PROHIBITED_STRUCTURE: 'Structure the policy prohibits',
   MISSING_REQUIRED_CONCEPT: 'Required provision missing',
   EXPECTED_CONCEPT_ABSENT: 'Expected provision absent',
   POLICY_UNAVAILABLE: 'Policy unavailable',
+  NOT_COVERED_BY_PLAYBOOK: 'Not covered by playbook — review',
   AMBIGUOUS_POLICY: 'Policy ambiguous',
   SURVIVAL_COVERAGE_GAP: 'Survival coverage gap',
   CARVE_OUT_INCONSISTENCY: 'Carve-out inconsistency',
   OPEN_ENDED_ANALYSIS_RESULT: 'Open-ended analysis',
+  POSITION_WALK_AWAY: 'Breaches walk-away',
+  POSITION_BEYOND_FALLBACK: 'Beyond our fallbacks',
+  POSITION_WITHIN_FALLBACK: 'Within an acceptable fallback',
+  POSITION_UNCLEAR: 'Unclear against our position',
+}
+
+const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
+  bounded_decision_unavailable: 'Could not be assessed',
 }
 
 export function observationKindLabel(kind: string): string {
-  if (kind.startsWith('UNCERTAINTY:')) return 'Uncertain assessment'
+  if (kind.startsWith('UNCERTAINTY:')) {
+    const reason = kind.slice('UNCERTAINTY:'.length)
+    return UNCERTAINTY_REASON_LABELS[reason] ?? 'Uncertain assessment'
+  }
   return OBSERVATION_KIND_LABELS[kind] ?? humanizeCode(kind)
+}
+
+const COMPARISON_CATEGORY_LABELS: Record<string, string> = {
+  MEETS_PREFERRED: 'Meets the preferred position',
+  WITHIN_FALLBACK: 'Within an acceptable fallback',
+  BEYOND_FALLBACK: 'Beyond every listed fallback',
+  WALK_AWAY: 'Breaches the walk-away',
+  UNCLEAR: 'Unclear against the position',
+  NOT_ADDRESSED: 'Does not address the position',
+}
+
+export function comparisonCategoryLabel(category: string): string {
+  return COMPARISON_CATEGORY_LABELS[category] ?? humanizeCode(category)
+}
+
+/**
+ * The comparison's own assessment in one line: the code-owned category, then the model's flag
+ * probability as a percentage. The uncovered-clause triage's probability stands in the same place
+ * when no comparison category exists. The probability is the model's estimate, never a certainty,
+ * and a finding whose quality lacks every part shows no line.
+ */
+export function assessmentSummary(quality: FindingQuality | null): string | null {
+  const parts: string[] = []
+  if (quality?.category) parts.push(comparisonCategoryLabel(quality.category))
+  const probability = quality?.flagProbability ?? quality?.uncoveredProbability ?? null
+  if (probability !== null) {
+    parts.push(`Model confidence ${Math.round(probability * 100)}% (an estimate, not a certainty)`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 const CLAIM_KIND_LABELS: Record<string, string> = {
@@ -145,16 +187,16 @@ export function proposedActionLabel(action: string): string {
   return PROPOSED_ACTION_LABELS[action] ?? humanizeCode(action)
 }
 
-export function checkKeyLabel(checkKey: string): string {
+export function checkKeyLabel(checkKey: string, label: ConceptLabel): string {
   const [mechanism, concept] = checkKey.split(':')
   if (!concept) return humanizeCode(checkKey)
-  return `${humanizeCode(mechanism)} · ${conceptLabel(concept)}`
+  return `${humanizeCode(mechanism)} · ${label(concept)}`
 }
 
 const SUFFICIENCY_LABELS: Record<string, string> = {
   SUFFICIENT: 'Evidence complete',
   PARTIAL: 'Evidence partially complete',
-  PRECEDENT_WEAK: 'Weak precedent evidence',
+  PRECEDENT_WEAK: 'No comparable past agreement found',
   DRAFTING_MISSING: 'No approved drafting available',
   POLICY_MISSING: 'Policy evidence missing',
   AMBIGUOUS_POLICY: 'Policy evidence ambiguous',
@@ -256,11 +298,14 @@ export function coverageLimitations(coverage: ReviewCoverage[]): ReviewCoverage[
   return coverage.filter((entry) => entry.coverage !== 'PRESENT_PRIMARY')
 }
 
-export function coverageLimitationSummary(coverage: ReviewCoverage[]): string | null {
+export function coverageLimitationSummary(
+  coverage: ReviewCoverage[],
+  label: ConceptLabel,
+): string | null {
   const limited = coverageLimitations(coverage)
   if (limited.length === 0) return null
   const parts = limited.map(
-    (entry) => `${conceptLabel(entry.concept)} (${coverageLabel(entry.coverage).toLowerCase()})`,
+    (entry) => `${label(entry.concept)} (${coverageLabel(entry.coverage).toLowerCase()})`,
   )
   return `Review coverage is limited for: ${parts.join('; ')}.`
 }
@@ -271,15 +316,16 @@ export function findingSubjectLabel(
     'subjectKind' | 'subjectHeadingNodeId' | 'absenceConcept' | 'concept'
   >,
   regionLabels: Map<string, string>,
+  label: ConceptLabel,
 ): string {
   if (finding.subjectKind === 'ABSENCE' && finding.absenceConcept) {
-    return `Missing: ${conceptLabel(finding.absenceConcept)}`
+    return `Missing: ${label(finding.absenceConcept)}`
   }
   if (finding.subjectKind === 'CLAUSE' && finding.subjectHeadingNodeId) {
-    const label = regionLabels.get(finding.subjectHeadingNodeId)
-    if (label) return label
+    const region = regionLabels.get(finding.subjectHeadingNodeId)
+    if (region) return region
     return finding.concept
-      ? `Clause · ${conceptLabel(finding.concept)}`
+      ? `Clause · ${label(finding.concept)}`
       : 'Clause source unavailable'
   }
   return 'Subject unavailable'
@@ -325,24 +371,38 @@ export function absenceClaims(claims: FindingClaim[]): FindingClaim[] {
     .sort((left, right) => left.ordinal - right.ordinal)
 }
 
-export function findingConceptLabels(finding: FindingDetail): string[] {
-  const concepts =
-    finding.concepts.length > 0
-      ? finding.concepts
-      : [finding.concept, finding.secondaryConcept].filter(
-          (concept): concept is string => Boolean(concept),
-        )
-  return concepts.map((concept) => conceptLabel(concept))
-}
-
 export function policyNoteText(
-  finding: Pick<FindingDetail, 'issueFamily'>,
+  finding: Pick<FindingDetail, 'issueFamily' | 'observationKind'>,
 ): string | null {
   if (finding.issueFamily === 'POLICY_UNAVAILABLE') {
-    return 'No organizational policy covers this clause. Historical precedent is evidence only and does not establish policy.'
+    return finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK'
+      ? 'This is a gap in the playbook, not a breach of one. Precedent is evidence only and does not establish a position.'
+      : 'No organizational policy covers this clause. Historical precedent is evidence only and does not establish policy.'
   }
   if (finding.issueFamily === 'POLICY_AMBIGUOUS') {
     return 'More than one published policy applies. Rivell did not choose between them; the ambiguity is preserved for human review.'
   }
   return null
+}
+
+/**
+ * Whether a position finding is only related: the position governs a topic the clause touches, not
+ * the clause's own subject, so the backend records it LOW and INFORMATIONAL.
+ */
+export function isRelatedPosition(
+  finding: Pick<FindingDetail, 'issueFamily' | 'quality'>,
+): boolean {
+  return finding.issueFamily.startsWith('POSITION_') && finding.quality?.secondaryTopic === true
+}
+
+/**
+ * The issue line a finding is listed under. A clause no playbook position addresses is its own
+ * kind: the family alone would read as the older "policy unavailable" case.
+ */
+export function findingIssueLabel(
+  finding: Pick<FindingSummary, 'issueFamily' | 'observationKind'>,
+): string {
+  return finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK'
+    ? 'Not covered by playbook — review'
+    : issueFamilyLabel(finding.issueFamily)
 }

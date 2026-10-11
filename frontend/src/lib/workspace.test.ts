@@ -5,6 +5,7 @@ import type { StructureNode } from './documentTree'
 import {
   acceptEligibilityFor,
   clauseBody,
+  clauseExcerpt,
   defaultFinding,
   executableChange,
   finalizeSummary,
@@ -31,6 +32,7 @@ function finding(id: string, overrides: Partial<FindingSummary> = {}): FindingSu
     reviewClassification: 'REVIEW_REQUIRED',
     proposedAction: 'ESCALATE_TO_HUMAN',
     proposedLanguageSource: 'NONE',
+    relatedPosition: false,
     createdAt: '2026-10-01T00:00:00Z',
     ...overrides,
   }
@@ -173,6 +175,41 @@ describe('clauses from the real, flat structure', () => {
   })
 })
 
+describe('clauseExcerpt', () => {
+  it('keeps about two lines and marks that more follows', () => {
+    expect(clauseExcerpt('3. Fees\n3.1 Pay in thirty days.\n3.2 Late interest applies.')).toBe(
+      '3. Fees\n3.1 Pay in thirty days.…',
+    )
+  })
+
+  it('truncates one very long passage within the character budget', () => {
+    const long = 'x'.repeat(400)
+    const excerpt = clauseExcerpt(`3. Fees\n${long}`)
+    expect(excerpt.length).toBeLessThan(long.length)
+    expect(excerpt.endsWith('…')).toBe(true)
+  })
+
+  it('keeps some clause body even when the first passage exhausts the budget', () => {
+    const long = 'x'.repeat(400)
+    const excerpt = clauseExcerpt(long)
+    expect(excerpt.length).toBeLessThanOrEqual(180)
+    expect(excerpt.endsWith('…')).toBe(true)
+    expect(excerpt).not.toContain('\n')
+  })
+
+  it('still shows the start of the body when the heading and body together exceed the budget', () => {
+    const excerpt = clauseExcerpt(`6. Limitation of Liability\n${'y'.repeat(400)}`)
+    expect(excerpt.startsWith('6. Limitation of Liability\n')).toBe(true)
+    expect(excerpt.split('\n')).toHaveLength(2)
+    expect(excerpt.endsWith('…')).toBe(true)
+    expect(excerpt.length).toBeLessThanOrEqual(181)
+  })
+
+  it('returns a short clause unchanged, with no invented ellipsis', () => {
+    expect(clauseExcerpt('4. Term\n4.1 Two years.')).toBe('4. Term\n4.1 Two years.')
+  })
+})
+
 describe('finalizeSummary', () => {
   const review = { accepted: 1, edited: 2, rejected: 1 }
 
@@ -180,7 +217,7 @@ describe('finalizeSummary', () => {
     const loaded = [{ type: 'REPLACE' as const }, { type: 'REPLACE' as const }, { type: 'DELETE' as const }]
     expect(finalizeSummary(review, loaded)).toEqual([
       '3 approved changes (1 accepted, 2 edited): 2 replace, 0 insert, 1 delete',
-      '1 rejected Finding; no ApprovedChange created',
+      '1 rejected Finding; no approved change created',
     ])
   })
 

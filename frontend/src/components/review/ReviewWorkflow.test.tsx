@@ -120,8 +120,9 @@ describe('human review progress in the workspace', () => {
     await workspaceReady()
 
     expect(await topBar().findByText('1 of 2 resolved')).toBeInTheDocument()
+    expect(topBar().getByText('Not ready to finalize')).toBeInTheDocument()
     expect(topBar().getByText('1 finding that requires review still needs a decision.')).toBeInTheDocument()
-    expect(finalizeButton()).toHaveTextContent('Finalize review · 1 unresolved')
+    expect(finalizeButton()).toHaveTextContent('Finalize review')
     expect(finalizeButton()).toBeDisabled()
     expect(
       within(screen.getByRole('complementary', { name: 'Findings' })).getByText('1 unresolved'),
@@ -138,7 +139,8 @@ describe('human review progress in the workspace', () => {
 
     await findSelectedFindingDetail()
     expect(topBar().getByText('0 of 1 resolved')).toBeInTheDocument()
-    expect(finalizeButton()).toHaveTextContent('Finalize review · 1 unresolved')
+    expect(finalizeButton()).toHaveTextContent('Finalize review')
+    expect(finalizeButton()).toBeDisabled()
     expect(topBar().queryByText('Approved changes frozen')).not.toBeInTheDocument()
     expect(topBar().queryByText('Ready to finalize')).not.toBeInTheDocument()
     expect(screen.queryByText('Human review completed')).not.toBeInTheDocument()
@@ -465,8 +467,9 @@ describe('finalization', () => {
     renderRouter('/reviews/c1/analysis/r-1', api)
     await workspaceReady()
     await topBar().findByText('1 finding that requires review still needs a decision.')
+    expect(topBar().getByText('Not ready to finalize')).toBeInTheDocument()
     expect(finalizeButton()).toBeDisabled()
-    expect(finalizeButton()).toHaveTextContent('Finalize review · 1 unresolved')
+    expect(finalizeButton()).toHaveTextContent('Finalize review')
 
     // A disabled control cannot open the dialog, so nothing is sent.
     await userEvent.click(finalizeButton())
@@ -647,8 +650,8 @@ describe('approved change set', () => {
           id: 'f-2',
           subjectKind: 'ABSENCE',
           subjectHeadingNodeId: null,
-          absenceConcept: 'CONFIDENTIALITY',
-          concept: 'CONFIDENTIALITY',
+          absenceConcept: 'CONFIDENTIALITY_OBLIGATIONS',
+          concept: 'CONFIDENTIALITY_OBLIGATIONS',
           issueFamily: 'MISSING_REQUIRED_PROVISION',
           proposedAction: 'ADD_REQUIRED_PROVISION',
           proposedLanguageSource: 'NONE',
@@ -657,7 +660,7 @@ describe('approved change set', () => {
           ...fixtureAcceptableFinding,
           id: 'f-3',
           subjectHeadingNodeId: 'node-5',
-          concept: 'TERM_TERMINATION',
+          concept: 'TERM',
           issueFamily: 'EXPECTED_PROVISION_ABSENT',
         },
       ],
@@ -703,7 +706,7 @@ describe('approved change set', () => {
     // Replace: the approved language stands in for the clause.
     expect(contract.getByText('Liability is capped at two times the fees paid.')).toBeInTheDocument()
     // Insert: the language is shown, but no location is claimed for it.
-    expect(contract.getByText('Approved insertion: Confidentiality')).toBeInTheDocument()
+    expect(contract.getByText('Approved insertion: Confidentiality obligations')).toBeInTheDocument()
     expect(
       contract.getByText(/Confidential information shall be protected for five years\./),
     ).toBeInTheDocument()

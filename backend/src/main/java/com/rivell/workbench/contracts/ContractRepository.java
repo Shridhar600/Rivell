@@ -62,7 +62,11 @@ public interface ContractRepository {
             Instant createdAt);
 
     void updateVersionParseOutcome(
-            UUID versionId, String parserVersion, ParseStatus status, List<String> warnings);
+            UUID versionId, String parserVersion, ParseStatus status, List<String> warnings,
+            ParseCoverage coverage);
+
+    /** Empty when the version was parsed before the coverage check existed or it could not run. */
+    Optional<ParseCoverage> findParseCoverage(UUID versionId);
 
     void updateContractTitle(UUID contractId, String title);
 

@@ -14,7 +14,7 @@ import com.rivell.workbench.contracts.SourceSpan;
 
 class DocxStructuralParserTest {
 
-    private static final String PARSER_VERSION = "rivell-docx-parser-2";
+    private static final String PARSER_VERSION = "rivell-docx-parser-3";
     private static final UUID VERSION_ID = UUID.randomUUID();
     private final DocxStructuralParser parser =
             new DocxStructuralParser(new DocxParserProperties(200L * 1024 * 1024));
@@ -69,6 +69,73 @@ class DocxStructuralParserTest {
             assertThat(node.sourceSpan().partPath()).isEqualTo("word/document.xml");
             assertThat(node.sourceSpan().hasNonNegativeIndices()).isTrue();
         });
+    }
+
+    /**
+     * A counterparty NDA written without Word heading styles: bold typed numbers
+     * ("7. Public statements") and a bold all-caps title, the way most real drafts arrive.
+     * Every section must become a heading, the title a title, and the bold party names in
+     * the signature block must stay body text.
+     */
+    @Test
+    void recoversSectionsFromATypedNumberContractWithoutHeadingStyles() {
+        var result = parse("fixtures/blind-mutual-nda-typed-headings.docx");
+
+        assertThat(result.status()).isEqualTo(ParseStatus.OK);
+        var titles = result.nodes().stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.TITLE)
+                .map(com.rivell.workbench.contracts.DocumentNode::text).toList();
+        var headings = result.nodes().stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.HEADING)
+                .map(com.rivell.workbench.contracts.DocumentNode::text).toList();
+        assertThat(titles).containsExactly("MUTUAL NON-DISCLOSURE AGREEMENT");
+        assertThat(headings).containsExactly(
+                "1. Definitions", "2. Use and protection", "3. Disclosure to Representatives",
+                "4. Exclusions", "5. Evaluation boundaries and data", "6. Required disclosure",
+                "7. Public statements", "8. Term and duration of obligations",
+                "9. Return or destruction", "10. Ownership; no license; feedback",
+                "11. Remedies", "12. General", "13. Governing law and forum",
+                "14. Counterparts and electronic signatures");
+    }
+
+    @Test
+    void recoversUnnumberedBoldHeadingsIncludingOnesThatIntroduceATable() {
+        var result = parse("fixtures/blind-sow-table-introduced-headings.docx");
+
+        assertHeadingsInOrder(result, "Scope of Services", "Definitions", "Deliverables and Acceptance",
+                "Milestones, Fees and Payment", "Governance, Roles and Responsibilities", "Key Personnel",
+                "Super-Users and Training", "Assumptions and Dependencies", "Variations",
+                "Intellectual Property in Project Deliverables", "Data Protection and Security",
+                "Subcontracting", "Liability Under this Statement of Work", "Governing Law and Jurisdiction",
+                "Reporting Pack Specification");
+    }
+
+    @Test
+    void recoversUnderlinedRunInHeadingsIncludingAnUnpunctuatedSchedule() {
+        var result = parse("fixtures/blind-nda-run-in-headings.docx");
+
+        assertHeadingsInOrder(result, "1. Purpose.", "2. Definition of Confidential Information.",
+                "3. Obligations of the Recipient.", "4. Permitted Disclosures.", "5. Residual Knowledge.",
+                "6. Return or Destruction.", "7. Compliance Warranties.",
+                "8. Evaluation Outcome and Reference Rights.", "9. Term and Survival.",
+                "10. Governing Law and Dispute Resolution.", "11. General.",
+                "12. No Licence and No Warranty.", "13. Clean Room Protocol.",
+                "Schedule 1 Information Expected to be Disclosed");
+    }
+
+    private static void assertHeadingsInOrder(com.rivell.workbench.contracts.ParseResult result, String... expectedPrefixes) {
+        assertThat(result.status()).isEqualTo(ParseStatus.OK);
+        var headings = result.nodes().stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.HEADING)
+                .map(com.rivell.workbench.contracts.DocumentNode::text).toList();
+        var cursor = 0;
+        for (var expected : expectedPrefixes) {
+            while (cursor < headings.size() && !headings.get(cursor).contains(expected)) {
+                cursor++;
+            }
+            assertThat(cursor).as("heading '%s' in %s", expected, headings).isLessThan(headings.size());
+            cursor++;
+        }
     }
 
     @Test

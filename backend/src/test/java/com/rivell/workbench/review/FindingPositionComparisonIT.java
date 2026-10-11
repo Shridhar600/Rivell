@@ -237,7 +237,7 @@ class FindingPositionComparisonIT {
         return new RetrievalResponses.EvidenceItemResponse(
                 UUID.randomUUID(), "POLICY", "PLAYBOOK_RULE", null, null, null, null,
                 "LIMITATION_OF_LIABILITY", "Net 45 days", new RetrievalResponses.PolicyFactsResponse(
-                        positions, null, trigger), List.of(), "STRUCTURED", lane(), null, null,
+                        positions, null, trigger, null, List.of(), null), List.of(), "STRUCTURED", lane(), null, null,
                 List.of(), null, publicationNumber, null);
     }
 

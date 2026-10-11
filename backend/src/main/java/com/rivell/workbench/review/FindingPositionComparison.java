@@ -10,8 +10,8 @@ import com.rivell.workbench.retrieval.api.RetrievalResponses;
 
 /**
  * The finding's own positions, grouped into the four slots the Review Workspace compares:
- * the contract's current position, the preferred position, the fallback position and the
- * escalation condition.
+ * the contract's current position, the preferred position, the fallback positions, the
+ * walk-away and the escalation condition.
  *
  * <p>This is a projection over the finding's already-frozen evidence. Retrieval is never
  * re-run, nothing is read from latest knowledge, and no position is invented: a slot that
@@ -35,12 +35,14 @@ public record FindingPositionComparison(
         List<ContractPositionSlot> contract,
         List<PolicyPositionSlot> preferred,
         List<PolicyPositionSlot> fallback,
+        List<PolicyPositionSlot> walkAway,
         List<EscalationSlot> escalation) {
 
     public FindingPositionComparison {
         contract = contract == null ? List.of() : List.copyOf(contract);
         preferred = preferred == null ? List.of() : List.copyOf(preferred);
         fallback = fallback == null ? List.of() : List.copyOf(fallback);
+        walkAway = walkAway == null ? List.of() : List.copyOf(walkAway);
         escalation = escalation == null ? List.of() : List.copyOf(escalation);
     }
 
@@ -85,6 +87,7 @@ public record FindingPositionComparison(
         var contract = new ArrayList<ContractPositionSlot>();
         var preferred = new ArrayList<PolicyPositionSlot>();
         var fallback = new ArrayList<PolicyPositionSlot>();
+        var walkAway = new ArrayList<PolicyPositionSlot>();
         var escalation = new ArrayList<EscalationSlot>();
 
         for (var item : evidenceItems) {
@@ -97,15 +100,20 @@ public record FindingPositionComparison(
             if (policyFacts == null) {
                 continue;
             }
-            if (carries(policyFacts, PositionRole.PREFERRED)) {
-                preferred.add(new PolicyPositionSlot(
-                        item.evidenceId(), item.authorityClass(), item.legalConcept(),
-                        item.publicationNumber(), item.text()));
+            // role-tagged fields carry each stance's own wording; a record without them
+            // carries the whole authored text in the slot its positions name
+            if (policyFacts.preferred() != null) {
+                preferred.add(slot(item, policyFacts.preferred()));
+            } else if (carries(policyFacts, PositionRole.PREFERRED)) {
+                preferred.add(slot(item, item.text()));
             }
-            if (carries(policyFacts, PositionRole.FALLBACK)) {
-                fallback.add(new PolicyPositionSlot(
-                        item.evidenceId(), item.authorityClass(), item.legalConcept(),
-                        item.publicationNumber(), item.text()));
+            if (policyFacts.fallbacks() != null && !policyFacts.fallbacks().isEmpty()) {
+                policyFacts.fallbacks().forEach(text -> fallback.add(slot(item, text)));
+            } else if (carries(policyFacts, PositionRole.FALLBACK)) {
+                fallback.add(slot(item, item.text()));
+            }
+            if (policyFacts.prohibited() != null) {
+                walkAway.add(slot(item, policyFacts.prohibited()));
             }
             var trigger = policyFacts.escalationTrigger();
             if (trigger != null && !trigger.isBlank()) {
@@ -116,10 +124,16 @@ public record FindingPositionComparison(
         }
 
         if (contract.isEmpty() && preferred.isEmpty() && fallback.isEmpty()
-                && escalation.isEmpty()) {
+                && walkAway.isEmpty() && escalation.isEmpty()) {
             return null;
         }
-        return new FindingPositionComparison(contract, preferred, fallback, escalation);
+        return new FindingPositionComparison(contract, preferred, fallback, walkAway, escalation);
+    }
+
+    private static PolicyPositionSlot slot(
+            RetrievalResponses.EvidenceItemResponse item, String text) {
+        return new PolicyPositionSlot(item.evidenceId(), item.authorityClass(),
+                item.legalConcept(), item.publicationNumber(), text);
     }
 
     private static boolean carries(

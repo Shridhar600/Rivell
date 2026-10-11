@@ -12,7 +12,15 @@ public record StructureExtraction(
         String parserVersion,
         IngestStatus status,
         List<String> warnings,
-        List<KnowledgeSourceNode> nodes) {
+        List<KnowledgeSourceNode> nodes,
+        com.rivell.workbench.contracts.ParseCoverage coverage) {
+
+    /** Without a coverage report (failed extraction, or a check that could not run). */
+    public StructureExtraction(String parserVersion, IngestStatus status, List<String> warnings,
+            List<KnowledgeSourceNode> nodes) {
+        this(parserVersion, status, warnings, nodes, null);
+    }
+
 
     public StructureExtraction {
         if (parserVersion == null || parserVersion.isBlank()) {

@@ -9,9 +9,7 @@ import type {
   ScopeEditInput,
   SemanticFieldsEditInput,
 } from '../api/knowledge'
-import { CONCEPT_LABELS, humanizeCode } from './domainLabels'
-
-export { CONCEPT_LABELS, VERIFICATION_LABELS, humanizeCode } from './domainLabels'
+export { VERIFICATION_LABELS, humanizeCode } from './domainLabels'
 
 export const POSITION_LABELS: Record<PositionRole, string> = {
   PREFERRED: 'Preferred',
@@ -64,11 +62,6 @@ export const ASSESSMENT_STATE_LABELS: Record<AssessmentState, string> = {
   MATCH: 'Matches declared type',
   POSSIBLE_MISMATCH: 'Possible mismatch',
   AMBIGUOUS: 'Ambiguous',
-}
-
-export function conceptLabel(key: string | null): string | null {
-  if (key === null || key.trim().length === 0) return null
-  return CONCEPT_LABELS[key] ?? humanizeCode(key)
 }
 
 export function reviewReasonLabel(code: string): string {

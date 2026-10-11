@@ -319,6 +319,11 @@ describe('knowledge parsers', () => {
     expect(parsed.items[0].action).toBe('ADD')
     expect(parsed.items[0].supersededCandidateId).toBeNull()
   })
+
+  it('keeps the record kind the compiler recorded, and null for a unit from old data', () => {
+    expect(parseExtractionUnit({ ...unit, recordKind: 'GUIDANCE' }).recordKind).toBe('GUIDANCE')
+    expect(parseExtractionUnit({ ...unit, recordKind: null }).recordKind).toBeNull()
+  })
 })
 
 describe('knowledge list queries', () => {

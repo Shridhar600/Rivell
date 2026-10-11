@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /** Persistence port for assembled findings and their children (run-scoped). */
 public interface FindingRepository {
@@ -36,7 +36,7 @@ public interface FindingRepository {
      * loaded (list projection only).
      */
     List<Finding> findFindings(
-            UUID organizationId, UUID runId, LegalConcept concept,
+            UUID organizationId, UUID runId, ConceptKey concept,
             FindingClassification classification, FindingSeverity severity, int limit);
 
     /** One finding of a run with concepts, claims, evidence ids, and signal ids. */

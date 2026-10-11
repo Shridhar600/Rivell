@@ -2,9 +2,9 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import type { SemanticClause } from '../../api/semantics'
 import { useCorrectClauseConcept } from '../../api/semantics'
+import { useTaxonomy } from '../../api/taxonomy'
+import { humanizeCode } from '../../lib/domainLabels'
 import {
-  TAXONOMY_CONCEPTS,
-  conceptLabel,
   effectivePrimaryConcept,
   machinePrimaryConcept,
   regionKindLabel,
@@ -12,12 +12,12 @@ import {
 import { ClauseFacts } from './ClauseFacts'
 import { CorrectionFailure } from './CorrectionFailure'
 
-function ConceptChips({ concepts }: { concepts: string[] }) {
+function ConceptChips({ concepts, labelFor }: { concepts: string[]; labelFor: (key: string) => string }) {
   return (
     <ul className="chip-list">
       {concepts.map((concept) => (
         <li className="chip" key={concept}>
-          {conceptLabel(concept)}
+          {labelFor(concept)}
         </li>
       ))}
     </ul>
@@ -36,6 +36,7 @@ function ConceptEditor({
   onRefresh: () => void
 }) {
   const correct = useCorrectClauseConcept(contractId, versionNumber)
+  const taxonomy = useTaxonomy()
   const effective = effectivePrimaryConcept(clause) ?? ''
   const [serverConcept, setServerConcept] = useState(effective)
   const [selected, setSelected] = useState(effective)
@@ -44,6 +45,12 @@ function ConceptEditor({
     setSelected(effective)
   }
   const [error, setError] = useState<string | null>(null)
+  const pickerDisabled = correct.isPending || taxonomy.isPending || taxonomy.isError
+  const selectedIsLeaf = selected === '' || taxonomy.leaves.some((leaf) => leaf.key === selected)
+  const selectedKnown =
+    selected === '' ||
+    selectedIsLeaf ||
+    taxonomy.parents.some((parent) => parent.key === selected)
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -65,15 +72,35 @@ function ConceptEditor({
             id={`concept-${clause.id}`}
             value={selected}
             onChange={(event) => setSelected(event.target.value)}
-            disabled={correct.isPending}
+            disabled={pickerDisabled}
           >
             <option value="">Select a concept…</option>
-            {TAXONOMY_CONCEPTS.map((concept) => (
-              <option key={concept} value={concept}>
-                {conceptLabel(concept)}
+            {selectedIsLeaf ? null : (
+              <option value={selected}>
+                {humanizeCode(selected)}
+                {!taxonomy.isPending && !taxonomy.isError && !selectedKnown
+                  ? ' (not in the current taxonomy)'
+                  : ''}
               </option>
+            )}
+            {taxonomy.groups.map((group) => (
+              <optgroup key={group.parentKey ?? 'other'} label={group.label}>
+                {group.leaves.map((concept) => (
+                  <option key={concept.key} value={concept.key}>
+                    {concept.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
+          {taxonomy.isPending ? (
+            <small role="status">Loading legal topics…</small>
+          ) : null}
+          {taxonomy.isError ? (
+            <small role="status">
+              The legal topic list could not be loaded. Classification cannot be changed right now.
+            </small>
+          ) : null}
         </div>
         <p className="correction__note">
           This corrects what the clause is about. It is not an approval or rejection of
@@ -84,7 +111,7 @@ function ConceptEditor({
             {error}
           </p>
         ) : null}
-        <button type="submit" disabled={correct.isPending}>
+        <button type="submit" disabled={pickerDisabled}>
           {correct.isPending ? 'Saving…' : 'Save classification'}
         </button>
       </form>
@@ -115,6 +142,7 @@ function ClauseDetail({
   onRefresh: () => void
   labelByNodeId: Map<string, string>
 }) {
+  const { labelFor } = useTaxonomy()
   return (
     <div className="clause-detail">
       <div className="clause-detail__header">
@@ -149,7 +177,7 @@ function ClauseDetail({
           <p className="clause-concept-primary">
             <span className="clause-concept-primary__label">Primary</span>
             <span className="chip chip--primary">
-              {conceptLabel(effectivePrimaryConcept(clause) as string)}
+              {labelFor(effectivePrimaryConcept(clause) as string)}
             </span>
           </p>
         ) : (
@@ -160,13 +188,13 @@ function ClauseDetail({
         {machinePrimaryConcept(clause) ? (
           <p className="clause-concept-machine">
             Rivell originally classified this clause as{' '}
-            {conceptLabel(machinePrimaryConcept(clause) as string)}.
+            {labelFor(machinePrimaryConcept(clause) as string)}.
           </p>
         ) : null}
         {clause.secondaryConcepts.length > 0 ? (
           <div className="clause-concept-secondary">
             <h5>Also relates to</h5>
-            <ConceptChips concepts={clause.secondaryConcepts} />
+            <ConceptChips concepts={clause.secondaryConcepts} labelFor={labelFor} />
           </div>
         ) : null}
         <ConceptEditor
@@ -215,6 +243,7 @@ export function ClausesPanel({
       (region) => region.headingNodeId === selectedClauseKey,
     ) ??
     null
+  const { labelFor } = useTaxonomy()
 
   return (
     <section aria-labelledby="clauses-heading">
@@ -248,7 +277,7 @@ export function ClausesPanel({
                   <span className="clause-list__heading">{clause.heading}</span>
                   <span className="clause-list__meta">
                     {effectivePrimaryConcept(clause)
-                      ? conceptLabel(effectivePrimaryConcept(clause) as string)
+                      ? labelFor(effectivePrimaryConcept(clause) as string)
                       : 'No primary concept'}
                     {clause.secondaryConcepts.length > 0
                       ? ` · +${clause.secondaryConcepts.length} more`
@@ -287,7 +316,7 @@ export function ClausesPanel({
                       <span className="clause-list__meta">
                         {regionKindLabel(region.regionKind)}
                         {effectivePrimaryConcept(region)
-                          ? ` · ${conceptLabel(effectivePrimaryConcept(region) as string)}`
+                          ? ` · ${labelFor(effectivePrimaryConcept(region) as string)}`
                           : ''}
                         {region.effectiveFacts.length > 0
                           ? ` · ${region.effectiveFacts.length} fact${

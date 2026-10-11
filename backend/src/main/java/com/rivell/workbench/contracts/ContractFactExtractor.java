@@ -12,6 +12,8 @@ import com.rivell.workbench.intelligence.GenerativeReasoningService;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
 
 /**
  * Typed fact extraction (S8). Responsibility ladder per fact: deterministic parse
@@ -37,15 +39,15 @@ public final class ContractFactExtractor {
     public record FactResult(List<LegalFact> facts, Map<String, Interpretation> interpretations) {
     }
 
-    public FactResult extract(LegalConcept concept, String heading, String text,
+    public FactResult extract(ConceptKey concept, String heading, String text,
             List<UUID> provenance, boolean generativeAllowed) {
-        return switch (concept) {
-            case LIMITATION_OF_LIABILITY -> liabilityFacts(heading, text, provenance,
-                    generativeAllowed);
-            case TERM_TERMINATION -> terminationFacts(heading, text, provenance,
-                    generativeAllowed);
-            default -> new FactResult(List.of(), Map.of());
-        };
+        if (CoreConcepts.LIMITATION_OF_LIABILITY.equals(concept)) {
+            return liabilityFacts(heading, text, provenance, generativeAllowed);
+        }
+        if (CoreConcepts.TERM.equals(concept)) {
+            return terminationFacts(heading, text, provenance, generativeAllowed);
+        }
+        return new FactResult(List.of(), Map.of());
     }
 
     private FactResult liabilityFacts(

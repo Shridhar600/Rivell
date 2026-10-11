@@ -63,10 +63,15 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
                         null, null, null, null, null, null,
                         null, null, null, null));
 
+                var stringCells = new ArrayList<String>();
                 for (int sheetIndex = 0; sheetIndex < workbook.getNumberOfSheets(); sheetIndex++) {
-                    addSheet(artifactId, workbookId, sheetIndex, workbook.getSheetAt(sheetIndex), nodes);
+                    addSheet(artifactId, workbookId, sheetIndex, workbook.getSheetAt(sheetIndex), nodes,
+                            stringCells);
                 }
-                return new StructureExtraction(PARSER_VERSION, IngestStatus.EXTRACTED, List.of(), nodes);
+                var warnings = new ArrayList<String>();
+                var coverage = coverage(bytes, stringCells, warnings);
+                return new StructureExtraction(PARSER_VERSION, IngestStatus.EXTRACTED, warnings, nodes,
+                        coverage);
             }
         } catch (Exception e) {
             return StructureExtraction.failed(
@@ -75,9 +80,20 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
         }
     }
 
+    /** The coverage check never fails an extraction: a check that cannot run is a warning. */
+    private static com.rivell.workbench.contracts.ParseCoverage coverage(
+            byte[] bytes, List<String> stringCells, List<String> warnings) {
+        try {
+            return TextCoverage.measureTexts(XlsxTextInventory.read(bytes), stringCells);
+        } catch (Exception e) {
+            warnings.add("COVERAGE_CHECK_FAILED");
+            return null;
+        }
+    }
+
     private void addSheet(
             UUID artifactId, UUID workbookId, int sheetIndex, XSSFSheet poiSheet,
-            List<KnowledgeSourceNode> nodes) {
+            List<KnowledgeSourceNode> nodes, List<String> stringCells) {
         var sheetId = UUID.randomUUID();
         var sheetName = poiSheet.getSheetName();
         var partPath = partPath(poiSheet);
@@ -108,6 +124,9 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
                     continue;
                 }
                 var text = formatter.formatCellValue(poiCell);
+                if (isString(poiCell)) {
+                    stringCells.add(text);
+                }
                 nodes.add(new KnowledgeSourceNode(
                         UUID.randomUUID(), artifactId, rowId,
                         KnowledgeNodeType.SPREADSHEET_CELL, c,
@@ -117,6 +136,14 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
                         sheetName, c, coveringRegion(mergedRegions, r, c), null));
             }
         }
+    }
+
+    /** String cells, including formulas whose cached result is a string (coverage compares these). */
+    private static boolean isString(org.apache.poi.ss.usermodel.Cell cell) {
+        var type = cell.getCellType();
+        return type == org.apache.poi.ss.usermodel.CellType.STRING
+                || (type == org.apache.poi.ss.usermodel.CellType.FORMULA
+                        && cell.getCachedFormulaResultType() == org.apache.poi.ss.usermodel.CellType.STRING);
     }
 
     private static String partPath(XSSFSheet sheet) {

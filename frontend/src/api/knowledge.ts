@@ -32,6 +32,7 @@ type SchemaArtifactType = NonNullable<SchemaArtifactSummary['artifactType']>
 type SchemaIngestStatus = NonNullable<SchemaArtifactSummary['ingestStatus']>
 type SchemaCandidate = components['schemas']['CandidateView']
 type SchemaUnitKind = NonNullable<components['schemas']['ExtractionUnitView']['kind']>
+type SchemaRecordKind = NonNullable<components['schemas']['ExtractionUnitView']['recordKind']>
 type SchemaConflictType = NonNullable<
   components['schemas']['ConflictSignalView']['conflictType']
 >
@@ -83,6 +84,17 @@ export const UNIT_KINDS = [
   'TABLE',
   'SPREADSHEET_ROW',
 ] as const satisfies readonly SchemaUnitKind[]
+
+export const RECORD_KINDS = [
+  'POSITION',
+  'WORDING',
+  'ESCALATION',
+  'GUIDANCE',
+  'DOCUMENT_CONTROL',
+  'OTHER',
+] as const satisfies readonly SchemaRecordKind[]
+
+export type RecordKind = (typeof RECORD_KINDS)[number]
 
 export const CONFLICT_TYPES = [
   'DUPLICATE',
@@ -223,6 +235,8 @@ export interface ExtractionUnit {
   title: string | null
   contentText: string | null
   sourceNodeIds: string[]
+  /** What the compiler judged this record to be. Null for data compiled before record kinds. */
+  recordKind: RecordKind | null
 }
 
 export interface ConflictSignal {
@@ -253,7 +267,7 @@ export interface Candidate {
   legalConceptKey: string | null
   /** The human correction when one exists, otherwise the classified concept. Absent when neither is set. */
   effectiveConceptKey: string | null
-  /** A reviewer's LegalConcept correction. An empty string means the reviewer cleared the concept. */
+  /** A reviewer's taxonomy-key correction. An empty string means the reviewer cleared the concept. */
   conceptCorrection: string | null
   classifiedConcepts: Record<string, number>
   positions: PositionRole[]
@@ -419,6 +433,11 @@ export function parseExtractionUnit(
     title: readNullableString(record, 'title', what),
     contentText: readNullableString(record, 'contentText', what),
     sourceNodeIds: readStringArray(record, 'sourceNodeIds', what),
+    // Old data carries no kind at all: an absent key is read as null, never as malformed.
+    recordKind:
+      record.recordKind === undefined || record.recordKind === null
+        ? null
+        : readNullableEnum(record, 'recordKind', what, RECORD_KINDS),
   }
 }
 
@@ -1024,7 +1043,7 @@ function useCandidateReviewInvalidation() {
 
 export interface ConceptCorrectionVariables {
   candidateId: string
-  /** A LegalConcept name, or an empty string to clear the concept. */
+  /** A taxonomy key, or an empty string to clear the concept. */
   primary: string
 }
 

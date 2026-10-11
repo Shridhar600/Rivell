@@ -1,0 +1,157 @@
+package com.rivell.workbench.taxonomy;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.rivell.workbench.intelligence.ChoiceAnswer;
+import com.rivell.workbench.intelligence.ChoiceQuestion;
+import com.rivell.workbench.intelligence.DecisionExecution;
+import com.rivell.workbench.intelligence.DecisionSpec;
+import com.rivell.workbench.intelligence.ProviderProtocolException;
+import com.rivell.workbench.intelligence.QuestionPack;
+import com.rivell.workbench.intelligence.SemanticDecisionService;
+import com.rivell.workbench.intelligence.SemanticQuestion;
+import com.rivell.workbench.intelligence.SemanticState;
+import com.rivell.workbench.intelligence.YesNoAnswer;
+import com.rivell.workbench.intelligence.YesNoQuestion;
+
+/**
+ * Classifies one text section (a contract clause or a knowledge unit) against every leaf
+ * topic in a single Jev call: one independent yes/no per topic, since a section may
+ * express several. When two or more topics pass, a second call picks the main one.
+ *
+ * <p>Measured on the dev corpus (2026-10-10): all leaves in one call beat a
+ * family-then-leaf shortlist on accuracy and took one call instead of two.
+ */
+public final class TopicClassifier {
+
+    static final String TOPICS_SPEC = "section-topics";
+    static final String PRIMARY_SPEC = "section-primary-topic";
+    private static final String QUESTION_PREFIX = "topic_";
+
+    private final ConceptRegistry registry;
+    private final SemanticDecisionService decisions;
+    private final TaxonomyProperties properties;
+    private final DecisionSpec topicsSpec;
+
+    public TopicClassifier(
+            ConceptRegistry registry, SemanticDecisionService decisions, TaxonomyProperties properties) {
+        this.registry = registry;
+        this.decisions = decisions;
+        this.properties = properties;
+        this.topicsSpec = topicsSpec(registry);
+    }
+
+    /**
+     * @throws com.rivell.workbench.intelligence.SemanticDecisionException when the provider
+     *     fails; callers decide how to degrade.
+     */
+    public TopicClassification classify(String heading, String text) {
+        var state = new SectionState(heading, truncate(text));
+        var topicsExecution = decisions.evaluate(topicsSpec, state);
+        var answers = topicsExecution.answers();
+        var probabilities = new LinkedHashMap<ConceptKey, Double>();
+        for (var leaf : registry.leaves()) {
+            var name = questionName(leaf.key());
+            if (!(answers.get(name) instanceof YesNoAnswer yesNo)) {
+                throw new ProviderProtocolException("Missing yes/no answer " + name);
+            }
+            probabilities.put(leaf.key(), yesNo.probability());
+        }
+        var topics = probabilities.entrySet().stream()
+                .filter(entry -> entry.getValue() >= properties.topicThreshold())
+                .sorted(Map.Entry.<ConceptKey, Double>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .toList();
+        var questions = registry.leaves().size();
+        if (topics.size() <= 1) {
+            var primary = topics.isEmpty() ? null : topics.getFirst();
+            return new TopicClassification(topics, primary, probabilities, registry.version(),
+                    List.of(topicsExecution.metadata()), questions);
+        }
+        var candidates = topics.subList(0, Math.min(topics.size(), properties.maxPrimaryCandidates()));
+        var primaryExecution = decisions.evaluate(primarySpec(candidates), state);
+        return new TopicClassification(topics, primaryTopic(primaryExecution, candidates), probabilities,
+                registry.version(), List.of(topicsExecution.metadata(), primaryExecution.metadata()),
+                questions + 1);
+    }
+
+    private DecisionSpec primarySpec(List<ConceptKey> candidates) {
+        var criteria = new LinkedHashMap<String, String>();
+        for (var key : candidates) {
+            var concept = registry.require(key);
+            criteria.put(key.value(), concept.label() + ": " + concept.definition());
+        }
+        return new DecisionSpec(PRIMARY_SPEC, registry.version(),
+                "Choose the main subject of a section among the topics it expresses.",
+                SectionState.SCHEMA_VERSION,
+                new QuestionPack(Map.of("primary_topic", new ChoiceQuestion(
+                        "Which single topic is the main subject of this section? "
+                                + "The section may also deal with the others in passing.",
+                        criteria))));
+    }
+
+    private ConceptKey primaryTopic(DecisionExecution execution, List<ConceptKey> candidates) {
+        if (!(execution.answers().get("primary_topic") instanceof ChoiceAnswer answer)) {
+            throw new ProviderProtocolException("Missing primary topic answer");
+        }
+        if (candidates.stream().map(ConceptKey::value).noneMatch(answer.selected()::equals)) {
+            throw new ProviderProtocolException("Primary topic " + answer.selected() + " was not offered");
+        }
+        var ranked = new ArrayList<>(answer.probabilities().values());
+        ranked.sort(Comparator.reverseOrder());
+        var best = answer.probabilities().getOrDefault(answer.selected(), 0.0);
+        var margin = ranked.size() < 2 ? 1.0 : ranked.get(0) - ranked.get(1);
+        if (best < properties.primaryThreshold() || margin < properties.primaryMargin()) {
+            return null;
+        }
+        return ConceptKey.of(answer.selected());
+    }
+
+    private static DecisionSpec topicsSpec(ConceptRegistry registry) {
+        var questions = new LinkedHashMap<String, SemanticQuestion>();
+        for (var leaf : registry.leaves()) {
+            questions.put(questionName(leaf.key()), new YesNoQuestion(
+                    "Is this a main subject of the section: " + leaf.label() + "?",
+                    leaf.definition(),
+                    "The section does not deal with " + leaf.label().toLowerCase()
+                            + ", or mentions it only in passing."));
+        }
+        return new DecisionSpec(TOPICS_SPEC, registry.version(),
+                "Decide which legal topics a contract or playbook section expresses.",
+                SectionState.SCHEMA_VERSION, new QuestionPack(questions));
+    }
+
+    static String questionName(ConceptKey key) {
+        return QUESTION_PREFIX + key.value().toLowerCase();
+    }
+
+    private String truncate(String text) {
+        return text == null || text.length() <= properties.textLimit()
+                ? text : text.substring(0, properties.textLimit());
+    }
+
+    /** The slice of a section a topic decision needs: its heading and its text. */
+    record SectionState(String heading, String text) implements SemanticState {
+
+        static final int SCHEMA_VERSION = 1;
+
+        @Override
+        public int schemaVersion() {
+            return SCHEMA_VERSION;
+        }
+
+        @Override
+        public Object payload() {
+            var payload = new LinkedHashMap<String, Object>();
+            if (heading != null && !heading.isBlank()) {
+                payload.put("heading", heading);
+            }
+            payload.put("text", text == null ? "" : text);
+            return payload;
+        }
+    }
+}

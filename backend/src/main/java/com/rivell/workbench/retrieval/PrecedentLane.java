@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
@@ -188,7 +188,7 @@ public class PrecedentLane {
             var candidate = byId.get(hit.candidateId());
             var state = new M6SemanticStates.PrecedentRelevanceState(
                     request.clauseText(),
-                    request.legalConcept().name(),
+                    request.legalConcept().value(),
                     effectiveText(candidate),
                     candidate.effectiveConceptKey());
             try {
@@ -298,11 +298,11 @@ public class PrecedentLane {
         return lexicalRank != null ? "LEXICAL" : "VECTOR";
     }
 
-    private LegalConcept conceptOf(KnowledgeCandidate candidate) {
+    private ConceptKey conceptOf(KnowledgeCandidate candidate) {
         if (candidate.effectiveConceptKey() == null) {
             return null;
         }
-        return LegalConcept.valueOf(candidate.effectiveConceptKey());
+        return ConceptKey.of(candidate.effectiveConceptKey());
     }
 
     private String effectiveText(KnowledgeCandidate candidate) {

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  conceptLabel,
   describeFact,
   enrichmentFailureNote,
   factDivergence,
@@ -21,12 +20,6 @@ import { ENRICHMENT_FAILURE_REASONS } from '../api/semantics'
 import type { EnrichmentFailureReason, SemanticFact } from '../api/semantics'
 
 describe('label maps', () => {
-  it('labels known concepts and humanizes unknown ones', () => {
-    expect(conceptLabel('LIMITATION_OF_LIABILITY')).toBe('Limitation of liability')
-    expect(conceptLabel('TERM_TERMINATION')).toBe('Term and termination')
-    expect(conceptLabel('DATA_PROTECTION')).toBe('Data protection')
-  })
-
   it('labels roles, metadata fields, references and verification', () => {
     expect(roleLabel('DISCLOSING_PARTY')).toBe('Disclosing party')
     expect(roleLabel('PARTY_A')).toBe('Party A')

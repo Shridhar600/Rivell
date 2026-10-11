@@ -74,14 +74,17 @@ public final class RetrievalResponses {
                 item.sourceCandidateId(),
                 item.sourceContractVersionId(),
                 item.sourceClauseId(),
-                item.legalConcept() == null ? null : item.legalConcept().name(),
+                item.legalConcept() == null ? null : item.legalConcept().value(),
                 item.text(),
                 item.policyFacts() == null ? null : new PolicyFactsResponse(
                         item.policyFacts().positions().stream()
                                 .map(Enum::name)
                                 .collect(java.util.stream.Collectors.toSet()),
                         item.policyFacts().requiresApproval(),
-                        item.policyFacts().escalationTrigger()),
+                        item.policyFacts().escalationTrigger(),
+                        item.policyFacts().preferred(),
+                        item.policyFacts().fallbacks(),
+                        item.policyFacts().prohibited()),
                 item.contractFacts(),
                 item.retrievalReason(),
                 new LaneInfoResponse(
@@ -122,7 +125,10 @@ public final class RetrievalResponses {
     public record PolicyFactsResponse(
             java.util.Set<String> positions,
             Boolean requiresApproval,
-            String escalationTrigger) {
+            String escalationTrigger,
+            String preferred,
+            List<String> fallbacks,
+            String prohibited) {
     }
 
     @Schema(name = "LaneInfoResponse")

@@ -109,6 +109,7 @@ public class KnowledgeIngestionService {
             var semanticAvailable = true;
             ArtifactTypeAssessment assessment = initialAssessment;
             List<KnowledgeCandidate> candidates = initialCandidates;
+            List<ExtractionUnit> units = compiled.units();
             if (extraction.status() != IngestStatus.FAILED && !compiled.units().isEmpty()) {
                 var publishedBefore = repository.findPublishedCandidates(identity.organizationId());
                 var semantic = semanticCompilation.compile(
@@ -116,9 +117,11 @@ public class KnowledgeIngestionService {
                 semanticAvailable = semantic.semanticAvailable();
                 assessment = semantic.assessment();
                 candidates = semantic.candidates();
+                units = semantic.units();
             }
             var finalAssessment = assessment;
             var finalCandidates = candidates;
+            var finalUnits = units;
 
             var outcomeWarnings = new ArrayList<>(extraction.warnings());
             if (!semanticAvailable) {
@@ -129,12 +132,15 @@ public class KnowledgeIngestionService {
                 repository.updateIngestOutcome(
                         artifactId, extraction.parserVersion(), outcomeStatus,
                         outcomeWarnings);
+                if (extraction.coverage() != null) {
+                    repository.updateParseCoverage(artifactId, extraction.coverage());
+                }
                 if (finalAssessment != null) {
                     repository.updateArtifactAssessment(artifactId, finalAssessment);
                 }
                 if (!extraction.nodes().isEmpty()) {
                     repository.insertNodes(artifactId, extraction.nodes());
-                    repository.insertUnits(artifactId, compiled.units());
+                    repository.insertUnits(artifactId, finalUnits);
                     repository.insertCandidates(artifactId, finalCandidates);
                 }
             });
@@ -182,7 +188,7 @@ public class KnowledgeIngestionService {
     }
 
     private static String extractorName(KnowledgeStructureExtractor extractor) {
-        return extractor.getClass().getSimpleName().contains("Docx") ? "rivell-docx-parser-2" : "unknown";
+        return extractor.getClass().getSimpleName().contains("Docx") ? "rivell-docx-parser-3" : "unknown";
     }
 
     private static String extensionOf(String filename) {

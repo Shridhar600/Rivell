@@ -13,6 +13,8 @@ import com.rivell.workbench.foundation.Texts;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.ConceptRegistry;
 
 /**
      * Human review of knowledge candidates: approve, edit, reject. Transitions are explicit
@@ -35,6 +37,7 @@ public class CandidateReviewService {
     private final AuthorizationService authorizationService;
     private final DuplicateConflictDetector conflictDetector;
     private final CandidateReviewCategorizer categorizer;
+    private final ConceptRegistry conceptRegistry;
 
     public CandidateReviewService(
             KnowledgeRepository repository,
@@ -42,13 +45,15 @@ public class CandidateReviewService {
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
             DuplicateConflictDetector conflictDetector,
-            CandidateReviewCategorizer categorizer) {
+            CandidateReviewCategorizer categorizer,
+            ConceptRegistry conceptRegistry) {
         this.repository = repository;
         this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
         this.conflictDetector = conflictDetector;
         this.categorizer = categorizer;
+        this.conceptRegistry = conceptRegistry;
     }
 
     public KnowledgeCandidate approve(UUID candidateId, String note) {
@@ -61,7 +66,7 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.APPROVED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.conceptCorrection(),
+                    candidate.legalConceptKey(), candidate.topicKeys(), candidate.conceptCorrection(),
                     candidate.conceptCorrectedBy(), candidate.conceptCorrectedAt(),
                     candidate.semanticFields(),
                     candidate.editedSemanticFields(), candidate.interpretations(),
@@ -117,7 +122,7 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.conceptCorrection(),
+                    candidate.legalConceptKey(), candidate.topicKeys(), candidate.conceptCorrection(),
                     candidate.conceptCorrectedBy(), candidate.conceptCorrectedAt(),
                     candidate.semanticFields(),
                     !editedSemantic.equals(SemanticFields.EMPTY) ? editedSemantic : candidate.editedSemanticFields(),
@@ -157,7 +162,7 @@ public class CandidateReviewService {
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.REJECTED,
                     candidate.rawLabel(), candidate.contentText(), candidate.payload(),
-                    candidate.legalConceptKey(), candidate.conceptCorrection(),
+                    candidate.legalConceptKey(), candidate.topicKeys(), candidate.conceptCorrection(),
                     candidate.conceptCorrectedBy(), candidate.conceptCorrectedAt(),
                     candidate.semanticFields(),
                     candidate.editedSemanticFields(), candidate.interpretations(),
@@ -170,7 +175,7 @@ public class CandidateReviewService {
     }
 
     /**
-     * Human LegalConcept correction on a candidate before publication (DW-017):
+     * Human taxonomy-key correction on a candidate before publication (DW-017):
      * same layering proven in M5 contracts — the machine concept is preserved,
      * a human correction (set key, or blank = clear to unclassified) defines the
      * effective concept that publication and retrieval consume. A correction that
@@ -187,12 +192,15 @@ public class CandidateReviewService {
         }
         if (primary == null) {
             throw new IllegalArgumentException(
-                    "A concept correction must set a LegalConcept name or an empty string to clear");
+                    "A concept correction must set a taxonomy key or an empty string to clear");
         }
         var normalized = primary.strip();
         if (!normalized.isEmpty()) {
             try {
-                com.rivell.workbench.contracts.LegalConcept.valueOf(normalized);
+                var key = ConceptKey.of(normalized);
+                if (!conceptRegistry.contains(key)) {
+                    throw new InvalidConceptCorrectionException(candidateId);
+                }
             } catch (IllegalArgumentException e) {
                 throw new InvalidConceptCorrectionException(candidateId);
             }

@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.rivell.workbench.contracts.ClauseSemantics;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.retrieval.EvidenceBundle;
@@ -57,9 +56,11 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
         }
         var counterparts = context.semantics().clauses().stream()
                 .filter(clause -> clause.effectivePrimaryConcept()
-                                .filter(concept -> concept == LegalConcept.INDEMNIFICATION)
+                                .filter(concept -> com.rivell.workbench.taxonomy.CoreConcepts
+                                        .INDEMNIFICATION.equals(concept))
                                 .isPresent()
-                        || clause.secondaryConcepts().contains(LegalConcept.INDEMNIFICATION))
+                        || clause.secondaryConcepts()
+                                .contains(com.rivell.workbench.taxonomy.CoreConcepts.INDEMNIFICATION))
                 .toList();
         if (counterparts.isEmpty()) {
             return CheckOutcome.degraded("counterpart_clause_not_found");
@@ -68,7 +69,7 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
         var subjectEvidence = subjectContractIds(bundle, liability.id());
         var counterpartIds = counterparts.stream().map(ClauseSemantics::id).toList();
         var counterpartBundle = context.evidenceCache().build(request(context,
-                counterparts.get(0), LegalConcept.INDEMNIFICATION));
+                counterparts.get(0), com.rivell.workbench.taxonomy.CoreConcepts.INDEMNIFICATION));
         var counterpartEvidence = subjectContractIds(counterpartBundle, counterpartIds);
 
         var counterpartText = counterparts.stream().map(ClauseSemantics::contentText)
@@ -184,7 +185,8 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
     }
 
     private static EvidenceRequest request(
-            ReviewCheckContext context, ClauseSemantics clause, LegalConcept concept) {
+            ReviewCheckContext context, ClauseSemantics clause,
+            com.rivell.workbench.taxonomy.ConceptKey concept) {
         var snapshot = context.snapshot();
         return EvidenceRequest.forClauseReview(
                 snapshot.organizationId(), concept,

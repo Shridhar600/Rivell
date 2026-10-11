@@ -1,6 +1,6 @@
 import type { EvidenceItem } from '../../api/retrieval'
+import { useTaxonomy } from '../../api/taxonomy'
 import {
-  conceptLabel,
   describeFact,
   factSchemaLabel,
 } from '../../lib/contractSemantics'
@@ -19,15 +19,16 @@ export function CurrentContractCard({
   item: EvidenceItem
   regionLabels: Map<string, string>
   clauseHeadings: Map<string, string>
-  /** Absent when the review is pinned to an older version than the one the links would open. */
+  /** Absent where the caller has no document to reveal the node in. */
   onNavigateToNode?: (nodeId: string) => void
   onOpenClauseSemantics?: (headingNodeId: string) => void
 }) {
+  const { labelFor } = useTaxonomy()
   const headingId = `evidence-${item.evidenceId}`
   const primaryNodeId = item.provenanceNodeIds[0] ?? null
   const regionLabel = primaryNodeId ? (regionLabels.get(primaryNodeId) ?? null) : null
   const heading =
-    regionLabel ?? (item.legalConcept ? conceptLabel(item.legalConcept) : 'Contract evidence')
+    regionLabel ?? (item.legalConcept ? labelFor(item.legalConcept) : 'Contract evidence')
   const clauseHeading = item.sourceClauseId
     ? (clauseHeadings.get(item.sourceClauseId) ?? null)
     : null

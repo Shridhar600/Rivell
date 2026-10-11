@@ -5,18 +5,18 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.UUID;
 
 /**
- * Segmentation of the deterministic source-node tree into coherent regions
- * (Architecture Decision #7.2). DOCX: a top-level heading/title opens a section that
- * owns trailing paragraphs; tables are independent row sources. XLSX: each sheet's first
- * non-empty row is the header; every data row becomes a row region.
+ * Segmentation of the deterministic source-node tree into knowledge records (design §5
+ * item 1). A record is one playbook position or one clause wording variant. DOCX heading
+ * sections own the tables that sit under them; a KEY_VALUE table is one record and a GRID
+ * table yields one record per data row. XLSX sheets use the first row with two or more
+ * label-like cells as their table start; earlier rows are context. Deterministic and
+ * model-free.
  */
 final class KnowledgeStructure {
 
@@ -31,13 +31,17 @@ final class KnowledgeStructure {
                 ApplicabilityScope scope, Instant now);
     }
 
-    static final class HeadingSection implements Region {
+    static final class ProseRegion implements Region {
         private final KnowledgeSourceNode heading;
         private final List<KnowledgeSourceNode> paragraphs;
 
-        HeadingSection(KnowledgeSourceNode heading, List<KnowledgeSourceNode> paragraphs) {
+        ProseRegion(KnowledgeSourceNode heading, List<KnowledgeSourceNode> paragraphs) {
             this.heading = heading;
             this.paragraphs = paragraphs;
+        }
+
+        String headingText() {
+            return heading == null ? null : heading.text();
         }
 
         @Override
@@ -48,8 +52,8 @@ final class KnowledgeStructure {
             }
             paragraphs.forEach(node -> memberIds.add(node.id()));
             return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal,
-                    ExtractionUnitKind.HEADING_SECTION, heading == null ? null : heading.text(),
-                    joinedParagraphText(), memberIds);
+                    ExtractionUnitKind.HEADING_SECTION, headingText(),
+                    joinedParagraphText(), memberIds, null);
         }
 
         @Override
@@ -74,122 +78,95 @@ final class KnowledgeStructure {
         }
     }
 
-    static final class TableRegion implements Region {
-        private final KnowledgeSourceNode table;
-        private final Map<Integer, List<KnowledgeSourceNode>> cellsByRow;
-        private final List<String> columnKeys;
+    /** One table or sheet block: label → value fields. */
+    static final class FieldRecordRegion implements Region {
+        private final ExtractionUnitKind unitKind;
+        private final String sectionTitle;
+        private final String recordLabel;
+        private final Map<String, String> fields;
+        private final List<UUID> sourceNodeIds;
 
-        TableRegion(KnowledgeSourceNode table, Map<Integer, List<KnowledgeSourceNode>> rowsByOrdinal,
-                List<String> columnKeys) {
-            this.table = table;
-            this.cellsByRow = Collections.unmodifiableMap(rowsByOrdinal);
-            this.columnKeys = columnKeys;
+        FieldRecordRegion(ExtractionUnitKind unitKind, String sectionTitle, String recordLabel,
+                Map<String, String> fields, List<UUID> sourceNodeIds) {
+            this.unitKind = unitKind;
+            this.sectionTitle = sectionTitle;
+            this.recordLabel = recordLabel;
+            this.fields = Collections.unmodifiableMap(new LinkedHashMap<>(fields));
+            this.sourceNodeIds = List.copyOf(sourceNodeIds);
         }
 
         @Override
         public ExtractionUnit toUnit(UUID artifactId, int ordinal) {
-            return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal,
-                    ExtractionUnitKind.TABLE, null, null, List.of(table.id()));
+            return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal, unitKind,
+                    sectionTitle, new CandidatePayload(fields).render(), sourceNodeIds, null);
         }
 
         @Override
         public List<KnowledgeCandidate> toCandidates(
                 KnowledgeArtifact artifact, ExtractionUnit unit,
                 ApplicabilityScope scope, Instant now) {
-            var candidates = new ArrayList<KnowledgeCandidate>();
-            boolean headerRow = true;
-            for (var rowCells : cellsByRow.values()) {
-                if (headerRow) {
-                    // The first row supplies column labels; it is not knowledge itself.
-                    headerRow = false;
-                    continue;
-                }
-                if (rowCells.stream().allMatch(cell ->
-                        cell.text() == null || cell.text().isBlank())) {
-                    continue;
-                }
-                var columns = new LinkedHashMap<String, String>();
-                for (int i = 0; i < rowCells.size(); i++) {
-                    var cell = rowCells.get(i);
-                    columns.put(columnKeys.get(i), cell.text() == null ? "" : cell.text());
-                }
-                var rawLabel = rowCells.get(0).text() != null && !rowCells.get(0).text().isBlank()
-                        ? rowCells.get(0).text()
-                        : columns.values().stream().filter(value -> !value.isBlank())
-                                .findFirst().orElse("");
-                var payload = new CandidatePayload(columns);
-                candidates.add(new KnowledgeCandidate(
-                        UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
-                        candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                        rawLabel, payload.render(), payload, null, null,
-                        null, null,
-                        SemanticFields.EMPTY, null, List.of(),
-                        null, null, null, scope, List.of(), null, null,
-                        null, null, now, now));
-            }
-            return candidates;
+            return List.of(structuredCandidate(artifact, unit, scope, now,
+                    recordLabel, fields));
         }
     }
 
-    static final class RowRegion implements Region {
-        private final KnowledgeSourceNode sheet;
-        private final KnowledgeSourceNode row;
-        private final List<KnowledgeSourceNode> cells;
-        private final Map<Integer, String> headerLabels;
+    /** One data row of a GRID table or sheet: header label → cell value. */
+    static final class GridRecordRegion implements Region {
+        private final ExtractionUnitKind unitKind;
+        private final String sectionTitle;
+        private final String recordLabel;
+        private final Map<String, String> columns;
+        private final List<UUID> sourceNodeIds;
 
-        RowRegion(KnowledgeSourceNode sheet, KnowledgeSourceNode row,
-                List<KnowledgeSourceNode> cells, Map<Integer, String> headerLabels) {
-            this.sheet = sheet;
-            this.row = row;
-            this.cells = cells;
-            this.headerLabels = headerLabels;
+        GridRecordRegion(ExtractionUnitKind unitKind, String sectionTitle, String recordLabel,
+                Map<String, String> columns, List<UUID> sourceNodeIds) {
+            this.unitKind = unitKind;
+            this.sectionTitle = sectionTitle;
+            this.recordLabel = recordLabel;
+            this.columns = Collections.unmodifiableMap(new LinkedHashMap<>(columns));
+            this.sourceNodeIds = List.copyOf(sourceNodeIds);
         }
 
         @Override
         public ExtractionUnit toUnit(UUID artifactId, int ordinal) {
-            var memberIds = new ArrayList<UUID>();
-            memberIds.add(row.id());
-            cells.forEach(cell -> memberIds.add(cell.id()));
-            return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal,
-                    ExtractionUnitKind.SPREADSHEET_ROW,
-                    sheet.sheetName() + "!row" + row.rowIndex(),
-                    rowContent(), memberIds);
+            return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal, unitKind,
+                    sectionTitle, new CandidatePayload(columns).render(), sourceNodeIds, null);
         }
 
         @Override
         public List<KnowledgeCandidate> toCandidates(
                 KnowledgeArtifact artifact, ExtractionUnit unit,
                 ApplicabilityScope scope, Instant now) {
-            var columns = new LinkedHashMap<String, String>();
-            for (KnowledgeSourceNode cell : cells) {
-                if (cell.text() == null || cell.text().isBlank()) {
-                    continue;
-                }
-                var header = headerLabels.get(cell.columnIndex());
-                columns.put(header != null && !header.isBlank() ? header
-                        : "Column " + (cell.columnIndex() + 1), cell.text());
-            }
-            if (columns.isEmpty()) {
-                return List.of();
-            }
-            var rawLabel = columns.values().iterator().next();
-            var payload = new CandidatePayload(columns);
-            return List.of(new KnowledgeCandidate(
-                    UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
-                    candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                    rawLabel, payload.render(), payload, null, null,
-                    null, null,
-                    SemanticFields.EMPTY, null, List.of(),
-                    null, null, null, scope, List.of(), null, null,
-                    null, null, now, now));
+            return List.of(structuredCandidate(artifact, unit, scope, now,
+                    recordLabel, columns));
+        }
+    }
+
+    /** A sheet row outside any table: kept as a record, never a candidate by default. */
+    static final class RowTextRegion implements Region {
+        private final String sheetName;
+        private final String recordLabel;
+        private final String text;
+        private final List<UUID> sourceNodeIds;
+
+        RowTextRegion(String sheetName, String recordLabel, String text, List<UUID> sourceNodeIds) {
+            this.sheetName = sheetName;
+            this.recordLabel = recordLabel;
+            this.text = text;
+            this.sourceNodeIds = List.copyOf(sourceNodeIds);
         }
 
-        private String rowContent() {
-            return cells.stream()
-                    .map(KnowledgeSourceNode::text)
-                    .filter(text -> text != null && !text.isBlank())
-                    .reduce((a, b) -> a + " | " + b)
-                    .orElse(null);
+        @Override
+        public ExtractionUnit toUnit(UUID artifactId, int ordinal) {
+            return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal,
+                    ExtractionUnitKind.SPREADSHEET_ROW, sheetName, text, sourceNodeIds, null);
+        }
+
+        @Override
+        public List<KnowledgeCandidate> toCandidates(
+                KnowledgeArtifact artifact, ExtractionUnit unit,
+                ApplicabilityScope scope, Instant now) {
+            return List.of(candidate(artifact, unit, scope, now, recordLabel, text));
         }
     }
 
@@ -199,7 +176,24 @@ final class KnowledgeStructure {
         return new KnowledgeCandidate(
                 UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                 candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                rawLabel, contentText, CandidatePayload.EMPTY, null, null,
+                rawLabel, contentText, CandidatePayload.EMPTY, null, List.of(), null,
+                null, null,
+                SemanticFields.EMPTY, null, List.of(),
+                null, null, null, scope, List.of(), null, null,
+                null, null, now, now);
+    }
+
+    private static KnowledgeCandidate structuredCandidate(
+            KnowledgeArtifact artifact, ExtractionUnit unit, ApplicabilityScope scope,
+            Instant now, String recordLabel, Map<String, String> columns) {
+        var payload = new CandidatePayload(columns);
+        var rawLabel = recordLabel != null && !recordLabel.isBlank()
+                ? recordLabel
+                : KnowledgeTableShaping.firstValue(columns);
+        return new KnowledgeCandidate(
+                UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
+                candidateType(artifact.artifactType()), ReviewStatus.PENDING,
+                rawLabel, payload.render(), payload, null, List.of(), null,
                 null, null,
                 SemanticFields.EMPTY, null, List.of(),
                 null, null, null, scope, List.of(), null, null,
@@ -236,21 +230,21 @@ final class KnowledgeStructure {
             return new Structure(regions);
         }
 
-        HeadingSection open = null;
+        ProseRegion open = null;
         for (KnowledgeSourceNode node : childrenOf(root, nodes)) {
             switch (node.nodeType()) {
                 case TITLE, HEADING -> {
-                    open = new HeadingSection(node, new ArrayList<>());
+                    open = new ProseRegion(node, new ArrayList<>());
                     regions.add(open);
                 }
                 case PARAGRAPH -> {
                     if (open == null) {
-                        open = new HeadingSection(null, new ArrayList<>());
+                        open = new ProseRegion(null, new ArrayList<>());
                         regions.add(open);
                     }
                     open.paragraphs.add(node);
                 }
-                case TABLE -> regions.add(buildTable(node, byId));
+                case TABLE -> addTableRegions(node, byId, open, regions);
                 default -> {
                 }
             }
@@ -261,51 +255,103 @@ final class KnowledgeStructure {
     record Structure(List<Region> regions) {
     }
 
-    private static Region buildTable(
+    private static void addTableRegions(
+            KnowledgeSourceNode table, Map<UUID, KnowledgeSourceNode> byId,
+            ProseRegion open, List<Region> regions) {
+        var rows = new ArrayList<KnowledgeTableShaping.Row>();
+        for (var row : rowsOf(table, byId)) {
+            var cells = cellsOf(row, byId).stream()
+                    .map(cell -> new KnowledgeTableShaping.Cell(
+                            cell.text(), cell.id(), cell.columnIndex()))
+                    .toList();
+            rows.add(new KnowledgeTableShaping.Row(row.id(),
+                    row.rowIndex() == null ? -1 : row.rowIndex(), cells));
+        }
+        var sectionTitle = open == null ? null : open.headingText();
+        var shape = KnowledgeTableShaping.shape(rows);
+        if (shape instanceof KnowledgeTableShaping.KeyValue keyValue) {
+            var provenance = new ArrayList<UUID>();
+            provenance.add(table.id());
+            provenance.addAll(keyValue.provenance());
+            var label = sectionTitle != null && !sectionTitle.isBlank()
+                    ? sectionTitle
+                    : keyValue.fields().keySet().stream().findFirst().orElse("");
+            regions.add(new FieldRecordRegion(ExtractionUnitKind.TABLE, sectionTitle, label,
+                    keyValue.fields(), provenance));
+            return;
+        }
+        var grid = (KnowledgeTableShaping.Grid) shape;
+        for (var row : grid.rows()) {
+            var provenance = new ArrayList<UUID>();
+            provenance.add(table.id());
+            provenance.addAll(row.provenance());
+            regions.add(new GridRecordRegion(ExtractionUnitKind.TABLE, sectionTitle,
+                    KnowledgeTableShaping.firstValue(row.columns()), row.columns(), provenance));
+        }
+    }
+
+    private static void buildSpreadsheet(
+            List<KnowledgeSourceNode> nodes, Map<UUID, KnowledgeSourceNode> byId,
+            KnowledgeSourceNode workbook, List<Region> regions) {
+        for (KnowledgeSourceNode sheet : nodes.stream()
+                .filter(node -> workbook.id().equals(node.parentId()))
+                .sorted(Comparator.comparingInt(KnowledgeSourceNode::ordinal))
+                .toList()) {
+            var rows = new ArrayList<KnowledgeTableShaping.Row>();
+            for (var row : nodes.stream()
+                    .filter(node -> sheet.id().equals(node.parentId())
+                            && node.nodeType() == KnowledgeNodeType.SPREADSHEET_ROW)
+                    .sorted(Comparator.comparingInt(KnowledgeSourceNode::rowIndex))
+                    .toList()) {
+                var cells = spreadsheetCells(row, byId).stream()
+                        .map(cell -> new KnowledgeTableShaping.Cell(
+                                cell.text(), cell.id(), cell.columnIndex()))
+                        .toList();
+                rows.add(new KnowledgeTableShaping.Row(row.id(),
+                        row.rowIndex() == null ? -1 : row.rowIndex(), cells));
+            }
+            for (var record : KnowledgeSheetShaping.records(rows)) {
+                addSheetRecord(sheet, record, regions);
+            }
+        }
+    }
+
+    private static void addSheetRecord(
+            KnowledgeSourceNode sheet, KnowledgeSheetShaping.SheetRecord record,
+            List<Region> regions) {
+        var sheetName = sheet.sheetName();
+        switch (record) {
+            case KnowledgeSheetShaping.KeyValueBlock block -> {
+                var provenance = new ArrayList<UUID>();
+                provenance.add(sheet.id());
+                provenance.addAll(block.provenance());
+                var label = block.fields().keySet().stream().findFirst().orElse(sheetName);
+                regions.add(new FieldRecordRegion(ExtractionUnitKind.SPREADSHEET_ROW, sheetName,
+                        label, block.fields(), provenance));
+            }
+            case KnowledgeSheetShaping.DataRow row -> {
+                var provenance = new ArrayList<UUID>();
+                provenance.add(sheet.id());
+                provenance.addAll(row.provenance());
+                regions.add(new GridRecordRegion(ExtractionUnitKind.SPREADSHEET_ROW, sheetName,
+                        row.rawLabel(), row.columns(), provenance));
+            }
+            case KnowledgeSheetShaping.LooseRow row -> {
+                var provenance = new ArrayList<UUID>();
+                provenance.add(sheet.id());
+                provenance.addAll(row.provenance());
+                regions.add(new RowTextRegion(sheetName, row.rawLabel(), row.text(), provenance));
+            }
+        }
+    }
+
+    private static List<KnowledgeSourceNode> rowsOf(
             KnowledgeSourceNode table, Map<UUID, KnowledgeSourceNode> byId) {
-        var rowsByOrdinal = new TreeMap<Integer, List<KnowledgeSourceNode>>();
-        for (var row : byId.values().stream()
+        return byId.values().stream()
                 .filter(node -> table.id().equals(node.parentId())
                         && node.nodeType() == KnowledgeNodeType.TABLE_ROW)
                 .sorted(Comparator.comparingInt(KnowledgeSourceNode::ordinal))
-                .toList()) {
-            rowsByOrdinal.put(row.ordinal(), cellsOf(row, byId));
-        }
-        var headerLabels = new ArrayList<String>();
-        var width = 0;
-        if (!rowsByOrdinal.isEmpty()) {
-            for (var cell : rowsByOrdinal.firstEntry().getValue()) {
-                headerLabels.add(cell.text() == null ? "" : cell.text());
-            }
-        }
-        for (var cells : rowsByOrdinal.values()) {
-            width = Math.max(width, cells.size());
-        }
-        return new TableRegion(table, rowsByOrdinal, columnKeys(headerLabels, width));
-    }
-
-    /**
-     * A header label is not a unique column name in real documents: a duplicated column keeps its
-     * label, and a two-tier header can repeat one. Because the payload is keyed by label, an
-     * unnumbered repeat silently dropped the second cell from the authoritative wording, so a row
-     * read as if the source said something it did not. Repeated labels are numbered in reading
-     * order, once per table, so every row of the same table resolves a column to the same key and
-     * a correction saved against it still attaches to the same cell.
-     */
-    private static List<String> columnKeys(List<String> headerLabels, int width) {
-        var keys = new ArrayList<String>(width);
-        var taken = new HashSet<String>();
-        for (int i = 0; i < width; i++) {
-            var label = i < headerLabels.size() ? headerLabels.get(i) : null;
-            var base = label == null || label.isBlank() ? "Column " + (i + 1) : label.strip();
-            var key = base;
-            for (int suffix = 2; taken.contains(key); suffix++) {
-                key = base + " (" + suffix + ")";
-            }
-            taken.add(key);
-            keys.add(key);
-        }
-        return List.copyOf(keys);
+                .toList();
     }
 
     private static List<KnowledgeSourceNode> cellsOf(
@@ -316,39 +362,6 @@ final class KnowledgeStructure {
                                 || node.nodeType() == KnowledgeNodeType.TABLE_CELL))
                 .sorted(Comparator.comparingInt(KnowledgeSourceNode::ordinal))
                 .toList();
-    }
-
-    private static void buildSpreadsheet(
-            List<KnowledgeSourceNode> nodes, Map<UUID, KnowledgeSourceNode> byId,
-            KnowledgeSourceNode workbook, List<Region> regions) {
-        for (KnowledgeSourceNode sheet : nodes.stream()
-                .filter(node -> workbook.id().equals(node.parentId()))
-                .sorted(Comparator.comparingInt(KnowledgeSourceNode::ordinal))
-                .toList()) {
-            var rows = nodes.stream()
-                    .filter(node -> sheet.id().equals(node.parentId())
-                            && node.nodeType() == KnowledgeNodeType.SPREADSHEET_ROW)
-                    .sorted(Comparator.comparingInt(KnowledgeSourceNode::rowIndex))
-                    .toList();
-            if (rows.isEmpty()) {
-                continue;
-            }
-            var headerLabels = new HashMap<Integer, String>();
-            for (KnowledgeSourceNode cell : spreadsheetCells(rows.get(0), byId)) {
-                if (cell.text() != null && !cell.text().isBlank()) {
-                    headerLabels.put(cell.columnIndex(), cell.text());
-                }
-            }
-            for (int i = 1; i < rows.size(); i++) {
-                var row = rows.get(i);
-                var sheetRowCells = spreadsheetCells(row, byId);
-                if (sheetRowCells.stream().noneMatch(cell ->
-                        cell.text() != null && !cell.text().isBlank())) {
-                    continue;
-                }
-                regions.add(new RowRegion(sheet, row, sheetRowCells, headerLabels));
-            }
-        }
     }
 
     private static List<KnowledgeSourceNode> spreadsheetCells(

@@ -8,7 +8,8 @@ import com.rivell.workbench.contracts.ContractRegionSegmenter;
 import com.rivell.workbench.contracts.ContractStructure;
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
 
 /**
  * Deterministic DW-030 INSERT placement (document position only, never legal substance):
@@ -19,19 +20,19 @@ public final class InsertPlacementStrategy {
 
     public static final String VERSION = "rivell-insert-placement-1";
 
-    private static final Map<LegalConcept, List<LegalConcept>> ANCHOR_CONCEPTS = Map.of(
-            LegalConcept.LIMITATION_OF_LIABILITY,
-            List.of(LegalConcept.INDEMNIFICATION, LegalConcept.CONFIDENTIALITY,
-                    LegalConcept.TERM_TERMINATION),
-            LegalConcept.INDEMNIFICATION,
-            List.of(LegalConcept.LIMITATION_OF_LIABILITY, LegalConcept.TERM_TERMINATION),
-            LegalConcept.TERM_TERMINATION,
-            List.of(LegalConcept.CONFIDENTIALITY, LegalConcept.LIMITATION_OF_LIABILITY),
-            LegalConcept.CONFIDENTIALITY,
-            List.of(LegalConcept.TERM_TERMINATION, LegalConcept.LIMITATION_OF_LIABILITY),
-            LegalConcept.GOVERNING_LAW,
-            List.of(LegalConcept.TERM_TERMINATION, LegalConcept.CONFIDENTIALITY,
-                    LegalConcept.INDEMNIFICATION));
+    private static final Map<ConceptKey, List<ConceptKey>> ANCHOR_CONCEPTS = Map.of(
+            CoreConcepts.LIMITATION_OF_LIABILITY,
+            List.of(CoreConcepts.INDEMNIFICATION, CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                    CoreConcepts.TERM),
+            CoreConcepts.INDEMNIFICATION,
+            List.of(CoreConcepts.LIMITATION_OF_LIABILITY, CoreConcepts.TERM),
+            CoreConcepts.TERM,
+            List.of(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CoreConcepts.LIMITATION_OF_LIABILITY),
+            CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+            List.of(CoreConcepts.TERM, CoreConcepts.LIMITATION_OF_LIABILITY),
+            CoreConcepts.GOVERNING_LAW,
+            List.of(CoreConcepts.TERM, CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                    CoreConcepts.INDEMNIFICATION));
 
     /** Resolved insertion position; {@code afterBodyIndex = -1} inserts at the start. */
     public record Placement(
@@ -42,9 +43,9 @@ public final class InsertPlacementStrategy {
     }
 
     public Placement resolve(
-            LegalConcept concept,
+            ConceptKey concept,
             ContractStructure structure,
-            Map<UUID, LegalConcept> effectivePrimaryConcepts) {
+            Map<UUID, ConceptKey> effectivePrimaryConcepts) {
         var nodes = structure.nodes();
         var byId = new java.util.HashMap<UUID, DocumentNode>();
         for (var node : nodes) {

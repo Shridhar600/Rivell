@@ -348,6 +348,18 @@ class KnowledgeReviewConcurrencyIT {
         }
 
         @Override
+        public void updateParseCoverage(UUID artifactId,
+                com.rivell.workbench.contracts.ParseCoverage coverage) {
+            delegate.updateParseCoverage(artifactId, coverage);
+        }
+
+        @Override
+        public java.util.Optional<com.rivell.workbench.contracts.ParseCoverage> findParseCoverage(
+                UUID artifactId, UUID organizationId) {
+            return delegate.findParseCoverage(artifactId, organizationId);
+        }
+
+        @Override
         public void updateArtifactAssessment(UUID artifactId, ArtifactTypeAssessment assessment) {
             delegate.updateArtifactAssessment(artifactId, assessment);
         }

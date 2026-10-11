@@ -1,6 +1,7 @@
 package com.rivell.workbench.knowledge;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -80,11 +81,11 @@ class ExtractionUnitConceptClassificationIT {
     static final class ScriptedSemanticDecisionProvider implements SemanticDecisionProvider {
 
         private volatile Map<String, Double> probabilities = Map.of(
-                "concept_confidentiality", 0.94,
-                "concept_term_termination", 0.31,
-                "concept_limitation_of_liability", 0.05,
-                "concept_indemnification", 0.02,
-                "concept_governing_law", 0.11);
+                "topic_confidentiality_obligations", 0.94,
+                "topic_term", 0.31,
+                "topic_limitation_of_liability", 0.05,
+                "topic_indemnification", 0.02,
+                "topic_governing_law", 0.11);
         private volatile Map<String, String> choices = Map.of();
         private volatile RuntimeException failure;
         private volatile DecisionExecutionRequest lastRequest;
@@ -126,7 +127,7 @@ class ExtractionUnitConceptClassificationIT {
                             selected, 1.0, probabilitiesMap));
                 } else {
                     answers.put(entry.getKey(), new com.rivell.workbench.intelligence.YesNoAnswer(
-                            probabilities.getOrDefault(entry.getKey(), 0.5)));
+                            probabilities.getOrDefault(entry.getKey(), 0.05)));
                 }
             }
             return new ProviderExecutionResult(
@@ -193,11 +194,11 @@ class ExtractionUnitConceptClassificationIT {
         identityProvider.use(new UserIdentity(
                 java.util.UUID.randomUUID(), java.util.UUID.randomUUID(), Set.of("ADMIN")));
         fakeProvider.script(Map.of(
-                "concept_confidentiality", 0.94,
-                "concept_term_termination", 0.31,
-                "concept_limitation_of_liability", 0.05,
-                "concept_indemnification", 0.02,
-                "concept_governing_law", 0.11));
+                "topic_confidentiality_obligations", 0.94,
+                "topic_term", 0.31,
+                "topic_limitation_of_liability", 0.05,
+                "topic_indemnification", 0.02,
+                "topic_governing_law", 0.11));
     }
 
     @Test
@@ -210,25 +211,22 @@ class ExtractionUnitConceptClassificationIT {
         assertThat(classification.unitId()).isEqualTo(unit.id());
         assertThat(classification.artifactId()).isEqualTo(artifact.id());
         assertThat(classification.proposedConcepts())
-                .containsExactly(LegalConcept.CONFIDENTIALITY);
+                .containsExactly(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS);
         assertThat(classification.noneMatched()).isFalse();
-        assertThat(classification.conceptProbabilities().get(LegalConcept.CONFIDENTIALITY))
+        assertThat(classification.conceptProbabilities().get(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS))
                 .isEqualTo(0.94);
 
-        var metadata = classification.metadata();
-        assertThat(metadata.specId()).isEqualTo(ExtractionUnitConceptSpec.ID);
-        assertThat(metadata.specVersion()).isEqualTo(1);
-        assertThat(metadata.providerId()).isEqualTo("fake");
-        assertThat(metadata.requestedModelAlias()).isEqualTo("fake-model-latest");
-        assertThat(metadata.resolvedModel()).isEqualTo("fake-resolved-v2");
-        assertThat(metadata.usage()).isEqualTo(new TokenUsage(180, 6));
+        assertThat(classification.taxonomyVersion()).isPositive();
+        assertThat(classification.executions()).singleElement()
+                .satisfies(execution -> assertThat(execution.specId()).isEqualTo("section-topics"));
 
         var request = fakeProvider.lastRequest();
         @SuppressWarnings("unchecked")
         var payload = (Map<String, Object>) request.state().payload();
-        assertThat(payload).containsOnlyKeys("text", "kind", "title");
+        assertThat(payload).containsKey("text");
         assertThat(payload.get("text")).isEqualTo(unit.contentText());
-        assertThat(payload).doesNotContainKeys("artifactId", "organizationId", "manifest");
+        assertThat(payload).doesNotContainKeys("artifactId", "organizationId", "manifest",
+                "kind", "title");
     }
 
     @Test
@@ -236,17 +234,20 @@ class ExtractionUnitConceptClassificationIT {
         var artifact = ingest("fixtures/clause-library.docx", "library2.docx");
         var unit = firstTextualUnit(artifact);
         fakeProvider.script(Map.of(
-                "concept_confidentiality", 0.40,
-                "concept_term_termination", 0.41,
-                "concept_limitation_of_liability", 0.10,
-                "concept_indemnification", 0.05,
-                "concept_governing_law", 0.04));
+                "topic_confidentiality_obligations", 0.40,
+                "topic_term", 0.41,
+                "topic_limitation_of_liability", 0.10,
+                "topic_indemnification", 0.05,
+                "topic_governing_law", 0.04));
 
         var classification = classifier.classify(artifact.id(), unit.id());
 
         assertThat(classification.proposedConcepts()).isEmpty();
         assertThat(classification.noneMatched()).isTrue();
-        assertThat(classification.conceptProbabilities()).hasSize(5);
+        assertThat(classification.conceptProbabilities())
+                .containsKeys(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CoreConcepts.TERM,
+                        CoreConcepts.LIMITATION_OF_LIABILITY, CoreConcepts.INDEMNIFICATION,
+                        CoreConcepts.GOVERNING_LAW);
     }
 
     @Test
@@ -280,14 +281,14 @@ class ExtractionUnitConceptClassificationIT {
     void rejectsUnitsWithoutText() throws Exception {
         var artifact = ingest("fixtures/knowledge-playbook.docx", "empty.docx");
 
-        assertThatThrownBy(() -> classifier.classify(artifact.id(), tableUnitId(artifact)))
+        assertThatThrownBy(() -> classifier.classify(artifact.id(), textlessUnitId(artifact)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("no text to classify");
     }
 
-    private java.util.UUID tableUnitId(KnowledgeArtifact artifact) {
+    private java.util.UUID textlessUnitId(KnowledgeArtifact artifact) {
         return queryService.getUnits(artifact.id()).stream()
-                .filter(unit -> unit.kind() == ExtractionUnitKind.TABLE)
+                .filter(unit -> unit.contentText() == null || unit.contentText().isBlank())
                 .findFirst().orElseThrow()
                 .id();
     }

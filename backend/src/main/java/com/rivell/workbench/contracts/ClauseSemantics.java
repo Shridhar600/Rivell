@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.rivell.workbench.taxonomy.ConceptKey;
+
 /**
  * The typed semantic interpretation of one clause region of a contract version.
  * Keeps source text untouched; concepts, facts, machine proposals, and human
@@ -38,7 +40,7 @@ public record ClauseSemantics(
         return correction.corrected() && correction.primaryConcept() != null;
     }
 
-    public java.util.Optional<LegalConcept> primaryConcept() {
+    public java.util.Optional<ConceptKey> primaryConcept() {
         return classification.primaryConcept();
     }
 
@@ -47,11 +49,11 @@ public record ClauseSemantics(
      * (AD #5.18: corrections override without erasing machine history). Downstream
      * flows (retrieval planning, review) consume the effective concept.
      */
-    public java.util.Optional<LegalConcept> effectivePrimaryConcept() {
+    public java.util.Optional<ConceptKey> effectivePrimaryConcept() {
         if (conceptCorrected()) {
             try {
                 return java.util.Optional.of(
-                        LegalConcept.valueOf(correction.primaryConcept()));
+                        ConceptKey.of(correction.primaryConcept()));
             } catch (IllegalArgumentException e) {
                 return classification.primaryConcept();
             }
@@ -59,7 +61,7 @@ public record ClauseSemantics(
         return classification.primaryConcept();
     }
 
-    public List<LegalConcept> secondaryConcepts() {
+    public List<ConceptKey> secondaryConcepts() {
         return classification.secondaryConcepts();
     }
 

@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -36,7 +38,6 @@ import com.rivell.workbench.contracts.ContractVersionNotFoundException;
 import com.rivell.workbench.contracts.EnrichmentFailedException;
 import com.rivell.workbench.contracts.EnrichmentInProgressException;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -247,11 +248,11 @@ class ReviewCreationIT {
         assertThat(checks).filteredOn(check -> check.family() == CheckFamily.CONCEPT_PRESENCE)
                 .extracting(ReviewPlanCheck::concept, ReviewPlanCheck::expectation)
                 .containsExactlyInAnyOrder(
-                        tuple(LegalConcept.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED),
-                        tuple(LegalConcept.CONFIDENTIALITY, CheckExpectation.REQUIRED),
-                        tuple(LegalConcept.TERM_TERMINATION, CheckExpectation.EXPECTED),
-                        tuple(LegalConcept.INDEMNIFICATION, CheckExpectation.EXPECTED),
-                        tuple(LegalConcept.GOVERNING_LAW, CheckExpectation.OPTIONAL));
+                        tuple(CoreConcepts.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED),
+                        tuple(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CheckExpectation.REQUIRED),
+                        tuple(CoreConcepts.TERM, CheckExpectation.EXPECTED),
+                        tuple(CoreConcepts.INDEMNIFICATION, CheckExpectation.EXPECTED),
+                        tuple(CoreConcepts.GOVERNING_LAW, CheckExpectation.OPTIONAL));
 
         var headingNodeIds = corpus.semantics().clauses().stream()
                 .map(ClauseSemantics::headingNodeId).toList();
@@ -260,27 +261,36 @@ class ReviewCreationIT {
                 .toList();
         assertThat(clauseChecks).isNotEmpty();
         assertThat(clauseChecks).allSatisfy(check -> {
-            assertThat(check.mechanism()).isEqualTo(CheckMechanism.LIABILITY_CAP);
-            assertThat(check.concept()).isEqualTo(LegalConcept.LIMITATION_OF_LIABILITY);
+            assertThat(check.mechanism()).isEqualTo(CheckMechanism.POLICY_COMPARISON);
             assertThat(headingNodeIds).contains(check.subjectHeadingNodeId());
         });
 
-        // Substantive clause/cross checks are planned per primary-classified clause only
-        // (documented coverage limit, DW-024): clauses that carry a concept as a
-        // secondary classification satisfy presence but get no substantive check.
+        // Policy comparison is planned for every clause that carries at least one
+        // effective topic (primary or secondary); the check records the effective
+        // primary, else the first topic.
+        var topicClauses = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.effectivePrimaryConcept().isPresent()
+                        || !clause.secondaryConcepts().isEmpty())
+                .map(ClauseSemantics::headingNodeId)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(clauseChecks).extracting(ReviewPlanCheck::subjectHeadingNodeId)
+                .containsExactlyInAnyOrderElementsOf(topicClauses);
+        assertThat(clauseChecks).allSatisfy(check -> {
+            var clause = corpus.semantics().clauses().stream()
+                    .filter(candidate -> candidate.headingNodeId()
+                            .equals(check.subjectHeadingNodeId()))
+                    .findFirst().orElseThrow();
+            var expected = clause.effectivePrimaryConcept()
+                    .orElseGet(() -> clause.secondaryConcepts().getFirst());
+            assertThat(check.concept()).isEqualTo(expected);
+        });
+
         var clausesByConcept = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.effectivePrimaryConcept().isPresent())
                 .collect(java.util.stream.Collectors.groupingBy(
                         clause -> clause.effectivePrimaryConcept().orElseThrow(),
                         java.util.stream.Collectors.mapping(
                                 ClauseSemantics::headingNodeId, java.util.stream.Collectors.toList())));
-        var secondaryOnly = corpus.semantics().clauses().stream()
-                .filter(clause -> clause.effectivePrimaryConcept().isEmpty())
-                .filter(clause -> !clause.secondaryConcepts().isEmpty())
-                .map(ClauseSemantics::headingNodeId)
-                .toList();
-        assertThat(clauseChecks).noneSatisfy(check ->
-                assertThat(secondaryOnly).contains(check.subjectHeadingNodeId()));
         var crossChecks = checks.stream()
                 .filter(check -> check.family() == CheckFamily.CROSS_CLAUSE)
                 .toList();
@@ -293,12 +303,12 @@ class ReviewCreationIT {
         assertThat(crossChecks.stream()
                 .filter(check -> check.mechanism() == CheckMechanism.CONFIDENTIALITY_SURVIVAL)
                 .count()).isEqualTo(
-                        clausesByConcept.getOrDefault(LegalConcept.CONFIDENTIALITY,
+                        clausesByConcept.getOrDefault(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
                                 java.util.List.of()).size());
         assertThat(crossChecks.stream()
                 .filter(check -> check.mechanism() == CheckMechanism.CARVE_OUT_CONSISTENCY)
                 .count()).isEqualTo(
-                        clausesByConcept.getOrDefault(LegalConcept.LIMITATION_OF_LIABILITY,
+                        clausesByConcept.getOrDefault(CoreConcepts.LIMITATION_OF_LIABILITY,
                                 java.util.List.of()).size());
 
         var rebuilt = reviewPlanBuilder.build(
@@ -526,10 +536,10 @@ class ReviewCreationIT {
 
         var confidentiality = semantics.clauses().stream()
                 .filter(clause -> clause.effectivePrimaryConcept()
-                        .filter(concept -> concept == LegalConcept.CONFIDENTIALITY).isPresent())
+                        .filter(concept -> concept.equals(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS)).isPresent())
                 .findFirst().orElseThrow();
         var bundle = evidenceService.build(EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.CONFIDENTIALITY, ingested.contractId(), 1,
+                organizationId, CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, ingested.contractId(), 1,
                 confidentiality.id(), confidentiality.contentText(), profile,
                 snapshot.effectiveOn(), KnowledgePin.none()));
         assertThat(bundle.policyItems()).isEmpty();

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import type { FindingDetail, FindingSummary } from '../../api/reviews'
+import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
-import { conceptLabel } from '../../lib/contractSemantics'
 import type { StructureNode, TreeNode } from '../../lib/documentTree'
 import {
   clauseBody,
@@ -46,6 +46,8 @@ interface Props {
   remaining: number | null
   /** Notes above the page: a pinned older version, limited coverage, analysis warnings. */
   notes: ReactNode
+  /** An evidence jump target. A new object re-reveals the same node, so repeated jumps work. */
+  focusTarget?: { nodeId: string } | null
 }
 
 interface Ctx {
@@ -58,6 +60,12 @@ interface Ctx {
   selectedId: string | null
   selected: FindingDetail | undefined
   onSelect: (findingId: string) => void
+  focusNodeId: string | null
+}
+
+/** Whether the node itself, or anything beneath it, is the evidence jump's target. */
+function containsNode(node: TreeNode, nodeId: string): boolean {
+  return node.id === nodeId || node.children.some((child) => containsNode(child, nodeId))
 }
 
 function Text({ text, term }: { text: string; term: string }) {
@@ -152,6 +160,11 @@ function Region({ heading, body, findings, ctx }: { heading: TreeNode; body: Tre
 
   const settled = findings.every((finding) => !isActionable(finding) || isResolved(ctx.decisions.get(finding.id)))
   const selected = findings.some((finding) => finding.id === ctx.selectedId)
+  // The evidence jump's target may be the heading or any passage inside this clause.
+  const focusNodeId = ctx.focusNodeId
+  const focused =
+    focusNodeId !== null &&
+    (containsNode(heading, focusNodeId) || body.some((node) => containsNode(node, focusNodeId)))
   const bodyOriginal = body.map(nodeText).filter(Boolean).join('\n')
 
   let content: ReactNode
@@ -180,8 +193,10 @@ function Region({ heading, body, findings, ctx }: { heading: TreeNode; body: Tre
 
   return (
     <div
-      className={`rv-ws-cl rv-ws-cl--${ctx.mode === 'orig' || settled ? 'dec' : 'has'}`}
+      className={`rv-ws-cl rv-ws-cl--${ctx.mode === 'orig' || settled ? 'dec' : 'has'}${focused ? ' rv-ws-cl--focus' : ''}`}
       data-sel={selected ? '1' : undefined}
+      data-focus={focused ? '1' : undefined}
+      tabIndex={focused ? -1 : undefined}
       data-findings={findings.map((finding) => finding.id).join(' ')}
     >
       {content}
@@ -200,7 +215,17 @@ function Sequence({ nodes, ctx }: { nodes: readonly TreeNode[]; ctx: Ctx }) {
       out.push(<Region key={node.id} heading={node} body={body} findings={findings} ctx={ctx} />)
       i += body.length
     } else {
-      out.push(<Plain key={node.id} node={node} ctx={ctx} />)
+      // A jump target outside every clause region is highlighted on its own.
+      const focused = ctx.regionsOpen && ctx.focusNodeId !== null && containsNode(node, ctx.focusNodeId)
+      out.push(
+        focused ? (
+          <div key={node.id} className="rv-ws-cl rv-ws-cl--focus" data-focus="1" tabIndex={-1}>
+            <Plain node={node} ctx={ctx} />
+          </div>
+        ) : (
+          <Plain key={node.id} node={node} ctx={ctx} />
+        ),
+      )
     }
   }
   return <>{out}</>
@@ -208,13 +233,14 @@ function Sequence({ nodes, ctx }: { nodes: readonly TreeNode[]; ctx: Ctx }) {
 
 /** A finding about a provision the contract lacks has no location, so it is a card, not a clause. */
 function AbsenceCards({ ctx, findings }: { ctx: Ctx; findings: FindingSummary[] }) {
+  const { labelFor } = useTaxonomy()
   const cards = findings.filter((finding) => finding.subjectKind === 'ABSENCE')
   return (
     <>
       {cards.map((finding) => {
         const change = executableChange(ctx.decisions.get(finding.id))
         if (ctx.mode === 'final' && !change) return null
-        const name = finding.absenceConcept ? conceptLabel(finding.absenceConcept) : 'Provision'
+        const name = finding.absenceConcept ? labelFor(finding.absenceConcept) : 'Provision'
         return (
           <div
             key={finding.id}
@@ -246,6 +272,17 @@ function AbsenceCards({ ctx, findings }: { ctx: Ctx; findings: FindingSummary[] 
 export function ContractPane(props: Props) {
   const { nodes, findings, mode, term, isFinalized, remaining, selectedId, onSelect } = props
   const page = useRef<HTMLElement>(null)
+  const focusNodeId = props.focusTarget?.nodeId ?? null
+
+  // An evidence jump brings its clause into view and lands focus there, so the reviewer arrives at
+  // the place the source points to without losing their keyboard position.
+  useEffect(() => {
+    if (focusNodeId === null) return
+    const target = page.current?.querySelector<HTMLElement>('[data-focus="1"]')
+    if (!target) return
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    target.focus({ preventScroll: true })
+  }, [props.focusTarget, focusNodeId, nodes])
 
   // A click on a clause or an absent-provision card selects its finding. This is a pointer
   // convenience only: the Findings list is the keyboard path to every finding.
@@ -270,6 +307,7 @@ export function ContractPane(props: Props) {
     selected: props.selected,
     onSelect,
     regions: new Map(),
+    focusNodeId,
   }
   for (const finding of findings) {
     if (finding.subjectKind !== 'CLAUSE' || !finding.subjectHeadingNodeId) continue

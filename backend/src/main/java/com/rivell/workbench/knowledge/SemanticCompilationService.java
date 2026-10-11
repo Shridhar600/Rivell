@@ -14,49 +14,56 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
-import com.rivell.workbench.intelligence.DecisionExecution;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
+import com.rivell.workbench.intelligence.BoundedParallel;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.TopicClassifier;
 
 /**
  * The M4 semantic compilation pipeline: attaches machine interpretation to deterministic
- * candidates. Stages: artifact-type assessment; per-candidate concept normalization (M3
- * spec), artifact-specific bounded strategy, source-scope narrowing; conflict analysis
- * via the detector port. Model calls happen with no open transaction. Only technical
- * provider failure fails the artifact — semantic uncertainty flows to review instead.
+ * candidates. Stages: artifact-type assessment; per-artifact unknown-label resolution;
+ * one record-kind decision per record (records that are not positions or approved wording
+ * stay units, never candidates); per-candidate interpretation; conflict analysis via the
+ * detector port. Model calls happen with no open transaction. Provider failure never
+ * drops knowledge: the record stays a candidate with SEMANTIC_ANALYSIS_UNAVAILABLE.
  */
 public class SemanticCompilationService {
 
+    private static final String DETERMINISTIC_COLUMN_SPEC = "deterministic-column-extraction";
+
     private final SemanticDecisionService decisionService;
     private final SemanticPolicyProperties properties;
-    private final ConceptClassificationProperties conceptProperties;
     private final DuplicateConflictDetector conflictDetector;
     private final GenerativeFieldExtractor generativeFieldExtractor;
     private final CandidateReviewCategorizer categorizer;
+    private final TopicClassifier topicClassifier;
+    private final KnowledgeRecordSemantics recordSemantics;
 
     public SemanticCompilationService(
             SemanticDecisionService decisionService,
             SemanticPolicyProperties properties,
-            ConceptClassificationProperties conceptProperties,
             DuplicateConflictDetector conflictDetector,
             GenerativeFieldExtractor generativeFieldExtractor,
-            CandidateReviewCategorizer categorizer) {
+            CandidateReviewCategorizer categorizer,
+            TopicClassifier topicClassifier) {
         this.decisionService = decisionService;
         this.properties = properties;
-        this.conceptProperties = conceptProperties;
         this.conflictDetector = conflictDetector;
         this.generativeFieldExtractor = generativeFieldExtractor;
         this.categorizer = categorizer;
+        this.topicClassifier = topicClassifier;
+        this.recordSemantics = new KnowledgeRecordSemantics(decisionService);
     }
 
     public record SemanticCompilation(
             boolean semanticAvailable,
             ArtifactTypeAssessment assessment,
-            List<KnowledgeCandidate> candidates) {
+            List<KnowledgeCandidate> candidates,
+            List<ExtractionUnit> units) {
     }
 
     public SemanticCompilation compile(
@@ -74,68 +81,239 @@ public class SemanticCompilationService {
         }
 
         var semanticAvailable = assessment != null;
-        var budget = properties.maxInterpretedCandidates();
-        var compiled = new ArrayList<KnowledgeCandidate>(candidates.size());
+        var labelRoles = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var recordKinds = new LinkedHashMap<UUID, KnowledgeRecordKind>();
+        var kindUnavailable = new LinkedHashSet<UUID>();
+        var eligible = new ArrayList<KnowledgeCandidate>(candidates.size());
+        var rolesByCandidate = new LinkedHashMap<UUID, Map<String, RecordFieldRole>>();
         for (var candidate : candidates) {
+            rolesByCandidate.put(candidate.id(), fieldRoles(candidate, labelRoles));
+        }
+        // record decisions are independent per record: run them concurrently, keep source order
+        var kinds = BoundedParallel.map(candidates, properties.compileConcurrency(),
+                candidate -> recordSemantics.decideKind(artifact,
+                        unitsById.get(candidate.extractionUnitId()), candidate,
+                        rolesByCandidate.get(candidate.id())));
+        for (int index = 0; index < candidates.size(); index++) {
+            var candidate = candidates.get(index);
             var unit = unitsById.get(candidate.extractionUnitId());
-            KnowledgeCandidate enriched;
-            if (budget <= 0) {
+            var kind = kindOf(kinds.get(index), unit);
+            if (kind.isEmpty()) {
                 semanticAvailable = false;
-                enriched = candidate;
-            } else {
-                try {
-                    enriched = interpret(candidate, artifact, unit);
-                    budget--;
-                } catch (SemanticDecisionException e) {
+                kindUnavailable.add(unit.id());
+                eligible.add(candidate);
+                continue;
+            }
+            recordKinds.put(unit.id(), kind.get());
+            if (eligibleForCandidates(artifact.artifactType(), kind.get())) {
+                eligible.add(candidate);
+            }
+        }
+
+        var interpretable = Math.min(eligible.size(), properties.maxInterpretedCandidates());
+        var interpreted = BoundedParallel.map(eligible.subList(0, interpretable),
+                properties.compileConcurrency(),
+                candidate -> interpret(candidate, artifact,
+                        unitsById.get(candidate.extractionUnitId()),
+                        rolesByCandidate.getOrDefault(candidate.id(), Map.of())));
+        if (interpretable < eligible.size()) {
+            semanticAvailable = false;
+        }
+        var compiled = new ArrayList<KnowledgeCandidate>(eligible.size());
+        for (int index = 0; index < eligible.size(); index++) {
+            var candidate = eligible.get(index);
+            var unit = unitsById.get(candidate.extractionUnitId());
+            var enriched = candidate;
+            if (index < interpretable) {
+                var outcome = interpreted.get(index);
+                if (outcome.failure() == null) {
+                    enriched = outcome.value();
+                } else if (outcome.failure() instanceof SemanticDecisionException e) {
                     LoggerFactory.getLogger(SemanticCompilationService.class)
                             .warn("Semantic interpretation degraded for candidate {} ({} {})",
                             candidate.id(), e.getClass().getSimpleName(), e.getMessage());
                     semanticAvailable = false;
-                    enriched = candidate;
+                } else {
+                    throw outcome.failure();
                 }
             }
             var signals = conflictDetector.inspect(enriched, publishedCandidates);
             var withSignals = enriched.withConflictSignals(signals);
             var categorization = categorizer.categorize(withSignals, assessment);
-            compiled.add(withSignals.withReviewOutcome(
-                    categorization.category(), categorization.reasons()));
+            var reasons = categorization.reasons();
+            var category = categorization.category();
+            if (kindUnavailable.contains(unit.id())) {
+                var merged = new LinkedHashSet<>(reasons);
+                merged.add(ReviewReason.SEMANTIC_ANALYSIS_UNAVAILABLE);
+                reasons = Set.copyOf(merged);
+                if (category == ReviewCategory.ROUTINE) {
+                    category = ReviewCategory.ELEVATED;
+                }
+            }
+            compiled.add(withSignals.withReviewOutcome(category, reasons));
         }
-        return new SemanticCompilation(semanticAvailable, assessment, compiled);
+
+        var compiledUnits = units.stream()
+                .map(unit -> recordKinds.containsKey(unit.id())
+                        ? unit.withRecordKind(recordKinds.get(unit.id()))
+                        : unit)
+                .toList();
+        return new SemanticCompilation(semanticAvailable, assessment, List.copyOf(compiled),
+                compiledUnits);
+    }
+
+    private static Optional<KnowledgeRecordKind> kindOf(
+            BoundedParallel.Outcome<Optional<KnowledgeRecordKind>> outcome, ExtractionUnit unit) {
+        if (outcome.failure() == null) {
+            return outcome.value();
+        }
+        if (outcome.failure() instanceof SemanticDecisionException e) {
+            LoggerFactory.getLogger(SemanticCompilationService.class)
+                    .warn("Record kind unavailable for unit {} ({} {})",
+                            unit.id(), e.getClass().getSimpleName(), e.getMessage());
+            return Optional.empty();
+        }
+        throw outcome.failure();
+    }
+
+    private static boolean eligibleForCandidates(
+            ArtifactType artifactType, KnowledgeRecordKind kind) {
+        // a playbook rule written as model contract wording ("Kaveri may terminate for
+        // material breach…") is still the playbook's preferred position
+        return switch (artifactType) {
+            case PLAYBOOK, CLAUSE_LIBRARY -> kind == KnowledgeRecordKind.POSITION
+                    || kind == KnowledgeRecordKind.WORDING;
+            default -> true;
+        };
+    }
+
+    /**
+     * The role of every non-empty field of a cell record. Known labels resolve through the
+     * code-owned synonyms; the rest through the per-artifact label decision.
+     */
+    private static Map<String, RecordFieldRole> fieldRoles(
+            KnowledgeCandidate candidate, Map<String, RecordFieldRole> unknownLabels) {
+        var roles = new LinkedHashMap<String, RecordFieldRole>();
+        for (var entry : candidate.payload().columns().entrySet()) {
+            if (entry.getValue() == null || entry.getValue().isBlank()) {
+                continue;
+            }
+            var role = RecordLabelRoles.known(entry.getKey())
+                    .orElseGet(() -> unknownLabels.getOrDefault(
+                            RecordLabelRoles.normalize(entry.getKey()), RecordFieldRole.OTHER));
+            if (role != RecordFieldRole.OTHER) {
+                roles.put(entry.getKey(), role);
+            }
+        }
+        return roles;
     }
 
     private KnowledgeCandidate interpret(
-            KnowledgeCandidate candidate, KnowledgeArtifact artifact, ExtractionUnit unit) {
+            KnowledgeCandidate candidate, KnowledgeArtifact artifact, ExtractionUnit unit,
+            Map<String, RecordFieldRole> roles) {
         var state = new M4SemanticStates.PlaybookUnitState(
                 unit.contentText(), unit.title(), unit.kind(), candidate.payload().columns());
-        var concepts = classifyConcepts(state);
+        var topic = topicClassifier.classify(
+                topicHeading(candidate, roles), topicText(candidate, roles, unit));
         var fields = new LinkedHashMap<String, FieldInterpretation>();
-        var builder = new SemanticFieldsBuilder(concepts.probabilities());
+        var builder = new SemanticFieldsBuilder(topic.probabilities());
         var provenance = unit.sourceNodeIds();
 
-        switch (artifact.artifactType()) {
-            case PLAYBOOK -> interpretPlaybook(state, provenance, builder, fields);
-            case CLAUSE_LIBRARY -> interpretClauseVariant(state, provenance, builder, fields);
-            case TEMPLATE, EXECUTED_PRECEDENT, NEGOTIATION_HISTORY, EXTERNAL_REFERENCE -> { }
+        if (unit.kind() == ExtractionUnitKind.HEADING_SECTION) {
+            switch (artifact.artifactType()) {
+                case PLAYBOOK -> interpretPlaybook(state, provenance, builder, fields);
+                case CLAUSE_LIBRARY -> interpretClauseVariant(state, provenance, builder, fields);
+                default -> { }
+            }
+        } else {
+            interpretFieldRoles(candidate, roles, builder, fields, provenance);
         }
         interpretScopeNarrowing(state, provenance, fields);
 
         var semantic = builder.build();
-        var conceptKey = SemanticFields.primaryConcept(
-                concepts.probabilities(), conceptProperties.conceptThreshold())
-                .map(Enum::name).orElse(null);
-        return candidate.withSemanticOutcome(semantic, List.copyOf(fields.values()), conceptKey);
+        var conceptKey = topic.primary() == null ? null : topic.primary().value();
+        var topicKeys = new java.util.LinkedHashSet<String>();
+        topic.topics().forEach(key -> topicKeys.add(key.value()));
+        if (conceptKey != null) {
+            topicKeys.add(conceptKey);
+        }
+        return candidate.withSemanticOutcome(semantic, List.copyOf(fields.values()),
+                conceptKey, List.copyOf(topicKeys));
     }
 
-    private ConceptOutcome classifyConcepts(M4SemanticStates.PlaybookUnitState state) {
-        var execution = decisionService.evaluate(ExtractionUnitConceptSpec.spec(), state);
-        var probabilities = new LinkedHashMap<LegalConcept, Double>();
-        for (var concept : LegalConcept.values()) {
-            var answer = execution.answers().get(ExtractionUnitConceptSpec.questionName(concept));
-            if (answer instanceof YesNoAnswer yesNo) {
-                probabilities.put(concept, yesNo.probability());
+    /**
+     * Topic once per record (design §5 item 4): the record title, or its TOPIC field, is
+     * the heading; the PREFERRED or WORDING value (else the full text) is the text.
+     */
+    private static String topicHeading(
+            KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles) {
+        var topic = firstFieldValue(candidate, roles, RecordFieldRole.TOPIC);
+        return topic != null ? topic : candidate.rawLabel();
+    }
+
+    private static String topicText(
+            KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles,
+            ExtractionUnit unit) {
+        var preferred = firstFieldValue(candidate, roles, RecordFieldRole.PREFERRED);
+        if (preferred != null) {
+            return preferred;
+        }
+        var wording = firstFieldValue(candidate, roles, RecordFieldRole.WORDING);
+        return wording != null ? wording : unit.contentText();
+    }
+
+    private static String firstFieldValue(
+            KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles,
+            RecordFieldRole wanted) {
+        for (var key : candidate.payload().orderedKeys()) {
+            if (roles.get(key) == wanted) {
+                var value = candidate.payload().columns().get(key);
+                if (value != null && !value.isBlank()) {
+                    return value;
+                }
             }
         }
-        return new ConceptOutcome(execution, probabilities);
+        return null;
+    }
+
+    /**
+     * Cell records carry their stance in role-tagged fields; no generative extractor runs
+     * for them. Positions, the escalation trigger and the role provenance are deterministic.
+     */
+    private void interpretFieldRoles(
+            KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles,
+            SemanticFieldsBuilder builder, Map<String, FieldInterpretation> fields,
+            List<UUID> provenance) {
+        var positions = new LinkedHashSet<PositionRole>();
+        var positionNames = new ArrayList<String>();
+        String escalationTrigger = null;
+        for (var key : candidate.payload().orderedKeys()) {
+            var role = roles.get(key);
+            if (role == null) {
+                continue;
+            }
+            var position = role.toPositionRole();
+            if (position != null && positions.add(position)) {
+                positionNames.add(role.name());
+            }
+            if (role == RecordFieldRole.ESCALATION) {
+                escalationTrigger = candidate.payload().columns().get(key);
+            }
+        }
+        builder.positions(positions).escalationTrigger(escalationTrigger);
+        if (!positions.isEmpty()) {
+            fields.put("positions", new FieldInterpretation(
+                    "positions", InterpretationKind.DETERMINISTIC,
+                    String.join(",", positionNames),
+                    DETERMINISTIC_COLUMN_SPEC, 1,
+                    null, provenance, VerificationState.VERIFIED, null));
+        }
+        if (escalationTrigger != null && !escalationTrigger.isBlank()) {
+            fields.put("escalationTrigger", new FieldInterpretation(
+                    "escalationTrigger", InterpretationKind.DETERMINISTIC, escalationTrigger,
+                    DETERMINISTIC_COLUMN_SPEC, 1,
+                    null, provenance, VerificationState.VERIFIED, null));
+        }
     }
 
     private void interpretPlaybook(
@@ -198,14 +376,15 @@ public class SemanticCompilationService {
             builder.escalationTrigger(value);
             fields.put("escalationTrigger", new FieldInterpretation(
                     "escalationTrigger", InterpretationKind.DETERMINISTIC, value,
-                    "deterministic-column-extraction", 1,
+                    DETERMINISTIC_COLUMN_SPEC, 1,
                     null, provenance, VerificationState.VERIFIED, null));
             return;
         }
         if (verbatim.isEmpty() && (state.text() == null || state.text().isBlank())) {
-            // A table region carries candidate rows but no prose. Recording the outcome keeps
-            // the candidate explicit and the source lineage intact rather than silently
-            // omitting the field, and avoids asking a model to extract from nothing.
+            // A unit with no prose has nothing to extract from and nothing to verify a claim
+            // against. Recording the outcome keeps the candidate explicit and the source
+            // lineage intact rather than silently omitting the field, and avoids asking a
+            // model to extract from nothing.
             fields.put("escalationTrigger", new FieldInterpretation(
                     "escalationTrigger", InterpretationKind.GENERATIVE_EXTRACTION, "UNAVAILABLE",
                     M4ReasoningSpecs.ESCALATION_TRIGGER_SPEC, M4ReasoningSpecs.escalationTrigger().version(),
@@ -297,19 +476,14 @@ public class SemanticCompilationService {
                 .toList();
     }
 
-    private record ConceptOutcome(
-            DecisionExecution execution,
-            Map<LegalConcept, Double> probabilities) {
-    }
-
     private static final class SemanticFieldsBuilder {
         private Set<PositionRole> positions = Set.of();
         private Boolean requiresApproval;
         private String escalationTrigger;
         private PositionRole variantRole;
-        private Map<LegalConcept, Double> conceptProbabilities;
+        private Map<ConceptKey, Double> conceptProbabilities;
 
-        SemanticFieldsBuilder(Map<LegalConcept, Double> conceptProbabilities) {
+        SemanticFieldsBuilder(Map<ConceptKey, Double> conceptProbabilities) {
             this.conceptProbabilities = conceptProbabilities;
         }
 

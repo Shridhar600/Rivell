@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { hasHumanCorrection, interpretationRows } from './compilationFields'
+import { hasHumanCorrection, interpretationRows as labeledRows } from './compilationFields'
+import { humanizeCode } from './semantics'
 import { candidate } from '../test/knowledgeFixtures'
 import type { Candidate } from '../api/knowledge'
 
 const make = (over: Partial<Candidate> = {}) => candidate({ id: 'c', artifactId: 'a', reviewStatus: 'PENDING', ...over })
+/** The fallback resolver, so these tests read the same words a user sees for a key the API cannot label. */
+const interpretationRows = (entry: Candidate) => labeledRows(entry, humanizeCode)
 const row = (rows: ReturnType<typeof interpretationRows>, key: string) => rows.find((entry) => entry.key === key)
 
 describe('structured interpretation', () => {
@@ -67,13 +70,13 @@ describe('structured interpretation', () => {
   })
 
   it('shows the reviewer concept correction and what Rivell classified', () => {
-    const rows = interpretationRows(make({ legalConceptKey: 'CONFIDENTIALITY', conceptCorrection: 'INDEMNIFICATION', effectiveConceptKey: 'INDEMNIFICATION' }))
-    expect(row(rows, 'concept')).toMatchObject({ value: 'Indemnification', machine: 'Rivell classified: Confidentiality', corrected: true })
+    const rows = interpretationRows(make({ legalConceptKey: 'CONFIDENTIALITY_OBLIGATIONS', conceptCorrection: 'INDEMNIFICATION', effectiveConceptKey: 'INDEMNIFICATION' }))
+    expect(row(rows, 'concept')).toMatchObject({ value: 'Indemnification', machine: 'Rivell classified: Confidentiality obligations', corrected: true })
   })
 
   it('shows a cleared concept as not classified, with the machine concept kept', () => {
-    const rows = interpretationRows(make({ legalConceptKey: 'CONFIDENTIALITY', conceptCorrection: '', effectiveConceptKey: null }))
-    expect(row(rows, 'concept')).toMatchObject({ value: 'Not classified', machine: 'Rivell classified: Confidentiality', corrected: true })
+    const rows = interpretationRows(make({ legalConceptKey: 'CONFIDENTIALITY_OBLIGATIONS', conceptCorrection: '', effectiveConceptKey: null }))
+    expect(row(rows, 'concept')).toMatchObject({ value: 'Not classified', machine: 'Rivell classified: Confidentiality obligations', corrected: true })
   })
 
   it('flags a field the source supports only weakly', () => {

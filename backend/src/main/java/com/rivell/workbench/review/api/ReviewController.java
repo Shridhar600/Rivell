@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.foundation.ApiResult;
 import com.rivell.workbench.foundation.ErrorResponse;
 import com.rivell.workbench.review.FindingClassification;
@@ -106,7 +105,7 @@ class ReviewController {
     @GetMapping("/reviews/{id}/findings")
     ApiResult<FindingListResponse> findings(
             @PathVariable UUID id,
-            @RequestParam(required = false) LegalConcept concept,
+            @RequestParam(required = false) String concept,
             @RequestParam(required = false) FindingClassification classification,
             @RequestParam(required = false) FindingSeverity severity,
             @RequestParam(required = false) Integer limit) {

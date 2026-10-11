@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.contracts.FactCorrection;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.CoreConcepts;
 import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.redline.ApprovedChangeSet;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
@@ -435,7 +435,8 @@ final class DemoReviewSeeder {
         }
         var target = semantics(review).clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent())
-                .filter(clause -> clause.primaryConcept().get() != LegalConcept.GOVERNING_LAW)
+                .filter(clause -> !CoreConcepts.GOVERNING_LAW
+                        .equals(clause.primaryConcept().get()))
                 .filter(clause -> !clause.conceptCorrected())
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
@@ -448,16 +449,18 @@ final class DemoReviewSeeder {
         var drifted = driftedClause(review).orElseThrow();
         var machine = drifted.primaryConcept().orElseThrow();
         enrichment.correctClause(review.contractId(), review.contractVersionNumber(),
-                drifted.id(), new FactCorrection(machine.name(), Map.of(), UUID.randomUUID()));
+                drifted.id(), new FactCorrection(machine.value(), Map.of(), UUID.randomUUID()));
     }
 
     private Optional<ClauseSemantics> driftedClause(Review review) {
         return semantics(review).clauses().stream()
                 .filter(ClauseSemantics::conceptCorrected)
                 .filter(clause -> clause.effectivePrimaryConcept().isPresent()
-                        && clause.effectivePrimaryConcept().get() == LegalConcept.GOVERNING_LAW)
+                        && CoreConcepts.GOVERNING_LAW
+                                .equals(clause.effectivePrimaryConcept().get()))
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get() != LegalConcept.GOVERNING_LAW)
+                        && !CoreConcepts.GOVERNING_LAW
+                                .equals(clause.primaryConcept().get()))
                 .findFirst();
     }
 

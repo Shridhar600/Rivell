@@ -7,11 +7,13 @@ import java.util.UUID;
 
 /**
  * Deterministic contract segmentation (S1): every top-level HEADING starts a clause
- * region; top-level paragraphs before the first heading form the preamble region
+ * region, except a body-less heading that only groups deeper sub-clause headings; top-level paragraphs before the first heading form the preamble region
  * (anchored on the BODY node); TITLE nodes carry document metadata only. Tables are
  * kept inside their preceding region (schedule support).
  */
 public final class ContractRegionSegmenter {
+
+    private static final int MAX_CONTAINER_WORDS = 12;
 
     /**
      * A DocumentNode is not automatically a legal clause (AD #5.3): the segmenter
@@ -35,6 +37,31 @@ public final class ContractRegionSegmenter {
         public boolean isPreamble() {
             return headingText == null;
         }
+    }
+
+    /**
+     * Headings whose clause a tracked change cannot replace or delete: regions that are not
+     * clauses (schedules, signature blocks) and clauses whose body holds anything other than
+     * paragraphs (a table). The redline plan applies the same rule and fails closed; callers use
+     * this to refuse such a change before it is approved.
+     */
+    public java.util.Set<UUID> untrackableHeadings(List<DocumentNode> nodes) {
+        var byId = new java.util.HashMap<UUID, DocumentNode>();
+        for (var node : nodes) {
+            byId.put(node.id(), node);
+        }
+        var untrackable = new java.util.HashSet<UUID>();
+        for (var region : segment(nodes)) {
+            if (region.isPreamble()) {
+                continue;
+            }
+            var paragraphsOnly = region.textNodeIds().stream().map(byId::get)
+                    .allMatch(node -> node != null && node.nodeType() == DocumentNodeType.PARAGRAPH);
+            if (region.kind() != SemanticRegionKind.CLAUSE || !paragraphsOnly) {
+                untrackable.add(region.headingNodeId());
+            }
+        }
+        return untrackable;
     }
 
     public List<Region> segment(List<DocumentNode> nodes) {
@@ -64,7 +91,9 @@ public final class ContractRegionSegmenter {
             switch (node.nodeType()) {
                 case TITLE -> { /* metadata layer handles titles */ }
                 case HEADING -> {
-                    closeCurrent(regions, currentHeading, currentTexts, currentText);
+                    if (!isContainer(currentHeading, currentTexts, node)) {
+                        closeCurrent(regions, currentHeading, currentTexts, currentText);
+                    }
                     currentHeading = node;
                     currentTexts = new ArrayList<>();
                     currentText = new StringBuilder();
@@ -136,6 +165,20 @@ public final class ContractRegionSegmenter {
             }
         }
         return text.toString();
+    }
+
+    /**
+     * A short heading with no body directly above a deeper heading ("5 Confidentiality"
+     * over "5.1 Confidential Information") only groups its sub-clauses. It is not a
+     * clause of its own: judging an empty region yields noise, not findings.
+     */
+    private static boolean isContainer(
+            DocumentNode heading, List<UUID> textNodes, DocumentNode next) {
+        return heading != null && textNodes.isEmpty()
+                && heading.headingLevel() != null && next.headingLevel() != null
+                && next.headingLevel() > heading.headingLevel()
+                && heading.text() != null
+                && heading.text().strip().split("\\s+").length <= MAX_CONTAINER_WORDS;
     }
 
     private void closeCurrent(

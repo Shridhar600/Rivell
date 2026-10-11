@@ -1,7 +1,10 @@
 package com.rivell.workbench.knowledge;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +27,13 @@ public record KnowledgeCandidate(
         String contentText,
         CandidatePayload payload,
         String legalConceptKey,
+        /**
+         * The topics this record is about (design 6a): the classification members at or
+         * above the topic threshold plus the effective concept, or exactly the human
+         * correction once one exists. Review resolution matches clause topics against
+         * this set, so a position covering several topics applies to each of them.
+         */
+        List<String> topicKeys,
         String conceptCorrection,
         UUID conceptCorrectedBy,
         Instant conceptCorrectedAt,
@@ -61,6 +71,7 @@ public record KnowledgeCandidate(
         }
         Objects.requireNonNull(payload, "payload");
         Objects.requireNonNull(scope, "scope");
+        topicKeys = topicKeys == null ? List.of() : List.copyOf(topicKeys);
         semanticFields = semanticFields == null ? SemanticFields.EMPTY : semanticFields;
         interpretations = interpretations == null ? List.of() : List.copyOf(interpretations);
         conflictSignals = conflictSignals == null ? List.of() : List.copyOf(conflictSignals);
@@ -71,7 +82,7 @@ public record KnowledgeCandidate(
 
     public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
-                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
                 conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope, signals,
@@ -93,6 +104,7 @@ public record KnowledgeCandidate(
     public KnowledgeCandidate withConceptCorrection(String correction) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
+                correctionTopicKeys(correction),
                 correction,
                 conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
@@ -101,11 +113,23 @@ public record KnowledgeCandidate(
                 createdAt, Instant.now());
     }
 
+    /**
+     * The topic set of a correction: a key replaces the machine members; a blank
+     * correction clears the record to unclassified; no correction keeps the members.
+     */
+    private List<String> correctionTopicKeys(String correction) {
+        if (correction == null) {
+            return topicKeys;
+        }
+        return correction.isBlank() ? List.of() : List.of(correction);
+    }
+
     public KnowledgeCandidate withSemanticOutcome(
             SemanticFields fields, List<FieldInterpretation> fieldInterpretations,
-            String conceptKey) {
+            String conceptKey, List<String> topicKeys) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
-                candidateType, reviewStatus, rawLabel, contentText, payload, conceptKey, conceptCorrection,
+                candidateType, reviewStatus, rawLabel, contentText, payload, conceptKey, topicKeys,
+                conceptCorrection,
                 conceptCorrectedBy, conceptCorrectedAt,
                 fields, editedSemanticFields, fieldInterpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
@@ -122,7 +146,7 @@ public record KnowledgeCandidate(
             throw new IllegalArgumentException("A candidate cannot supersede itself");
         }
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
-                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
                 conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersededId, scope,
@@ -132,7 +156,7 @@ public record KnowledgeCandidate(
 
     public KnowledgeCandidate withReviewOutcome(ReviewCategory category, Set<ReviewReason> reasons) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
-                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
                 conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
@@ -142,7 +166,7 @@ public record KnowledgeCandidate(
 
     public KnowledgeCandidate withReviewStatus(ReviewStatus status) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
-                candidateType, status, rawLabel, contentText, payload, legalConceptKey, conceptCorrection,
+                candidateType, status, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
                 conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
@@ -221,5 +245,30 @@ public record KnowledgeCandidate(
         return editedSemanticFields != null && editedSemanticFields.requiresApproval() != null
                 ? editedSemanticFields.requiresApproval()
                 : semanticFields.requiresApproval();
+    }
+
+    /**
+     * The role-tagged field values a comparison question needs, in authoritative source
+     * order: PREFERRED / FALLBACK (several, ordered) / PROHIBITED / ESCALATION values from
+     * the effective payload. A prose candidate with no role-tagged fields returns an empty
+     * map; the question then carries its content text as the position.
+     */
+    public Map<PositionRole, List<String>> effectivePositionFieldValues() {
+        var payload = editedPayload != null && !editedPayload.columns().isEmpty()
+                ? editedPayload : this.payload;
+        var values = new LinkedHashMap<PositionRole, List<String>>();
+        for (var key : payload.orderedKeys()) {
+            var value = payload.columns().get(key);
+            if (value == null || value.isBlank()) {
+                continue;
+            }
+            var role = RecordLabelRoles.known(key)
+                    .map(RecordFieldRole::toPositionRole).orElse(null);
+            if (role == null) {
+                continue;
+            }
+            values.computeIfAbsent(role, ignored -> new ArrayList<>()).add(value);
+        }
+        return values;
     }
 }

@@ -95,6 +95,12 @@ public class ContractQueryService {
         return repository.loadStructure(summary.versionId());
     }
 
+    /** The version's coverage report; empty when it was parsed before the check existed. */
+    public java.util.Optional<ParseCoverage> getParseCoverage(UUID contractId, int versionNumber) {
+        var summary = getVersionSummary(contractId, versionNumber);
+        return repository.findParseCoverage(summary.versionId());
+    }
+
     public ContractVersionSummary getVersionSummary(UUID contractId, int versionNumber) {
         requireReadPermission();
         return repository
@@ -122,6 +128,13 @@ public class ContractQueryService {
             UUID organizationId, UUID contractId, int versionNumber) {
         var summary = getVersionSummaryForOrganization(organizationId, contractId, versionNumber);
         return java.util.Set.copyOf(repository.findHeadingNodeIds(summary.versionId()));
+    }
+
+    /** System-level: headings whose clause a tracked change cannot replace or delete. */
+    public java.util.Set<UUID> untrackableHeadingsForOrganization(
+            UUID organizationId, UUID contractId, int versionNumber) {
+        return new ContractRegionSegmenter().untrackableHeadings(
+                getStructureForOrganization(organizationId, contractId, versionNumber).nodes());
     }
 
     /** System-level contract read for flows whose organization is already resolved. */

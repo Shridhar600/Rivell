@@ -36,15 +36,16 @@ import com.rivell.workbench.intelligence.TokenUsage;
 import com.rivell.workbench.intelligence.YesNoAnswer;
 
 /**
- * Regression for the null-text unit crash. A DOCX table region carries no content text but
- * still yields one candidate per non-blank row, and a table row that the classifier calls an
- * escalation position with no "escalat" cell value used to reach
- * {@code GenerativeFieldExtractor.bounded(null)} and throw a NullPointerException. The
- * exception escaped every semantic catch, marked the artifact FAILED and surfaced as a 500.
+ * Regression for the null-text unit crash, re-anchored to the one-record-per-position
+ * model. A DOCX table record carries no prose, and the old compiler still classified it
+ * as an escalation position and reached {@code GenerativeFieldExtractor.bounded(null)},
+ * which threw a NullPointerException that escaped every semantic catch, marked the
+ * artifact FAILED and surfaced as a 500.
  *
- * <p>The test uses a generative provider that answers without needing source text, because the
- * production demo provider does the same. The old fake threw before the null dereference, which
- * is why the suite never saw it.
+ * <p>Under record shaping a cell record never reaches the generative extractor at all:
+ * its stance comes from role-tagged fields. This test pins that contract - the table
+ * record compiles, its candidate carries deterministic positions and no escalation
+ * trigger, and the artifact stays EXTRACTED.
  */
 @SpringBootTest
 @Testcontainers
@@ -148,8 +149,7 @@ class NullTextUnitCompilationIT {
     KnowledgeQueryService queryService;
 
     @Test
-    void aTableUnitClassifiedAsEscalationDoesNotCrashAndRecordsExplicitUnavailability()
-            throws Exception {
+    void aTableRecordWithoutProseCompilesWithDeterministicPositions() throws Exception {
         KnowledgeArtifact artifact;
         try (InputStream stream = getClass().getClassLoader()
                 .getResourceAsStream("fixtures/knowledge-playbook.docx")) {
@@ -159,7 +159,7 @@ class NullTextUnitCompilationIT {
         }
 
         assertThat(artifact.ingestStatus())
-                .as("a null-text unit must not fail the artifact")
+                .as("a cell record with no prose must not fail the artifact")
                 .isEqualTo(IngestStatus.EXTRACTED);
 
         ExtractionUnit tableUnit = queryService.getUnits(artifact.id()).stream()
@@ -167,24 +167,25 @@ class NullTextUnitCompilationIT {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("fixture must contain a table unit"));
         assertThat(tableUnit.contentText())
-                .as("the table region is the candidate-bearing unit with no text")
-                .isNull();
+                .as("the table record renders its label -> value fields")
+                .isEqualTo("Liability cap | 1x annual fees | 2x annual fees");
+        assertThat(tableUnit.recordKind())
+                .as("role-tagged fields make the record a POSITION without a model call")
+                .isEqualTo(KnowledgeRecordKind.POSITION);
 
         KnowledgeCandidate candidate = queryService.getCandidates(artifact.id()).stream()
                 .filter(c -> c.extractionUnitId().equals(tableUnit.id()))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("table row must yield a candidate"));
-
-        FieldInterpretation escalation = candidate.interpretations().stream()
-                .filter(interpretation -> "escalationTrigger".equals(interpretation.field()))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(
-                        "the compiler must record the trigger outcome explicitly"));
-        assertThat(escalation.proposedValue()).isEqualTo("UNAVAILABLE");
-        assertThat(escalation.verification()).isEqualTo(VerificationState.UNCERTAIN);
-        assertThat(escalation.sourceNodeIds())
-                .as("the source lineage is retained even when no trigger can be extracted")
-                .isNotEmpty();
-        assertThat(escalation.kind()).isEqualTo(InterpretationKind.GENERATIVE_EXTRACTION);
+                .orElseThrow(() -> new AssertionError("table record must yield a candidate"));
+        assertThat(candidate.effectivePositions())
+                .containsExactlyInAnyOrder(PositionRole.PREFERRED, PositionRole.FALLBACK);
+        assertThat(candidate.effectiveEscalationTrigger())
+                .as("a cell record never reaches the generative extractor")
+                .isNull();
+        assertThat(candidate.interpretations()).anyMatch(interpretation ->
+                "positions".equals(interpretation.field())
+                        && interpretation.kind() == InterpretationKind.DETERMINISTIC);
+        assertThat(candidate.interpretations()).noneMatch(interpretation ->
+                "escalationTrigger".equals(interpretation.field()));
     }
 }

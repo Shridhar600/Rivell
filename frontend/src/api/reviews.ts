@@ -17,6 +17,7 @@ import {
   parseApiResult,
   readArray,
   readNumber,
+  readNumberMap,
   readOptionalBoolean,
   readOptionalNullableNumber,
   readOptionalNullableString,
@@ -245,6 +246,8 @@ export type FindingSummary = {
   reviewClassification: FindingClassification
   proposedAction: string
   proposedLanguageSource: string
+  /** True when the position governs a topic the clause only touches: a LOW note, not a breach. */
+  relatedPosition: boolean
   createdAt: string
 }
 
@@ -265,6 +268,16 @@ export type FindingQuality = {
   sufficiency: string | null
   verificationOutcome: string | null
   degradationFlags: string[]
+  /** The policy comparison's code-owned category. Null for findings from other checks. */
+  category: string | null
+  /** The model's summed flag probability on a 0–1 scale. An estimate, never a certainty. */
+  flagProbability: number | null
+  /** The per-option probabilities the flag probability was summed from. */
+  probabilities: Record<string, number>
+  /** True when the position governs a topic the clause only touches, not its own subject. */
+  secondaryTopic: boolean
+  /** The uncovered-clause triage's probability on the same 0–1 scale. An estimate too. */
+  uncoveredProbability: number | null
 }
 
 export type AbsenceBasis = {
@@ -305,6 +318,7 @@ export type PositionComparison = {
   contract: ContractPositionSlot[]
   preferred: PolicyPositionSlot[]
   fallback: PolicyPositionSlot[]
+  walkAway: PolicyPositionSlot[]
   escalation: EscalationSlot[]
 }
 
@@ -623,6 +637,7 @@ function parseFindingSummary(value: unknown, what: string): FindingSummary {
     proposedAction: readOptionalNullableString(finding, 'proposedAction', what) ?? 'UNKNOWN',
     proposedLanguageSource:
       readOptionalNullableString(finding, 'proposedLanguageSource', what) ?? 'UNKNOWN',
+    relatedPosition: readOptionalBoolean(finding, 'relatedPosition', what),
     createdAt: readOptionalNullableString(finding, 'createdAt', what) ?? '',
   }
 }
@@ -658,10 +673,24 @@ function parseClaim(value: unknown, what: string): FindingClaim {
 function parseQuality(value: unknown, what: string): FindingQuality | null {
   if (value === null || value === undefined) return null
   const quality = asRecord(value, what)
+  const flagProbability = readOptionalNullableNumber(quality, 'flagProbability', what)
+  const uncoveredProbability = readOptionalNullableNumber(quality, 'uncoveredProbability', what)
   return {
     sufficiency: readOptionalNullableString(quality, 'sufficiency', what),
     verificationOutcome: readOptionalNullableString(quality, 'verificationOutcome', what),
     degradationFlags: parseOptionalStringArray(quality, 'degradationFlags', what),
+    category: readOptionalNullableString(quality, 'category', what),
+    // A probability outside 0–1 is not on the scale the comparison uses, so it is not shown.
+    flagProbability:
+      flagProbability !== null && flagProbability >= 0 && flagProbability <= 1
+        ? flagProbability
+        : null,
+    probabilities: readNumberMap(quality, 'probabilities', what),
+    secondaryTopic: readOptionalBoolean(quality, 'secondaryTopic', what),
+    uncoveredProbability:
+      uncoveredProbability !== null && uncoveredProbability >= 0 && uncoveredProbability <= 1
+        ? uncoveredProbability
+        : null,
   }
 }
 
@@ -699,6 +728,7 @@ function parsePositionComparison(value: unknown, what: string): PositionComparis
     }),
     preferred: readSlots(comparison, 'preferred', what, parsePolicyPositionSlot),
     fallback: readSlots(comparison, 'fallback', what, parsePolicyPositionSlot),
+    walkAway: readSlots(comparison, 'walkAway', what, parsePolicyPositionSlot),
     escalation: readSlots(comparison, 'escalation', what, (item, label) => {
       const slot = asRecord(item, label)
       return {

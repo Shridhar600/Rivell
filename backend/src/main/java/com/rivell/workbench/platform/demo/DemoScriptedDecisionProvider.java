@@ -12,7 +12,6 @@ import com.rivell.workbench.intelligence.SemanticAnswer;
 import com.rivell.workbench.intelligence.SemanticDecisionProvider;
 import com.rivell.workbench.intelligence.TokenUsage;
 import com.rivell.workbench.intelligence.YesNoAnswer;
-import com.rivell.workbench.review.M7DecisionSpecs;
 
 /**
  * Deterministic decision provider for local demo data only.
@@ -72,11 +71,14 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
      * to decide whether a classification is trustworthy.
      */
     private ChoiceAnswer choiceAnswer(String name, ChoiceQuestion choice, Object state) {
+        if (choice.criteria().containsKey(
+                com.rivell.workbench.review.PolicyComparisonSpecs.WALK_AWAY)) {
+            return policyComparisonAnswer(state, choice);
+        }
         var candidate = switch (name) {
-            case "primary_concept" -> primaryConceptCue(state, choice);
+            case "primary_topic" -> primaryConceptCue(state, choice);
             case "variant_role" -> variantRoleCue(state, choice);
             case "governing_law" -> cues(state).contains("england") ? "UK" : "US";
-            case "deviation_type" -> liabilityDeviation(state, choice);
             default -> choice.criteria().keySet().iterator().next();
         };
         var selected = choice.criteria().containsKey(candidate)
@@ -88,48 +90,104 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
         return new ChoiceAnswer(selected, 0.92, probabilities);
     }
 
+    /**
+     * The demo fixtures predate the 90-topic taxonomy, so the expected main subject of an
+     * ambiguous clause follows the core-concept order the old vocabulary used, not the
+     * registry's arbitrary leaf order.
+     */
+    private static final List<String> CORE_ORDER = List.of(
+            "CONFIDENTIALITY_OBLIGATIONS", "TERM", "LIMITATION_OF_LIABILITY",
+            "INDEMNIFICATION", "GOVERNING_LAW");
+
     private String primaryConceptCue(Object state, ChoiceQuestion choice) {
         var heading = headingOf(state).toLowerCase();
-        var text = cues(state);
-        for (var option : choice.criteria().keySet()) {
+        var text = cues(state).toLowerCase();
+        var ordered = choice.criteria().keySet().stream()
+                .sorted(java.util.Comparator.comparingInt(DemoScriptedDecisionProvider::coreRank))
+                .toList();
+        for (var option : ordered) {
             var cue = option.toLowerCase().replace('_', ' ');
             if (heading.contains(cue) || heading.contains(cue.split(" ")[0])) {
                 return option;
             }
         }
-        for (var option : choice.criteria().keySet()) {
-            if (text.contains(option.toLowerCase().replace('_', ' '))) {
+        for (var option : ordered) {
+            var cue = option.toLowerCase().replace('_', ' ');
+            if (text.contains(cue) || text.contains(cue.split(" ")[0])) {
                 return option;
             }
         }
-        return choice.criteria().keySet().iterator().next();
+        return ordered.get(0);
+    }
+
+    private static int coreRank(String key) {
+        var index = CORE_ORDER.indexOf(key);
+        return index < 0 ? CORE_ORDER.size() : index;
     }
 
     /**
-     * Compares the clause's own extracted cap against the multiple the published policy
-     * states, using the two values the domain actually supplies: the typed cap multiple from
-     * the frozen clause and the authored policy text.
-     *
-     * <p>Answering this from the data rather than defaulting to the first option is the
-     * difference between a demo review that finds a real deviation and one that reports the
-     * contract as compliant whatever it says. A clause with no numeric cap is a prohibited
-     * structure; a cap above the policy's stated multiple is above the preferred position;
-     * anything at or below it is no deviation.
+     * Answers one position question from the clause under review and the position text the
+     * question carries. A cap above every stated fallback is a needs-fallback deviation, a
+     * cap inside a fallback is within-fallback, and uncapped exposure against a position
+     * that prohibits it is a walk-away. Without this the demo review would report every
+     * clause compliant whatever it says.
      */
-    private String liabilityDeviation(Object state, ChoiceQuestion choice) {
-        var clause = field(state, "clauseText").toLowerCase();
-        var policy = field(state, "preferredPosition");
-        var cap = field(state, "capMultiple");
-        if (clause.contains("uncapped") || clause.contains("unlimited")) {
-            return "PROHIBITED_STRUCTURE";
+    private ChoiceAnswer policyComparisonAnswer(Object state, ChoiceQuestion choice) {
+        var selected = policyComparisonCategory(state, choice.instructions());
+        var probabilities = new LinkedHashMap<String, Double>();
+        choice.criteria().keySet().forEach(option ->
+                probabilities.put(option, option.equals(selected) ? 0.92 : 0.016));
+        return new ChoiceAnswer(selected, 0.92, probabilities);
+    }
+
+    private String policyComparisonCategory(Object state, String instructions) {
+        var clause = comparisonClause(state);
+        var position = instructions == null ? "" : instructions.toLowerCase();
+        if ((clause.contains("uncapped") || clause.contains("unlimited"))
+                && (position.contains("uncapped") || position.contains("unlimited")
+                    || position.contains("never accept") || position.contains("not acceptable"))) {
+            return com.rivell.workbench.review.PolicyComparisonSpecs.WALK_AWAY;
         }
-        var capValue = number(cap);
-        var policyValue = number(policy);
-        if (capValue == null || policyValue == null) {
-            return "NOT_COMPARABLE";
+        var clauseMultiple = number(clause);
+        if (clauseMultiple == null) {
+            return com.rivell.workbench.review.PolicyComparisonSpecs.MEETS_PREFERRED;
         }
-        return capValue.doubleValue() > policyValue
-                ? "CAP_ABOVE_PREFERRED" : "NO_DEVIATION";
+        var preferred = number(labelValue(instructions, "Preferred:"));
+        if (preferred == null && position.contains("fees paid")) {
+            preferred = 1d;
+        }
+        var fallback = number(labelValue(instructions, "Fallback 1:"));
+        if (preferred != null && clauseMultiple <= preferred) {
+            return com.rivell.workbench.review.PolicyComparisonSpecs.MEETS_PREFERRED;
+        }
+        if (fallback != null && clauseMultiple <= fallback) {
+            return com.rivell.workbench.review.PolicyComparisonSpecs.WITHIN_FALLBACK;
+        }
+        if (preferred != null) {
+            return com.rivell.workbench.review.PolicyComparisonSpecs.BEYOND_FALLBACK;
+        }
+        return com.rivell.workbench.review.PolicyComparisonSpecs.MEETS_PREFERRED;
+    }
+
+    private String comparisonClause(Object state) {
+        if (state instanceof com.rivell.workbench.review.PolicyComparisonSpecs
+                .PolicyComparisonState comparison) {
+            return comparison.clause() == null ? "" : comparison.clause().toLowerCase();
+        }
+        return "";
+    }
+
+    private static String labelValue(String instructions, String label) {
+        if (instructions == null) {
+            return "";
+        }
+        var index = instructions.indexOf(label);
+        if (index < 0) {
+            return "";
+        }
+        var rest = instructions.substring(index + label.length());
+        var end = rest.indexOf('\n');
+        return end < 0 ? rest : rest.substring(0, end);
     }
 
     private java.util.regex.Matcher matcher(String text, String pattern) {
@@ -162,18 +220,6 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
         return null;
     }
 
-    private String field(Object state, String name) {
-        if (state instanceof M7DecisionSpecs.LiabilityDeviationState deviation) {
-            return switch (name) {
-                case "clauseText" -> deviation.clauseText();
-                case "capMultiple" -> deviation.capMultiple();
-                case "preferredPosition" -> deviation.preferredPosition();
-                default -> "";
-            };
-        }
-        return "";
-    }
-
     private String variantRoleCue(Object state, ChoiceQuestion choice) {
         var heading = headingOf(state).toLowerCase();
         if (heading.contains("fallback")) {
@@ -194,17 +240,17 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
         }
         var combined = (headingOf(state) + " " + cues(state)).toLowerCase();
         return switch (questionName) {
-            case "concept_limitation_of_liability" ->
+            case "topic_limitation_of_liability" ->
                     combined.contains("liability") || combined.contains(" cap ") ? CONFIDENT
                             : ABSENT;
-            case "concept_confidentiality" ->
+            case "topic_confidentiality_obligations" ->
                     combined.contains("confidential") ? CONFIDENT : ABSENT;
-            case "concept_term_termination" ->
+            case "topic_term" ->
                     combined.contains("terminat") || combined.contains(" term ")
                             ? CONFIDENT : ABSENT;
-            case "concept_indemnification" ->
+            case "topic_indemnification" ->
                     combined.contains("indemnif") ? CONFIDENT : ABSENT;
-            case "concept_governing_law" -> combined.contains("govern") ? CONFIDENT : ABSENT;
+            case "topic_governing_law" -> combined.contains("govern") ? CONFIDENT : ABSENT;
             case "role_preferred" -> present(combined, "preferred");
             case "role_fallback" -> present(combined, "fallback");
             case "role_prohibited" -> present(combined, "prohibited");

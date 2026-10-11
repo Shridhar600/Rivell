@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
@@ -30,7 +32,6 @@ import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.FactCorrection;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -127,7 +128,7 @@ class M7EvaluationIT {
         var elapsed = (System.nanoTime() - start) / 1_000_000;
 
         assertThat(generativeProvider.calls()).isZero();
-        assertThat(scriptedProvider.liabilityDecisions()).isEqualTo(1);
+        assertThat(scriptedProvider.policyComparisonDecisions()).isGreaterThanOrEqualTo(1);
         var optionalCheck = reviewRepository.findPlanChecks(organizationId, review.id()).stream()
                 .filter(check -> "PRESENCE:GOVERNING_LAW".equals(check.checkKey()))
                 .findFirst().orElseThrow();
@@ -136,8 +137,8 @@ class M7EvaluationIT {
                 organizationId, run.id(), optionalCheck.id()).orElseThrow().signalCount())
                 .isZero();
         assertThat(analysisRepository.findSignals(organizationId, run.id())).noneMatch(signal ->
-                signal.concept() == LegalConcept.GOVERNING_LAW
-                        || signal.absenceConcept() == LegalConcept.GOVERNING_LAW);
+                signal.concept().equals(CoreConcepts.GOVERNING_LAW)
+                        || signal.absenceConcept().equals(CoreConcepts.GOVERNING_LAW));
         assertThat(analysisRepository.findExecutions(organizationId, run.id()))
                 .allSatisfy(execution -> assertThat(execution.status())
                         .isEqualTo(CheckExecutionStatus.COMPLETED));
@@ -158,14 +159,14 @@ class M7EvaluationIT {
 
         var findings = findingRepository.findFindings(organizationId, run.id());
         var finding = findings.stream().filter(candidate -> candidate.issueFamily()
-                == IssueFamily.LIABILITY_CAP_DEVIATION).findFirst().orElseThrow();
+                == IssueFamily.POSITION_NEEDS_FALLBACK).findFirst().orElseThrow();
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
         assertThat(finding.proposedLanguage()).contains("two times the fees");
         assertThat(finding.signalIds()).hasSize(3);
         assertThat(generativeProvider.calls()).isZero();
-        record("S2+S11 deviation + fallback + escalation, one finding",
+        record("S2+S11 beyond fallback + approved drafting + escalation, one finding",
                 organizationId, review.id(),
-                Set.of(IssueFamily.LIABILITY_CAP_DEVIATION), 1, 0, elapsed);
+                Set.of(IssueFamily.POSITION_NEEDS_FALLBACK), 1, 0, elapsed);
     }
 
     @Test
@@ -201,7 +202,7 @@ class M7EvaluationIT {
     }
 
     @Test
-    void s6PolicyMissingIsPreservedWithoutInference() throws Exception {
+    void s6NoPublishedPositionMakesNoCallAndNoFinding() throws Exception {
         var organizationId = organizationId();
         var review = enrichedReview("m7-msa-preferred.docx", msaProfile(null));
 
@@ -211,17 +212,15 @@ class M7EvaluationIT {
         var run = analysisService.analyze(organizationId, review.id());
         var elapsed = (System.nanoTime() - start) / 1_000_000;
 
-        assertThat(scriptedProvider.liabilityDecisions()).isZero();
+        assertThat(scriptedProvider.policyComparisonDecisions()).isZero();
         assertThat(generativeProvider.calls()).isZero();
-        var finding = findingRepository.findFindings(organizationId, run.id()).get(0);
-        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
-        assertThat(finding.quality()).containsEntry("sufficiency", "POLICY_MISSING");
-        record("S6 policy missing, no inference", organizationId, review.id(),
-                Set.of(IssueFamily.POLICY_UNAVAILABLE), 1, 0, elapsed);
+        assertThat(findingRepository.findFindings(organizationId, run.id())).isEmpty();
+        record("S6 no published position, no call and no inference",
+                organizationId, review.id(), Set.of(), 0, 0, elapsed);
     }
 
     @Test
-    void s7AmbiguousPolicyIsPreservedWithoutSelection() throws Exception {
+    void s7TwoApplicablePositionsAreEachJudgedInOneCall() throws Exception {
         var organizationId = organizationId();
         publishMainPolicyAndLibrary(organizationId);
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_AMBIGUOUS,
@@ -236,10 +235,12 @@ class M7EvaluationIT {
         var run = analysisService.analyze(organizationId, review.id());
         var elapsed = (System.nanoTime() - start) / 1_000_000;
 
-        assertThat(scriptedProvider.liabilityDecisions()).isZero();
+        assertThat(scriptedProvider.policyComparisonCalls())
+                .anySatisfy(call -> assertThat(call.questionKeys()).hasSize(2));
         assertThat(generativeProvider.calls()).isZero();
-        record("S7 ambiguous policy preserved", organizationId, review.id(),
-                Set.of(IssueFamily.POLICY_AMBIGUOUS), 1, 0, elapsed);
+        assertThat(findingRepository.findFindings(organizationId, run.id())).isEmpty();
+        record("S7 two positions judged independently, no ambiguity finding",
+                organizationId, review.id(), Set.of(), 0, 0, elapsed);
     }
 
     @Test
@@ -258,20 +259,20 @@ class M7EvaluationIT {
         var deviation = signals.stream()
                 .filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
                 .findFirst().orElseThrow();
-        assertThat(((LiabilityDeviationPayload) deviation.payload()).deviationType())
-                .isEqualTo(M7DecisionSpecs.PROHIBITED_STRUCTURE);
+        assertThat(((PositionDeviationPayload) deviation.payload()).category())
+                .isEqualTo(PolicyComparisonSpecs.WALK_AWAY);
         var finding = findingRepository.findFindings(organizationId, run.id()).stream()
                 .filter(candidate -> candidate.issueFamily()
-                        == IssueFamily.LIABILITY_CAP_DEVIATION)
+                        == IssueFamily.POSITION_WALK_AWAY)
                 .findFirst().orElseThrow();
         assertThat(finding.severity()).isEqualTo(FindingSeverity.HIGH);
         assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.BLOCKING);
         assertThat(finding.claims()).anyMatch(claim -> claim.claimKind() == ClaimKind.POLICY_BASIS);
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
         assertThat(generativeProvider.calls()).isZero();
-        record("S8 prohibited structure grounded in policy, precedent not policy",
+        record("S8 walk-away grounded in policy, precedent not policy",
                 organizationId, review.id(),
-                Set.of(IssueFamily.LIABILITY_CAP_DEVIATION), 1, 0, elapsed);
+                Set.of(IssueFamily.POSITION_WALK_AWAY), 1, 0, elapsed);
     }
 
     @Test
@@ -294,7 +295,7 @@ class M7EvaluationIT {
         assertThat(gap.jevExecutionId()).isNull();
         assertThat(generativeProvider.calls()).isZero();
         record("S9 survival coverage gap", organizationId, review.id(),
-                Set.of(IssueFamily.LIABILITY_CAP_DEVIATION,
+                Set.of(IssueFamily.POSITION_NEEDS_FALLBACK,
                         IssueFamily.SURVIVAL_COVERAGE_GAP),
                 2, 0, elapsed);
     }
@@ -314,16 +315,16 @@ class M7EvaluationIT {
 
         var findings = findingRepository.findFindings(organizationId, run.id());
         assertThat(findings).extracting(Finding::issueFamily)
-                .contains(IssueFamily.LIABILITY_CAP_DEVIATION,
+                .contains(IssueFamily.POSITION_NEEDS_FALLBACK,
                         IssueFamily.CARVE_OUT_INCONSISTENCY);
         assertThat(findings.stream().filter(finding ->
-                finding.issueFamily() == IssueFamily.LIABILITY_CAP_DEVIATION
+                finding.issueFamily() == IssueFamily.POSITION_NEEDS_FALLBACK
                         || finding.issueFamily() == IssueFamily.CARVE_OUT_INCONSISTENCY))
                 .hasSize(2);
         assertThat(generativeProvider.calls()).isZero();
         record("S10 same clause, two issue families, no overmerge",
                 organizationId, review.id(),
-                Set.of(IssueFamily.LIABILITY_CAP_DEVIATION,
+                Set.of(IssueFamily.POSITION_NEEDS_FALLBACK,
                         IssueFamily.CARVE_OUT_INCONSISTENCY,
                         IssueFamily.SURVIVAL_COVERAGE_GAP),
                 3, 0, elapsed);
@@ -333,7 +334,7 @@ class M7EvaluationIT {
     void s12GenerativeEscalationProducesVerifiedProposal() throws Exception {
         var organizationId = organizationId();
         publishMainPolicy(organizationId);
-        var review = enrichedReview("m7-msa-exotic.docx", msaProfile(null));
+        var review = enrichedReview("m7-msa-uncapped.docx", msaProfile(null));
 
         resetProviders();
 
@@ -346,20 +347,21 @@ class M7EvaluationIT {
                 .filter(signal -> signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT)
                 .findFirst().orElseThrow();
         assertThat(openEnded.verificationOutcome()).isEqualTo("VERIFIED");
-        var finding = findingRepository.findFindings(organizationId, run.id()).get(0);
-        assertThat(finding.issueFamily()).isEqualTo(IssueFamily.OPEN_ENDED_LIABILITY);
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.CONSIDER_GENERATED_LANGUAGE);
         assertThat(finding.proposedLanguageSource())
                 .isEqualTo(ProposedLanguageSource.GENERATIVE);
         record("S12 generative escalation verified", organizationId, review.id(),
-                Set.of(IssueFamily.OPEN_ENDED_LIABILITY), 1, 1, elapsed);
+                Set.of(IssueFamily.POSITION_WALK_AWAY), 1, 1, elapsed);
     }
 
     @Test
     void s13GenerativeFailureNeverFabricates() throws Exception {
         var organizationId = organizationId();
         publishMainPolicy(organizationId);
-        var review = enrichedReview("m7-msa-exotic.docx", msaProfile(null));
+        var review = enrichedReview("m7-msa-uncapped.docx", msaProfile(null));
         resetProviders();
         generativeProvider.failOpenEnded = true;
 
@@ -375,19 +377,19 @@ class M7EvaluationIT {
                 .noneMatch(finding -> finding.proposedLanguage() != null);
         assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
                 .isEqualTo(ReviewStatus.COMPLETED);
-        record("S13 generative failure degrades without fabrication",
+        record("S13 generative failure escalates without fabrication",
                 organizationId, review.id(),
-                Set.of(IssueFamily.LIABILITY_CAP_UNCERTAIN), 1, 1, elapsed);
+                Set.of(IssueFamily.POSITION_WALK_AWAY), 1, 1, elapsed);
     }
 
     @Test
-    void s14CorrectedContractSemanticsDriveTheReview() {
+    void s14CorrectedClauseSemanticsDriveTheReview() {
         var organizationId = organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var contractId = corpus.contract().contractId();
         var liability = enrichmentService.getSemantics(contractId, 1).clauses().stream()
                 .filter(clause -> clause.primaryConcept()
-                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .map(concept -> concept.equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                         .orElse(false))
                 .findFirst().orElseThrow();
 
@@ -399,41 +401,37 @@ class M7EvaluationIT {
         var machineDeviation = analysisRepository.findSignals(organizationId, machineRun.id())
                 .stream().filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
                 .findFirst().orElseThrow();
-        assertThat(((LiabilityDeviationPayload) machineDeviation.payload()).capMultiple())
-                .isEqualTo("3");
-        record("S14 machine cap 3x deviates", organizationId, machineReview.id(),
-                Set.of(IssueFamily.LIABILITY_CAP_DEVIATION), 1, 0, machineElapsed);
+        assertThat(((PositionDeviationPayload) machineDeviation.payload()).category())
+                .isEqualTo(PolicyComparisonSpecs.BEYOND_FALLBACK);
+        record("S14 machine 3x cap deviates", organizationId, machineReview.id(),
+                Set.of(IssueFamily.POSITION_NEEDS_FALLBACK), 1, 0, machineElapsed);
 
         enrichmentService.correctClause(contractId, 1, liability.id(),
-                FactCorrection.ofFacts(java.util.Map.of("liabilityCapMultiple", "2")));
+                FactCorrection.ofPrimary(CoreConcepts.GOVERNING_LAW));
         var correctedReview = reviewService.create(contractId, 1, ReviewPackRegistry.MSA_PACK);
         resetProviders();
         var correctedStart = System.nanoTime();
         var correctedRun = analysisService.analyze(organizationId, correctedReview.id());
         var correctedElapsed = (System.nanoTime() - correctedStart) / 1_000_000;
-        var correctedDeviation = analysisRepository.findSignals(organizationId, correctedRun.id())
-                .stream().filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
-                .findFirst().orElseThrow();
-        assertThat(((LiabilityDeviationPayload) correctedDeviation.payload()).capMultiple())
-                .isEqualTo("2");
-        record("S14 corrected cap 2x still deviates", organizationId, correctedReview.id(),
-                Set.of(IssueFamily.LIABILITY_CAP_DEVIATION), 1, 0, correctedElapsed);
+        assertThat(analysisRepository.findSignals(organizationId, correctedRun.id()))
+                .noneMatch(signal -> signal.signalType() == SignalType.POLICY_DEVIATION);
+        record("S14 corrected concept no longer matches liability positions",
+                organizationId, correctedReview.id(), Set.of(), 0, 0, correctedElapsed);
 
         enrichmentService.correctClause(contractId, 1, liability.id(),
-                FactCorrection.ofFacts(java.util.Map.of("liabilityCapMultiple", "1")));
-        var compliantReview = reviewService.create(contractId, 1, ReviewPackRegistry.MSA_PACK);
+                FactCorrection.ofPrimary(CoreConcepts.LIMITATION_OF_LIABILITY));
+        var restoredReview = reviewService.create(contractId, 1, ReviewPackRegistry.MSA_PACK);
         resetProviders();
-        var compliantStart = System.nanoTime();
-        var compliantRun = analysisService.analyze(organizationId, compliantReview.id());
-        var compliantElapsed = (System.nanoTime() - compliantStart) / 1_000_000;
-        assertThat(analysisRepository.findSignals(organizationId, compliantRun.id()))
-                .noneMatch(signal -> signal.signalType() == SignalType.POLICY_DEVIATION
-                        );
-        assertThat(findingRepository.findFindings(organizationId, compliantRun.id()))
-                .noneMatch(finding -> finding.issueFamily()
-                        == IssueFamily.LIABILITY_CAP_DEVIATION);
-        record("S14 corrected cap 1x is compliant (classification changed)",
-                organizationId, compliantReview.id(), Set.of(), 0, 0, compliantElapsed);
+        var restoredStart = System.nanoTime();
+        var restoredRun = analysisService.analyze(organizationId, restoredReview.id());
+        var restoredElapsed = (System.nanoTime() - restoredStart) / 1_000_000;
+        var restoredDeviation = analysisRepository.findSignals(organizationId, restoredRun.id())
+                .stream().filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
+                .findFirst().orElseThrow();
+        assertThat(((PositionDeviationPayload) restoredDeviation.payload()).category())
+                .isEqualTo(PolicyComparisonSpecs.BEYOND_FALLBACK);
+        record("S14 restored concept deviates again", organizationId, restoredReview.id(),
+                Set.of(IssueFamily.POSITION_NEEDS_FALLBACK), 1, 0, restoredElapsed);
     }
 
     @AfterAll
@@ -495,7 +493,7 @@ class M7EvaluationIT {
         assertThat(unresolved).as(scenario + " evidence links resolve").isEmpty();
 
         RESULTS.add(new EvalLine(scenario, findings.size(), unexpected.size(), missing.size(),
-                scriptedProvider.liabilityDecisions(), generativeProvider.calls(),
+                scriptedProvider.policyComparisonDecisions(), generativeProvider.calls(),
                 (int) verificationFailures, cited.size(), elapsedMs));
     }
 

@@ -1,15 +1,16 @@
 import type { EvidenceItem } from '../../api/retrieval'
-import { conceptLabel } from '../../lib/contractSemantics'
+import { useTaxonomy } from '../../api/taxonomy'
 import { authorityLabel, sourceTypeLabel } from '../../lib/evidence'
 import { ApplicabilityScopeSummary } from './ApplicabilityScopeSummary'
 import { EvidenceItemSource } from './EvidenceItemSource'
 import { EvidenceText } from './EvidenceText'
 
 export function GenericEvidenceCard({ item }: { item: EvidenceItem }) {
+  const { labelFor } = useTaxonomy()
   const headingId = `evidence-${item.evidenceId}`
   const heading =
     item.legalConcept && item.legalConcept !== ''
-      ? conceptLabel(item.legalConcept)
+      ? labelFor(item.legalConcept)
       : sourceTypeLabel(item.sourceType)
 
   return (

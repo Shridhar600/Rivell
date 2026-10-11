@@ -1,8 +1,9 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router'
 import { useKnowledgeCatalog } from '../../api/knowledgeRead'
+import { useTaxonomy } from '../../api/taxonomy'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
-import { AddKnowledgeButton, KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
+import { KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
 import { KnowledgeTabs } from '../../components/knowledge/read/KnowledgeTabs'
 import { VersionBanner } from '../../components/knowledge/read/VersionBanner'
@@ -26,6 +27,7 @@ export function ClausesPage() {
 }
 
 function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeof useKnowledgeCatalog> }) {
+  const { labelFor } = useTaxonomy()
   const [params, setParams] = useSearchParams()
   const library = catalog.clauseLibrary
   const tab: Tab = params.get('tab') === 'history' ? 'history' : 'clauses'
@@ -33,7 +35,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
   const requested = Number(params.get('publication'))
   const viewing = library.versions.find((entry) => entry.publication.number === requested) ?? current
   const isCurrent = viewing === current
-  const groups = clauseGroups(library, catalog.index, viewing?.publication.number)
+  const groups = clauseGroups(library, catalog.index, labelFor, viewing?.publication.number)
   const compiling = catalog.inCompilation.filter((source) => source.artifact.artifactType === 'CLAUSE_LIBRARY')
 
   const update = useCallback(
@@ -61,7 +63,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
       crumbs={CRUMBS}
       title="Clause library"
       lede={LEDE}
-      actions={<AddKnowledgeButton preset="clause-library" />}
+      addPreset="clause-library"
       meta={
         viewing ? (
           <>
@@ -94,7 +96,6 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
         <EmptyState
           title="No clause library is published"
           message="Approved clause wording appears here once you publish a clause library."
-          action={<AddKnowledgeButton />}
         />
       ) : (
         <>

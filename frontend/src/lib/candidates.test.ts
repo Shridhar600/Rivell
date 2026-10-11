@@ -51,6 +51,7 @@ function unit(partial: Partial<ExtractionUnit> & { id: string }): ExtractionUnit
     title: null,
     contentText: null,
     sourceNodeIds: [],
+    recordKind: null,
     ...partial,
   }
 }

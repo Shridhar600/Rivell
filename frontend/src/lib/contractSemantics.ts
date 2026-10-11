@@ -1,10 +1,5 @@
-import type { components } from '../api/schema'
 import type { EnrichmentFailureReason } from '../api/semantics'
-import {
-  CONCEPT_LABELS,
-  VERIFICATION_LABELS,
-  humanizeCode,
-} from './domainLabels'
+import { VERIFICATION_LABELS, humanizeCode } from './domainLabels'
 
 export { humanizeCode } from './domainLabels'
 import type {
@@ -14,17 +9,17 @@ import type {
   SemanticFact,
 } from '../api/semantics'
 
-export const TAXONOMY_CONCEPTS = [
-  'CONFIDENTIALITY',
-  'TERM_TERMINATION',
-  'LIMITATION_OF_LIABILITY',
-  'INDEMNIFICATION',
-  'GOVERNING_LAW',
+export const CONTRACT_TYPES = [
+  'MNDA',
+  'ONDA',
+  'NDA',
+  'MSA',
+  'SAAS',
+  'DPA',
+  'SOW',
+  'SWL',
+  'OTHER',
 ] as const satisfies readonly NonNullable<
-  components['schemas']['ConceptView']['concept']
->[]
-
-export const CONTRACT_TYPES = ['NDA', 'MSA', 'OTHER'] as const satisfies readonly NonNullable<
   ReviewProfileInput['contractType']
 >[]
 
@@ -117,8 +112,14 @@ const ANALYSIS_QUALITY_NOTES = new Set([
 ])
 
 export const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  MNDA: 'Mutual NDA',
+  ONDA: 'One-way NDA',
   NDA: 'NDA',
   MSA: 'MSA',
+  SAAS: 'SaaS',
+  DPA: 'DPA',
+  SOW: 'SOW',
+  SWL: 'Software licence',
   OTHER: 'Other',
 }
 
@@ -136,10 +137,6 @@ export const JURISDICTION_LABELS: Record<string, string> = {
 
 function labelFrom(map: Record<string, string>, value: string): string {
   return map[value] ?? humanizeCode(value)
-}
-
-export function conceptLabel(value: string): string {
-  return labelFrom(CONCEPT_LABELS, value)
 }
 
 export function roleLabel(value: string): string {

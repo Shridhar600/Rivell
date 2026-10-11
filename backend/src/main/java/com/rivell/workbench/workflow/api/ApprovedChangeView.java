@@ -2,7 +2,7 @@ package com.rivell.workbench.workflow.api;
 
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+
 
 /** One frozen approved change: action, canonical target, exact language, provenance. */
 public record ApprovedChangeView(
@@ -13,7 +13,7 @@ public record ApprovedChangeView(
         String actionType,
         String targetKind,
         UUID targetHeadingNodeId,
-        LegalConcept absenceConcept,
+        String absenceConcept,
         String approvedLanguage,
         String languageSource,
         UUID approvedDraftingEvidenceId) {

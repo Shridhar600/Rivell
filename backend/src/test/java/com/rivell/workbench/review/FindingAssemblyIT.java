@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
@@ -22,7 +24,6 @@ import org.testcontainers.utility.DockerImageName;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -130,13 +131,14 @@ class FindingAssemblyIT {
         var findings = findingRepository.findFindings(organizationId, run.id());
         assertThat(findings).hasSize(1);
         var finding = findings.get(0);
-        assertThat(finding.issueFamily()).isEqualTo(IssueFamily.LIABILITY_CAP_DEVIATION);
+        assertThat(finding.issueFamily()).isEqualTo(IssueFamily.POSITION_NEEDS_FALLBACK);
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
         assertThat(finding.proposedLanguageSource())
                 .isEqualTo(ProposedLanguageSource.APPROVED_DRAFTING);
         assertThat(finding.proposedLanguage()).contains("two times the fees");
         assertThat(finding.approvedDraftingEvidenceId()).isNotNull();
-        assertThat(finding.severity()).isEqualTo(FindingSeverity.HIGH);
+        // severity follows the category; the named approver keeps it review-required
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
         assertThat(finding.reviewClassification())
                 .isEqualTo(FindingClassification.REVIEW_REQUIRED);
         assertThat(finding.signalIds()).hasSize(3);
@@ -164,9 +166,9 @@ class FindingAssemblyIT {
 
         var finding = findingRepository.findFindings(organizationId, run.id()).stream()
                 .filter(candidate -> candidate.issueFamily()
-                        == IssueFamily.LIABILITY_CAP_DEVIATION)
+                        == IssueFamily.POSITION_WALK_AWAY)
                 .findFirst().orElseThrow();
-        assertThat(finding.observationKind()).isEqualTo("PROHIBITED_STRUCTURE");
+        assertThat(finding.observationKind()).isEqualTo("POSITION_WALK_AWAY");
         assertThat(finding.severity()).isEqualTo(FindingSeverity.HIGH);
         assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.BLOCKING);
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
@@ -197,7 +199,7 @@ class FindingAssemblyIT {
                     .isEqualTo(ProposedLanguageSource.NONE);
         });
         var missing = findings.stream()
-                .filter(finding -> finding.concept() == LegalConcept.LIMITATION_OF_LIABILITY)
+                .filter(finding -> finding.concept().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow();
         assertThat(missing.severity()).isEqualTo(FindingSeverity.HIGH);
         assertThat(missing.reviewClassification())
@@ -210,7 +212,7 @@ class FindingAssemblyIT {
             assertThat(claim.evidenceItemIds()).isEmpty();
         });
         var expected = findings.stream()
-                .filter(finding -> finding.concept() == LegalConcept.INDEMNIFICATION)
+                .filter(finding -> finding.concept().equals(CoreConcepts.INDEMNIFICATION))
                 .findFirst().orElseThrow();
         assertThat(expected.reviewClassification())
                 .isEqualTo(FindingClassification.INFORMATIONAL);
@@ -218,17 +220,19 @@ class FindingAssemblyIT {
     }
 
     @Test
-    void policyMissingIsAnExplicitUnresolvedFinding() throws Exception {
+    void noPublishedPositionProducesNoPositionFinding() throws Exception {
         var organizationId = organizationId();
         var review = enrichedReview("m7-msa-preferred.docx");
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
-                .filter(candidate -> candidate.issueFamily() == IssueFamily.POLICY_UNAVAILABLE)
-                .findFirst().orElseThrow();
-        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
-        assertThat(finding.quality()).containsEntry("sufficiency", "POLICY_MISSING");
+        assertThat(scriptedProvider.policyComparisonDecisions()).isZero();
+        assertThat(findingRepository.findFindings(organizationId, run.id()))
+                .noneMatch(finding -> finding.issueFamily().name().startsWith("POSITION_"));
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()))
+                .isNotEmpty()
+                .allSatisfy(execution -> assertThat(execution.status())
+                        .isEqualTo(CheckExecutionStatus.COMPLETED));
     }
 
     @Test
@@ -241,10 +245,10 @@ class FindingAssemblyIT {
 
         var findings = findingRepository.findFindings(organizationId, run.id());
         assertThat(findings).extracting(Finding::issueFamily)
-                .contains(IssueFamily.LIABILITY_CAP_DEVIATION,
+                .contains(IssueFamily.POSITION_NEEDS_FALLBACK,
                         IssueFamily.CARVE_OUT_INCONSISTENCY);
         var liabilitySubjects = findings.stream()
-                .filter(finding -> finding.issueFamily() == IssueFamily.LIABILITY_CAP_DEVIATION
+                .filter(finding -> finding.issueFamily() == IssueFamily.POSITION_NEEDS_FALLBACK
                         || finding.issueFamily() == IssueFamily.CARVE_OUT_INCONSISTENCY)
                 .map(Finding::subjectHeadingNodeId).distinct().toList();
         assertThat(liabilitySubjects).hasSize(1);
@@ -260,14 +264,14 @@ class FindingAssemblyIT {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
-        var review = enrichedReview("m7-msa-exotic.docx");
+        var review = enrichedReview("m7-msa-uncapped.docx");
         scriptedProvider.verificationSatisfiesProbability = 0.5;
 
         var run = analysisService.analyze(organizationId, review.id());
 
         var finding = findingRepository.findFindings(organizationId, run.id()).stream()
                 .filter(candidate -> candidate.issueFamily()
-                        == IssueFamily.OPEN_ENDED_LIABILITY)
+                        == IssueFamily.POSITION_WALK_AWAY)
                 .findFirst().orElseThrow();
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
         assertThat(finding.proposedLanguageSource())
@@ -345,13 +349,13 @@ class FindingAssemblyIT {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
-        var review = enrichedReview("m7-msa-exotic.docx");
+        var review = enrichedReview("m7-msa-uncapped.docx");
 
         var run = analysisService.analyze(organizationId, review.id());
 
         var finding = findingRepository.findFindings(organizationId, run.id()).stream()
                 .filter(candidate -> candidate.issueFamily()
-                        == IssueFamily.OPEN_ENDED_LIABILITY)
+                        == IssueFamily.POSITION_WALK_AWAY)
                 .findFirst().orElseThrow();
         assertThat(finding.proposedAction())
                 .isEqualTo(ProposedAction.CONSIDER_GENERATED_LANGUAGE);
@@ -364,22 +368,29 @@ class FindingAssemblyIT {
     }
 
     @Test
-    void ambiguousPolicyBecomesReviewAmbiguity() throws Exception {
+    void unclearCategoryBecomesReviewAmbiguity() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
-        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_AMBIGUOUS,
-                M6EvidenceCorpus.policyManifest(java.time.LocalDate.of(2026, 1, 1),
-                        java.time.LocalDate.of(2026, 12, 31)),
-                null);
         var review = enrichedReview("m7-msa-preferred.docx");
+        scriptedProvider.policyComparisonAnswerOverride = PolicyComparisonSpecs.UNCLEAR;
+        scriptedProvider.policyComparisonProbabilities = java.util.Map.of(
+                PolicyComparisonSpecs.MEETS_PREFERRED, 0.05,
+                PolicyComparisonSpecs.WITHIN_FALLBACK, 0.05,
+                PolicyComparisonSpecs.BEYOND_FALLBACK, 0.05,
+                PolicyComparisonSpecs.WALK_AWAY, 0.05,
+                PolicyComparisonSpecs.UNCLEAR, 0.7,
+                PolicyComparisonSpecs.NOT_ADDRESSED, 0.1);
 
         var run = analysisService.analyze(organizationId, review.id());
 
         var finding = findingRepository.findFindings(organizationId, run.id()).stream()
-                .filter(candidate -> candidate.issueFamily() == IssueFamily.POLICY_AMBIGUOUS)
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_AMBIGUOUS)
+                .filter(candidate -> candidate.concept()
+                        .equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow();
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.REVIEW_AMBIGUITY);
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
         assertThat(finding.proposedLanguageSource())
                 .isEqualTo(ProposedLanguageSource.NONE);
         assertThat(finding.reviewClassification())

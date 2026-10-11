@@ -96,6 +96,8 @@ describe('candidate correction', () => {
 
   it('corrects the legal concept through its own endpoint, and only that', async () => {
     const { world, form } = await openEdit('uncertain')
+    const group = await within(form).findByRole('group', { name: 'Liability and indemnity' })
+    expect(within(group).getByRole('option', { name: 'Indemnification' })).toBeInTheDocument()
     await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), 'INDEMNIFICATION')
     await save()
     await waitFor(() => expect(conceptCalls(world)).toHaveLength(1))

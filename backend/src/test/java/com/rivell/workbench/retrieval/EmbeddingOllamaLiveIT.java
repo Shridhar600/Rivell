@@ -1,5 +1,8 @@
 package com.rivell.workbench.retrieval;
 
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
@@ -23,7 +26,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.EmbeddingService.EmbeddingExecution;
 import com.rivell.workbench.intelligence.ModelBinding;
@@ -171,11 +173,10 @@ class EmbeddingOllamaLiveIT {
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get()
-                                == LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
         var bundle = evidenceService.build(EvidenceRequest.forClauseReview(
-                organizationId, com.rivell.workbench.contracts.LegalConcept
+                organizationId, com.rivell.workbench.taxonomy.CoreConcepts
                         .LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),

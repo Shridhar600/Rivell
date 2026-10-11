@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
 
@@ -69,18 +69,53 @@ public class EvidenceService {
         return buildInternal(request);
     }
 
+    /**
+     * Policy-comparison build (design 6a item 2): policy positions and approved drafting
+     * are resolved by topic membership instead of concept equality, capped at
+     * {@code maxPositions}. Everything else — authority, scope filters, lanes, trace —
+     * is the same evidence construction.
+     */
+    public EvidenceBundle buildForPolicyComparison(
+            EvidenceRequest request, java.util.List<ConceptKey> topics,
+            ConceptKey primaryTopic, int maxPositions) {
+        if (topics.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Policy comparison requires at least one clause topic");
+        }
+        var asOfPublication = resolveAsOf(request);
+        var topicKeys = topics.stream().map(ConceptKey::value).toList();
+        var primaryKey = primaryTopic == null ? null : primaryTopic.value();
+        var policy = resolver.resolveByTopics(request, Set.of(CandidateType.PLAYBOOK_RULE),
+                asOfPublication, topicKeys, primaryKey, maxPositions);
+        var drafting = resolver.resolveByTopics(request, Set.of(CandidateType.CLAUSE_VARIANT),
+                asOfPublication, topicKeys, primaryKey, maxPositions);
+        var warnings = new java.util.ArrayList<String>();
+        if (policy.truncated() || drafting.truncated()) {
+            // more positions matched than the cap allows; the omission is visible, not silent
+            warnings.add("POLICY_POSITIONS_TRUNCATED");
+        }
+        return assemble(request, asOfPublication, policy, drafting, warnings);
+    }
+
     private EvidenceBundle buildInternal(EvidenceRequest request) {
+        var asOfPublication = resolveAsOf(request);
+        return assemble(request, asOfPublication,
+                resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE), asOfPublication),
+                resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT), asOfPublication),
+                List.of());
+    }
+
+    private EvidenceBundle assemble(
+            EvidenceRequest request, long asOfPublication,
+            StructuredPolicyResolver.Resolution policyResolution,
+            StructuredPolicyResolver.Resolution draftingResolution,
+            List<String> extraWarnings) {
         var startedAt = clock.instant();
         var stageStart = startedAt;
         var stageTimings = new LinkedHashMap<String, Long>();
-        var asOfPublication = resolveAsOf(request);
         stageTimings.put("pinResolution",
                 java.time.Duration.between(stageStart, clock.instant()).toMillis());
         stageStart = clock.instant();
-        var policyResolution = resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE),
-                asOfPublication);
-        var draftingResolution = resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT),
-                asOfPublication);
         stageTimings.put("structured",
                 java.time.Duration.between(stageStart, clock.instant()).toMillis());
         stageStart = clock.instant();
@@ -102,10 +137,12 @@ public class EvidenceService {
                 AuthorityClass.POLICY, "PUBLISHED_PLAYBOOK_RULE");
         var draftingItems = items(draftingResolution, request.organizationId(),
                 AuthorityClass.APPROVED_DRAFTING, "PUBLISHED_CLAUSE_VARIANT");
+        var warnings = new java.util.ArrayList<String>(extraWarnings);
+        warnings.addAll(degradationOf(precedentOutcome, currentOutcome));
         var bundle = new EvidenceBundle(UUID.randomUUID(), request,
                 policyItems, draftingItems,
                 precedentOutcome.items(), currentOutcome.items(), List.of(),
-                sufficiency, degradationOf(precedentOutcome, currentOutcome), null);
+                sufficiency, warnings, null);
         var traceId = persistTrace(request, asOfPublication, policyResolution,
                 draftingResolution, precedentOutcome, currentOutcome, bundle,
                 startedAt, stageTimings);
@@ -184,7 +221,7 @@ public class EvidenceService {
     private Map<String, Object> requestOf(EvidenceRequest request, long asOfPublication) {
         var map = new LinkedHashMap<String, Object>();
         map.put("purpose", request.purpose().name());
-        map.put("legalConcept", request.legalConcept().name());
+        map.put("legalConcept", request.legalConcept().value());
         map.put("effectiveOn", request.effectiveOn().toString());
         map.put("knowledgePin", request.knowledgePin().publicationNumber());
         map.put("resolvedAsOfPublication", asOfPublication);
@@ -308,7 +345,7 @@ public class EvidenceService {
                 null,
                 null,
                 candidate.effectiveConceptKey() == null ? null
-                        : LegalConcept.valueOf(candidate.effectiveConceptKey()),
+                        : ConceptKey.of(candidate.effectiveConceptKey()),
                 candidate.scope(),
                 candidate.effectiveContentText(),
                 authority == AuthorityClass.POLICY ? policyFacts(candidate) : null,
@@ -322,15 +359,22 @@ public class EvidenceService {
                 match.publicationNumber(),
                 authority == AuthorityClass.APPROVED_DRAFTING
                         ? candidate.effectiveVariantRole()
-                        : null);
+                        : null,
+                candidate.topicKeys());
     }
 
     private EvidenceItem.PolicyFacts policyFacts(
             com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
+        var fields = candidate.effectivePositionFieldValues();
+        var preferred = fields.get(com.rivell.workbench.knowledge.PositionRole.PREFERRED);
+        var prohibited = fields.get(com.rivell.workbench.knowledge.PositionRole.PROHIBITED);
         return new EvidenceItem.PolicyFacts(
                 candidate.effectivePositions(),
                 candidate.effectiveRequiresApproval(),
-                candidate.effectiveEscalationTrigger());
+                candidate.effectiveEscalationTrigger(),
+                preferred == null || preferred.isEmpty() ? null : preferred.getFirst(),
+                fields.getOrDefault(com.rivell.workbench.knowledge.PositionRole.FALLBACK, List.of()),
+                prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst());
     }
 
     private List<String> provenance(UUID organizationId,

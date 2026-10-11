@@ -19,6 +19,12 @@ public interface KnowledgeRepository {
 
     void updateArtifactAssessment(UUID artifactId, ArtifactTypeAssessment assessment);
 
+    void updateParseCoverage(UUID artifactId, com.rivell.workbench.contracts.ParseCoverage coverage);
+
+    /** Empty when the artifact predates the coverage check or the check could not run. */
+    Optional<com.rivell.workbench.contracts.ParseCoverage> findParseCoverage(
+            UUID artifactId, UUID organizationId);
+
     Optional<KnowledgeArtifact> findArtifact(UUID artifactId, UUID organizationId);
 
     /**
@@ -46,7 +52,7 @@ public interface KnowledgeRepository {
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);
 
     /**
-     * Human LegalConcept correction (DW-017); pre-publication only. Persists the
+     * Human concept correction (DW-017); pre-publication only. Persists the
      * correction, the resulting review status (an APPROVED candidate demotes to
      * EDITED for re-approval), and the recomputed analysis outcome. Returns false
      * when the expected status no longer holds (concurrent transition).

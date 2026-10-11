@@ -1,19 +1,19 @@
 package com.rivell.workbench.knowledge.api;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.intelligence.DecisionExecutionMetadata;
 import com.rivell.workbench.knowledge.UnitConceptClassification;
 
 /**
- * Domain-meaning view of a semantic classification proposal: per-concept probabilities,
- * concepts proposed above the task threshold, and execution provenance. No provider internals.
+ * Domain-meaning view of a semantic classification proposal: per-topic probabilities,
+ * topics proposed at or above the task threshold, and taxonomy execution provenance.
+ * No provider internals.
  */
 public record UnitConceptClassificationView(
-        java.util.UUID unitId,
-        java.util.UUID artifactId,
+        UUID unitId,
+        UUID artifactId,
         List<ConceptView> proposedConcepts,
         List<ConceptView> evaluatedConcepts,
         boolean noneMatched,
@@ -21,46 +21,42 @@ public record UnitConceptClassificationView(
 
     public static UnitConceptClassificationView from(UnitConceptClassification classification) {
         var proposed = classification.proposedConcepts().stream()
-                .map(concept -> conceptView(concept, classification))
+                .map(concept -> new ConceptView(concept.value(),
+                        classification.conceptProbabilities().getOrDefault(concept, 0.0)))
                 .toList();
         var evaluated = classification.conceptProbabilities().entrySet().stream()
-                .map(entry -> new ConceptView(entry.getKey(), entry.getValue()))
+                .map(entry -> new ConceptView(entry.getKey().value(), entry.getValue()))
                 .toList();
         return new UnitConceptClassificationView(
                 classification.unitId(), classification.artifactId(),
                 proposed, evaluated, classification.noneMatched(),
-                MetadataView.from(classification.metadata()));
+                new MetadataView(classification.taxonomyVersion(),
+                        classification.executions().stream().map(ExecutionView::from).toList()));
     }
 
-    private static ConceptView conceptView(
-            LegalConcept concept, UnitConceptClassification classification) {
-        return new ConceptView(concept, classification.conceptProbabilities().get(concept));
+    public record ConceptView(String concept, double probability) {
     }
 
-    public record ConceptView(LegalConcept concept, double probability) {
+    public record MetadataView(int taxonomyVersion, List<ExecutionView> executions) {
     }
 
-    public record MetadataView(
-            java.util.UUID executionId,
+    /** One model call behind the proposal: which spec, which model, how long, what it cost. */
+    public record ExecutionView(
+            UUID executionId,
             String specId,
             int specVersion,
-            int stateSchemaVersion,
             String providerId,
-            String requestedModelAlias,
             String resolvedModel,
             long durationMs,
             int questionCount,
             int inputTokens,
             int outputTokens) {
 
-        private static MetadataView from(com.rivell.workbench.intelligence.DecisionExecutionMetadata metadata) {
+        private static ExecutionView from(DecisionExecutionMetadata metadata) {
             var usage = metadata.usage();
-            return new MetadataView(
-                    metadata.executionId(), metadata.specId(), metadata.specVersion(),
-                    metadata.stateSchemaVersion(), metadata.providerId(),
-                    metadata.requestedModelAlias(), metadata.resolvedModel(),
-                    metadata.durationMs(), metadata.questionCount(),
-                    usage == null ? 0 : usage.inputTokens(),
+            return new ExecutionView(metadata.executionId(), metadata.specId(), metadata.specVersion(),
+                    metadata.providerId(), metadata.resolvedModel(), metadata.durationMs(),
+                    metadata.questionCount(), usage == null ? 0 : usage.inputTokens(),
                     usage == null ? 0 : usage.outputTokens());
         }
     }

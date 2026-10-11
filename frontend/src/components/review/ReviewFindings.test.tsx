@@ -21,9 +21,16 @@ import {
   fixtureClauseFindingSummary,
   fixtureCompletedReviewSummary,
   fixtureCrossClauseFindingDetail,
+  fixtureEscalatedFallbackFindingDetail,
   fixtureFailedReviewSummary,
   fixtureGenerativeFindingDetail,
+  fixtureNotCoveredFindingDetail,
+  fixtureNotCoveredFindingSummary,
   fixturePolicyMissingFindingDetail,
+  fixtureRelatedPositionFindingDetail,
+  fixtureRelatedPositionFindingSummary,
+  fixtureWithinFallbackFindingDetail,
+  fixtureWithinFallbackFindingSummary,
 } from './testFixtures'
 import { fixtureHumanReview } from './workflowFixtures'
 
@@ -45,6 +52,10 @@ const detailById: Record<string, unknown> = {
   'f-4': fixtureAmbiguousPolicyFindingDetail,
   'f-5': fixtureGenerativeFindingDetail,
   'f-6': fixtureCrossClauseFindingDetail,
+  'f-7': fixtureWithinFallbackFindingDetail,
+  'f-8': fixtureEscalatedFallbackFindingDetail,
+  'f-9': fixtureRelatedPositionFindingDetail,
+  'f-10': fixtureNotCoveredFindingDetail,
 }
 
 /**
@@ -64,9 +75,9 @@ const findingsForThisReview = {
     fixtureClauseFindingSummary,
     fixtureAbsenceFindingSummary,
     absenceFinding('f-3', 'GOVERNING_LAW'),
-    absenceFinding('f-4', 'CONFIDENTIALITY'),
+    absenceFinding('f-4', 'CONFIDENTIALITY_OBLIGATIONS'),
     absenceFinding('f-5', 'INDEMNIFICATION'),
-    absenceFinding('f-6', 'TERM_TERMINATION'),
+    absenceFinding('f-6', 'TERM'),
   ],
   truncated: false,
 }
@@ -139,7 +150,7 @@ describe('findings list', () => {
       name: /6\. Limitation of Liability/,
     })
     // Decision state shows only once the server's decisions and human review have loaded.
-    await waitFor(() => expect(clauseRow).toHaveTextContent('Needs decision · Liability cap deviation'))
+    await waitFor(() => expect(clauseRow).toHaveTextContent('Needs decision · Beyond our fallbacks'))
 
     const absenceRow = findingsList().getByRole('option', { name: /Missing: Limitation of liability/ })
     expect(absenceRow).toHaveTextContent('Missing required provision')
@@ -176,7 +187,7 @@ describe('findings list', () => {
     const clauseRow = await (await findFindingsList()).findByRole('option', {
       name: /6\. Limitation of Liability/,
     })
-    expect(clauseRow).toHaveTextContent('Liability cap deviation')
+    expect(clauseRow).toHaveTextContent('Beyond our fallbacks')
     expect(clauseRow).not.toHaveTextContent(/Needs decision|Accepted|Rejected|Escalated|Informational/)
   })
 
@@ -188,7 +199,8 @@ describe('findings list', () => {
           {
             ...fixtureClauseFindingSummary,
             id: 'f-9',
-            issueFamily: 'LIABILITY_CAP_UNCERTAIN',
+            issueFamily: 'POSITION_UNCERTAIN',
+            observationKind: 'UNCERTAINTY:bounded_decision_unavailable',
             severity: 'MEDIUM',
           },
         ],
@@ -198,15 +210,15 @@ describe('findings list', () => {
 
     const rows = await (await findFindingsList()).findAllByRole('option', { name: /6\. Limitation of Liability/ })
     expect(rows).toHaveLength(2)
-    expect(rows[0]).toHaveTextContent('Liability cap deviation')
-    expect(rows[1]).toHaveTextContent('Liability cap uncertainty')
+    expect(rows[0]).toHaveTextContent('Beyond our fallbacks')
+    expect(rows[1]).toHaveTextContent('Could not be assessed')
   })
 
   it('requests the review findings with a fixed limit and never forwards URL filters', async () => {
     // Severity, classification and concept filters no longer exist in the workspace. A stale link
     // carrying them must not reach the API.
     const { api } = renderWorkspace(
-      '/reviews/c1/analysis/r-1?severity=HIGH&classification=BLOCKING&concept=CONFIDENTIALITY',
+      '/reviews/c1/analysis/r-1?severity=HIGH&classification=BLOCKING&concept=CONFIDENTIALITY_OBLIGATIONS',
     )
 
     await (await findFindingsList()).findByRole('option', { name: /6\. Limitation of Liability/ })
@@ -274,10 +286,10 @@ describe('finding detail', () => {
 
     await findDetailTitle('6. Limitation of Liability')
     const found = section('Rivell found')
-    expect(found).toHaveTextContent(/liability cap above the organization’s preferred position/)
-    expect(found).toHaveTextContent('Liability cap above the preferred position')
+    expect(found).toHaveTextContent(/worse for us than every fallback the position lists/)
+    expect(found).toHaveTextContent('Beyond our fallbacks')
     expect(found).toHaveTextContent(
-      'Policy basis: Published policy prefers a cap of two times the fees paid over a twelve-month period.',
+      'Policy basis: Published policy lists a fallback at two times the fees paid over a twelve-month period.',
     )
     expect(found).toHaveTextContent(
       'Recommendation: Use the approved fallback wording. Replace the clause with the approved fallback wording for the liability cap.',
@@ -303,7 +315,7 @@ describe('finding detail', () => {
     expect(position).toHaveTextContent('Escalate: Uncapped liability or consequential damages')
   })
 
-  it('shows the exact clause text under "In the contract" and in the document', async () => {
+  it('shows a short clause excerpt under "In the contract" and marks the clause in the document', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
     await findDetailTitle('6. Limitation of Liability')
@@ -328,6 +340,13 @@ describe('finding detail', () => {
     expect(selected).not.toHaveTextContent('5. Termination')
     expect(selected).not.toHaveTextContent('Schedule A')
     expect(contractPane().querySelectorAll('[data-sel="1"]')).toHaveLength(1)
+
+    // "Show in document" reveals the same clause in place, exactly as an evidence jump does.
+    await userEvent.click(within(source).getByRole('button', { name: 'Show in document' }))
+    const revealed = contractPane().querySelectorAll('[data-focus="1"]')
+    expect(revealed).toHaveLength(1)
+    expect(revealed[0]).toHaveTextContent('6.3 The exclusions in Section 6.2')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
   it('says so when the clause text for this version is not available', async () => {
@@ -432,6 +451,24 @@ describe('finding detail', () => {
     expect(within(detailPane()).queryByText('Proposed language')).not.toBeInTheDocument()
   })
 
+  it('labels a clause no playbook covers as a review item, with the model’s confidence as an estimate', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-10', {
+      findings: { items: [...findingsForThisReview.items, fixtureNotCoveredFindingSummary], truncated: false },
+    })
+
+    await findDetailText('Rivell found')
+    const pane = within(detailPane())
+    expect(pane.getAllByText(/Not covered by playbook — review/).length).toBeGreaterThan(0)
+    expect(pane.queryByText('Policy unavailable')).not.toBeInTheDocument()
+    expect(pane.getByText(/No playbook position addresses this clause/)).toBeInTheDocument()
+    expect(pane.getByText(/Model confidence 90%/)).toBeInTheDocument()
+    expect(pane.getByText(/not a certainty/)).toBeInTheDocument()
+    // The list names the same kind, not the generic policy-unavailable family.
+    expect(
+      await (await findFindingsList()).findByRole('option', { name: /Not covered by playbook — review/ }),
+    ).toBeInTheDocument()
+  })
+
   it('preserves policy ambiguity without selecting a winner', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-4')
 
@@ -446,7 +483,7 @@ describe('finding detail', () => {
     // Every cited item that holds a role is kept: nothing is dropped to the first.
     const position = section('Policy position')
     expect(within(within(position).getByRole('group', { name: 'Preferred' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
-    expect(within(within(position).getByRole('group', { name: 'Fallback' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
+    expect(within(within(position).getByRole('group', { name: 'Fallbacks' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
     expect(within(position).getAllByText(/Escalate: Uncapped liability/)).toHaveLength(2)
     // The source of each one stays reachable.
     expect(within(position).getAllByRole('button', { name: /Open source: Policy, publication 2/ }).length).toBeGreaterThanOrEqual(4)
@@ -494,6 +531,78 @@ describe('finding detail', () => {
     expect(
       within(detailPane()).queryByText('Approved organizational drafting'),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('position findings', () => {
+  const listWith = (
+    ...extra: (typeof fixtureWithinFallbackFindingSummary | typeof fixtureRelatedPositionFindingSummary)[]
+  ) => ({
+    items: [...findingsForThisReview.items, ...extra],
+    truncated: false,
+  })
+
+  it('shows the comparison’s category and the model’s confidence as an estimate, not certainty', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    expect(pane.getByText(/Beyond every listed fallback/)).toBeInTheDocument()
+    expect(pane.getByText(/Model confidence 87%/)).toBeInTheDocument()
+    expect(pane.getByText(/not a certainty/)).toBeInTheDocument()
+  })
+
+  it('shows no assessment line when the finding carries no comparison quality', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-2')
+
+    await findDetailTitle('Missing: Limitation of liability')
+    expect(within(detailPane()).queryByText(/Model confidence/)).not.toBeInTheDocument()
+  })
+
+  it('reads a within-fallback finding as a note to accept and record, not a problem', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-7', {
+      findings: listWith(fixtureWithinFallbackFindingSummary),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    expect(pane.getByText(/note, not a problem/i)).toBeInTheDocument()
+    expect(pane.getByText(/accept and record/i)).toBeInTheDocument()
+  })
+
+  it('reads a secondary-topic position as a related note, not a breach', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-9', {
+      findings: listWith(fixtureRelatedPositionFindingSummary),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    const label = pane.getByText('Related position')
+    expect(label).toHaveClass('rv-ws-typ--related')
+    expect(pane.getByText(/not a breach/i)).toBeInTheDocument()
+    expect(pane.getByText(/governs a topic the clause only touches/i)).toBeInTheDocument()
+    // The list reads the server's relatedPosition flag, not the severity.
+    expect(
+      await (await findFindingsList()).findByRole('option', { name: /Related position/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('says approval is needed and shows the escalation condition when the position names an approver', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-8', {
+      findings: listWith({
+        ...fixtureWithinFallbackFindingSummary,
+        id: 'f-8',
+        reviewClassification: 'REVIEW_REQUIRED',
+        proposedAction: 'ESCALATE_TO_HUMAN',
+      }),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const note = detailPane().querySelector('.rv-ws-note--approval')
+    expect(note).not.toBeNull()
+    // The note itself carries the approval statement and the condition, not only the comparison grid.
+    expect(note).toHaveTextContent('Approval is needed.')
+    expect(note).toHaveTextContent('Escalate when: Uncapped liability or consequential damages.')
   })
 })
 
@@ -576,7 +685,7 @@ describe('finding evidence amendment', () => {
     expect(router.state.location.search).not.toContain('node-63')
   })
 
-  it('opens a source region in the contract document when the review is on the current version', async () => {
+  it('keeps a source region inside the workspace and highlights the clause it came from', async () => {
     const { router } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
     await findDetailTitle('6. Limitation of Liability')
@@ -584,12 +693,20 @@ describe('finding evidence amendment', () => {
     const sheet = screen.getByRole('dialog', { name: 'Source' })
     await userEvent.click(within(sheet).getByRole('button', { name: '6. Limitation of Liability' }))
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c1'))
-    expect(router.state.location.search).toBe('?view=document&node=node-6')
+    // The legacy contract route is not opened: the evidence targets the workspace's own document.
+    expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Source' })).not.toBeInTheDocument())
+    // The target clause is marked, and only it.
+    const highlighted = contractPane().querySelectorAll('[data-focus="1"]')
+    expect(highlighted).toHaveLength(1)
+    expect(highlighted[0]).toHaveTextContent('6. Limitation of Liability')
+    expect(highlighted[0]).toHaveTextContent('6.3 The exclusions')
+    expect(highlighted[0]).not.toHaveTextContent('5. Termination')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
-  it('offers no deep link into the document when the review is pinned to an older version', async () => {
-    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+  it('reveals the clause in the pinned workspace document and keeps latest-version links off', async () => {
+    const { router } = renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
       contractSummary: {
         ...fixtureContractSummary,
         latestVersion: { ...fixtureContractSummary.latestVersion, versionNumber: 2 },
@@ -599,7 +716,18 @@ describe('finding evidence amendment', () => {
     await findDetailTitle('6. Limitation of Liability')
     await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Current contract/ }))
     const sheet = screen.getByRole('dialog', { name: 'Source' })
-    expect(within(sheet).queryByText('View in document:')).not.toBeInTheDocument()
+    // Clause semantics open the latest version, so a pinned older review does not offer them.
+    expect(
+      within(sheet).queryByRole('button', { name: 'Open clause semantics' }),
+    ).not.toBeInTheDocument()
+
+    // "View in document" still works: the workspace document is the version the review pinned.
+    await userEvent.click(within(sheet).getByRole('button', { name: '6. Limitation of Liability' }))
+    expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Source' })).not.toBeInTheDocument())
+    const highlighted = contractPane().querySelectorAll('[data-focus="1"]')
+    expect(highlighted).toHaveLength(1)
+    expect(highlighted[0]).toHaveTextContent('6.3 The exclusions in Section 6.2')
   })
 
   it('fails safely when a claim references evidence missing from the response', async () => {
@@ -738,8 +866,8 @@ describe('finding evidence amendment', () => {
         findings: 0,
         coverage: [
           { concept: 'LIMITATION_OF_LIABILITY', expectation: 'REQUIRED', coverage: 'PRESENT_PRIMARY' },
-          { concept: 'CONFIDENTIALITY', expectation: 'EXPECTED', coverage: 'PRESENT_SECONDARY_ONLY' },
-          { concept: 'TERM_TERMINATION', expectation: 'REQUIRED', coverage: 'ABSENT' },
+          { concept: 'CONFIDENTIALITY_OBLIGATIONS', expectation: 'EXPECTED', coverage: 'PRESENT_SECONDARY_ONLY' },
+          { concept: 'TERM', expectation: 'REQUIRED', coverage: 'ABSENT' },
           { concept: 'INDEMNIFICATION', expectation: 'OPTIONAL', coverage: 'UNKNOWN' },
         ],
       },

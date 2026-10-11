@@ -57,9 +57,13 @@ public record ReviewDiagnosticsView(
     @Schema(description = "One planned check and how it ended")
     public record CheckView(
             String key,
+            @Schema(description = "Clause the check judged, when it has one")
+            UUID subjectHeadingNodeId,
             String status,
             Integer signalCount,
             String degradedReason,
+            @Schema(description = "Exception type of a FAILED check; no message text")
+            String failureType,
             Instant startedAt,
             Instant completedAt,
             Long durationMillis) {

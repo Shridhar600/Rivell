@@ -7,6 +7,7 @@ import {
   type Candidate,
 } from '../../api/knowledge'
 import { useKnowledgeCatalog } from '../../api/knowledgeRead'
+import { useTaxonomy } from '../../api/taxonomy'
 import { CatalogGate, CatalogNotices } from '../../components/knowledge/read/CatalogGate'
 import { KnowledgeFrame, type Crumb } from '../../components/knowledge/read/KnowledgeFrame'
 import { SourceStateBadge } from '../../components/knowledge/read/KnowledgeRows'
@@ -60,6 +61,7 @@ function publishedTarget(source: SourceView): string | null {
 }
 
 function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: SourceView; state: ReturnType<typeof useKnowledgeCatalog> }) {
+  const { labelFor } = useTaxonomy()
   const { artifact } = source
   const [params, setParams] = useSearchParams()
   const detail = useArtifactQuery(artifact.id)
@@ -93,7 +95,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
     )
 
   const target = publishedTarget(source)
-  const clauseCount = clauseGroups(catalog.clauseLibrary, catalog.index).length
+  const clauseCount = clauseGroups(catalog.clauseLibrary, catalog.index, labelFor).length
 
   return (
     <KnowledgeFrame

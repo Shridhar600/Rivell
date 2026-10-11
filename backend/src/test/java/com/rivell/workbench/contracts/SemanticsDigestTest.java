@@ -1,5 +1,8 @@
 package com.rivell.workbench.contracts;
 
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
@@ -25,22 +28,22 @@ class SemanticsDigestTest {
     @Test
     void secondaryConceptChangeAltersTheDigest() {
         var base = semantics(List.of());
-        var mutated = semantics(List.of(LegalConcept.LIMITATION_OF_LIABILITY));
+        var mutated = semantics(List.of(CoreConcepts.LIMITATION_OF_LIABILITY));
 
         assertThat(SemanticsDigest.of(base)).isNotEqualTo(SemanticsDigest.of(mutated));
     }
 
     @Test
     void identicalSemanticsProduceTheSameDigest() {
-        assertThat(SemanticsDigest.of(semantics(List.of(LegalConcept.INDEMNIFICATION))))
+        assertThat(SemanticsDigest.of(semantics(List.of(CoreConcepts.INDEMNIFICATION))))
                 .isEqualTo(SemanticsDigest.of(
-                        semantics(List.of(LegalConcept.INDEMNIFICATION))));
+                        semantics(List.of(CoreConcepts.INDEMNIFICATION))));
     }
 
-    private static ContractSemantics semantics(List<LegalConcept> secondary) {
+    private static ContractSemantics semantics(List<ConceptKey> secondary) {
         var clause = new ClauseSemantics(CLAUSE_ID, VERSION_ID, HEADING_ID,
                 ContractRegionSegmenter.SemanticRegionKind.CLAUSE, List.of(), "clause text",
-                new ConceptClassification(List.of(LegalConcept.CONFIDENTIALITY), secondary,
+                new ConceptClassification(List.of(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS), secondary,
                         Map.of()),
                 List.of(), List.of(), new FactCorrection(null, Map.of(), null), null);
         return new ContractSemantics(SEMANTICS_ID, VERSION_ID, ORGANIZATION_ID,

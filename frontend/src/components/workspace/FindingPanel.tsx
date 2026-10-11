@@ -2,15 +2,18 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { EvidenceItem } from '../../api/retrieval'
 import type { FindingClaim, FindingDetail } from '../../api/reviews'
+import type { ConceptLabel } from '../../api/taxonomy'
+import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
-import { conceptLabel } from '../../lib/contractSemantics'
 import { authorityLabel } from '../../lib/evidence'
 import {
   absenceClaims,
+  assessmentSummary,
   claimKindLabel,
   classificationLabel,
+  findingIssueLabel,
   findingSubjectLabel,
-  issueFamilyLabel,
+  isRelatedPosition,
   observationKindLabel,
   policyNoteText,
   proposedActionLabel,
@@ -20,7 +23,13 @@ import {
 } from '../../lib/reviews'
 import { dateTime } from '../../lib/dates'
 import { policyPositionView } from '../../lib/positionComparison'
-import { findingState, isWordingGrounded, languageAuthority, proposedChangeType } from '../../lib/workspace'
+import {
+  clauseExcerpt,
+  findingState,
+  isWordingGrounded,
+  languageAuthority,
+  proposedChangeType,
+} from '../../lib/workspace'
 import { Button } from '../ui/Button'
 import { BookIcon, ChevronIcon } from '../ui/Icon'
 import { ErrorState, LoadingState } from '../ui/State'
@@ -99,9 +108,9 @@ function ClaimEvidence({ claim, items, onOpen }: { claim: FindingClaim; items: M
   )
 }
 
-function sourceRow(item: EvidenceItem, regionLabels: Map<string, string>): { title: string; detail: string } {
+function sourceRow(item: EvidenceItem, regionLabels: Map<string, string>, label: ConceptLabel): { title: string; detail: string } {
   const region = item.provenanceNodeIds.map((id) => regionLabels.get(id)).find(Boolean)
-  const subject = region ?? (item.legalConcept ? conceptLabel(item.legalConcept) : '')
+  const subject = region ?? (item.legalConcept ? label(item.legalConcept) : '')
   const snippet = item.text.replace(/\s+/g, ' ').trim()
   return { title: authorityLabel(item.authorityClass), detail: [subject, snippet].filter(Boolean).join(' · ') }
 }
@@ -137,6 +146,7 @@ function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'summar
 
 export function FindingPanel(props: Props) {
   const { finding, flow, decision } = props
+  const { labelFor } = useTaxonomy()
   const [showAll, setShowAll] = useState(false)
 
   // The loading, empty and error states share the host elements of the full panel, and the frozen
@@ -164,8 +174,16 @@ export function FindingPanel(props: Props) {
   const recommendations = recommendationClaims(finding.claims)
   const absences = absenceClaims(finding.claims)
   const quality = qualityFactorRows(finding.quality)
+  const assessment = assessmentSummary(finding.quality)
   const note = policyNoteText(finding)
   const position = policyPositionView(finding.positionComparison)
+  // A within-fallback finding is a note, not a defect; a position that names an approver makes it
+  // an approval question instead.
+  const withinFallback = finding.issueFamily === 'POSITION_ACCEPTABLE_FALLBACK'
+  const approvalNeeded = withinFallback && finding.proposedAction === 'ESCALATE_TO_HUMAN'
+  const escalationTriggers = (finding.positionComparison?.escalation ?? [])
+    .map((slot) => slot.trigger.trim())
+    .filter((trigger) => trigger !== '')
   const change = proposedChangeType(finding)
   const grounded = isWordingGrounded(finding)
   const authority = !grounded ? null : languageAuthority(finding, items.get(finding.approvedDraftingEvidenceId ?? '')?.publicationNumber ?? null)
@@ -175,7 +193,10 @@ export function FindingPanel(props: Props) {
   const eligible = flow.acceptEligibility.eligible
   const reason = flow.acceptEligibility.eligible ? '' : flow.acceptEligibility.reason
   const missingEvidence = finding.claims.some((claim) => claim.evidenceItemIds.some((id) => !items.has(id)))
-  const title = findingSubjectLabel(finding, props.regionLabels)
+  const title = findingSubjectLabel(finding, props.regionLabels, labelFor)
+  // A position on a topic the clause only touches is a related note, never a defect in the clause.
+  const related = isRelatedPosition(finding)
+  const excerpt = props.currentText ? clauseExcerpt(props.currentText) : null
 
   return (
     <aside className="rv-ws-pane rv-ws-dt" aria-label="Finding detail">
@@ -184,15 +205,29 @@ export function FindingPanel(props: Props) {
       </p>
       <div key="in" className="rv-ws-dt-in">
         <div className="rv-ws-kicker">
-          <span className={`rv-ws-typ${change ? ` rv-ws-typ--${change}` : ''}`}>
-            {change ?? classificationLabel(finding.reviewClassification)}
-          </span>
-          {finding.subjectKind === 'ABSENCE' ? 'No location in contract' : issueFamilyLabel(finding.issueFamily)}
+          {related ? (
+            <span className="rv-ws-typ rv-ws-typ--related">Related position</span>
+          ) : (
+            <span className={`rv-ws-typ${change ? ` rv-ws-typ--${change}` : ''}`}>
+              {change ?? classificationLabel(finding.reviewClassification)}
+            </span>
+          )}
+          {finding.subjectKind === 'ABSENCE'
+            ? 'No location in contract'
+            : related
+              ? 'On a topic the clause only touches'
+              : findingIssueLabel(finding)}
           <span className="rv-ws-sp" />
           {props.position ? `${props.position.index} of ${props.position.total}` : null}
         </div>
         <h2>{title}</h2>
         {props.context ? <div className="rv-ws-ctx">{props.context}</div> : null}
+        {related ? (
+          <p className="rv-ws-note rv-ws-note--related">
+            <b>Related position, not a breach.</b> This position governs a topic the clause only
+            touches, so it is context for review rather than a defect in the clause.
+          </p>
+        ) : null}
 
         <div className="rv-ws-sec">
           <div className="rv-ws-sec-h">Rivell found</div>
@@ -200,8 +235,15 @@ export function FindingPanel(props: Props) {
             <p>
               {finding.observationText}
               <br />
-              <span className="rv-ws-authority">{observationKindLabel(finding.observationKind)}</span>
+              <span className="rv-ws-authority">
+                {related ? 'Related position — secondary topic' : observationKindLabel(finding.observationKind)}
+              </span>
             </p>
+            {assessment ? (
+              <p className="rv-ws-caption" data-testid="finding-assessment">
+                Assessment{related ? ' (secondary topic)' : ''}: {assessment}
+              </p>
+            ) : null}
             {absences.map((claim) => (
               <p key={claim.ordinal}>
                 {claim.text}
@@ -232,6 +274,23 @@ export function FindingPanel(props: Props) {
           </div>
         </div>
 
+        {withinFallback ? (
+          <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
+            {approvalNeeded ? (
+              <>
+                <b>Approval is needed.</b> This position names an approver, so a human must approve
+                the clause before it can be accepted.
+                {escalationTriggers.length > 0 ? ` Escalate when: ${escalationTriggers.join('; ')}.` : ''}
+              </>
+            ) : (
+              <>
+                <b>This is a note, not a problem.</b> The clause departs from the preferred position
+                but stays within an acceptable fallback; accept and record it.
+              </>
+            )}
+          </p>
+        ) : null}
+
         {position ? <PolicyPosition view={position} openable={new Set(items.keys())} onOpenSource={props.onOpenSource} /> : null}
 
         <div className="rv-ws-sec">
@@ -246,7 +305,7 @@ export function FindingPanel(props: Props) {
           <div className="rv-ws-incl">
             {finding.subjectKind === 'ABSENCE'
               ? 'No source passage. This provision appears absent in this contract version.'
-              : (props.currentText ?? 'The clause text for this version is not available.')}
+              : (excerpt ?? 'The clause text for this version is not available.')}
           </div>
         </div>
 
@@ -267,10 +326,15 @@ export function FindingPanel(props: Props) {
         ) : null}
 
         {finding.evidenceItems.length > 0 ? (
-          <div className="rv-ws-sec">
-            <div className="rv-ws-sec-h">Sources</div>
+          // Condensed: the policy position and the proposed wording are above already, so the full
+          // source list is one disclosure away, each item still labelled with its own authority.
+          <details className="rv-ws-sec rv-ws-srcs">
+            <summary className="rv-ws-sec-h">
+              Sources
+              <small>{finding.evidenceItems.length}</small>
+            </summary>
             {sources.map((item) => {
-              const row = sourceRow(item, props.regionLabels)
+              const row = sourceRow(item, props.regionLabels, labelFor)
               return (
                 <button key={item.evidenceId} type="button" className="rv-ws-srow" onClick={() => props.onOpenSource(item.evidenceId)}>
                   <span className="rv-ws-sico">
@@ -294,7 +358,7 @@ export function FindingPanel(props: Props) {
                 {row}
               </div>
             ))}
-          </div>
+          </details>
         ) : null}
 
         {decision && props.decisionsLoaded ? (

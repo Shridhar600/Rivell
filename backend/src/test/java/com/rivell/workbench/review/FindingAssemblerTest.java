@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -10,7 +12,6 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
-import com.rivell.workbench.contracts.LegalConcept;
 
 class FindingAssemblerTest {
 
@@ -33,7 +34,7 @@ class FindingAssemblerTest {
             List<UUID> evidence, String verificationOutcome) {
         return new RawReviewSignal(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, RUN_ID,
                 UUID.randomUUID(), type, FindingSubjectKind.CLAUSE, HEADING_ID, null,
-                LegalConcept.LIMITATION_OF_LIABILITY, null, family, payload, evidence,
+                CoreConcepts.LIMITATION_OF_LIABILITY, null, family, payload, evidence,
                 null, null, null, null, verificationOutcome, null, null, Map.of(),
                 type.name() + ":" + UUID.randomUUID(), NOW);
     }
@@ -41,7 +42,7 @@ class FindingAssemblerTest {
     @Test
     void supportOnlyGroupYieldsNoFinding() {
         var support = signal(SignalType.APPROVED_DRAFTING_AVAILABLE,
-                IssueFamily.LIABILITY_CAP_DEVIATION,
+                IssueFamily.POSITION_WALK_AWAY,
                 new ApprovedDraftingPayload(UUID.randomUUID(), "fallback wording", "FALLBACK"),
                 List.of(UUID.randomUUID()), null);
 
@@ -50,8 +51,8 @@ class FindingAssemblerTest {
 
     @Test
     void clauseSignalWithoutEvidenceFailsAssemblyLoudly() {
-        var signal = signal(SignalType.DEVIATION_UNCERTAIN, IssueFamily.LIABILITY_CAP_UNCERTAIN,
-                new DeviationUncertainPayload("policy_not_comparable"), List.of(), null);
+        var signal = signal(SignalType.DEVIATION_UNCERTAIN, IssueFamily.POSITION_UNCERTAIN,
+                new DeviationUncertainPayload("bounded_decision_unavailable"), List.of(), null);
 
         assertThatThrownBy(() -> assembler.assemble(run(), List.of(signal), NOW))
                 .isInstanceOf(FindingAssemblyException.class)
@@ -61,11 +62,11 @@ class FindingAssemblerTest {
     @Test
     void draftingOnAnUncertainIssueDoesNotProposeLanguage() {
         var uncertain = signal(SignalType.DEVIATION_UNCERTAIN,
-                IssueFamily.LIABILITY_CAP_UNCERTAIN,
+                IssueFamily.POSITION_UNCERTAIN,
                 new DeviationUncertainPayload("classification_uncertain"),
                 List.of(UUID.randomUUID()), null);
         var drafting = signal(SignalType.APPROVED_DRAFTING_AVAILABLE,
-                IssueFamily.LIABILITY_CAP_UNCERTAIN,
+                IssueFamily.POSITION_UNCERTAIN,
                 new ApprovedDraftingPayload(UUID.randomUUID(), "fallback wording", "FALLBACK"),
                 List.of(UUID.randomUUID()), null);
 
@@ -79,7 +80,7 @@ class FindingAssemblerTest {
     @Test
     void unverifiedCandidateHasNoGenerativeExplanationClaimAndSequentialOrdinals() {
         var openEnded = signal(SignalType.OPEN_ENDED_ANALYSIS_RESULT,
-                IssueFamily.OPEN_ENDED_LIABILITY,
+                IssueFamily.POSITION_NEEDS_FALLBACK,
                 new OpenEndedAnalysisPayload("candidate", "model explanation", "UNCERTAIN"),
                 List.of(UUID.randomUUID()), "UNCERTAIN");
 
@@ -91,6 +92,26 @@ class FindingAssemblerTest {
         for (var index = 0; index < finding.claims().size(); index++) {
             assertThat(finding.claims().get(index).ordinal()).isEqualTo(index);
         }
+    }
+
+    private static RawReviewSignal walkAway(boolean secondaryTopic) {
+        return signal(SignalType.POLICY_DEVIATION, IssueFamily.POSITION_WALK_AWAY,
+                new PositionDeviationPayload(UUID.randomUUID(), PolicyComparisonSpecs.WALK_AWAY,
+                        0.9, Map.of(PolicyComparisonSpecs.WALK_AWAY, 0.9), secondaryTopic),
+                List.of(UUID.randomUUID()), null);
+    }
+
+    @Test
+    void aPositionOnATopicTheClauseOnlyTouchesIsANoteAndNeverMasksItsOwnTopic() {
+        var note = assembler.assemble(run(), List.of(walkAway(true)), NOW).get(0);
+        assertThat(note.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(note.reviewClassification()).isEqualTo(FindingClassification.INFORMATIONAL);
+
+        // same clause, same family: the position on the clause's own topic decides
+        var both = assembler.assemble(run(), List.of(walkAway(true), walkAway(false)), NOW);
+        assertThat(both).hasSize(1);
+        assertThat(both.get(0).severity()).isEqualTo(FindingSeverity.HIGH);
+        assertThat(both.get(0).reviewClassification()).isEqualTo(FindingClassification.BLOCKING);
     }
 
     @Test

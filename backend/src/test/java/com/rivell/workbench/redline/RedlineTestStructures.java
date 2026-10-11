@@ -1,5 +1,7 @@
 package com.rivell.workbench.redline;
 
+import com.rivell.workbench.taxonomy.ConceptKey;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,7 +11,6 @@ import java.util.UUID;
 import com.rivell.workbench.contracts.ContractStructure;
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
 
@@ -93,9 +94,9 @@ public final class RedlineTestStructures {
         return new BodyElement(text);
     }
 
-    public static Map<UUID, LegalConcept> concepts(
-            ContractStructure structure, Map<String, LegalConcept> byHeadingText) {
-        var byId = new LinkedHashMap<UUID, LegalConcept>();
+    public static Map<UUID, ConceptKey> concepts(
+            ContractStructure structure, Map<String, ConceptKey> byHeadingText) {
+        var byId = new LinkedHashMap<UUID, ConceptKey>();
         for (var node : structure.nodes()) {
             if (node.nodeType() == DocumentNodeType.HEADING
                     && node.text() != null && byHeadingText.containsKey(node.text())) {
@@ -129,7 +130,7 @@ public final class RedlineTestStructures {
                 null, ChangeLanguageSource.NONE, null);
     }
 
-    public static ApprovedChange insert(UUID changeSetId, int ordinal, LegalConcept concept,
+    public static ApprovedChange insert(UUID changeSetId, int ordinal, ConceptKey concept,
             String language) {
         return new ApprovedChange(UUID.randomUUID(), UUID.randomUUID(), changeSetId,
                 UUID.randomUUID(), ordinal, UUID.randomUUID(), UUID.randomUUID(),

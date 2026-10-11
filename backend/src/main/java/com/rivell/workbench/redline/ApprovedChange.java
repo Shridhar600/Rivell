@@ -3,7 +3,7 @@ package com.rivell.workbench.redline;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * One deterministic legal-change intent frozen for M9: exact action, canonical target,
@@ -21,7 +21,7 @@ public record ApprovedChange(
         ChangeActionType actionType,
         ChangeTargetKind targetKind,
         UUID targetHeadingNodeId,
-        LegalConcept absenceConcept,
+        ConceptKey absenceConcept,
         String approvedLanguage,
         ChangeLanguageSource languageSource,
         UUID approvedDraftingEvidenceId) {

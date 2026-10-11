@@ -1,10 +1,10 @@
 import { useId, type FormEvent, type ReactNode } from 'react'
 import { POSITION_ROLES, type ArtifactDetail, type Candidate, type PositionRole } from '../../../api/knowledge'
-import { CONCEPT_LABELS, POSITION_LABELS, formatPositions, proposedPositions, positionsDiverge, scopeDifferences } from '../../../lib/semantics'
+import { useTaxonomy } from '../../../api/taxonomy'
+import { humanizeCode } from '../../../lib/domainLabels'
+import { POSITION_LABELS, formatPositions, proposedPositions, positionsDiverge, scopeDifferences } from '../../../lib/semantics'
 import type { SemanticDraft } from '../../../lib/semantics'
 import type { Correction } from './useCorrection'
-
-const CONCEPTS = Object.keys(CONCEPT_LABELS)
 
 /** A labelled control. The label is tied to the control by id, so each one has a real accessible name. */
 function Field({ label, hint, className, children }: { label: string; hint?: ReactNode; className?: string; children: (id: string) => ReactNode }) {
@@ -34,11 +34,16 @@ interface Props {
  */
 export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }: Props) {
   const { draft, setDraft, pending, error } = correction
+  const taxonomy = useTaxonomy()
   const isPlaybook = candidate.candidateType === 'PLAYBOOK_RULE'
   const isClause = candidate.candidateType === 'CLAUSE_VARIANT'
   const columns = Object.keys(draft.columns)
   const machinePositions = proposedPositions(candidate)
   const scopeDiffs = scopeDifferences(candidate, artifact)
+  const conceptDisabled = pending || taxonomy.isPending || taxonomy.isError
+  const selectedIsLeaf = draft.concept === '' || taxonomy.leaves.some((leaf) => leaf.key === draft.concept)
+  const selectedKnown =
+    selectedIsLeaf || taxonomy.parents.some((parent) => parent.key === draft.concept)
 
   const semantic = (change: Partial<SemanticDraft>) => setDraft((previous) => ({ ...previous, semantic: { ...previous.semantic, ...change } }))
   const scope = (key: keyof typeof draft.scope) => (event: { target: { value: string } }) =>
@@ -60,19 +65,39 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
         hint={
           <>
             Changing it asks Rivell to compare this candidate with published knowledge again.
-            {candidate.legalConceptKey ? ` Rivell classified it as ${CONCEPT_LABELS[candidate.legalConceptKey] ?? candidate.legalConceptKey}.` : ' Rivell did not classify it.'}
+            {candidate.legalConceptKey ? ` Rivell classified it as ${taxonomy.labelFor(candidate.legalConceptKey)}.` : ' Rivell did not classify it.'}
           </>
         }
       >
         {(id) => (
-          <select id={id} value={draft.concept} disabled={pending} onChange={(event) => setDraft((previous) => ({ ...previous, concept: event.target.value }))}>
-            <option value="">Not classified</option>
-            {CONCEPTS.map((key) => (
-              <option key={key} value={key}>
-                {CONCEPT_LABELS[key]}
-              </option>
-            ))}
-          </select>
+          <>
+            <select id={id} value={draft.concept} disabled={conceptDisabled} onChange={(event) => setDraft((previous) => ({ ...previous, concept: event.target.value }))}>
+              <option value="">Not classified</option>
+              {selectedIsLeaf ? null : (
+                <option value={draft.concept}>
+                  {humanizeCode(draft.concept)}
+                  {!taxonomy.isPending && !taxonomy.isError && !selectedKnown
+                    ? ' (not in the current taxonomy)'
+                    : ''}
+                </option>
+              )}
+              {taxonomy.groups.map((group) => (
+                <optgroup key={group.parentKey ?? 'other'} label={group.label}>
+                  {group.leaves.map((concept) => (
+                    <option key={concept.key} value={concept.key}>
+                      {concept.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {taxonomy.isPending ? <small role="status">Loading legal topics…</small> : null}
+            {taxonomy.isError ? (
+              <small role="status">
+                The legal topic list could not be loaded. The concept cannot be changed right now.
+              </small>
+            ) : null}
+          </>
         )}
       </Field>
 

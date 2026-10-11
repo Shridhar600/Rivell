@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ArtifactDetail, Candidate } from '../api/knowledge'
 import {
-  conceptLabel,
   escalationDiverge,
   hasSupersessionProposal,
   interpretationFor,
@@ -79,12 +78,6 @@ const artifact: ArtifactDetail = {
 }
 
 describe('semantic display helpers', () => {
-  it('labels concepts with a readable fallback', () => {
-    expect(conceptLabel('LIMITATION_OF_LIABILITY')).toBe('Limitation of liability')
-    expect(conceptLabel('FUTURE_CONCEPT')).toBe('Future concept')
-    expect(conceptLabel(null)).toBeNull()
-  })
-
   it('labels review reasons and falls back to the raw code', () => {
     expect(reviewReasonLabel('VERIFICATION_DISPUTED')).toMatch(/not sufficiently supported/i)
     expect(reviewReasonLabel('FUTURE_REASON')).toBe('FUTURE_REASON')

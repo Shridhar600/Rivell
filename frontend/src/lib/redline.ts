@@ -1,7 +1,7 @@
 import type { ApprovedChange, ChangeActionType } from '../api/workflow'
 import type { RedlineExecution, RedlineExecutionChange } from '../api/redline'
+import type { ConceptLabel } from '../api/taxonomy'
 import { changeTargetLabel } from './workflow'
-import { conceptLabel } from './contractSemantics'
 
 export function redlineExecutionTitle(execution: RedlineExecution): string {
   if (execution.status === 'FAILED') return 'Redline could not be generated'
@@ -100,10 +100,10 @@ export function redlineRetryAvailable(execution: RedlineExecution): boolean {
   return execution.status === 'FAILED' && execution.failureCode === 'APPROVED_SEMANTICS_DRIFT'
 }
 
-export function redlinePlacementLabel(placement: string | null): string | null {
+export function redlinePlacementLabel(placement: string | null, label: ConceptLabel): string | null {
   if (placement === null) return null
   const afterClause = /^AFTER_CLAUSE\[([^\]]+)\]$/.exec(placement)
-  if (afterClause) return `After clause: ${conceptLabel(afterClause[1])}`
+  if (afterClause) return `After clause: ${label(afterClause[1])}`
   if (placement === 'BEFORE_SIGNATURE_BLOCK') return 'Before the signature block'
   if (placement === 'END_OF_BODY') return 'At the end of the document'
   return 'Placement recorded by Rivell'
@@ -168,16 +168,17 @@ function resolvedTargetLabel(
   change: RedlineExecutionChange,
   approved: ApprovedChange | undefined,
   regionLabels: Map<string, string>,
+  label: ConceptLabel,
 ): string {
   if (change.actionType === 'INSERT') {
-    if (approved) return changeTargetLabel(approved, regionLabels)
+    if (approved) return changeTargetLabel(approved, regionLabels, label)
     if (change.resolvedTarget) {
-      return `Missing provision: ${conceptLabel(change.resolvedTarget)}`
+      return `Missing provision: ${label(change.resolvedTarget)}`
     }
     return 'Target not recorded'
   }
   if (change.resolvedTarget) return change.resolvedTarget
-  if (approved) return changeTargetLabel(approved, regionLabels)
+  if (approved) return changeTargetLabel(approved, regionLabels, label)
   return 'Target not recorded'
 }
 
@@ -196,7 +197,7 @@ export type RedlineChangeRow = {
 
 export function buildRedlineChangeRows(
   execution: RedlineExecution,
-  context: { approvedChanges: ApprovedChange[]; regionLabels: Map<string, string> },
+  context: { approvedChanges: ApprovedChange[]; regionLabels: Map<string, string>; label: ConceptLabel },
 ): RedlineChangeRow[] {
   const approvedById = new Map(context.approvedChanges.map((change) => [change.id, change]))
   return execution.changes.map((change) => {
@@ -205,11 +206,11 @@ export function buildRedlineChangeRows(
       id: change.approvedChangeId,
       ordinal: change.ordinal,
       actionLabel: actionLabel(change.actionType),
-      targetLabel: resolvedTargetLabel(change, approved, context.regionLabels),
+      targetLabel: resolvedTargetLabel(change, approved, context.regionLabels, context.label),
       statusLabel: redlineChangeStatusLabel(change.status),
       verificationLabel: redlineVerificationLabel(change.verification),
       placementLabel:
-        change.actionType === 'INSERT' ? redlinePlacementLabel(change.placement) : null,
+        change.actionType === 'INSERT' ? redlinePlacementLabel(change.placement, context.label) : null,
       paragraphSummary: paragraphSummary(change),
       failureTitle: change.failureCode ? redlineFailureTitle(change.failureCode) : null,
       findingId: approved?.findingId ?? null,

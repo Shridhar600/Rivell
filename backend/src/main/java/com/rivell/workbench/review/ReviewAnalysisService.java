@@ -9,6 +9,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
+import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
@@ -31,6 +32,7 @@ public class ReviewAnalysisService {
     private final ReviewAnalysisRepository analysisRepository;
     private final ReviewCheckExecutors executors;
     private final ContractEnrichmentService contractEnrichmentService;
+    private final ContractQueryService contractQueryService;
     private final RetrievalProperties retrievalProperties;
     private final EmbeddingService embeddingService;
     private final EvidenceService evidenceService;
@@ -45,6 +47,7 @@ public class ReviewAnalysisService {
             ReviewAnalysisRepository analysisRepository,
             ReviewCheckExecutors executors,
             ContractEnrichmentService contractEnrichmentService,
+            ContractQueryService contractQueryService,
             RetrievalProperties retrievalProperties,
             EmbeddingService embeddingService,
             EvidenceService evidenceService,
@@ -57,6 +60,7 @@ public class ReviewAnalysisService {
         this.analysisRepository = analysisRepository;
         this.executors = executors;
         this.contractEnrichmentService = contractEnrichmentService;
+        this.contractQueryService = contractQueryService;
         this.retrievalProperties = retrievalProperties;
         this.embeddingService = embeddingService;
         this.evidenceService = evidenceService;
@@ -250,6 +254,7 @@ public class ReviewAnalysisService {
             Review review, ReviewSnapshot snapshot, ReviewAnalysisRun run,
             ContractSemantics semantics, AnalysisEnvironment environment) {
         var evidenceCache = new ReviewEvidenceCache(evidenceService);
+        var headingTexts = headingTexts(snapshot);
         for (var check : reviewRepository.findPlanChecks(review.organizationId(), review.id())) {
             var existing = analysisRepository.findExecution(
                     review.organizationId(), run.id(), check.id());
@@ -269,7 +274,7 @@ public class ReviewAnalysisService {
                 continue;
             }
             var context = new ReviewCheckContext(review, snapshot, check, run.id(),
-                    semantics, environment, evidenceCache, clock.instant());
+                    semantics, environment, evidenceCache, headingTexts, clock.instant());
             var outcome = runCheck(check, context, environment);
             var leaseId = lease.get();
             try {
@@ -290,6 +295,27 @@ public class ReviewAnalysisService {
                 // another worker reclaimed this execution; it owns the terminal write
                 continue;
             }
+        }
+    }
+
+    /**
+     * Structure node text by node id, loaded once per run: the comparison state names
+     * the subject clause heading. A structure read failure leaves the map empty rather
+     * than failing the run; the check still judges the clause text.
+     */
+    private Map<UUID, String> headingTexts(ReviewSnapshot snapshot) {
+        try {
+            return contractQueryService.getStructureForOrganization(
+                            snapshot.organizationId(), snapshot.contractId(),
+                            snapshot.contractVersionNumber())
+                    .nodes().stream()
+                    .filter(node -> node.text() != null && !node.text().isBlank())
+                    .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                            com.rivell.workbench.contracts.DocumentNode::id,
+                            com.rivell.workbench.contracts.DocumentNode::text,
+                            (first, second) -> first));
+        } catch (RuntimeException e) {
+            return Map.of();
         }
     }
 

@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.review.ClaimKind;
 import com.rivell.workbench.review.Finding;
 import com.rivell.workbench.review.FindingClassification;
@@ -108,10 +108,10 @@ class JdbcFindingRepository implements FindingRepository {
                 .param("subjectKind", finding.subjectKind().name())
                 .param("subjectHeadingNodeId", finding.subjectHeadingNodeId())
                 .param("absenceConcept", finding.absenceConcept() == null
-                        ? null : finding.absenceConcept().name())
-                .param("concept", finding.concept().name())
+                        ? null : finding.absenceConcept().value())
+                .param("concept", finding.concept().value())
                 .param("secondaryConcept", finding.secondaryConcept() == null
-                        ? null : finding.secondaryConcept().name())
+                        ? null : finding.secondaryConcept().value())
                 .param("issueFamily", finding.issueFamily().name())
                 .param("observationKind", finding.observationKind())
                 .param("observationText", finding.observationText())
@@ -138,7 +138,7 @@ class JdbcFindingRepository implements FindingRepository {
                     .param("organizationId", finding.organizationId())
                     .param("findingId", finding.id())
                     .param("ordinal", conceptOrdinal++)
-                    .param("concept", concept.name())
+                    .param("concept", concept.value())
                     .update();
         }
         for (var claim : finding.claims()) {
@@ -226,7 +226,7 @@ class JdbcFindingRepository implements FindingRepository {
                 .list();
 
         var concepts = children(organizationId, runId, "concept", (findingId, row) ->
-                new ConceptRow(findingId, LegalConcept.valueOf(row.getString("concept"))));
+                new ConceptRow(findingId, ConceptKey.of(row.getString("concept"))));
         var claims = children(organizationId, runId, "claim", (findingId, row) ->
                 new ClaimRow(findingId, new FindingClaim(
                         row.getObject("id", UUID.class),
@@ -257,7 +257,7 @@ class JdbcFindingRepository implements FindingRepository {
 
     @Override
     public List<Finding> findFindings(
-            UUID organizationId, UUID runId, LegalConcept concept,
+            UUID organizationId, UUID runId, ConceptKey concept,
             FindingClassification classification, FindingSeverity severity, int limit) {
         var conditions = new ArrayList<String>();
         var params = new LinkedHashMap<String, Object>();
@@ -267,7 +267,7 @@ class JdbcFindingRepository implements FindingRepository {
         params.put("runId", runId);
         if (concept != null) {
             conditions.add("(concept = :concept or secondary_concept = :concept)");
-            params.put("concept", concept.name());
+            params.put("concept", concept.value());
         }
         if (classification != null) {
             conditions.add("review_classification = :classification");
@@ -354,7 +354,7 @@ class JdbcFindingRepository implements FindingRepository {
                 .optional();
     }
 
-    private List<LegalConcept> findConcepts(UUID organizationId, UUID findingId) {
+    private List<ConceptKey> findConcepts(UUID organizationId, UUID findingId) {
         return jdbcClient.sql("""
                 select concept from finding_concept
                 where finding_id = :findingId and organization_id = :organizationId
@@ -362,7 +362,7 @@ class JdbcFindingRepository implements FindingRepository {
                 """)
                 .param("findingId", findingId)
                 .param("organizationId", organizationId)
-                .query((rs, rowNum) -> LegalConcept.valueOf(rs.getString("concept")))
+                .query((rs, rowNum) -> ConceptKey.of(rs.getString("concept")))
                 .list();
     }
 
@@ -410,7 +410,7 @@ class JdbcFindingRepository implements FindingRepository {
     }
 
     private static Finding toFinding(
-            FindingRow row, List<LegalConcept> concepts, List<FindingClaim> claims,
+            FindingRow row, List<ConceptKey> concepts, List<FindingClaim> claims,
             List<UUID> evidence, List<UUID> signals) {
         return new Finding(row.id(), row.organizationId(), row.reviewId(), row.runId(),
                 row.consolidationKey(), row.subjectKind(), row.subjectHeadingNodeId(),
@@ -431,10 +431,10 @@ class JdbcFindingRepository implements FindingRepository {
                 FindingSubjectKind.valueOf(rs.getString("subject_kind")),
                 rs.getObject("subject_heading_node_id", UUID.class),
                 rs.getString("absence_concept") == null ? null
-                        : LegalConcept.valueOf(rs.getString("absence_concept")),
-                LegalConcept.valueOf(rs.getString("concept")),
+                        : ConceptKey.of(rs.getString("absence_concept")),
+                ConceptKey.of(rs.getString("concept")),
                 rs.getString("secondary_concept") == null ? null
-                        : LegalConcept.valueOf(rs.getString("secondary_concept")),
+                        : ConceptKey.of(rs.getString("secondary_concept")),
                 IssueFamily.valueOf(rs.getString("issue_family")),
                 rs.getString("observation_kind"),
                 rs.getString("observation_text"),
@@ -536,7 +536,7 @@ class JdbcFindingRepository implements FindingRepository {
     private record FindingRow(
             UUID id, UUID organizationId, UUID reviewId, UUID runId, String consolidationKey,
             FindingSubjectKind subjectKind, UUID subjectHeadingNodeId,
-            LegalConcept absenceConcept, LegalConcept concept, LegalConcept secondaryConcept,
+            ConceptKey absenceConcept, ConceptKey concept, ConceptKey secondaryConcept,
             IssueFamily issueFamily, String observationKind, String observationText,
             FindingSeverity severity, FindingClassification reviewClassification,
             ProposedAction proposedAction, String proposedLanguage,
@@ -544,7 +544,7 @@ class JdbcFindingRepository implements FindingRepository {
             Map<String, Object> quality, java.time.Instant createdAt) {
     }
 
-    private record ConceptRow(UUID findingId, LegalConcept concept) {
+    private record ConceptRow(UUID findingId, ConceptKey concept) {
     }
 
     private record ClaimRow(UUID findingId, FindingClaim claim) {

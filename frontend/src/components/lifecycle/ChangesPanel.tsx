@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
 import type { FindingSummary } from '../../api/reviews'
+import { useTaxonomy } from '../../api/taxonomy'
 import type { ApprovedChange, ApprovedChangeSet, HumanDecision, HumanReview } from '../../api/workflow'
 import { changeLocation, changeOutcome, changeTitle, pluralise } from '../../lib/lifecycleView'
 import { workspacePath } from '../../lib/reviewLifecycle'
@@ -39,6 +40,7 @@ export function ChangesPanel({
   clauseText,
   structure,
 }: Props) {
+  const { labelFor } = useTaxonomy()
   const [open, setOpen] = useState<Set<string>>(() => new Set(changeSet.changes.slice(0, 1).map((change) => change.id)))
   const toggle = (id: string) =>
     setOpen((previous) => {
@@ -82,8 +84,8 @@ export function ChangesPanel({
                   <TypeChip type={change.actionType} />
                 </span>
                 <span>
-                  <b>{changeTitle(change, finding, regionLabels)}</b>
-                  <div className="rv-lc-chg__l">{changeLocation(change, regionLabels)}</div>
+                  <b>{changeTitle(change, finding, regionLabels, labelFor)}</b>
+                  <div className="rv-lc-chg__l">{changeLocation(change, regionLabels, labelFor)}</div>
                 </span>
                 <span className="rv-stb">{changeOutcome(decision)}</span>
                 <ChevronIcon className="rv-icon" />
@@ -143,7 +145,7 @@ export function ChangesPanel({
       </ol>
       {humanReview.rejected > 0 ? (
         <p className="rv-lc-quiet">
-          Also reviewed: {pluralise(humanReview.rejected, 'Finding')} rejected; no ApprovedChange was created for{' '}
+          Also reviewed: {pluralise(humanReview.rejected, 'Finding')} rejected; no approved change was created for{' '}
           {humanReview.rejected === 1 ? 'it' : 'them'}.
         </p>
       ) : null}

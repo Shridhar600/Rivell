@@ -60,7 +60,7 @@ public final class SemanticsDigest {
                     canonical.append("clause=").append(clause.headingNodeId()).append('|')
                             .append(clause.effectivePrimaryConcept().orElse(null)).append('|')
                             .append(clause.secondaryConcepts().stream()
-                                    .map(Enum::name).sorted()
+                                    .map(com.rivell.workbench.taxonomy.ConceptKey::value).sorted()
                                     .collect(Collectors.joining(",")))
                             .append('|')
                             .append(clause.effectiveFacts().stream()

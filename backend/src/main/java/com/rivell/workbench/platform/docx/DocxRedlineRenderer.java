@@ -57,6 +57,8 @@ public class DocxRedlineRenderer implements RedlineRenderer {
 
     private final ObjectFactory factory = new ObjectFactory();
 
+    private static final String MAIN_DOCUMENT_ENTRY = "word/document.xml";
+
     private final com.rivell.workbench.platform.parsing.DocxParserProperties properties;
 
     public DocxRedlineRenderer(
@@ -126,7 +128,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                     start, nextId.get() - 1));
         }
 
-        var bytes = serialize(wordPackage);
+        var bytes = serialize(wordPackage, sourceBytes);
         return new RenderedRedline(bytes, Hashes.sha256Hex(bytes), reports);
     }
 
@@ -458,10 +460,17 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         }
     }
 
-    private byte[] serialize(WordprocessingMLPackage wordPackage) {
+    /**
+     * The source package with only the main document part replaced. docx4j re-serializes every
+     * part whose JAXB tree was read (the settings part is read for the protection check) and drops
+     * markup its schema rejects, so saving the whole package would change parts the redline never
+     * edits. Copying them from the source keeps them byte-identical.
+     */
+    private byte[] serialize(WordprocessingMLPackage wordPackage, byte[] sourceBytes) {
         try (var output = new ByteArrayOutputStream()) {
             wordPackage.save(output);
-            return output.toByteArray();
+            var document = DocxRedlineSupport.entryBytes(output.toByteArray(), MAIN_DOCUMENT_ENTRY);
+            return DocxRedlineSupport.withEntryReplaced(sourceBytes, MAIN_DOCUMENT_ENTRY, document);
         } catch (Exception e) {
             throw failure(RedlineFailureCode.DOCX_SERIALIZATION_FAILED, null,
                     "The redline document could not be serialized.");

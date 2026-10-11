@@ -2,24 +2,22 @@ package com.rivell.workbench.review;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.contracts.ContractSemantics;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Deterministic plan construction from snapshot-frozen inputs. Pack definitions own
- * WHICH concepts are checked; this builder owns HOW the plan entries are derived.
- * Subjects are stable canonical heading-node identities.
+ * WHICH concepts are checked for presence and cross-clause coherence; the builder owns
+ * HOW the plan entries are derived. Every clause that carries at least one effective
+ * topic gets a policy comparison, with or without a pack, because applicability comes
+ * from the published playbook's topic sets, not from code. Subjects are stable
+ * canonical heading-node identities.
  */
 public final class ReviewPlanBuilder {
-
-    private static final Map<LegalConcept, CheckMechanism> SUPPORTED_CLAUSE_CHECKS =
-            Map.of(LegalConcept.LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP);
 
     private final ReviewPackRegistry packs;
 
@@ -30,25 +28,29 @@ public final class ReviewPlanBuilder {
     public List<ReviewPlanCheck> build(
             UUID reviewId, UUID organizationId, ReviewSnapshot snapshot,
             ContractSemantics semantics) {
-        var clausesByConcept = clausesByConcept(semantics);
         var checks = new ArrayList<ReviewPlanCheck>();
         var ordinal = new int[] {0};
+        ReviewPack pack = null;
 
         if (snapshot.contractPackKey() != null) {
-            var pack = packs.find(snapshot.contractPackKey())
+            pack = packs.find(snapshot.contractPackKey())
                     .orElseThrow(() -> new InvalidReviewConfigurationException(
                             "Unknown contract pack: " + snapshot.contractPackKey()));
             for (var entry : pack.conceptExpectations().entrySet()) {
                 checks.add(presenceCheck(reviewId, organizationId, snapshot.createdAt(),
                         ordinal[0]++, entry.getKey(), entry.getValue()));
             }
-            for (var entry : pack.clauseChecks().entrySet()) {
-                for (var clause : clausesByConcept.getOrDefault(entry.getKey(), List.of())) {
-                    checks.add(clauseCheck(reviewId, organizationId, snapshot.createdAt(),
-                            ordinal[0]++, entry.getKey(), entry.getValue(),
-                            clause.headingNodeId()));
-                }
+        }
+        for (var clause : semantics.clauses()) {
+            var topics = ClauseTopics.effectiveTopics(clause);
+            if (topics.isEmpty()) {
+                continue;
             }
+            checks.add(policyComparisonCheck(reviewId, organizationId, snapshot.createdAt(),
+                    ordinal[0]++, ClauseTopics.subjectConcept(topics), clause.headingNodeId()));
+        }
+        if (pack != null) {
+            var clausesByConcept = clausesByConcept(semantics);
             for (var rule : pack.crossClauseChecks()) {
                 if (clausesByConcept.getOrDefault(rule.secondaryConcept(), List.of()).isEmpty()) {
                     continue;
@@ -59,21 +61,13 @@ public final class ReviewPlanBuilder {
                             subject.headingNodeId()));
                 }
             }
-        } else {
-            for (var entry : SUPPORTED_CLAUSE_CHECKS.entrySet()) {
-                for (var clause : clausesByConcept.getOrDefault(entry.getKey(), List.of())) {
-                    checks.add(clauseCheck(reviewId, organizationId, snapshot.createdAt(),
-                            ordinal[0]++, entry.getKey(), entry.getValue(),
-                            clause.headingNodeId()));
-                }
-            }
         }
         return List.copyOf(checks);
     }
 
-    private static Map<LegalConcept, List<ClauseSemantics>> clausesByConcept(
+    private static java.util.Map<ConceptKey, List<ClauseSemantics>> clausesByConcept(
             ContractSemantics semantics) {
-        var byConcept = new LinkedHashMap<LegalConcept, List<ClauseSemantics>>();
+        var byConcept = new java.util.LinkedHashMap<ConceptKey, List<ClauseSemantics>>();
         for (var clause : semantics.clauses()) {
             clause.effectivePrimaryConcept().ifPresent(concept ->
                     byConcept.computeIfAbsent(concept, key -> new ArrayList<>()).add(clause));
@@ -83,19 +77,20 @@ public final class ReviewPlanBuilder {
 
     private static ReviewPlanCheck presenceCheck(
             UUID reviewId, UUID organizationId, Instant createdAt, int ordinal,
-            LegalConcept concept, CheckExpectation expectation) {
+            ConceptKey concept, CheckExpectation expectation) {
         return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,
                 "PRESENCE:" + concept, CheckFamily.CONCEPT_PRESENCE, expectation,
                 CheckMechanism.PRESENCE, concept, null, null, createdAt);
     }
 
-    private static ReviewPlanCheck clauseCheck(
+    private static ReviewPlanCheck policyComparisonCheck(
             UUID reviewId, UUID organizationId, Instant createdAt, int ordinal,
-            LegalConcept concept, CheckMechanism mechanism, UUID subjectHeadingNodeId) {
+            ConceptKey concept, UUID subjectHeadingNodeId) {
         return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,
-                "CLAUSE:" + mechanism + ":" + concept + ":" + subjectHeadingNodeId,
-                CheckFamily.CLAUSE_REVIEW, null, mechanism, concept, null,
-                subjectHeadingNodeId, createdAt);
+                "CLAUSE:" + CheckMechanism.POLICY_COMPARISON + ":" + concept + ":"
+                        + subjectHeadingNodeId,
+                CheckFamily.CLAUSE_REVIEW, null, CheckMechanism.POLICY_COMPARISON, concept,
+                null, subjectHeadingNodeId, createdAt);
     }
 
     private static ReviewPlanCheck crossClauseCheck(

@@ -1,5 +1,8 @@
 package com.rivell.workbench.redline;
 
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -49,7 +52,6 @@ import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -255,8 +257,8 @@ class RedlineExecutionIT {
         var fixture = analyzedNda();
         var absence = fixture.findings().stream()
                 .filter(finding -> finding.subjectKind() == FindingSubjectKind.ABSENCE)
-                .filter(finding -> finding.absenceConcept()
-                        == com.rivell.workbench.contracts.LegalConcept.LIMITATION_OF_LIABILITY)
+                .filter(finding -> com.rivell.workbench.taxonomy.CoreConcepts
+                        .LIMITATION_OF_LIABILITY.equals(finding.absenceConcept()))
                 .findFirst().orElseThrow();
         assertThat(absence.absenceConcept()).isNotNull();
         var language = "Liability is capped at fees paid in the prior 12 months.";
@@ -282,7 +284,7 @@ class RedlineExecutionIT {
     @Test
     void multipleApprovedChangesExecuteIndependently() throws Exception {
         var fixture = analyzedSource("m9-multi-change-source.docx");
-        var replaceTarget = findingByFamily(fixture, "LIABILITY_CAP_DEVIATION");
+        var replaceTarget = findingByFamily(fixture, "POSITION_NEEDS_FALLBACK");
         var deleteTarget = findingByFamily(fixture, "SURVIVAL_COVERAGE_GAP");
         var absence = absenceFinding(fixture);
         decide(fixture.review().id(), replaceTarget.id(), """
@@ -910,12 +912,12 @@ class RedlineExecutionIT {
     }
 
     /** The concept the drifted clause had before this test corrected it. */
-    private LegalConcept driftSemanticsOfPinnedVersion(UUID reviewId) {
+    private ConceptKey driftSemanticsOfPinnedVersion(UUID reviewId) {
         var changeSet = changeSetRepository.findByReview(organizationId(), reviewId).orElseThrow();
         var contractId = changeSet.contractId();
         var clause = enrichmentService.getSemantics(contractId, 1).clauses().stream()
                 .filter(c -> c.effectivePrimaryConcept().isPresent())
-                .filter(c -> c.effectivePrimaryConcept().get() != LegalConcept.GOVERNING_LAW)
+                .filter(c -> !c.effectivePrimaryConcept().get().equals(CoreConcepts.GOVERNING_LAW))
                 .filter(c -> !c.conceptCorrected())
                 .min(java.util.Comparator.comparing(c -> c.id().toString()))
                 .orElseThrow(() -> new AssertionError("no classified clause to correct"));
@@ -932,12 +934,12 @@ class RedlineExecutionIT {
         var clause = enrichmentService.getSemantics(contractId, 1).clauses().stream()
                 .filter(c -> c.conceptCorrected())
                 .filter(c -> c.primaryConcept().isPresent())
-                .filter(c -> c.primaryConcept().get() != LegalConcept.GOVERNING_LAW)
+                .filter(c -> !c.primaryConcept().get().equals(CoreConcepts.GOVERNING_LAW))
                 .min(java.util.Comparator.comparing(c -> c.id().toString()))
                 .orElseThrow(() -> new AssertionError("no corrected clause to restore"));
         enrichmentService.correctClause(contractId, 1, clause.id(),
                 new com.rivell.workbench.contracts.FactCorrection(
-                        clause.primaryConcept().get().name(), Map.of(), UUID.randomUUID()));
+                        clause.primaryConcept().get().value(), Map.of(), UUID.randomUUID()));
     }
 
     private JsonNode retryExpectingFailure(UUID reviewId) throws Exception {

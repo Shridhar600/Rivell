@@ -108,7 +108,7 @@ class KnowledgeIngestionIT {
                 ArtifactType.PLAYBOOK, manifest);
 
         assertThat(artifact.ingestStatus()).isEqualTo(IngestStatus.EXTRACTED);
-        assertThat(artifact.parserVersion()).isEqualTo("rivell-docx-parser-2");
+        assertThat(artifact.parserVersion()).isEqualTo("rivell-docx-parser-3");
         assertThat(artifact.filename()).isEqualTo("playbook.docx");
         assertThat(artifact.sha256()).hasSize(64);
 
@@ -210,7 +210,7 @@ class KnowledgeIngestionIT {
                 ArtifactType.PLAYBOOK, null);
 
         assertThat(artifact.ingestStatus()).isEqualTo(IngestStatus.FAILED);
-        assertThat(artifact.parserVersion()).isEqualTo("rivell-docx-parser-2");
+        assertThat(artifact.parserVersion()).isEqualTo("rivell-docx-parser-3");
         assertThat(artifact.parseWarnings()).isNotEmpty();
         assertThat(queryService.getUnits(artifact.id())).isEmpty();
         assertThat(queryService.getCandidates(artifact.id())).isEmpty();

@@ -1,5 +1,6 @@
 import type { FindingSummary } from '../../api/reviews'
 import type { RedlineExecution } from '../../api/redline'
+import { useTaxonomy } from '../../api/taxonomy'
 import type { ApprovedChange } from '../../api/workflow'
 import { failureNote, overallResult, reportLocation, reportResult } from '../../lib/lifecycleView'
 import { changeTitle } from '../../lib/lifecycleView'
@@ -19,6 +20,7 @@ interface Props {
  * table is a diagnostic only, and the closing banner says no artifact is offered.
  */
 export function ReportPanel({ execution, approvedChanges, findingsById, regionLabels }: Props) {
+  const { labelFor } = useTaxonomy()
   const approvedById = new Map(approvedChanges.map((change) => [change.id, change]))
   const failed = execution.status === 'FAILED'
   const result = overallResult(execution)
@@ -29,7 +31,7 @@ export function ReportPanel({ execution, approvedChanges, findingsById, regionLa
         <h2>{heading}</h2>
         <span>
           {result.tone === 'ok'
-            ? 'Execution and verification against the frozen ApprovedChangeSet'
+            ? 'Execution and verification against the frozen approved change set'
             : 'Why no verified artifact was produced'}
         </span>
       </div>
@@ -58,10 +60,10 @@ export function ReportPanel({ execution, approvedChanges, findingsById, regionLa
                   <td>{position + 1}</td>
                   <td>
                     <TypeChip type={change.actionType} />{' '}
-                    <b>{approved ? changeTitle(approved, findingsById.get(approved.findingId), regionLabels) : 'Contract change'}</b>
+                    <b>{approved ? changeTitle(approved, findingsById.get(approved.findingId), regionLabels, labelFor) : 'Contract change'}</b>
                     {note ? <div className="rv-lc-rep__note">{note}</div> : null}
                   </td>
-                  <td>{reportLocation(change, approved, regionLabels, failed)}</td>
+                  <td>{reportLocation(change, approved, regionLabels, failed, labelFor)}</td>
                   <td style={{ textAlign: 'right' }}>
                     <span className={`rv-stb${pill.variant === 'neutral' ? '' : ` rv-stb--${pill.variant}`}`}>{pill.label}</span>
                   </td>

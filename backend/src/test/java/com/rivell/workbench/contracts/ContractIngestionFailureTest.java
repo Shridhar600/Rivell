@@ -67,7 +67,12 @@ class ContractIngestionFailureTest {
 
             @Override
             public void updateVersionParseOutcome(UUID versionId, String parserVersion,
-                    ParseStatus status, List<String> warnings) {
+                    ParseStatus status, List<String> warnings, ParseCoverage coverage) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public java.util.Optional<ParseCoverage> findParseCoverage(UUID versionId) {
                 throw new UnsupportedOperationException();
             }
 

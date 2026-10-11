@@ -35,13 +35,13 @@ describe('Playbooks list', () => {
     expect(row).toHaveTextContent('Nothing is used in reviews until you publish it')
   })
 
-  it('states the empty case plainly and offers Add knowledge', async () => {
+  it('states the empty case plainly with one Add action', async () => {
     stubKnowledgeApi({ artifacts: [], candidates: {}, publications: [], units: {}, structure: {} })
     renderKnowledge('/knowledge/playbooks')
     expect(await screen.findByText('No playbook is published')).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: 'Add knowledge' }).every((link) => link.getAttribute('href') === '/knowledge/playbooks?add=1')).toBe(true)
-    // The page's own button names what it adds.
-    expect(screen.getByRole('link', { name: 'Add playbook' })).toHaveAttribute('href', '/knowledge/playbooks?add=playbook')
+    const actions = screen.getAllByRole('link', { name: /^Add (knowledge|playbook)$/ })
+    expect(actions).toHaveLength(1)
+    expect(actions[0]).toHaveAttribute('href', '/knowledge/playbooks?add=playbook')
   })
 })
 

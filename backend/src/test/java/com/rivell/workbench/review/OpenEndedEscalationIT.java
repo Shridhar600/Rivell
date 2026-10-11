@@ -28,6 +28,12 @@ import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
+/**
+ * The open-ended drafting path generalised from liability to any position: a walk-away
+ * with no approved clause-library wording produces a verified machine candidate, a
+ * failed or unverifiable candidate never becomes proposed language and the finding
+ * escalates to a human instead.
+ */
 @SpringBootTest
 @Testcontainers
 @Import({LiabilityReviewIT.FakeIntelligenceConfiguration.class,
@@ -67,7 +73,13 @@ class OpenEndedEscalationIT {
     ReviewAnalysisRepository analysisRepository;
 
     @Autowired
+    FindingRepository findingRepository;
+
+    @Autowired
     LiabilityReviewIT.ReviewScriptedProvider scriptedProvider;
+
+    @Autowired
+    LiabilityReviewIT.ReviewGenerativeProvider generativeProvider;
 
     @Autowired
     M6EvidenceCorpus corpusBuilder;
@@ -77,6 +89,9 @@ class OpenEndedEscalationIT {
 
     @Autowired
     com.rivell.workbench.contracts.ContractEnrichmentService enrichmentService;
+
+    @Autowired
+    ReviewRepository reviewRepository;
 
     @BeforeEach
     void freshOrganization() {
@@ -90,14 +105,14 @@ class OpenEndedEscalationIT {
         return identityProvider.currentIdentity().organizationId();
     }
 
-    /** Exotic clause, policy published, deliberately no approved drafting. */
-    private Review exoticReviewOnlyPolicy() throws Exception {
+    /** Uncapped clause, policy published, deliberately no approved drafting. */
+    private Review uncappedReviewOnlyPolicy() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
         var bytes = Files.readAllBytes(java.nio.file.Path.of(
-                "src/test/resources/fixtures/m7-msa-exotic.docx"));
-        var ingested = contractIngestionService.ingest("m7-msa-exotic.docx",
+                "src/test/resources/fixtures/m7-msa-uncapped.docx"));
+        var ingested = contractIngestionService.ingest("m7-msa-uncapped.docx",
                 ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
         enrichmentService.enrich(ingested.contractId(), 1,
                 new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
@@ -105,19 +120,24 @@ class OpenEndedEscalationIT {
         return reviewService.create(ingested.contractId(), 1, null);
     }
 
+    private static RawReviewSignal openEnded(java.util.List<RawReviewSignal> signals) {
+        return signals.stream()
+                .filter(signal -> signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT)
+                .findFirst().orElseThrow();
+    }
+
     @Test
-    void openEndedEscalationProducesVerifiedMachineProposal() throws Exception {
+    void walkAwayWithoutDraftingProducesVerifiedMachineProposal() throws Exception {
         var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy();
+        var review = uncappedReviewOnlyPolicy();
         generativeProvider.reset();
 
         var run = analysisService.analyze(organizationId, review.id());
 
         assertThat(generativeProvider.calls()).isEqualTo(1);
-        var openEnded = analysisRepository.findSignals(organizationId, run.id()).stream()
-                .filter(signal -> signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT)
-                .findFirst().orElseThrow();
-        assertThat(openEnded.issueFamily()).isEqualTo(IssueFamily.OPEN_ENDED_LIABILITY);
+        var signals = analysisRepository.findSignals(organizationId, run.id());
+        var openEnded = openEnded(signals);
+        assertThat(openEnded.issueFamily()).isEqualTo(IssueFamily.POSITION_WALK_AWAY);
         var payload = (OpenEndedAnalysisPayload) openEnded.payload();
         assertThat(payload.proposedLanguage()).contains("two times the fees");
         assertThat(payload.explanation()).isNotBlank();
@@ -126,15 +146,24 @@ class OpenEndedEscalationIT {
         assertThat(openEnded.resolvedModel()).isNotBlank();
         assertThat(openEnded.evidenceItemIds()).isNotEmpty();
         assertThat(openEnded.quality()).containsEntry("verificationOutcome", "VERIFIED");
-        var execution = analysisRepository.findExecutions(organizationId, run.id()).get(0);
-        assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
-        assertThat(execution.detail()).containsEntry("openEnded", true);
+        var loi = analysisRepository.findExecutions(organizationId, run.id()).stream()
+                .filter(execution -> execution.detail().containsKey("positions"))
+                .filter(execution -> execution.detail().get("positions").toString()
+                        .contains("WALK_AWAY"))
+                .findFirst().orElseThrow();
+        assertThat(loi.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
+        assertThat(loi.detail()).containsEntry("openEnded", true);
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
+        assertThat(finding.proposedAction())
+                .isEqualTo(ProposedAction.CONSIDER_GENERATED_LANGUAGE);
     }
 
     @Test
-    void generativeFailurePreservesUncertaintyWithoutFabrication() throws Exception {
+    void generationFailureEscalatesToHumanWithoutFabrication() throws Exception {
         var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy();
+        var review = uncappedReviewOnlyPolicy();
         generativeProvider.failOpenEnded = true;
 
         var run = analysisService.analyze(organizationId, review.id());
@@ -143,36 +172,36 @@ class OpenEndedEscalationIT {
         assertThat(signals).noneMatch(signal ->
                 signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT);
         assertThat(signals).anyMatch(signal ->
-                signal.signalType() == SignalType.DEVIATION_UNCERTAIN
-                        && ((DeviationUncertainPayload) signal.payload()).reason()
-                                .equals("open_ended_generation_unavailable"));
-        var execution = analysisRepository.findExecutions(organizationId, run.id()).get(0);
-        assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
-        assertThat(execution.detail().get("degradedReason").toString())
-                .contains("open_ended_generation_unavailable");
-        assertThat(reviewRepositoryStatus(organizationId, review.id()))
+                signal.signalType() == SignalType.POLICY_DEVIATION
+                        && ((PositionDeviationPayload) signal.payload()).category()
+                                .equals(PolicyComparisonSpecs.WALK_AWAY));
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+        assertThat(finding.proposedLanguage()).isNull();
+        assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
                 .isEqualTo(ReviewStatus.COMPLETED);
     }
 
     @Test
     void unverifiedCandidateIsRetainedButMarkedUncertain() throws Exception {
         var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy();
+        var review = uncappedReviewOnlyPolicy();
         scriptedProvider.verificationSatisfies = false;
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var openEnded = analysisRepository.findSignals(organizationId, run.id()).stream()
-                .filter(signal -> signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT)
-                .findFirst().orElseThrow();
+        var openEnded = openEnded(analysisRepository.findSignals(organizationId, run.id()));
         var payload = (OpenEndedAnalysisPayload) openEnded.payload();
         assertThat(payload.proposedLanguage()).contains("two times the fees");
         assertThat(payload.verificationOutcome()).isEqualTo("UNCERTAIN");
         assertThat(openEnded.verificationOutcome()).isEqualTo("UNCERTAIN");
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
     }
-
-    @Autowired
-    LiabilityReviewIT.ReviewGenerativeProvider generativeProvider;
 
     @Test
     void approvedDraftingPresentSuppressesGenerationEntirely() throws Exception {
@@ -182,8 +211,8 @@ class OpenEndedEscalationIT {
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.LIBRARY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
         var bytes = Files.readAllBytes(java.nio.file.Path.of(
-                "src/test/resources/fixtures/m7-msa-exotic.docx"));
-        var ingested = contractIngestionService.ingest("m7-msa-exotic.docx",
+                "src/test/resources/fixtures/m7-msa-uncapped.docx"));
+        var ingested = contractIngestionService.ingest("m7-msa-uncapped.docx",
                 ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
         enrichmentService.enrich(ingested.contractId(), 1,
                 new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
@@ -198,22 +227,22 @@ class OpenEndedEscalationIT {
         assertThat(signals).noneMatch(signal ->
                 signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT);
         assertThat(signals).anyMatch(signal ->
-                signal.signalType() == SignalType.DEVIATION_UNCERTAIN
-                        && ((DeviationUncertainPayload) signal.payload()).reason()
-                                .equals("policy_not_comparable"));
+                signal.signalType() == SignalType.POLICY_DEVIATION
+                        && ((PositionDeviationPayload) signal.payload()).category()
+                                .equals(PolicyComparisonSpecs.WALK_AWAY));
+        assertThat(signals).anyMatch(signal ->
+                signal.signalType() == SignalType.APPROVED_DRAFTING_AVAILABLE);
     }
 
     @Test
     void ambiguousVerificationDemotesCandidateToUncertain() throws Exception {
         var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy();
+        var review = uncappedReviewOnlyPolicy();
         scriptedProvider.verificationSatisfiesProbability = 0.5;
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var openEnded = analysisRepository.findSignals(organizationId, run.id()).stream()
-                .filter(signal -> signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT)
-                .findFirst().orElseThrow();
+        var openEnded = openEnded(analysisRepository.findSignals(organizationId, run.id()));
         assertThat(((OpenEndedAnalysisPayload) openEnded.payload()).verificationOutcome())
                 .isEqualTo("UNCERTAIN");
         assertThat(openEnded.verificationOutcome()).isEqualTo("UNCERTAIN");
@@ -223,21 +252,19 @@ class OpenEndedEscalationIT {
     @Test
     void ambiguousRiskAnswerFailsClosedToDisputed() throws Exception {
         var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy();
+        var review = uncappedReviewOnlyPolicy();
         scriptedProvider.verificationRiskProbability = 0.5;
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var openEnded = analysisRepository.findSignals(organizationId, run.id()).stream()
-                .filter(signal -> signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT)
-                .findFirst().orElseThrow();
+        var openEnded = openEnded(analysisRepository.findSignals(organizationId, run.id()));
         assertThat(openEnded.verificationOutcome()).isEqualTo("DISPUTED");
     }
 
     @Test
     void oversizedExplanationIsRejectedWithoutFabrication() throws Exception {
         var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy();
+        var review = uncappedReviewOnlyPolicy();
         generativeProvider.openEndedExplanation = "x".repeat(2500);
 
         var run = analysisService.analyze(organizationId, review.id());
@@ -245,31 +272,28 @@ class OpenEndedEscalationIT {
         var signals = analysisRepository.findSignals(organizationId, run.id());
         assertThat(signals).noneMatch(signal ->
                 signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT);
-        assertThat(analysisRepository.findExecutions(organizationId, run.id()).get(0)
-                .status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
     }
 
     @Test
     void whitespaceNearCopyCandidateIsRejected() throws Exception {
         var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy();
+        var review = uncappedReviewOnlyPolicy();
         generativeProvider.openEndedProposed =
-                "Supplier's   aggregate liability shall not exceed the insurance "
-                        + "proceeds actually recovered by Supplier in respect of the claim.";
+                "The liability of Supplier under this Agreement is   uncapped and unlimited, "
+                        + "however arising.";
 
         var run = analysisService.analyze(organizationId, review.id());
 
         var signals = analysisRepository.findSignals(organizationId, run.id());
         assertThat(signals).noneMatch(signal ->
                 signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT);
-        assertThat(analysisRepository.findExecutions(organizationId, run.id()).get(0)
-                .status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
     }
-
-    private ReviewStatus reviewRepositoryStatus(UUID organizationId, UUID reviewId) {
-        return reviewRepository.find(organizationId, reviewId).orElseThrow().status();
-    }
-
-    @Autowired
-    ReviewRepository reviewRepository;
 }

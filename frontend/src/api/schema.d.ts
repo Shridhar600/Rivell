@@ -151,7 +151,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Correct or clear a candidate's LegalConcept (machine proposal preserved) */
+        /** Correct or clear a candidate's concept (machine proposal preserved) */
         post: operations["correctConcept"];
         delete?: never;
         options?: never;
@@ -325,6 +325,23 @@ export interface paths {
         put?: never;
         /** Create a review for a contract version (optional explicit pack) */
         post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/concepts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the legal topics clauses and playbook positions are classified against */
+        get: operations["concepts"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -670,6 +687,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/artifacts/{id}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report how much of the uploaded source's text the extracted structure holds */
+        get: operations["coverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/artifacts/{id}/candidates": {
         parameters: {
             query?: never;
@@ -747,6 +781,23 @@ export interface paths {
         };
         /** Download the original uploaded DOCX of a contract version */
         get: operations["downloadOriginal_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{id}/versions/{versionNumber}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report how much of the uploaded file's text the parsed structure holds */
+        get: operations["getCoverage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -907,8 +958,7 @@ export interface components {
             targetKind?: string;
             /** Format: uuid */
             targetHeadingNodeId?: string;
-            /** @enum {string} */
-            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            absenceConcept?: string;
             approvedLanguage?: string;
             languageSource?: string;
             /** Format: uuid */
@@ -1013,6 +1063,9 @@ export interface components {
             positions?: string[];
             requiresApproval?: boolean;
             escalationTrigger?: string;
+            preferred?: string;
+            fallbacks?: string[];
+            prohibited?: string;
         };
         SemanticAssessmentResponse: {
             judgments?: {
@@ -1247,21 +1300,17 @@ export interface components {
             timestamp?: string;
         };
         ConceptView: {
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            concept?: string;
             /** Format: double */
             probability?: number;
         };
-        MetadataView: {
+        ExecutionView: {
             /** Format: uuid */
             executionId?: string;
             specId?: string;
             /** Format: int32 */
             specVersion?: number;
-            /** Format: int32 */
-            stateSchemaVersion?: number;
             providerId?: string;
-            requestedModelAlias?: string;
             resolvedModel?: string;
             /** Format: int64 */
             durationMs?: number;
@@ -1271,6 +1320,11 @@ export interface components {
             inputTokens?: number;
             /** Format: int32 */
             outputTokens?: number;
+        };
+        MetadataView: {
+            /** Format: int32 */
+            taxonomyVersion?: number;
+            executions?: components["schemas"]["ExecutionView"][];
         };
         UnitConceptClassificationView: {
             /** Format: uuid */
@@ -1448,7 +1502,7 @@ export interface components {
             };
         };
         ConceptCorrection: {
-            /** @description Corrected primary concept as a LegalConcept name; any known LegalConcept is accepted (unknown names are rejected) and becomes the effective primary even if previously unclassified. null leaves the current correction unchanged; blank clears the concept correction */
+            /** @description Corrected primary concept as a taxonomy key; any known key is accepted (unknown names are rejected) and becomes the effective primary even if previously unclassified. null leaves the current correction unchanged; blank clears the concept correction */
             primary: string;
         };
         ReviewProfileInput: {
@@ -1456,7 +1510,7 @@ export interface components {
              * @description Declared contract type for enrichment
              * @enum {string}
              */
-            contractType: "NDA" | "MSA" | "OTHER";
+            contractType: "NDA" | "MNDA" | "ONDA" | "MSA" | "SAAS" | "DPA" | "SOW" | "SWL" | "OTHER";
             /** @enum {string} */
             ourSideRole?: "CUSTOMER" | "SUPPLIER" | "DISCLOSING_PARTY" | "RECEIVING_PARTY" | "LICENSOR" | "LICENSEE" | "PARTY_A" | "PARTY_B";
             /** @enum {string} */
@@ -1510,8 +1564,7 @@ export interface components {
             delete?: number;
         };
         ReviewCoverageView: {
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            concept?: string;
             /** @enum {string} */
             expectation?: "REQUIRED" | "EXPECTED" | "OPTIONAL";
             /** @enum {string} */
@@ -1567,6 +1620,18 @@ export interface components {
             knowledgePinNumber?: number;
             /** Format: date */
             effectiveOn?: string;
+        };
+        TaxonomyConceptView: {
+            key: string;
+            label: string;
+            parentKey: string | null;
+            definition: string | null;
+        };
+        TaxonomyResponse: {
+            /** Format: int32 */
+            version: number;
+            parents: components["schemas"]["TaxonomyConceptView"][];
+            leaves: components["schemas"]["TaxonomyConceptView"][];
         };
         ApiResultSystemStatusResponse: {
             data?: components["schemas"]["SystemStatusResponse"];
@@ -1758,14 +1823,11 @@ export interface components {
             subjectKind?: "CLAUSE" | "ABSENCE";
             /** Format: uuid */
             subjectHeadingNodeId?: string;
+            absenceConcept?: string;
+            concept?: string;
+            secondaryConcept?: string;
             /** @enum {string} */
-            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            secondaryConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
+            issueFamily?: "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "POSITION_WALK_AWAY" | "POSITION_NEEDS_FALLBACK" | "POSITION_ACCEPTABLE_FALLBACK" | "POSITION_AMBIGUOUS" | "POSITION_UNCERTAIN" | "OPEN_ENDED_POSITION";
             observationKind?: string;
             /** @enum {string} */
             severity?: "HIGH" | "MEDIUM" | "LOW";
@@ -1775,6 +1837,7 @@ export interface components {
             proposedAction?: "USE_APPROVED_FALLBACK" | "ADD_REQUIRED_PROVISION" | "REVIEW_AMBIGUITY" | "ESCALATE_TO_HUMAN" | "CONSIDER_GENERATED_LANGUAGE" | "NO_ACTION";
             /** @enum {string} */
             proposedLanguageSource?: "APPROVED_DRAFTING" | "GENERATIVE" | "NONE";
+            relatedPosition?: boolean;
             /** Format: date-time */
             createdAt?: string;
         };
@@ -1825,15 +1888,12 @@ export interface components {
             subjectKind?: "CLAUSE" | "ABSENCE";
             /** Format: uuid */
             subjectHeadingNodeId?: string;
+            absenceConcept?: string;
+            concept?: string;
+            secondaryConcept?: string;
+            concepts?: string[];
             /** @enum {string} */
-            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            secondaryConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            concepts?: ("CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW")[];
-            /** @enum {string} */
-            issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
+            issueFamily?: "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "POSITION_WALK_AWAY" | "POSITION_NEEDS_FALLBACK" | "POSITION_ACCEPTABLE_FALLBACK" | "POSITION_AMBIGUOUS" | "POSITION_UNCERTAIN" | "OPEN_ENDED_POSITION";
             observationKind?: string;
             observationText?: string;
             /** @enum {string} */
@@ -1863,6 +1923,7 @@ export interface components {
             contract?: components["schemas"]["ContractPositionSlot"][];
             preferred?: components["schemas"]["PolicyPositionSlot"][];
             fallback?: components["schemas"]["PolicyPositionSlot"][];
+            walkAway?: components["schemas"]["PolicyPositionSlot"][];
             escalation?: components["schemas"]["EscalationSlot"][];
         };
         PolicyPositionSlot: {
@@ -1915,10 +1976,17 @@ export interface components {
         /** @description One planned check and how it ended */
         CheckView: {
             key?: string;
+            /**
+             * Format: uuid
+             * @description Clause the check judged, when it has one
+             */
+            subjectHeadingNodeId?: string;
             status?: string;
             /** Format: int32 */
             signalCount?: number;
             degradedReason?: string;
+            /** @description Exception type of a FAILED check; no message text */
+            failureType?: string;
             /** Format: date-time */
             startedAt?: string;
             /** Format: date-time */
@@ -2104,6 +2172,8 @@ export interface components {
             title?: string;
             contentText?: string;
             sourceNodeIds?: string[];
+            /** @enum {string} */
+            recordKind?: "POSITION" | "WORDING" | "ESCALATION" | "GUIDANCE" | "DOCUMENT_CONTROL" | "OTHER";
         };
         ApiResultListKnowledgeStructureNodeView: {
             data?: components["schemas"]["KnowledgeStructureNodeView"][];
@@ -2265,6 +2335,46 @@ export interface components {
             runStart: number | null;
             /** Format: int32 */
             runEnd: number | null;
+        };
+        ApiResultParseCoverageResponse: {
+            data?: components["schemas"]["ParseCoverageResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        GapView: {
+            part: string;
+            /** @description BODY, TABLE, TEXT_BOX, HEADER, FOOTER, FOOTNOTE, ENDNOTE or COMMENT */
+            location: string;
+            /** Format: int32 */
+            words: number;
+            excerpt: string;
+        };
+        LocationTotalView: {
+            location: string;
+            /** Format: int32 */
+            sourceWords: number;
+            /** Format: int32 */
+            capturedWords: number;
+        };
+        /** @description How much of the uploaded file's text the parsed structure holds, from an independent read of the raw file. checked is false for versions parsed before the check existed or when it could not run. */
+        ParseCoverageResponse: {
+            checked: boolean;
+            /** @description False when the check fell back to whole-paragraph matching */
+            exact: boolean;
+            /** Format: int32 */
+            sourceWords: number;
+            /** Format: int32 */
+            capturedWords: number;
+            /**
+             * Format: int32
+             * @description Structure words with no source counterpart
+             */
+            extraWords: number;
+            totals: components["schemas"]["LocationTotalView"][];
+            /** @description Source text the structure does not hold, in source order */
+            gaps: components["schemas"]["GapView"][];
         };
     };
     responses: never;
@@ -2743,7 +2853,7 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResultCandidateView"];
                 };
             };
-            /** @description Unknown LegalConcept or missing primary value */
+            /** @description Unknown concept or missing primary value */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3336,6 +3446,26 @@ export interface operations {
             };
         };
     };
+    concepts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyResponse"];
+                };
+            };
+        };
+    };
     status: {
         parameters: {
             query?: never;
@@ -3527,7 +3657,7 @@ export interface operations {
     findings: {
         parameters: {
             query?: {
-                concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+                concept?: string;
                 classification?: "BLOCKING" | "REVIEW_REQUIRED" | "INFORMATIONAL";
                 severity?: "HIGH" | "MEDIUM" | "LOW";
                 limit?: number;
@@ -3978,6 +4108,28 @@ export interface operations {
             };
         };
     };
+    coverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artifact does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getCandidates: {
         parameters: {
             query?: never;
@@ -4125,6 +4277,38 @@ export interface operations {
                 };
                 content: {
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                };
+            };
+            /** @description Contract or version does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getCoverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultParseCoverageResponse"];
                 };
             };
             /** @description Contract or version does not exist in this organization */

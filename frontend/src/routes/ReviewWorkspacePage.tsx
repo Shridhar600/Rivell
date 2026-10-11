@@ -29,7 +29,8 @@ import {
   type DecisionListResponse,
 } from '../api/workflow'
 import { useSemanticsQuery } from '../api/semantics'
-import { buildRegionLabelMap, CONTRACT_TYPE_LABELS, conceptLabel } from '../lib/contractSemantics'
+import { useTaxonomy } from '../api/taxonomy'
+import { buildRegionLabelMap, CONTRACT_TYPE_LABELS } from '../lib/contractSemantics'
 import { clearResumeFor, writeResume } from '../lib/resume'
 import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun, runStatusLabel } from '../lib/reviews'
 import {
@@ -166,6 +167,7 @@ interface WorkspaceProps {
 }
 
 function Workspace({ contractId, reviewId, contract, summary, onRefresh }: WorkspaceProps) {
+  const { labelFor } = useTaxonomy()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -177,6 +179,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const [sheet, setSheet] = useState<Sheet | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [finalizeOpen, setFinalizeOpen] = useState(false)
+  // An evidence jump target in this workspace's own document, so "View in document" never leaves it.
+  const [docFocus, setDocFocus] = useState<{ nodeId: string } | null>(null)
   // Set when a Finalize succeeds, so focus can move on once the dialog is closed and the page shows
   // the frozen state. A ref, because moving focus needs no render of its own.
   const focusFrozen = useRef(false)
@@ -241,6 +245,15 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     },
     [setSearchParams],
   )
+  // A reviewer picking a finding leaves the evidence highlight behind; the URL fallback above is
+  // not a pick, so it does not need this.
+  const chooseFinding = useCallback(
+    (findingId: string) => {
+      setDocFocus(null)
+      selectFinding(findingId)
+    },
+    [selectFinding],
+  )
   useEffect(() => {
     if (selectedParam === null && fallback) selectFinding(fallback.id)
   }, [selectedParam, fallback, selectFinding])
@@ -266,7 +279,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       const fresh = queryClient.getQueryData<DecisionListResponse>(workflowKeys.decisions(reviewId))
       const latest = new Map((fresh?.items ?? []).map((d) => [d.findingId, d]))
       const next = nextOpenFinding(findings, latest, savedId)
-      if (next && next.id !== savedId) selectFinding(next.id)
+      if (next && next.id !== savedId) chooseFinding(next.id)
     },
   })
   const canDecideNow = analysisCompleted && humanReview !== null && decisionsLoaded && !isFinalized && !flow.readOnly && finding !== undefined
@@ -296,6 +309,11 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   }
 
   function showInDocument() {
+    // The same reveal the evidence jump uses, on the selected finding's own clause.
+    if (headingNodeId) {
+      showInDocumentAt(headingNodeId)
+      return
+    }
     setMode('changes')
     setTerm('')
     window.requestAnimationFrame(() =>
@@ -322,7 +340,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       const step = (by: number) => {
         event.preventDefault()
         const target = findings[Math.min(findings.length - 1, Math.max(0, index + by))]
-        if (target) selectFinding(target.id)
+        if (target) chooseFinding(target.id)
       }
       if (key === 'j' || event.key === 'ArrowDown') step(1)
       else if (key === 'k' || event.key === 'ArrowUp') step(-1)
@@ -360,10 +378,10 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const paletteItems: PaletteItem[] = [
     ...findings.map((f) => ({
       group: 'Findings',
-      label: findingSubjectLabel(f, regionLabels),
+      label: findingSubjectLabel(f, regionLabels, labelFor),
       hint: decisionsLoaded ? findingState(f, decisions.get(f.id)).label : undefined,
       icon: <DocumentIcon className="rv-icon" />,
-      run: () => selectFinding(f.id),
+      run: () => chooseFinding(f.id),
     })),
     ...(canDecideNow
       ? ([
@@ -397,7 +415,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     })),
     ...(finding?.evidenceItems ?? []).map((item) => ({
       group: 'Sources',
-      label: `Source: ${item.legalConcept ? conceptLabel(item.legalConcept) : item.sourceType}`,
+      label: `Source: ${item.legalConcept ? labelFor(item.legalConcept) : item.sourceType}`,
       icon: <BookIcon className="rv-icon" />,
       run: () => setSheet({ kind: 'source', evidenceId: item.evidenceId }),
     })),
@@ -430,7 +448,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   if (pinnedVersion !== undefined && pinnedVersion !== latestVersion) {
     noteLines.push(`This review is pinned to v${pinnedVersion}; the contract’s current version is v${latestVersion}.`)
   }
-  const coverageNote = coverageLimitationSummary(summary.coverage)
+  const coverageNote = coverageLimitationSummary(summary.coverage, labelFor)
   if (coverageNote) noteLines.push(coverageNote)
   if (analysisCompleted && summary.failedChecks > 0) {
     noteLines.push('Some checks did not complete. Review the analysis warnings.')
@@ -487,7 +505,14 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   )
 
   const sourceItem = sheet?.kind === 'source' ? finding?.evidenceItems.find((item) => item.evidenceId === sheet.evidenceId) : undefined
-  const goToNode = (nodeId: string) => void navigate(`/reviews/${contractId}?view=document&node=${nodeId}`)
+  // "View in document" stays in this workspace: the clause is revealed in the document beside the
+  // panel, keyed by the exact node the evidence recorded, on the version the review pinned.
+  function showInDocumentAt(nodeId: string) {
+    setSheet(null)
+    setMode('changes')
+    setTerm('')
+    setDocFocus({ nodeId })
+  }
   const goToClause = (headingNodeId: string) =>
     void navigate(`/reviews/${contractId}?${new URLSearchParams({ view: 'semantics', section: 'clauses', clause: headingNodeId })}`)
   const contractType = summary.snapshot?.profile?.contractType
@@ -526,7 +551,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           isPending={findingsQuery.isPending}
           isError={findingsQuery.isError}
           onRetry={() => void findingsQuery.refetch()}
-          onSelect={selectFinding}
+          onSelect={chooseFinding}
         />
         <ContractPane
           title={contract.title ?? 'Untitled contract'}
@@ -546,10 +571,11 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           decisions={decisions}
           selectedId={selectedId}
           selected={finding}
-          onSelect={selectFinding}
+          onSelect={chooseFinding}
           isFinalized={isFinalized}
           remaining={humanReview ? humanReview.remainingFindings : null}
           notes={notes}
+          focusTarget={docFocus}
         />
         <FindingPanel
           finding={finding}
@@ -587,7 +613,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
               item={sourceItem}
               regionLabels={regionLabels}
               clauseHeadings={clauseHeadings}
-              onNavigateToNode={pinnedVersion === latestVersion ? goToNode : undefined}
+              onNavigateToNode={showInDocumentAt}
               onOpenClauseSemantics={pinnedVersion === latestVersion ? goToClause : undefined}
             />
           ) : (
@@ -595,7 +621,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           )
         ) : null}
         {sheet?.kind === 'history' && selectedId ? (
-          <DecisionHistorySheet reviewId={reviewId} findingId={selectedId} title={finding ? findingSubjectLabel(finding, regionLabels) : ''} />
+          <DecisionHistorySheet reviewId={reviewId} findingId={selectedId} title={finding ? findingSubjectLabel(finding, regionLabels, labelFor) : ''} />
         ) : null}
         {sheet?.kind === 'notes' ? (
           <>

@@ -13,6 +13,7 @@ import {
 } from '../components/review/workflowFixtures'
 import { fixtureNodes } from '../components/contract/testFixtures'
 import type { DocumentNode } from '../api/contracts'
+import { humanizeCode } from './domainLabels'
 import {
   changeLocation,
   clauseBodyText,
@@ -34,9 +35,9 @@ import {
 
 describe('findings and progress', () => {
   it('names a Finding by its concept, or by the missing provision', () => {
-    expect(findingTitle(fixtureAcceptableFinding)).toBe('Limitation of liability')
-    expect(findingTitle(fixtureAbsenceFindingSummaryForChangeSet)).toBe('Missing: Confidentiality')
-    expect(findingTitle(undefined)).toBeNull()
+    expect(findingTitle(fixtureAcceptableFinding, humanizeCode)).toBe('Limitation of liability')
+    expect(findingTitle(fixtureAbsenceFindingSummaryForChangeSet, humanizeCode)).toBe('Missing: Confidentiality obligations')
+    expect(findingTitle(undefined, humanizeCode)).toBeNull()
   })
 
   it('counts Findings by their server classification', () => {
@@ -54,9 +55,9 @@ describe('findings and progress', () => {
 
   it('names the next unresolved Finding only when the server names it and the list holds it', () => {
     const review = fixtureHumanReview()
-    expect(nextUnresolvedTitle(review, [fixtureAcceptableFinding])).toBe('Limitation of liability')
-    expect(nextUnresolvedTitle(review, [])).toBeNull()
-    expect(nextUnresolvedTitle(fixtureHumanReview({ blockers: [] }), [fixtureAcceptableFinding])).toBeNull()
+    expect(nextUnresolvedTitle(review, [fixtureAcceptableFinding], humanizeCode)).toBe('Limitation of liability')
+    expect(nextUnresolvedTitle(review, [], humanizeCode)).toBeNull()
+    expect(nextUnresolvedTitle(fixtureHumanReview({ blockers: [] }), [fixtureAcceptableFinding], humanizeCode)).toBeNull()
   })
 
   it('draws one segment per Finding, filled for each one decided, with no percentage', () => {
@@ -80,14 +81,14 @@ describe('approved changes', () => {
   const labels = new Map([['node-6', '8. Limitation of Liability']])
 
   it('titles a change by its Finding, falling back to the target', () => {
-    expect(changeTitle(change, fixtureAcceptableFinding, labels)).toBe('Limitation of liability')
-    expect(changeTitle(change, undefined, labels)).toBe('8. Limitation of Liability')
+    expect(changeTitle(change, fixtureAcceptableFinding, labels, humanizeCode)).toBe('Limitation of liability')
+    expect(changeTitle(change, undefined, labels, humanizeCode)).toBe('8. Limitation of Liability')
   })
 
   it('does not invent a place for an insertion', () => {
-    const insert = { ...change, actionType: 'INSERT' as const, targetKind: 'ABSENCE' as const, targetHeadingNodeId: null, absenceConcept: 'CONFIDENTIALITY' }
-    expect(changeLocation(insert, labels)).toBe('Placement resolved during redline execution')
-    expect(changeLocation(change, labels)).toBe('8. Limitation of Liability')
+    const insert = { ...change, actionType: 'INSERT' as const, targetKind: 'ABSENCE' as const, targetHeadingNodeId: null, absenceConcept: 'CONFIDENTIALITY_OBLIGATIONS' }
+    expect(changeLocation(insert, labels, humanizeCode)).toBe('Placement resolved during redline execution')
+    expect(changeLocation(change, labels, humanizeCode)).toBe('8. Limitation of Liability')
   })
 
   it('reports the human decision as the outcome', () => {
@@ -136,9 +137,9 @@ describe('redline report: no partial success is ever shown as success', () => {
   })
 
   it('names where an insertion landed, or says it was not resolved', () => {
-    const insert = fixtureRedlineChange({ actionType: 'INSERT', placement: 'AFTER_CLAUSE[CONFIDENTIALITY]', resolvedTarget: 'CONFIDENTIALITY' })
-    expect(reportLocation(insert, undefined, new Map(), false)).toBe('After clause: Confidentiality')
-    expect(reportLocation({ ...insert, status: 'FAILED' }, undefined, new Map(), true)).toBe('Not resolved safely')
+    const insert = fixtureRedlineChange({ actionType: 'INSERT', placement: 'AFTER_CLAUSE[CONFIDENTIALITY_OBLIGATIONS]', resolvedTarget: 'CONFIDENTIALITY_OBLIGATIONS' })
+    expect(reportLocation(insert, undefined, new Map(), false, humanizeCode)).toBe('After clause: Confidentiality obligations')
+    expect(reportLocation({ ...insert, status: 'FAILED' }, undefined, new Map(), true, humanizeCode)).toBe('Not resolved safely')
   })
 
   it('shows only a fixed, user-safe sentence for a failure, never the server detail', () => {

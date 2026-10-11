@@ -308,11 +308,11 @@ class ReviewApiIT {
                 .andExpect(jsonPath("$.data.subjectHeadingNodeId").isString())
                 .andExpect(jsonPath("$.data.absenceConcept").value(nullValue()))
                 .andExpect(jsonPath("$.data.concept").value("LIMITATION_OF_LIABILITY"))
-                .andExpect(jsonPath("$.data.issueFamily").value("LIABILITY_CAP_DEVIATION"))
+                .andExpect(jsonPath("$.data.issueFamily").value("POSITION_NEEDS_FALLBACK"))
                 .andExpect(jsonPath("$.data.observationKind")
-                        .value("CAP_ABOVE_PREFERRED"))
+                        .value("POSITION_BEYOND_FALLBACK"))
                 .andExpect(jsonPath("$.data.observationText").isNotEmpty())
-                .andExpect(jsonPath("$.data.severity").value("HIGH"))
+                .andExpect(jsonPath("$.data.severity").value("MEDIUM"))
                 .andExpect(jsonPath("$.data.reviewClassification")
                         .value("REVIEW_REQUIRED"))
                 .andExpect(jsonPath("$.data.proposedAction")
@@ -736,13 +736,13 @@ class ReviewApiIT {
                 .andReturn()).get("data");
 
         assertThat(progress.get("coverage")).anySatisfy(entry -> {
-            assertThat(entry.get("concept").asText()).isEqualTo("CONFIDENTIALITY");
+            assertThat(entry.get("concept").asText()).isEqualTo("CONFIDENTIALITY_OBLIGATIONS");
             assertThat(entry.get("expectation").asText()).isEqualTo("REQUIRED");
             assertThat(entry.get("coverage").asText())
                     .isEqualTo("PRESENT_SECONDARY_ONLY");
         });
         assertThat(progress.get("coverage")).anySatisfy(entry -> {
-            assertThat(entry.get("concept").asText()).isEqualTo("TERM_TERMINATION");
+            assertThat(entry.get("concept").asText()).isEqualTo("TERM");
             assertThat(entry.get("coverage").asText()).isEqualTo("PRESENT_PRIMARY");
         });
     }

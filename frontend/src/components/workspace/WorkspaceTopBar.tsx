@@ -24,7 +24,9 @@ interface Props {
 
 /**
  * Finalize reads the server's readiness and blockers verbatim. The label never claims more than
- * the server says: unresolved counts and the first blocker are the server's own.
+ * the server says, and the status is stated once: the progress count, and either a short readiness
+ * word or the frozen state. The exact blocker is one disclosure away rather than a clipped line,
+ * and the button never repeats the unresolved count.
  */
 export function WorkspaceTopBar({
   title,
@@ -41,18 +43,14 @@ export function WorkspaceTopBar({
 }: Props) {
   const ready = humanReview?.readyToFinalize === true
   const blockers = humanReview?.blockers ?? []
-  const label = isFinalized
-    ? 'Finalized'
-    : ready || !humanReview || humanReview.remainingFindings === 0
-      ? 'Finalize review'
-      : `Finalize review · ${humanReview.remainingFindings} unresolved`
-  const note = isFinalized
+  const label = isFinalized ? 'Finalized' : 'Finalize review'
+  const status = isFinalized
     ? 'Approved changes frozen'
     : !humanReview
       ? ''
       : ready
         ? 'Ready to finalize'
-        : (blockers[0]?.message ?? 'Not ready to finalize')
+        : 'Not ready to finalize'
 
   return (
     <header className="rv-ws-top">
@@ -103,11 +101,22 @@ export function WorkspaceTopBar({
       >
         <PanelRightIcon className="rv-icon" />
       </button>
-      {note ? (
+      {status && !isFinalized && !ready ? (
+        <details className="rv-ws-why">
+          <summary className="rv-ws-blocker">{status}</summary>
+          <div className="rv-ws-why-b" role="group" aria-label="Why finalization is blocked">
+            {blockers.length > 0 ? (
+              blockers.map((blocker, index) => <div key={`${index}-${blocker.message}`}>{blocker.message}</div>)
+            ) : (
+              <div>The server has not marked this review ready to finalize.</div>
+            )}
+          </div>
+        </details>
+      ) : status ? (
         // After Finalize this is the one status that is always on screen, so it is the focus fallback
         // when the detail panel is closed.
         <span className="rv-ws-blocker" id={FROZEN_NOTE_ID} tabIndex={isFinalized ? -1 : undefined}>
-          {note}
+          {status}
         </span>
       ) : null}
       <Button

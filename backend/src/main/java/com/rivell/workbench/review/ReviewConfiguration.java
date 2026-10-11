@@ -79,11 +79,15 @@ class ReviewConfiguration {
     }
 
     @Bean
-    ReviewCheckExecutor liabilityCapCheckExecutor(
+    ReviewCheckExecutor policyComparisonCheckExecutor(
             com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService,
-            com.rivell.workbench.intelligence.GenerativeReasoningService generativeReasoningService) {
-        return new com.rivell.workbench.review.check.LiabilityCapCheckExecutor(
-                semanticDecisionService, generativeReasoningService);
+            com.rivell.workbench.intelligence.GenerativeReasoningService generativeReasoningService,
+            com.rivell.workbench.retrieval.EvidenceService evidenceService,
+            com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry,
+            PolicyComparisonProperties properties) {
+        return new com.rivell.workbench.review.check.PolicyComparisonCheckExecutor(
+                semanticDecisionService, generativeReasoningService, evidenceService,
+                conceptRegistry, properties);
     }
 
     @Bean
@@ -97,6 +101,7 @@ class ReviewConfiguration {
             ReviewAnalysisRepository reviewAnalysisRepository,
             ReviewCheckExecutors reviewCheckExecutors,
             ContractEnrichmentService contractEnrichmentService,
+            ContractQueryService contractQueryService,
             RetrievalProperties retrievalProperties,
             EmbeddingService embeddingService,
             com.rivell.workbench.retrieval.EvidenceService evidenceService,
@@ -106,9 +111,9 @@ class ReviewConfiguration {
             TransactionTemplate transactionTemplate,
             Clock clock) {
         return new ReviewAnalysisService(reviewRepository, reviewAnalysisRepository,
-                reviewCheckExecutors, contractEnrichmentService, retrievalProperties,
-                embeddingService, evidenceService, modelBindingCatalog, findingRepository,
-                findingAssembler, transactionTemplate, clock);
+                reviewCheckExecutors, contractEnrichmentService, contractQueryService,
+                retrievalProperties, embeddingService, evidenceService, modelBindingCatalog,
+                findingRepository, findingAssembler, transactionTemplate, clock);
     }
 
     @Bean
@@ -124,12 +129,13 @@ class ReviewConfiguration {
             ReviewHumanReviewListQuery reviewHumanReviewListQuery,
             ReviewDocumentQuery reviewDocumentQuery,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry) {
         return new com.rivell.workbench.review.api.ReviewApiService(
                 reviewService, reviewAnalysisService, reviewRepository,
                 reviewAnalysisRepository, findingRepository, contractQueryService,
                     reviewPackRegistry, reviewListQuery,
                 reviewHumanReviewListQuery, reviewDocumentQuery, identityProvider,
-                authorizationService);
+                authorizationService, conceptRegistry);
     }
 }

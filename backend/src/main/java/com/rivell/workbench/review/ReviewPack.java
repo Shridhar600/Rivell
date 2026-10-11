@@ -6,20 +6,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Code-owned contract pack: declares WHICH concepts are required/expected/optional and
- * which typed checks apply. Pack definitions own configuration; the engine owns how a
- * check executes.
+ * which cross-clause checks apply. Clause-level policy comparison is not pack
+ * configuration — every classified clause is compared against the published playbook.
+ * Pack definitions own configuration; the engine owns how a check executes.
  */
 public record ReviewPack(
         String key,
         String displayName,
         String summary,
         String version,
-        Map<LegalConcept, CheckExpectation> conceptExpectations,
-        Map<LegalConcept, CheckMechanism> clauseChecks,
+        Map<ConceptKey, CheckExpectation> conceptExpectations,
         List<CrossClauseRule> crossClauseChecks) {
 
     public ReviewPack {
@@ -28,12 +28,11 @@ public record ReviewPack(
         Objects.requireNonNull(summary, "summary");
         Objects.requireNonNull(version, "version");
         conceptExpectations = Collections.unmodifiableMap(new LinkedHashMap<>(conceptExpectations));
-        clauseChecks = Collections.unmodifiableMap(new LinkedHashMap<>(clauseChecks));
         crossClauseChecks = List.copyOf(crossClauseChecks);
     }
 
     public record CrossClauseRule(
-            CheckMechanism mechanism, LegalConcept concept, LegalConcept secondaryConcept) {
+            CheckMechanism mechanism, ConceptKey concept, ConceptKey secondaryConcept) {
 
         public CrossClauseRule {
             Objects.requireNonNull(mechanism, "mechanism");

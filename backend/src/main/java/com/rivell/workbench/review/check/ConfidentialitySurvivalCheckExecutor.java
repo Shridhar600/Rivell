@@ -46,7 +46,7 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
         // explicit uncertainty, never a fabricated per-clause verdict (DW-027).
         var candidates = context.semantics().clauses().stream()
                 .filter(candidate -> candidate.effectivePrimaryConcept()
-                        .filter(concept -> concept == context.check().concept())
+                        .filter(concept -> concept.equals(context.check().concept()))
                         .isPresent())
                 .toList();
         var survivalEndpoints = context.semantics().relationships().stream()
@@ -93,7 +93,7 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
                 .filter(candidate -> context.check().secondaryConcept() != null
                         && (candidate.effectivePrimaryConcept()
                                         .filter(concept -> concept
-                                                == context.check().secondaryConcept())
+                                                .equals(context.check().secondaryConcept()))
                                         .isPresent()
                                 || candidate.secondaryConcepts()
                                         .contains(context.check().secondaryConcept())))
@@ -149,7 +149,7 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
 
     private static EvidenceRequest request(
             ReviewCheckContext context, ClauseSemantics clause,
-            com.rivell.workbench.contracts.LegalConcept concept) {
+            com.rivell.workbench.taxonomy.ConceptKey concept) {
         var snapshot = context.snapshot();
         return EvidenceRequest.forClauseReview(
                 snapshot.organizationId(), concept,

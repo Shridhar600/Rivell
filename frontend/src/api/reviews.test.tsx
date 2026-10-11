@@ -111,7 +111,7 @@ const completedSummary = {
   findings: 2,
   analysisWarnings: [
     {
-      checkKey: 'LIABILITY_CAP:LIMITATION_OF_LIABILITY',
+      checkKey: 'POLICY_COMPARISON:LIMITATION_OF_LIABILITY',
       status: 'DEGRADED',
       reasonCode: 'PROVIDER_UNAVAILABLE',
       message: 'An external analysis provider was unavailable for this check.',
@@ -151,11 +151,10 @@ const clauseFindingDetail = {
   concept: 'LIMITATION_OF_LIABILITY',
   secondaryConcept: null,
   concepts: ['LIMITATION_OF_LIABILITY'],
-  issueFamily: 'LIABILITY_CAP_DEVIATION',
-  observationKind: 'CAP_ABOVE_PREFERRED',
-  observationText:
-    "The bounded classification found the liability cap above the organization's preferred position (cap multiple 3x).",
-  severity: 'HIGH',
+  issueFamily: 'POSITION_NEEDS_FALLBACK',
+  observationKind: 'POSITION_BEYOND_FALLBACK',
+  observationText: "The clause is worse for us than every fallback the position lists.",
+  severity: 'MEDIUM',
   reviewClassification: 'REVIEW_REQUIRED',
   proposedAction: 'USE_APPROVED_FALLBACK',
   proposedLanguage: 'The total liability of Supplier shall not exceed two times the fees paid.',
@@ -165,12 +164,15 @@ const clauseFindingDetail = {
     sufficiency: 'SUFFICIENT',
     verificationOutcome: 'VERIFIED',
     degradationFlags: [],
+    category: 'BEYOND_FALLBACK',
+    flagProbability: 0.87,
+    probabilities: { BEYOND_FALLBACK: 0.87, WALK_AWAY: 0.05 },
   },
   claims: [
     {
       ordinal: 0,
       claimKind: 'OBSERVATION',
-      text: "The bounded classification found the liability cap above the organization's preferred position.",
+      text: 'The clause is worse for us than every fallback the position lists.',
       absence: false,
       evidenceItemIds: ['e-clause', 'e-policy'],
     },
@@ -236,7 +238,7 @@ describe('review parsers', () => {
     expect(summary.activeRun?.status).toBe('COMPLETED')
     expect(summary.snapshot?.profile?.contractPackKey).toBe('MSA_PACK')
     expect(summary.snapshot?.knowledgePinNumber).toBe(6)
-    expect(summary.analysisWarnings[0].checkKey).toBe('LIABILITY_CAP:LIMITATION_OF_LIABILITY')
+    expect(summary.analysisWarnings[0].checkKey).toBe('POLICY_COMPARISON:LIMITATION_OF_LIABILITY')
     expect(summary.analysisWarnings[0].reasonCode).toBe('PROVIDER_UNAVAILABLE')
     expect(summary.coverage[0].coverage).toBe('PRESENT_PRIMARY')
   })
@@ -251,7 +253,7 @@ describe('review parsers', () => {
 
     const detail = parseFindingDetail({ ...clauseFindingDetail, severity: 'EXTREME' })
     expect(detail.severity).toBe('UNKNOWN')
-    expect(detail.issueFamily).toBe('LIABILITY_CAP_DEVIATION')
+    expect(detail.issueFamily).toBe('POSITION_NEEDS_FALLBACK')
   })
 
   it('parses clause finding detail including untyped quality and claims', () => {
@@ -262,6 +264,11 @@ describe('review parsers', () => {
       sufficiency: 'SUFFICIENT',
       verificationOutcome: 'VERIFIED',
       degradationFlags: [],
+      category: 'BEYOND_FALLBACK',
+      flagProbability: 0.87,
+      probabilities: { BEYOND_FALLBACK: 0.87, WALK_AWAY: 0.05 },
+      secondaryTopic: false,
+      uncoveredProbability: null,
     })
     expect(detail.claims.map((claim) => claim.claimKind)).toEqual([
       'OBSERVATION',
@@ -271,6 +278,33 @@ describe('review parsers', () => {
     expect(detail.absenceBasis).toBeNull()
     expect(detail.evidenceItems[0].evidenceId).toBe('e-clause')
     expect(detail.evidenceItems[0].authorityClass).toBe('CURRENT_CONTRACT')
+  })
+
+  it('drops a flag probability that is not on the comparison’s 0–1 scale', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: { ...clauseFindingDetail.quality, flagProbability: 87 },
+    })
+    expect(detail.quality?.flagProbability).toBeNull()
+  })
+
+  it('reads the related-position flag and the uncovered probability, dropping one off the scale', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: {
+        ...clauseFindingDetail.quality,
+        secondaryTopic: true,
+        uncoveredProbability: 0.9,
+      },
+    })
+    expect(detail.quality?.secondaryTopic).toBe(true)
+    expect(detail.quality?.uncoveredProbability).toBe(0.9)
+
+    const offScale = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: { ...clauseFindingDetail.quality, uncoveredProbability: 90 },
+    })
+    expect(offScale.quality?.uncoveredProbability).toBeNull()
   })
 
   it('parses absence finding detail with plan-check basis and no evidence', () => {
@@ -309,12 +343,14 @@ describe('review parsers', () => {
           contract: [contractSlot],
           preferred: [policySlot('e-1'), policySlot('e-2')],
           fallback: [policySlot('e-1')],
+          walkAway: [policySlot('e-2')],
           escalation: [{ evidenceItemId: 'e-1', authorityClass: 'POLICY', publicationNumber: 2, trigger: 'Uncapped liability' }],
         },
       })
       const comparison = detail.positionComparison
       expect(comparison?.preferred.map((slot) => slot.evidenceItemId)).toEqual(['e-1', 'e-2'])
       expect(comparison?.fallback).toHaveLength(1)
+      expect(comparison?.walkAway.map((slot) => slot.evidenceItemId)).toEqual(['e-2'])
       expect(comparison?.contract[0].facts[0]).toMatchObject({ factSchema: 'liability-facts', values: { liabilityCapMultiple: '3' } })
       expect(comparison?.escalation[0].trigger).toBe('Uncapped liability')
     })
@@ -325,6 +361,7 @@ describe('review parsers', () => {
         contract: [],
         preferred: [expect.objectContaining({ evidenceItemId: 'e-1', publicationNumber: null })],
         fallback: [],
+        walkAway: [],
         escalation: [],
       })
     })

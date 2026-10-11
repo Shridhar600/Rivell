@@ -1,5 +1,7 @@
 package com.rivell.workbench.platform.parsing;
 
+import com.rivell.workbench.taxonomy.ConceptKey;
+
 import java.io.ByteArrayInputStream;
 import java.time.Instant;
 import java.util.List;
@@ -11,7 +13,6 @@ import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import com.rivell.workbench.contracts.ContractStructure;
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.redline.ApprovedChangeSet;
 import com.rivell.workbench.redline.DocumentExecutionPlan;
 import com.rivell.workbench.redline.RedlinePlanResolver;
@@ -49,13 +50,13 @@ public final class RedlineFixturePipeline {
     public static DocumentExecutionPlan plan(
             ContractStructure structure,
             ApprovedChangeSet set,
-            Map<UUID, LegalConcept> effectivePrimaryConcepts) {
+            Map<UUID, ConceptKey> effectivePrimaryConcepts) {
         return new RedlinePlanResolver().resolve(set, structure, effectivePrimaryConcepts,
                 AUTHOR, EXECUTED_AT, SOURCE_SHA);
     }
 
-    public static Map<UUID, LegalConcept> concepts(
-            ContractStructure structure, Map<String, LegalConcept> byHeadingText) {
+    public static Map<UUID, ConceptKey> concepts(
+            ContractStructure structure, Map<String, ConceptKey> byHeadingText) {
         return RedlineTestStructures.concepts(structure, byHeadingText);
     }
 
