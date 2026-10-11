@@ -117,6 +117,29 @@ class ContractRegionSegmenterTest {
     }
 
     @Test
+    void aTrackedChangeCanReplaceOnlyParagraphClauses() {
+        var fees = heading("4. Fees", "4", 1);
+        var table = new DocumentNode(UUID.randomUUID(), VERSION, BODY_ID,
+                DocumentNodeType.TABLE, 3, null, null, null,
+                SourceSpan.ofTable("word/document.xml", 3, 0), null);
+        var term = heading("5. Term", "5", 4);
+        var schedule = heading("Schedule 1 Order Form", "S1", 6);
+        var nodes = List.of(
+                BODY_NODE,
+                fees,
+                paragraph("The fees are set out below.", 2),
+                table,
+                term,
+                paragraph("This Agreement lasts three years.", 5),
+                schedule,
+                paragraph("Subscription: Enterprise.", 7));
+
+        var untrackable = new ContractRegionSegmenter().untrackableHeadings(nodes);
+
+        assertThat(untrackable).containsExactlyInAnyOrder(fees.id(), schedule.id());
+    }
+
+    @Test
     void signatureHeadingsAndSchedulesAreNotClauses() {
         var nodes = List.of(
                 BODY_NODE,

@@ -228,8 +228,9 @@ public class RedlineExecutionService {
                     effectiveConcepts(organizationId, changeSet),
                     AUTHOR, startedAt, sourceSha);
         } catch (RedlinePlanException e) {
+            // Plan and render messages name the change ordinal and the reason, never document text.
             return fail(changeSet, organizationId, requestedBy, attemptNumber, startedAt, e.code(),
-                    e.approvedChangeId(), null, List.of(), sourceSha);
+                    e.approvedChangeId(), e.getMessage(), List.of(), sourceSha);
         }
 
         RenderedRedline rendered;
@@ -237,7 +238,7 @@ public class RedlineExecutionService {
             rendered = renderer.render(sourceBytes, plan);
         } catch (RedlineRenderException e) {
             return fail(changeSet, organizationId, requestedBy, attemptNumber, startedAt, e.code(),
-                    e.approvedChangeId(), null, List.of(), sourceSha);
+                    e.approvedChangeId(), e.getMessage(), List.of(), sourceSha);
         }
 
         var verification = verifier.verify(sourceBytes, rendered.bytes(), plan,

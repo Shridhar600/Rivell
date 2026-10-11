@@ -47,6 +47,7 @@ import com.rivell.workbench.review.UnauthorizedReviewAccessException;
 import com.rivell.workbench.workflow.AnalysisNotCompleteException;
 import com.rivell.workbench.workflow.DecisionConflictException;
 import com.rivell.workbench.workflow.FindingNotActionableException;
+import com.rivell.workbench.workflow.UntrackableChangeTargetException;
 import com.rivell.workbench.workflow.InvalidDecisionException;
 import com.rivell.workbench.workflow.ReviewAlreadyFinalizedException;
 import com.rivell.workbench.workflow.ReviewNotFinalizableException;
@@ -109,7 +110,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({DecisionConflictException.class, FindingNotActionableException.class,
             AnalysisNotCompleteException.class, ReviewAlreadyFinalizedException.class,
-            ReviewNotFinalizableException.class})
+            ReviewNotFinalizableException.class, UntrackableChangeTargetException.class})
     ResponseEntity<ErrorResponse> decisionConflict(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }

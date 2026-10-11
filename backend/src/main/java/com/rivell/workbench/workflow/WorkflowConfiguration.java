@@ -28,10 +28,12 @@ class WorkflowConfiguration {
             HumanDecisionRepository decisionRepository,
             ApprovedChangeSetRepository changeSetRepository,
             TransactionTemplate transactionTemplate,
-            Clock clock) {
+            Clock clock,
+            ContractQueryService contractQueryService) {
         return new HumanDecisionService(identityProvider, authorizationService,
                 reviewRepository, analysisRepository, findingRepository,
-                decisionRepository, changeSetRepository, transactionTemplate, clock);
+                decisionRepository, changeSetRepository, transactionTemplate, clock,
+                contractQueryService);
     }
 
     @Bean

@@ -5,11 +5,13 @@ import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
 import com.rivell.workbench.redline.ChangeActionType;
+import com.rivell.workbench.redline.ChangeTargetKind;
 import com.rivell.workbench.review.FindingNotFoundException;
 import com.rivell.workbench.review.FindingRepository;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
@@ -34,6 +36,7 @@ public class HumanDecisionService {
     private final ApprovedChangeSetRepository changeSetRepository;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    private final ContractQueryService contractQueryService;
 
     public HumanDecisionService(
             IdentityProvider identityProvider,
@@ -44,7 +47,8 @@ public class HumanDecisionService {
             HumanDecisionRepository decisionRepository,
             ApprovedChangeSetRepository changeSetRepository,
             TransactionTemplate transactionTemplate,
-            Clock clock) {
+            Clock clock,
+            ContractQueryService contractQueryService) {
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
         this.reviewRepository = reviewRepository;
@@ -54,6 +58,7 @@ public class HumanDecisionService {
         this.changeSetRepository = changeSetRepository;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
+        this.contractQueryService = contractQueryService;
     }
 
     public HumanDecision decide(UUID reviewId, UUID findingId, DecisionCommand command) {
@@ -81,6 +86,13 @@ public class HumanDecisionService {
                         ? DecisionRules.plan(finding, command.action(),
                                 command.approvedAction(), command.approvedLanguage(), decisionId)
                         : null;
+        if (planned != null && planned.targetKind() == ChangeTargetKind.CLAUSE
+                && planned.actionType() != ChangeActionType.INSERT
+                && contractQueryService.untrackableHeadingsForOrganization(organizationId,
+                        review.contractId(), review.contractVersionNumber())
+                        .contains(planned.targetHeadingNodeId())) {
+            throw new UntrackableChangeTargetException(findingId);
+        }
 
         return transactionTemplate.execute(status -> {
             if (!reviewRepository.lock(organizationId, reviewId)) {

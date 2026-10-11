@@ -39,6 +39,31 @@ public final class ContractRegionSegmenter {
         }
     }
 
+    /**
+     * Headings whose clause a tracked change cannot replace or delete: regions that are not
+     * clauses (schedules, signature blocks) and clauses whose body holds anything other than
+     * paragraphs (a table). The redline plan applies the same rule and fails closed; callers use
+     * this to refuse such a change before it is approved.
+     */
+    public java.util.Set<UUID> untrackableHeadings(List<DocumentNode> nodes) {
+        var byId = new java.util.HashMap<UUID, DocumentNode>();
+        for (var node : nodes) {
+            byId.put(node.id(), node);
+        }
+        var untrackable = new java.util.HashSet<UUID>();
+        for (var region : segment(nodes)) {
+            if (region.isPreamble()) {
+                continue;
+            }
+            var paragraphsOnly = region.textNodeIds().stream().map(byId::get)
+                    .allMatch(node -> node != null && node.nodeType() == DocumentNodeType.PARAGRAPH);
+            if (region.kind() != SemanticRegionKind.CLAUSE || !paragraphsOnly) {
+                untrackable.add(region.headingNodeId());
+            }
+        }
+        return untrackable;
+    }
+
     public List<Region> segment(List<DocumentNode> nodes) {
         var bodyId = bodyIdOf(nodes);
         var byId = new java.util.HashMap<UUID, DocumentNode>();

@@ -37,6 +37,19 @@ def _decide(api, review_id, findings):
         try:
             api.put(f"/api/reviews/{review_id}/findings/{f['id']}/decision", body)
         except ApiError as e:
+            if body["action"] == "ACCEPT" and e.status == 409:
+                # The product refused the change (e.g. a table or schedule target): reject it.
+                counts["accepted"] -= 1
+                counts["acceptRefused"] = counts.get("acceptRefused", 0) + 1
+                used.discard(target)
+                body = {"expectedVersion": 0, "clientRequestId": str(uuid.uuid4()), "action": "REJECT",
+                        "comment": "eval reviewer: the product refused the change"}
+                try:
+                    api.put(f"/api/reviews/{review_id}/findings/{f['id']}/decision", body)
+                    counts["rejected"] += 1
+                    continue
+                except ApiError as retry:
+                    e = retry
             counts["decideErrors"] += 1
             counts.setdefault("decideErrorSamples", []).append(f"{body['action']} {f['id']}: {e.status}")
     return counts

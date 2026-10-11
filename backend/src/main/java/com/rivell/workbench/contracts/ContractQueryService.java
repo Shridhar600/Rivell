@@ -130,6 +130,13 @@ public class ContractQueryService {
         return java.util.Set.copyOf(repository.findHeadingNodeIds(summary.versionId()));
     }
 
+    /** System-level: headings whose clause a tracked change cannot replace or delete. */
+    public java.util.Set<UUID> untrackableHeadingsForOrganization(
+            UUID organizationId, UUID contractId, int versionNumber) {
+        return new ContractRegionSegmenter().untrackableHeadings(
+                getStructureForOrganization(organizationId, contractId, versionNumber).nodes());
+    }
+
     /** System-level contract read for flows whose organization is already resolved. */
     public Contract getContractForOrganization(UUID organizationId, UUID contractId) {
         return repository
