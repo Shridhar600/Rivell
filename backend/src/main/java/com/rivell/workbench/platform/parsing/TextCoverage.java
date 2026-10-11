@@ -16,9 +16,10 @@ import com.rivell.workbench.contracts.ParseCoverage.LocationTotal;
 /**
  * Compares an independent read of the raw file with the parsed nodes, word by word.
  *
- * <p>Main-document words are aligned with the node text in order (Myers shortest edit script),
- * so a word counts as captured only where the structure holds it in sequence. Text in parts the
- * structure does not represent (headers, footers, notes, comments) is reported as gaps whole.
+ * <p>Words of segments the structure is meant to hold are aligned with the captured text in order
+ * (Myers shortest edit script), so a word counts as captured only where the structure holds it in
+ * sequence. Text in parts the structure does not represent (headers, footers, notes, comments,
+ * drawings) is reported as gaps whole.
  * When the two sides differ by more than {@link #MAX_EDITS} words the alignment stops and every
  * paragraph is matched whole against the node text instead ({@code exact = false}).
  */
@@ -30,11 +31,16 @@ final class TextCoverage {
     }
 
     static ParseCoverage measure(List<DocxTextInventory.Segment> source, List<DocumentNode> nodes) {
+        return measureTexts(source, nodes.stream().map(DocumentNode::text).toList());
+    }
+
+    /** {@code captured}: the structure's text pieces in source order (nulls are skipped). */
+    static ParseCoverage measureTexts(List<DocxTextInventory.Segment> source, List<String> captured) {
         var ids = new HashMap<String, Integer>();
         var mainWords = new ArrayList<String>();
         var mainSegment = new ArrayList<Integer>();
         for (int s = 0; s < source.size(); s++) {
-            if (DocxTextInventory.MAIN_PART.equals(source.get(s).part())) {
+            if (source.get(s).aligned()) {
                 for (var word : words(source.get(s).text())) {
                     mainWords.add(word);
                     mainSegment.add(s);
@@ -42,8 +48,8 @@ final class TextCoverage {
             }
         }
         var nodeWords = new ArrayList<String>();
-        for (var node : nodes) {
-            nodeWords.addAll(words(node.text()));
+        for (var text : captured) {
+            nodeWords.addAll(words(text));
         }
         var a = intern(mainWords, ids);
         var b = intern(nodeWords, ids);
@@ -52,11 +58,11 @@ final class TextCoverage {
         var exact = matched != null;
         int extra;
         if (exact) {
-            int captured = 0;
+            int alignedWords = 0;
             for (var m : matched) {
-                captured += m ? 1 : 0;
+                alignedWords += m ? 1 : 0;
             }
-            extra = b.length - captured;
+            extra = b.length - alignedWords;
         } else {
             matched = paragraphMatch(source, mainSegment, String.join(" ", nodeWords));
             extra = 0;
@@ -78,7 +84,7 @@ final class TextCoverage {
         }
         run.close(gaps);
         for (var segment : source) {
-            if (DocxTextInventory.MAIN_PART.equals(segment.part())) {
+            if (segment.aligned()) {
                 continue;
             }
             for (var word : words(segment.text())) {

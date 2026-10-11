@@ -687,6 +687,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/artifacts/{id}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report how much of the uploaded source's text the extracted structure holds */
+        get: operations["coverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/artifacts/{id}/candidates": {
         parameters: {
             query?: never;
@@ -4080,6 +4097,28 @@ export interface operations {
                     "*/*": string;
                 };
             };
+            /** @description Artifact does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    coverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
             /** @description Artifact does not exist in this organization */
             404: {
                 headers: {

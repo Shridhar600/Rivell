@@ -75,7 +75,7 @@ class ParseCoverageTest {
     @Test
     void wordsMissingFromTheMiddleOfAParagraphBecomeOneGapAndInventedWordsCountAsExtra() {
         var source = List.of(new DocxTextInventory.Segment(DocxTextInventory.MAIN_PART,
-                Location.BODY, "The cap is twelve months of fees paid."));
+                Location.BODY, "The cap is twelve months of fees paid.", true));
         var nodes = nodes("The cap is fees paid.", "An invented sentence.");
 
         var coverage = TextCoverage.measure(source, nodes);
@@ -93,13 +93,13 @@ class ParseCoverageTest {
     void aFileTooDifferentToAlignFallsBackToWholeParagraphMatching() {
         var source = new ArrayList<DocxTextInventory.Segment>();
         source.add(new DocxTextInventory.Segment(DocxTextInventory.MAIN_PART, Location.BODY,
-                "Kept paragraph."));
+                "Kept paragraph.", true));
         var lost = new StringBuilder();
         for (int i = 0; i <= TextCoverage.MAX_EDITS; i++) {
             lost.append("w").append(i).append(' ');
         }
         source.add(new DocxTextInventory.Segment(DocxTextInventory.MAIN_PART, Location.BODY,
-                lost.toString()));
+                lost.toString(), true));
 
         var coverage = TextCoverage.measure(source, nodes("Kept paragraph."));
 

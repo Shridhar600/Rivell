@@ -44,7 +44,8 @@ public class DocxKnowledgeExtractor implements KnowledgeStructureExtractor {
         var status = result.status() == ParseStatus.FAILED
                 ? IngestStatus.FAILED
                 : IngestStatus.EXTRACTED;
-        return new StructureExtraction(result.parserVersion(), status, result.warnings(), nodes);
+        return new StructureExtraction(result.parserVersion(), status, result.warnings(), nodes,
+                result.coverage());
     }
 
     private static KnowledgeSourceNode toKnowledgeNode(UUID artifactId, DocumentNode node) {

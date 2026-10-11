@@ -1,6 +1,7 @@
 package com.rivell.workbench.knowledge;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.rivell.workbench.organization.AuthorizationService;
@@ -42,6 +43,13 @@ public class KnowledgeQueryService {
         requireRead();
         return repository.findArtifact(artifactId, organizationId())
                 .orElseThrow(() -> new KnowledgeArtifactNotFoundException(artifactId));
+    }
+
+    /** The artifact's coverage report; empty when it predates the check. */
+    public Optional<com.rivell.workbench.contracts.ParseCoverage> getParseCoverage(UUID artifactId) {
+        requireRead();
+        assertArtifactExists(artifactId);
+        return repository.findParseCoverage(artifactId, organizationId());
     }
 
     public List<KnowledgeSourceNode> getStructure(UUID artifactId) {

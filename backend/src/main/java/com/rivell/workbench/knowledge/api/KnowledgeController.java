@@ -341,6 +341,16 @@ class KnowledgeController {
         return ApiResult.ok(new BulkApprovalView(result.approvedIds(), result.skipped()));
     }
 
+    @Operation(summary = "Report how much of the uploaded source's text the extracted structure holds")
+    @ApiResponse(
+            responseCode = "404", description = "Artifact does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @GetMapping("/artifacts/{id}/coverage")
+    ApiResult<com.rivell.workbench.contracts.ParseCoverageView> coverage(@PathVariable UUID id) {
+        return ApiResult.ok(com.rivell.workbench.contracts.ParseCoverageView.of(
+                queryService.getParseCoverage(id)));
+    }
+
     @Operation(summary = "Download the original uploaded knowledge source")
     @ApiResponse(
             responseCode = "200", description = "Original document bytes",

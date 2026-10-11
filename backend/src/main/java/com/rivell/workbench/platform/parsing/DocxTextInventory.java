@@ -43,7 +43,12 @@ final class DocxTextInventory {
             WML + "endnotes+xml", Location.ENDNOTE,
             WML + "comments+xml", Location.COMMENT);
 
-    record Segment(String part, Location location, String text) {
+    /**
+     * One paragraph (or cell) of source text. {@code aligned} is true for text the structure is
+     * meant to hold, which coverage aligns word by word; false for parts it does not represent,
+     * which coverage reports whole.
+     */
+    record Segment(String part, Location location, String text, boolean aligned) {
     }
 
     private DocxTextInventory() {
@@ -148,7 +153,7 @@ final class DocxTextInventory {
                             var text = open.pop().toString();
                             var location = openLocations.pop();
                             if (!text.isBlank()) {
-                                segments.add(new Segment(part, location, text));
+                                segments.add(new Segment(part, location, text, fixed == null));
                             }
                         }
                         default -> {

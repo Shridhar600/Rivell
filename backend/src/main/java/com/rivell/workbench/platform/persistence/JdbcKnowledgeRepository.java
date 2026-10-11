@@ -106,6 +106,41 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public void updateParseCoverage(UUID artifactId, com.rivell.workbench.contracts.ParseCoverage coverage) {
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(coverage);
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not serialise parse coverage", e);
+        }
+        jdbcClient.sql("update knowledge_artifact set parse_coverage = cast(:coverage as jsonb) where id = :id")
+                .param("coverage", json)
+                .param("id", artifactId)
+                .update();
+    }
+
+    @Override
+    public Optional<com.rivell.workbench.contracts.ParseCoverage> findParseCoverage(
+            UUID artifactId, UUID organizationId) {
+        return jdbcClient.sql("""
+                        select parse_coverage from knowledge_artifact
+                        where id = :id and organization_id = :organizationId
+                        """)
+                .param("id", artifactId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> Optional.ofNullable(rs.getString("parse_coverage")))
+                .optional()
+                .flatMap(json -> json)
+                .map(json -> {
+                    try {
+                        return objectMapper.readValue(json, com.rivell.workbench.contracts.ParseCoverage.class);
+                    } catch (Exception e) {
+                        throw new IllegalStateException("Unreadable parse coverage for an artifact", e);
+                    }
+                });
+    }
+
+    @Override
     @Transactional
     public void updateIngestOutcome(
             UUID artifactId, String parserVersion, IngestStatus status, List<String> warnings) {

@@ -132,6 +132,9 @@ public class KnowledgeIngestionService {
                 repository.updateIngestOutcome(
                         artifactId, extraction.parserVersion(), outcomeStatus,
                         outcomeWarnings);
+                if (extraction.coverage() != null) {
+                    repository.updateParseCoverage(artifactId, extraction.coverage());
+                }
                 if (finalAssessment != null) {
                     repository.updateArtifactAssessment(artifactId, finalAssessment);
                 }

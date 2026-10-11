@@ -1,4 +1,4 @@
-"""Writes coverage-mixed-parts.docx: raw OOXML with every place text can hide.
+"""Writes coverage-mixed-parts.docx and coverage-workbook.xlsx: raw OOXML with every place text can hide.
 
 Body paragraphs, a tracked insertion and deletion, a simple field, a text box stored the way
 Word stores it (DrawingML choice + VML fallback), a table, a header, a footer, a footnote and
@@ -91,7 +91,82 @@ DOC_RELS = (
     '</Relationships>')
 
 
+S = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+R = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+SML = "application/vnd.openxmlformats-officedocument.spreadsheetml."
+XLSX = {
+    "[Content_Types].xml": (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        '<Default Extension="xml" ContentType="application/xml"/>'
+        f'<Override PartName="/xl/workbook.xml" ContentType="{SML}sheet.main+xml"/>'
+        f'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="{SML}worksheet+xml"/>'
+        f'<Override PartName="/xl/worksheets/sheet2.xml" ContentType="{SML}worksheet+xml"/>'
+        f'<Override PartName="/xl/sharedStrings.xml" ContentType="{SML}sharedStrings+xml"/>'
+        f'<Override PartName="/xl/comments1.xml" ContentType="{SML}comments+xml"/>'
+        '<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>'
+        '</Types>'),
+    "_rels/.rels": (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        '</Relationships>'),
+    # sheet order in the workbook is Positions (sheet2.xml) then Notes (sheet1.xml)
+    "xl/workbook.xml": (
+        f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook {S} {R}><sheets>'
+        '<sheet name="Positions" sheetId="1" r:id="rId2"/><sheet name="Notes" sheetId="2" r:id="rId1"/>'
+        '</sheets></workbook>'),
+    "xl/_rels/workbook.xml.rels": (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        f'<Relationship Id="rId1" Type="{REL}worksheet" Target="worksheets/sheet1.xml"/>'
+        f'<Relationship Id="rId2" Type="{REL}worksheet" Target="worksheets/sheet2.xml"/>'
+        f'<Relationship Id="rId3" Type="{REL}sharedStrings" Target="sharedStrings.xml"/>'
+        '</Relationships>'),
+    "xl/sharedStrings.xml": (
+        f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst {S} count="4" uniqueCount="4">'
+        '<si><t>Topic</t></si><si><t>Preferred position</t></si>'
+        '<si><r><t xml:space="preserve">Cap at </t></r><r><rPr><b/></rPr><t>twelve months</t></r>'
+        '<r><t xml:space="preserve"> of fees</t></r></si>'
+        '<si><t>Use the latest approved template.</t></si></sst>'),
+    "xl/worksheets/sheet2.xml": (
+        f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet {S} {R}><sheetData>'
+        '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>'
+        '<row r="2"><c r="A2" t="inlineStr"><is><t>Limitation of liability</t></is></c>'
+        '<c r="B2" t="s"><v>2</v></c><c r="C2"><v>12</v></c></row>'
+        '</sheetData><drawing r:id="rIdD"/></worksheet>'),
+    "xl/worksheets/_rels/sheet2.xml.rels": (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        f'<Relationship Id="rIdC" Type="{REL}comments" Target="../comments1.xml"/>'
+        f'<Relationship Id="rIdD" Type="{REL}drawing" Target="../drawings/drawing1.xml"/>'
+        '</Relationships>'),
+    "xl/worksheets/sheet1.xml": (
+        f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet {S}><sheetData>'
+        '<row r="1"><c r="A1" t="s"><v>3</v></c></row></sheetData></worksheet>'),
+    "xl/comments1.xml": (
+        f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><comments {S}><authors><author>Legal</author></authors>'
+        '<commentList><comment ref="B2" authorId="0"><text><r><t>Board approval needed above this cap.</t></r></text>'
+        '</comment></commentList></comments>'),
+    "xl/drawings/drawing1.xml": (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor>'
+        '<xdr:from><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
+        '<xdr:to><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>6</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>'
+        '<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="TextBox 1"/><xdr:cNvSpPr txBox="1"/></xdr:nvSpPr><xdr:spPr/>'
+        '<xdr:txBody><a:bodyPr/><a:p><a:r><a:t>Escalate every walk-away to the General Counsel.</a:t></a:r></a:p></xdr:txBody>'
+        '</xdr:sp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>'),
+}
+
+
 def main():
+    workbook = pathlib.Path(__file__).with_name("coverage-workbook.xlsx")
+    with zipfile.ZipFile(workbook, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, xml in XLSX.items():
+            z.writestr(name, xml)
+    print(workbook)
     out = pathlib.Path(__file__).with_name("coverage-mixed-parts.docx")
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", CONTENT_TYPES)

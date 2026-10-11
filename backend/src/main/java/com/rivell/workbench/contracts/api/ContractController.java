@@ -182,9 +182,10 @@ class ContractController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping("/{id}/versions/{versionNumber}/coverage")
-    ApiResult<ParseCoverageResponse> getCoverage(
+    ApiResult<com.rivell.workbench.contracts.ParseCoverageView> getCoverage(
             @PathVariable UUID id, @PathVariable int versionNumber) {
-        return ApiResult.ok(ParseCoverageResponse.of(queryService.getParseCoverage(id, versionNumber)));
+        return ApiResult.ok(com.rivell.workbench.contracts.ParseCoverageView.of(
+                queryService.getParseCoverage(id, versionNumber)));
     }
 
     @Operation(summary = "Download the original uploaded DOCX of a contract version")

@@ -204,11 +204,12 @@ def run_org(api, corpus, org, raw_dir, redline=True):
         if not entry:
             continue
         try:
-            _, cands, ok = run_knowledge(api, corpus, entry, kind, types, errors)
+            artifact_id, cands, ok = run_knowledge(api, corpus, entry, kind, types, errors)
             approved += ok
+            coverage = api.get(f"/api/knowledge/artifacts/{artifact_id}/coverage")
             (raw_dir / f"knowledge-{pathlib.Path(entry).stem}.json").write_text(json.dumps(cands, indent=1))
             score = score_knowledge(load_answer(corpus, entry), cands)
-            result["knowledge"].append(dict(score, file=entry, approved=len(ok)))
+            result["knowledge"].append(dict(score, file=entry, approved=len(ok), coverage=coverage))
         except ApiError as e:
             errors.append(f"knowledge {entry}: {e}")
     if approved:
@@ -262,7 +263,8 @@ MAIN_LOCATIONS = ("BODY", "TABLE", "TEXT_BOX")
 
 
 def coverage_report(results):
-    rows = [c for r in results for c in r["contracts"] if (c.get("coverage") or {}).get("checked")]
+    rows = [c for r in results for c in r["knowledge"] + r["contracts"]
+            if (c.get("coverage") or {}).get("checked")]
     if not rows:
         return []
     lines = ["", "## Parse coverage (independent raw-file read)", "",

@@ -116,6 +116,7 @@ class SystemApiIT {
                         "/api/knowledge/artifacts",
                         "/api/knowledge/artifacts/{id}",
                         "/api/knowledge/artifacts/{id}/structure",
+                        "/api/knowledge/artifacts/{id}/coverage",
                         "/api/knowledge/artifacts/{id}/units",
                         "/api/knowledge/artifacts/{id}/candidates",
                         "/api/knowledge/artifacts/{id}/original",
