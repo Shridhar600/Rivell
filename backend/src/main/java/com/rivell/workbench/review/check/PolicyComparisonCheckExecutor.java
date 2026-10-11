@@ -95,7 +95,10 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var detail = new LinkedHashMap<String, Object>();
         detail.put("clauseTopicCount", topics.size());
         if (topics.isEmpty()) {
-            return CheckOutcome.completed(List.of(), detail);
+            // no topic means no position can match, but the clause may still be unusual and
+            // against us ("the only remedy is damages"): the uncovered-clause triage reads it
+            return compare(context, clause,
+                    evidenceService.buildForUncoveredClause(request(context, clause, ClauseTopics.NO_TOPIC)), detail);
         }
         var primary = clause.effectivePrimaryConcept().orElse(null);
         var bundle = evidenceService.buildForPolicyComparison(

@@ -264,6 +264,37 @@ class PolicyComparisonFlowIT {
     }
 
     @Test
+    void aClauseWithNoTopicIsStillTriaged() throws Exception {
+        // dev2 eval: "8. Remedies — the only remedy is damages" matched no topic and was never read
+        var organizationId = organizationId();
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.PC_PLAYBOOK,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/pc-contract.docx"));
+        var ingested = contractIngestionService.ingest("pc-contract.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        scriptedProvider.topiclessHeadings.add("Governing Law");
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        var review = reviewService.create(ingested.contractId(), 1, null);
+        scriptedProvider.uncoveredProbability = 0.9;
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(scriptedProvider.uncoveredHeadings)
+                .anyMatch(heading -> heading.contains("Governing Law"));
+        assertThat(scriptedProvider.policyComparisonCalls())
+                .extracting(LiabilityReviewIT.ReviewScriptedProvider.ComparisonCall::heading)
+                .noneMatch(heading -> heading.contains("Governing Law"));
+        assertThat(findingRepository.findFindings(organizationId, run.id()))
+                .anySatisfy(finding -> {
+                    assertThat(finding.issueFamily()).isEqualTo(IssueFamily.POLICY_UNAVAILABLE);
+                    assertThat(finding.observationKind()).isEqualTo(PolicyUnavailablePayload.NOT_COVERED);
+                });
+    }
+
+    @Test
     void comparisonProviderFailureIsUncertaintyPerPositionNotSilentPass() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.PC_PLAYBOOK,

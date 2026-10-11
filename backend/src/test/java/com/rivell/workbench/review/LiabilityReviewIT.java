@@ -171,6 +171,9 @@ public class LiabilityReviewIT {
         final java.util.Set<String> indecisivePrimaryHeadings =
                 java.util.concurrent.ConcurrentHashMap.newKeySet();
         private final AtomicInteger indecisivePrimaryAnswers = new AtomicInteger();
+        /** Headings the section-topics decision finds no topic in (every topic answers no). */
+        final java.util.Set<String> topiclessHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
 
         public int indecisivePrimaryAnswers() {
             return indecisivePrimaryAnswers.get();
@@ -204,6 +207,15 @@ public class LiabilityReviewIT {
                 return new ProviderExecutionResult(new LinkedHashMap<>(Map.of("primary_topic",
                         new com.rivell.workbench.intelligence.ChoiceAnswer(first, even.get(first), even))),
                         "fake-review-v1", new TokenUsage(1, 1));
+            }
+            if (request.pack().questions().keySet().stream().anyMatch(name -> name.startsWith("topic_"))
+                    && request.state().payload() instanceof Map<?, ?> topicPayload
+                    && topicPayload.get("heading") instanceof String topicHeading
+                    && topiclessHeadings.stream().anyMatch(topicHeading::contains)) {
+                var none = new LinkedHashMap<String, SemanticAnswer>();
+                request.pack().questions().keySet().forEach(name -> none.put(name,
+                        new com.rivell.workbench.intelligence.YesNoAnswer(0.02)));
+                return new ProviderExecutionResult(none, "fake-review-v1", new TokenUsage(1, 1));
             }
             if (request.pack().questions().containsKey(M7DecisionSpecs.SATISFIES_POLICY)) {
                 var verificationAnswers = new LinkedHashMap<String, SemanticAnswer>();
@@ -413,6 +425,7 @@ public class LiabilityReviewIT {
             policyComparisonProbabilities = null;
             indecisivePrimaryHeadings.clear();
             indecisivePrimaryAnswers.set(0);
+            topiclessHeadings.clear();
             uncoveredProbability = 0.05;
             uncoveredHeadings.clear();
             failConsistencyDecision = false;
