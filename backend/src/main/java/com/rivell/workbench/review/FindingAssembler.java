@@ -57,7 +57,7 @@ public final class FindingAssembler {
         var observation = observation(primary);
         var action = action(primary, drafting, openEnded, escalation);
         var severity = severity(primary);
-        var quality = quality(group);
+        var quality = quality(primary, group);
         var evidence = evidence(group);
         var concepts = concepts(group);
 
@@ -403,8 +403,18 @@ public final class FindingAssembler {
         };
     }
 
-    private static Map<String, Object> quality(List<RawReviewSignal> group) {
+    /** The deciding signal's own assessment, shown with the finding (model estimates). */
+    private static final List<String> ASSESSMENT_KEYS = List.of("category", "flagProbability",
+            "probabilities", "secondaryTopic", "uncoveredProbability");
+
+    private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
+        for (var key : ASSESSMENT_KEYS) {
+            var value = primary.quality().get(key);
+            if (value != null) {
+                quality.put(key, value);
+            }
+        }
         var flags = new LinkedHashSet<String>();
         for (var signal : group) {
             var sufficiency = signal.quality().get("sufficiency");

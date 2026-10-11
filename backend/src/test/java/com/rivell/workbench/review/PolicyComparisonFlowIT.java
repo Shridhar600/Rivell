@@ -147,6 +147,9 @@ class PolicyComparisonFlowIT {
         assertThat(walkAway.proposedLanguageSource())
                 .isEqualTo(ProposedLanguageSource.APPROVED_DRAFTING);
         assertThat(walkAway.proposedLanguage()).contains("two times the fees");
+        // the finding carries the deciding judgement for the reviewer
+        assertThat(walkAway.quality()).containsEntry("category", PolicyComparisonSpecs.WALK_AWAY)
+                .containsKey("flagProbability").containsEntry("secondaryTopic", false);
 
         var deviation = analysisRepository.findSignals(organizationId, run.id()).stream()
                 .filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
