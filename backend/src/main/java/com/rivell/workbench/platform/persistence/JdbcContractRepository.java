@@ -19,6 +19,7 @@ import com.rivell.workbench.contracts.ContractStructure;
 import com.rivell.workbench.contracts.ContractVersionSummary;
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
+import com.rivell.workbench.contracts.ParseCoverage;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
 import java.time.Instant;
@@ -259,17 +260,20 @@ class JdbcContractRepository implements ContractRepository {
     @Override
     @Transactional
     public void updateVersionParseOutcome(
-            UUID versionId, String parserVersion, ParseStatus status, List<String> warnings) {
+            UUID versionId, String parserVersion, ParseStatus status, List<String> warnings,
+            ParseCoverage coverage) {
         var updated = jdbcClient.sql("""
                 update contract_version
                 set parser_version = :parserVersion, parse_status = :parseStatus,
-                    parse_warnings = cast(:warnings as jsonb)
+                    parse_warnings = cast(:warnings as jsonb),
+                    parse_coverage = cast(:coverage as jsonb)
                 where id = :versionId
                 """)
                 .param("versionId", versionId)
                 .param("parserVersion", parserVersion)
                 .param("parseStatus", status.name())
                 .param("warnings", toJson(warnings))
+                .param("coverage", coverage == null ? null : writeJson(coverage))
                 .update();
         if (updated != 1) {
             throw new IllegalStateException("Version parse outcome not recorded: " + versionId);
@@ -382,6 +386,30 @@ class JdbcContractRepository implements ContractRepository {
                 rs.getString("sha256"),
                 rs.getString("filename"),
                 rs.getInt("node_count"));
+    }
+
+    @Override
+    public Optional<ParseCoverage> findParseCoverage(UUID versionId) {
+        return jdbcClient.sql("select parse_coverage from contract_version where id = :versionId")
+                .param("versionId", versionId)
+                .query((rs, rowNum) -> Optional.ofNullable(rs.getString("parse_coverage")))
+                .optional()
+                .flatMap(json -> json)
+                .map(json -> {
+                    try {
+                        return objectMapper.readValue(json, ParseCoverage.class);
+                    } catch (Exception e) {
+                        throw new IllegalStateException("Unreadable parse coverage for a version", e);
+                    }
+                });
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not serialise " + value.getClass().getSimpleName(), e);
+        }
     }
 
     private List<String> readWarnings(String json) {

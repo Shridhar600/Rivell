@@ -16,12 +16,8 @@ import org.docx4j.openpackaging.parts.WordprocessingML.FooterPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.FootnotesPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.HeaderPart;
 import org.docx4j.wml.Body;
-import org.docx4j.wml.Br;
 import org.docx4j.wml.P;
-import org.docx4j.wml.P.Hyperlink;
-import org.docx4j.wml.R;
 import org.docx4j.wml.SdtBlock;
-import org.docx4j.wml.SdtRun;
 import org.docx4j.wml.SectPr;
 import org.docx4j.wml.Tbl;
 import org.docx4j.wml.Tc;
@@ -33,6 +29,7 @@ import org.springframework.stereotype.Component;
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
 import com.rivell.workbench.contracts.DocumentStructureParser;
+import com.rivell.workbench.contracts.ParseCoverage;
 import com.rivell.workbench.contracts.ParseResult;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
@@ -85,13 +82,29 @@ public class DocxStructuralParser implements DocumentStructureParser {
             if (rawTopLevelChildren != body.getContent().size()) {
                 warnings.add("SOME_BODY_CONTENT_COULD_NOT_BE_REPRESENTED");
             }
+            if (DocxTextInventory.hasTrackedChanges(scan.mainDocumentXml())) {
+                // Text is read in the accept-all view; the user must know the file was a markup.
+                warnings.add("TRACKED_CHANGES_PRESENT");
+            }
             addDeferredPartWarnings(wordPackage, warnings);
-            return new ParseResult(PARSER_VERSION, ParseStatus.OK, warnings, walk.nodes());
+            var coverage = coverage(docxBytes, walk.nodes(), warnings);
+            return new ParseResult(PARSER_VERSION, ParseStatus.OK, warnings, walk.nodes(), coverage);
         } catch (Exception e) {
             return new ParseResult(
                     PARSER_VERSION, ParseStatus.FAILED,
                     List.of("The document could not be parsed (" + e.getClass().getSimpleName() + ")"),
                     List.of());
+        }
+    }
+
+    /** The coverage check never fails a parse: a check that cannot run is a warning. */
+    private static ParseCoverage coverage(
+            byte[] docxBytes, List<DocumentNode> nodes, List<String> warnings) {
+        try {
+            return TextCoverage.measure(DocxTextInventory.read(docxBytes), nodes);
+        } catch (Exception e) {
+            warnings.add("COVERAGE_CHECK_FAILED");
+            return null;
         }
     }
 
@@ -126,19 +139,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
     }
 
     private static String paragraphText(P paragraph) {
-        var text = new StringBuilder();
-        for (Object rawElement : paragraph.getContent()) {
-            var element = unwrap(rawElement);
-            if (element instanceof R run) {
-                for (Object rawRunChild : run.getContent()) {
-                    var runChild = unwrap(rawRunChild);
-                    if (runChild instanceof Text textElement) {
-                        text.append(textElement.getValue());
-                    }
-                }
-            }
-        }
-        return text.toString();
+        return WordText.paragraphText(paragraph);
     }
 
     private static boolean hasRealFootnotes(FootnotesPart footnotesPart) {
@@ -313,33 +314,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
         }
 
         private String textOf(P paragraph) {
-            var text = new StringBuilder();
-            for (Object rawElement : paragraph.getContent()) {
-                appendText(unwrap(rawElement), text);
-            }
-            return text.toString();
-        }
-
-        private void appendText(Object element, StringBuilder text) {
-            if (element instanceof R run) {
-                for (Object rawRunChild : run.getContent()) {
-                    appendText(unwrap(rawRunChild), text);
-                }
-            } else if (element instanceof Hyperlink hyperlink) {
-                for (Object rawLinkChild : hyperlink.getContent()) {
-                    appendText(unwrap(rawLinkChild), text);
-                }
-            } else if (element instanceof SdtRun sdtRun) {
-                for (Object rawSdtChild : sdtRun.getSdtContent().getContent()) {
-                    appendText(unwrap(rawSdtChild), text);
-                }
-            } else if (element instanceof Text textElement) {
-                text.append(textElement.getValue());
-            } else if (element instanceof Br || element instanceof R.Cr) {
-                text.append('\n');
-            } else if (element instanceof R.Tab) {
-                text.append('\t');
-            }
+            return WordText.paragraphText(paragraph);
         }
 
         private String cellText(Tc cell) {

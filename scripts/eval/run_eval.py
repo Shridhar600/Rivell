@@ -164,9 +164,12 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
     nodes = structure if isinstance(structure, list) else structure.get("nodes", [])
     semantics = api.get(f"{base}/semantics")
     findings = items(api.get(f"/api/reviews/{review['id']}/findings?limit=500"))
+    coverage = api.get(f"{base}/coverage")
     raw = {"upload": upload, "profile": profile, "enrichmentStatus": enrichment.get("enrichmentStatus"),
-           "review": review, "nodes": nodes, "semantics": semantics, "findings": findings}
+           "review": review, "nodes": nodes, "semantics": semantics, "findings": findings,
+           "coverage": coverage}
     score = score_contract(answer, nodes, semantics.get("clauses", []), findings)
+    score["coverage"] = coverage
     if redline and review["status"] == "COMPLETED":
         try:
             raw["redline"] = run_redline(api, review["id"], (corpus / entry).read_bytes(), nodes, entry)
@@ -249,6 +252,33 @@ def pct(n, d):
 
 
 CHECKS = ("opens", "preserved", "local", "applied")
+MAIN_LOCATIONS = ("BODY", "TABLE", "TEXT_BOX")
+
+
+def coverage_report(results):
+    rows = [c for r in results for c in r["contracts"] if (c.get("coverage") or {}).get("checked")]
+    if not rows:
+        return []
+    lines = ["", "## Parse coverage (independent raw-file read)", "",
+             "| File | Main text captured | Not represented (header/footer/notes/comments, words) "
+             "| Extra words | Gaps by location |", "|---|---|---|---|---|"]
+    tot_src = tot_cap = tot_other = tot_extra = 0
+    for c in rows:
+        cov = c["coverage"]
+        main = [t for t in cov["totals"] if t["location"] in MAIN_LOCATIONS]
+        src = sum(t["sourceWords"] for t in main)
+        cap = sum(t["capturedWords"] for t in main)
+        other = sum(t["sourceWords"] - t["capturedWords"] for t in cov["totals"] if t["location"] not in MAIN_LOCATIONS)
+        by_loc = {}
+        for g in cov["gaps"]:
+            by_loc[g["location"]] = by_loc.get(g["location"], 0) + g["words"]
+        tot_src += src; tot_cap += cap; tot_other += other; tot_extra += cov["extraWords"]
+        exact = "" if cov["exact"] else " (approx.)"
+        lines.append(f"| {c['file']} | {pct(cap, src)}{exact} | {other} | {cov['extraWords']} "
+                     f"| {', '.join(f'{k} {v}' for k, v in sorted(by_loc.items())) or '-'} |")
+    lines += ["", f"- Main text captured: {pct(tot_cap, tot_src)}; not represented elsewhere: {tot_other} words; "
+                  f"extra (invented) words: {tot_extra}"]
+    return lines
 
 
 def redline_report(results):
@@ -259,13 +289,14 @@ def redline_report(results):
              "| File | Accepted / rejected | Changes | Redline | Opens | Original preserved | Changes local "
              "| Applied | Re-parse (status, headings, sees ins/del) | First problem |",
              "|---|---|---|---|---|---|---|---|---|---|"]
-    done = clean = 0
+    done = clean = with_changes = 0
     for c in rows:
         x = c["redline"]
         checks = x.get("checks") or {}
         rp = x.get("reparse") or {}
         ok = [checks.get(k) for k in CHECKS]
         done += x.get("redlineStatus") == "COMPLETED"
+        with_changes += bool(x.get("changes"))
         clean += bool(checks) and all(ok)
         status = x.get("redlineStatus") or f"stopped at {x.get('stage')} {x.get('blockers') or x.get('error') or ''}"
         if x.get("failureCode"):
@@ -277,7 +308,9 @@ def redline_report(results):
         lines.append(f"| {c['file']} | {x.get('accepted', 0)} / {x.get('rejected', 0)} | {x.get('changes', '-')} "
                      f"| {status} | " + " | ".join("-" if v is None else ("✅" if v else "❌") for v in ok)
                      + f" | {rp_text} | {problem} |")
-    lines += ["", f"- Redlines completed: {pct(done, len(rows))}; all four independent checks pass: {pct(clean, len(rows))}"]
+    lines += ["", f"- Contracts with at least one accepted change: {with_changes}/{len(rows)}; "
+                  f"redlines completed: {pct(done, len(rows))}; all four independent checks pass: "
+                  f"{pct(clean, with_changes)} of redlines with changes"]
     return lines
 
 
@@ -348,7 +381,7 @@ def write_report(out, results, meta):
               f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})", "",
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]
-    lines += redline_report(results) + usage_report(results)
+    lines += coverage_report(results) + redline_report(results) + usage_report(results)
     errs = [f"- {r['org']}: {e}" for r in results for e in r["errors"]]
     lines += ["", "## Errors", ""] + (errs or ["- none"])
     (out / "summary.md").write_text("\n".join(lines) + "\n")

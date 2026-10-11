@@ -95,6 +95,12 @@ public class ContractQueryService {
         return repository.loadStructure(summary.versionId());
     }
 
+    /** The version's coverage report; empty when it was parsed before the check existed. */
+    public java.util.Optional<ParseCoverage> getParseCoverage(UUID contractId, int versionNumber) {
+        var summary = getVersionSummary(contractId, versionNumber);
+        return repository.findParseCoverage(summary.versionId());
+    }
+
     public ContractVersionSummary getVersionSummary(UUID contractId, int versionNumber) {
         requireReadPermission();
         return repository

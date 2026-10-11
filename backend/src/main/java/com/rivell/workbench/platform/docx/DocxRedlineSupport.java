@@ -20,18 +20,15 @@ import org.docx4j.TraversalUtil;
 import org.docx4j.openpackaging.contenttype.ContentTypes;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.PartName;
-import org.docx4j.wml.Br;
 import org.docx4j.wml.Body;
 import org.docx4j.wml.CTMarkup;
 import org.docx4j.wml.CTTrackChange;
 import org.docx4j.wml.P;
 import org.docx4j.wml.R;
 import org.docx4j.wml.SdtBlock;
-import org.docx4j.wml.SdtRun;
 import org.docx4j.wml.SectPr;
 import org.docx4j.wml.Tbl;
 import org.docx4j.wml.Tc;
-import org.docx4j.wml.Text;
 import org.docx4j.wml.Tr;
 
 import jakarta.xml.bind.JAXBElement;
@@ -71,35 +68,9 @@ final class DocxRedlineSupport {
         }
     }
 
-    /** Plain text with the M1 parser's semantics (runs, hyperlinks, inline SDTs, breaks). */
+    /** Plain text with exactly the structural parser's semantics (one shared definition). */
     static String paragraphText(P paragraph) {
-        var text = new StringBuilder();
-        for (var rawElement : paragraph.getContent()) {
-            appendText(unwrap(rawElement), text);
-        }
-        return text.toString();
-    }
-
-    private static void appendText(Object element, StringBuilder text) {
-        if (element instanceof R run) {
-            for (var rawRunChild : run.getContent()) {
-                appendText(unwrap(rawRunChild), text);
-            }
-        } else if (element instanceof P.Hyperlink hyperlink) {
-            for (var rawLinkChild : hyperlink.getContent()) {
-                appendText(unwrap(rawLinkChild), text);
-            }
-        } else if (element instanceof SdtRun sdtRun) {
-            for (var rawSdtChild : sdtRun.getSdtContent().getContent()) {
-                appendText(unwrap(rawSdtChild), text);
-            }
-        } else if (element instanceof Text textElement) {
-            text.append(textElement.getValue());
-        } else if (element instanceof Br || element instanceof R.Cr) {
-            text.append('\n');
-        } else if (element instanceof R.Tab) {
-            text.append('\t');
-        }
+        return com.rivell.workbench.platform.parsing.WordText.paragraphText(paragraph);
     }
 
     /**

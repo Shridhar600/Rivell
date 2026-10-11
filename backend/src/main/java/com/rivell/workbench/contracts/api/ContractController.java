@@ -175,6 +175,18 @@ class ContractController {
                         .toList()));
     }
 
+    @Operation(summary = "Report how much of the uploaded file's text the parsed structure holds")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "404", description = "Contract or version does not exist in this organization",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/{id}/versions/{versionNumber}/coverage")
+    ApiResult<ParseCoverageResponse> getCoverage(
+            @PathVariable UUID id, @PathVariable int versionNumber) {
+        return ApiResult.ok(ParseCoverageResponse.of(queryService.getParseCoverage(id, versionNumber)));
+    }
+
     @Operation(summary = "Download the original uploaded DOCX of a contract version")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Original document bytes",
