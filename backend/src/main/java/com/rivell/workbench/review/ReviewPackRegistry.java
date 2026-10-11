@@ -40,7 +40,6 @@ public final class ReviewPackRegistry {
                 "Completeness, liability-cap, confidentiality-survival, and "
                         + "carve-out consistency review for MSAs.",
                 VERSION, msaExpectations,
-                Map.of(CoreConcepts.LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP),
                 List.of(
                         new ReviewPack.CrossClauseRule(
                                 CheckMechanism.CONFIDENTIALITY_SURVIVAL,
@@ -59,7 +58,6 @@ public final class ReviewPackRegistry {
         var nda = new ReviewPack(NDA_PACK, "Mutual NDA Pack",
                 "Confidentiality completeness and survival review for NDAs.",
                 VERSION, ndaExpectations,
-                Map.of(CoreConcepts.LIMITATION_OF_LIABILITY, CheckMechanism.LIABILITY_CAP),
                 List.of(new ReviewPack.CrossClauseRule(
                         CheckMechanism.CONFIDENTIALITY_SURVIVAL,
                         CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CoreConcepts.TERM)));

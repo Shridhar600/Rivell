@@ -226,7 +226,7 @@ class M7HardeningIT {
         var review = reviewService.create(
                 corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
         var planCheck = reviewRepository.findPlanChecks(organizationId, review.id()).stream()
-                .filter(check -> check.mechanism() == CheckMechanism.LIABILITY_CAP)
+                .filter(check -> check.mechanism() == CheckMechanism.POLICY_COMPARISON)
                 .findFirst().orElseThrow();
         var run = ReviewAnalysisRun.running(UUID.randomUUID(), organizationId, review.id(), 1,
                 RunTrigger.INITIAL, ReviewPipeline.VERSION, java.time.Instant.now());

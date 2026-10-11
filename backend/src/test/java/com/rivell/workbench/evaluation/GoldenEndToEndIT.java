@@ -156,7 +156,7 @@ class GoldenEndToEndIT {
                 "m5-msa-services.docx",
                 "MSA",
                 "LIMITATION_OF_LIABILITY",
-                Set.of("LIABILITY_CAP_DEVIATION"),
+                Set.of("POSITION_NEEDS_FALLBACK"),
                 Set.of("USE_APPROVED_FALLBACK"),
                 "REPLACE",
                 "REDLINE_GENERATED");
@@ -170,7 +170,7 @@ class GoldenEndToEndIT {
         var findings = readFindings(reviewId);
         var deviation = findings.stream()
                 .filter(f -> "LIMITATION_OF_LIABILITY".equals(f.get("concept").asText()))
-                .filter(f -> "LIABILITY_CAP_DEVIATION".equals(f.get("issueFamily").asText()))
+                .filter(f -> "POSITION_NEEDS_FALLBACK".equals(f.get("issueFamily").asText()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no liability deviation finding in "
                         + findings));
@@ -702,8 +702,8 @@ class GoldenEndToEndIT {
         }
 
         private static boolean isReviewPack(Set<String> questionNames) {
-            return questionNames.contains(
-                    com.rivell.workbench.review.M7DecisionSpecs.DEVIATION_TYPE)
+            return questionNames.stream().anyMatch(
+                            name -> name.startsWith("position_"))
                     || questionNames.contains(
                             com.rivell.workbench.review.M7DecisionSpecs.CONSISTENCY)
                     || questionNames.contains(

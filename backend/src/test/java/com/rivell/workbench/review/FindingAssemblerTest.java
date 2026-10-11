@@ -42,7 +42,7 @@ class FindingAssemblerTest {
     @Test
     void supportOnlyGroupYieldsNoFinding() {
         var support = signal(SignalType.APPROVED_DRAFTING_AVAILABLE,
-                IssueFamily.LIABILITY_CAP_DEVIATION,
+                IssueFamily.POSITION_WALK_AWAY,
                 new ApprovedDraftingPayload(UUID.randomUUID(), "fallback wording", "FALLBACK"),
                 List.of(UUID.randomUUID()), null);
 
@@ -51,8 +51,8 @@ class FindingAssemblerTest {
 
     @Test
     void clauseSignalWithoutEvidenceFailsAssemblyLoudly() {
-        var signal = signal(SignalType.DEVIATION_UNCERTAIN, IssueFamily.LIABILITY_CAP_UNCERTAIN,
-                new DeviationUncertainPayload("policy_not_comparable"), List.of(), null);
+        var signal = signal(SignalType.DEVIATION_UNCERTAIN, IssueFamily.POSITION_UNCERTAIN,
+                new DeviationUncertainPayload("bounded_decision_unavailable"), List.of(), null);
 
         assertThatThrownBy(() -> assembler.assemble(run(), List.of(signal), NOW))
                 .isInstanceOf(FindingAssemblyException.class)
@@ -62,11 +62,11 @@ class FindingAssemblerTest {
     @Test
     void draftingOnAnUncertainIssueDoesNotProposeLanguage() {
         var uncertain = signal(SignalType.DEVIATION_UNCERTAIN,
-                IssueFamily.LIABILITY_CAP_UNCERTAIN,
+                IssueFamily.POSITION_UNCERTAIN,
                 new DeviationUncertainPayload("classification_uncertain"),
                 List.of(UUID.randomUUID()), null);
         var drafting = signal(SignalType.APPROVED_DRAFTING_AVAILABLE,
-                IssueFamily.LIABILITY_CAP_UNCERTAIN,
+                IssueFamily.POSITION_UNCERTAIN,
                 new ApprovedDraftingPayload(UUID.randomUUID(), "fallback wording", "FALLBACK"),
                 List.of(UUID.randomUUID()), null);
 
@@ -80,7 +80,7 @@ class FindingAssemblerTest {
     @Test
     void unverifiedCandidateHasNoGenerativeExplanationClaimAndSequentialOrdinals() {
         var openEnded = signal(SignalType.OPEN_ENDED_ANALYSIS_RESULT,
-                IssueFamily.OPEN_ENDED_LIABILITY,
+                IssueFamily.POSITION_NEEDS_FALLBACK,
                 new OpenEndedAnalysisPayload("candidate", "model explanation", "UNCERTAIN"),
                 List.of(UUID.randomUUID()), "UNCERTAIN");
 

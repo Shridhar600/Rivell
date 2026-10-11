@@ -176,7 +176,7 @@ final class KnowledgeStructure {
         return new KnowledgeCandidate(
                 UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                 candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                rawLabel, contentText, CandidatePayload.EMPTY, null, null,
+                rawLabel, contentText, CandidatePayload.EMPTY, null, List.of(), null,
                 null, null,
                 SemanticFields.EMPTY, null, List.of(),
                 null, null, null, scope, List.of(), null, null,
@@ -193,7 +193,7 @@ final class KnowledgeStructure {
         return new KnowledgeCandidate(
                 UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                 candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                rawLabel, payload.render(), payload, null, null,
+                rawLabel, payload.render(), payload, null, List.of(), null,
                 null, null,
                 SemanticFields.EMPTY, null, List.of(),
                 null, null, null, scope, List.of(), null, null,

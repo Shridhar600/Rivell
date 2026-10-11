@@ -350,11 +350,9 @@ class ReviewAnalysisIT {
 
     private ReviewCheckExecution liabilityExecution(
             UUID organizationId, UUID reviewId, UUID runId) {
-        var planCheck = reviewRepository.findPlanChecks(organizationId, reviewId).stream()
-                .filter(check -> check.mechanism() == CheckMechanism.LIABILITY_CAP)
+        return analysisRepository.findExecutions(organizationId, runId).stream()
+                .filter(execution -> execution.signalCount() > 0)
                 .findFirst().orElseThrow();
-        return analysisRepository.findExecution(organizationId, runId, planCheck.id())
-                .orElseThrow();
     }
 
     private void assertSignalCountParity(UUID organizationId, UUID runId) {
@@ -460,8 +458,8 @@ class ReviewAnalysisIT {
                 UUID.randomUUID(), UUID.randomUUID(), type,
                 com.rivell.workbench.review.FindingSubjectKind.CLAUSE, UUID.randomUUID(), null,
                 com.rivell.workbench.taxonomy.CoreConcepts.LIMITATION_OF_LIABILITY, null,
-                com.rivell.workbench.review.IssueFamily.LIABILITY_CAP_UNCERTAIN,
-                new com.rivell.workbench.review.DeviationUncertainPayload("policy_not_comparable"),
+                com.rivell.workbench.review.IssueFamily.POSITION_UNCERTAIN,
+                new com.rivell.workbench.review.DeviationUncertainPayload("bounded_decision_unavailable"),
                 evidence, "spec", 1, null, null, "VERIFIED", "fake", null, Map.of(), key,
                 java.time.Instant.parse("2026-09-27T00:00:00Z"));
     }
@@ -728,7 +726,7 @@ class ReviewAnalysisIT {
         var review = reviewService.create(
                 corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
         var planCheck = reviewRepository.findPlanChecks(organizationId, review.id()).stream()
-                .filter(check -> check.mechanism() == CheckMechanism.LIABILITY_CAP)
+                .filter(check -> check.mechanism() == CheckMechanism.POLICY_COMPARISON)
                 .findFirst().orElseThrow();
         var run = ReviewAnalysisRun.running(UUID.randomUUID(), organizationId, review.id(), 1,
                 RunTrigger.INITIAL, ReviewPipeline.VERSION, java.time.Instant.now());
@@ -762,7 +760,7 @@ class ReviewAnalysisIT {
     }
 
     @Test
-    void emptyPlanCompletesWithZeroFindings() throws Exception {
+    void classifiedClausesWithoutPublishedPositionsCompleteWithZeroFindings() throws Exception {
         var organizationId = organizationId();
         var bytes = Files.readAllBytes(java.nio.file.Path.of(
                 "src/test/resources/fixtures/m5-nda-counterparty.docx"));
@@ -773,7 +771,9 @@ class ReviewAnalysisIT {
                         PaperSource.COUNTERPARTY_PAPER, Jurisdiction.US));
         var review = reviewService.create(ingested.contractId(), 1, null);
 
-        assertThat(reviewRepository.findPlanChecks(organizationId, review.id())).isEmpty();
+        var plan = reviewRepository.findPlanChecks(organizationId, review.id());
+        assertThat(plan).isNotEmpty().allSatisfy(check -> assertThat(check.mechanism())
+                .isEqualTo(CheckMechanism.POLICY_COMPARISON));
 
         var run = analysisService.analyze(organizationId, review.id());
 
@@ -781,7 +781,7 @@ class ReviewAnalysisIT {
         assertThat(analysisRepository.findSignals(organizationId, run.id())).isEmpty();
         assertThat(findingRepository.findFindings(organizationId, run.id())).isEmpty();
         var progress = analysisService.progress(organizationId, review.id());
-        assertThat(progress.plannedChecks()).isZero();
+        assertThat(progress.plannedChecks()).isEqualTo(plan.size());
         assertThat(progress.reviewStatus()).isEqualTo(ReviewStatus.COMPLETED);
     }
 

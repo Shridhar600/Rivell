@@ -527,9 +527,9 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 return objectMapper.treeToValue(node,
                         com.rivell.workbench.review.PolicyAmbiguousPayload.class);
             }
-            if ("LIABILITY_DEVIATION".equals(kind)) {
+            if ("POSITION_DEVIATION".equals(kind)) {
                 return objectMapper.treeToValue(node,
-                        com.rivell.workbench.review.LiabilityDeviationPayload.class);
+                        com.rivell.workbench.review.PositionDeviationPayload.class);
             }
             if ("APPROVED_DRAFTING".equals(kind)) {
                 return objectMapper.treeToValue(node,

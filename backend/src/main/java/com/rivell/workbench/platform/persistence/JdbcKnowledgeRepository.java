@@ -256,6 +256,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                             insert into knowledge_candidate
                             (id, artifact_id, organization_id, extraction_unit_id, candidate_type,
                              review_status, raw_label, content_text, payload, legal_concept_key,
+                             topic_keys,
                              semantic_fields, edited_semantic_fields, interpretations,
                              edited_content_text, edited_payload, superseding_candidate_id,
                              contract_pack_key, declared_contract_types, party_perspective,
@@ -266,6 +267,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                                     (select organization_id from knowledge_artifact where id = :artifactId),
                                     :extractionUnitId, :candidateType, :reviewStatus, :rawLabel,
                                     :contentText, :payload::jsonb, :legalConceptKey,
+                                    :topicKeys::text[],
                                     :semanticFields::jsonb, :editedSemanticFields::jsonb,
                                     :interpretations::jsonb,
                                     :editedContentText, :editedPayload::jsonb, :supersedingCandidateId,
@@ -284,6 +286,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("contentText", candidate.contentText())
                     .param("payload", writePayload(candidate.payload()))
                     .param("legalConceptKey", candidate.legalConceptKey())
+                    .param("topicKeys", topicKeysLiteral(candidate.topicKeys()))
                     .param("editedContentText", candidate.editedContentText())
                     .param("editedPayload", writePayload(candidate.editedPayload()))
                     .param("supersedingCandidateId", candidate.supersedingCandidateId())
@@ -392,6 +395,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         return jdbcClient.sql("""
                         update knowledge_candidate
                         set concept_correction = :conceptCorrection,
+                            topic_keys = :topicKeys::text[],
                             concept_corrected_by = :correctedBy,
                             concept_corrected_at = :correctedAt,
                             review_status = :reviewStatus,
@@ -403,6 +407,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                           and review_status = :expectedStatus
                         """)
                 .param("conceptCorrection", updated.conceptCorrection())
+                .param("topicKeys", topicKeysLiteral(updated.topicKeys()))
                 .param("correctedBy", correctedBy)
                 .param("correctedAt", toTimestamp(updatedAt))
                 .param("reviewStatus", updated.reviewStatus().name())
@@ -496,7 +501,11 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             params.put("candidateTypes",
                     query.candidateTypes().stream().map(Enum::name).toArray(String[]::new));
         }
-        if (query.legalConceptKey() != null) {
+        var topicMembership = !query.topicKeys().isEmpty();
+        if (topicMembership) {
+            conditions.add("c.topic_keys && :topicKeys::text[]");
+            params.put("topicKeys", topicKeysLiteral(List.copyOf(query.topicKeys())));
+        } else if (query.legalConceptKey() != null) {
             conditions.add("c.effective_concept_key = :legalConceptKey");
             params.put("legalConceptKey", query.legalConceptKey());
         }
@@ -555,10 +564,28 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 + " on pp.id = add_item.publication_id"
                 + " and pp.organization_id = c.organization_id"
                 + " and pp.publication_number <= :asOf ";
+        String order;
+        if (topicMembership) {
+            // primary-topic match first, then shared-topic count, then publication order;
+            // source (unit) order breaks publication ties deterministically
+            var primaryMatch = query.primaryTopicKey() == null
+                    ? "false"
+                    : "c.effective_concept_key = :primaryTopicKey";
+            if (query.primaryTopicKey() != null) {
+                params.put("primaryTopicKey", query.primaryTopicKey());
+            }
+            from = from + " join knowledge_extraction_unit u on u.id = c.extraction_unit_id ";
+            order = " order by (" + primaryMatch + ") desc,"
+                    + " cardinality(array(select unnest(c.topic_keys)"
+                    + " intersect select unnest(:topicKeys::text[]))) desc,"
+                    + " pp.publication_number desc, u.ordinal asc, c.id desc limit :limit";
+        } else {
+            order = " order by c.created_at desc, c.id desc limit :limit";
+        }
         var sql = "select c.*, pp.id as publication_id, pp.publication_number as publication_number"
                 + from + " where "
                 + String.join(" and ", conditions)
-                + " order by c.created_at desc, c.id desc limit :limit";
+                + order;
         var statement = jdbcClient.sql(sql);
         for (var entry : params.entrySet()) {
             statement = statement.param(entry.getKey(), entry.getValue());
@@ -816,6 +843,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("content_text"),
                 machinePayload,
                 rs.getString("legal_concept_key"),
+                readTopicKeys(rs),
                 rs.getString("concept_correction"),
                 uuid(rs, "concept_corrected_by"),
                 instant(rs, "concept_corrected_at"),
@@ -862,6 +890,30 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     private static LocalDate readDate(ResultSet rs, String column) throws SQLException {
         var value = rs.getDate(column);
         return value == null ? null : value.toLocalDate();
+    }
+
+    private static List<String> readTopicKeys(ResultSet rs) throws SQLException {
+        var array = rs.getArray("topic_keys");
+        if (array == null) {
+            return List.of();
+        }
+        var values = (Object[]) array.getArray();
+        var keys = new java.util.ArrayList<String>(values.length);
+        for (var value : values) {
+            if (value != null) {
+                keys.add(value.toString());
+            }
+        }
+        return List.copyOf(keys);
+    }
+
+    private static String topicKeysLiteral(List<String> topicKeys) {
+        if (topicKeys == null || topicKeys.isEmpty()) {
+            return "{}";
+        }
+        return "{" + topicKeys.stream()
+                .map(key -> "\"" + key.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
+                .collect(java.util.stream.Collectors.joining(",")) + "}";
     }
 
     private String writeStringSet(Set<String> values) {

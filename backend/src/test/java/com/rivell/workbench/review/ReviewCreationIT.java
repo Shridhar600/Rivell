@@ -261,27 +261,36 @@ class ReviewCreationIT {
                 .toList();
         assertThat(clauseChecks).isNotEmpty();
         assertThat(clauseChecks).allSatisfy(check -> {
-            assertThat(check.mechanism()).isEqualTo(CheckMechanism.LIABILITY_CAP);
-            assertThat(check.concept()).isEqualTo(CoreConcepts.LIMITATION_OF_LIABILITY);
+            assertThat(check.mechanism()).isEqualTo(CheckMechanism.POLICY_COMPARISON);
             assertThat(headingNodeIds).contains(check.subjectHeadingNodeId());
         });
 
-        // Substantive clause/cross checks are planned per primary-classified clause only
-        // (documented coverage limit, DW-024): clauses that carry a concept as a
-        // secondary classification satisfy presence but get no substantive check.
+        // Policy comparison is planned for every clause that carries at least one
+        // effective topic (primary or secondary); the check records the effective
+        // primary, else the first topic.
+        var topicClauses = corpus.semantics().clauses().stream()
+                .filter(clause -> clause.effectivePrimaryConcept().isPresent()
+                        || !clause.secondaryConcepts().isEmpty())
+                .map(ClauseSemantics::headingNodeId)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(clauseChecks).extracting(ReviewPlanCheck::subjectHeadingNodeId)
+                .containsExactlyInAnyOrderElementsOf(topicClauses);
+        assertThat(clauseChecks).allSatisfy(check -> {
+            var clause = corpus.semantics().clauses().stream()
+                    .filter(candidate -> candidate.headingNodeId()
+                            .equals(check.subjectHeadingNodeId()))
+                    .findFirst().orElseThrow();
+            var expected = clause.effectivePrimaryConcept()
+                    .orElseGet(() -> clause.secondaryConcepts().getFirst());
+            assertThat(check.concept()).isEqualTo(expected);
+        });
+
         var clausesByConcept = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.effectivePrimaryConcept().isPresent())
                 .collect(java.util.stream.Collectors.groupingBy(
                         clause -> clause.effectivePrimaryConcept().orElseThrow(),
                         java.util.stream.Collectors.mapping(
                                 ClauseSemantics::headingNodeId, java.util.stream.Collectors.toList())));
-        var secondaryOnly = corpus.semantics().clauses().stream()
-                .filter(clause -> clause.effectivePrimaryConcept().isEmpty())
-                .filter(clause -> !clause.secondaryConcepts().isEmpty())
-                .map(ClauseSemantics::headingNodeId)
-                .toList();
-        assertThat(clauseChecks).noneSatisfy(check ->
-                assertThat(secondaryOnly).contains(check.subjectHeadingNodeId()));
         var crossChecks = checks.stream()
                 .filter(check -> check.family() == CheckFamily.CROSS_CLAUSE)
                 .toList();
