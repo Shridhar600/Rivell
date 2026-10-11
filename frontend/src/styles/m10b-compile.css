@@ -212,6 +212,32 @@
 .rv-kc-flag--sup {
   color: var(--accent);
 }
+/* The record kind the compiler judged: a small label, absent for data compiled before kinds. */
+.rv-kc-kind {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+/* A unit kept as a record, not a candidate: visible, plainly secondary, and not a control. */
+.rv-kc-unit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 8px 14px;
+  color: var(--text-3);
+}
+.rv-kc-unit b {
+  display: block;
+  color: var(--text-2);
+  font-weight: 400;
+  line-height: 1.3;
+}
 .rv-kc-g {
   margin-top: 1px;
   color: var(--text-3);

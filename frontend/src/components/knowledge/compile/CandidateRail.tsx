@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
-import type { ArtifactDetail, Candidate } from '../../../api/knowledge'
+import type { ArtifactDetail, Candidate, ExtractionUnit, RecordKind } from '../../../api/knowledge'
 import { artifactFormat } from '../../../lib/knowledgeCatalog'
+import { RECORD_KIND_LABELS, UNIT_KIND_LABELS } from '../../../lib/knowledgeLabels'
 import {
   OUTCOME_LABELS,
   kindLabel,
@@ -19,7 +20,13 @@ function Glyph({ outcome, attention }: { outcome: Outcome; attention: boolean })
   return <StateOpenIcon className="rv-icon rv-kc-g" />
 }
 
-function Row({ candidate, selected, location, onSelect }: { candidate: Candidate; selected: boolean; location: string | null; onSelect: (id: string) => void }) {
+/** The kind the compiler judged the unit to be. Old data has none, and shows no label. */
+function RecordKindTag({ kind }: { kind: RecordKind | null }) {
+  if (!kind) return null
+  return <span className="rv-kc-kind">{RECORD_KIND_LABELS[kind]}</span>
+}
+
+function Row({ candidate, selected, location, recordKind, onSelect }: { candidate: Candidate; selected: boolean; location: string | null; recordKind: RecordKind | null; onSelect: (id: string) => void }) {
   const outcome = outcomeOf(candidate)
   const open = outcome === 'pending' || outcome === 'corrected'
   const condition = open ? primaryCondition(candidate) : null
@@ -36,8 +43,26 @@ function Row({ candidate, selected, location, onSelect }: { candidate: Candidate
           {condition ? (
             <span className={`rv-kc-flag${condition.kind === 'supersession' ? ' rv-kc-flag--sup' : ''}`}>{condition.label}</span>
           ) : null}
+          <RecordKindTag kind={recordKind} />
         </span>
       </button>
+    </li>
+  )
+}
+
+/** A record the compiler kept as a unit instead of a candidate: shown, but plainly secondary. */
+function UnitRow({ unit }: { unit: ExtractionUnit }) {
+  const text = unit.contentText?.replace(/\s+/g, ' ').trim()
+  const title = unit.title?.trim() || (text ? text.slice(0, 90) : `Unit ${unit.ordinal + 1}`)
+  return (
+    <li>
+      <div className="rv-kc-unit">
+        <span>
+          <b>{title}</b>
+          <span className="rv-kc-row__sub">{UNIT_KIND_LABELS[unit.kind]}</span>
+        </span>
+        <RecordKindTag kind={unit.recordKind} />
+      </div>
     </li>
   )
 }
@@ -61,6 +86,10 @@ interface RailProps {
   groups: ReviewGroups
   readiness: Readiness
   locations: ReadonlyMap<string, string | null>
+  /** The unit behind each candidate, for its record kind. */
+  unitsById: ReadonlyMap<string, ExtractionUnit>
+  /** Units the compiler kept as records, not candidates. Secondary, and never compared. */
+  uncompiled: ExtractionUnit[]
   selectedId: string | null
   groupSelected: boolean
   onSelect: (id: string) => void
@@ -68,10 +97,17 @@ interface RailProps {
 }
 
 /** The candidate list, grouped the way a reviewer works: what needs attention, what to review, the safe group, what is done. */
-export function CandidateRail({ id, artifact, groups, readiness, locations, selectedId, groupSelected, onSelect, onOpenGroup }: RailProps) {
+export function CandidateRail({ id, artifact, groups, readiness, locations, unitsById, uncompiled, selectedId, groupSelected, onSelect, onOpenGroup }: RailProps) {
   const rows = (list: Candidate[]) =>
     list.map((candidate) => (
-      <Row key={candidate.id} candidate={candidate} selected={!groupSelected && candidate.id === selectedId} location={locations.get(candidate.id) ?? null} onSelect={onSelect} />
+      <Row
+        key={candidate.id}
+        candidate={candidate}
+        selected={!groupSelected && candidate.id === selectedId}
+        location={locations.get(candidate.id) ?? null}
+        recordKind={unitsById.get(candidate.extractionUnitId)?.recordKind ?? null}
+        onSelect={onSelect}
+      />
     ))
   const ready = readiness.canPublish
   const done = readiness.published > 0 && readiness.awaiting === 0 && readiness.approved === 0
@@ -117,6 +153,19 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, sele
         <Group title="Published, immutable" count={groups.published.length}>
           {rows(groups.published)}
         </Group>
+        {uncompiled.length > 0 ? (
+          <section className="rv-kc-grp">
+            <h3 className="rv-kc-fgrp">
+              <span>Other records</span>
+              <span>{uncompiled.length}</span>
+            </h3>
+            <ul className="rv-kc-rows">
+              {uncompiled.map((unit) => (
+                <UnitRow key={unit.id} unit={unit} />
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </nav>
       <div className="rv-kc-ready" aria-live="polite">
         <b>{ready ? 'Ready to publish' : done ? 'Published' : 'Compilation review'}</b>

@@ -24,6 +24,7 @@ const comparison = (overrides: Partial<PositionComparison> = {}): PositionCompar
   contract: [],
   preferred: [],
   fallback: [],
+  walkAway: [],
   escalation: [],
   ...overrides,
 })
@@ -45,14 +46,29 @@ describe('policyPositionView', () => {
     expect(policyPositionView(comparison({ preferred: [policy('p-1', '  ')], escalation: [escalation('p-1', ' ')] }))).toBeNull()
   })
 
-  it('draws Contract, Preferred and Fallback in that order, from the structured slots', () => {
+  it('draws Contract, Preferred, Fallback and Walk-away in that order, from the structured slots', () => {
     const view = policyPositionView(
-      comparison({ contract: [contract], preferred: [policy('p-1', 'Preferred wording.')], fallback: [policy('p-2', 'Fallback wording.')], escalation: [escalation('p-1')] }),
+      comparison({
+        contract: [contract],
+        preferred: [policy('p-1', 'Preferred wording.')],
+        fallback: [policy('p-2', 'Fallback wording.')],
+        walkAway: [policy('p-3', 'Never accept an uncapped liability.')],
+        escalation: [escalation('p-1')],
+      }),
     )
-    expect(view?.columns.map((column) => column.key)).toEqual(['contract', 'preferred', 'fallback'])
+    expect(view?.columns.map((column) => column.key)).toEqual(['contract', 'preferred', 'fallback', 'walkAway'])
+    expect(view?.columns[3].label).toBe('Walk-away')
     expect(view?.columns[1].entries[0]).toMatchObject({ evidenceId: 'p-1', text: 'Preferred wording.', publication: 2 })
     expect(view?.columns[2].entries[0]).toMatchObject({ evidenceId: 'p-2', text: 'Fallback wording.' })
+    expect(view?.columns[3].entries[0]).toMatchObject({ evidenceId: 'p-3', text: 'Never accept an uncapped liability.' })
     expect(view?.escalations).toEqual([{ evidenceId: 'p-1', publication: 2, trigger: 'Uncapped liability' }])
+  })
+
+  it('keeps several fallbacks an evidence item supplies, in the server’s order', () => {
+    const view = policyPositionView(
+      comparison({ fallback: [policy('p-1', 'First fallback.'), policy('p-1', 'Second fallback.')] }),
+    )
+    expect(view?.columns[0].entries.map((entry) => entry.text)).toEqual(['First fallback.', 'Second fallback.'])
   })
 
   it('shows the contract as labelled typed facts, not a sentence', () => {

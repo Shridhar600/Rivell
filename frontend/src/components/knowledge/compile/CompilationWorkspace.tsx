@@ -70,6 +70,13 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
   const blocks = useMemo(() => (structureReady ? sourceBlocks(nodes, highlightMap(candidates, units)) : null), [structureReady, nodes, units, candidates])
   const byId = useMemo(() => (nodes ? indexNodes(nodes) : null), [nodes])
   const locations = useMemo(() => (structureReady ? candidateLocations(candidates, units, nodes) : new Map<string, string | null>()), [structureReady, candidates, units, nodes])
+  const unitsById = useMemo(() => new Map((units ?? []).map((entry) => [entry.id, entry])), [units])
+  // Records the compiler kept as units. Only kind-assessed units are shown: without a record kind
+  // there was no kind gate to exclude them, so listing them as "not compiled" would mislead.
+  const uncompiled = useMemo(() => {
+    const compiled = new Set(candidates.map((candidate) => candidate.extractionUnitId))
+    return (units ?? []).filter((entry) => entry.recordKind !== null && !compiled.has(entry.id))
+  }, [units, candidates])
   const index = useMemo(() => (publicationsQuery.data ? buildPublicationIndex(publicationsQuery.data) : null), [publicationsQuery.data])
 
   const update = useCallback(
@@ -245,9 +252,25 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       </CompileLayout>
     )
   }
+  const rail = (
+    <CandidateRail
+      id={railId}
+      artifact={artifact}
+      groups={groups}
+      readiness={state}
+      locations={locations}
+      unitsById={unitsById}
+      uncompiled={uncompiled}
+      selectedId={selected?.id ?? null}
+      groupSelected={open?.kind === 'group'}
+      onSelect={select}
+      onOpenGroup={openGroup}
+    />
+  )
   if (candidates.length === 0) {
+    // No candidate at all: the units the kind gate kept are still shown, so no record is dropped.
     return (
-      <CompileLayout top={top}>
+      <CompileLayout top={top} rail={uncompiled.length > 0 ? rail : undefined} railOpen={railOpen}>
         <div className="rv-kc-center">
           <EmptyState
             title="No candidates were compiled"
@@ -258,20 +281,6 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       </CompileLayout>
     )
   }
-
-  const rail = (
-    <CandidateRail
-      id={railId}
-      artifact={artifact}
-      groups={groups}
-      readiness={state}
-      locations={locations}
-      selectedId={selected?.id ?? null}
-      groupSelected={open?.kind === 'group'}
-      onSelect={select}
-      onOpenGroup={openGroup}
-    />
-  )
   const selectedUnit = selected ? (units?.find((entry) => entry.id === selected.extractionUnitId) ?? null) : null
   const showSheet = params.get('context') === '1' && selected !== null
 

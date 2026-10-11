@@ -21,9 +21,12 @@ import {
   fixtureClauseFindingSummary,
   fixtureCompletedReviewSummary,
   fixtureCrossClauseFindingDetail,
+  fixtureEscalatedFallbackFindingDetail,
   fixtureFailedReviewSummary,
   fixtureGenerativeFindingDetail,
   fixturePolicyMissingFindingDetail,
+  fixtureWithinFallbackFindingDetail,
+  fixtureWithinFallbackFindingSummary,
 } from './testFixtures'
 import { fixtureHumanReview } from './workflowFixtures'
 
@@ -45,6 +48,8 @@ const detailById: Record<string, unknown> = {
   'f-4': fixtureAmbiguousPolicyFindingDetail,
   'f-5': fixtureGenerativeFindingDetail,
   'f-6': fixtureCrossClauseFindingDetail,
+  'f-7': fixtureWithinFallbackFindingDetail,
+  'f-8': fixtureEscalatedFallbackFindingDetail,
 }
 
 /**
@@ -139,7 +144,7 @@ describe('findings list', () => {
       name: /6\. Limitation of Liability/,
     })
     // Decision state shows only once the server's decisions and human review have loaded.
-    await waitFor(() => expect(clauseRow).toHaveTextContent('Needs decision · Liability cap deviation'))
+    await waitFor(() => expect(clauseRow).toHaveTextContent('Needs decision · Beyond our fallbacks'))
 
     const absenceRow = findingsList().getByRole('option', { name: /Missing: Limitation of liability/ })
     expect(absenceRow).toHaveTextContent('Missing required provision')
@@ -176,7 +181,7 @@ describe('findings list', () => {
     const clauseRow = await (await findFindingsList()).findByRole('option', {
       name: /6\. Limitation of Liability/,
     })
-    expect(clauseRow).toHaveTextContent('Liability cap deviation')
+    expect(clauseRow).toHaveTextContent('Beyond our fallbacks')
     expect(clauseRow).not.toHaveTextContent(/Needs decision|Accepted|Rejected|Escalated|Informational/)
   })
 
@@ -188,7 +193,8 @@ describe('findings list', () => {
           {
             ...fixtureClauseFindingSummary,
             id: 'f-9',
-            issueFamily: 'LIABILITY_CAP_UNCERTAIN',
+            issueFamily: 'POSITION_UNCERTAIN',
+            observationKind: 'UNCERTAINTY:bounded_decision_unavailable',
             severity: 'MEDIUM',
           },
         ],
@@ -198,8 +204,8 @@ describe('findings list', () => {
 
     const rows = await (await findFindingsList()).findAllByRole('option', { name: /6\. Limitation of Liability/ })
     expect(rows).toHaveLength(2)
-    expect(rows[0]).toHaveTextContent('Liability cap deviation')
-    expect(rows[1]).toHaveTextContent('Liability cap uncertainty')
+    expect(rows[0]).toHaveTextContent('Beyond our fallbacks')
+    expect(rows[1]).toHaveTextContent('Could not be assessed')
   })
 
   it('requests the review findings with a fixed limit and never forwards URL filters', async () => {
@@ -274,10 +280,10 @@ describe('finding detail', () => {
 
     await findDetailTitle('6. Limitation of Liability')
     const found = section('Rivell found')
-    expect(found).toHaveTextContent(/liability cap above the organization’s preferred position/)
-    expect(found).toHaveTextContent('Liability cap above the preferred position')
+    expect(found).toHaveTextContent(/worse for us than every fallback the position lists/)
+    expect(found).toHaveTextContent('Beyond our fallbacks')
     expect(found).toHaveTextContent(
-      'Policy basis: Published policy prefers a cap of two times the fees paid over a twelve-month period.',
+      'Policy basis: Published policy lists a fallback at two times the fees paid over a twelve-month period.',
     )
     expect(found).toHaveTextContent(
       'Recommendation: Use the approved fallback wording. Replace the clause with the approved fallback wording for the liability cap.',
@@ -446,7 +452,7 @@ describe('finding detail', () => {
     // Every cited item that holds a role is kept: nothing is dropped to the first.
     const position = section('Policy position')
     expect(within(within(position).getByRole('group', { name: 'Preferred' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
-    expect(within(within(position).getByRole('group', { name: 'Fallback' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
+    expect(within(within(position).getByRole('group', { name: 'Fallbacks' })).getAllByText(/capped at fees paid/)).toHaveLength(2)
     expect(within(position).getAllByText(/Escalate: Uncapped liability/)).toHaveLength(2)
     // The source of each one stays reachable.
     expect(within(position).getAllByRole('button', { name: /Open source: Policy, publication 2/ }).length).toBeGreaterThanOrEqual(4)
@@ -494,6 +500,59 @@ describe('finding detail', () => {
     expect(
       within(detailPane()).queryByText('Approved organizational drafting'),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('position findings', () => {
+  const listWith = (...extra: (typeof fixtureWithinFallbackFindingSummary)[]) => ({
+    items: [...findingsForThisReview.items, ...extra],
+    truncated: false,
+  })
+
+  it('shows the comparison’s category and the model’s confidence as an estimate, not certainty', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    expect(pane.getByText(/Beyond every listed fallback/)).toBeInTheDocument()
+    expect(pane.getByText(/Model confidence 87%/)).toBeInTheDocument()
+    expect(pane.getByText(/not a certainty/)).toBeInTheDocument()
+  })
+
+  it('shows no assessment line when the finding carries no comparison quality', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-2')
+
+    await findDetailTitle('Missing: Limitation of liability')
+    expect(within(detailPane()).queryByText(/Model confidence/)).not.toBeInTheDocument()
+  })
+
+  it('reads a within-fallback finding as a note to accept and record, not a problem', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-7', {
+      findings: listWith(fixtureWithinFallbackFindingSummary),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    expect(pane.getByText(/note, not a problem/i)).toBeInTheDocument()
+    expect(pane.getByText(/accept and record/i)).toBeInTheDocument()
+  })
+
+  it('says approval is needed and shows the escalation condition when the position names an approver', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-8', {
+      findings: listWith({
+        ...fixtureWithinFallbackFindingSummary,
+        id: 'f-8',
+        reviewClassification: 'REVIEW_REQUIRED',
+        proposedAction: 'ESCALATE_TO_HUMAN',
+      }),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const note = detailPane().querySelector('.rv-ws-note--approval')
+    expect(note).not.toBeNull()
+    // The note itself carries the approval statement and the condition, not only the comparison grid.
+    expect(note).toHaveTextContent('Approval is needed.')
+    expect(note).toHaveTextContent('Escalate when: Uncapped liability or consequential damages.')
   })
 })
 
