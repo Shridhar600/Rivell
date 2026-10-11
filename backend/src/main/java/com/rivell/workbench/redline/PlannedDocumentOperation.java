@@ -7,7 +7,8 @@ import java.util.UUID;
 /**
  * One ApprovedChange resolved to concrete document anchors. {@code deletionTargets} are
  * paragraphs to tracked-delete (REPLACE body / DELETE heading+body); {@code insertion}
- * is the tracked insertion (REPLACE/INSERT) or null for DELETE.
+ * is the tracked insertion (REPLACE/INSERT) or null for DELETE. {@code headingTrim} (REPLACE
+ * only, nullable) deletes clause text that shares its paragraph with the clause heading.
  */
 public record PlannedDocumentOperation(
         UUID approvedChangeId,
@@ -16,7 +17,8 @@ public record PlannedDocumentOperation(
         List<PlannedParagraph> deletionTargets,
         PlannedInsertion insertion,
         String placementLabel,
-        String targetLabel) {
+        String targetLabel,
+        PlannedHeadingTrim headingTrim) {
 
     public PlannedDocumentOperation {
         Objects.requireNonNull(approvedChangeId, "approvedChangeId");
@@ -35,6 +37,9 @@ public record PlannedDocumentOperation(
         }
         if (actionType != ChangeActionType.INSERT && placementLabel != null) {
             throw new IllegalArgumentException("only insertions carry a placement label");
+        }
+        if (headingTrim != null && actionType != ChangeActionType.REPLACE) {
+            throw new IllegalArgumentException("only replacements trim a heading paragraph");
         }
     }
 }

@@ -164,6 +164,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
         private final Set<String> warnings = new LinkedHashSet<>();
         private final Deque<HeadingDecision> decisions = new ArrayDeque<>();
         private final Deque<Optional<String>> numberingLabels = new ArrayDeque<>();
+        private final Deque<Optional<String>> runInTitles = new ArrayDeque<>();
         private int paragraphSequence;
         private int tableSequence;
         private BodyWalk(UUID ownerAggregateId, WordprocessingMLPackage wordPackage) {
@@ -188,6 +189,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
                 numberingLabels.add(paragraph.numberingLabel() == null
                         ? Optional.empty()
                         : Optional.of(paragraph.numberingLabel()));
+                runInTitles.add(Optional.ofNullable(paragraph.runInTitle()));
             }
             var bodyNodeId = UUID.randomUUID();
             nodes.add(new DocumentNode(
@@ -260,15 +262,38 @@ public class DocxStructuralParser implements DocumentStructureParser {
             var styleId = styleId(paragraph);
             var decision = decisions.removeFirst();
             var label = numberingLabels.removeFirst().orElse(null);
+            var runInTitle = runInTitles.removeFirst().orElse(null);
             var nodeType = switch (decision.kind()) {
                 case TITLE -> DocumentNodeType.TITLE;
                 case HEADING -> DocumentNodeType.HEADING;
                 case BODY -> DocumentNodeType.PARAGRAPH;
             };
+            var text = textOf(paragraph);
             return new DocumentNode(
                     UUID.randomUUID(), ownerAggregateId, parentId, nodeType, ordinal,
-                    textOf(paragraph), decision.level(), label,
-                    SourceSpan.ofParagraph(PART_PATH, bodyIndex, paragraphSequence), styleId);
+                    text, decision.level(), label,
+                    SourceSpan.ofParagraph(PART_PATH, bodyIndex, paragraphSequence), styleId,
+                    nodeType == DocumentNodeType.HEADING ? runInHeading(text, runInTitle) : null);
+        }
+
+        /**
+         * The heading part of a heading paragraph that goes on with clause text: everything up to
+         * the end of the run-in title and its closing punctuation. Null when the paragraph is the
+         * heading alone.
+         */
+        static String runInHeading(String text, String runInTitle) {
+            if (text == null || runInTitle == null || runInTitle.isBlank()) {
+                return null;
+            }
+            var start = text.indexOf(runInTitle);
+            if (start < 0) {
+                return null;
+            }
+            var end = start + runInTitle.length();
+            while (end < text.length() && ".:–—-".indexOf(text.charAt(end)) >= 0) {
+                end++;
+            }
+            return text.substring(end).isBlank() ? null : text.substring(0, end);
         }
 
         private void tableNodes(

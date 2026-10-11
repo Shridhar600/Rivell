@@ -69,6 +69,23 @@ class RedlineCheckTest(unittest.TestCase):
         result = check(ORIGINAL, redline, NODES, REPLACE)
         self.assertFalse(result["applied"])
 
+    def test_a_run_in_clause_keeps_its_old_text_when_the_replacement_is_only_added(self):
+        clause = "5. Residual Knowledge. The Recipient may use information retained in the unaided memory of its staff."
+        original = docx(p(clause), p("6. Law. New York law governs this Agreement."))
+        nodes = [node("h5", "HEADING", 0), node("h6", "HEADING", 1)]
+        change = [{"ordinal": 1, "actionType": "REPLACE", "targetHeadingNodeId": "h5",
+                   "approvedLanguage": "Neither party may rely on residual knowledge."}]
+        appended = docx(p(clause), inserted_p("Neither party may rely on residual knowledge."),
+                        p("6. Law. New York law governs this Agreement."))
+        self.assertFalse(check(original, appended, nodes, change)["applied"])
+        kept, dropped = "5. Residual Knowledge.", clause[len("5. Residual Knowledge."):]
+        trimmed = docx(f"<w:p><w:r><w:t>{kept}</w:t></w:r>{DEL.format(i=3, body=f'<w:r><w:delText xml:space=\"preserve\">{dropped}</w:delText></w:r>')}</w:p>",
+                       inserted_p("Neither party may rely on residual knowledge."),
+                       p("6. Law. New York law governs this Agreement."))
+        result = check(original, trimmed, nodes, change)
+        self.assertEqual(result["problems"], [])
+        self.assertTrue(all(result[k] for k in ("opens", "preserved", "local", "applied")))
+
     def test_an_unreadable_file_does_not_open(self):
         result = check(ORIGINAL, b"not a zip", NODES, REPLACE)
         self.assertFalse(result["opens"])

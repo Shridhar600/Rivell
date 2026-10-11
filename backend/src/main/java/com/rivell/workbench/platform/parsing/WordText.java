@@ -35,6 +35,13 @@ public final class WordText {
         return text.toString();
     }
 
+    /** The text one paragraph child (a run, hyperlink, ...) contributes to its paragraph. */
+    public static String childText(Object paragraphChild) {
+        var text = new StringBuilder();
+        append(List.of(paragraphChild), text);
+        return text.toString();
+    }
+
     private static void append(List<Object> content, StringBuilder text) {
         for (var raw : content) {
             if (raw instanceof JAXBElement<?> element && skipped(element.getName().getLocalPart())) {

@@ -6,6 +6,7 @@ Reads the original DOCX and the tracked-change DOCX as plain OOXML and checks:
   local      every changed original element lies in a clause a REPLACE/DELETE change targets;
              inserted elements outside those clauses only when an INSERT change exists
   applied    "accept all" view contains each approved text; REPLACE/DELETE leave no old body text
+             (for a run-in heading, the clause text in the heading paragraph counts as body)
 
 Body elements are indexed like the backend's sourceSpan.bodyIndex: the children of w:body
 except the final w:sectPr. Clause regions come from the frozen structure nodes: a heading's
@@ -19,6 +20,7 @@ import xml.etree.ElementTree as ET
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 INSERTED = {W + "ins", W + "moveTo"}
+RUN_IN_WORDS = 15  # a heading paragraph longer than this also carries clause text ("5. Term. This…")
 DELETED = {W + "del", W + "moveFrom"}
 
 
@@ -174,9 +176,16 @@ def check(original_bytes, redline_bytes, nodes, changes):
             problems.append(f"applied: change {c.get('ordinal')} text not in accept-all view: {language[:60]!r}")
         if c["actionType"] in ("REPLACE", "DELETE"):
             region = sorted(regions.get(c.get("targetHeadingNodeId")) or [])
-            body = region[1:] if c["actionType"] == "REPLACE" else region
+            body = region
+            if c["actionType"] == "REPLACE" and region and len(
+                    norm(view_text(original[region[0]], "orig")).split()) <= RUN_IN_WORDS:
+                body = region[1:]  # a plain heading stays; a run-in heading holds clause text
+            def survives(i):
+                # a kept run-in heading may keep its heading words, not its clause text
+                limit = RUN_IN_WORDS if c["actionType"] == "REPLACE" and i == region[0] else 0
+                return any(j == i and len(norm(view_text(el, "new")).split()) > limit for j, el in aligned)
             left = [i for i in body if i < len(original) and norm(view_text(original[i], "orig"))
-                    and any(j == i and norm(view_text(el, "new")) for j, el in aligned)]
+                    and survives(i)]
             if left:
                 applied = False
                 problems.append(f"applied: change {c.get('ordinal')} left old text in elements {left[:5]}")

@@ -86,6 +86,10 @@ public final class RedlinePlanResolver {
         var heading = heading(change, region, byId);
         var anchorIndex = heading.sourceSpan().paragraphIndex();
         var anchorText = heading.text() == null ? "" : heading.text();
+        // a run-in heading's paragraph holds clause text too: replacing the clause deletes it
+        var headingTrim = heading.runInHeading() == null ? null
+                : new PlannedHeadingTrim(heading.sourceSpan().bodyIndex(), anchorIndex,
+                        anchorText, heading.runInHeading());
         PlannedInsertion insertion;
         if (deletionTargets.isEmpty()) {
             insertion = new PlannedInsertion(heading.sourceSpan().bodyIndex(), anchorIndex,
@@ -97,7 +101,8 @@ public final class RedlinePlanResolver {
         }
         return new PlannedDocumentOperation(change.id(), change.ordinal(),
                 ChangeActionType.REPLACE, deletionTargets, insertion, null,
-                label(anchorText));
+                label(heading.runInHeading() == null ? anchorText : heading.runInHeading()),
+                headingTrim);
     }
 
     private PlannedDocumentOperation deleteOperation(
@@ -111,7 +116,7 @@ public final class RedlinePlanResolver {
         targets.addAll(bodyTargets(change, region, byId));
         return new PlannedDocumentOperation(change.id(), change.ordinal(),
                 ChangeActionType.DELETE, targets, null, null,
-                label(heading(change, region, byId).text()));
+                label(heading(change, region, byId).text()), null);
     }
 
     private PlannedDocumentOperation insertOperation(
@@ -130,7 +135,7 @@ public final class RedlinePlanResolver {
                 paragraphs);
         return new PlannedDocumentOperation(change.id(), change.ordinal(),
                 ChangeActionType.INSERT, List.of(), insertion, placement.label(),
-                change.absenceConcept().value());
+                change.absenceConcept().value(), null);
     }
 
     private static String label(String value) {
@@ -232,8 +237,15 @@ public final class RedlinePlanResolver {
     private void validateNoOverlap(List<PlannedDocumentOperation> operations) {
         var deleted = new HashMap<String, UUID>();
         for (var operation : operations) {
+            var keys = new ArrayList<String>();
             for (var target : operation.deletionTargets()) {
-                var key = target.bodyIndex() + ":" + target.paragraphIndex();
+                keys.add(target.bodyIndex() + ":" + target.paragraphIndex());
+            }
+            if (operation.headingTrim() != null) {
+                keys.add(operation.headingTrim().bodyIndex() + ":"
+                        + operation.headingTrim().paragraphIndex());
+            }
+            for (var key : keys) {
                 var previous = deleted.put(key, operation.approvedChangeId());
                 if (previous != null) {
                     throw new RedlinePlanException(RedlineFailureCode.CHANGE_OVERLAP,

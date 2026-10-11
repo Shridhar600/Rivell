@@ -137,7 +137,7 @@ class JdbcContractRepository implements ContractRepository {
                 )
                 select id, parent_id, node_type, ordinal, text, heading_level, numbering_label,
                        part_path, body_index, paragraph_index, table_index, row_index, cell_index,
-                       run_start, run_end, raw_style_id
+                       run_start, run_end, raw_style_id, run_in_heading
                 from tree
                 order by sort_path
                 """)
@@ -161,7 +161,8 @@ class JdbcContractRepository implements ContractRepository {
                                 nullableInt(rs, "cell_index"),
                                 nullableInt(rs, "run_start"),
                                 nullableInt(rs, "run_end")),
-                        rs.getString("raw_style_id")))
+                        rs.getString("raw_style_id"),
+                        rs.getString("run_in_heading")))
                 .list();
 
         return new ContractStructure(
@@ -298,10 +299,10 @@ class JdbcContractRepository implements ContractRepository {
                     insert into document_node
                       (id, contract_version_id, parent_id, node_type, ordinal, text, heading_level,
                        numbering_label, part_path, body_index, paragraph_index, table_index,
-                       row_index, cell_index, run_start, run_end, raw_style_id)
+                       row_index, cell_index, run_start, run_end, raw_style_id, run_in_heading)
                     values (:nodeId, :versionId, :parentId, :nodeType, :ordinal, :text, :headingLevel,
                             :numberingLabel, :partPath, :bodyIndex, :paragraphIndex, :tableIndex,
-                            :rowIndex, :cellIndex, :runStart, :runEnd, :rawStyleId)
+                            :rowIndex, :cellIndex, :runStart, :runEnd, :rawStyleId, :runInHeading)
                     """)
                     .param("nodeId", node.id())
                     .param("versionId", contractVersionId)
@@ -320,6 +321,7 @@ class JdbcContractRepository implements ContractRepository {
                     .param("runStart", span.runStart())
                     .param("runEnd", span.runEnd())
                     .param("rawStyleId", node.rawStyleId())
+                    .param("runInHeading", node.runInHeading())
                     .update();
         }
     }

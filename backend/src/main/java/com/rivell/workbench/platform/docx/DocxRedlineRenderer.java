@@ -37,6 +37,7 @@ import org.docx4j.wml.Text;
 import org.springframework.stereotype.Component;
 
 import com.rivell.workbench.foundation.Hashes;
+import com.rivell.workbench.platform.parsing.WordText;
 import com.rivell.workbench.redline.AppliedChangeReport;
 import com.rivell.workbench.redline.DocumentExecutionPlan;
 import com.rivell.workbench.redline.PlannedDocumentOperation;
@@ -102,6 +103,10 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         var reports = new ArrayList<AppliedChangeReport>();
         for (var operation : resolved) {
             var start = nextId.get();
+            if (operation.trimmed() != null) {
+                trimHeading(operation.trimmed(), operation.operation(), nextId.getAndIncrement(),
+                        plan.author(), date);
+            }
             for (var target : operation.targets()) {
                 markDeleted(target, nextId, plan.author(), date);
             }
@@ -157,6 +162,19 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             validateSupportedInline(paragraph, operation.approvedChangeId(),
                     operation.ordinal());
             targets.add(paragraph);
+        }
+
+        P trimmed = null;
+        if (operation.headingTrim() != null) {
+            var trim = operation.headingTrim();
+            trimmed = paragraphByAnchor.get(anchorKey(trim.bodyIndex(), trim.paragraphIndex()));
+            if (trimmed == null
+                    || !DocxRedlineSupport.paragraphText(trimmed).equals(trim.expectedText())) {
+                throw failure(RedlineFailureCode.TARGET_NOT_FOUND, operation.approvedChangeId(),
+                        "Approved change " + operation.ordinal() + " (" + operation.actionType()
+                                + ") cannot be resolved against the frozen document.");
+            }
+            validateSupportedInline(trimmed, operation.approvedChangeId(), operation.ordinal());
         }
 
         Object rawAnchor = null;
@@ -217,10 +235,104 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                         operation.ordinal());
                 paragraphTemplate = templateParagraph.getPPr();
                 runTemplate = firstRunProperties(templateParagraph);
+            } else if (trimmed != null) {
+                // the clause had no body paragraph: new text takes the deleted clause text's
+                // run formatting, not the heading's
+                runTemplate = runPropertiesAfter(trimmed,
+                        operation.headingTrim().keptHeading().length());
             }
         }
-        return new ResolvedOperation(operation, targets, rawAnchor, anchorKey,
+        return new ResolvedOperation(operation, targets, trimmed, rawAnchor, anchorKey,
                 paragraphTemplate, runTemplate);
+    }
+
+    /**
+     * Tracked-deletes the clause text after a run-in heading in the same paragraph. The heading
+     * part stays untouched; a run that spans the boundary is split in two with the same
+     * formatting. A hyperlink that spans it cannot be split deterministically and fails closed.
+     */
+    private void trimHeading(
+            P paragraph, PlannedDocumentOperation operation, long revisionId, String author,
+            XMLGregorianCalendar date) {
+        var keep = operation.headingTrim().keptHeading().length();
+        var rewritten = new ArrayList<Object>(paragraph.getContent().size() + 1);
+        var offset = 0;
+        for (var raw : paragraph.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (!(element instanceof R) && !(element instanceof P.Hyperlink)) {
+                rewritten.add(raw);
+                continue;
+            }
+            var length = WordText.childText(raw).length();
+            if (offset + length <= keep) {
+                rewritten.add(raw);
+            } else if (offset >= keep) {
+                rewritten.add(element instanceof R run
+                        ? deletedRun(run, revisionId, author, date)
+                        : deletedHyperlink((P.Hyperlink) element, revisionId, author, date));
+            } else if (element instanceof R run) {
+                var parts = split(run, keep - offset);
+                rewritten.add(parts[0]);
+                rewritten.add(deletedRun(parts[1], revisionId, author, date));
+            } else {
+                throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
+                        operation.approvedChangeId(),
+                        "Approved change " + operation.ordinal()
+                                + " targets a clause whose heading and text share a hyperlink.");
+            }
+            offset += length;
+        }
+        paragraph.getContent().clear();
+        paragraph.getContent().addAll(rewritten);
+    }
+
+    /** Two runs with the run's formatting: the text before {@code at} and the text after. */
+    private R[] split(R run, int at) {
+        var head = factory.createR();
+        var tail = factory.createR();
+        if (run.getRPr() != null) {
+            head.setRPr(XmlUtils.deepCopy(run.getRPr()));
+            tail.setRPr(XmlUtils.deepCopy(run.getRPr()));
+        }
+        var offset = 0;
+        for (var raw : run.getContent()) {
+            var length = WordText.childText(raw).length();
+            if (offset + length <= at) {
+                head.getContent().add(raw);
+            } else if (offset >= at) {
+                tail.getContent().add(raw);
+            } else {
+                var value = ((Text) DocxRedlineSupport.unwrap(raw)).getValue();
+                head.getContent().add(text(value.substring(0, at - offset)));
+                tail.getContent().add(text(value.substring(at - offset)));
+            }
+            offset += length;
+        }
+        return new R[] {head, tail};
+    }
+
+    private Text text(String value) {
+        var text = factory.createText();
+        text.setValue(value);
+        text.setSpace("preserve");
+        return text;
+    }
+
+    /** Formatting of the first run that carries text after {@code offset}. */
+    private RPr runPropertiesAfter(P paragraph, int offset) {
+        var position = 0;
+        for (var raw : paragraph.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof R run) {
+                position += WordText.childText(raw).length();
+                if (position > offset) {
+                    return run.getRPr();
+                }
+            } else if (element instanceof P.Hyperlink) {
+                position += WordText.childText(raw).length();
+            }
+        }
+        return null;
     }
 
     private void markDeleted(
@@ -489,6 +601,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
     private record ResolvedOperation(
             PlannedDocumentOperation operation,
             List<P> targets,
+            P trimmed,
             Object rawAnchor,
             Object anchorKey,
             PPr paragraphTemplate,

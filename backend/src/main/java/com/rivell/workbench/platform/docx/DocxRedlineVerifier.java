@@ -267,9 +267,17 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         }
 
         var deleted = new HashSet<Integer>();
+        var trimmed = new HashMap<Integer, String>();
         var insertedAfter = new LinkedHashMap<Integer, List<String>>();
         var prepended = new ArrayList<String>();
         for (var operation : plan.operations()) {
+            if (operation.headingTrim() != null) {
+                var trim = operation.headingTrim();
+                var index = anchorToViewIndex.get(trim.bodyIndex() + ":" + trim.paragraphIndex());
+                if (index != null) {
+                    trimmed.put(index, trim.keptHeading());
+                }
+            }
             for (var target : operation.deletionTargets()) {
                 var index = anchorToViewIndex.get(
                         target.bodyIndex() + ":" + target.paragraphIndex());
@@ -298,7 +306,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         expected.addAll(prepended);
         for (var i = 0; i < entries.size(); i++) {
             if (!deleted.contains(i)) {
-                expected.add(entries.get(i));
+                expected.add(trimmed.getOrDefault(i, entries.get(i)));
             }
             var insertions = insertedAfter.get(i);
             if (insertions != null) {
@@ -533,9 +541,41 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 problem[0] = deletedParagraphProblem(paragraph);
             } else if (isInserted(paragraph)) {
                 problem[0] = insertedParagraphProblem(paragraph);
+            } else {
+                problem[0] = keptParagraphProblem(paragraph);
             }
         });
         return problem[0];
+    }
+
+    /**
+     * A paragraph that stays may lose trailing text (clause text after a run-in heading) but
+     * never gains any: its deleted runs carry delText only, and it has no inserted runs.
+     */
+    private String keptParagraphProblem(P paragraph) {
+        var children = new ArrayList<Object>();
+        for (var raw : paragraph.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof P.Hyperlink hyperlink) {
+                hyperlink.getContent().forEach(child -> children.add(DocxRedlineSupport.unwrap(child)));
+            } else {
+                children.add(element);
+            }
+        }
+        for (var element : children) {
+            if (element instanceof RunIns) {
+                return "An existing paragraph carries inserted run content.";
+            }
+            if (element instanceof RunDel del) {
+                for (var wrapped : del.getCustomXmlOrSmartTagOrSdt()) {
+                    var run = DocxRedlineSupport.unwrap(wrapped);
+                    if (run instanceof R inner && runHasNormalText(inner)) {
+                        return "A tracked deletion carries normal text instead of delText.";
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /** M9 never mutates tables: any revision inside a table is unplanned. */

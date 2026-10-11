@@ -123,6 +123,26 @@ class DocxStructuralParserTest {
                 "Schedule 1 Information Expected to be Disclosed");
     }
 
+    @Test
+    void aRunInHeadingRecordsWhichPartOfItsParagraphIsTheHeading() {
+        var result = parse("fixtures/blind-nda-run-in-headings.docx");
+
+        var byText = result.nodes().stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.HEADING)
+                .toList();
+        assertThat(byText).filteredOn(node -> node.text().startsWith("5. Residual Knowledge."))
+                .singleElement()
+                .satisfies(node -> assertThat(node.runInHeading()).isEqualTo("5. Residual Knowledge."));
+        assertThat(byText).filteredOn(node -> node.text().startsWith("Schedule 1"))
+                .singleElement()
+                .satisfies(node -> assertThat(node.runInHeading())
+                        .isEqualTo("Schedule 1 Information Expected to be Disclosed"));
+        assertThat(parse("fixtures/m9-simple-replace.docx").nodes())
+                .filteredOn(node -> node.nodeType() == DocumentNodeType.HEADING)
+                .isNotEmpty()
+                .allSatisfy(node -> assertThat(node.runInHeading()).isNull());
+    }
+
     private static void assertHeadingsInOrder(com.rivell.workbench.contracts.ParseResult result, String... expectedPrefixes) {
         assertThat(result.status()).isEqualTo(ParseStatus.OK);
         var headings = result.nodes().stream()

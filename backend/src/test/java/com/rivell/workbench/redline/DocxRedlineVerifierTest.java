@@ -406,6 +406,60 @@ class DocxRedlineVerifierTest {
     }
 
     @Test
+    void replacingARunInClauseDeletesItsTextAndKeepsTheHeading() throws Exception {
+        // "5. Residual Knowledge. The Recipient…" is one paragraph: the heading and the clause
+        // text share it, so a replacement that only adds paragraphs would leave the old clause
+        var fixture = "blind-nda-run-in-headings.docx";
+        var contractId = UUID.randomUUID();
+        var versionId = UUID.randomUUID();
+        var structure = RedlineFixturePipeline.parse(fixture, contractId, versionId);
+        var heading = structure.nodes().stream()
+                .filter(node -> node.text() != null && node.text().startsWith("5. Residual Knowledge."))
+                .findFirst().orElseThrow();
+        var language = "Neither party may use Confidential Information retained in unaided memory.";
+        var setId = UUID.randomUUID();
+        var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
+                List.of(RedlineTestStructures.replace(setId, 0, heading.id(), language)));
+        var plan = RedlineFixturePipeline.plan(structure, set, Map.of());
+        var source = RedlineFixturePipeline.fixture(fixture);
+
+        var rendered = renderer.render(source, plan);
+        var report = verifier.verify(source, rendered.bytes(), plan, rendered.changes());
+
+        assertThat(report.passed()).as(String.valueOf(report.failureDetail())).isTrue();
+        var accepted = paragraphTexts(rendered.bytes(), true);
+        assertThat(accepted).contains("5. Residual Knowledge.", language);
+        assertThat(accepted).noneMatch(text -> text.contains("retained in the unaided memory"));
+        assertThat(paragraphTexts(rendered.bytes(), false)).contains(heading.text())
+                .doesNotContain(language);
+    }
+
+    /** Word's accept-all (or reject-all) paragraph texts, read from the raw XML. */
+    private static List<String> paragraphTexts(byte[] docx, boolean accept) throws Exception {
+        var xml = new String(entries(docx).get("word/document.xml"), java.nio.charset.StandardCharsets.UTF_8);
+        var texts = new ArrayList<String>();
+        var paragraph = java.util.regex.Pattern.compile("<w:p[ >].*?</w:p>", java.util.regex.Pattern.DOTALL)
+                .matcher(xml);
+        while (paragraph.find()) {
+            var p = paragraph.group();
+            var properties = p.contains("<w:pPr>") ? p.substring(0, p.indexOf("</w:pPr>") + 1) : "";
+            if (properties.contains(accept ? "<w:del " : "<w:ins ")) {
+                continue;
+            }
+            var visible = accept ? p.replaceAll("(?s)<w:del [^>]*>.*?</w:del>", "")
+                    : p.replaceAll("(?s)<w:ins [^>]*>.*?</w:ins>", "");
+            var text = new StringBuilder();
+            var run = java.util.regex.Pattern.compile(accept ? "<w:t(?: [^>]*)?>([^<]*)</w:t>"
+                    : "<w:(?:t|delText)(?: [^>]*)?>([^<]*)</w:(?:t|delText)>").matcher(visible);
+            while (run.find()) {
+                text.append(run.group(1));
+            }
+            texts.add(text.toString());
+        }
+        return texts;
+    }
+
+    @Test
     void partsDocx4jWouldRewriteStayByteIdenticalAndTheRedlineVerifies() throws Exception {
         // Real Word files carry a settings part (read for the protection check) and often
         // markup docx4j's schema rejects; saving the whole package used to rewrite both.
