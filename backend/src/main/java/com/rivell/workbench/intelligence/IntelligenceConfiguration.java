@@ -54,8 +54,11 @@ class IntelligenceConfiguration {
             IntelligenceProperties properties,
             JevProperties jevProperties,
             com.rivell.workbench.intelligence.provider.GenerativeProperties generativeProperties) {
+        // an LLM as decider (step-6 comparison) answers with the generative model
+        var decisionModel = "openai-decider".equals(properties.provider())
+                ? generativeProperties.model() : jevProperties.model();
         return () -> new ModelBindings(
-                new ModelBinding(properties.provider(), jevProperties.model()),
+                new ModelBinding(properties.provider(), decisionModel),
                 new ModelBinding(generativeProperties.provider(), generativeProperties.model()));
     }
 
@@ -109,6 +112,31 @@ class IntelligenceConfiguration {
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
                 .build();
         return new com.rivell.workbench.intelligence.provider.OpenAiCompatibleGenerativeProvider(
+                (path, payload) -> restClient.post()
+                        .uri(path)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(payload)
+                        .retrieve()
+                        .body(String.class),
+                objectMapper, properties);
+    }
+
+    @Bean
+    SemanticDecisionProvider openAiCompatibleDecisionProvider(
+            com.rivell.workbench.intelligence.provider.GenerativeProperties properties,
+            ObjectMapper objectMapper) {
+        var httpClient = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(properties.connectTimeout())
+                .build();
+        var requestFactory = new org.springframework.http.client.JdkClientHttpRequestFactory(httpClient);
+        // one pack can hold 90 questions (section topics): allow longer than one generation
+        requestFactory.setReadTimeout(properties.readTimeout().multipliedBy(3));
+        var restClient = RestClient.builder()
+                .baseUrl(properties.baseUrl())
+                .requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
+                .build();
+        return new com.rivell.workbench.intelligence.provider.OpenAiCompatibleDecisionProvider(
                 (path, payload) -> restClient.post()
                         .uri(path)
                         .contentType(MediaType.APPLICATION_JSON)
