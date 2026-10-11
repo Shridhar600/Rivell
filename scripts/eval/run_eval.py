@@ -29,7 +29,9 @@ from scoring import score_contract, score_knowledge
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 BACKEND = REPO / "backend"
-BASE_URL = "http://localhost:8080"
+# a dedicated port so the eval never talks to a developer's running backend
+PORT = os.environ.get("RIVELL_EVAL_PORT", "18080")
+BASE_URL = f"http://localhost:{PORT}"
 IN_PROGRESS = {"ANALYSIS_QUEUED", "ANALYZING"}
 
 
@@ -48,7 +50,8 @@ def find_jar():
 
 def start_backend(jar, org_id, log_path):
     java = pathlib.Path(os.environ["JAVA_HOME"], "bin", "java") if "JAVA_HOME" in os.environ else "java"
-    env = dict(os.environ, RIVELL_DEV_ORGANIZATION_ID=org_id, RIVELL_JOB_WORKER_ENABLED="true")
+    env = dict(os.environ, RIVELL_DEV_ORGANIZATION_ID=org_id, RIVELL_JOB_WORKER_ENABLED="true",
+               SERVER_PORT=PORT)
     log = open(log_path, "w")
     proc = subprocess.Popen([str(java), "-jar", str(jar)], cwd=BACKEND, env=env,
                             stdout=log, stderr=subprocess.STDOUT)
@@ -292,6 +295,8 @@ def main():
         proc, log = start_backend(jar, org_id, out / f"backend-{org['id']}.log")
         try:
             api.wait_ready()
+            if proc.poll() is not None:
+                sys.exit(f"backend for org {org['id']} exited; see {log.name}")
             print(f"org {org['id']}: tenant {org_id}", flush=True)
             results.append(run_org(api, args.corpus, org, raw_dir))
         finally:
