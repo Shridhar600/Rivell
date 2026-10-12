@@ -53,12 +53,13 @@ class ReviewConfiguration {
             ReviewRepository reviewRepository,
             TransactionTemplate transactionTemplate,
             ApplicationEventPublisher eventPublisher,
+            ReviewEngineProperties reviewEngineProperties,
             Clock clock) {
         return new ReviewService(identityProvider, authorizationService,
                 contractQueryService, contractEnrichmentService, knowledgeQueryService,
                 modelBindingCatalog, embeddingService, retrievalProperties,
                 reviewPackRegistry, reviewPlanBuilder, reviewRepository,
-                transactionTemplate, eventPublisher, clock);
+                transactionTemplate, eventPublisher, reviewEngineProperties, clock);
     }
 
     @Bean

@@ -20,6 +20,7 @@ import com.rivell.workbench.review.CheckFamily;
 import com.rivell.workbench.review.CheckMechanism;
 import com.rivell.workbench.review.ModelPolicyIdentity;
 import com.rivell.workbench.review.Review;
+import com.rivell.workbench.review.ReviewEngine;
 import com.rivell.workbench.review.ReviewPlanCheck;
 import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewSnapshot;
@@ -70,7 +71,7 @@ class JdbcReviewRepository implements ReviewRepository {
                    pack_version, knowledge_pin_number, effective_on,
                    review_pipeline_version, embedding_index_version,
                    embedding_model_identity, decision_provider_id, decision_model_alias,
-                   generative_provider_id, generative_model_alias, created_at)
+                   generative_provider_id, generative_model_alias, review_engine, created_at)
                 values (:reviewId, :organizationId, :contractId, :contractVersionId,
                    :contractVersionNumber, :contractSemanticsId,
                    :semanticsPipelineVersion, :semanticsDigest, :contractType,
@@ -78,7 +79,7 @@ class JdbcReviewRepository implements ReviewRepository {
                    :packVersion, :knowledgePinNumber, :effectiveOn,
                    :reviewPipelineVersion, :embeddingIndexVersion,
                    :embeddingModelIdentity, :decisionProviderId, :decisionModelAlias,
-                   :generativeProviderId, :generativeModelAlias, :createdAt)
+                   :generativeProviderId, :generativeModelAlias, :reviewEngine, :createdAt)
                 """)
                 .param("reviewId", snapshot.reviewId())
                 .param("organizationId", snapshot.organizationId())
@@ -103,6 +104,7 @@ class JdbcReviewRepository implements ReviewRepository {
                 .param("decisionModelAlias", snapshot.modelPolicy().decisionModelAlias())
                 .param("generativeProviderId", snapshot.modelPolicy().generativeProviderId())
                 .param("generativeModelAlias", snapshot.modelPolicy().generativeModelAlias())
+                .param("reviewEngine", snapshot.reviewEngine().name())
                 .param("createdAt", timestamp(snapshot.createdAt()))
                 .update();
 
@@ -204,7 +206,7 @@ class JdbcReviewRepository implements ReviewRepository {
                        pack_version, knowledge_pin_number, effective_on,
                        review_pipeline_version, embedding_index_version,
                        embedding_model_identity, decision_provider_id, decision_model_alias,
-                       generative_provider_id, generative_model_alias, created_at
+                       generative_provider_id, generative_model_alias, review_engine, created_at
                 from review_snapshot
                 where review_id = :reviewId and organization_id = :organizationId
                 """)
@@ -235,6 +237,7 @@ class JdbcReviewRepository implements ReviewRepository {
                                 rs.getString("decision_model_alias"),
                                 rs.getString("generative_provider_id"),
                                 rs.getString("generative_model_alias")),
+                        ReviewEngine.valueOf(rs.getString("review_engine")),
                         rs.getTimestamp("created_at").toInstant()))
                 .optional();
     }

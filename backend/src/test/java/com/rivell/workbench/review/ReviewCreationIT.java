@@ -240,6 +240,8 @@ class ReviewCreationIT {
         assertThat(snapshot.modelPolicy().decisionModelAlias()).isEqualTo("fake-decision-model");
         assertThat(snapshot.modelPolicy().generativeProviderId()).isEqualTo("fake");
         assertThat(snapshot.modelPolicy().generativeModelAlias()).isEqualTo("fake-gen-model");
+        // no engine configured: the review is frozen on engine v1 (Jev only)
+        assertThat(snapshot.reviewEngine()).isEqualTo(ReviewEngine.V1);
 
         var checks = reviewRepository.findPlanChecks(organizationId, review.id());
         assertThat(checks).extracting(ReviewPlanCheck::ordinal)

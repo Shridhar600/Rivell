@@ -454,7 +454,8 @@ public class ReviewApiService {
                                 snapshot.contractPackKey()),
                         snapshot.packVersion(),
                         snapshot.knowledgePinNumber(),
-                        snapshot.effectiveOn()),
+                        snapshot.effectiveOn(),
+                        snapshot.reviewEngine().name()),
                 coverage(organizationId, reviewId, counted),
                 warnings.items(),
                 warnings.truncated());
