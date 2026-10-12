@@ -355,6 +355,25 @@ class OpenAiCompatibleGenerativeProviderTest {
     }
 
     @Test
+    void anAccountWithNoCreditsIsRejectedNotRetried() {
+        var body = "{\"error\":{\"message\":\"You exceeded your current quota\",\"type\":\"insufficient_quota\","
+                + "\"code\":\"insufficient_quota\"}}";
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> {
+                    throw new org.springframework.web.client.RestClientResponseException(
+                            "rejected", 429, "Too Many Requests", null,
+                            body.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+                }),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+        assertThatThrownBy(() -> provider.generate(
+                new GenerationRequest("cap-model", state("t"), capSpec())))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderRejectedException.class)
+                .hasMessageContaining("no credits");
+    }
+
+    @Test
     void unconfiguredProviderFailsClosed() {
         var provider = new OpenAiCompatibleGenerativeProvider(
                 scripted(request -> chatResponse("{}", "stop", null)),

@@ -180,7 +180,7 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
         try {
             body = restClient.post(CHAT_COMPLETIONS_PATH, payload);
         } catch (RestClientResponseException e) {
-            throw mapHttpFailure(e.getStatusCode().value());
+            throw mapHttpFailure(e.getStatusCode().value(), e.getResponseBodyAsString());
         } catch (RestClientException e) {
             throw translateTransportFailure(e);
         }
@@ -194,7 +194,12 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
         }
     }
 
-    private RuntimeException mapHttpFailure(int status) {
+    private RuntimeException mapHttpFailure(int status, String body) {
+        // OpenAI answers an exhausted account with 429 too; waiting does not help, so fail fast
+        // (only the error code is read, never logged)
+        if (status == 429 && body != null && body.contains("insufficient_quota")) {
+            return new ProviderRejectedException("Provider account has no credits (HTTP 429 insufficient_quota)");
+        }
         if (status == 429) {
             return new ProviderUnavailableException("Provider rate limited (HTTP 429)");
         }
