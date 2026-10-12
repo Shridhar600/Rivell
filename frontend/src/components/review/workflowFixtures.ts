@@ -17,6 +17,7 @@ export const fixtureAcceptableFinding = {
   proposedLanguageSource: 'APPROVED_DRAFTING',
   relatedPosition: false,
   decidedBy: null,
+  addedBy: null,
   createdAt: '2026-09-26T09:01:10Z',
 } satisfies FindingSummary
 

@@ -13,6 +13,7 @@ import {
   isReviewNotFoundError,
   isReviewTerminal,
   useFindingQuery,
+  useClauseMarksQuery,
   useFindingsQuery,
   useReviewSummaryQuery,
   type ReviewSummary,
@@ -20,12 +21,14 @@ import {
 import {
   isWorkflowConflictError,
   isWorkflowNotFoundError,
+  useAddFinding,
   useApprovedChangeSetQuery,
   useCurrentDecisionsQuery,
   useFinalizeReview,
   useHumanReviewQuery,
   workflowErrorMessage,
   workflowKeys,
+  type AddFindingInput,
   type DecisionListResponse,
 } from '../api/workflow'
 import { useSemanticsQuery } from '../api/semantics'
@@ -198,6 +201,13 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const findingsQuery = useFindingsQuery(reviewId, {}, canReadFindings)
   const findings = useMemo(() => orderForReview(findingsQuery.data?.items ?? []), [findingsQuery.data])
 
+  const clauseMarksQuery = useClauseMarksQuery(reviewId, analysisCompleted)
+  const clauseMarks = useMemo(() => {
+    const data = clauseMarksQuery.data
+    if (!data || data.runId === null) return null
+    return new Map(data.clauses.map((clause) => [clause.headingNodeId, clause.mark]))
+  }, [clauseMarksQuery.data])
+  const addFindingMutation = useAddFinding(reviewId ?? '')
   const decisionsQuery = useCurrentDecisionsQuery(reviewId, analysisCompleted)
   const humanReviewQuery = useHumanReviewQuery(reviewId, analysisCompleted)
   const humanReview = humanReviewQuery.data ?? null
@@ -284,6 +294,16 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     },
   })
   const canDecideNow = analysisCompleted && humanReview !== null && decisionsLoaded && !isFinalized && !flow.readOnly && finding !== undefined
+  // A finding Rivell missed can be added wherever a decision could be made: never once finalized.
+  const canAddFinding = analysisCompleted && humanReview !== null && !isFinalized && !flow.readOnly
+  const addFinding = useCallback(
+    async (input: AddFindingInput) => {
+      const findingId = await addFindingMutation.mutateAsync(input)
+      setDocFocus(null)
+      selectFinding(findingId)
+    },
+    [addFindingMutation, selectFinding],
+  )
 
   function togglePanel(side: 'l' | 'r') {
     const set = side === 'l' ? setLeftOpen : setRightOpen
@@ -577,6 +597,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           remaining={humanReview ? humanReview.remainingFindings : null}
           notes={notes}
           focusTarget={docFocus}
+          marks={clauseMarks}
+          onAddFinding={canAddFinding ? addFinding : null}
         />
         <FindingPanel
           finding={finding}

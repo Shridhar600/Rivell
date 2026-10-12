@@ -455,6 +455,8 @@ export type StubOptions = {
   changeSet?: unknown
   changeSetStatus?: number
   decisionResponse?: (body: unknown) => Response | Promise<Response>
+  clauseMarks?: unknown
+  addFindingResponse?: (body: unknown) => Response | Promise<Response>
   finalizeResponse?: () => Response | Promise<Response>
   redline?: unknown
   redlineStatus?: number
@@ -726,6 +728,13 @@ export function stubContractApi(options: StubOptions = {}) {
         )
       }
       return jsonResponse(envelope(redline))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/clause-marks$/.test(url)) {
+      return jsonResponse(envelope(options.clauseMarks ?? { runId: null, clauses: [] }))
+    }
+    if (method === 'POST' && /\/api\/reviews\/[^/?]+\/findings$/.test(url)) {
+      if (options.addFindingResponse) return await options.addFindingResponse(body)
+      return jsonResponse(envelope({ findingId: 'f-user' }), 201)
     }
     if (method === 'PUT' && /\/api\/reviews\/[^/?]+\/findings\/[^/?]+\/decision$/.test(url)) {
       if (options.decisionResponse) return await options.decisionResponse(body)

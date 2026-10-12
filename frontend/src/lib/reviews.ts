@@ -1,5 +1,6 @@
 import type {
   AnalysisWarning,
+  ClauseMark,
   FindingClaim,
   FindingDetail,
   FindingSummary,
@@ -98,6 +99,7 @@ const ISSUE_FAMILY_LABELS: Record<string, string> = {
   POSITION_AMBIGUOUS: 'Unclear against our position',
   POSITION_UNCERTAIN: 'Could not be assessed',
   OPEN_ENDED_POSITION: 'No approved position available',
+  USER_ADDED: 'Added by a reviewer',
 }
 
 export function issueFamilyLabel(family: string): string {
@@ -429,6 +431,34 @@ export function decidedByLabel(quality: FindingQuality | null): string | null {
   if (quality.route === 'SECOND_OPINION') return 'Decided with a second opinion'
   if (quality.route === 'NEEDS_YOUR_LOOK') return 'Needs your look'
   return null
+}
+
+const CLAUSE_MARK_LABELS: Record<ClauseMark, string> = {
+  FLAGGED: 'Flagged',
+  CHECKED: 'Checked — no issue found',
+  NOT_COVERED: 'Not covered by your playbook',
+  NOT_ANALYSED: 'Not analysed',
+}
+
+const CLAUSE_MARK_COUNTS: Record<ClauseMark, string> = {
+  FLAGGED: 'flagged',
+  CHECKED: 'checked',
+  NOT_COVERED: 'not covered',
+  NOT_ANALYSED: 'not analysed',
+}
+
+/** What Rivell did with one clause (spec §9): the whole contract is marked, not only the flags. */
+export function clauseMarkLabel(mark: ClauseMark): string {
+  return CLAUSE_MARK_LABELS[mark]
+}
+
+/** The legend over the contract: how many clauses carry each mark, in a fixed order. */
+export function clauseMarksLegend(marks: readonly ClauseMark[]): string {
+  return (Object.keys(CLAUSE_MARK_COUNTS) as ClauseMark[])
+    .map((mark) => [mark, marks.filter((each) => each === mark).length] as const)
+    .filter(([, count]) => count > 0)
+    .map(([mark, count]) => `${count} ${CLAUSE_MARK_COUNTS[mark]}`)
+    .join(' · ')
 }
 
 export function engineLabel(engine: string | null): string {

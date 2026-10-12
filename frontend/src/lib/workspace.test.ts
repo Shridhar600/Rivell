@@ -35,6 +35,7 @@ function finding(id: string, overrides: Partial<FindingSummary> = {}): FindingSu
     proposedLanguageSource: 'NONE',
     relatedPosition: false,
     decidedBy: null,
+    addedBy: null,
     createdAt: '2026-10-01T00:00:00Z',
     ...overrides,
   }

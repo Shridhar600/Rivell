@@ -177,7 +177,8 @@ export function FindingPanel(props: Props) {
   const absences = absenceClaims(finding.claims)
   const quality = qualityFactorRows(finding.quality)
   const assessment = assessmentSummary(finding.quality)
-  const decidedBy = decidedByLabel(finding.quality)
+  // a finding a reviewer added has no machine decider: say who raised it
+  const decidedBy = finding.addedBy ? 'Added by a reviewer' : decidedByLabel(finding.quality)
   const note = policyNoteText(finding)
   const position = policyPositionView(finding.positionComparison)
   // A within-fallback finding is a note, not a defect; a position that names an approver makes it

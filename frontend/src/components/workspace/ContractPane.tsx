@@ -1,8 +1,9 @@
-import { useEffect, useRef, type ReactNode } from 'react'
-import type { FindingDetail, FindingSummary } from '../../api/reviews'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import type { ClauseMark, FindingDetail, FindingSummary } from '../../api/reviews'
 import { useTaxonomy } from '../../api/taxonomy'
-import type { HumanDecision } from '../../api/workflow'
+import type { AddFindingInput, HumanDecision } from '../../api/workflow'
 import type { StructureNode, TreeNode } from '../../lib/documentTree'
+import { clauseMarkLabel, clauseMarksLegend } from '../../lib/reviews'
 import {
   clauseBody,
   executableChange,
@@ -48,7 +49,13 @@ interface Props {
   notes: ReactNode
   /** An evidence jump target. A new object re-reveals the same node, so repeated jumps work. */
   focusTarget?: { nodeId: string } | null
+  /** What the review did with each planned clause; null until an analysis completed. */
+  marks?: ReadonlyMap<string, ClauseMark> | null
+  /** Adds a finding Rivell missed on a clause; null when the user cannot add one now. */
+  onAddFinding?: ((input: AddFindingInput) => Promise<void>) | null
 }
+
+const NOTE_LIMIT = 2000
 
 interface Ctx {
   /** Clause regions are cut only at the document's top level; nested content is drawn plainly. */
@@ -61,6 +68,131 @@ interface Ctx {
   selected: FindingDetail | undefined
   onSelect: (findingId: string) => void
   focusNodeId: string | null
+  marks: ReadonlyMap<string, ClauseMark> | null
+  onAddFinding: ((input: AddFindingInput) => Promise<void>) | null
+}
+
+/** A heading the review did not plan (a title, the signature block) was not analysed. */
+function markOf(ctx: Ctx, headingId: string): ClauseMark {
+  return ctx.marks?.get(headingId) ?? 'NOT_ANALYSED'
+}
+
+/** Marks and the add action belong to the working views, not to the preview of the result. */
+function showsMarks(ctx: Ctx): boolean {
+  return ctx.marks !== null && ctx.mode !== 'final'
+}
+
+/**
+ * What Rivell did with this clause, and the way to add what it missed. Kept apart from the clause
+ * text: a click here never selects one of the clause's findings.
+ */
+function ClauseTools({ heading, ctx }: { heading: TreeNode; ctx: Ctx }) {
+  const [open, setOpen] = useState(false)
+  const [severity, setSeverity] = useState<AddFindingInput['severity']>('MEDIUM')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  const mark = markOf(ctx, heading.id)
+  const add = ctx.onAddFinding
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!add || pending) return
+    if (!note.trim()) {
+      setError('Say what Rivell missed.')
+      return
+    }
+    setError(null)
+    setPending(true)
+    try {
+      await add({ headingNodeId: heading.id, severity, note: note.trim() })
+      setOpen(false)
+      setNote('')
+      setSeverity('MEDIUM')
+    } catch {
+      setError('The finding could not be added. Try again.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <div className="rv-ws-ctools" data-clause-tools="1">
+      <span className="rv-ws-mark" data-mark={mark}>
+        {clauseMarkLabel(mark)}
+      </span>
+      {add && !open ? (
+        <button type="button" className="rv-ws-link" onClick={() => setOpen(true)}>
+          Add a finding
+        </button>
+      ) : null}
+      {add && open ? (
+        <form className="rv-ws-addf" onSubmit={(event) => void submit(event)} noValidate>
+          {ctx.regions.has(heading.id) ? (
+            <p className="rv-ws-addf-warn">
+              This clause already has a finding. Two changes on one clause cannot both be approved.
+            </p>
+          ) : null}
+          <label>
+            Severity
+            <select value={severity} onChange={(event) => setSeverity(event.target.value as AddFindingInput['severity'])}>
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+            </select>
+          </label>
+          <label>
+            What did Rivell miss?
+            <textarea
+              value={note}
+              maxLength={NOTE_LIMIT}
+              rows={3}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </label>
+          {error ? (
+            <p className="rv-ws-addf-err" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <div className="rv-ws-addf-act">
+            <button type="submit" disabled={pending}>
+              Add finding
+            </button>
+            <button
+              type="button"
+              className="rv-ws-link"
+              onClick={() => {
+                setOpen(false)
+                setError(null)
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
+    </div>
+  )
+}
+
+/** A clause with no finding: drawn as received, with its mark. */
+function MarkedClause({ heading, body, ctx }: { heading: TreeNode; body: TreeNode[]; ctx: Ctx }) {
+  const focusNodeId = ctx.focusNodeId
+  const focused =
+    focusNodeId !== null &&
+    (containsNode(heading, focusNodeId) || body.some((node) => containsNode(node, focusNodeId)))
+  return (
+    <div
+      className={`rv-ws-cl rv-ws-cl--plain${focused ? ' rv-ws-cl--focus' : ''}`}
+      data-mark={markOf(ctx, heading.id)}
+      data-focus={focused ? '1' : undefined}
+      tabIndex={focused ? -1 : undefined}
+    >
+      <ClauseTools heading={heading} ctx={ctx} />
+      <Sequence nodes={[heading, ...body]} ctx={{ ...ctx, regionsOpen: false }} />
+    </div>
+  )
 }
 
 /** Whether the node itself, or anything beneath it, is the evidence jump's target. */
@@ -198,7 +330,9 @@ function Region({ heading, body, findings, ctx }: { heading: TreeNode; body: Tre
       data-focus={focused ? '1' : undefined}
       tabIndex={focused ? -1 : undefined}
       data-findings={findings.map((finding) => finding.id).join(' ')}
+      data-mark={showsMarks(ctx) ? markOf(ctx, heading.id) : undefined}
     >
+      {showsMarks(ctx) ? <ClauseTools heading={heading} ctx={ctx} /> : null}
       {content}
     </div>
   )
@@ -213,6 +347,10 @@ function Sequence({ nodes, ctx }: { nodes: readonly TreeNode[]; ctx: Ctx }) {
     if (findings && ctx.regionsOpen) {
       const body = clauseBody(nodes, i)
       out.push(<Region key={node.id} heading={node} body={body} findings={findings} ctx={ctx} />)
+      i += body.length
+    } else if (node.nodeType === 'HEADING' && ctx.regionsOpen && showsMarks(ctx)) {
+      const body = clauseBody(nodes, i)
+      out.push(<MarkedClause key={node.id} heading={node} body={body} ctx={ctx} />)
       i += body.length
     } else {
       // A jump target outside every clause region is highlighted on its own.
@@ -290,6 +428,7 @@ export function ContractPane(props: Props) {
     const element = page.current
     if (!element) return
     const select = (event: MouseEvent) => {
+      if ((event.target as Element | null)?.closest('[data-clause-tools]')) return
       const target = (event.target as Element | null)?.closest<HTMLElement>('[data-findings]')
       const ids = target?.dataset.findings?.split(' ')
       if (!ids) return
@@ -308,6 +447,8 @@ export function ContractPane(props: Props) {
     onSelect,
     regions: new Map(),
     focusNodeId,
+    marks: props.marks ?? null,
+    onAddFinding: props.onAddFinding ?? null,
   }
   for (const finding of findings) {
     if (finding.subjectKind !== 'CLAUSE' || !finding.subjectHeadingNodeId) continue
@@ -316,6 +457,9 @@ export function ContractPane(props: Props) {
   const top = nodes ? topLevelNodes(nodes) : []
   const hasTitle = top.some((node) => node.nodeType === 'TITLE')
   const executable = findings.filter((finding) => executableChange(props.decisions.get(finding.id))).length
+  const legend = showsMarks(ctx)
+    ? clauseMarksLegend(top.filter((node) => node.nodeType === 'HEADING').map((node) => markOf(ctx, node.id)))
+    : ''
 
   const note = term ? (
     <>
@@ -352,6 +496,11 @@ export function ContractPane(props: Props) {
         </div>
         <span className="rv-ws-dnote">{note}</span>
       </div>
+      {legend ? (
+        <p className="rv-ws-legend" aria-label="What Rivell did with each clause">
+          Clauses: {legend}
+        </p>
+      ) : null}
       {props.notes}
       {props.isPending ? <LoadingState label="Loading contract…" /> : null}
       {props.isError ? <ErrorState message="The contract could not be loaded." onRetry={props.onRetry} /> : null}
