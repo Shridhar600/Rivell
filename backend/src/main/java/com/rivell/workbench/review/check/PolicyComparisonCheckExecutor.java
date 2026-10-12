@@ -154,8 +154,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     positions.get(index),
                     PolicyComparisonOutcome.judge(choice, properties.flagThreshold())));
         }
+        var probe = probe(clause, positions, state, detail);
         detail.put("positions", judgedPositions.stream()
-                .map(PolicyComparisonCheckExecutor::detailEntry).toList());
+                .map(judged -> detailEntry(judged, probe.get(judged.key()))).toList());
         var signals = new ArrayList<RawReviewSignal>();
         for (var judged : judgedPositions) {
             if (judged.judgement().flagged()) {
@@ -297,6 +298,38 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 .dedupeSuffix("uncovered")));
     }
 
+    /**
+     * Measurement only (engine v2 P0): the same comparison asked again, options reversed or
+     * as asked. The answers go to the check detail beside the real ones. They never change a
+     * finding, and a failed probe only marks the detail.
+     */
+    private Map<String, PolicyComparisonOutcome.Judgement> probe(
+            ClauseSemantics clause, List<EvidenceItem> positions,
+            PolicyComparisonSpecs.PolicyComparisonState state, Map<String, Object> detail) {
+        var mode = properties.orderProbe();
+        if (mode == PolicyComparisonProperties.OrderProbe.OFF) {
+            return Map.of();
+        }
+        DecisionExecution execution;
+        try {
+            execution = decisionService.evaluate(PolicyComparisonSpecs.orderProbe(
+                    PolicyPositionQuestions.build(positions, clause, conceptRegistry,
+                            mode == PolicyComparisonProperties.OrderProbe.REVERSED)), state);
+        } catch (SemanticDecisionException e) {
+            detail.put("probe", "UNAVAILABLE");
+            return Map.of();
+        }
+        var judged = new LinkedHashMap<String, PolicyComparisonOutcome.Judgement>();
+        for (int index = 0; index < positions.size(); index++) {
+            var key = PolicyPositionQuestions.key(index);
+            if (execution.answers().get(key) instanceof ChoiceAnswer choice) {
+                judged.put(key, PolicyComparisonOutcome.judge(choice, properties.flagThreshold()));
+            }
+        }
+        detail.put("probe", mode.name());
+        return judged;
+    }
+
     private RawReviewSignal generate(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
             IssueFamily family, List<UUID> evidence, Map<String, Object> detail) {
@@ -397,7 +430,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             String key, EvidenceItem position, PolicyComparisonOutcome.Judgement judgement) {
     }
 
-    private static Map<String, Object> detailEntry(JudgedPosition judged) {
+    private static Map<String, Object> detailEntry(
+            JudgedPosition judged, PolicyComparisonOutcome.Judgement probe) {
         var entry = new LinkedHashMap<String, Object>();
         entry.put("positionKey", judged.key());
         entry.put("positionCandidateId", judged.position().sourceCandidateId() == null
@@ -407,6 +441,11 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         entry.put("flagProbability", judged.judgement().flagProbability());
         entry.put("probabilities", judged.judgement().probabilities());
         entry.put("flagged", judged.judgement().flagged());
+        if (probe != null) {
+            entry.put("probeCategory", probe.category() == null ? "" : probe.category());
+            entry.put("probeFlagged", probe.flagged());
+            entry.put("probeProbabilities", probe.probabilities());
+        }
         return entry;
     }
 

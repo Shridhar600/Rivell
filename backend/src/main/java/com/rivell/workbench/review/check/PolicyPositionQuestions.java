@@ -30,10 +30,17 @@ public final class PolicyPositionQuestions {
 
     public static Map<String, SemanticQuestion> build(
             List<EvidenceItem> positions, ClauseSemantics clause, ConceptRegistry registry) {
+        return build(positions, clause, registry, false);
+    }
+
+    /** {@code reversed}: options in reverse order, for the order probe (engine v2 P0). */
+    public static Map<String, SemanticQuestion> build(
+            List<EvidenceItem> positions, ClauseSemantics clause, ConceptRegistry registry,
+            boolean reversed) {
         var questions = new LinkedHashMap<String, SemanticQuestion>();
         for (int index = 0; index < positions.size(); index++) {
             questions.put(key(index), PolicyComparisonSpecs.positionQuestion(
-                    instructions(positions.get(index), clause, registry)));
+                    instructions(positions.get(index), clause, registry), reversed));
         }
         return questions;
     }

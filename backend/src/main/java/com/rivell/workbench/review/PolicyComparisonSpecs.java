@@ -21,6 +21,8 @@ public final class PolicyComparisonSpecs {
 
     public static final String POLICY_COMPARISON_SPEC = "policy-comparison";
     public static final int POLICY_COMPARISON_VERSION = 1;
+    /** The same comparison asked again for measurement (engine v2 P0); never a finding. */
+    public static final String ORDER_PROBE_SPEC = "policy-comparison-order-probe";
     public static final int STATE_SCHEMA_VERSION = 1;
 
     public static final String MEETS_PREFERRED = "MEETS_PREFERRED";
@@ -53,8 +55,33 @@ public final class PolicyComparisonSpecs {
                 new QuestionPack(questions));
     }
 
+    public static DecisionSpec orderProbe(Map<String, SemanticQuestion> questions) {
+        return new DecisionSpec(
+                ORDER_PROBE_SPEC,
+                POLICY_COMPARISON_VERSION,
+                "Measurement only: the policy comparison asked again, options reversed or as "
+                        + "asked; the answer never becomes a finding.",
+                STATE_SCHEMA_VERSION,
+                new QuestionPack(questions));
+    }
+
     public static ChoiceQuestion positionQuestion(String instructions) {
-        return new ChoiceQuestion(instructions, OPTIONS);
+        return positionQuestion(instructions, false);
+    }
+
+    /**
+     * {@code reversed}: the same options and wording, last first. Jev "leans toward the option
+     * that comes first" (jev-1.13 jaggedness notes); the probe measures how much.
+     */
+    public static ChoiceQuestion positionQuestion(String instructions, boolean reversed) {
+        if (!reversed) {
+            return new ChoiceQuestion(instructions, OPTIONS);
+        }
+        var keys = new java.util.ArrayList<>(OPTIONS.keySet());
+        java.util.Collections.reverse(keys);
+        var options = new LinkedHashMap<String, String>();
+        keys.forEach(key -> options.put(key, OPTIONS.get(key)));
+        return new ChoiceQuestion(instructions, options);
     }
 
     private static Map<String, String> options() {
