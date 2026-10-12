@@ -69,6 +69,14 @@ class BucketTest(unittest.TestCase):
                          {"DOUBTFUL_MISS": {"NEEDS_FALLBACK": 1}, "CONFIDENT_MISS": {"AMBIGUOUS": 1},
                           "NOT_JUDGED": {"UNADDRESSED": 1}, "NO_CHECK": {"NEEDS_FALLBACK": 1}})
 
+    def test_a_miss_the_key_places_in_no_section_is_an_absence(self):
+        # a provision missing from the contract has no section; it is not a section without a check
+        answer = dict(ANSWER, expectedIssues=ANSWER["expectedIssues"] + [
+            {"id": "I5", "category": "MISSING_PROVISION", "severity": "HIGH", "sectionIds": []}])
+        records = calibration.build_records("r1", "c", answer, standard_raw())
+        self.assertEqual(calibration.miss_buckets(records)["ABSENCE"], {"MISSING_PROVISION": 1})
+        self.assertEqual(calibration.miss_buckets(records)["NO_CHECK"], {"NEEDS_FALLBACK": 1})
+
     def test_a_failed_check_is_its_own_bucket(self):
         records = calibration.build_records("r1", "c", ANSWER, raw([check("h1", [], status="DEGRADED")]))
         self.assertEqual(calibration.miss_buckets(records)["CHECK_FAILED"], {"NEEDS_FALLBACK": 1})

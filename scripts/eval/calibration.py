@@ -7,7 +7,8 @@ raw/<contract>.json) with the corpus answer key. One record per:
   judged     judged position, or a comparison check that judged none (positionKey None)
 Miss buckets: CONFIDENT_MISS / DOUBTFUL_MISS (a position judged the clause), OFF_TOPIC (positions
 matched but none covers it) and NOT_JUDGED (none matched): the triage decided those two,
-NO_CHECK, CHECK_FAILED.
+ABSENCE (the key names no section: a provision missing from the contract), NO_CHECK,
+CHECK_FAILED.
 Routing thresholds come from dev/dev2 only: a holdout is refused.
 
 Usage (one corpus per build; report takes several files):
@@ -120,6 +121,8 @@ def _rows_for(issue, judged):
 
 
 def miss_bucket(issue, judged):
+    if not issue["sections"]:
+        return "ABSENCE"
     rows = _rows_for(issue, judged)
     if not rows:
         return "NO_CHECK"
