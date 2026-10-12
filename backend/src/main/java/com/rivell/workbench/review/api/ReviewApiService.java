@@ -678,7 +678,11 @@ public class ReviewApiService {
                 finding.proposedLanguageSource(),
                 Boolean.TRUE.equals(finding.quality().get("secondaryTopic")),
                 finding.quality().get("route") instanceof String route ? route : null,
-                finding.createdAt());
+                finding.createdAt(), addedBy(finding));
+    }
+
+    private static String addedBy(Finding finding) {
+        return finding.addedBy() == null ? null : finding.addedBy().toString();
     }
 
     private static String name(ConceptKey concept) {
@@ -706,7 +710,7 @@ public class ReviewApiService {
                         .toList(),
                 finding.evidenceItemIds(), evidenceItems,
                 FindingPositionComparison.from(evidenceItems), finding.signalIds(), absenceBasis,
-                finding.createdAt());
+                finding.createdAt(), addedBy(finding));
     }
 
     private record Warnings(List<AnalysisWarningView> items, boolean truncated) {

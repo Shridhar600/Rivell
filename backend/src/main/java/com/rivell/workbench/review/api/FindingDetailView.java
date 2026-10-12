@@ -20,7 +20,8 @@ import com.rivell.workbench.retrieval.api.RetrievalResponses;
  * plan-check basis for absence findings. {@code evidenceItems} are the exact frozen
  * items the finding cites (G-M7-1), resolved from the finding's run and never rebuilt
  * from latest knowledge; every claim evidence id resolves inside this set. Signal ids
- * are provenance references only; no raw signal surface is exposed.
+ * are provenance references only; no raw signal surface is exposed. {@code addedBy} is the
+ * user who added a {@code USER_ADDED} finding, null for findings Rivell assembled.
  */
 public record FindingDetailView(
         UUID id,
@@ -48,7 +49,8 @@ public record FindingDetailView(
         FindingPositionComparison positionComparison,
         List<UUID> signalIds,
         AbsenceBasisView absenceBasis,
-        Instant createdAt) {
+        Instant createdAt,
+        String addedBy) {
 
     public record ClaimView(
             int ordinal,

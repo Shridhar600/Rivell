@@ -15,7 +15,8 @@ import com.rivell.workbench.review.ProposedLanguageSource;
  * deciding position governs a topic the clause only touches (a LOW note, not a breach).
  * {@code decidedBy}: who decided a policy-comparison finding — JEV, SECOND_OPINION (Jev and an
  * agreeing second opinion) or NEEDS_YOUR_LOOK (they disagreed or the second opinion was not
- * available, so the user decides); null for other findings.
+ * available, so the user decides); null for other findings. {@code addedBy}: the user who added
+ * a {@code USER_ADDED} finding (Rivell missed it); null for findings Rivell assembled.
  */
 public record FindingSummaryView(
         UUID id,
@@ -32,5 +33,6 @@ public record FindingSummaryView(
         ProposedLanguageSource proposedLanguageSource,
         boolean relatedPosition,
         String decidedBy,
-        Instant createdAt) {
+        Instant createdAt,
+        String addedBy) {
 }

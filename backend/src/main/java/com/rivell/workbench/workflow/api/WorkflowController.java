@@ -60,6 +60,26 @@ class WorkflowController {
         return ApiResult.ok(apiService.decide(id, findingId, request));
     }
 
+    @Operation(summary = "Add a finding Rivell missed on one planned clause of the active run; "
+            + "it is decided like any other finding")
+    @ResponseStatus(HttpStatus.CREATED)
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Missing or too long note, or not a "
+                    + "planned clause of this review",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing reviews:decide",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Unknown review",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Analysis incomplete or already "
+                    + "finalized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
+    @PostMapping("/reviews/{id}/findings")
+    ApiResult<AddedFindingView> addFinding(
+            @PathVariable UUID id, @RequestBody AddFindingRequest request) {
+        return ApiResult.ok(apiService.addFinding(id, request));
+    }
+
     @Operation(summary = "List the current effective decisions of a review's active run")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses(@ApiResponse(responseCode = "404", description = "Unknown review",

@@ -42,7 +42,7 @@ class ClauseMarksTest {
                 IssueFamily.POSITION_NEEDS_FALLBACK, "POSITION_DEVIATION", "text",
                 FindingSeverity.MEDIUM, FindingClassification.REVIEW_REQUIRED,
                 ProposedAction.ESCALATE_TO_HUMAN, null, ProposedLanguageSource.NONE, null, Map.of(),
-                Instant.now(), List.of(), List.of(), List.of(), List.of()));
+                Instant.now(), List.of(), List.of(), List.of(), List.of(), null));
     }
 
     private ClauseMark markOf(UUID heading) {

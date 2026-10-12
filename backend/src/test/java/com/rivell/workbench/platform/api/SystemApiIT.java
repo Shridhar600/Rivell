@@ -102,6 +102,7 @@ class SystemApiIT {
                         "/api/reviews/{id}",
                         "/api/reviews/{id}/findings",
                         "/api/reviews/{id}/findings/{findingId}",
+                        "/api/reviews/{id}/clause-marks",
                         "/api/reviews/{id}/findings/{findingId}/decision",
                         "/api/reviews/{id}/findings/{findingId}/decisions",
                         "/api/reviews/{id}/decisions",

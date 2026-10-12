@@ -9,6 +9,7 @@ import com.rivell.workbench.organization.Permissions;
 import com.rivell.workbench.redline.ApprovedChange;
 import com.rivell.workbench.redline.ApprovedChangeSet;
 import com.rivell.workbench.redline.ApprovedChangeSetNotFoundException;
+import com.rivell.workbench.workflow.AddFindingCommand;
 import com.rivell.workbench.workflow.DecisionCommand;
 import com.rivell.workbench.workflow.FinalizationBlocker;
 import com.rivell.workbench.workflow.HumanDecision;
@@ -17,6 +18,7 @@ import com.rivell.workbench.workflow.HumanReviewService;
 import com.rivell.workbench.workflow.HumanReviewState;
 import com.rivell.workbench.workflow.ReviewFinalizationService;
 import com.rivell.workbench.workflow.UnauthorizedWorkflowAccessException;
+import com.rivell.workbench.workflow.UserFindingService;
 
 /**
  * Human review workflow HTTP surface: decision writes, current decisions and history,
@@ -30,6 +32,7 @@ public class WorkflowApiService {
     private static final int MAX_PAGE_LIMIT = 100;
 
     private final HumanDecisionService decisionService;
+    private final UserFindingService userFindingService;
     private final HumanReviewService humanReviewService;
     private final ReviewFinalizationService finalizationService;
     private final IdentityProvider identityProvider;
@@ -37,11 +40,13 @@ public class WorkflowApiService {
 
     public WorkflowApiService(
             HumanDecisionService decisionService,
+            UserFindingService userFindingService,
             HumanReviewService humanReviewService,
             ReviewFinalizationService finalizationService,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
         this.decisionService = decisionService;
+        this.userFindingService = userFindingService;
         this.humanReviewService = humanReviewService;
         this.finalizationService = finalizationService;
         this.identityProvider = identityProvider;
@@ -53,6 +58,12 @@ public class WorkflowApiService {
                 request.expectedVersion(), request.clientRequestId(), request.action(),
                 request.approvedAction(), request.approvedLanguage(), request.comment()));
         return toView(decision);
+    }
+
+    public AddedFindingView addFinding(UUID reviewId, AddFindingRequest request) {
+        var finding = userFindingService.add(reviewId, new AddFindingCommand(
+                request.headingNodeId(), request.severity(), request.note()));
+        return new AddedFindingView(finding.id());
     }
 
     public DecisionListResponse currentDecisions(UUID reviewId, Integer limit) {
