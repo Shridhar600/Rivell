@@ -433,28 +433,37 @@ export function decidedByLabel(quality: FindingQuality | null): string | null {
   return null
 }
 
-const CLAUSE_MARK_LABELS: Record<ClauseMark, string> = {
+/**
+ * A mark as shown: the server's mark for a planned clause, or NOT_PLANNED for a heading the review
+ * plan left out (a title, the signature block). Both mean Rivell did not judge the clause, for
+ * different reasons, so the user sees which.
+ */
+export type ShownClauseMark = ClauseMark | 'NOT_PLANNED'
+
+const CLAUSE_MARK_LABELS: Record<ShownClauseMark, string> = {
   FLAGGED: 'Flagged',
   CHECKED: 'Checked — no issue found',
   NOT_COVERED: 'Not covered by your playbook',
-  NOT_ANALYSED: 'Not analysed',
+  NOT_ANALYSED: 'Not analysed — the check did not finish',
+  NOT_PLANNED: 'Not reviewed — outside the review plan',
 }
 
-const CLAUSE_MARK_COUNTS: Record<ClauseMark, string> = {
+const CLAUSE_MARK_COUNTS: Record<ShownClauseMark, string> = {
   FLAGGED: 'flagged',
   CHECKED: 'checked',
   NOT_COVERED: 'not covered',
   NOT_ANALYSED: 'not analysed',
+  NOT_PLANNED: 'not reviewed',
 }
 
 /** What Rivell did with one clause (spec §9): the whole contract is marked, not only the flags. */
-export function clauseMarkLabel(mark: ClauseMark): string {
+export function clauseMarkLabel(mark: ShownClauseMark): string {
   return CLAUSE_MARK_LABELS[mark]
 }
 
 /** The legend over the contract: how many clauses carry each mark, in a fixed order. */
-export function clauseMarksLegend(marks: readonly ClauseMark[]): string {
-  return (Object.keys(CLAUSE_MARK_COUNTS) as ClauseMark[])
+export function clauseMarksLegend(marks: readonly ShownClauseMark[]): string {
+  return (Object.keys(CLAUSE_MARK_COUNTS) as ShownClauseMark[])
     .map((mark) => [mark, marks.filter((each) => each === mark).length] as const)
     .filter(([, count]) => count > 0)
     .map(([mark, count]) => `${count} ${CLAUSE_MARK_COUNTS[mark]}`)

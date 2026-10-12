@@ -43,12 +43,13 @@ describe('clause marks', () => {
     expect(clauseMarkLabel('FLAGGED')).toBe('Flagged')
     expect(clauseMarkLabel('CHECKED')).toBe('Checked — no issue found')
     expect(clauseMarkLabel('NOT_COVERED')).toBe('Not covered by your playbook')
-    expect(clauseMarkLabel('NOT_ANALYSED')).toBe('Not analysed')
+    expect(clauseMarkLabel('NOT_ANALYSED')).toBe('Not analysed — the check did not finish')
+    expect(clauseMarkLabel('NOT_PLANNED')).toBe('Not reviewed — outside the review plan')
   })
 
   it('counts the marks for the legend and leaves out a mark no clause has', () => {
-    expect(clauseMarksLegend(['FLAGGED', 'CHECKED', 'CHECKED', 'NOT_ANALYSED'])).toBe(
-      '1 flagged · 2 checked · 1 not analysed',
+    expect(clauseMarksLegend(['FLAGGED', 'CHECKED', 'CHECKED', 'NOT_ANALYSED', 'NOT_PLANNED'])).toBe(
+      '1 flagged · 2 checked · 1 not analysed · 1 not reviewed',
     )
     expect(clauseMarksLegend([])).toBe('')
   })

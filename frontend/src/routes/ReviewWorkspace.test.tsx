@@ -303,11 +303,15 @@ describe('the whole contract under your control', () => {
     expect(within(await clauseOf('1. Definitions')).getByText('Checked — no issue found')).toBeInTheDocument()
     expect(within(await clauseOf('5. Termination')).getByText('Not covered by your playbook')).toBeInTheDocument()
     expect(within(await clauseOf('6. Limitation of Liability')).getByText('Flagged')).toBeInTheDocument()
-    expect(within(await clauseOf('Schedule A — Services')).getByText('Not analysed')).toBeInTheDocument()
-    // a heading the review did not plan is shown as not analysed: Rivell did not look at it
-    expect(within(await clauseOf('Northwind Customer Group LLC')).getByText('Not analysed')).toBeInTheDocument()
+    expect(
+      within(await clauseOf('Schedule A — Services')).getByText('Not analysed — the check did not finish'),
+    ).toBeInTheDocument()
+    // a heading the review did not plan: Rivell did not look at it, and says so differently
+    expect(
+      within(await clauseOf('Northwind Customer Group LLC')).getByText('Not reviewed — outside the review plan'),
+    ).toBeInTheDocument()
     expect(screen.getByRole('main', { name: 'Contract' })).toHaveTextContent(
-      '1 flagged · 1 checked · 1 not covered · 2 not analysed',
+      '1 flagged · 1 checked · 1 not covered · 1 not analysed · 1 not reviewed',
     )
   })
 
@@ -316,7 +320,7 @@ describe('the whole contract under your control', () => {
     const page = await screen.findByRole('article')
     await within(page).findByText('1. Definitions')
     expect(within(page).queryByText('Checked — no issue found')).not.toBeInTheDocument()
-    expect(within(page).queryByText('Not analysed')).not.toBeInTheDocument()
+    expect(within(page).queryByText(/Not analysed|Not reviewed/)).not.toBeInTheDocument()
   })
 
   it('lets you add a finding on a clause Rivell passed, and opens it selected', async () => {

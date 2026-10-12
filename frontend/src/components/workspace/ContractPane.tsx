@@ -3,7 +3,7 @@ import type { ClauseMark, FindingDetail, FindingSummary } from '../../api/review
 import { useTaxonomy } from '../../api/taxonomy'
 import type { AddFindingInput, HumanDecision } from '../../api/workflow'
 import type { StructureNode, TreeNode } from '../../lib/documentTree'
-import { clauseMarkLabel, clauseMarksLegend } from '../../lib/reviews'
+import { clauseMarkLabel, clauseMarksLegend, type ShownClauseMark } from '../../lib/reviews'
 import {
   clauseBody,
   executableChange,
@@ -72,9 +72,9 @@ interface Ctx {
   onAddFinding: ((input: AddFindingInput) => Promise<void>) | null
 }
 
-/** A heading the review did not plan (a title, the signature block) was not analysed. */
-function markOf(ctx: Ctx, headingId: string): ClauseMark {
-  return ctx.marks?.get(headingId) ?? 'NOT_ANALYSED'
+/** A heading the review did not plan (a title, the signature block) is outside the review. */
+function markOf(ctx: Ctx, headingId: string): ShownClauseMark {
+  return ctx.marks?.get(headingId) ?? 'NOT_PLANNED'
 }
 
 /** Marks and the add action belong to the working views, not to the preview of the result. */
