@@ -114,21 +114,33 @@ def _topic_matches(concept_key, playbook_ref):
     return bool(_stems(concept_key) & _stems(ref))
 
 
-def score_contract(answer, structure_nodes, clauses, findings):
+def _detected_headings(structure_nodes, clauses):
     detected = [(n["id"], n.get("text") or "") for n in structure_nodes
                 if n.get("nodeType") == "HEADING"]
     for clause in clauses:  # clause headings cover run-in headings the parser kept inline
         if clause.get("headingNodeId") and clause.get("heading"):
             if all(clause["headingNodeId"] != node_id for node_id, _ in detected):
                 detected.append((clause["headingNodeId"], clause["heading"]))
+    return detected
+
+
+def section_locator(answer, structure_nodes, clauses):
+    """(section_of, section_to_node): section_of(node_id) is the answer-key section that holds
+    a heading node, or None off the key."""
+    section_to_node = match_sections(answer.get("sections", []),
+                                     _detected_headings(structure_nodes, clauses))
+    return _section_locator(structure_nodes, section_to_node), section_to_node
+
+
+def score_contract(answer, structure_nodes, clauses, findings):
+    detected = _detected_headings(structure_nodes, clauses)
     expected = answer.get("sections", [])
-    section_to_node = match_sections(expected, detected)
+    section_of, section_to_node = section_locator(answer, structure_nodes, clauses)
     node_to_section = {v: k for k, v in section_to_node.items()}
 
     classified = [c for c in clauses if c.get("correctedPrimaryConcept") or c.get("primaryConcept")]
     absence = [f for f in findings if f.get("subjectKind") == "ABSENCE"]
     located = [f for f in findings if f.get("subjectHeadingNodeId")]
-    section_of = _section_locator(structure_nodes, section_to_node)
     finding_sections = {}
     for f in located:
         sid = section_of(f["subjectHeadingNodeId"])
