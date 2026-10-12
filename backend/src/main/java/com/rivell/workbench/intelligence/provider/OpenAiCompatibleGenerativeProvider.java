@@ -45,7 +45,9 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
 
     static final String PROVIDER_ID = "openai-compatible";
     private static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
-    private static final int MAX_FIELD_LENGTH = 2000;
+    // a redrafted clause body can be as long as the clause it replaces (up to 4000 characters
+    // are sent); 2000 refused every long clause's wording as "malformed"
+    private static final int MAX_FIELD_LENGTH = 8000;
 
     private final RestClientAccessor restClient;
     private final ObjectMapper objectMapper;
