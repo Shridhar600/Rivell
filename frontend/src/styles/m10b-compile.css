@@ -1150,3 +1150,7 @@
   color: var(--red);
   font-size: 11.5px;
 }
+/* the kind tag keeps its pill shape beside a title that wraps */
+.rv-kc-unit .rv-kc-kind {
+  align-self: start;
+}

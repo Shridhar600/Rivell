@@ -15,6 +15,7 @@ import {
   splitOnTerm,
   topLevelNodes,
 } from '../../lib/workspace'
+import { Button } from '../ui/Button'
 import { ErrorState, LoadingState } from '../ui/State'
 
 export type DocMode = 'changes' | 'orig' | 'final'
@@ -93,7 +94,8 @@ function ClauseTools({ heading, ctx }: { heading: TreeNode; ctx: Ctx }) {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const mark = markOf(ctx, heading.id)
-  const add = ctx.onAddFinding
+  // a finding belongs to a clause the review planned; the server refuses any other heading
+  const add = mark === 'NOT_PLANNED' ? null : ctx.onAddFinding
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -156,19 +158,18 @@ function ClauseTools({ heading, ctx }: { heading: TreeNode; ctx: Ctx }) {
             </p>
           ) : null}
           <div className="rv-ws-addf-act">
-            <button type="submit" disabled={pending}>
-              Add finding
-            </button>
-            <button
-              type="button"
-              className="rv-ws-link"
+            <Button
+              compact
               onClick={() => {
                 setOpen(false)
                 setError(null)
               }}
             >
               Cancel
-            </button>
+            </Button>
+            <Button variant="primary" compact type="submit" disabled={pending}>
+              Add finding
+            </Button>
           </div>
         </form>
       ) : null}

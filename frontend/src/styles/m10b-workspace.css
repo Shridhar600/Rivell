@@ -1345,8 +1345,8 @@
 }
 .rv-ws-addf-act {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .rv-ws-cl[data-mark='NOT_PLANNED'] {
   border-left-style: dotted;

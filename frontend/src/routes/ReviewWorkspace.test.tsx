@@ -370,6 +370,14 @@ describe('the whole contract under your control', () => {
     expect(within(panel).getByText('The definition of Services has no carve-out for third-party software.')).toBeInTheDocument()
   })
 
+  it('offers no add on a heading outside the review plan, where the server would refuse it', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    const unplanned = await clauseOf('Northwind Customer Group LLC')
+    expect(within(unplanned).getByText('Not reviewed — outside the review plan')).toBeInTheDocument()
+    expect(within(unplanned).queryByRole('button', { name: 'Add a finding' })).not.toBeInTheDocument()
+    expect(within(await clauseOf('5. Termination')).getByRole('button', { name: 'Add a finding' })).toBeInTheDocument()
+  })
+
   it('warns that two changes on one clause cannot both be approved', async () => {
     renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
     const clause = await clauseOf('6. Limitation of Liability')
