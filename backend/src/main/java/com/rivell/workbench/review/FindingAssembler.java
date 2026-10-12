@@ -210,6 +210,12 @@ public final class FindingAssembler {
             case "survival_coverage_partial" -> "Survival coverage could not be established "
                     + "for all confidentiality provisions; the limitation requires human "
                     + "review.";
+            case DeviationUncertainPayload.SECOND_OPINION_DISAGREES -> "Rivell's two reviewers "
+                    + "disagree on this clause against the position: one finds an issue, the "
+                    + "other does not. Rivell does not decide; please take a look.";
+            case DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE -> "Rivell was unsure about "
+                    + "this clause against the position, and a second opinion could not be "
+                    + "obtained; please take a look.";
             default -> "The check recorded unresolved uncertainty for "
                     + signal.concept().value() + ".";
         };
@@ -300,6 +306,13 @@ public final class FindingAssembler {
         }
         if (primary.signalType() == SignalType.CROSS_CLAUSE_CONFLICT) {
             return FindingSeverity.HIGH;
+        }
+        if (primary.payload() instanceof DeviationUncertainPayload uncertain
+                && List.of(DeviationUncertainPayload.SECOND_OPINION_DISAGREES,
+                        DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE)
+                        .contains(uncertain.reason())) {
+            // engine v2: a "needs your look" item asks for a look; it is never an alarm
+            return FindingSeverity.LOW;
         }
         return FindingSeverity.MEDIUM;
     }
@@ -412,7 +425,9 @@ public final class FindingAssembler {
 
     /** The deciding signal's own assessment, shown with the finding (model estimates). */
     private static final List<String> ASSESSMENT_KEYS = List.of("category", "flagProbability",
-            "probabilities", "secondaryTopic", "uncoveredProbability");
+            "probabilities", "secondaryTopic", "uncoveredProbability", "route", "jevCategory",
+            "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
+            "secondOpinionReason");
 
     private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
