@@ -5,6 +5,9 @@ raw/<contract>.json) with the corpus answer key. One record per:
   issue      planted issue: detected or not, its sections
   compliant  compliant section: alarmed or not
   judged     judged position, or a comparison check that judged none (positionKey None)
+Miss buckets: CONFIDENT_MISS / DOUBTFUL_MISS (a position judged the clause), OFF_TOPIC (positions
+matched but none covers it) and NOT_JUDGED (none matched): the triage decided those two,
+NO_CHECK, CHECK_FAILED.
 Routing thresholds come from dev/dev2 only: a holdout is refused.
 
 Usage (one corpus per build; report takes several files):
@@ -23,6 +26,8 @@ FLAGGING = ("WALK_AWAY", "BEYOND_FALLBACK", "UNCLEAR", "WITHIN_FALLBACK")
 POLICY_CHECK = "CLAUSE:POLICY_COMPARISON:"
 FAILED = ("FAILED", "DEGRADED")
 CONFIDENT_P, CONFIDENT_MARGIN = 0.8, 0.2  # spec §6 initial ACCEPT band
+ADDRESSED = 0.5  # PolicyComparisonCheckExecutor.ADDRESSED: below it no position covers the clause
+TRIAGE_BUCKETS = ("NOT_JUDGED", "OFF_TOPIC")  # the uncovered-clause triage decided these
 SWEEP = (0.3, 0.4, 0.5, 0.6, 0.7, 0.8)    # product flag threshold today: 0.6
 
 
@@ -36,6 +41,11 @@ def shape(probabilities):
 
 def confident(row):
     return row["pMax"] >= CONFIDENT_P and row["margin"] >= CONFIDENT_MARGIN
+
+
+def addresses(row):
+    """The product's rule: a position covers the clause when 'meets' plus the flagging mass reach 0.5."""
+    return row["probabilities"].get("MEETS_PREFERRED", 0.0) + row["flagMass"] >= ADDRESSED
 
 
 def build_records(run, contract, answer, raw):
@@ -118,6 +128,8 @@ def miss_bucket(issue, judged):
     positions = [r for r in rows if r["positionKey"]]
     if not positions:
         return "NOT_JUDGED"
+    if not any(addresses(r) for r in positions):
+        return "OFF_TOPIC"
     best = max(positions, key=lambda r: r["flagMass"])
     return "CONFIDENT_MISS" if confident(best) else "DOUBTFUL_MISS"
 
@@ -130,6 +142,19 @@ def miss_buckets(records):
         cats = buckets.setdefault(miss_bucket(issue, judged), {})
         cats[issue["category"]] = cats.get(issue["category"], 0) + 1
     return buckets
+
+
+def triage_misses(records):
+    """Highest triage probability seen for each miss the uncovered-clause triage decided."""
+    judged = _judged_by_section(records)
+    found = []
+    for issue in (r for r in records if r["kind"] == "issue" and not r["detected"]):
+        if miss_bucket(issue, judged) in TRIAGE_BUCKETS:
+            seen = [r["uncoveredProbability"] for r in _rows_for(issue, judged)
+                    if r["uncoveredProbability"] is not None]
+            if seen:
+                found.append(round(max(seen), 2))
+    return sorted(found)
 
 
 def alarm_buckets(records):
@@ -208,6 +233,10 @@ def report(records):
         lines += _table(["Bucket", "Issues", "Categories"],
                         [(b, sum(c.values()), ", ".join(f"{k} {v}" for k, v in sorted(c.items())))
                          for b, c in sorted(misses.items())]) + [""]
+        triage = triage_misses(rs)
+        if triage:
+            lines += [f"- Triage probability of the misses it decided: {', '.join(map(str, triage))} "
+                      "(product threshold 0.5)", ""]
         lines += ["### MEDIUM+ false alarms, by source", ""]
         lines += _table(["Bucket", "Sections"], sorted(alarm_buckets(rs).items())) + [""]
         probe = probe_summary(rs)

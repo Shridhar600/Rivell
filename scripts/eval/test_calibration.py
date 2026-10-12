@@ -16,9 +16,9 @@ def probs(**top):
     return p
 
 
-def check(node, positions, status="COMPLETED", probe=None):
+def check(node, positions, status="COMPLETED", probe=None, uncovered=None):
     return {"key": f"CLAUSE:POLICY_COMPARISON:TOPIC:{node}", "subjectHeadingNodeId": node,
-            "status": status, "judgedPositions": positions, "probe": probe, "uncoveredProbability": None}
+            "status": status, "judgedPositions": positions, "probe": probe, "uncoveredProbability": uncovered}
 
 
 def position(p, flagged=False, category="", probe=None, probe_flagged=None):
@@ -72,6 +72,14 @@ class BucketTest(unittest.TestCase):
     def test_a_failed_check_is_its_own_bucket(self):
         records = calibration.build_records("r1", "c", ANSWER, raw([check("h1", [], status="DEGRADED")]))
         self.assertEqual(calibration.miss_buckets(records)["CHECK_FAILED"], {"NEEDS_FALLBACK": 1})
+
+    def test_a_miss_no_matched_position_addresses_is_left_to_the_triage(self):
+        # every matched position judged the clause off its subject: the uncovered triage decided
+        records = calibration.build_records("r1", "c", ANSWER, raw([
+            check("h2", [position(probs(NOT_ADDRESSED=0.90))], uncovered=0.3),
+            check("h3", [], uncovered=0.1)]))
+        self.assertEqual(calibration.miss_buckets(records)["OFF_TOPIC"], {"AMBIGUOUS": 1})
+        self.assertEqual(calibration.triage_misses(records), [0.1, 0.3])
 
     def test_alarms_are_sorted_by_source_and_confidence(self):
         records = calibration.build_records("r1", "c", ANSWER, standard_raw())
