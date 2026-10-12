@@ -298,6 +298,32 @@ export function startFakeServer(fake: Fake) {
         }
         return envelope({ approvedIds, skipped })
       }
+      const position = /^\/api\/knowledge\/artifacts\/([^/]+)\/units\/([^/]+)\/position$/.exec(path)
+      if (method === 'POST' && position) {
+        if (fake.fail['POST position']) return refuse(fake.fail['POST position'])
+        const sourceId = position[1] ?? ''
+        const unitId = position[2] ?? ''
+        const part = (fake.units[sourceId] ?? []).find((entry) => entry.id === unitId)
+        if (!part) return refuse(404)
+        const list = fake.candidates[sourceId] ?? []
+        if (part.recordKindOverride || list.some((entry) => entry.extractionUnitId === unitId)) return refuse(409)
+        const made = candidate({
+          id: `c-${unitId}`,
+          artifactId: sourceId,
+          extractionUnitId: unitId,
+          reviewStatus: 'PENDING',
+          reviewCategory: 'ROUTINE',
+          rawLabel: part.title ?? 'Part',
+          contentText: part.contentText,
+        })
+        fake.candidates[sourceId] = [...list, made]
+        fake.units[sourceId] = (fake.units[sourceId] ?? []).map((entry) =>
+          entry.id === unitId
+            ? { ...entry, recordKindOverride: 'POSITION', recordKindOverriddenAt: '2026-10-12T10:00:00Z' }
+            : entry,
+        )
+        return envelope([made], 201)
+      }
       const decision = /^\/api\/knowledge\/candidates\/([^/]+)\/(approve|reject|edit|concept)$/.exec(path)
       if (method === 'POST' && decision) {
         const id = decision[1] ?? ''

@@ -253,6 +253,8 @@ export type FindingSummary = {
   /** Who decided: 'JEV' (Rivell's first review), 'SECOND_OPINION' or 'NEEDS_YOUR_LOOK' (the user decides). Null for other findings. */
   decidedBy: string | null
   createdAt: string
+  /** The user who added this finding because Rivell missed it; null for Rivell's own findings. */
+  addedBy: string | null
 }
 
 export type FindingListResponse = {
@@ -655,6 +657,34 @@ function parseFindingSummary(value: unknown, what: string): FindingSummary {
     relatedPosition: readOptionalBoolean(finding, 'relatedPosition', what),
     decidedBy: readOptionalNullableString(finding, 'decidedBy', what),
     createdAt: readOptionalNullableString(finding, 'createdAt', what) ?? '',
+    addedBy: readOptionalNullableString(finding, 'addedBy', what),
+  }
+}
+
+const CLAUSE_MARKS = ['FLAGGED', 'CHECKED', 'NOT_COVERED', 'NOT_ANALYSED'] as const
+
+/** What a review did with one planned clause (spec §9). */
+export type ClauseMark = (typeof CLAUSE_MARKS)[number]
+
+export type ClauseMarksResponse = {
+  /** Null while no analysis has completed: there is nothing to mark yet. */
+  runId: string | null
+  clauses: { headingNodeId: string; mark: ClauseMark }[]
+}
+
+function parseClauseMarks(value: unknown, what: string): ClauseMarksResponse {
+  const record = asRecord(value, what)
+  return {
+    runId: readOptionalNullableString(record, 'runId', what),
+    clauses: readArray(record, 'clauses', what, (entry, entryWhat) => {
+      const clause = asRecord(entry, entryWhat)
+      const mark = readStatus(clause, 'mark', CLAUSE_MARKS)
+      return {
+        headingNodeId: readString(clause, 'headingNodeId', entryWhat),
+        // an unknown mark is shown as not analysed: never as checked
+        mark: mark === 'UNKNOWN' ? 'NOT_ANALYSED' : mark,
+      }
+    }),
   }
 }
 
@@ -882,6 +912,7 @@ export const reviewKeys = {
     ] as const,
   finding: (reviewId: string, findingId: string) =>
     ['reviews', 'finding', reviewId, findingId] as const,
+  clauseMarks: (reviewId: string) => ['reviews', 'clause-marks', reviewId] as const,
 }
 
 export async function fetchReviewPacks(): Promise<ReviewPack[]> {
@@ -1039,6 +1070,20 @@ export async function fetchFindingList(
   return parseApiResult(data, parseFindingList, 'finding list')
 }
 
+export async function fetchClauseMarks(reviewId: string): Promise<ClauseMarksResponse> {
+  const client = createApiClient()
+  const { data, response } = await client.GET('/api/reviews/{id}/clause-marks', {
+    params: { path: { id: reviewId } },
+  })
+  if (!data) {
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Clause marks unavailable'),
+      response.status,
+    )
+  }
+  return parseApiResult(data, parseClauseMarks, 'clause marks')
+}
+
 export async function fetchFindingDetail(
   reviewId: string,
   findingId: string,
@@ -1132,6 +1177,19 @@ export function useFindingsQuery(
   return useQuery({
     queryKey: reviewKeys.findings(reviewId ?? '', filters),
     queryFn: reviewId ? () => fetchFindingList(reviewId, filters) : skipToken,
+    enabled: Boolean(reviewId) && enabled,
+    retry: reviewRetry,
+  })
+}
+
+/** What the active run did with each planned clause; refetched when a finding is added. */
+export function useClauseMarksQuery(
+  reviewId: string | undefined,
+  enabled: boolean,
+): UseQueryResult<ClauseMarksResponse> {
+  return useQuery({
+    queryKey: reviewKeys.clauseMarks(reviewId ?? ''),
+    queryFn: reviewId ? () => fetchClauseMarks(reviewId) : skipToken,
     enabled: Boolean(reviewId) && enabled,
     retry: reviewRetry,
   })

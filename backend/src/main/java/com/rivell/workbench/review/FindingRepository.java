@@ -14,6 +14,12 @@ public interface FindingRepository {
     void replaceFindings(
             UUID organizationId, UUID reviewId, UUID runId, List<Finding> findings);
 
+    /**
+     * Adds one finding to a completed run: a person's addition. The run's assembled findings
+     * stay as they are; a later re-assembly of the same run never happens (runs complete once).
+     */
+    void addFinding(Finding finding);
+
     /** Deletes a run's findings (derived state) when its checks are re-executed. */
     void deleteFindings(UUID organizationId, UUID runId);
 

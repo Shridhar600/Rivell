@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FindingQuality } from '../api/reviews'
-import { decidedByLabel } from './reviews'
+import { clauseMarkLabel, clauseMarksLegend, decidedByLabel, findingIssueLabel } from './reviews'
 
 const quality = (overrides: Partial<FindingQuality>): FindingQuality => ({
   sufficiency: null,
@@ -35,5 +35,30 @@ describe('decidedByLabel', () => {
   it('shows nothing for a finding that carries no route', () => {
     expect(decidedByLabel(quality({}))).toBeNull()
     expect(decidedByLabel(null)).toBeNull()
+  })
+})
+
+describe('clause marks', () => {
+  it('says in plain words what Rivell did with each clause', () => {
+    expect(clauseMarkLabel('FLAGGED')).toBe('Flagged')
+    expect(clauseMarkLabel('CHECKED')).toBe('Checked — no issue found')
+    expect(clauseMarkLabel('NOT_COVERED')).toBe('Not covered by your playbook')
+    expect(clauseMarkLabel('NOT_ANALYSED')).toBe('Not analysed — the check did not finish')
+    expect(clauseMarkLabel('NOT_PLANNED')).toBe('Not reviewed — outside the review plan')
+  })
+
+  it('counts the marks for the legend and leaves out a mark no clause has', () => {
+    expect(clauseMarksLegend(['FLAGGED', 'CHECKED', 'CHECKED', 'NOT_ANALYSED', 'NOT_PLANNED'])).toBe(
+      '1 flagged · 2 checked · 1 not analysed · 1 not reviewed',
+    )
+    expect(clauseMarksLegend([])).toBe('')
+  })
+})
+
+describe('a finding a reviewer added', () => {
+  it('is listed as added by a reviewer', () => {
+    expect(findingIssueLabel({ issueFamily: 'USER_ADDED', observationKind: 'USER_ADDED' })).toBe(
+      'Added by a reviewer',
+    )
   })
 })

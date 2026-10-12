@@ -139,6 +139,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 truncate(clause.contentText(), MAX_CLAUSE_LENGTH));
         if (positions.isEmpty()) {
             // no applicable position: only the uncovered-clause triage runs
+            detail.put("addressed", false);
             var signals = new ArrayList<>(uncovered(context, clause, bundle, state, detail));
             signals.addAll(spotted(context, clause, bundle, signals, detail));
             return CheckOutcome.completed(signals, detail, bundle.traceId())
@@ -166,6 +167,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     positions.get(index),
                     PolicyComparisonOutcome.judge(choice, properties.flagThreshold())));
         }
+        // the clause marks read this: a clause a position addresses was checked against the playbook
+        detail.put("addressed", judgedPositions.stream()
+                .anyMatch(PolicyComparisonCheckExecutor::addresses));
         var opinions = secondOpinions(context, clause, state, judgedPositions);
         var v2 = context.snapshot().reviewEngine() == ReviewEngine.V2;
         var probe = probe(clause, positions, state, detail);

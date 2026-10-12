@@ -211,6 +211,48 @@ export const fixtureAbsenceFindingSummary = {
   createdAt: '2026-09-25T09:01:10Z',
 }
 
+/** A finding a reviewer added on a clause Rivell passed (P2b): no proposal, decided like any other. */
+export const fixtureUserFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-user',
+  subjectHeadingNodeId: 'node-1',
+  concept: 'DEFINITIONS',
+  issueFamily: 'USER_ADDED',
+  observationKind: 'USER_ADDED',
+  severity: 'HIGH',
+  proposedAction: 'NO_ACTION',
+  proposedLanguageSource: 'NONE',
+  addedBy: 'u-1',
+}
+
+export const fixtureUserFindingDetail = {
+  ...fixtureUserFindingSummary,
+  reviewId: 'r-1',
+  runId: 'run-1',
+  concepts: ['DEFINITIONS'],
+  observationText: 'The definition of Services has no carve-out for third-party software.',
+  proposedLanguage: null,
+  approvedDraftingEvidenceId: null,
+  quality: {},
+  claims: [],
+  evidenceItems: [],
+  evidenceItemIds: [],
+  positionComparison: null,
+  signalIds: [],
+  absenceBasis: null,
+}
+
+/** Every mark once on the fixture contract; "Northwind Customer Group LLC" (node-10) is unplanned. */
+export const fixtureClauseMarks = {
+  runId: 'run-1',
+  clauses: [
+    { headingNodeId: 'node-1', mark: 'CHECKED' },
+    { headingNodeId: 'node-5', mark: 'NOT_COVERED' },
+    { headingNodeId: 'node-6', mark: 'FLAGGED' },
+    { headingNodeId: 'node-9', mark: 'NOT_ANALYSED' },
+  ],
+}
+
 export const fixtureFindingList = {
   items: [fixtureClauseFindingSummary, fixtureAbsenceFindingSummary],
   truncated: false,

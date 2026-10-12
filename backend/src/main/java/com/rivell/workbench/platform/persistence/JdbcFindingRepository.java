@@ -52,6 +52,13 @@ class JdbcFindingRepository implements FindingRepository {
 
     @Override
     @Transactional
+    public void addFinding(Finding finding) {
+        insertFinding(finding);
+        insertChildren(finding);
+    }
+
+    @Override
+    @Transactional
     public void deleteFindings(UUID organizationId, UUID runId) {
         deleteRunFindings(organizationId, runId);
     }
@@ -92,13 +99,13 @@ class JdbcFindingRepository implements FindingRepository {
                    issue_family, observation_kind, observation_text, severity,
                    review_classification, proposed_action, proposed_language,
                    proposed_language_source, approved_drafting_evidence_id, quality,
-                   created_at)
+                   created_at, added_by)
                 values (:id, :organizationId, :reviewId, :runId, :consolidationKey,
                    :subjectKind, :subjectHeadingNodeId, :absenceConcept, :concept,
                    :secondaryConcept, :issueFamily, :observationKind, :observationText,
                    :severity, :reviewClassification, :proposedAction, :proposedLanguage,
                    :proposedLanguageSource, :approvedDraftingEvidenceId,
-                   cast(:quality as jsonb), :createdAt)
+                   cast(:quality as jsonb), :createdAt, :addedBy)
                 """)
                 .param("id", finding.id())
                 .param("organizationId", finding.organizationId())
@@ -123,6 +130,7 @@ class JdbcFindingRepository implements FindingRepository {
                 .param("approvedDraftingEvidenceId", finding.approvedDraftingEvidenceId())
                 .param("quality", json(finding.quality()))
                 .param("createdAt", timestamp(finding.createdAt()))
+                .param("addedBy", finding.addedBy())
                 .update();
     }
 
@@ -215,7 +223,7 @@ class JdbcFindingRepository implements FindingRepository {
                        secondary_concept, issue_family, observation_kind, observation_text,
                        severity, review_classification, proposed_action, proposed_language,
                        proposed_language_source, approved_drafting_evidence_id, quality,
-                       created_at
+                       created_at, added_by
                 from finding
                 where run_id = :runId and organization_id = :organizationId
                 order by consolidation_key
@@ -283,7 +291,7 @@ class JdbcFindingRepository implements FindingRepository {
                        secondary_concept, issue_family, observation_kind, observation_text,
                        severity, review_classification, proposed_action, proposed_language,
                        proposed_language_source, approved_drafting_evidence_id, quality,
-                       created_at
+                       created_at, added_by
                 from finding
                 where %s
                 order by case severity when 'HIGH' then 0 when 'MEDIUM' then 1 else 2 end,
@@ -310,7 +318,7 @@ class JdbcFindingRepository implements FindingRepository {
                        secondary_concept, issue_family, observation_kind, observation_text,
                        severity, review_classification, proposed_action, proposed_language,
                        proposed_language_source, approved_drafting_evidence_id, quality,
-                       created_at
+                       created_at, added_by
                 from finding
                 where id = :findingId and review_id = :reviewId and run_id = :runId
                   and organization_id = :organizationId
@@ -418,7 +426,7 @@ class JdbcFindingRepository implements FindingRepository {
                 row.observationKind(), row.observationText(), row.severity(),
                 row.reviewClassification(), row.proposedAction(), row.proposedLanguage(),
                 row.proposedLanguageSource(), row.approvedDraftingEvidenceId(), row.quality(),
-                row.createdAt(), concepts, claims, evidence, signals);
+                row.createdAt(), concepts, claims, evidence, signals, row.addedBy());
     }
 
     private FindingRow mapFindingRow(java.sql.ResultSet rs) throws java.sql.SQLException {
@@ -445,7 +453,8 @@ class JdbcFindingRepository implements FindingRepository {
                 ProposedLanguageSource.valueOf(rs.getString("proposed_language_source")),
                 rs.getObject("approved_drafting_evidence_id", UUID.class),
                 map(rs.getString("quality")),
-                rs.getTimestamp("created_at").toInstant());
+                rs.getTimestamp("created_at").toInstant(),
+                rs.getObject("added_by", UUID.class));
     }
 
     @Override
@@ -541,7 +550,7 @@ class JdbcFindingRepository implements FindingRepository {
             FindingSeverity severity, FindingClassification reviewClassification,
             ProposedAction proposedAction, String proposedLanguage,
             ProposedLanguageSource proposedLanguageSource, UUID approvedDraftingEvidenceId,
-            Map<String, Object> quality, java.time.Instant createdAt) {
+            Map<String, Object> quality, java.time.Instant createdAt, UUID addedBy) {
     }
 
     private record ConceptRow(UUID findingId, ConceptKey concept) {

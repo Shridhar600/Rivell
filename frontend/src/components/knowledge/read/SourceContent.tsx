@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Link } from 'react-router'
 import type { ArtifactType, Candidate } from '../../../api/knowledge'
 import type { SourceBlock } from '../../../lib/knowledgeSource'
+import { UNIT_MARK_LABELS, type UnitMark } from '../../../lib/knowledgeMarks'
 import { ArrowRightIcon, ChevronIcon } from '../../ui/Icon'
 
 interface SourceContentProps {
@@ -13,6 +14,8 @@ interface SourceContentProps {
   onSelect: (candidateId: string | null) => void
   /** Where the selected candidate can be opened as published knowledge, when it can. */
   openTo: (candidate: Candidate) => { to: string; label: string } | null
+  /** Parts Rivell did not take, by source node: shown on the passage so no part looks silently dropped. */
+  partMarks?: ReadonlyMap<string, Exclude<UnitMark, 'ABSORBED'>>
 }
 
 const PRODUCED_TITLE: Partial<Record<ArtifactType, string>> = {
@@ -20,7 +23,7 @@ const PRODUCED_TITLE: Partial<Record<ArtifactType, string>> = {
   CLAUSE_LIBRARY: 'Produced clauses',
 }
 
-function Passage({ block, selectedId, onSelect }: { block: SourceBlock; selectedId: string | null; onSelect: (id: string | null) => void }) {
+function Passage({ block, selectedId, onSelect, mark }: { block: SourceBlock; selectedId: string | null; onSelect: (id: string | null) => void; mark?: Exclude<UnitMark, 'ABSORBED'> }) {
   const body =
     block.candidateIds.length > 0 ? (
       <button
@@ -35,7 +38,14 @@ function Passage({ block, selectedId, onSelect }: { block: SourceBlock; selected
     ) : (
       block.text
     )
-  return block.kind === 'title' || block.kind === 'heading' ? <h4>{body}</h4> : <p>{body}</p>
+  const tagged = mark ? (
+    <>
+      {body} <span className={`rv-k-partmark rv-k-partmark--${mark === 'MISSED' ? 'missed' : 'other'}`}>{UNIT_MARK_LABELS[mark]}</span>
+    </>
+  ) : (
+    body
+  )
+  return block.kind === 'title' || block.kind === 'heading' ? <h4>{tagged}</h4> : <p>{tagged}</p>
 }
 
 /**
@@ -43,7 +53,7 @@ function Passage({ block, selectedId, onSelect }: { block: SourceBlock; selected
  * exact source node (paragraph or row) the extraction unit recorded for a published candidate.
  * It is node-level lineage: it does not claim to mark individual words.
  */
-export function SourceContent({ type, blocks, produced, selectedId, onSelect, openTo }: SourceContentProps) {
+export function SourceContent({ type, blocks, produced, selectedId, onSelect, openTo, partMarks }: SourceContentProps) {
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!selectedId) return
@@ -66,7 +76,7 @@ export function SourceContent({ type, blocks, produced, selectedId, onSelect, op
         </div>
         <div className="rv-k-srcdoc" ref={root}>
           {blocks.map((block) => (
-            <Passage key={block.id} block={block} selectedId={selectedId} onSelect={onSelect} />
+            <Passage key={block.id} block={block} selectedId={selectedId} onSelect={onSelect} mark={partMarks?.get(block.id)} />
           ))}
         </div>
       </div>

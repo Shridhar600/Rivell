@@ -84,7 +84,7 @@ public final class FindingAssembler {
                 primary.issueFamily(), observation.kind(), observation.text(),
                 severity, classification(primary, escalation), action, proposedLanguage,
                 languageSource, draftingEvidenceId, quality, now, concepts, claims,
-                evidence, group.stream().map(RawReviewSignal::id).toList());
+                evidence, group.stream().map(RawReviewSignal::id).toList(), null);
     }
 
     /** The issue-bearing signal of a group; support-only groups yield no finding. */

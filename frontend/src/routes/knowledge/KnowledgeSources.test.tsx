@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { buildWorld, renderKnowledge, stubKnowledgeApi } from './knowledgeWorld'
+import { unit } from '../../test/knowledgeFixtures'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -88,6 +89,21 @@ describe('Source detail and lineage', () => {
     expect(highlighted.map((b) => b.textContent)).toEqual(['Limitation of Liability', 'A cap at twelve months of fees is preferred.', 'Net 45.'])
     // A node no unit recorded is shown, unhighlighted.
     expect(screen.getByText('Unrelated source text.').closest('button')).toBeNull()
+  })
+
+  it('marks a part Rivell did not take as a position with Rivell\u2019s reading of it', async () => {
+    const world = buildWorld()
+    world.units.pb = [
+      ...(world.units.pb ?? []),
+      unit({ id: 'u-other', artifactId: 'pb', sourceNodeIds: ['n-other'], contentText: 'Unrelated source text.', recordKind: 'GUIDANCE' }),
+    ]
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/sources/pb')
+    await screen.findByRole('heading', { name: 'Original content' })
+    const passage = (await screen.findByText('Unrelated source text.')).closest('p') as HTMLElement
+    expect(await within(passage).findByText('Not a position (Rivell\u2019s reading)')).toBeInTheDocument()
+    // a part that became knowledge carries no such mark
+    expect(screen.getByText('Net 45.').closest('p')).not.toHaveTextContent('Not a position')
   })
 
   it('claims node-level lineage only, and no page number', async () => {

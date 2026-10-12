@@ -27,6 +27,7 @@ import {
 } from '../../lib/knowledgeCatalog'
 import { ARTIFACT_TYPE_LABELS, formatBytes, shortSha } from '../../lib/knowledgeLabels'
 import { highlightMap, sourceBlocks } from '../../lib/knowledgeSource'
+import { partMarksByNode } from '../../lib/knowledgeMarks'
 import { SourceContent } from '../../components/knowledge/read/SourceContent'
 
 export function SourceDetailPage() {
@@ -82,6 +83,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
   )
   const highlights = useMemo(() => highlightMap(produced, units.data ?? []), [produced, units.data])
   const blocks = useMemo(() => sourceBlocks(structure.data ?? [], highlights), [structure.data, highlights])
+  const partMarks = useMemo(() => partMarksByNode(units.data ?? [], source.candidates), [units.data, source.candidates])
   const selectedId = produced.some((candidate) => candidate.id === params.get('position')) ? params.get('position') : null
   const select = (id: string | null) =>
     setParams(
@@ -176,6 +178,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
           selectedId={selectedId}
           onSelect={select}
           openTo={(candidate) => openTarget(source, candidate)}
+          partMarks={partMarks}
         />
       ) : (
         <div className="rv-k-list">

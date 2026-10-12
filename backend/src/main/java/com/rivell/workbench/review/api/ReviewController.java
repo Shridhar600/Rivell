@@ -112,6 +112,16 @@ class ReviewController {
         return ApiResult.ok(apiService.findings(id, concept, classification, severity, limit));
     }
 
+    @Operation(summary = "One mark per planned clause of the active run: flagged, checked, "
+            + "not covered by the playbook, or not analysed")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses(@ApiResponse(responseCode = "404", description = "Unknown review",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))))
+    @GetMapping("/reviews/{id}/clause-marks")
+    ApiResult<ClauseMarksView> clauseMarks(@PathVariable UUID id) {
+        return ApiResult.ok(apiService.clauseMarks(id));
+    }
+
     @Operation(summary = "Get one finding's detail with claims, evidence, and absence basis")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses(@ApiResponse(responseCode = "404", description = "Unknown finding",

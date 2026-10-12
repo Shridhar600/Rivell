@@ -7,9 +7,14 @@ import { AppProviders } from '../app/AppProviders'
 import { appRoutes } from '../app/router'
 import { stubContractApi, type StubOptions } from '../components/contract/testFixtures'
 import {
+  fixtureAbsenceFindingSummary,
   fixtureClauseFindingDetail,
+  fixtureClauseFindingSummary,
+  fixtureClauseMarks,
   fixtureCompletedReviewSummary,
   fixtureFindingList,
+  fixtureUserFindingDetail,
+  fixtureUserFindingSummary,
 } from '../components/review/testFixtures'
 import { fixtureChangeSet, fixtureDecision, fixtureHumanReview } from '../components/review/workflowFixtures'
 
@@ -271,5 +276,134 @@ describe('keyboard and command menu', () => {
     await userEvent.click(within(await topBar()).getByRole('button', { name: 'Toggle Findings list' }))
     expect(localStorage.getItem('rv-l')).toBe('c')
     expect(within(await topBar()).getByRole('button', { name: 'Toggle Findings list' })).toHaveAttribute('aria-pressed', 'false')
+  })
+})
+
+function apiResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify({ data, status, timestamp: '2026-09-24T05:00:00Z' }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+/** The clause block that holds a heading: the unit the marks and the add action belong to. */
+async function clauseOf(heading: string): Promise<HTMLElement> {
+  const page = await screen.findByRole('article')
+  // the marks arrive after the contract text, from their own request
+  return waitFor(() => {
+    const clause = within(page).getByText(heading).closest<HTMLElement>('[data-mark]')
+    if (!clause) throw new Error(`no marked clause around ${heading}`)
+    return clause
+  })
+}
+
+describe('the whole contract under your control', () => {
+  it('marks every clause with what Rivell did with it, and counts the marks', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    expect(within(await clauseOf('1. Definitions')).getByText('Checked — no issue found')).toBeInTheDocument()
+    expect(within(await clauseOf('5. Termination')).getByText('Not covered by your playbook')).toBeInTheDocument()
+    expect(within(await clauseOf('6. Limitation of Liability')).getByText('Flagged')).toBeInTheDocument()
+    expect(
+      within(await clauseOf('Schedule A — Services')).getByText('Not analysed — the check did not finish'),
+    ).toBeInTheDocument()
+    // a heading the review did not plan: Rivell did not look at it, and says so differently
+    expect(
+      within(await clauseOf('Northwind Customer Group LLC')).getByText('Not reviewed — outside the review plan'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('main', { name: 'Contract' })).toHaveTextContent(
+      '1 flagged · 1 checked · 1 not covered · 1 not analysed · 1 not reviewed',
+    )
+  })
+
+  it('shows no marks before an analysis completed', async () => {
+    renderWorkspace(stubContractApi(options()))
+    const page = await screen.findByRole('article')
+    await within(page).findByText('1. Definitions')
+    expect(within(page).queryByText('Checked — no issue found')).not.toBeInTheDocument()
+    expect(within(page).queryByText(/Not analysed|Not reviewed/)).not.toBeInTheDocument()
+  })
+
+  it('lets you add a finding on a clause Rivell passed, and opens it selected', async () => {
+    let added = false
+    const api = stubContractApi(
+      options({
+        clauseMarks: fixtureClauseMarks,
+        findingsResponse: () =>
+          apiResponse({
+            items: added
+              ? [fixtureClauseFindingSummary, fixtureAbsenceFindingSummary, fixtureUserFindingSummary]
+              : [fixtureClauseFindingSummary, fixtureAbsenceFindingSummary],
+            truncated: false,
+          }),
+        findingDetailResponse: (findingId) =>
+          apiResponse(findingId === 'f-user' ? fixtureUserFindingDetail : fixtureClauseFindingDetail),
+        addFindingResponse: () => {
+          added = true
+          return apiResponse({ findingId: 'f-user' }, 201)
+        },
+      }),
+    )
+    const router = renderWorkspace(api)
+    const clause = await clauseOf('1. Definitions')
+    await userEvent.click(within(clause).getByRole('button', { name: 'Add a finding' }))
+
+    await userEvent.click(within(clause).getByRole('button', { name: 'Add finding' }))
+    expect(within(clause).getByText('Say what Rivell missed.')).toBeInTheDocument()
+    expect(api.requests.some((request) => request.method === 'POST' && request.url.endsWith('/findings'))).toBe(false)
+
+    await userEvent.type(
+      within(clause).getByRole('textbox', { name: 'What did Rivell miss?' }),
+      'The definition of Services has no carve-out for third-party software.',
+    )
+    await userEvent.selectOptions(within(clause).getByRole('combobox', { name: 'Severity' }), 'HIGH')
+    await userEvent.click(within(clause).getByRole('button', { name: 'Add finding' }))
+
+    await waitFor(() => expect(router.state.location.search).toBe('?finding=f-user'))
+    const post = api.requests.find((request) => request.method === 'POST' && request.url.endsWith('/findings'))
+    expect(post?.body).toEqual({
+      headingNodeId: 'node-1',
+      severity: 'HIGH',
+      note: 'The definition of Services has no carve-out for third-party software.',
+    })
+    const panel = await detail()
+    expect(await within(panel).findByText('The definition of Services has no carve-out for third-party software.')).toBeInTheDocument()
+    // the note is the reviewer's, never presented as Rivell's analysis or recommendation
+    expect(within(panel).getByText('Reviewer\u2019s note')).toBeInTheDocument()
+    expect(within(panel).queryByText('Rivell found')).not.toBeInTheDocument()
+    expect(within(panel).queryByText('Recommendation:')).not.toBeInTheDocument()
+    expect(within(panel).queryByText('Rivell\u2019s recommendation is kept separately')).not.toBeInTheDocument()
+    expect(within(panel).getAllByText(/Added by a reviewer/)).toHaveLength(1)
+  })
+
+  it('offers no add on a heading outside the review plan, where the server would refuse it', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    const unplanned = await clauseOf('Northwind Customer Group LLC')
+    expect(within(unplanned).getByText('Not reviewed — outside the review plan')).toBeInTheDocument()
+    expect(within(unplanned).queryByRole('button', { name: 'Add a finding' })).not.toBeInTheDocument()
+    expect(within(await clauseOf('5. Termination')).getByRole('button', { name: 'Add a finding' })).toBeInTheDocument()
+  })
+
+  it('warns that two changes on one clause cannot both be approved', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    const clause = await clauseOf('6. Limitation of Liability')
+    await userEvent.click(within(clause).getByRole('button', { name: 'Add a finding' }))
+    expect(
+      within(clause).getByText('This clause already has a finding. Two changes on one clause cannot both be approved.'),
+    ).toBeInTheDocument()
+  })
+
+  it('offers no add once the review is finalized', async () => {
+    renderWorkspace(
+      stubContractApi(
+        options({
+          clauseMarks: fixtureClauseMarks,
+          humanReview: fixtureHumanReview({ status: 'COMPLETED', readyToFinalize: false, changeSetId: 'cs-1', finalizedAt: '2026-09-26T11:00:00Z' }),
+          changeSet: fixtureChangeSet(),
+        }),
+      ),
+    )
+    const clause = await clauseOf('1. Definitions')
+    expect(within(clause).getByText('Checked — no issue found')).toBeInTheDocument()
+    expect(within(clause).queryByRole('button', { name: 'Add a finding' })).not.toBeInTheDocument()
   })
 })

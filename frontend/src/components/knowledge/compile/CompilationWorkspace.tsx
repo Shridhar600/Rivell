@@ -8,6 +8,7 @@ import {
   useCandidatesQuery,
   useExtractionUnitsQuery,
   useKnowledgeStructureQuery,
+  useMakePosition,
   type ArtifactDetail,
   type Candidate,
 } from '../../../api/knowledge'
@@ -16,6 +17,7 @@ import type { PublishedCompilation as PublishedResult } from '../../../api/knowl
 import { groupCandidates, isPublishedCompilation, nextTarget, publishedDestination, readiness } from '../../../lib/compilation'
 import { buildPublicationIndex } from '../../../lib/knowledgeCatalog'
 import { candidateLocations, highlightMap, indexNodes, passagesIn, sourceBlocks } from '../../../lib/knowledgeSource'
+import { unitMark } from '../../../lib/knowledgeMarks'
 import { publishedState } from '../../../lib/publishedNotice'
 import { EmptyState, ErrorState, LoadingState } from '../../ui/State'
 import { LinkButton } from '../../ui/Button'
@@ -61,9 +63,14 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
   const [publishing, setPublishing] = useState(false)
 
   const candidates = useMemo(() => candidatesQuery.data ?? [], [candidatesQuery.data])
-  const groups = useMemo(() => groupCandidates(candidates, solo), [candidates, solo])
-  const state = useMemo(() => readiness(candidates), [candidates])
   const units = unitsQuery.data
+  // A position a person made is always reviewed on its own, never inside the straightforward group.
+  const reviewAlone = useMemo(() => {
+    const made = new Set((units ?? []).filter((entry) => entry.recordKindOverride !== null).map((entry) => entry.id))
+    return new Set([...solo, ...candidates.filter((candidate) => made.has(candidate.extractionUnitId)).map((candidate) => candidate.id)])
+  }, [solo, units, candidates])
+  const groups = useMemo(() => groupCandidates(candidates, reviewAlone), [candidates, reviewAlone])
+  const state = useMemo(() => readiness(candidates), [candidates])
   const nodes = structureQuery.data
   const structureReady = units !== undefined && nodes !== undefined
 
@@ -71,12 +78,20 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
   const byId = useMemo(() => (nodes ? indexNodes(nodes) : null), [nodes])
   const locations = useMemo(() => (structureReady ? candidateLocations(candidates, units, nodes) : new Map<string, string | null>()), [structureReady, candidates, units, nodes])
   const unitsById = useMemo(() => new Map((units ?? []).map((entry) => [entry.id, entry])), [units])
-  // Records the compiler kept as units. Only kind-assessed units are shown: without a record kind
-  // there was no kind gate to exclude them, so listing them as "not compiled" would mislead.
-  const uncompiled = useMemo(() => {
-    const compiled = new Set(candidates.map((candidate) => candidate.extractionUnitId))
-    return (units ?? []).filter((entry) => entry.recordKind !== null && !compiled.has(entry.id))
+  // Parts the compiler kept as units, by what Rivell read them as. Only kind-assessed parts with text
+  // are listed: without a record kind there was no kind gate to exclude them, so listing them as
+  // "not compiled" would mislead.
+  const { notPosition, missed } = useMemo(() => {
+    const parts = units ?? []
+    return {
+      notPosition: parts.filter((entry) => unitMark(entry, candidates) === 'NOT_A_POSITION'),
+      missed: parts.filter((entry) => unitMark(entry, candidates) === 'MISSED'),
+    }
   }, [units, candidates])
+  // Only playbooks and clause libraries sort their parts into positions, so only there can a
+  // person overrule that reading.
+  const makePositionMutation = useMakePosition(artifact.id)
+  const sortsPositions = artifact.artifactType === 'PLAYBOOK' || artifact.artifactType === 'CLAUSE_LIBRARY'
   const index = useMemo(() => (publicationsQuery.data ? buildPublicationIndex(publicationsQuery.data) : null), [publicationsQuery.data])
 
   const update = useCallback(
@@ -108,6 +123,13 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       next.delete('context')
     })
   }, [update])
+  const makePosition = useCallback(
+    async (unitId: string) => {
+      const made = await makePositionMutation.mutateAsync(unitId)
+      if (made[0]) select(made[0].id)
+    },
+    [makePositionMutation, select],
+  )
   const reread = useCallback(() => void queryClient.invalidateQueries({ queryKey: knowledgeKeys.candidates(artifact.id) }), [queryClient, artifact.id])
 
   // ------------------------------------------------------------ what is open
@@ -140,7 +162,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
 
   // ---------------------------------------------------------------- moving on
   function goNext(from: string) {
-    const target = nextTarget(candidates, from, solo)
+    const target = nextTarget(candidates, from, reviewAlone)
     if (target?.kind === 'candidate') select(target.id)
     else if (target?.kind === 'bulk') openGroup()
   }
@@ -260,7 +282,9 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       readiness={state}
       locations={locations}
       unitsById={unitsById}
-      uncompiled={uncompiled}
+      notPosition={notPosition}
+      missed={missed}
+      onMakePosition={sortsPositions ? makePosition : null}
       selectedId={selected?.id ?? null}
       groupSelected={open?.kind === 'group'}
       onSelect={select}
@@ -270,7 +294,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
   if (candidates.length === 0) {
     // No candidate at all: the units the kind gate kept are still shown, so no record is dropped.
     return (
-      <CompileLayout top={top} rail={uncompiled.length > 0 ? rail : undefined} railOpen={railOpen}>
+      <CompileLayout top={top} rail={notPosition.length + missed.length > 0 ? rail : undefined} railOpen={railOpen}>
         <div className="rv-kc-center">
           <EmptyState
             title="No candidates were compiled"

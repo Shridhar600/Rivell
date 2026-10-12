@@ -124,7 +124,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({InvalidCandidateReviewStateException.class, InvalidPublicationException.class,
             EnrichmentInProgressException.class, EnrichmentFailedException.class,
-            EnrichmentNotReadyException.class, ClauseNotClassifiedException.class})
+            EnrichmentNotReadyException.class, ClauseNotClassifiedException.class,
+            com.rivell.workbench.knowledge.UnitNotMarkableException.class})
     ResponseEntity<ErrorResponse> invalidState(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }

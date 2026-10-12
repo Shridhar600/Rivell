@@ -322,6 +322,24 @@ public class ReviewApiService {
         return new FindingListResponse(items, truncated);
     }
 
+    /** What the active run did with each planned clause: flagged, checked, not covered, not analysed. */
+    public ClauseMarksView clauseMarks(UUID reviewId) {
+        var organizationId = requireRead();
+        requireReview(organizationId, reviewId);
+        var activeRun = analysisRepository.findLatestCompletedRun(organizationId, reviewId);
+        if (activeRun.isEmpty()) {
+            return new ClauseMarksView(null, List.of());
+        }
+        var runId = activeRun.get().id();
+        var marks = com.rivell.workbench.review.ClauseMarks.of(
+                reviewRepository.findPlanChecks(organizationId, reviewId),
+                analysisRepository.findExecutions(organizationId, runId),
+                findingRepository.findFindings(organizationId, runId));
+        return new ClauseMarksView(runId, marks.entrySet().stream()
+                .map(entry -> new ClauseMarksView.Clause(entry.getKey(), entry.getValue()))
+                .toList());
+    }
+
     /** Optional request filter keyed by a taxonomy topic; unknown or malformed is a 400. */
     private ConceptKey requestConcept(String concept) {
         if (concept == null || concept.isBlank()) {
@@ -660,7 +678,11 @@ public class ReviewApiService {
                 finding.proposedLanguageSource(),
                 Boolean.TRUE.equals(finding.quality().get("secondaryTopic")),
                 finding.quality().get("route") instanceof String route ? route : null,
-                finding.createdAt());
+                finding.createdAt(), addedBy(finding));
+    }
+
+    private static String addedBy(Finding finding) {
+        return finding.addedBy() == null ? null : finding.addedBy().toString();
     }
 
     private static String name(ConceptKey concept) {
@@ -688,7 +710,7 @@ public class ReviewApiService {
                         .toList(),
                 finding.evidenceItemIds(), evidenceItems,
                 FindingPositionComparison.from(evidenceItems), finding.signalIds(), absenceBasis,
-                finding.createdAt());
+                finding.createdAt(), addedBy(finding));
     }
 
     private record Warnings(List<AnalysisWarningView> items, boolean truncated) {

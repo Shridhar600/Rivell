@@ -237,6 +237,9 @@ export interface ExtractionUnit {
   sourceNodeIds: string[]
   /** What the compiler judged this record to be. Null for data compiled before record kinds. */
   recordKind: RecordKind | null
+  /** A person's correction of that reading ("make this a position"); null when nobody corrected it. */
+  recordKindOverride: RecordKind | null
+  recordKindOverriddenAt: string | null
 }
 
 export interface ConflictSignal {
@@ -438,6 +441,12 @@ export function parseExtractionUnit(
       record.recordKind === undefined || record.recordKind === null
         ? null
         : readNullableEnum(record, 'recordKind', what, RECORD_KINDS),
+    recordKindOverride:
+      record.recordKindOverride === undefined || record.recordKindOverride === null
+        ? null
+        : readNullableEnum(record, 'recordKindOverride', what, RECORD_KINDS),
+    recordKindOverriddenAt:
+      typeof record.recordKindOverriddenAt === 'string' ? record.recordKindOverriddenAt : null,
   }
 }
 
@@ -778,6 +787,21 @@ export async function uploadKnowledge(
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
 }
 
+/** Makes a part Rivell did not take as a position into one; returns the new pending candidates. */
+async function makePosition(artifactId: string, unitId: string): Promise<Candidate[]> {
+  const client = createApiClient()
+  const { data, response } = await client.POST('/api/knowledge/artifacts/{artifactId}/units/{unitId}/position', {
+    params: { path: { artifactId, unitId } },
+  })
+  if (!data) {
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'The part could not be made a position'))
+  }
+  return parseApiResult(data, (value, what) => {
+    if (!Array.isArray(value)) throw new Error(`${what} is not a list`)
+    return value.map((entry, index) => parseCandidate(entry, `${what}[${index}]`))
+  }, 'made position')
+}
+
 async function approveCandidate(candidateId: string, note?: string): Promise<Candidate> {
   const client = createApiClient()
   const { data, response } = await client.POST('/api/knowledge/candidates/{id}/approve', {
@@ -1052,6 +1076,20 @@ export function useCorrectCandidateConcept(): UseMutationResult<Candidate, Error
   return useMutation({
     mutationFn: ({ candidateId, primary }: ConceptCorrectionVariables) => correctConcept(candidateId, primary),
     onSuccess: invalidate,
+  })
+}
+
+/** The part's units and candidates both change, so both are read again. */
+export function useMakePosition(artifactId: string): UseMutationResult<Candidate[], Error, string> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (unitId: string) => makePosition(artifactId, unitId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: knowledgeKeys.units(artifactId) }),
+        queryClient.invalidateQueries({ queryKey: knowledgeKeys.candidates(artifactId) }),
+      ])
+    },
   })
 }
 

@@ -583,7 +583,7 @@ class ReviewDiagnosticsQueryIT {
                     List.of(concept),
                     List.of(new FindingClaim(UUID.randomUUID(), 0,
                             ClaimKind.OBSERVATION, "claim " + i, true, List.of())),
-                    List.of(), List.of()));
+                    List.of(), List.of(), null));
         }
         return findings;
     }

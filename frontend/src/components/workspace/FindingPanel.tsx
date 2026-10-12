@@ -177,7 +177,9 @@ export function FindingPanel(props: Props) {
   const absences = absenceClaims(finding.claims)
   const quality = qualityFactorRows(finding.quality)
   const assessment = assessmentSummary(finding.quality)
-  const decidedBy = decidedByLabel(finding.quality)
+  // a finding a reviewer added has no machine decider; its kicker and note say who raised it
+  const added = Boolean(finding.addedBy)
+  const decidedBy = added ? null : decidedByLabel(finding.quality)
   const note = policyNoteText(finding)
   const position = policyPositionView(finding.positionComparison)
   // A within-fallback finding is a note, not a defect; a position that names an approver makes it
@@ -238,14 +240,18 @@ export function FindingPanel(props: Props) {
         ) : null}
 
         <div className="rv-ws-sec">
-          <div className="rv-ws-sec-h">Rivell found</div>
+          <div className="rv-ws-sec-h">{added ? 'Reviewer’s note' : 'Rivell found'}</div>
           <div className="rv-ws-machine">
             <p>
               {finding.observationText}
-              <br />
-              <span className="rv-ws-authority">
-                {related ? 'Related position — secondary topic' : observationKindLabel(finding.observationKind)}
-              </span>
+              {added ? null : (
+                <>
+                  <br />
+                  <span className="rv-ws-authority">
+                    {related ? 'Related position — secondary topic' : observationKindLabel(finding.observationKind)}
+                  </span>
+                </>
+              )}
             </p>
             {assessment ? (
               <p className="rv-ws-caption" data-testid="finding-assessment">
@@ -265,16 +271,18 @@ export function FindingPanel(props: Props) {
                 <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
               </p>
             ))}
-            <p>
-              <b>Recommendation:</b> {proposedActionLabel(finding.proposedAction)}.
-              {recommendations.map((claim) => (
-                <span key={claim.ordinal}>
-                  {' '}
-                  {claim.text}
-                  <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
-                </span>
-              ))}
-            </p>
+            {added ? null : (
+              <p>
+                <b>Recommendation:</b> {proposedActionLabel(finding.proposedAction)}.
+                {recommendations.map((claim) => (
+                  <span key={claim.ordinal}>
+                    {' '}
+                    {claim.text}
+                    <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
+                  </span>
+                ))}
+              </p>
+            )}
             {note ? <p>{note}</p> : null}
             {missingEvidence ? (
               <p className="rv-ws-warn">Some statements cite evidence this response does not include. They are not shown as grounded.</p>
@@ -442,7 +450,7 @@ export function FindingPanel(props: Props) {
           <>
             <div className="rv-ws-decide-h">
               <span>Your decision{decision ? `: ${state.label}` : ''}</span>
-              <span>Rivell’s recommendation is kept separately</span>
+              {added ? null : <span>Rivell’s recommendation is kept separately</span>}
             </div>
             <div className="rv-ws-dbtns">
               <Button

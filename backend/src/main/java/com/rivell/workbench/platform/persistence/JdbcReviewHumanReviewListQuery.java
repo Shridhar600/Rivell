@@ -140,7 +140,7 @@ class JdbcReviewHumanReviewListQuery implements ReviewHumanReviewListQuery {
                        f.observation_kind, f.observation_text, f.severity,
                        f.review_classification, f.proposed_action, f.proposed_language,
                        f.proposed_language_source, f.approved_drafting_evidence_id,
-                       f.created_at,
+                       f.created_at, f.added_by,
                        cd.id as d_id, cd.organization_id as d_organization_id,
                        cd.review_id as d_review_id, cd.finding_id as d_finding_id,
                        cd.run_id as d_run_id, cd.revision as d_revision,
@@ -230,7 +230,8 @@ class JdbcReviewHumanReviewListQuery implements ReviewHumanReviewListQuery {
                 rs.getObject("approved_drafting_evidence_id", UUID.class),
                 Map.of(),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
-                List.of(), List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(), List.of(),
+                rs.getObject("added_by", UUID.class));
     }
 
     private static <E extends Enum<E>> E enumOrNull(String value, Class<E> type) {

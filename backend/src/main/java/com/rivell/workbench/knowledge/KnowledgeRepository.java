@@ -47,6 +47,13 @@ public interface KnowledgeRepository {
 
     Optional<ExtractionUnit> findUnit(UUID unitId, UUID organizationId);
 
+    /**
+     * Records a person's record-kind correction on one part, once: false when the part already
+     * carries a correction (or is not this organization's), and nothing is written then.
+     */
+    boolean overrideRecordKind(UUID unitId, UUID organizationId, KnowledgeRecordKind kind,
+            UUID by, java.time.Instant at);
+
     List<KnowledgeCandidate> loadCandidates(UUID artifactId, UUID organizationId);
 
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);

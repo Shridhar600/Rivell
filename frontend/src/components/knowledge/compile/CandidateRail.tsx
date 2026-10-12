@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { ArtifactDetail, Candidate, ExtractionUnit, RecordKind } from '../../../api/knowledge'
 import { artifactFormat } from '../../../lib/knowledgeCatalog'
 import { RECORD_KIND_LABELS, UNIT_KIND_LABELS } from '../../../lib/knowledgeLabels'
@@ -26,7 +26,7 @@ function RecordKindTag({ kind }: { kind: RecordKind | null }) {
   return <span className="rv-kc-kind">{RECORD_KIND_LABELS[kind]}</span>
 }
 
-function Row({ candidate, selected, location, recordKind, onSelect }: { candidate: Candidate; selected: boolean; location: string | null; recordKind: RecordKind | null; onSelect: (id: string) => void }) {
+function Row({ candidate, selected, location, recordKind, madeByReviewer, onSelect }: { candidate: Candidate; selected: boolean; location: string | null; recordKind: RecordKind | null; madeByReviewer: boolean; onSelect: (id: string) => void }) {
   const outcome = outcomeOf(candidate)
   const open = outcome === 'pending' || outcome === 'corrected'
   const condition = open ? primaryCondition(candidate) : null
@@ -43,7 +43,14 @@ function Row({ candidate, selected, location, recordKind, onSelect }: { candidat
           {condition ? (
             <span className={`rv-kc-flag${condition.kind === 'supersession' ? ' rv-kc-flag--sup' : ''}`}>{condition.label}</span>
           ) : null}
-          <RecordKindTag kind={recordKind} />
+          {madeByReviewer ? (
+            <>
+              {recordKind ? <span className="rv-kc-kind">Rivell’s reading: {RECORD_KIND_LABELS[recordKind]}</span> : null}
+              <span className="rv-kc-kind rv-kc-kind--you">Added by a reviewer</span>
+            </>
+          ) : (
+            <RecordKindTag kind={recordKind} />
+          )}
         </span>
       </button>
     </li>
@@ -51,19 +58,60 @@ function Row({ candidate, selected, location, recordKind, onSelect }: { candidat
 }
 
 /** A record the compiler kept as a unit instead of a candidate: shown, but plainly secondary. */
-function UnitRow({ unit }: { unit: ExtractionUnit }) {
+function UnitRow({ unit, onMakePosition }: { unit: ExtractionUnit; onMakePosition: ((unitId: string) => Promise<void>) | null }) {
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const text = unit.contentText?.replace(/\s+/g, ' ').trim()
   const title = unit.title?.trim() || (text ? text.slice(0, 90) : `Unit ${unit.ordinal + 1}`)
+  async function make() {
+    if (!onMakePosition || pending) return
+    setPending(true)
+    setError(null)
+    try {
+      await onMakePosition(unit.id)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'The part could not be made a position.')
+    } finally {
+      setPending(false)
+    }
+  }
   return (
     <li>
       <div className="rv-kc-unit">
         <span>
           <b>{title}</b>
           <span className="rv-kc-row__sub">{UNIT_KIND_LABELS[unit.kind]}</span>
+          {error ? (
+            <span className="rv-kc-unit__err" role="alert">
+              {error}
+            </span>
+          ) : null}
         </span>
         <RecordKindTag kind={unit.recordKind} />
+        {onMakePosition ? (
+          <button type="button" className="rv-lnk rv-kc-unit__make" disabled={pending} onClick={() => void make()}>
+            Make this a position
+          </button>
+        ) : null}
       </div>
     </li>
+  )
+}
+
+function UnitGroup({ title, units, onMakePosition }: { title: string; units: ExtractionUnit[]; onMakePosition: ((unitId: string) => Promise<void>) | null }) {
+  if (units.length === 0) return null
+  return (
+    <section className="rv-kc-grp">
+      <h3 className="rv-kc-fgrp">
+        <span>{title}</span>
+        <span>{units.length}</span>
+      </h3>
+      <ul className="rv-kc-rows">
+        {units.map((unit) => (
+          <UnitRow key={unit.id} unit={unit} onMakePosition={onMakePosition} />
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -89,7 +137,12 @@ interface RailProps {
   /** The unit behind each candidate, for its record kind. */
   unitsById: ReadonlyMap<string, ExtractionUnit>
   /** Units the compiler kept as records, not candidates. Secondary, and never compared. */
-  uncompiled: ExtractionUnit[]
+  /** Parts Rivell read as something other than a position. */
+  notPosition: ExtractionUnit[]
+  /** Parts Rivell read as a position or wording that hold no candidate. */
+  missed: ExtractionUnit[]
+  /** Makes a part a position; null where the file type sorts no parts into positions. */
+  onMakePosition: ((unitId: string) => Promise<void>) | null
   selectedId: string | null
   groupSelected: boolean
   onSelect: (id: string) => void
@@ -97,7 +150,7 @@ interface RailProps {
 }
 
 /** The candidate list, grouped the way a reviewer works: what needs attention, what to review, the safe group, what is done. */
-export function CandidateRail({ id, artifact, groups, readiness, locations, unitsById, uncompiled, selectedId, groupSelected, onSelect, onOpenGroup }: RailProps) {
+export function CandidateRail({ id, artifact, groups, readiness, locations, unitsById, notPosition, missed, onMakePosition, selectedId, groupSelected, onSelect, onOpenGroup }: RailProps) {
   const rows = (list: Candidate[]) =>
     list.map((candidate) => (
       <Row
@@ -106,6 +159,7 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         selected={!groupSelected && candidate.id === selectedId}
         location={locations.get(candidate.id) ?? null}
         recordKind={unitsById.get(candidate.extractionUnitId)?.recordKind ?? null}
+        madeByReviewer={Boolean(unitsById.get(candidate.extractionUnitId)?.recordKindOverride)}
         onSelect={onSelect}
       />
     ))
@@ -153,19 +207,8 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         <Group title="Published, immutable" count={groups.published.length}>
           {rows(groups.published)}
         </Group>
-        {uncompiled.length > 0 ? (
-          <section className="rv-kc-grp">
-            <h3 className="rv-kc-fgrp">
-              <span>Other records</span>
-              <span>{uncompiled.length}</span>
-            </h3>
-            <ul className="rv-kc-rows">
-              {uncompiled.map((unit) => (
-                <UnitRow key={unit.id} unit={unit} />
-              ))}
-            </ul>
-          </section>
-        ) : null}
+        <UnitGroup title="Missed" units={missed} onMakePosition={onMakePosition} />
+        <UnitGroup title="Not a position (Rivell’s reading)" units={notPosition} onMakePosition={onMakePosition} />
       </nav>
       <div className="rv-kc-ready" aria-live="polite">
         <b>{ready ? 'Ready to publish' : done ? 'Published' : 'Compilation review'}</b>

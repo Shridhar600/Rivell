@@ -396,6 +396,29 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    @Transactional
+    public boolean overrideRecordKind(UUID unitId, UUID organizationId, KnowledgeRecordKind kind,
+            UUID by, java.time.Instant at) {
+        // the guard makes the correction once: a second request for the same part changes nothing
+        return jdbcClient.sql("""
+                        update knowledge_extraction_unit u
+                        set record_kind_override = :kind,
+                            record_kind_overridden_by = :by,
+                            record_kind_overridden_at = :at
+                        from knowledge_artifact a
+                        where u.id = :id and a.id = u.artifact_id
+                          and a.organization_id = :organizationId
+                          and u.record_kind_override is null
+                        """)
+                .param("kind", kind.name())
+                .param("by", by)
+                .param("at", java.sql.Timestamp.from(at))
+                .param("id", unitId)
+                .param("organizationId", organizationId)
+                .update() == 1;
+    }
+
+    @Override
     public List<ExtractionUnit> loadUnits(UUID artifactId, UUID organizationId) {
         return jdbcClient.sql("""
                         select u.* from knowledge_extraction_unit u
@@ -888,7 +911,18 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("title"),
                 rs.getString("content_text"),
                 readStringSet(rs.getString("provenance")).stream().map(UUID::fromString).toList(),
-                recordKind == null ? null : KnowledgeRecordKind.valueOf(recordKind));
+                recordKind == null ? null : KnowledgeRecordKind.valueOf(recordKind),
+                override(rs));
+    }
+
+    private static ExtractionUnit.RecordKindOverride override(ResultSet rs) throws SQLException {
+        var kind = rs.getString("record_kind_override");
+        if (kind == null) {
+            return null;
+        }
+        return new ExtractionUnit.RecordKindOverride(KnowledgeRecordKind.valueOf(kind),
+                rs.getObject("record_kind_overridden_by", UUID.class),
+                rs.getTimestamp("record_kind_overridden_at").toInstant());
     }
 
     private KnowledgeCandidate mapCandidate(ResultSet rs, int rowNum) throws SQLException {

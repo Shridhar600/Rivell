@@ -49,6 +49,7 @@ function summaryOf(detail: FindingDetail): FindingSummary {
     proposedLanguageSource: detail.proposedLanguageSource,
     relatedPosition: detail.relatedPosition,
     decidedBy: detail.decidedBy,
+    addedBy: detail.addedBy,
     createdAt: detail.createdAt,
   }
 }
