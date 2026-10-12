@@ -1137,6 +1137,9 @@ export interface components {
             payloadColumns?: {
                 [key: string]: string;
             };
+            payloadFieldRoles?: {
+                [key: string]: string;
+            };
             legalConceptKey?: string;
             conceptCorrection?: string;
             /** Format: uuid */
@@ -1168,6 +1171,7 @@ export interface components {
             effectiveFrom?: string;
             /** Format: date */
             effectiveTo?: string;
+            sourceContractTypes?: string[];
             conflictSignals?: components["schemas"]["ConflictSignalView"][];
             /** @enum {string} */
             reviewCategory?: "ROUTINE" | "ELEVATED" | "HIGH";
@@ -1993,6 +1997,15 @@ export interface components {
             completedAt?: string;
             /** Format: int64 */
             durationMillis?: number;
+            /** @description Policy comparison: every judged position with its option probabilities; ids and numbers, never text */
+            judgedPositions?: components["schemas"]["JudgedPositionView"][];
+            /** @description Measurement probe that re-asked the comparison: REVERSED, REPEAT or UNAVAILABLE; absent when off */
+            probe?: string;
+            /**
+             * Format: double
+             * @description Uncovered-clause triage probability, when the triage ran
+             */
+            uncoveredProbability?: number;
         };
         /** @description Finding counts, no finding content */
         CountsView: {
@@ -2025,6 +2038,23 @@ export interface components {
             finalizedAt?: string;
             /** Format: int32 */
             approvedChanges?: number;
+        };
+        /** @description One judged playbook position: ids, categories and probabilities only */
+        JudgedPositionView: {
+            positionKey?: string;
+            positionCandidateId?: string;
+            category?: string;
+            /** Format: double */
+            flagProbability?: number;
+            flagged?: boolean;
+            probabilities?: {
+                [key: string]: number;
+            };
+            probeCategory?: string;
+            probeFlagged?: boolean;
+            probeProbabilities?: {
+                [key: string]: number;
+            };
         };
         /** @description Deterministic redline state */
         RedlineView: {
@@ -2308,7 +2338,7 @@ export interface components {
             /** Format: uuid */
             parentId: string | null;
             /** @enum {string} */
-            nodeType: "BODY" | "TITLE" | "HEADING" | "PARAGRAPH" | "TABLE" | "TABLE_ROW" | "TABLE_CELL";
+            nodeType: "BODY" | "TITLE" | "HEADING" | "PARAGRAPH" | "TABLE" | "TABLE_ROW" | "TABLE_CELL" | "TEXT_BOX";
             /** Format: int32 */
             ordinal: number;
             text: string | null;

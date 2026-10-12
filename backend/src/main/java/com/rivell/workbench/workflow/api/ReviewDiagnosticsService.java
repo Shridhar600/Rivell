@@ -41,7 +41,8 @@ import com.rivell.workbench.workflow.UnauthorizedWorkflowAccessException;
  * <p>M10. The product's hardest failure to diagnose is a review that simply stops: with the default
  * configuration there is no background worker, so an enqueued analysis is never picked up and the
  * review sits in {@code ANALYSIS_QUEUED} with nothing to indicate why. This service answers that
- * question without a database session, and without exposing contract text or model output.
+ * question without a database session, and without exposing contract text. Model output appears
+ * only as categories and probabilities (the policy comparison's judged positions, for the eval).
  *
  * <p>Every read is organization-scoped, and the joins between modules are on identifiers that the
  * schema already ties to the owning organization, so no hop can cross a tenant.
@@ -167,7 +168,11 @@ public class ReviewDiagnosticsService {
                     execution.startedAt() == null ? null
                             : Duration.between(execution.startedAt(),
                                     execution.completedAt() == null ? now
-                                            : execution.completedAt()).toMillis()));
+                                            : execution.completedAt()).toMillis(),
+                    judgedPositions(execution.detail()),
+                    text(execution.detail(), "probe"),
+                    number(execution.detail() == null ? null
+                            : execution.detail().get("uncoveredProbability"))));
         }
         return new ReviewDiagnosticsView.AnalysisRunView(run.id(), run.runNumber(),
                 run.status().name(), run.trigger().name(), run.pipelineVersion(),
@@ -206,6 +211,55 @@ public class ReviewDiagnosticsService {
         reviewRepository.findPlanChecks(organizationId, reviewId)
                 .forEach(check -> checks.put(check.id(), check));
         return checks;
+    }
+
+    /**
+     * A policy comparison's judged positions as the check stored them: keys, categories and
+     * probabilities. Clause and position text never reach the check detail.
+     */
+    static List<ReviewDiagnosticsView.JudgedPositionView> judgedPositions(Map<String, Object> detail) {
+        if (detail == null || !(detail.get("positions") instanceof List<?> positions)) {
+            return null;
+        }
+        var views = new ArrayList<ReviewDiagnosticsView.JudgedPositionView>();
+        for (var item : positions) {
+            if (item instanceof Map<?, ?> entry) {
+                views.add(new ReviewDiagnosticsView.JudgedPositionView(
+                        text(entry.get("positionKey")), text(entry.get("positionCandidateId")),
+                        text(entry.get("category")), number(entry.get("flagProbability")),
+                        entry.get("flagged") instanceof Boolean flagged ? flagged : null,
+                        probabilities(entry.get("probabilities")),
+                        text(entry.get("probeCategory")),
+                        entry.get("probeFlagged") instanceof Boolean probeFlagged ? probeFlagged : null,
+                        probabilities(entry.get("probeProbabilities"))));
+            }
+        }
+        return views;
+    }
+
+    private static String text(Map<String, Object> detail, String key) {
+        return detail == null ? null : text(detail.get(key));
+    }
+
+    private static String text(Object value) {
+        return value instanceof String string && !string.isEmpty() ? string : null;
+    }
+
+    private static Double number(Object value) {
+        return value instanceof Number number ? number.doubleValue() : null;
+    }
+
+    private static Map<String, Double> probabilities(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return null;
+        }
+        var result = new java.util.LinkedHashMap<String, Double>();
+        map.forEach((option, probability) -> {
+            if (option instanceof String name && probability instanceof Number number) {
+                result.put(name, number.doubleValue());
+            }
+        });
+        return result;
     }
 
     /** The exception type of a failed check, never its message (which may quote data). */

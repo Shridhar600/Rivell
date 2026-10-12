@@ -182,8 +182,13 @@ public class LiabilityReviewIT {
         volatile String consistencyAnswerOverride;
         volatile double consistencyTopProbability = 0.9;
 
-        /** One policy-comparison call: the subject heading and the question keys asked. */
-        public record ComparisonCall(String heading, java.util.List<String> questionKeys) {
+        /** Answer for every position when the options arrive reversed (order probe); null = as asked. */
+        volatile String reversedOrderAnswer;
+        /** The reversed-order (probe) call fails as if the provider were down. */
+        volatile boolean failReversedOrder;
+
+        /** One policy-comparison call: the subject heading, the question keys, the first option offered. */
+        public record ComparisonCall(String heading, java.util.List<String> questionKeys, String firstOption) {
         }
 
         @Override
@@ -309,18 +314,27 @@ public class LiabilityReviewIT {
                 throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                         "policy comparison provider unavailable");
             }
+            var firstOption = ((ChoiceQuestion) request.pack().questions().values().iterator().next())
+                    .criteria().keySet().iterator().next();
+            var reversedOrder = PolicyComparisonSpecs.NOT_ADDRESSED.equals(firstOption);
+            if (reversedOrder && failReversedOrder) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "order probe provider unavailable");
+            }
             var state = (PolicyComparisonSpecs.PolicyComparisonState) request.state().payload();
             var clause = state.clause() == null ? "" : state.clause().toLowerCase();
             var initialKeys = new java.util.ArrayList<>(request.pack().questions().keySet());
             java.util.Collections.sort(initialKeys);
             comparisonCalls.add(new ComparisonCall(
-                    state.heading() == null ? "" : state.heading(), initialKeys));
+                    state.heading() == null ? "" : state.heading(), initialKeys, firstOption));
             var answers = new LinkedHashMap<String, SemanticAnswer>();
             for (var entry : request.pack().questions().entrySet()) {
                 var question = (ChoiceQuestion) entry.getValue();
-                var selected = policyComparisonAnswerOverride != null
-                        ? policyComparisonAnswerOverride
-                        : policyComparisonSelection(clause, question.instructions());
+                var selected = reversedOrder && reversedOrderAnswer != null
+                        ? reversedOrderAnswer
+                        : policyComparisonAnswerOverride != null
+                                ? policyComparisonAnswerOverride
+                                : policyComparisonSelection(clause, question.instructions());
                 var probabilities = policyComparisonProbabilities != null
                         ? new LinkedHashMap<>(policyComparisonProbabilities)
                         : uniformProbabilities(question, selected);
@@ -423,6 +437,8 @@ public class LiabilityReviewIT {
             failPolicyComparisonDecision = false;
             policyComparisonAnswerOverride = null;
             policyComparisonProbabilities = null;
+            reversedOrderAnswer = null;
+            failReversedOrder = false;
             indecisivePrimaryHeadings.clear();
             indecisivePrimaryAnswers.set(0);
             topiclessHeadings.clear();

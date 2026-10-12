@@ -471,7 +471,9 @@ def write_report(out, results, meta):
     lines = [f"# Eval run {meta['runId']}", "",
              f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
              + (f" · decisions `{meta['decisions']}`" if meta.get("decisions") else "")
-             + (" · issue spotting on" if meta.get("issueSpotting") else ""), ""]
+             + (" · issue spotting on" if meta.get("issueSpotting") else "")
+             + (f" · order probe `{meta['orderProbe']}` (measurement only)"
+                if meta.get("orderProbe", "off") != "off" else ""), ""]
     if meta.get("aborted"):
         lines += [f"**⚠️ RUN ABORTED: {meta['aborted']}. Numbers below cover finished orgs only.**", ""]
     tot = {k: 0 for k in ("sx", "sm", "cl", "cc", "ix", "id", "cs", "fa", "fas", "pos", "posf", "cand", "candc")}
@@ -554,7 +556,8 @@ def main():
                          capture_output=True, text=True).stdout.strip()
     meta = {"runId": run_id, "corpus": str(args.corpus), "git": git,
             "started": time.strftime("%Y-%m-%d %H:%M"), "decisions": decisions,
-            "issueSpotting": os.environ.get("RIVELL_ISSUE_SPOTTING", "false").lower() == "true"}
+            "issueSpotting": os.environ.get("RIVELL_ISSUE_SPOTTING", "false").lower() == "true",
+            "orderProbe": os.environ.get("RIVELL_ORDER_PROBE", "off").lower()}
     started = time.monotonic()
 
     if not args.no_build:

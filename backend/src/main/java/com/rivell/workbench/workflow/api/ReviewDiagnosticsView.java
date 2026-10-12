@@ -2,6 +2,7 @@ package com.rivell.workbench.workflow.api;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -66,7 +67,28 @@ public record ReviewDiagnosticsView(
             String failureType,
             Instant startedAt,
             Instant completedAt,
-            Long durationMillis) {
+            Long durationMillis,
+            @Schema(description = "Policy comparison: every judged position with its option "
+                    + "probabilities; ids and numbers, never text")
+            List<JudgedPositionView> judgedPositions,
+            @Schema(description = "Measurement probe that re-asked the comparison: REVERSED, "
+                    + "REPEAT or UNAVAILABLE; absent when off")
+            String probe,
+            @Schema(description = "Uncovered-clause triage probability, when the triage ran")
+            Double uncoveredProbability) {
+    }
+
+    @Schema(description = "One judged playbook position: ids, categories and probabilities only")
+    public record JudgedPositionView(
+            String positionKey,
+            String positionCandidateId,
+            String category,
+            Double flagProbability,
+            Boolean flagged,
+            Map<String, Double> probabilities,
+            String probeCategory,
+            Boolean probeFlagged,
+            Map<String, Double> probeProbabilities) {
     }
 
     @Schema(description = "Finding counts, no finding content")
