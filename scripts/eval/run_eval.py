@@ -37,6 +37,7 @@ BACKEND = REPO / "backend"
 PORT = os.environ.get("RIVELL_EVAL_PORT", "18080")
 BASE_URL = f"http://localhost:{PORT}"
 IN_PROGRESS = {"ANALYSIS_QUEUED", "ANALYZING"}
+SPOTTED = "SPOTTED_IN_WHOLE_CONTRACT_READ"  # finding raised by the opt-in whole-contract read
 WATCH = None  # LogWatch of the running backend: aborts the run when a provider cannot serve it
 
 
@@ -205,6 +206,14 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
            "review": review, "nodes": nodes, "semantics": semantics, "findings": findings,
            "coverage": coverage, "checks": checks}
     score = score_contract(answer, nodes, semantics.get("clauses", []), findings)
+    if any(f.get("observationKind") == SPOTTED for f in findings):
+        # the spotter only adds findings where no position judged a clause, so the same run
+        # scored without them is Rivell alone on identical decisions
+        alone = score_contract(answer, nodes, semantics.get("clauses", []),
+                               [f for f in findings if f.get("observationKind") != SPOTTED])
+        score["withoutSpotted"] = {k: alone[k] for k in ("issues", "issuesDetected", "falseAlarmSections",
+                                                         "seriousFalseAlarmSections", "findings")}
+        score["spottedFindings"] = sum(f.get("observationKind") == SPOTTED for f in findings)
     score["coverage"] = coverage
     score["checkStatus"] = {}
     for c in checks:
@@ -441,6 +450,23 @@ def volume_line(results):
             f"planted issues found per 10 findings: {per_ten}") if contracts else "- Findings: 0"
 
 
+def spotting_line(results):
+    contracts = [c for r in results for c in r["contracts"]]
+    spotted = sum(c.get("spottedFindings", 0) for c in contracts)
+    if not spotted:
+        return []
+    alone = [c.get("withoutSpotted") or c for c in contracts]
+    issues = [i for a in alone for i in a["issues"]]
+    serious = [i for i in issues if i.get("severity") in ("HIGH", "MEDIUM")]
+    compliant = sum(c["compliantSections"] for c in contracts)
+    findings = sum(a["findings"] for a in alone)
+    return [f"- Without the {spotted} spotted findings (Rivell alone, same run): issues "
+            f"{pct(sum(a['issuesDetected'] for a in alone), len(issues))}, serious "
+            f"{pct(sum(1 for i in serious if i.get('detectedSerious')), len(serious))}, false alarms "
+            f"{pct(sum(a['falseAlarmSections'] for a in alone), compliant)} (MEDIUM/HIGH: "
+            f"{pct(sum(a['seriousFalseAlarmSections'] for a in alone), compliant)}), findings {findings}"]
+
+
 def write_report(out, results, meta):
     lines = [f"# Eval run {meta['runId']}", "",
              f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
@@ -488,6 +514,7 @@ def write_report(out, results, meta):
               f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})",
               volume_line(results),
               cost_speed_line(results, meta),
+              *spotting_line(results),
               check_line(results), "",
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]
