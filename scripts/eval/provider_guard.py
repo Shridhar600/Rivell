@@ -14,6 +14,7 @@ import urllib.request
 
 NO_CREDITS = "has no credits"
 CONSECUTIVE_FAILURES = 25
+JEV_MODEL = "jev-1.13.0"  # same pin as the backend default (JevProperties.DEFAULT_MODEL)
 
 
 class ProviderFatal(Exception):
@@ -40,7 +41,7 @@ def _post(url, body, key, timeout=60):
 
 def check_jev():
     return _post(os.environ.get("TYPESAFE_BASE_URL", "https://api.typesafe.ai") + "/v1/systemone",
-                 {"model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
+                 {"model": os.environ.get("TYPESAFE_MODEL", JEV_MODEL),
                   "state": {"clause": "Either party may terminate on 30 days' notice."},
                   "questions": {"q": {"type": "noul", "instructions": "Can a party terminate on notice?",
                                       "criteria": {"true": "It can.", "false": "It cannot."}}}},
