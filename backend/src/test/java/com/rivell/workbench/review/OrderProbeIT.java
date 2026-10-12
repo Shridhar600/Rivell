@@ -1,6 +1,8 @@
 package com.rivell.workbench.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
@@ -184,5 +186,33 @@ class OrderProbeIT {
             assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
             assertThat(execution.detail()).containsEntry("probe", "UNAVAILABLE");
         });
+    }
+
+    @Test
+    void diagnosticsShowEveryJudgedPositionAsNumbersWithoutText() throws Exception {
+        var reviewId = reviewedContract();
+        analysisService.analyze(organizationId(), reviewId);
+
+        var body = mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        var checks = objectMapper.readTree(body).at("/data/analysis/checks");
+        var judged = new java.util.ArrayList<com.fasterxml.jackson.databind.JsonNode>();
+        checks.forEach(check -> check.path("judgedPositions").forEach(judged::add));
+        assertThat(judged).isNotEmpty().allSatisfy(position -> {
+            assertThat(position.path("positionKey").asText()).startsWith("position_");
+            assertThat(position.path("probabilities").has(PolicyComparisonSpecs.MEETS_PREFERRED)).isTrue();
+            assertThat(position.path("probeProbabilities").isObject()).isTrue();
+            assertThat(position.path("flagged").isBoolean()).isTrue();
+        });
+        assertThat(judged).anySatisfy(position ->
+                assertThat(position.path("category").asText()).isEqualTo(PolicyComparisonSpecs.WALK_AWAY));
+        assertThat(checks.findValuesAsText("probe")).contains("REVERSED");
+        assertThat(body)
+                .as("diagnostics carry numbers, never clause or position text")
+                .doesNotContain("uncapped and unlimited")
+                .doesNotContain("two times the fees")
+                .doesNotContain("Walk-away:");
     }
 }
