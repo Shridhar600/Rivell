@@ -83,6 +83,8 @@ def build_records(run, contract, answer, raw):
             row = dict(base, positionKey=position["positionKey"],
                        positionCandidateId=position.get("positionCandidateId"),
                        category=position.get("category"), flagged=bool(position.get("flagged")),
+                       route=position.get("route"), secondOpinionOutcome=position.get("secondOpinionOutcome"),
+                       secondOpinionCategory=position.get("secondOpinionCategory"),
                        probabilities=probabilities, **shape(probabilities))
             if position.get("probeProbabilities"):
                 probe = shape(position["probeProbabilities"])
@@ -202,6 +204,30 @@ def adjudication_load(records):
     return len(rows), doubtful, round(doubtful / max(len(contracts), 1), 1)
 
 
+def second_opinion_summary(records):
+    """Engine v2: positions sent to a second opinion, by outcome, and whom the answer key backs where
+    Jev and the second opinion disagreed (section level: a planted issue in the section means
+    flagging was right; a compliant section means not flagging was right)."""
+    rows = [r for r in records if r["kind"] == "judged" and r.get("route") == "ADJUDICATE"]
+    if not rows:
+        return None
+    issue_sections = {(r["run"], r["contract"], s) for r in records if r["kind"] == "issue" for s in r["sections"]}
+    compliant = {(r["run"], r["contract"], r["section"]) for r in records if r["kind"] == "compliant"}
+    contracts = {(r["run"], r["contract"]) for r in records}
+    backs = Counter()
+    for r in rows:
+        if r.get("secondOpinionOutcome") != "DISAGREED":
+            continue
+        key = (r["run"], r["contract"], r["section"])
+        if key in issue_sections or key in compliant:
+            backs["JEV" if r["flagged"] == (key in issue_sections) else "SECOND_OPINION"] += 1
+        else:
+            backs["UNLABELLED"] += 1
+    return {"adjudicated": len(rows), "perContract": round(len(rows) / max(len(contracts), 1), 1),
+            "outcomes": dict(Counter(r.get("secondOpinionOutcome") for r in rows)),
+            "disagreementsBack": dict(backs)}
+
+
 def sweep(records):
     """[(threshold, issue sections caught, judged issue sections, compliant alarmed, judged compliant)]."""
     mass = {}
@@ -250,6 +276,13 @@ def report(records):
                       f"{probe['flagFlips']} ({100 * probe['flagFlips'] / probe['positions']:.1f}%)",
                       f"- Missed issues the probe flags: {probe['missesProbeFlags']}/{probe['misses']}; "
                       f"MEDIUM+ alarms the probe clears: {probe['alarmsProbeClears']}/{probe['alarms']}", ""]
+        second = second_opinion_summary(rs)
+        if second:
+            lines += ["### Second opinions (engine v2)", "",
+                      f"- Positions sent: {second['adjudicated']} (≈ {second['perContract']} per contract); outcomes: "
+                      + ", ".join(f"{k} {v}" for k, v in sorted(second["outcomes"].items())),
+                      "- Disagreements the answer key backs: "
+                      + (", ".join(f"{k} {v}" for k, v in sorted(second["disagreementsBack"].items())) or "none"), ""]
         lines += ["### Flag-threshold sweep (judged sections only)", ""]
         lines += _table(["Threshold", "Issue sections caught", "Compliant sections alarmed"],
                         [(t, f"{c}/{ci}", f"{a}/{ca}") for t, c, ci, a, ca in sweep(rs)]) + [""]
