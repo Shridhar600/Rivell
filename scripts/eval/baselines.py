@@ -442,7 +442,10 @@ def write_summary(run_dir, args, results, usage):
              *[f"| {k} | {pct(v[0], v[1])} |" for k, v in sorted(by_cat.items())]]
     (run_dir / "summary.md").write_text("\n".join(lines) + "\n")
     (run_dir / "results.json").write_text(json.dumps(
-        {"results": [{"file": r, "score": s} for r, s, _ in results], "usage": usage}, indent=1))
+        {"meta": {"mode": args.mode, "model": args.model, "corpus": str(args.corpus),
+                  "aborted": FATAL_REASON[0] if FATAL.is_set() else None},
+         "results": [{"file": r, "score": s, "secs": round(t, 1)} for r, s, t in results],
+         "usage": usage, "costUsd": dollars}, indent=1))
 
 
 if __name__ == "__main__":
