@@ -366,8 +366,13 @@ describe('the whole contract under your control', () => {
       note: 'The definition of Services has no carve-out for third-party software.',
     })
     const panel = await detail()
-    expect(await within(panel).findByText('Added by a reviewer')).toBeInTheDocument()
-    expect(within(panel).getByText('The definition of Services has no carve-out for third-party software.')).toBeInTheDocument()
+    expect(await within(panel).findByText('The definition of Services has no carve-out for third-party software.')).toBeInTheDocument()
+    // the note is the reviewer's, never presented as Rivell's analysis or recommendation
+    expect(within(panel).getByText('Reviewer\u2019s note')).toBeInTheDocument()
+    expect(within(panel).queryByText('Rivell found')).not.toBeInTheDocument()
+    expect(within(panel).queryByText('Recommendation:')).not.toBeInTheDocument()
+    expect(within(panel).queryByText('Rivell\u2019s recommendation is kept separately')).not.toBeInTheDocument()
+    expect(within(panel).getAllByText(/Added by a reviewer/)).toHaveLength(1)
   })
 
   it('offers no add on a heading outside the review plan, where the server would refuse it', async () => {

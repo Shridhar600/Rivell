@@ -26,7 +26,7 @@ function RecordKindTag({ kind }: { kind: RecordKind | null }) {
   return <span className="rv-kc-kind">{RECORD_KIND_LABELS[kind]}</span>
 }
 
-function Row({ candidate, selected, location, recordKind, addedByYou, onSelect }: { candidate: Candidate; selected: boolean; location: string | null; recordKind: RecordKind | null; addedByYou: boolean; onSelect: (id: string) => void }) {
+function Row({ candidate, selected, location, recordKind, madeByReviewer, onSelect }: { candidate: Candidate; selected: boolean; location: string | null; recordKind: RecordKind | null; madeByReviewer: boolean; onSelect: (id: string) => void }) {
   const outcome = outcomeOf(candidate)
   const open = outcome === 'pending' || outcome === 'corrected'
   const condition = open ? primaryCondition(candidate) : null
@@ -43,7 +43,14 @@ function Row({ candidate, selected, location, recordKind, addedByYou, onSelect }
           {condition ? (
             <span className={`rv-kc-flag${condition.kind === 'supersession' ? ' rv-kc-flag--sup' : ''}`}>{condition.label}</span>
           ) : null}
-          {addedByYou ? <span className="rv-kc-kind rv-kc-kind--you">Added by you</span> : <RecordKindTag kind={recordKind} />}
+          {madeByReviewer ? (
+            <>
+              {recordKind ? <span className="rv-kc-kind">Rivell’s reading: {RECORD_KIND_LABELS[recordKind]}</span> : null}
+              <span className="rv-kc-kind rv-kc-kind--you">Added by a reviewer</span>
+            </>
+          ) : (
+            <RecordKindTag kind={recordKind} />
+          )}
         </span>
       </button>
     </li>
@@ -152,7 +159,7 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         selected={!groupSelected && candidate.id === selectedId}
         location={locations.get(candidate.id) ?? null}
         recordKind={unitsById.get(candidate.extractionUnitId)?.recordKind ?? null}
-        addedByYou={Boolean(unitsById.get(candidate.extractionUnitId)?.recordKindOverride)}
+        madeByReviewer={Boolean(unitsById.get(candidate.extractionUnitId)?.recordKindOverride)}
         onSelect={onSelect}
       />
     ))

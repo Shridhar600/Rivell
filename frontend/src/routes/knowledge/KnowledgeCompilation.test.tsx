@@ -119,7 +119,11 @@ describe('compilation workspace', () => {
     await waitFor(() => expect(heading()).toHaveTextContent('How to use this playbook'))
     expect(requests(world, 'POST', /\/api\/knowledge\/artifacts\/src1\/units\/u-guidance\/position$/)).toHaveLength(1)
     const list = rail()
-    expect(within(list).getByRole('button', { name: /How to use this playbook/ })).toHaveTextContent('Added by you')
+    const made = within(list).getByRole('button', { name: /How to use this playbook/ })
+    // who made it is not known to the page, so it does not say "you"; Rivell's own reading stays beside it
+    expect(made).toHaveTextContent('Added by a reviewer')
+    expect(made).toHaveTextContent('Rivell\u2019s reading: Guidance')
+    expect(made).not.toHaveTextContent('Added by you')
     expect(within(list).queryByRole('heading', { name: /Not a position/ })).not.toBeInTheDocument()
   })
 
