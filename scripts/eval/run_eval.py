@@ -389,6 +389,16 @@ def serious_caught(results):
     return sum(1 for i in issues if i.get("detectedSerious")), len(issues)
 
 
+def volume_line(results):
+    """Findings a lawyer reads, against issues found: the section-level scorer rewards volume."""
+    contracts = [c for r in results for c in r["contracts"]]
+    findings = sum(c["findings"] for c in contracts)
+    found = sum(c["issuesDetected"] for c in contracts)
+    per_ten = f"{10 * found / findings:.1f}" if findings else "-"
+    return (f"- Findings: {findings} ({findings / len(contracts):.1f} per contract); "
+            f"planted issues found per 10 findings: {per_ten}") if contracts else "- Findings: 0"
+
+
 def write_report(out, results, meta):
     lines = [f"# Eval run {meta['runId']}", "",
              f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}", ""]
@@ -430,6 +440,7 @@ def write_report(out, results, meta):
               f"- HIGH/MEDIUM planted issues caught by a MEDIUM+ finding: {pct(*serious_caught(results))}",
               f"- False-alarm compliant sections: {pct(tot['fa'], tot['cs'])}"
               f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})",
+              volume_line(results),
               check_line(results), "",
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]

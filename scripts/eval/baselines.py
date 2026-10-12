@@ -403,7 +403,9 @@ def write_summary(run_dir, args, results, usage):
              f"- HIGH/MEDIUM planted issues caught by a MEDIUM+ finding: {pct(tot['seriousFound'], tot['serious'])}",
              f"- False-alarm compliant sections: {pct(tot['fa'], tot['compliant'])} "
              f"(MEDIUM/HIGH: {pct(tot['mfa'], tot['compliant'])})",
-             f"- Findings: {tot['findings']}, of which unlocated (quote not in contract): {tot['unlocated']}",
+             f"- Findings: {tot['findings']} ({tot['findings'] / max(1, len(results)):.1f} per contract), "
+             f"of which unlocated (quote not in contract): {tot['unlocated']}; planted issues found per 10 "
+             f"findings: {10 * tot['found'] / tot['findings'] if tot['findings'] else 0:.1f}",
              f"- Contracts failed: {tot['failed']}",
              f"- Model calls: {usage['calls']} (failed {usage['failed']}), input tokens {usage['input']}, "
              f"output tokens {usage['output']}, cost {cost}", "",
