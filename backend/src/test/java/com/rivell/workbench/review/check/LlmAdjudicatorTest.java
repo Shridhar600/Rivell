@@ -38,6 +38,15 @@ class LlmAdjudicatorTest {
     }
 
     @Test
+    void aQuoteTooShortToCarryAnAnswerDoesNotCount() {
+        var clause = "The aggregate liability shall not exceed the fees paid.";
+
+        assertThat(LlmAdjudicator.quoted("the", clause)).isFalse();
+        assertThat(LlmAdjudicator.quoted("shall not", clause)).isFalse();
+        assertThat(LlmAdjudicator.quoted("aggregate liability", clause)).isTrue();
+    }
+
+    @Test
     void theSecondOpinionMayOnlyAnswerWithAnOfferedOption() {
         var spec = AdjudicationSpecs.secondOpinion(Set.of(
                 PolicyComparisonSpecs.MEETS_PREFERRED, PolicyComparisonSpecs.BEYOND_FALLBACK));

@@ -1,6 +1,7 @@
 package com.rivell.workbench.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -37,6 +38,14 @@ import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.organization.UserIdentity;
+import com.rivell.workbench.redline.ChangeActionType;
+import com.rivell.workbench.redline.ChangeLanguageSource;
+import com.rivell.workbench.workflow.DecisionAction;
+import com.rivell.workbench.workflow.DecisionCommand;
+import com.rivell.workbench.workflow.FinalizationBlockerCode;
+import com.rivell.workbench.workflow.FindingNotActionableException;
+import com.rivell.workbench.workflow.HumanDecisionService;
+import com.rivell.workbench.workflow.HumanReviewService;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
@@ -128,6 +137,12 @@ class SecondOpinionIT {
 
     @Autowired
     JdbcClient jdbcClient;
+
+    @Autowired
+    HumanDecisionService decisionService;
+
+    @Autowired
+    HumanReviewService humanReviewService;
 
     @Autowired
     MockMvc mockMvc;
@@ -407,5 +422,40 @@ class SecondOpinionIT {
                 .doesNotContain("The quoted words decide")
                 .doesNotContain("secondOpinionQuote")
                 .doesNotContain("secondOpinionReason");
+    }
+
+    @Test
+    void youResolveANeedsYourLookItemWithYourOwnWordingNeverByAcceptingIt() throws Exception {
+        var reviewId = reviewedContract();
+        jevUnsureOnLiability(UNSURE_FLAG);
+        generativeProvider.secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
+        var run = analysisService.analyze(organizationId(), reviewId);
+        var look = only(findings(run.id()), IssueFamily.POSITION_UNCERTAIN);
+
+        // undecided, it blocks finalization like any review-required finding
+        assertThat(humanReviewService.state(organizationId(), reviewId).assessment().progress()
+                .blockers()).anySatisfy(blocker -> {
+                    assertThat(blocker.code())
+                            .isEqualTo(FinalizationBlockerCode.UNRESOLVED_REVIEW_REQUIRED_FINDINGS);
+                    assertThat(blocker.findingIds()).contains(look.id());
+                });
+        // Rivell decided nothing here, so there is nothing to accept as-is
+        assertThatThrownBy(() -> decisionService.decide(reviewId, look.id(),
+                new DecisionCommand(0, null, DecisionAction.ACCEPT, null, null, null)))
+                .isInstanceOf(FindingNotActionableException.class);
+
+        // the lawyer sides with the first review and writes the change
+        decisionService.decide(reviewId, look.id(), new DecisionCommand(0, null,
+                DecisionAction.EDIT, ChangeActionType.REPLACE,
+                "Supplier's aggregate liability shall not exceed the fees paid in the preceding "
+                        + "twelve months.", null));
+
+        var after = humanReviewService.state(organizationId(), reviewId).assessment();
+        assertThat(after.progress().blockers()).noneSatisfy(blocker ->
+                assertThat(blocker.findingIds()).contains(look.id()));
+        assertThat(after.plannedChanges()).anySatisfy(change -> {
+            assertThat(change.findingId()).isEqualTo(look.id());
+            assertThat(change.languageSource()).isEqualTo(ChangeLanguageSource.HUMAN_EDIT);
+        });
     }
 }

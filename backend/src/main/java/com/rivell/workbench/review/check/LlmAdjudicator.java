@@ -24,6 +24,8 @@ final class LlmAdjudicator {
 
     /** An option Jev gave at least this probability is plausible (plan decision D4). */
     static final double PLAUSIBLE = 0.05;
+    /** Shorter than this ("the", "shall not"), a quote cannot show what the answer rests on. */
+    static final int MIN_QUOTE_LENGTH = 12;
 
     record Ask(String ourSide, String contractType, String heading, String clause, String position) {
     }
@@ -96,13 +98,16 @@ final class LlmAdjudicator {
                 .toList();
     }
 
-    /** The clause holds the quote, ignoring case, spacing, quote-mark style and a final full stop. */
+    /**
+     * The clause holds the quote, ignoring case, spacing, quote-mark style and a final full stop, and
+     * the quote is long enough to show what the answer rests on.
+     */
     static boolean quoted(String quote, String clause) {
         if (quote == null || clause == null) {
             return false;
         }
         var wanted = normalize(quote).replaceAll("^[\"'\\s]+|[\"'.\\s]+$", "");
-        return !wanted.isEmpty() && normalize(clause).contains(wanted);
+        return wanted.length() >= MIN_QUOTE_LENGTH && normalize(clause).contains(wanted);
     }
 
     private static String normalize(String text) {
