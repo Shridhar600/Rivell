@@ -211,6 +211,47 @@
   color: var(--text-3);
   font-size: 12px;
 }
+
+.rv-ws-badge {
+  display: inline-block;
+  margin: 4px 0 0;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font-size: 12px;
+}
+
+.rv-ws-look {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.rv-ws-look-h {
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rv-ws-views {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.rv-ws-views dd {
+  margin: 0;
+}
+
+.rv-ws-views blockquote {
+  margin: 4px 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--line);
+}
 .rv-ws-f {
   position: relative;
   display: grid;

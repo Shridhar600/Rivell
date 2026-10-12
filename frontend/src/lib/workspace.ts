@@ -249,3 +249,13 @@ export function acceptEligibilityFor(finding: FindingDetail): AcceptEligibility 
     reason: 'The approved wording cannot be traced to its source in this review’s evidence. Use Edit to author the change, or Reject or Escalate it.',
   }
 }
+
+/** A "needs your look" item: the two reviewers disagreed, or the second opinion was not available. */
+export function isNeedsYourLook(finding: Pick<FindingSummary, 'decidedBy'>): boolean {
+  return finding.decidedBy === 'NEEDS_YOUR_LOOK'
+}
+
+/** Findings in review order: "needs your look" items after the others, each group in server order. */
+export function orderForReview<T extends Pick<FindingSummary, 'decidedBy'>>(findings: readonly T[]): T[] {
+  return [...findings.filter((finding) => !isNeedsYourLook(finding)), ...findings.filter(isNeedsYourLook)]
+}

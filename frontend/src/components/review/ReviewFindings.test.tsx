@@ -31,6 +31,10 @@ import {
   fixtureRelatedPositionFindingSummary,
   fixtureWithinFallbackFindingDetail,
   fixtureWithinFallbackFindingSummary,
+  fixtureNeedsYourLookFindingDetail,
+  fixtureNeedsYourLookFindingSummary,
+  fixtureSecondOpinionFindingDetail,
+  fixtureSecondOpinionFindingSummary,
 } from './testFixtures'
 import { fixtureHumanReview } from './workflowFixtures'
 
@@ -56,6 +60,8 @@ const detailById: Record<string, unknown> = {
   'f-8': fixtureEscalatedFallbackFindingDetail,
   'f-9': fixtureRelatedPositionFindingDetail,
   'f-10': fixtureNotCoveredFindingDetail,
+  'f-11': fixtureNeedsYourLookFindingDetail,
+  'f-12': fixtureSecondOpinionFindingDetail,
 }
 
 /**
@@ -928,5 +934,73 @@ describe('review workspace authority and network guards', () => {
     expect(text).toMatch(/Machine-proposed/)
     expect(text).not.toMatch(/Approved organizational drafting/)
     expect(text).not.toMatch(/\bJev\b|OpenAI|OpenRouter|embedding|rerank/i)
+  })
+})
+
+describe('engine v2: who decided', () => {
+  const withV2 = {
+    reviewSummary: {
+      ...fixtureCompletedReviewSummary,
+      snapshot: { ...fixtureCompletedReviewSummary.snapshot, engine: 'V2' },
+    },
+    findings: {
+      items: [
+        fixtureNeedsYourLookFindingSummary,
+        ...findingsForThisReview.items,
+        fixtureSecondOpinionFindingSummary,
+      ],
+      truncated: false,
+    },
+  }
+
+  it('keeps "needs your look" items in their own group, collapsed until opened', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', withV2)
+
+    const toggle = await screen.findByRole('button', { name: 'Needs your look (1)' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(findingsList().queryByRole('option', { name: /two reviewers disagree/ })).not.toBeInTheDocument()
+
+    await userEvent.click(toggle)
+
+    const group = within(screen.getByRole('listbox', { name: 'Needs your look list' }))
+    expect(group.getByRole('option', { name: /two reviewers disagree/ })).toBeInTheDocument()
+  })
+
+  it('shows both views on a "needs your look" item, with the quoted words and no provider name', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-11', withV2)
+
+    await findDetailText('Two views — you decide')
+    const views = within(screen.getByTestId('second-opinion-views'))
+    expect(views.getByText('First review')).toBeInTheDocument()
+    expect(views.getByText(/Beyond every listed fallback/)).toBeInTheDocument()
+    expect(views.getByText(/issue estimate 68%/)).toBeInTheDocument()
+    expect(views.getByText(/Meets the preferred position/)).toBeInTheDocument()
+    expect(views.getByText(/liability shall not exceed the fees paid/)).toBeInTheDocument()
+    expect(within(detailPane()).getByTestId('finding-decided-by')).toHaveTextContent('Needs your look')
+    // the selected item's group opens by itself
+    expect(screen.getByRole('button', { name: 'Needs your look (1)' })).toHaveAttribute('aria-expanded', 'true')
+    expect(document.body.textContent ?? '').not.toMatch(/\bJev\b|OpenAI|OpenRouter/i)
+  })
+
+  it('says when an agreeing second opinion confirmed a finding', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-12', withV2)
+
+    await findDetailText('Rivell found')
+    expect(within(detailPane()).getByTestId('finding-decided-by')).toHaveTextContent(
+      'Decided with a second opinion',
+    )
+    expect(screen.queryByTestId('second-opinion-views')).not.toBeInTheDocument()
+  })
+
+  it('names the review engine and the route counts in the review notes', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', withV2)
+
+    // the frozen context lives in the Review notes sheet
+    await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
+    const sheet = screen.getByRole('dialog', { name: 'Review notes' })
+    const row = within(sheet).getByText('Review engine').closest('.data-list__row') as HTMLElement
+    expect(row).toHaveTextContent(
+      'v2: a second opinion when the first review is unsure · 1 decided with a second opinion · 1 needs your look',
+    )
   })
 })

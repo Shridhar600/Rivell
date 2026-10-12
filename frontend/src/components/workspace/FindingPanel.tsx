@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { EvidenceItem } from '../../api/retrieval'
-import type { FindingClaim, FindingDetail } from '../../api/reviews'
+import type { FindingClaim, FindingDetail, FindingQuality } from '../../api/reviews'
 import type { ConceptLabel } from '../../api/taxonomy'
 import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
@@ -11,6 +11,8 @@ import {
   assessmentSummary,
   claimKindLabel,
   classificationLabel,
+  comparisonCategoryLabel,
+  decidedByLabel,
   findingIssueLabel,
   findingSubjectLabel,
   isRelatedPosition,
@@ -175,6 +177,7 @@ export function FindingPanel(props: Props) {
   const absences = absenceClaims(finding.claims)
   const quality = qualityFactorRows(finding.quality)
   const assessment = assessmentSummary(finding.quality)
+  const decidedBy = decidedByLabel(finding.quality)
   const note = policyNoteText(finding)
   const position = policyPositionView(finding.positionComparison)
   // A within-fallback finding is a note, not a defect; a position that names an approver makes it
@@ -222,6 +225,11 @@ export function FindingPanel(props: Props) {
         </div>
         <h2>{title}</h2>
         {props.context ? <div className="rv-ws-ctx">{props.context}</div> : null}
+        {decidedBy ? (
+          <p className="rv-ws-badge" data-testid="finding-decided-by">
+            {decidedBy}
+          </p>
+        ) : null}
         {related ? (
           <p className="rv-ws-note rv-ws-note--related">
             <b>Related position, not a breach.</b> This position governs a topic the clause only
@@ -273,6 +281,8 @@ export function FindingPanel(props: Props) {
             ) : null}
           </div>
         </div>
+
+        {finding.quality?.route === 'NEEDS_YOUR_LOOK' ? <SecondOpinionViews quality={finding.quality} /> : null}
 
         {withinFallback ? (
           <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
@@ -474,5 +484,35 @@ export function FindingPanel(props: Props) {
         )}
       </div>
     </aside>
+  )
+}
+
+/** Engine v2 both-views panel (spec §9): the first review's answer and the second opinion's, side by side. */
+function SecondOpinionViews({ quality }: { quality: FindingQuality }) {
+  const estimate =
+    quality.flagProbability === null ? '' : ` (issue estimate ${Math.round(quality.flagProbability * 100)}%)`
+  return (
+    <div className="rv-ws-sec" data-testid="second-opinion-views">
+      <div className="rv-ws-sec-h">Two views — you decide</div>
+      <dl className="rv-ws-views">
+        <div>
+          <dt>First review</dt>
+          <dd>
+            {quality.jevCategory ? comparisonCategoryLabel(quality.jevCategory) : 'No answer'}
+            {estimate}
+          </dd>
+        </div>
+        <div>
+          <dt>Second opinion</dt>
+          <dd>
+            {quality.secondOpinionCategory
+              ? comparisonCategoryLabel(quality.secondOpinionCategory)
+              : 'Not available'}
+            {quality.secondOpinionQuote ? <blockquote>“{quality.secondOpinionQuote}”</blockquote> : null}
+            {quality.secondOpinionReason ? <p>{quality.secondOpinionReason}</p> : null}
+          </dd>
+        </div>
+      </dl>
+    </div>
   )
 }
