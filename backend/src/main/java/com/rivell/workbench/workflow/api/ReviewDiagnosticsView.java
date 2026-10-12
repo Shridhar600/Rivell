@@ -88,7 +88,10 @@ public record ReviewDiagnosticsView(
             Map<String, Double> probabilities,
             String probeCategory,
             Boolean probeFlagged,
-            Map<String, Double> probeProbabilities) {
+            Map<String, Double> probeProbabilities,
+            String route,
+            String secondOpinionOutcome,
+            String secondOpinionCategory) {
     }
 
     @Schema(description = "Finding counts, no finding content")

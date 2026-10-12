@@ -1,9 +1,12 @@
 package com.rivell.workbench.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -24,6 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
@@ -366,5 +370,42 @@ class SecondOpinionIT {
                 .containsEntry("route", "JEV");
         assertThat(judged(run.id())).allSatisfy(position ->
                 assertThat(position).doesNotContainKey("route"));
+    }
+
+    private JsonNode json(String url, Object... variables) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(get(url, variables))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
+
+    @Test
+    void theApiSaysWhoDecidedAndDiagnosticsCarryNoSecondOpinionText() throws Exception {
+        var reviewId = reviewedContract();
+        jevUnsureOnLiability(UNSURE_FLAG);
+        generativeProvider.secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
+        analysisService.analyze(organizationId(), reviewId);
+
+        assertThat(json("/api/reviews/{id}", reviewId).at("/data/snapshot/engine").asText())
+                .isEqualTo("V2");
+        var decidedBy = new ArrayList<String>();
+        json("/api/reviews/{id}/findings?limit=100", reviewId).at("/data/items")
+                .forEach(item -> decidedBy.add(item.path("decidedBy").asText()));
+        assertThat(decidedBy).contains("NEEDS_YOUR_LOOK", "JEV");
+
+        var body = mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        var judged = new ArrayList<JsonNode>();
+        objectMapper.readTree(body).at("/data/analysis/checks")
+                .forEach(check -> check.path("judgedPositions").forEach(judged::add));
+        assertThat(judged).anySatisfy(position -> {
+            assertThat(position.path("route").asText()).isEqualTo("ADJUDICATE");
+            assertThat(position.path("secondOpinionOutcome").asText()).isEqualTo("DISAGREED");
+            assertThat(position.path("secondOpinionCategory").asText())
+                    .isEqualTo(PolicyComparisonSpecs.MEETS_PREFERRED);
+        });
+        assertThat(body)
+                .as("diagnostics carry the second opinion's category, never its words")
+                .doesNotContain("The quoted words decide")
+                .doesNotContain("secondOpinionQuote")
+                .doesNotContain("secondOpinionReason");
     }
 }
