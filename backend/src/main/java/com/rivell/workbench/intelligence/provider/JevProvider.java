@@ -122,6 +122,9 @@ public final class JevProvider implements SemanticDecisionProvider {
         if (status.value() == 429) {
             return new ProviderUnavailableException("Provider rate limited (HTTP 429)");
         }
+        if (status.value() == 402) {
+            return new ProviderRejectedException("Provider account has no credits (HTTP 402)");
+        }
         if (status.is4xxClientError()) {
             return new ProviderRejectedException("Provider rejected the decision request (HTTP " + status.value() + ")");
         }
