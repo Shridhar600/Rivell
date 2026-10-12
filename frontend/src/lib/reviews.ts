@@ -109,6 +109,7 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
   EXPECTED_CONCEPT_ABSENT: 'Expected provision absent',
   POLICY_UNAVAILABLE: 'Policy unavailable',
   NOT_COVERED_BY_PLAYBOOK: 'Not covered by playbook — review',
+  SPOTTED_IN_WHOLE_CONTRACT_READ: 'Flagged by whole-contract read — review',
   AMBIGUOUS_POLICY: 'Policy ambiguous',
   SURVIVAL_COVERAGE_GAP: 'Survival coverage gap',
   CARVE_OUT_INCONSISTENCY: 'Carve-out inconsistency',
