@@ -214,8 +214,9 @@ public class ReviewDiagnosticsService {
     }
 
     /**
-     * A policy comparison's judged positions as the check stored them: keys, categories and
-     * probabilities. Clause and position text never reach the check detail.
+     * A policy comparison's judged positions as the check stored them: keys, categories,
+     * probabilities and, on engine v2, the route and the second opinion's outcome and category.
+     * Clause and position text, and the second opinion's words, never reach the check detail.
      */
     static List<ReviewDiagnosticsView.JudgedPositionView> judgedPositions(Map<String, Object> detail) {
         if (detail == null || !(detail.get("positions") instanceof List<?> positions)) {
@@ -231,7 +232,10 @@ public class ReviewDiagnosticsService {
                         probabilities(entry.get("probabilities")),
                         text(entry.get("probeCategory")),
                         entry.get("probeFlagged") instanceof Boolean probeFlagged ? probeFlagged : null,
-                        probabilities(entry.get("probeProbabilities"))));
+                        probabilities(entry.get("probeProbabilities")),
+                        text(entry.get("route")),
+                        text(entry.get("secondOpinionOutcome")),
+                        text(entry.get("secondOpinionCategory"))));
             }
         }
         return views;

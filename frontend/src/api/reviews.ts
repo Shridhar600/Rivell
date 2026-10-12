@@ -76,6 +76,8 @@ export type ReviewSnapshot = {
   packVersion: string | null
   knowledgePinNumber: number | null
   effectiveOn: string | null
+  /** The review engine the review is frozen on: 'V1' (one review) or 'V2' (a second opinion when the first review is unsure). */
+  engine: string | null
 }
 
 export const COVERAGE_STATES = [
@@ -248,6 +250,8 @@ export type FindingSummary = {
   proposedLanguageSource: string
   /** True when the position governs a topic the clause only touches: a LOW note, not a breach. */
   relatedPosition: boolean
+  /** Who decided: 'JEV' (Rivell's first review), 'SECOND_OPINION' or 'NEEDS_YOUR_LOOK' (the user decides). Null for other findings. */
+  decidedBy: string | null
   createdAt: string
 }
 
@@ -278,6 +282,16 @@ export type FindingQuality = {
   secondaryTopic: boolean
   /** The uncovered-clause triage's probability on the same 0–1 scale. An estimate too. */
   uncoveredProbability: number | null
+  /** Who decided: 'JEV' (Rivell's first review), 'SECOND_OPINION' or 'NEEDS_YOUR_LOOK'. */
+  route: string | null
+  /** The first review's own answer on a "needs your look" item (a comparison category). */
+  jevCategory: string | null
+  /** AGREED, DISAGREED, UNAVAILABLE, INVALID or OVER_BUDGET. */
+  secondOpinionOutcome: string | null
+  secondOpinionCategory: string | null
+  /** The clause words the second opinion rests on: model output, shown as a quote. */
+  secondOpinionQuote: string | null
+  secondOpinionReason: string | null
 }
 
 export type AbsenceBasis = {
@@ -424,6 +438,7 @@ function parseSnapshot(value: unknown, what: string): ReviewSnapshot | null {
     packVersion: readOptionalNullableString(snapshot, 'packVersion', what),
     knowledgePinNumber: readOptionalNullableNumber(snapshot, 'knowledgePinNumber', what),
     effectiveOn: readOptionalNullableString(snapshot, 'effectiveOn', what),
+    engine: readOptionalNullableString(snapshot, 'engine', what),
   }
 }
 
@@ -638,6 +653,7 @@ function parseFindingSummary(value: unknown, what: string): FindingSummary {
     proposedLanguageSource:
       readOptionalNullableString(finding, 'proposedLanguageSource', what) ?? 'UNKNOWN',
     relatedPosition: readOptionalBoolean(finding, 'relatedPosition', what),
+    decidedBy: readOptionalNullableString(finding, 'decidedBy', what),
     createdAt: readOptionalNullableString(finding, 'createdAt', what) ?? '',
   }
 }
@@ -691,6 +707,12 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
       uncoveredProbability !== null && uncoveredProbability >= 0 && uncoveredProbability <= 1
         ? uncoveredProbability
         : null,
+    route: readOptionalNullableString(quality, 'route', what),
+    jevCategory: readOptionalNullableString(quality, 'jevCategory', what),
+    secondOpinionOutcome: readOptionalNullableString(quality, 'secondOpinionOutcome', what),
+    secondOpinionCategory: readOptionalNullableString(quality, 'secondOpinionCategory', what),
+    secondOpinionQuote: readOptionalNullableString(quality, 'secondOpinionQuote', what),
+    secondOpinionReason: readOptionalNullableString(quality, 'secondOpinionReason', what),
   }
 }
 

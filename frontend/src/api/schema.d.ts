@@ -1624,6 +1624,7 @@ export interface components {
             knowledgePinNumber?: number;
             /** Format: date */
             effectiveOn?: string;
+            engine?: string;
         };
         TaxonomyConceptView: {
             key: string;
@@ -1842,6 +1843,7 @@ export interface components {
             /** @enum {string} */
             proposedLanguageSource?: "APPROVED_DRAFTING" | "GENERATIVE" | "NONE";
             relatedPosition?: boolean;
+            decidedBy?: string;
             /** Format: date-time */
             createdAt?: string;
         };
@@ -2055,6 +2057,9 @@ export interface components {
             probeProbabilities?: {
                 [key: string]: number;
             };
+            route?: string;
+            secondOpinionOutcome?: string;
+            secondOpinionCategory?: string;
         };
         /** @description Deterministic redline state */
         RedlineView: {

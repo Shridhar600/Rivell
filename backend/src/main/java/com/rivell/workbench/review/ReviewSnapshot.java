@@ -36,6 +36,7 @@ public record ReviewSnapshot(
         String embeddingIndexVersion,
         String embeddingModelIdentity,
         ModelPolicyIdentity modelPolicy,
+        ReviewEngine reviewEngine,
         Instant createdAt) {
 
     public ReviewSnapshot {
@@ -52,6 +53,7 @@ public record ReviewSnapshot(
         Objects.requireNonNull(reviewPipelineVersion, "reviewPipelineVersion");
         Objects.requireNonNull(embeddingIndexVersion, "embeddingIndexVersion");
         Objects.requireNonNull(modelPolicy, "modelPolicy");
+        Objects.requireNonNull(reviewEngine, "reviewEngine");
         Objects.requireNonNull(createdAt, "createdAt");
         if (knowledgePinNumber < 0) {
             throw new IllegalArgumentException("knowledgePinNumber must be >= 0");

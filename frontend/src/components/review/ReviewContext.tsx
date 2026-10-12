@@ -1,6 +1,7 @@
-import type { ReviewSummary } from '../../api/reviews'
+import type { FindingSummary, ReviewSummary } from '../../api/reviews'
 import { useReviewPacksQuery } from '../../api/reviews'
 import { contractPackLabel } from '../../lib/evidence'
+import { engineLabel, routeCountsLabel } from '../../lib/reviews'
 import {
   CONTRACT_TYPE_LABELS,
   JURISDICTION_LABELS,
@@ -9,7 +10,14 @@ import {
 } from '../../lib/contractSemantics'
 
 /** The frozen context this review was created with: what it was checked against. */
-export function ReviewContext({ summary }: { summary: ReviewSummary }) {
+export function ReviewContext({
+  summary,
+  findings = [],
+}: {
+  summary: ReviewSummary
+  /** The review's findings, to count what a second opinion settled and what needs a look. */
+  findings?: readonly FindingSummary[]
+}) {
   const packsQuery = useReviewPacksQuery()
   const snapshot = summary.snapshot
   const profile = snapshot?.profile ?? null
@@ -77,6 +85,12 @@ export function ReviewContext({ summary }: { summary: ReviewSummary }) {
             {snapshot === null
               ? 'Pack context unavailable'
               : (packLabel ?? 'No pack (reduced checks)')}
+          </dd>
+        </div>
+        <div className="data-list__row">
+          <dt>Review engine</dt>
+          <dd>
+            {[engineLabel(snapshot?.engine ?? null), routeCountsLabel(findings)].filter(Boolean).join(' · ')}
           </dd>
         </div>
         {snapshot?.effectiveOn ? (

@@ -16,6 +16,7 @@ export const fixtureAcceptableFinding = {
   proposedAction: 'USE_APPROVED_FALLBACK',
   proposedLanguageSource: 'APPROVED_DRAFTING',
   relatedPosition: false,
+  decidedBy: null,
   createdAt: '2026-09-26T09:01:10Z',
 } satisfies FindingSummary
 
@@ -36,6 +37,12 @@ export const fixtureAcceptableFindingDetail = {
     probabilities: { BEYOND_FALLBACK: 0.87 },
     secondaryTopic: false,
     uncoveredProbability: null,
+    route: null,
+    jevCategory: null,
+    secondOpinionOutcome: null,
+    secondOpinionCategory: null,
+    secondOpinionQuote: null,
+    secondOpinionReason: null,
   },
   claims: [],
   // Accept adopts approved wording, so the evidence it cites is part of the finding, as the backend guarantees.

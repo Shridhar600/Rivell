@@ -454,7 +454,8 @@ public class ReviewApiService {
                                 snapshot.contractPackKey()),
                         snapshot.packVersion(),
                         snapshot.knowledgePinNumber(),
-                        snapshot.effectiveOn()),
+                        snapshot.effectiveOn(),
+                        snapshot.reviewEngine().name()),
                 coverage(organizationId, reviewId, counted),
                 warnings.items(),
                 warnings.truncated());
@@ -657,7 +658,9 @@ public class ReviewApiService {
                 finding.issueFamily(), finding.observationKind(),
                 finding.severity(), finding.reviewClassification(), finding.proposedAction(),
                 finding.proposedLanguageSource(),
-                Boolean.TRUE.equals(finding.quality().get("secondaryTopic")), finding.createdAt());
+                Boolean.TRUE.equals(finding.quality().get("secondaryTopic")),
+                finding.quality().get("route") instanceof String route ? route : null,
+                finding.createdAt());
     }
 
     private static String name(ConceptKey concept) {

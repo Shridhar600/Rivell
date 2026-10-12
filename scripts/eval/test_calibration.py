@@ -107,6 +107,27 @@ class BucketTest(unittest.TestCase):
 
 class GuardTest(unittest.TestCase):
 
+    def test_second_opinions_count_outcomes_and_whom_the_key_backs(self):
+        def adjudicated(p, flagged, outcome, category):
+            return dict(position(p, flagged=flagged), route="ADJUDICATE",
+                        secondOpinionOutcome=outcome, secondOpinionCategory=category)
+        records = calibration.build_records("run", "c", ANSWER, raw([
+            # S1 holds a planted issue: Jev passed it, the second opinion flagged it -> key backs the second opinion
+            check("h1", [adjudicated(probs(MEETS_PREFERRED=0.45, BEYOND_FALLBACK=0.45), False,
+                                     "DISAGREED", "BEYOND_FALLBACK")]),
+            # S4 is compliant: Jev flagged it, the second opinion did not -> key backs the second opinion
+            check("h4", [adjudicated(probs(UNCLEAR=0.6, MEETS_PREFERRED=0.3), True,
+                                     "DISAGREED", "MEETS_PREFERRED")]),
+            # S2: both flagged
+            check("h2", [adjudicated(probs(BEYOND_FALLBACK=0.6, MEETS_PREFERRED=0.3), True,
+                                     "AGREED", "BEYOND_FALLBACK")]),
+        ]))
+        summary = calibration.second_opinion_summary(records)
+        self.assertEqual(summary["adjudicated"], 3)
+        self.assertEqual(summary["perContract"], 3.0)
+        self.assertEqual(summary["outcomes"], {"DISAGREED": 2, "AGREED": 1})
+        self.assertEqual(summary["disagreementsBack"], {"SECOND_OPINION": 2})
+
     def test_a_holdout_is_refused(self):
         with self.assertRaises(SystemExit):
             calibration.build(pathlib.Path("/x/eval/corpus/holdout2-fixed"), [])

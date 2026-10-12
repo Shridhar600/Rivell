@@ -40,6 +40,7 @@ import {
   findingState,
   isActionable,
   nextOpenFinding,
+  orderForReview,
   profileLine,
   regionText,
 } from '../lib/workspace'
@@ -195,7 +196,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const analysisCompleted = status === 'COMPLETED'
   const canReadFindings = isReviewTerminal(status) || status === 'UNKNOWN'
   const findingsQuery = useFindingsQuery(reviewId, {}, canReadFindings)
-  const findings = useMemo(() => findingsQuery.data?.items ?? [], [findingsQuery.data])
+  const findings = useMemo(() => orderForReview(findingsQuery.data?.items ?? []), [findingsQuery.data])
 
   const decisionsQuery = useCurrentDecisionsQuery(reviewId, analysisCompleted)
   const humanReviewQuery = useHumanReviewQuery(reviewId, analysisCompleted)
@@ -625,7 +626,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         ) : null}
         {sheet?.kind === 'notes' ? (
           <>
-            <ReviewContext summary={summary} />
+            <ReviewContext summary={summary} findings={findings} />
             <ReviewCoveragePanel coverage={summary.coverage} />
             <AnalysisWarnings summary={summary} />
           </>

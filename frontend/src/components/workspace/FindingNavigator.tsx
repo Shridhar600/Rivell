@@ -1,9 +1,9 @@
-import type { KeyboardEvent } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 import type { FindingSummary } from '../../api/reviews'
 import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
 import { findingIssueLabel, findingSubjectLabel } from '../../lib/reviews'
-import { findingState, type FindingTone } from '../../lib/workspace'
+import { findingState, isNeedsYourLook, type FindingTone } from '../../lib/workspace'
 import { ErrorState, LoadingState } from '../ui/State'
 import { GlyphEscalated, GlyphOpen, GlyphRejected, GlyphResolved } from './WorkspaceIcons'
 
@@ -49,11 +49,42 @@ export function FindingNavigator({
   onSelect,
 }: Props) {
   const { labelFor } = useTaxonomy()
+  const [lookOpen, setLookOpen] = useState(false)
+  const look = findings.filter(isNeedsYourLook)
+  // the group opens by itself when one of its items is selected (keyboard or URL)
+  const showLook = lookOpen || look.some((finding) => finding.id === selectedId)
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>, id: string) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       onSelect(id)
     }
+  }
+
+  function row(finding: FindingSummary) {
+    const state = findingState(finding, decisions.get(finding.id))
+    const Glyph = GLYPHS[state.tone]
+    const selected = finding.id === selectedId
+    return (
+      <div
+        key={finding.id}
+        className="rv-ws-f"
+        role="option"
+        aria-selected={selected}
+        tabIndex={selected ? 0 : -1}
+        onClick={() => onSelect(finding.id)}
+        onKeyDown={(event) => onKeyDown(event, finding.id)}
+      >
+        <Glyph className={`rv-icon rv-ws-g--${state.tone}`} />
+        <div>
+          <b>{findingSubjectLabel(finding, regionLabels, labelFor)}</b>
+          <span>
+            {showState ? `${state.label} · ` : ''}
+            {finding.relatedPosition ? 'Related position' : findingIssueLabel(finding)}
+          </span>
+          {finding.subjectKind === 'ABSENCE' ? <div className="rv-ws-miss">Not in contract</div> : null}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -73,33 +104,28 @@ export function FindingNavigator({
         </p>
       ) : null}
       <div role="listbox" aria-label="Findings list">
-        {findings.map((finding) => {
-          const state = findingState(finding, decisions.get(finding.id))
-          const Glyph = GLYPHS[state.tone]
-          const selected = finding.id === selectedId
-          return (
-            <div
-              key={finding.id}
-              className="rv-ws-f"
-              role="option"
-              aria-selected={selected}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => onSelect(finding.id)}
-              onKeyDown={(event) => onKeyDown(event, finding.id)}
-            >
-              <Glyph className={`rv-icon rv-ws-g--${state.tone}`} />
-              <div>
-                <b>{findingSubjectLabel(finding, regionLabels, labelFor)}</b>
-                <span>
-                  {showState ? `${state.label} · ` : ''}
-                  {finding.relatedPosition ? 'Related position' : findingIssueLabel(finding)}
-                </span>
-                {finding.subjectKind === 'ABSENCE' ? <div className="rv-ws-miss">Not in contract</div> : null}
-              </div>
-            </div>
-          )
-        })}
+        {findings.filter((finding) => !isNeedsYourLook(finding)).map(row)}
       </div>
+      {look.length > 0 ? (
+        <div className="rv-ws-look">
+          <button
+            type="button"
+            className="rv-ws-look-h"
+            aria-expanded={showLook}
+            onClick={() => setLookOpen(!showLook)}
+          >
+            Needs your look ({look.length})
+          </button>
+          <p className="rv-ws-fl-note">
+            Rivell’s two reviewers disagreed, or a second opinion was not available. Rivell did not decide these.
+          </p>
+          {showLook ? (
+            <div role="listbox" aria-label="Needs your look list">
+              {look.map(row)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {truncated ? <p className="rv-ws-fl-note">Showing the first {findings.length} findings only.</p> : null}
     </aside>
   )

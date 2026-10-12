@@ -17,6 +17,7 @@ Usage: scripts/eval/run_eval.py --corpus <dir> --out <dir> [--org A] [--no-build
 """
 import argparse
 import json
+from collections import Counter
 import os
 import pathlib
 import re
@@ -38,6 +39,7 @@ PORT = os.environ.get("RIVELL_EVAL_PORT", "18080")
 BASE_URL = f"http://localhost:{PORT}"
 IN_PROGRESS = {"ANALYSIS_QUEUED", "ANALYZING"}
 SPOTTED = "SPOTTED_IN_WHOLE_CONTRACT_READ"  # finding raised by the opt-in whole-contract read
+NEEDS_LOOK = "NEEDS_YOUR_LOOK"  # engine v2: the reviewers disagreed or no second opinion; the user decides
 WATCH = None  # LogWatch of the running backend: aborts the run when a provider cannot serve it
 
 
@@ -214,6 +216,13 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
         score["withoutSpotted"] = {k: alone[k] for k in ("issues", "issuesDetected", "falseAlarmSections",
                                                          "seriousFalseAlarmSections", "findings")}
         score["spottedFindings"] = sum(f.get("observationKind") == SPOTTED for f in findings)
+    score["decidedBy"] = dict(Counter(f.get("decidedBy") or "NONE" for f in findings))
+    if any(f.get("decidedBy") == NEEDS_LOOK for f in findings):
+        # the same run scored without the "needs your look" group: what the group adds for the user
+        rest = score_contract(answer, nodes, semantics.get("clauses", []),
+                              [f for f in findings if f.get("decidedBy") != NEEDS_LOOK])
+        score["withoutNeedsYourLook"] = {k: rest[k] for k in ("issues", "issuesDetected", "falseAlarmSections",
+                                                              "seriousFalseAlarmSections", "findings")}
     score["coverage"] = coverage
     score["checkStatus"] = {}
     for c in checks:
@@ -467,13 +476,29 @@ def spotting_line(results):
             f"{pct(sum(a['seriousFalseAlarmSections'] for a in alone), compliant)}), findings {findings}"]
 
 
+def needs_look_line(results):
+    """Engine v2: findings a second opinion settled, and the "needs your look" group the user reads."""
+    contracts = [c for r in results for c in r["contracts"]]
+    looks = sum((c.get("decidedBy") or {}).get(NEEDS_LOOK, 0) for c in contracts)
+    second = sum((c.get("decidedBy") or {}).get("SECOND_OPINION", 0) for c in contracts)
+    if not looks and not second:
+        return []
+    rest = [c.get("withoutNeedsYourLook") or c for c in contracts]
+    only_look = sum(c["issuesDetected"] for c in contracts) - sum(r["issuesDetected"] for r in rest)
+    on_compliant = sum(c["falseAlarmSections"] for c in contracts) - sum(r["falseAlarmSections"] for r in rest)
+    return [f"- Engine v2: {second} findings decided with a second opinion; {looks} \"needs your look\" "
+            f"({looks / len(contracts):.1f} per contract); planted issues only they reach: {only_look}; "
+            f"compliant sections only they touch: {on_compliant}"]
+
+
 def write_report(out, results, meta):
     lines = [f"# Eval run {meta['runId']}", "",
              f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
              + (f" · decisions `{meta['decisions']}`" if meta.get("decisions") else "")
              + (" · issue spotting on" if meta.get("issueSpotting") else "")
              + (f" · order probe `{meta['orderProbe']}` (measurement only)"
-                if meta.get("orderProbe", "off") != "off" else ""), ""]
+                if meta.get("orderProbe", "off") != "off" else "")
+             + (f" · engine `{meta['engine']}`" if meta.get("engine", "v1") != "v1" else ""), ""]
     if meta.get("aborted"):
         lines += [f"**⚠️ RUN ABORTED: {meta['aborted']}. Numbers below cover finished orgs only.**", ""]
     tot = {k: 0 for k in ("sx", "sm", "cl", "cc", "ix", "id", "cs", "fa", "fas", "pos", "posf", "cand", "candc")}
@@ -517,6 +542,7 @@ def write_report(out, results, meta):
               volume_line(results),
               cost_speed_line(results, meta),
               *spotting_line(results),
+              *needs_look_line(results),
               check_line(results), "",
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]
@@ -557,7 +583,8 @@ def main():
     meta = {"runId": run_id, "corpus": str(args.corpus), "git": git,
             "started": time.strftime("%Y-%m-%d %H:%M"), "decisions": decisions,
             "issueSpotting": os.environ.get("RIVELL_ISSUE_SPOTTING", "false").lower() == "true",
-            "orderProbe": os.environ.get("RIVELL_ORDER_PROBE", "off").lower()}
+            "orderProbe": os.environ.get("RIVELL_ORDER_PROBE", "off").lower(),
+            "engine": os.environ.get("RIVELL_REVIEW_ENGINE", "v1").lower()}
     started = time.monotonic()
 
     if not args.no_build:

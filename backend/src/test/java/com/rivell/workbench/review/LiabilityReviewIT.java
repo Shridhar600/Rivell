@@ -167,6 +167,9 @@ public class LiabilityReviewIT {
         final java.util.List<String> uncoveredHeadings =
                 java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         volatile Map<String, Double> policyComparisonProbabilities;
+        /** When not empty, {@link #policyComparisonProbabilities} apply only to these headings. */
+        final java.util.Set<String> probabilityHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
         /** Headings whose primary-topic choice comes back indecisive, so the clause has none. */
         final java.util.Set<String> indecisivePrimaryHeadings =
                 java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -335,7 +338,11 @@ public class LiabilityReviewIT {
                         : policyComparisonAnswerOverride != null
                                 ? policyComparisonAnswerOverride
                                 : policyComparisonSelection(clause, question.instructions());
-                var probabilities = policyComparisonProbabilities != null
+                var scripted = policyComparisonProbabilities != null
+                        && (probabilityHeadings.isEmpty() || probabilityHeadings.stream()
+                                .anyMatch(heading -> state.heading() != null
+                                        && state.heading().contains(heading)));
+                var probabilities = scripted
                         ? new LinkedHashMap<>(policyComparisonProbabilities)
                         : uniformProbabilities(question, selected);
                 answers.put(entry.getKey(), new ChoiceAnswer(
@@ -437,6 +444,7 @@ public class LiabilityReviewIT {
             failPolicyComparisonDecision = false;
             policyComparisonAnswerOverride = null;
             policyComparisonProbabilities = null;
+            probabilityHeadings.clear();
             reversedOrderAnswer = null;
             failReversedOrder = false;
             indecisivePrimaryHeadings.clear();
@@ -461,6 +469,11 @@ public class LiabilityReviewIT {
         /** Headings the whole-contract spotting read names (MEDIUM); every other clause is fine. */
         final java.util.Set<String> spottedHeadings = java.util.concurrent.ConcurrentHashMap.newKeySet();
         final AtomicInteger spottingCalls = new AtomicInteger();
+        /** The second opinion's answer (engine v2). Its quote is the clause's first words unless set. */
+        volatile String secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
+        volatile String secondOpinionQuote;
+        volatile boolean failSecondOpinion;
+        final AtomicInteger secondOpinionCalls = new AtomicInteger();
 
         @Override
         public String id() {
@@ -482,11 +495,29 @@ public class LiabilityReviewIT {
             openEndedExplanation = null;
             spottedHeadings.clear();
             spottingCalls.set(0);
+            secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
+            secondOpinionQuote = null;
+            failSecondOpinion = false;
+            secondOpinionCalls.set(0);
         }
 
         @Override
         public GenerationResult generate(GenerationRequest request) {
             calls.incrementAndGet();
+            if (request.state() instanceof AdjudicationSpecs.SecondOpinionState opinion) {
+                secondOpinionCalls.incrementAndGet();
+                if (failSecondOpinion) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "second opinion provider unavailable");
+                }
+                var quote = secondOpinionQuote != null ? secondOpinionQuote
+                        : opinion.clause().substring(0, Math.min(40, opinion.clause().length()));
+                return new GenerationResult(Map.of(
+                        "category", secondOpinionCategory,
+                        "quote", quote,
+                        "reason", "The quoted words decide how the clause meets the position."),
+                        "fake-gen-v1", new TokenUsage(400, 30));
+            }
             if (request.state() instanceof IssueSpottingSpecs.SpottingState spotting) {
                 spottingCalls.incrementAndGet();
                 var lines = spotting.clauses().stream()

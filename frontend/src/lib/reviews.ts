@@ -122,6 +122,8 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
 
 const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
   bounded_decision_unavailable: 'Could not be assessed',
+  second_opinion_disagrees: 'Needs your look — two reviewers disagree',
+  second_opinion_unavailable: 'Needs your look — no second opinion',
 }
 
 export function observationKindLabel(kind: string): string {
@@ -403,7 +405,42 @@ export function isRelatedPosition(
 export function findingIssueLabel(
   finding: Pick<FindingSummary, 'issueFamily' | 'observationKind'>,
 ): string {
-  return finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK'
-    ? 'Not covered by playbook — review'
-    : issueFamilyLabel(finding.issueFamily)
+  if (finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK') return 'Not covered by playbook — review'
+  if (finding.observationKind.startsWith('UNCERTAINTY:second_opinion_')) {
+    return observationKindLabel(finding.observationKind)
+  }
+  return issueFamilyLabel(finding.issueFamily)
+}
+
+/**
+ * Who decided a finding (engine v2 spec §9): Rivell's first review alone, with its estimate; the
+ * first review confirmed by a second opinion; or nobody, because the two disagreed or the second
+ * opinion was not available, so the user decides. The UI never names a model provider. Null when
+ * the finding carries no route (older reviews, other checks).
+ */
+export function decidedByLabel(quality: FindingQuality | null): string | null {
+  if (!quality) return null
+  if (quality.route === 'JEV') {
+    const probability = quality.flagProbability ?? quality.uncoveredProbability
+    return probability === null
+      ? 'Decided by Rivell’s first review'
+      : `Decided by Rivell’s first review · ${Math.round(probability * 100)}%`
+  }
+  if (quality.route === 'SECOND_OPINION') return 'Decided with a second opinion'
+  if (quality.route === 'NEEDS_YOUR_LOOK') return 'Needs your look'
+  return null
+}
+
+export function engineLabel(engine: string | null): string {
+  if (engine === 'V2') return 'v2: a second opinion when the first review is unsure'
+  if (engine === 'V1') return 'v1: one review only'
+  return 'Not recorded'
+}
+
+/** How many findings a second opinion settled and how many wait for the user; null when none. */
+export function routeCountsLabel(findings: readonly Pick<FindingSummary, 'decidedBy'>[]): string | null {
+  const second = findings.filter((finding) => finding.decidedBy === 'SECOND_OPINION').length
+  const look = findings.filter((finding) => finding.decidedBy === 'NEEDS_YOUR_LOOK').length
+  if (second === 0 && look === 0) return null
+  return `${second} decided with a second opinion · ${look} need${look === 1 ? 's' : ''} your look`
 }

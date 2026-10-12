@@ -53,12 +53,13 @@ class ReviewConfiguration {
             ReviewRepository reviewRepository,
             TransactionTemplate transactionTemplate,
             ApplicationEventPublisher eventPublisher,
+            ReviewEngineProperties reviewEngineProperties,
             Clock clock) {
         return new ReviewService(identityProvider, authorizationService,
                 contractQueryService, contractEnrichmentService, knowledgeQueryService,
                 modelBindingCatalog, embeddingService, retrievalProperties,
                 reviewPackRegistry, reviewPlanBuilder, reviewRepository,
-                transactionTemplate, eventPublisher, clock);
+                transactionTemplate, eventPublisher, reviewEngineProperties, clock);
     }
 
     @Bean
@@ -84,10 +85,11 @@ class ReviewConfiguration {
             com.rivell.workbench.intelligence.GenerativeReasoningService generativeReasoningService,
             com.rivell.workbench.retrieval.EvidenceService evidenceService,
             com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry,
-            PolicyComparisonProperties properties) {
+            PolicyComparisonProperties properties,
+            ReviewEngineProperties reviewEngineProperties) {
         return new com.rivell.workbench.review.check.PolicyComparisonCheckExecutor(
                 semanticDecisionService, generativeReasoningService, evidenceService,
-                conceptRegistry, properties);
+                conceptRegistry, properties, reviewEngineProperties);
     }
 
     @Bean

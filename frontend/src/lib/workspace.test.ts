@@ -11,6 +11,7 @@ import {
   finalizeSummary,
   findingState,
   nextOpenFinding,
+  orderForReview,
   profileLine,
   proposedChangeType,
   regionText,
@@ -33,6 +34,7 @@ function finding(id: string, overrides: Partial<FindingSummary> = {}): FindingSu
     proposedAction: 'ESCALATE_TO_HUMAN',
     proposedLanguageSource: 'NONE',
     relatedPosition: false,
+    decidedBy: null,
     createdAt: '2026-10-01T00:00:00Z',
     ...overrides,
   }
@@ -114,6 +116,7 @@ describe('profileLine', () => {
       packVersion: null,
       knowledgePinNumber: null,
       effectiveOn: null,
+      engine: null,
     }
     expect(profileLine(snapshot)).toBe('MSA, counterparty paper, our side customer')
     expect(profileLine({ ...snapshot, profile: null })).toBeNull()
@@ -268,5 +271,17 @@ describe('approved wording', () => {
 
   it('leaves machine-proposed wording to the ordinary eligibility rule', () => {
     expect(acceptEligibilityFor(detail({ proposedLanguageSource: 'GENERATIVE', proposedAction: 'CONSIDER_GENERATED_LANGUAGE', approvedDraftingEvidenceId: null })).eligible).toBe(true)
+  })
+})
+
+describe('orderForReview', () => {
+  it('puts "needs your look" items after the others and keeps each group in server order', () => {
+    const findings = [
+      { id: 'a', decidedBy: 'NEEDS_YOUR_LOOK' },
+      { id: 'b', decidedBy: 'JEV' },
+      { id: 'c', decidedBy: null },
+      { id: 'd', decidedBy: 'NEEDS_YOUR_LOOK' },
+    ]
+    expect(orderForReview(findings).map((finding) => finding.id)).toEqual(['b', 'c', 'a', 'd'])
   })
 })

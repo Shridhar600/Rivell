@@ -269,6 +269,12 @@ describe('review parsers', () => {
       probabilities: { BEYOND_FALLBACK: 0.87, WALK_AWAY: 0.05 },
       secondaryTopic: false,
       uncoveredProbability: null,
+      route: null,
+      jevCategory: null,
+      secondOpinionOutcome: null,
+      secondOpinionCategory: null,
+      secondOpinionQuote: null,
+      secondOpinionReason: null,
     })
     expect(detail.claims.map((claim) => claim.claimKind)).toEqual([
       'OBSERVATION',
@@ -278,6 +284,25 @@ describe('review parsers', () => {
     expect(detail.absenceBasis).toBeNull()
     expect(detail.evidenceItems[0].evidenceId).toBe('e-clause')
     expect(detail.evidenceItems[0].authorityClass).toBe('CURRENT_CONTRACT')
+  })
+
+  it('reads who decided and both views of a "needs your look" item', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: {
+        ...clauseFindingDetail.quality,
+        route: 'NEEDS_YOUR_LOOK',
+        jevCategory: 'BEYOND_FALLBACK',
+        secondOpinionOutcome: 'DISAGREED',
+        secondOpinionCategory: 'MEETS_PREFERRED',
+        secondOpinionQuote: 'shall not exceed the fees paid',
+        secondOpinionReason: 'The cap matches the preferred basis.',
+      },
+    })
+    expect(detail.quality?.route).toBe('NEEDS_YOUR_LOOK')
+    expect(detail.quality?.jevCategory).toBe('BEYOND_FALLBACK')
+    expect(detail.quality?.secondOpinionCategory).toBe('MEETS_PREFERRED')
+    expect(detail.quality?.secondOpinionQuote).toBe('shall not exceed the fees paid')
   })
 
   it('drops a flag probability that is not on the comparison’s 0–1 scale', () => {

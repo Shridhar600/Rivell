@@ -461,6 +461,56 @@ export const fixtureNotCoveredFindingDetail = {
   },
 }
 
+export const fixtureNeedsYourLookFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-11',
+  issueFamily: 'POSITION_UNCERTAIN',
+  observationKind: 'UNCERTAINTY:second_opinion_disagrees',
+  severity: 'LOW',
+  proposedAction: 'ESCALATE_TO_HUMAN',
+  proposedLanguageSource: 'NONE',
+  decidedBy: 'NEEDS_YOUR_LOOK',
+}
+
+export const fixtureNeedsYourLookFindingDetail = {
+  ...fixtureClauseFindingDetail,
+  ...fixtureNeedsYourLookFindingSummary,
+  observationText:
+    "Rivell's two reviewers disagree on this clause against the position: one finds an issue, the other does not. Rivell does not decide; please take a look.",
+  proposedLanguage: null,
+  approvedDraftingEvidenceId: null,
+  quality: {
+    sufficiency: 'SUFFICIENT',
+    verificationOutcome: null,
+    degradationFlags: [],
+    route: 'NEEDS_YOUR_LOOK',
+    jevCategory: 'BEYOND_FALLBACK',
+    flagProbability: 0.68,
+    probabilities: { BEYOND_FALLBACK: 0.62, MEETS_PREFERRED: 0.3 },
+    secondOpinionOutcome: 'DISAGREED',
+    secondOpinionCategory: 'MEETS_PREFERRED',
+    secondOpinionQuote: 'liability shall not exceed the fees paid',
+    secondOpinionReason: 'The cap matches the preferred basis in the position.',
+  },
+}
+
+export const fixtureSecondOpinionFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-12',
+  decidedBy: 'SECOND_OPINION',
+}
+
+export const fixtureSecondOpinionFindingDetail = {
+  ...fixtureClauseFindingDetail,
+  ...fixtureSecondOpinionFindingSummary,
+  quality: {
+    ...fixtureClauseFindingDetail.quality,
+    route: 'SECOND_OPINION',
+    secondOpinionOutcome: 'AGREED',
+    secondOpinionCategory: 'BEYOND_FALLBACK',
+  },
+}
+
 export const fixtureAmbiguousPolicyFindingDetail = {
   ...fixturePolicyMissingFindingDetail,
   id: 'f-4',
