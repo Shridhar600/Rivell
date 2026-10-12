@@ -808,3 +808,19 @@ a.rv-k-lc:focus-visible {
   color: var(--text);
   font-weight: 600;
 }
+/* P2b: a part Rivell did not take as a position, shown in the whole file with Rivell's reading. */
+.rv-k-partmark {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.rv-k-partmark--missed {
+  border-color: var(--amber);
+  color: var(--amber);
+}

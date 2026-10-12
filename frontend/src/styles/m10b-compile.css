@@ -1134,3 +1134,19 @@
     transition: none !important;
   }
 }
+/* P2b: a part a person made a position, and the action that makes one. */
+.rv-kc-kind--you {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.rv-kc-unit__make {
+  grid-column: 1 / -1;
+  justify-self: start;
+  font-size: 12px;
+}
+.rv-kc-unit__err {
+  display: block;
+  margin-top: 3px;
+  color: var(--red);
+  font-size: 11.5px;
+}

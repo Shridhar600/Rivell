@@ -98,15 +98,59 @@ describe('compilation workspace', () => {
     expect(within(list).getByRole('button', { name: /Subcontracting/ })).toHaveTextContent('Position')
   })
 
-  it('keeps a unit that became no candidate visible, secondary, with its record kind', async () => {
+  it('keeps a unit that became no candidate visible, secondary, with Rivell\u2019s reading of it', async () => {
     await open()
     const list = rail()
+    expect(within(list).getByRole('heading', { name: /Not a position \(Rivell\u2019s reading\)/ })).toHaveTextContent('1')
     const title = within(list).getByText('How to use this playbook')
     const row = title.closest('.rv-kc-unit') as HTMLElement
     expect(row).not.toBeNull()
     expect(row).toHaveTextContent('Guidance')
     expect(row).toHaveTextContent('Heading section')
-    // It is reference material, not a candidate: no control to select or decide it.
+    // It is not a candidate: it cannot be selected or decided, only made a position.
+    expect(within(row).getAllByRole('button').map((button) => button.textContent)).toEqual(['Make this a position'])
+  })
+
+  it('lets you make a part Rivell read as guidance into a position, which then waits for review', async () => {
+    const { world } = await open()
+    const row = within(rail()).getByText('How to use this playbook').closest('.rv-kc-unit') as HTMLElement
+    await userEvent.click(within(row).getByRole('button', { name: 'Make this a position' }))
+
+    await waitFor(() => expect(heading()).toHaveTextContent('How to use this playbook'))
+    expect(requests(world, 'POST', /\/api\/knowledge\/artifacts\/src1\/units\/u-guidance\/position$/)).toHaveLength(1)
+    const list = rail()
+    expect(within(list).getByRole('button', { name: /How to use this playbook/ })).toHaveTextContent('Added by you')
+    expect(within(list).queryByRole('heading', { name: /Not a position/ })).not.toBeInTheDocument()
+  })
+
+  it('says so when the server refuses, and adds nothing', async () => {
+    const world = reviewWorld()
+    world.fail['POST position'] = 409
+    await open(world)
+    const row = within(rail()).getByText('How to use this playbook').closest('.rv-kc-unit') as HTMLElement
+    await userEvent.click(within(row).getByRole('button', { name: 'Make this a position' }))
+
+    expect(await within(row).findByRole('alert')).toHaveTextContent('does not apply in the current state')
+    expect(world.candidates[SRC]?.some((entry) => entry.extractionUnitId === 'u-guidance')).toBe(false)
+  })
+
+  it('lists a part Rivell read as a position but compiled nothing from as missed', async () => {
+    const world = reviewWorld()
+    world.units[SRC] = (world.units[SRC] ?? []).map((entry) =>
+      entry.id === 'u-guidance' ? { ...entry, recordKind: 'POSITION' } : entry,
+    )
+    await open(world)
+    const list = rail()
+    expect(within(list).getByRole('heading', { name: /Missed/ })).toHaveTextContent('1')
+    const row = within(list).getByText('How to use this playbook').closest('.rv-kc-unit') as HTMLElement
+    expect(within(row).getByRole('button', { name: 'Make this a position' })).toBeInTheDocument()
+  })
+
+  it('offers no position action on a file type that sorts no parts into positions', async () => {
+    const world = reviewWorld()
+    world.artifacts = world.artifacts.map((entry) => ({ ...entry, artifactType: 'TEMPLATE' }))
+    await open(world)
+    const row = within(rail()).getByText('How to use this playbook').closest('.rv-kc-unit') as HTMLElement
     expect(within(row).queryByRole('button')).not.toBeInTheDocument()
   })
 

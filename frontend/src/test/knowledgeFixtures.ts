@@ -117,6 +117,8 @@ export function unit(over: Partial<ExtractionUnit> & { id: string; artifactId: s
     contentText: null,
     sourceNodeIds: [],
     recordKind: null,
+    recordKindOverride: null,
+    recordKindOverriddenAt: null,
     ...over,
   }
 }
