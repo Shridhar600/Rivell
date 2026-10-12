@@ -2,6 +2,7 @@ package com.rivell.workbench.knowledge;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
@@ -146,8 +147,11 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
     }
 
     private static boolean compatibleContractTypes(KnowledgeCandidate a, KnowledgeCandidate b) {
-        var aTypes = a.scope().declaredContractTypes();
-        var bTypes = b.scope().declaredContractTypes();
+        return overlap(a.scope().declaredContractTypes(), b.scope().declaredContractTypes())
+                && overlap(a.scope().sourceContractTypes(), b.scope().sourceContractTypes());
+    }
+
+    private static boolean overlap(Set<String> aTypes, Set<String> bTypes) {
         if (aTypes.isEmpty() || bTypes.isEmpty()) {
             return true;
         }

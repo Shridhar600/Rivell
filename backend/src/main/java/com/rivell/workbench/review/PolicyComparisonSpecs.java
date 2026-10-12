@@ -73,13 +73,14 @@ public final class PolicyComparisonSpecs {
     }
 
     public static final String UNCOVERED_CLAUSE_SPEC = "uncovered-clause";
-    public static final int UNCOVERED_CLAUSE_VERSION = 1;
+    public static final int UNCOVERED_CLAUSE_VERSION = 2;
     public static final String NEEDS_REVIEW = "needs_review";
 
     /**
      * Triage for a clause no published position addresses (measured 2026-10-11 with
      * {@code jev_uncovered_probe.py} v2): is it unusual for this kind of contract and against
-     * our side? Same state as the comparison.
+     * our side? Same state as the comparison. v2 names a limited remedy as adverse (dev2:
+     * "the Discloser's only remedy is damages" read as normal for the discloser).
      */
     public static DecisionSpec uncoveredClause() {
         return new DecisionSpec(
@@ -94,9 +95,10 @@ public final class PolicyComparisonSpecs {
                         "It restricts our freedom to deal with others (exclusivity, "
                                 + "non-solicitation, standstill, most-favoured pricing), imposes a "
                                 + "penalty or fixed damages on us, grants the other side rights over "
-                                + "our data, name or materials, or adds another one-sided "
-                                + "obligation, cost or risk for us that this kind of contract does "
-                                + "not normally contain.",
+                                + "our data, name or materials, takes away or limits a remedy we "
+                                + "would normally have (an injunction, termination, a claim), or "
+                                + "adds another one-sided obligation, cost or risk for us that this "
+                                + "kind of contract does not normally contain.",
                         "The clause is normal for this kind of contract: standard mechanics, "
                                 + "boilerplate, ordinary mutual obligations, or terms that protect "
                                 + "us."))));

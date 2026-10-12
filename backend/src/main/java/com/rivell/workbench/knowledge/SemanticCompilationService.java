@@ -137,6 +137,8 @@ public class SemanticCompilationService {
                     throw outcome.failure();
                 }
             }
+            var roles = rolesByCandidate.getOrDefault(candidate.id(), Map.<String, RecordFieldRole>of());
+            enriched = withSourceApplicability(withResolvedFieldRoles(enriched, roles), unit, roles);
             var signals = conflictDetector.inspect(enriched, publishedCandidates);
             var withSignals = enriched.withConflictSignals(signals);
             var categorization = categorizer.categorize(withSignals, assessment);
@@ -237,8 +239,49 @@ public class SemanticCompilationService {
         if (conceptKey != null) {
             topicKeys.add(conceptKey);
         }
+        topicClassifier.familyLeaves(topicHeading(candidate, roles))
+                .forEach(key -> topicKeys.add(key.value()));
         return candidate.withSemanticOutcome(semantic, List.copyOf(fields.values()),
                 conceptKey, List.copyOf(topicKeys));
+    }
+
+    /**
+     * Keeps the roles the field-role decision resolved for labels the code does not know, so
+     * review reads "Can live with" as the fallback instead of an unlabelled value.
+     */
+    private static KnowledgeCandidate withResolvedFieldRoles(
+            KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles) {
+        var resolved = new LinkedHashMap<String, String>();
+        roles.forEach((label, role) -> {
+            if (RecordLabelRoles.known(label).isEmpty() && role != RecordFieldRole.OTHER) {
+                resolved.put(label, role.name());
+            }
+        });
+        return resolved.isEmpty() ? candidate
+                : candidate.withMachinePayload(candidate.payload().withFieldRoles(resolved));
+    }
+
+    /**
+     * The contract types the record itself says it applies to: its APPLICABILITY field, or a
+     * prose "Applies to:" line. Deterministic; a record that states nothing keeps the scope it
+     * inherited from the manifest. A label only the model resolved as applicability ("Variant",
+     * "Trigger") narrows only when its value names a contract type the product models.
+     */
+    private static KnowledgeCandidate withSourceApplicability(
+            KnowledgeCandidate candidate, ExtractionUnit unit, Map<String, RecordFieldRole> roles) {
+        var label = firstFieldLabel(candidate, roles, RecordFieldRole.APPLICABILITY);
+        Set<String> types = Set.of();
+        if (label != null) {
+            var codeKnown = RecordLabelRoles.known(label).orElse(null) == RecordFieldRole.APPLICABILITY;
+            types = ContractTypeApplicability.contractTypes(
+                    candidate.payload().columns().get(label), codeKnown);
+        } else if (unit.kind() == ExtractionUnitKind.HEADING_SECTION) {
+            types = ContractTypeApplicability.statedIn(unit.contentText())
+                    .map(text -> ContractTypeApplicability.contractTypes(text, true))
+                    .orElse(Set.of());
+        }
+        return types.isEmpty() ? candidate
+                : candidate.withScope(candidate.scope().withSourceContractTypes(types));
     }
 
     /**
@@ -265,11 +308,18 @@ public class SemanticCompilationService {
     private static String firstFieldValue(
             KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles,
             RecordFieldRole wanted) {
+        var label = firstFieldLabel(candidate, roles, wanted);
+        return label == null ? null : candidate.payload().columns().get(label);
+    }
+
+    private static String firstFieldLabel(
+            KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles,
+            RecordFieldRole wanted) {
         for (var key : candidate.payload().orderedKeys()) {
             if (roles.get(key) == wanted) {
                 var value = candidate.payload().columns().get(key);
                 if (value != null && !value.isBlank()) {
-                    return value;
+                    return key;
                 }
             }
         }

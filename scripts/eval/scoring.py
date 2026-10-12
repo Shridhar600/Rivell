@@ -12,6 +12,10 @@ _STOP = {"the", "a", "an", "of", "and", "or", "to", "in", "for", "on", "by", "wi
 def tokens(text):
     text = (text or "").lower()
     stripped = _NUMBERING.sub("", text, count=1)
+    # a list number before a schedule label ("26. Schedule 1 - Fees"): strip both
+    if re.match(r"\s*(?:schedule|exhibit|annex|appendix)\b", stripped):
+        again = _NUMBERING.sub("", stripped, count=1)
+        stripped = again if again.strip() else stripped
     return _WORD.findall(stripped if stripped.strip() else text)
 
 

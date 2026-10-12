@@ -21,7 +21,14 @@ import java.util.Map;
  *       alongside as an ordered array, which {@code jsonb} does preserve.</li>
  * </ul>
  */
-public record CandidatePayload(Map<String, String> columns, List<String> columnOrder) {
+public record CandidatePayload(
+        Map<String, String> columns, List<String> columnOrder,
+        /**
+         * Roles of labels the code synonym table does not know ("Can live with" -> FALLBACK), as
+         * resolved once per artifact by the field-role decision. Code-known labels are not stored:
+         * their role always comes from the current synonym table.
+         */
+        Map<String, String> fieldRoles) {
 
     public static final CandidatePayload EMPTY = new CandidatePayload(Map.of(), List.of());
 
@@ -29,11 +36,20 @@ public record CandidatePayload(Map<String, String> columns, List<String> columnO
         this(columns, columns == null ? List.of() : List.copyOf(columns.keySet()));
     }
 
+    public CandidatePayload(Map<String, String> columns, List<String> columnOrder) {
+        this(columns, columnOrder, Map.of());
+    }
+
     public CandidatePayload {
         columns = columns == null || columns.isEmpty()
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(columns));
         columnOrder = columnOrder == null ? List.of() : List.copyOf(columnOrder);
+        fieldRoles = fieldRoles == null || fieldRoles.isEmpty() ? Map.of() : Map.copyOf(fieldRoles);
+    }
+
+    public CandidatePayload withFieldRoles(Map<String, String> roles) {
+        return new CandidatePayload(columns, columnOrder, roles);
     }
 
     /**
@@ -83,7 +99,7 @@ public record CandidatePayload(Map<String, String> columns, List<String> columnO
                 order.add(key);
             }
         }
-        return new CandidatePayload(values, order);
+        return new CandidatePayload(values, order, fieldRoles);
     }
 
     /**
@@ -107,13 +123,13 @@ public record CandidatePayload(Map<String, String> columns, List<String> columnO
         }
         var matched = matchOrderTo(machineWording);
         if (matched != null) {
-            return new CandidatePayload(columns, matched);
+            return new CandidatePayload(columns, matched, fieldRoles);
         }
         if (verifiedOrder == null || verifiedOrder.isEmpty()
                 || !columns.keySet().containsAll(verifiedOrder)) {
             return this;
         }
-        return new CandidatePayload(columns, verifiedOrder);
+        return new CandidatePayload(columns, verifiedOrder, fieldRoles);
     }
 
     private List<String> matchOrderTo(String machineWording) {

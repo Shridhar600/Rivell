@@ -57,16 +57,18 @@ class ParseCoverageTest {
     }
 
     @Test
-    void coverageListsTheTextBoxAndTheUnrepresentedPartsAndNothingElse() {
+    void coverageCapturesTheTextBoxOnceAndListsOnlyTheUnrepresentedParts() {
         var coverage = parse(FIXTURE).coverage();
 
         assertThat(coverage.exact()).isTrue();
         assertThat(coverage.extraWords()).isZero();
         assertThat(coverage.gaps()).extracting(Gap::location).containsExactly(
-                Location.TEXT_BOX, Location.HEADER, Location.FOOTER, Location.FOOTNOTE,
-                Location.COMMENT);
-        assertThat(coverage.gaps().get(0).words()).isEqualTo(10);
-        assertThat(coverage.gaps().get(2).excerpt()).isEqualTo("Northwind order form");
+                Location.HEADER, Location.FOOTER, Location.FOOTNOTE, Location.COMMENT);
+        assertThat(coverage.gaps().get(1).excerpt()).isEqualTo("Northwind order form");
+        assertThat(coverage.totals()).filteredOn(t -> t.location() == Location.TEXT_BOX)
+                .singleElement()
+                .as("the box Word writes twice (DrawingML and its VML fallback) is held once")
+                .satisfies(t -> assertThat(t.capturedWords()).isEqualTo(t.sourceWords()).isEqualTo(10));
         assertThat(coverage.totals()).filteredOn(t -> t.location() == Location.BODY)
                 .singleElement()
                 .satisfies(t -> assertThat(t.capturedWords()).isEqualTo(t.sourceWords()));

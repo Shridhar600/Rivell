@@ -117,7 +117,7 @@ class TaxonomyIT {
     void servesTheSeededTaxonomyEveryLeafUnderAParent() throws Exception {
         mockMvc.perform(get("/api/taxonomy/concepts"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.version").value(1))
+                .andExpect(jsonPath("$.version").value(2))
                 .andExpect(jsonPath("$.parents.length()").value(14))
                 .andExpect(jsonPath("$.leaves.length()").value(90))
                 .andExpect(jsonPath("$.leaves[?(@.key == 'LIMITATION_OF_LIABILITY')].parentKey")
@@ -137,6 +137,18 @@ class TaxonomyIT {
         assertThat(result.primaryTopic()).contains(ConceptKey.of("LIMITATION_OF_LIABILITY"));
         assertThat(result.probabilities()).hasSize(90);
         assertThat(result.decisionExecutions()).isEqualTo(2);
+    }
+
+    @Test
+    void aHeadingNamingAWholeFamilyCoversEveryLeafOfIt() {
+        assertThat(classifier.familyLeaves("G-03  Data protection"))
+                .extracting(ConceptKey::value)
+                .contains("SECURITY_MEASURES", "PROCESSOR_DUTIES", "PROCESSING_DETAILS")
+                .doesNotContain("CONFIDENTIALITY_OBLIGATIONS");
+        assertThat(classifier.familyLeaves("Data protection and privacy")).isNotEmpty();
+        assertThat(classifier.familyLeaves("Confidentiality period")).as("a leaf, not the family").isEmpty();
+        assertThat(classifier.familyLeaves("Limitation of liability")).isEmpty();
+        assertThat(classifier.familyLeaves(null)).isEmpty();
     }
 
     @Test

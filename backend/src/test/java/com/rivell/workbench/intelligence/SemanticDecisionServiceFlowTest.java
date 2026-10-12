@@ -118,6 +118,58 @@ class SemanticDecisionServiceFlowTest {
     }
 
     @Test
+    void retriesABrieflyUnavailableProviderAndNothingElse() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        SemanticDecisionProvider flaky = new SemanticDecisionProvider() {
+            @Override
+            public String id() {
+                return "fake";
+            }
+
+            @Override
+            public ProviderExecutionResult execute(DecisionExecutionRequest request) {
+                if (calls.incrementAndGet() <= 2) {
+                    throw new ProviderUnavailableException("Provider rate limited (HTTP 429)");
+                }
+                return new ProviderExecutionResult(Map.of("flag", new YesNoAnswer(0.9)),
+                        "fake-model-v1", new TokenUsage(1, 1));
+            }
+        };
+        var retrying = new SemanticDecisionService(
+                spec -> new ModelBinding("fake", "fake-model-latest"),
+                providerId -> Optional.of(flaky), clock,
+                new ProviderRetry(java.util.List.of(Duration.ZERO, Duration.ZERO)));
+
+        assertThat(retrying.evaluate(spec(), state()).answers()).containsKey("flag");
+        assertThat(calls).hasValue(3);
+
+        calls.set(-10); // fails every attempt: gives up after the last wait
+        assertThatThrownBy(() -> retrying.evaluate(spec(), state()))
+                .isInstanceOf(ProviderUnavailableException.class);
+        assertThat(calls).hasValue(-7);
+
+        var rejected = new java.util.concurrent.atomic.AtomicInteger();
+        var notRetried = new SemanticDecisionService(
+                spec -> new ModelBinding("fake", "fake-model-latest"),
+                providerId -> Optional.of(new SemanticDecisionProvider() {
+                    @Override
+                    public String id() {
+                        return "fake";
+                    }
+
+                    @Override
+                    public ProviderExecutionResult execute(DecisionExecutionRequest request) {
+                        rejected.incrementAndGet();
+                        throw new ProviderRejectedException("HTTP 400");
+                    }
+                }), clock,
+                new ProviderRetry(java.util.List.of(Duration.ZERO, Duration.ZERO)));
+        assertThatThrownBy(() -> notRetried.evaluate(spec(), state()))
+                .isInstanceOf(ProviderRejectedException.class);
+        assertThat(rejected).hasValue(1);
+    }
+
+    @Test
     void wrapsUnexpectedProviderCrashesAsProtocolError() {
         var service = service(new FailingProvider(new IllegalStateException("exploded")));
 

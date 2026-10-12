@@ -9,6 +9,8 @@ import java.util.Objects;
 public record PolicyUnavailablePayload(String sufficiency) implements SignalPayload {
 
     public static final String NOT_COVERED = "NOT_COVERED_BY_PLAYBOOK";
+    /** A whole-contract read named the clause and no position check flagged it. */
+    public static final String SPOTTED = "SPOTTED_IN_WHOLE_CONTRACT_READ";
 
     public PolicyUnavailablePayload {
         Objects.requireNonNull(sufficiency, "sufficiency");

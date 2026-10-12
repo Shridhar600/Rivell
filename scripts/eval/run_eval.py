@@ -100,7 +100,7 @@ def review_profile(answer):
     law = answer.get("governingLaw", "").lower()
     ctype = contract_type(answer)
     profile = {"contractType": ctype, "paperSource": "COUNTERPARTY_PAPER"}
-    if "england" in law or "wales" in law or "scotland" in law or "united kingdom" in law:
+    if re.search(r"england|(?<!south )wales|scotland|united kingdom", law):
         profile["jurisdiction"] = "UK"
     elif any(s in law for s in ("new york", "delaware", "california", "texas", "illinois",
                                 "washington", "massachusetts", "united states", "ohio",

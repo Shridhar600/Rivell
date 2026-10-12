@@ -23,7 +23,8 @@ import com.rivell.workbench.review.M7ReasoningSpecs;
  */
 final class PositionLanguageGenerator {
 
-    private static final int MAX_CANDIDATE_LENGTH = 2000;
+    private static final int MAX_PROPOSED_LENGTH = 8000;
+    private static final int MAX_EXPLANATION_LENGTH = 2000;
     private static final double TRUE_BAND = 0.6;
     /** A removal or addition judged at least this likely to hurt us fails closed. */
     private static final double HURTS_BAND = 0.5;
@@ -108,8 +109,8 @@ final class PositionLanguageGenerator {
     static boolean valid(String proposed, String explanation, String body) {
         return proposed != null && !proposed.isBlank()
                 && explanation != null && !explanation.isBlank()
-                && proposed.length() <= MAX_CANDIDATE_LENGTH
-                && explanation.length() <= MAX_CANDIDATE_LENGTH
+                && proposed.length() <= MAX_PROPOSED_LENGTH
+                && explanation.length() <= MAX_EXPLANATION_LENGTH
                 && !ClauseTextDiff.key(proposed).equals(ClauseTextDiff.key(body))
                 && !DRAFTING_NOTE.matcher(proposed).find();
     }

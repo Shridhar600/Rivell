@@ -14,4 +14,12 @@ class ContractTypeTest {
         assertThat(ContractType.DPA.applicableCodes()).containsExactly("DPA");
         assertThat(ContractType.ONDA.label()).isEqualTo("One-way non-disclosure agreement");
     }
+
+    @Test
+    void aRecordStatedForTheMsaAlsoGovernsAStatementOfWorkOrDpaUnderIt() {
+        assertThat(ContractType.SOW.recordApplicableCodes()).containsExactlyInAnyOrder("SOW", "MSA");
+        assertThat(ContractType.DPA.recordApplicableCodes()).containsExactlyInAnyOrder("DPA", "MSA");
+        assertThat(ContractType.MNDA.recordApplicableCodes()).containsExactlyInAnyOrder("MNDA", "NDA");
+        assertThat(ContractType.SAAS.recordApplicableCodes()).containsExactly("SAAS");
+    }
 }

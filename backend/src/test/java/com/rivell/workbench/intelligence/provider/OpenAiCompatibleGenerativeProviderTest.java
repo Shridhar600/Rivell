@@ -88,6 +88,41 @@ class OpenAiCompatibleGenerativeProviderTest {
     }
 
     @Test
+    void aLongRedraftedClauseIsAcceptedWhileAnOverlongFieldIsRejected() {
+        var spec = new ReasoningSpec("m7-open-ended-position", 2, "Redraft the clause.", 2,
+                new LinkedHashMap<>(Map.of("proposedLanguage", "new clause text")));
+        var longClause = "The Supplier shall keep the Customer's data confidential. ".repeat(60);
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> chatResponse(
+                        "{\"proposedLanguage\":\"" + longClause + "\"}", "stop", null)),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+        var state = new com.rivell.workbench.intelligence.SemanticState() {
+            @Override
+            public int schemaVersion() {
+                return 2;
+            }
+
+            @Override
+            public Object payload() {
+                return Map.of("clauseText", "x");
+            }
+        };
+
+        assertThat(longClause.length()).isGreaterThan(2000);
+        assertThat(provider.generate(new GenerationRequest("gpt", state, spec)).fields())
+                .containsEntry("proposedLanguage", longClause);
+
+        var overlong = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> chatResponse(
+                        "{\"proposedLanguage\":\"" + "x".repeat(8001) + "\"}", "stop", null)),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+        assertThatThrownBy(() -> overlong.generate(new GenerationRequest("gpt", state, spec)))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderProtocolException.class);
+    }
+
+    @Test
     void strictSchemaWireShapeIsOpenAiCompliant() throws Exception {
         var spec = new ReasoningSpec(
                 "liability-cap-extraction", 1, "Extract cap facts.", 1,
@@ -317,6 +352,25 @@ class OpenAiCompatibleGenerativeProviderTest {
         assertThatThrownBy(() -> provider.generate(
                 new GenerationRequest("cap-model", state("t"), capSpec())))
                 .isInstanceOf(ProviderUnavailableException.class);
+    }
+
+    @Test
+    void anAccountWithNoCreditsIsRejectedNotRetried() {
+        var body = "{\"error\":{\"message\":\"You exceeded your current quota\",\"type\":\"insufficient_quota\","
+                + "\"code\":\"insufficient_quota\"}}";
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> {
+                    throw new org.springframework.web.client.RestClientResponseException(
+                            "rejected", 429, "Too Many Requests", null,
+                            body.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+                }),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+        assertThatThrownBy(() -> provider.generate(
+                new GenerationRequest("cap-model", state("t"), capSpec())))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderRejectedException.class)
+                .hasMessageContaining("no credits");
     }
 
     @Test

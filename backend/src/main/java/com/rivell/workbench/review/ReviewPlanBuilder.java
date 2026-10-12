@@ -42,10 +42,8 @@ public final class ReviewPlanBuilder {
             }
         }
         for (var clause : semantics.clauses()) {
+            // every clause gets a check: one with no topic is still triaged as uncovered
             var topics = ClauseTopics.effectiveTopics(clause);
-            if (topics.isEmpty()) {
-                continue;
-            }
             checks.add(policyComparisonCheck(reviewId, organizationId, snapshot.createdAt(),
                     ordinal[0]++, ClauseTopics.subjectConcept(topics), clause.headingNodeId()));
         }

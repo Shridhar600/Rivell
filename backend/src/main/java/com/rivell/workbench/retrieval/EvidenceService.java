@@ -94,7 +94,25 @@ public class EvidenceService {
             // more positions matched than the cap allows; the omission is visible, not silent
             warnings.add("POLICY_POSITIONS_TRUNCATED");
         }
-        return assemble(request, asOfPublication, policy, drafting, warnings);
+        return assemble(request, asOfPublication, policy, drafting, warnings, true);
+    }
+
+    /**
+     * Evidence for a clause that expresses no taxonomy topic: no position or precedent can
+     * match it, so only the current contract's own text is gathered, for the uncovered-clause
+     * triage to cite. The request's concept is the clause's family placeholder and is not
+     * used to retrieve anything.
+     */
+    public EvidenceBundle buildForUncoveredClause(EvidenceRequest request) {
+        var asOfPublication = resolveAsOf(request);
+        var none = new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false);
+        return assemble(request, asOfPublication, none, none, List.of(), false);
+    }
+
+    /** The text of every published playbook position that applies to the request's contract. */
+    public List<String> applicablePositionTexts(EvidenceRequest request, int limit) {
+        return resolver.resolveAll(request, Set.of(CandidateType.PLAYBOOK_RULE), resolveAsOf(request), limit)
+                .candidates().stream().map(KnowledgeCandidate::effectiveContentText).toList();
     }
 
     private EvidenceBundle buildInternal(EvidenceRequest request) {
@@ -102,14 +120,14 @@ public class EvidenceService {
         return assemble(request, asOfPublication,
                 resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE), asOfPublication),
                 resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT), asOfPublication),
-                List.of());
+                List.of(), true);
     }
 
     private EvidenceBundle assemble(
             EvidenceRequest request, long asOfPublication,
             StructuredPolicyResolver.Resolution policyResolution,
             StructuredPolicyResolver.Resolution draftingResolution,
-            List<String> extraWarnings) {
+            List<String> extraWarnings, boolean withPrecedents) {
         var startedAt = clock.instant();
         var stageStart = startedAt;
         var stageTimings = new LinkedHashMap<String, Long>();
@@ -124,7 +142,9 @@ public class EvidenceService {
                 policyResolution.candidates().stream()
                         .map(KnowledgeCandidate::effectiveContentText)
                         .toList());
-        var precedentOutcome = precedentLane.gather(request, asOfPublication, policyContext);
+        var precedentOutcome = withPrecedents
+                ? precedentLane.gather(request, asOfPublication, policyContext)
+                : PrecedentLane.Outcome.empty();
         stageTimings.put("precedent",
                 java.time.Duration.between(stageStart, clock.instant()).toMillis());
         stageStart = clock.instant();

@@ -32,6 +32,20 @@ final class ExecutionLog {
                 .log(EVENT);
     }
 
+    /** One failed attempt that {@link ProviderRetry} will repeat; not a failed execution. */
+    static void retried(String kind, String specId, int specVersion, String providerId,
+            RuntimeException failure) {
+        LOG.atInfo()
+                .addKeyValue("kind", kind)
+                .addKeyValue("spec", specId)
+                .addKeyValue("specVersion", specVersion)
+                .addKeyValue("provider", providerId)
+                .addKeyValue("outcome", "RETRIED")
+                .addKeyValue("error", failure.getClass().getSimpleName())
+                .addKeyValue("reason", failure.getMessage())
+                .log(EVENT);
+    }
+
     static void failed(String kind, String specId, int specVersion, String providerId,
             long durationMs, RuntimeException failure) {
         LOG.atWarn()
@@ -42,6 +56,9 @@ final class ExecutionLog {
                 .addKeyValue("outcome", "FAILED")
                 .addKeyValue("durationMs", durationMs)
                 .addKeyValue("error", failure.getClass().getSimpleName())
+                // code-written reasons only ("missing required field x"); a raw provider
+                // exception may carry contract text and is never logged
+                .addKeyValue("reason", failure instanceof SemanticDecisionException ? failure.getMessage() : null)
                 .log(EVENT);
     }
 }

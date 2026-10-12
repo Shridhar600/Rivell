@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -76,7 +77,8 @@ public class DocxStructuralParser implements DocumentStructureParser {
             var wordPackage = WordprocessingMLPackage.load(
                     new ByteArrayInputStream(docxBytes));
             var body = wordPackage.getMainDocumentPart().getJaxbElement().getBody();
-            var walk = new BodyWalk(ownerAggregateId, wordPackage);
+            var walk = new BodyWalk(ownerAggregateId, wordPackage,
+                    DocxTextInventory.textBoxes(scan.mainDocumentXml()));
             walk.body(body);
             var warnings = new ArrayList<>(walk.warnings());
             if (rawTopLevelChildren != body.getContent().size()) {
@@ -167,7 +169,11 @@ public class DocxStructuralParser implements DocumentStructureParser {
         private final Deque<Optional<String>> runInTitles = new ArrayDeque<>();
         private int paragraphSequence;
         private int tableSequence;
-        private BodyWalk(UUID ownerAggregateId, WordprocessingMLPackage wordPackage) {
+        private final Map<Integer, List<String>> textBoxes;
+
+        private BodyWalk(UUID ownerAggregateId, WordprocessingMLPackage wordPackage,
+                Map<Integer, List<String>> textBoxes) {
+            this.textBoxes = textBoxes;
             this.ownerAggregateId = ownerAggregateId;
             this.wordPackage = wordPackage;
         }
@@ -253,6 +259,14 @@ public class DocxStructuralParser implements DocumentStructureParser {
                     warning("UNSUPPORTED_BODY_ELEMENT: "
                             + (element == null ? "null" : element.getClass().getSimpleName()));
                 }
+                if (anchorBodyIndex == null) {
+                    for (var box : textBoxes.getOrDefault(i, List.of())) {
+                        nodes.add(new DocumentNode(UUID.randomUUID(), ownerAggregateId, parentId,
+                                DocumentNodeType.TEXT_BOX, siblingOrdinal++, box, null, null,
+                                new SourceSpan(PART_PATH, i, null, null, null, null, null, null),
+                                null));
+                    }
+                }
             }
             return siblingOrdinal;
         }
@@ -273,7 +287,8 @@ public class DocxStructuralParser implements DocumentStructureParser {
                     UUID.randomUUID(), ownerAggregateId, parentId, nodeType, ordinal,
                     text, decision.level(), label,
                     SourceSpan.ofParagraph(PART_PATH, bodyIndex, paragraphSequence), styleId,
-                    nodeType == DocumentNodeType.HEADING ? runInHeading(text, runInTitle) : null);
+                    nodeType == DocumentNodeType.HEADING ? runInHeading(text, runInTitle) : null,
+                    !com.rivell.workbench.platform.docx.TrackableContent.paragraph(paragraph));
         }
 
         /**

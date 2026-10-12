@@ -126,7 +126,7 @@ public final class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvide
         try {
             body = restClient.post(EMBEDDINGS_PATH, serialize(payload));
         } catch (RestClientResponseException e) {
-            throw mapHttpFailure(e.getStatusCode().value());
+            throw mapHttpFailure(e.getStatusCode().value(), e.getResponseBodyAsString());
         } catch (org.springframework.web.client.RestClientException e) {
             throw translateTransportFailure(e);
         }
@@ -140,7 +140,12 @@ public final class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvide
         }
     }
 
-    private RuntimeException mapHttpFailure(int status) {
+    private RuntimeException mapHttpFailure(int status, String body) {
+        // OpenAI answers an exhausted account with 429 too; waiting does not help, so fail fast
+        // (only the error code is read, never logged)
+        if (status == 429 && body != null && body.contains("insufficient_quota")) {
+            return new ProviderRejectedException("Provider account has no credits (HTTP 429 insufficient_quota)");
+        }
         if (status == 429) {
             return new ProviderUnavailableException("Embedding provider rate limited (HTTP 429)");
         }

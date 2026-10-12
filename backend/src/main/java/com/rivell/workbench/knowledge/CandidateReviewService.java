@@ -129,7 +129,10 @@ public class CandidateReviewService {
                     candidate.interpretations(),
                     explicitWording,
                     correctedPayload != null ? correctedPayload : candidate.editedPayload(),
-                    candidate.supersedingCandidateId(), scope != null ? scope : candidate.scope(),
+                    candidate.supersedingCandidateId(),
+                    scope != null
+                            ? scope.withSourceContractTypes(candidate.scope().sourceContractTypes())
+                            : candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
                     Texts.normalize(note), Instant.now(),
                     candidate.createdAt(), Instant.now());

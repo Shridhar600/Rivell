@@ -171,6 +171,9 @@ public class LiabilityReviewIT {
         final java.util.Set<String> indecisivePrimaryHeadings =
                 java.util.concurrent.ConcurrentHashMap.newKeySet();
         private final AtomicInteger indecisivePrimaryAnswers = new AtomicInteger();
+        /** Headings the section-topics decision finds no topic in (every topic answers no). */
+        final java.util.Set<String> topiclessHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
 
         public int indecisivePrimaryAnswers() {
             return indecisivePrimaryAnswers.get();
@@ -204,6 +207,15 @@ public class LiabilityReviewIT {
                 return new ProviderExecutionResult(new LinkedHashMap<>(Map.of("primary_topic",
                         new com.rivell.workbench.intelligence.ChoiceAnswer(first, even.get(first), even))),
                         "fake-review-v1", new TokenUsage(1, 1));
+            }
+            if (request.pack().questions().keySet().stream().anyMatch(name -> name.startsWith("topic_"))
+                    && request.state().payload() instanceof Map<?, ?> topicPayload
+                    && topicPayload.get("heading") instanceof String topicHeading
+                    && topiclessHeadings.stream().anyMatch(topicHeading::contains)) {
+                var none = new LinkedHashMap<String, SemanticAnswer>();
+                request.pack().questions().keySet().forEach(name -> none.put(name,
+                        new com.rivell.workbench.intelligence.YesNoAnswer(0.02)));
+                return new ProviderExecutionResult(none, "fake-review-v1", new TokenUsage(1, 1));
             }
             if (request.pack().questions().containsKey(M7DecisionSpecs.SATISFIES_POLICY)) {
                 var verificationAnswers = new LinkedHashMap<String, SemanticAnswer>();
@@ -413,6 +425,7 @@ public class LiabilityReviewIT {
             policyComparisonProbabilities = null;
             indecisivePrimaryHeadings.clear();
             indecisivePrimaryAnswers.set(0);
+            topiclessHeadings.clear();
             uncoveredProbability = 0.05;
             uncoveredHeadings.clear();
             failConsistencyDecision = false;
@@ -429,6 +442,9 @@ public class LiabilityReviewIT {
         volatile boolean failOpenEnded;
         volatile String openEndedProposed;
         volatile String openEndedExplanation;
+        /** Headings the whole-contract spotting read names (MEDIUM); every other clause is fine. */
+        final java.util.Set<String> spottedHeadings = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        final AtomicInteger spottingCalls = new AtomicInteger();
 
         @Override
         public String id() {
@@ -448,11 +464,22 @@ public class LiabilityReviewIT {
             failOpenEnded = false;
             openEndedProposed = null;
             openEndedExplanation = null;
+            spottedHeadings.clear();
+            spottingCalls.set(0);
         }
 
         @Override
         public GenerationResult generate(GenerationRequest request) {
             calls.incrementAndGet();
+            if (request.state() instanceof IssueSpottingSpecs.SpottingState spotting) {
+                spottingCalls.incrementAndGet();
+                var lines = spotting.clauses().stream()
+                        .filter(clause -> spottedHeadings.stream().anyMatch(clause.heading()::contains))
+                        .map(clause -> clause.number() + " | MEDIUM | one-sided term against us")
+                        .collect(java.util.stream.Collectors.joining("\n"));
+                return new GenerationResult(Map.of("issues", lines.isEmpty() ? "NONE" : lines),
+                        "fake-gen-v1", new TokenUsage(900, 30));
+            }
             if (request.spec().fields().containsKey("proposedLanguage")) {
                 if (failOpenEnded) {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(

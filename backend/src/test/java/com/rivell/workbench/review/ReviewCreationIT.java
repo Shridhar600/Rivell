@@ -265,23 +265,18 @@ class ReviewCreationIT {
             assertThat(headingNodeIds).contains(check.subjectHeadingNodeId());
         });
 
-        // Policy comparison is planned for every clause that carries at least one
-        // effective topic (primary or secondary); the check records the effective
-        // primary, else the first topic.
-        var topicClauses = corpus.semantics().clauses().stream()
-                .filter(clause -> clause.effectivePrimaryConcept().isPresent()
-                        || !clause.secondaryConcepts().isEmpty())
-                .map(ClauseSemantics::headingNodeId)
-                .collect(java.util.stream.Collectors.toSet());
+        // Policy comparison is planned for every clause; the check records the effective
+        // primary, else the first topic, else General (a clause with no topic is only triaged).
         assertThat(clauseChecks).extracting(ReviewPlanCheck::subjectHeadingNodeId)
-                .containsExactlyInAnyOrderElementsOf(topicClauses);
+                .containsExactlyInAnyOrderElementsOf(headingNodeIds);
         assertThat(clauseChecks).allSatisfy(check -> {
             var clause = corpus.semantics().clauses().stream()
                     .filter(candidate -> candidate.headingNodeId()
                             .equals(check.subjectHeadingNodeId()))
                     .findFirst().orElseThrow();
             var expected = clause.effectivePrimaryConcept()
-                    .orElseGet(() -> clause.secondaryConcepts().getFirst());
+                    .orElseGet(() -> clause.secondaryConcepts().isEmpty()
+                            ? ClauseTopics.NO_TOPIC : clause.secondaryConcepts().getFirst());
             assertThat(check.concept()).isEqualTo(expected);
         });
 

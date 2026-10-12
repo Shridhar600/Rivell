@@ -62,6 +62,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private final EvidenceService evidenceService;
     private final ConceptRegistry conceptRegistry;
     private final PolicyComparisonProperties properties;
+    private final ContractIssueSpotter spotter;
 
     public PolicyComparisonCheckExecutor(
             SemanticDecisionService decisionService,
@@ -75,6 +76,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         this.evidenceService = evidenceService;
         this.conceptRegistry = conceptRegistry;
         this.properties = properties;
+        this.spotter = properties.issueSpotting()
+                ? new ContractIssueSpotter(reasoningService, evidenceService) : null;
     }
 
     @Override
@@ -95,7 +98,10 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var detail = new LinkedHashMap<String, Object>();
         detail.put("clauseTopicCount", topics.size());
         if (topics.isEmpty()) {
-            return CheckOutcome.completed(List.of(), detail);
+            // no topic means no position can match, but the clause may still be unusual and
+            // against us ("the only remedy is damages"): the uncovered-clause triage reads it
+            return compare(context, clause,
+                    evidenceService.buildForUncoveredClause(request(context, clause, ClauseTopics.NO_TOPIC)), detail);
         }
         var primary = clause.effectivePrimaryConcept().orElse(null);
         var bundle = evidenceService.buildForPolicyComparison(
@@ -121,8 +127,10 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 truncate(clause.contentText(), MAX_CLAUSE_LENGTH));
         if (positions.isEmpty()) {
             // no applicable position: only the uncovered-clause triage runs
-            return CheckOutcome.completed(uncovered(context, clause, bundle, state, detail),
-                    detail, bundle.traceId()).withCitedEvidence(List.of(bundle));
+            var signals = new ArrayList<>(uncovered(context, clause, bundle, state, detail));
+            signals.addAll(spotted(context, clause, bundle, signals, detail));
+            return CheckOutcome.completed(signals, detail, bundle.traceId())
+                    .withCitedEvidence(List.of(bundle));
         }
         DecisionExecution execution;
         try {
@@ -158,8 +166,39 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             // every matched position judged the clause off its subject: the playbook is silent
             signals.addAll(uncovered(context, clause, bundle, state, detail));
         }
+        if (judgedPositions.stream().noneMatch(PolicyComparisonCheckExecutor::addresses)) {
+            // the playbook judged nothing here: the whole-contract read may still point at it
+            signals.addAll(spotted(context, clause, bundle, signals, detail));
+        }
         return CheckOutcome.completed(signals, detail, bundle.traceId())
                 .withCitedEvidence(List.of(bundle));
+    }
+
+    /**
+     * The whole-contract read (opt-in) named this clause, no position addresses it and the
+     * triage did not flag it: a needs-review finding citing the clause. Where a position
+     * judged the clause, that judgment stands (dev eval: letting the read override it put
+     * MEDIUM+ false alarms at 35%). Never a verdict on a position, never wording.
+     */
+    private List<RawReviewSignal> spotted(
+            ReviewCheckContext context, ClauseSemantics clause, EvidenceBundle bundle,
+            List<RawReviewSignal> signals, Map<String, Object> detail) {
+        if (spotter == null || !signals.isEmpty()) {
+            return List.of();
+        }
+        var spot = spotter.spots(context, bundle.request()).get(clause.headingNodeId());
+        var evidence = subjectEvidence(bundle, clause.id());
+        if (spot == null || evidence.isEmpty()) {
+            return List.of();
+        }
+        detail.put("spotted", spot.severity());
+        return List.of(signal(context, b -> b
+                .signalType(SignalType.POLICY_UNAVAILABLE).issueFamily(IssueFamily.POLICY_UNAVAILABLE)
+                .payload(new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED))
+                .evidence(evidence)
+                .generativeExecution(spot.executionId())
+                .quality(Map.of("spottedSeverity", spot.severity(), "spottedReason", spot.reason()))
+                .dedupeSuffix("spotted")));
     }
 
     private List<RawReviewSignal> flaggedSignals(

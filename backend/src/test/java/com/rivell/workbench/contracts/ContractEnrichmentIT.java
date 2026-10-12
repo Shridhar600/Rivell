@@ -108,7 +108,9 @@ public class ContractEnrichmentIT {
                 var matcher = java.util.regex.Pattern.compile("([a-z]+) times the",
                         java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text);
                 if (!matcher.find()) {
-                    throw new ProviderProtocolException("no cap statement");
+                    // spec v2: a clause with no multiple answers NONE instead of a blank field
+                    return new GenerationResult(Map.of("liabilityCapMultiple", "NONE",
+                            "capBasis", "UNSPECIFIED"), "fake-gen-v1", new TokenUsage(50, 4));
                 }
                 var word = matcher.group(1).toLowerCase();
                 var multiple = switch (word) {
@@ -673,6 +675,30 @@ public class ContractEnrichmentIT {
         assertThat(interpretation.kind()).isEqualTo(InterpretationKind.GENERATIVE_EXTRACTION);
         assertThat(interpretation.verification()).isEqualTo(VerificationState.VERIFIED);
         assertThat(interpretation.verificationExecutionId()).isNotNull();
+    }
+
+    @Test
+    void anUncappedClauseRecordsTheCapAsNotStatedWithoutAFailedCall() throws Exception {
+        var bytes = fixtureBytes("m7-msa-uncapped.docx");
+        var ingested = ingestionService.ingest("m7-msa-uncapped.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+
+        var liability = semantics.clauses().stream()
+                .filter(clause -> clause.contentText().contains("uncapped and unlimited"))
+                .findFirst()
+                .orElseThrow();
+        var interpretation = liability.interpretations().stream()
+                .filter(candidate -> candidate.field().equals("liabilityCapMultiple"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(interpretation.proposedValue()).isEqualTo("NOT_STATED");
+        assertThat(interpretation.executionId()).as("the model call completed").isNotNull();
+        assertThat(liability.facts())
+                .flatExtracting(fact -> fact.values().keySet())
+                .doesNotContain("liabilityCapMultiple");
     }
 
     @Test
