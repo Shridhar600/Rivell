@@ -122,6 +122,7 @@ class SystemApiIT {
                         "/api/knowledge/artifacts/{id}/candidates",
                         "/api/knowledge/artifacts/{id}/original",
                         "/api/knowledge/artifacts/{artifactId}/units/{unitId}/classification",
+                        "/api/knowledge/artifacts/{artifactId}/units/{unitId}/position",
                         "/api/knowledge/candidates/bulk-approve",
                         "/api/knowledge/candidates/{id}",
                         "/api/knowledge/candidates/{id}/concept",

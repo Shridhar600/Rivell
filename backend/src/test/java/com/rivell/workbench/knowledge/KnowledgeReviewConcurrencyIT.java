@@ -410,6 +410,12 @@ class KnowledgeReviewConcurrencyIT {
         }
 
         @Override
+        public boolean overrideRecordKind(UUID unitId, UUID organizationId,
+                KnowledgeRecordKind kind, UUID by, java.time.Instant at) {
+            return delegate.overrideRecordKind(unitId, organizationId, kind, by, at);
+        }
+
+        @Override
         public List<KnowledgeCandidate> loadCandidates(UUID artifactId, UUID organizationId) {
             return delegate.loadCandidates(artifactId, organizationId);
         }

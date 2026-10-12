@@ -98,6 +98,17 @@ class KnowledgeServicesConfiguration {
     }
 
     @Bean
+    UserPositionService userPositionService(
+            KnowledgeRepository knowledgeRepository,
+            SemanticCompilationService semanticCompilationService,
+            TransactionTemplate transactionTemplate,
+            IdentityProvider identityProvider,
+            AuthorizationService authorizationService) {
+        return new UserPositionService(knowledgeRepository, semanticCompilationService,
+                transactionTemplate, identityProvider, authorizationService);
+    }
+
+    @Bean
     KnowledgePublicationService knowledgePublicationService(
             KnowledgeRepository knowledgeRepository,
             TransactionTemplate transactionTemplate,

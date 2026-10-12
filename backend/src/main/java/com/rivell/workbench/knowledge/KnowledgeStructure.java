@@ -53,7 +53,7 @@ final class KnowledgeStructure {
             paragraphs.forEach(node -> memberIds.add(node.id()));
             return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal,
                     ExtractionUnitKind.HEADING_SECTION, headingText(),
-                    joinedParagraphText(), memberIds, null);
+                    joinedParagraphText(), memberIds, null, null);
         }
 
         @Override
@@ -98,7 +98,7 @@ final class KnowledgeStructure {
         @Override
         public ExtractionUnit toUnit(UUID artifactId, int ordinal) {
             return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal, unitKind,
-                    sectionTitle, new CandidatePayload(fields).render(), sourceNodeIds, null);
+                    sectionTitle, new CandidatePayload(fields).render(), sourceNodeIds, null, null);
         }
 
         @Override
@@ -130,7 +130,7 @@ final class KnowledgeStructure {
         @Override
         public ExtractionUnit toUnit(UUID artifactId, int ordinal) {
             return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal, unitKind,
-                    sectionTitle, new CandidatePayload(columns).render(), sourceNodeIds, null);
+                    sectionTitle, new CandidatePayload(columns).render(), sourceNodeIds, null, null);
         }
 
         @Override
@@ -159,7 +159,7 @@ final class KnowledgeStructure {
         @Override
         public ExtractionUnit toUnit(UUID artifactId, int ordinal) {
             return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal,
-                    ExtractionUnitKind.SPREADSHEET_ROW, sheetName, text, sourceNodeIds, null);
+                    ExtractionUnitKind.SPREADSHEET_ROW, sheetName, text, sourceNodeIds, null, null);
         }
 
         @Override

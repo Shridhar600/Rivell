@@ -65,6 +65,7 @@ class KnowledgeController {
     private final KnowledgePublicationService publicationService;
     private final ExtractionUnitConceptClassifier conceptClassifier;
     private final com.rivell.workbench.foundation.DocumentStorage documentStorage;
+    private final com.rivell.workbench.knowledge.UserPositionService userPositionService;
 
     KnowledgeController(
             KnowledgeIngestionService ingestionService,
@@ -72,13 +73,15 @@ class KnowledgeController {
             CandidateReviewService reviewService,
             KnowledgePublicationService publicationService,
             ExtractionUnitConceptClassifier conceptClassifier,
-            com.rivell.workbench.foundation.DocumentStorage documentStorage) {
+            com.rivell.workbench.foundation.DocumentStorage documentStorage,
+            com.rivell.workbench.knowledge.UserPositionService userPositionService) {
         this.ingestionService = ingestionService;
         this.queryService = queryService;
         this.reviewService = reviewService;
         this.publicationService = publicationService;
         this.conceptClassifier = conceptClassifier;
         this.documentStorage = documentStorage;
+        this.userPositionService = userPositionService;
     }
 
     @Operation(summary = "Upload a legal knowledge source with its human-declared manifest")
@@ -164,9 +167,28 @@ class KnowledgeController {
     @GetMapping("/artifacts/{id}/units")
     ApiResult<List<ExtractionUnitView>> getUnits(@PathVariable UUID id) {
         return ApiResult.ok(queryService.getUnits(id).stream()
-                .map(unit -> new ExtractionUnitView(
-                        unit.id(), unit.artifactId(), unit.ordinal(), unit.kind(),
-                        unit.title(), unit.contentText(), unit.sourceNodeIds(), unit.recordKind()))
+                .map(ExtractionUnitView::from)
+                .toList());
+    }
+
+    @Operation(summary = "Make a part Rivell did not take as a position into a position: records "
+            + "the correction beside Rivell's reading and adds the part's candidate for review")
+    @ResponseStatus(HttpStatus.CREATED)
+    @ApiResponses({
+            @ApiResponse(responseCode = "403", description = "Missing knowledge:review",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Artifact or part does not exist in "
+                    + "this organization",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "The part already holds a position, "
+                    + "has no text, or its artifact type sorts no parts into positions",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/artifacts/{artifactId}/units/{unitId}/position")
+    ApiResult<List<CandidateView>> makePosition(
+            @PathVariable UUID artifactId, @PathVariable UUID unitId) {
+        return ApiResult.ok(userPositionService.makePosition(artifactId, unitId).stream()
+                .map(KnowledgeController::toCandidateView)
                 .toList());
     }
 

@@ -229,6 +229,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/artifacts/{artifactId}/units/{unitId}/position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a part Rivell did not take as a position into a position: records the correction beside Rivell's reading and adds the part's candidate for review */
+        post: operations["makePosition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/artifacts/{artifactId}/units/{unitId}/classification": {
         parameters: {
             query?: never;
@@ -1332,6 +1349,13 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        ApiResultListCandidateView: {
+            data?: components["schemas"]["CandidateView"][];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
         ApiResultUnitConceptClassificationView: {
             data?: components["schemas"]["UnitConceptClassificationView"];
             /** Format: int32 */
@@ -2265,6 +2289,12 @@ export interface components {
             sourceNodeIds?: string[];
             /** @enum {string} */
             recordKind?: "POSITION" | "WORDING" | "ESCALATION" | "GUIDANCE" | "DOCUMENT_CONTROL" | "OTHER";
+            /** @enum {string} */
+            recordKindOverride?: "POSITION" | "WORDING" | "ESCALATION" | "GUIDANCE" | "DOCUMENT_CONTROL" | "OTHER";
+            /** Format: uuid */
+            recordKindOverriddenBy?: string;
+            /** Format: date-time */
+            recordKindOverriddenAt?: string;
         };
         ApiResultListKnowledgeStructureNodeView: {
             data?: components["schemas"]["KnowledgeStructureNodeView"][];
@@ -2316,13 +2346,6 @@ export interface components {
             firstColumn?: number;
             /** Format: int32 */
             lastColumn?: number;
-        };
-        ApiResultListCandidateView: {
-            data?: components["schemas"]["CandidateView"][];
-            /** Format: int32 */
-            status?: number;
-            /** Format: date-time */
-            timestamp?: string;
         };
         ApiResultContractListResponse: {
             data?: components["schemas"]["ContractListResponse"];
@@ -3235,6 +3258,56 @@ export interface operations {
             };
             /** @description Unsupported knowledge source type */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    makePosition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifactId: string;
+                unitId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultListCandidateView"];
+                };
+            };
+            /** @description Missing knowledge:review */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Artifact or part does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The part already holds a position, has no text, or its artifact type sorts no parts into positions */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

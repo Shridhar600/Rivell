@@ -138,21 +138,8 @@ public class SemanticCompilationService {
                 }
             }
             var roles = rolesByCandidate.getOrDefault(candidate.id(), Map.<String, RecordFieldRole>of());
-            enriched = withSourceApplicability(withResolvedFieldRoles(enriched, roles), unit, roles);
-            var signals = conflictDetector.inspect(enriched, publishedCandidates);
-            var withSignals = enriched.withConflictSignals(signals);
-            var categorization = categorizer.categorize(withSignals, assessment);
-            var reasons = categorization.reasons();
-            var category = categorization.category();
-            if (kindUnavailable.contains(unit.id())) {
-                var merged = new LinkedHashSet<>(reasons);
-                merged.add(ReviewReason.SEMANTIC_ANALYSIS_UNAVAILABLE);
-                reasons = Set.copyOf(merged);
-                if (category == ReviewCategory.ROUTINE) {
-                    category = ReviewCategory.ELEVATED;
-                }
-            }
-            compiled.add(withSignals.withReviewOutcome(category, reasons));
+            compiled.add(finish(enriched, unit, roles, publishedCandidates, assessment,
+                    kindUnavailable.contains(unit.id())));
         }
 
         var compiledUnits = units.stream()
@@ -162,6 +149,56 @@ public class SemanticCompilationService {
                 .toList();
         return new SemanticCompilation(semanticAvailable, assessment, List.copyOf(compiled),
                 compiledUnits);
+    }
+
+    /**
+     * One part a person marked as a position (design 2026-10-12 §9): the upload path's steps for
+     * each of its candidates, without the record-kind decision the person has just overruled. An
+     * interpretation the providers cannot give leaves the record raw and says so, as at upload.
+     */
+    public List<KnowledgeCandidate> compileUserPosition(
+            KnowledgeArtifact artifact, ExtractionUnit unit, List<KnowledgeCandidate> candidates,
+            List<KnowledgeCandidate> publishedCandidates) {
+        var labelRoles = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var compiled = new ArrayList<KnowledgeCandidate>(candidates.size());
+        for (var candidate : candidates) {
+            var roles = fieldRoles(candidate, labelRoles);
+            var enriched = candidate;
+            var unavailable = false;
+            try {
+                enriched = interpret(candidate, artifact, unit, roles);
+            } catch (SemanticDecisionException e) {
+                LoggerFactory.getLogger(SemanticCompilationService.class)
+                        .warn("Semantic interpretation degraded for candidate {} ({} {})",
+                                candidate.id(), e.getClass().getSimpleName(), e.getMessage());
+                unavailable = true;
+            }
+            compiled.add(finish(enriched, unit, roles, publishedCandidates, artifact.assessment(),
+                    unavailable));
+        }
+        return List.copyOf(compiled);
+    }
+
+    /** The steps after interpretation: resolved roles, applicability, conflicts, review category. */
+    private KnowledgeCandidate finish(
+            KnowledgeCandidate enriched, ExtractionUnit unit, Map<String, RecordFieldRole> roles,
+            List<KnowledgeCandidate> publishedCandidates, ArtifactTypeAssessment assessment,
+            boolean semanticUnavailable) {
+        var applied = withSourceApplicability(withResolvedFieldRoles(enriched, roles), unit, roles);
+        var withSignals = applied.withConflictSignals(
+                conflictDetector.inspect(applied, publishedCandidates));
+        var categorization = categorizer.categorize(withSignals, assessment);
+        var reasons = categorization.reasons();
+        var category = categorization.category();
+        if (semanticUnavailable) {
+            var merged = new LinkedHashSet<>(reasons);
+            merged.add(ReviewReason.SEMANTIC_ANALYSIS_UNAVAILABLE);
+            reasons = Set.copyOf(merged);
+            if (category == ReviewCategory.ROUTINE) {
+                category = ReviewCategory.ELEVATED;
+            }
+        }
+        return withSignals.withReviewOutcome(category, reasons);
     }
 
     private static Optional<KnowledgeRecordKind> kindOf(
