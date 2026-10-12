@@ -25,6 +25,8 @@ import sys
 import time
 import uuid
 
+import prices
+from provider_guard import LogWatch, ProviderFatal, preflight
 from redline_flow import run_redline
 from rivell_api import ApiError, RivellApi, items
 from scoring import score_contract, score_knowledge
@@ -35,6 +37,12 @@ BACKEND = REPO / "backend"
 PORT = os.environ.get("RIVELL_EVAL_PORT", "18080")
 BASE_URL = f"http://localhost:{PORT}"
 IN_PROGRESS = {"ANALYSIS_QUEUED", "ANALYZING"}
+WATCH = None  # LogWatch of the running backend: aborts the run when a provider cannot serve it
+
+
+def guard():
+    if WATCH is not None:
+        WATCH.check()
 
 
 # ---------- backend process ----------
@@ -138,6 +146,7 @@ def review_profile(answer):
 def wait_candidates(api, artifact_id, timeout_s=600):
     deadline, last = time.time() + timeout_s, -1
     while time.time() < deadline:
+        guard()
         cands = items(api.get(f"/api/knowledge/artifacts/{artifact_id}/candidates"))
         if cands and len(cands) == last and all(c.get("reviewStatus") for c in cands):
             return cands
@@ -164,6 +173,7 @@ def run_knowledge(api, corpus, entry, kind, contract_types, errors):
 def wait_review(api, review_id, timeout_s=900):
     deadline = time.time() + timeout_s
     while time.time() < deadline:
+        guard()
         review = api.get(f"/api/reviews/{review_id}")
         if review["status"] not in IN_PROGRESS:
             return review
@@ -267,13 +277,24 @@ def model_usage(log_path):
             continue
         if event.get("message") != "model_execution":
             continue
+        if event.get("outcome") == "RETRIED":
+            continue
         row = usage.setdefault(f"{event.get('kind')}:{event.get('spec')}",
-                               {"calls": 0, "failed": 0, "ms": 0, "inputTokens": 0, "outputTokens": 0})
+                               {"calls": 0, "failed": 0, "ms": 0, "inputTokens": 0, "outputTokens": 0,
+                                "costUsd": 0.0, "unpricedTokens": 0, "models": []})
+        tokens_in, tokens_out = int(event.get("inputTokens") or 0), int(event.get("outputTokens") or 0)
         row["calls"] += 1
         row["failed"] += event.get("outcome") == "FAILED"
         row["ms"] += int(event.get("durationMs") or 0)
-        row["inputTokens"] += int(event.get("inputTokens") or 0)
-        row["outputTokens"] += int(event.get("outputTokens") or 0)
+        row["inputTokens"] += tokens_in
+        row["outputTokens"] += tokens_out
+        call_cost = prices.cost(event.get("model"), tokens_in, tokens_out)
+        if call_cost is None:
+            row["unpricedTokens"] += tokens_in + tokens_out
+        else:
+            row["costUsd"] += call_cost
+        if event.get("model") and event["model"] not in row["models"]:
+            row["models"].append(event["model"])
     return usage
 
 
@@ -349,27 +370,48 @@ def redline_report(results):
 
 def usage_report(results):
     lines = ["", "## Cost and latency", "",
-             "| Org | Model calls | Failed | Input tokens | Output tokens | Model time (s, summed) "
-             "| Contract wall time p50 / max (s) |", "|---|---|---|---|---|---|---|"]
+             "| Org | Model calls | Failed | Input tokens | Output tokens | Cost (USD) | Model time (s, summed) "
+             "| Contract wall time p50 / max (s) |", "|---|---|---|---|---|---|---|---|"]
     by_spec = {}
     for r in results:
         u = r.get("modelUsage") or {}
-        tot = {k: sum(v[k] for v in u.values()) for k in ("calls", "failed", "inputTokens", "outputTokens", "ms")}
+        tot = {k: sum(v.get(k, 0) for v in u.values())
+               for k in ("calls", "failed", "inputTokens", "outputTokens", "ms", "costUsd")}
         for spec, v in u.items():
-            agg = by_spec.setdefault(spec, {"calls": 0, "failed": 0, "inputTokens": 0, "ms": 0})
-            for k in agg:
-                agg[k] += v[k]
+            agg = by_spec.setdefault(spec, {"calls": 0, "failed": 0, "inputTokens": 0, "outputTokens": 0,
+                                            "ms": 0, "costUsd": 0.0})
+            for k in ("calls", "failed", "inputTokens", "outputTokens", "ms", "costUsd"):
+                agg[k] += v.get(k, 0)
+            agg.setdefault("models", set()).update(v.get("models", []))
         walls = sorted(sum(c.get("timings", {}).values()) for c in r["contracts"])
         wall = f"{walls[len(walls) // 2]:.0f} / {walls[-1]:.0f}" if walls else "-"
         lines.append(f"| {r['org']} | {tot['calls']} | {tot['failed']} | {tot['inputTokens']} | {tot['outputTokens']} "
-                     f"| {tot['ms'] / 1000:.0f} | {wall} |")
+                     f"| {tot['costUsd']:.3f} | {tot['ms'] / 1000:.0f} | {wall} |")
     failed = sum(v["failed"] for r in results for v in (r.get("modelUsage") or {}).values())
     if failed:
         lines += ["", f"- ⚠️ {failed} model calls failed (see the Failed column; check provider keys)."]
-    lines += ["", "| Kind:spec | Calls | Failed | Input tokens | Model time (s) |", "|---|---|---|---|---|"]
+    lines += ["", "| Kind:spec | Model | Calls | Failed | Input tokens | Output tokens | Cost (USD) | Model time (s) |",
+              "|---|---|---|---|---|---|---|---|"]
     for spec, v in sorted(by_spec.items(), key=lambda kv: -kv[1]["ms"]):
-        lines.append(f"| {spec} | {v['calls']} | {v['failed']} | {v['inputTokens']} | {v['ms'] / 1000:.0f} |")
+        lines.append(f"| {spec} | {', '.join(sorted(v.get('models', ()))) or '-'} | {v['calls']} | {v['failed']} "
+                     f"| {v['inputTokens']} | {v['outputTokens']} | {v['costUsd']:.3f} | {v['ms'] / 1000:.0f} |")
     return lines
+
+
+def cost_speed_line(results, meta):
+    """One line for step-6 comparisons: list-price cost and wall time per contract."""
+    contracts = [c for r in results for c in r["contracts"]]
+    usage = [v for r in results for v in (r.get("modelUsage") or {}).values()]
+    cost = sum(v.get("costUsd", 0) for v in usage)
+    unpriced = sum(v.get("unpricedTokens", 0) for v in usage)
+    calls = sum(v["calls"] for v in usage)
+    walls = sorted(sum(c.get("timings", {}).values()) for c in contracts)
+    if not contracts:
+        return "- Cost and speed: no contracts"
+    return (f"- Cost and speed: ${cost:.2f} at list prices (${cost / len(contracts):.3f} per contract"
+            + (f"; {unpriced} tokens unpriced" if unpriced else "") + f"), {calls / len(contracts):.0f} model calls "
+            f"per contract; contract wall time p50 {walls[len(walls) // 2]:.0f} s, max {walls[-1]:.0f} s; "
+            f"run {meta.get('wallS', 0) / 60:.0f} min")
 
 
 def check_line(results):
@@ -401,7 +443,11 @@ def volume_line(results):
 
 def write_report(out, results, meta):
     lines = [f"# Eval run {meta['runId']}", "",
-             f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}", ""]
+             f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
+             + (f" · decisions `{meta['decisions']}`" if meta.get("decisions") else "")
+             + (" · issue spotting on" if meta.get("issueSpotting") else ""), ""]
+    if meta.get("aborted"):
+        lines += [f"**⚠️ RUN ABORTED: {meta['aborted']}. Numbers below cover finished orgs only.**", ""]
     tot = {k: 0 for k in ("sx", "sm", "cl", "cc", "ix", "id", "cs", "fa", "fas", "pos", "posf", "cand", "candc")}
     lines += ["## Knowledge", "", "| File | Candidates | With concept | Positions whole | Positions split | Unmatched candidates |",
               "|---|---|---|---|---|---|"]
@@ -441,6 +487,7 @@ def write_report(out, results, meta):
               f"- False-alarm compliant sections: {pct(tot['fa'], tot['cs'])}"
               f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})",
               volume_line(results),
+              cost_speed_line(results, meta),
               check_line(results), "",
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]
@@ -464,6 +511,10 @@ def main():
     missing = [k for k in ("TYPESAFE_API_KEY", "OPENAI_API_KEY") if not os.environ.get(k)]
     if missing:
         sys.exit(f"missing environment variables: {', '.join(missing)}")
+    decisions = os.environ.get("RIVELL_INTELLIGENCE_PROVIDER", "jev")
+    problems = preflight(jev=decisions != "openai-decider", openai_model=os.environ.get("OPENAI_MODEL", "gpt-6-luna"))
+    if problems:
+        sys.exit("preflight failed, nothing run:\n  " + "\n  ".join(problems))
     manifest = json.loads((args.corpus / "manifest.json").read_text())
     all_orgs = manifest.get("orgs") or manifest.get("organisations") or []
     orgs = [o for o in all_orgs if not args.org or o["id"] in args.org]
@@ -475,29 +526,42 @@ def main():
     git = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO,
                          capture_output=True, text=True).stdout.strip()
     meta = {"runId": run_id, "corpus": str(args.corpus), "git": git,
-            "started": time.strftime("%Y-%m-%d %H:%M")}
+            "started": time.strftime("%Y-%m-%d %H:%M"), "decisions": decisions,
+            "issueSpotting": os.environ.get("RIVELL_ISSUE_SPOTTING", "false").lower() == "true"}
+    started = time.monotonic()
 
     if not args.no_build:
         build_jar()
     jar = find_jar()
     api = RivellApi(BASE_URL)
     results = []
+    global WATCH
     for org in orgs:
         org_id = str(uuid.uuid4())
-        proc, log = start_backend(jar, org_id, out / f"backend-{org['id']}.log")
+        log_path = out / f"backend-{org['id']}.log"
+        proc, log = start_backend(jar, org_id, log_path)
+        WATCH = LogWatch(log_path)
         try:
             api.wait_ready()
             if proc.poll() is not None:
                 sys.exit(f"backend for org {org['id']} exited; see {log.name}")
             print(f"org {org['id']}: tenant {org_id}", flush=True)
             results.append(run_org(api, args.corpus, org, raw_dir, not args.no_redline))
+            WATCH.check()
+        except ProviderFatal as e:
+            meta["aborted"] = f"org {org['id']}: {e}"
         finally:
             stop_backend(proc, log)
         if results and results[-1]["org"] == org["id"]:
-            results[-1]["modelUsage"] = model_usage(out / f"backend-{org['id']}.log")
+            results[-1]["modelUsage"] = model_usage(log_path)
+        if meta.get("aborted"):
+            break
+    meta["wallS"] = round(time.monotonic() - started)
     (out / "results.json").write_text(json.dumps({"meta": meta, "results": results}, indent=1))
     write_report(out, results, meta)
     print(f"report: {out / 'summary.md'}")
+    if meta.get("aborted"):
+        sys.exit(f"ABORTED: {meta['aborted']}")
 
 
 if __name__ == "__main__":

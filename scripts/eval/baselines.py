@@ -21,12 +21,16 @@ import math
 import os
 import pathlib
 import re
+import sys
+import threading
 import time
 import urllib.error
 import urllib.request
 import zipfile
 import xml.etree.ElementTree as ET
 
+import prices
+from provider_guard import NO_CREDITS, check_openai
 from scoring import _section_locator, match_sections, score_contract
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -34,8 +38,9 @@ S = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 CATEGORIES = ["WALK_AWAY_BREACH", "NEEDS_FALLBACK", "ACCEPTABLE_FALLBACK", "AMBIGUOUS",
               "CROSS_CLAUSE_CONFLICT", "MISSING_PROVISION", "UNADDRESSED_BY_PLAYBOOK"]
-# USD per 1M tokens (input, output); third-party listings 2026-10, approximate
-PRICES = {"gpt-6-luna": (0.10, 0.50), "gpt-6-sol": (2.0, 10.0), "gpt-6.1-sol": (2.0, 10.0)}
+# set when the account has no credits or the key is rejected: every later call returns at once
+FATAL = threading.Event()
+FATAL_REASON = []
 
 
 # ---------- documents ----------
@@ -137,11 +142,21 @@ def chat(model, system, user, schema, usage):
         data=body, headers={"Authorization": "Bearer " + os.environ["OPENAI_API_KEY"],
                             "Content-Type": "application/json"})
     for attempt in range(4):
+        if FATAL.is_set():
+            usage["failed"] += 1
+            return None
         try:
             with urllib.request.urlopen(request, timeout=300) as response:
                 data = json.load(response)
             break
         except urllib.error.HTTPError as e:
+            text = e.read().decode(errors="replace")
+            if e.code in (401, 402, 403) or "insufficient_quota" in text:
+                FATAL_REASON.append(f"OpenAI account {NO_CREDITS}" if e.code == 402 or "insufficient_quota" in text
+                                    else f"OpenAI key rejected (HTTP {e.code})")
+                FATAL.set()
+                usage["failed"] += 1
+                return None
             if e.code in (429, 500, 502, 503) and attempt < 3:
                 time.sleep(5 * (attempt + 1))
                 continue
@@ -325,6 +340,9 @@ def main():
     ap.add_argument("--out", required=True, type=pathlib.Path)
     args = ap.parse_args()
 
+    problem = check_openai(args.model)
+    if problem:
+        sys.exit(f"preflight failed, nothing run: OpenAI {args.model}: {problem}")
     import run_eval  # contract_type() mapping shared with the Rivell run
     manifest = json.loads((args.corpus / "manifest.json").read_text())
     run_dir = args.out / f"{args.mode}-{args.model}" / time.strftime("%Y%m%d-%H%M%S")
@@ -356,11 +374,15 @@ def main():
             json.dumps({"issues": issues}, indent=1))
         return rel, score(answer, paras, issues), time.time() - started
 
+    started = time.monotonic()
     with concurrent.futures.ThreadPoolExecutor(4 if args.mode == "whole" else 2) as pool:
         results = list(pool.map(review, jobs))
+    usage["wallS"] = round(time.monotonic() - started)
 
     write_summary(run_dir, args, results, usage)
     print(f"report: {run_dir / 'summary.md'}")
+    if FATAL.is_set():
+        sys.exit(f"ABORTED: {FATAL_REASON[0]}")
 
 
 def write_summary(run_dir, args, results, usage):
@@ -392,11 +414,17 @@ def write_summary(run_dir, args, results, usage):
         rows.append(f"| {rel} | {pct(s['issuesDetected'], len(s['issues']))} | "
                     f"{s['falseAlarmSections']}/{s['compliantSections']} | {s['seriousFalseAlarmSections']} | "
                     f"{s['findings'] + s['unlocatedFindings']} | {s['unlocatedFindings']} | {secs:.0f}s |")
-    price = PRICES.get(args.model)
-    cost = (f"${usage['input'] / 1e6 * price[0] + usage['output'] / 1e6 * price[1]:.2f} (approx.)"
-            if price else "unknown price")
+    dollars = prices.cost(args.model, usage["input"], usage["output"])
+    cost = f"${dollars:.2f} (list prices, approx.)" if dollars is not None else "unknown price"
+    done = [secs for _, s, secs in results if s is not None]
+    secs = sorted(done)
+    speed = (f"- Cost and speed: {cost}; ${dollars / max(1, len(results)):.3f} per contract; "
+             f"{usage['calls'] / max(1, len(results)):.0f} model calls per contract; "
+             f"contract wall time p50 {secs[len(secs) // 2]:.0f} s, max {secs[-1]:.0f} s; "
+             f"run {usage.get('wallS', 0) / 60:.0f} min") if secs and dollars is not None else f"- Cost: {cost}"
     lines = [f"# Baseline {args.mode} · {args.model}", "",
              f"Corpus `{args.corpus}` · {time.strftime('%Y-%m-%d %H:%M')}", "",
+             *([f"**⚠️ RUN ABORTED: {FATAL_REASON[0]}.**", ""] if FATAL.is_set() else []),
              "| Contract | Issues detected | False-alarm sections | of which MEDIUM+ | Findings | Unlocated | Time |",
              "|---|---|---|---|---|---|---|", *rows, "", "## Totals", "",
              f"- Planted issues detected (section-level): {pct(tot['found'], tot['issues'])}",
@@ -407,6 +435,7 @@ def write_summary(run_dir, args, results, usage):
              f"of which unlocated (quote not in contract): {tot['unlocated']}; planted issues found per 10 "
              f"findings: {10 * tot['found'] / tot['findings'] if tot['findings'] else 0:.1f}",
              f"- Contracts failed: {tot['failed']}",
+             speed,
              f"- Model calls: {usage['calls']} (failed {usage['failed']}), input tokens {usage['input']}, "
              f"output tokens {usage['output']}, cost {cost}", "",
              "| Issue category | Detected |", "|---|---|",
