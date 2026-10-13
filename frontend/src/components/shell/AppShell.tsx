@@ -69,15 +69,3 @@ function usePanelShortcut(toggleSidebar: () => void, toggleInspector: () => void
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [toggleSidebar, toggleInspector])
 }
-
-/**
- * Temporary F1 seam. Reviews and Knowledge keep their existing layout until F2/F3 restyle them,
- * so this milestone cannot break them.
- */
-export function LegacySurface() {
-  return (
-    <div className="rv-legacy">
-      <Outlet />
-    </div>
-  )
-}

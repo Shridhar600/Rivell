@@ -502,3 +502,16 @@ export function traceRequestEntries(
   }
   return entries
 }
+
+/**
+ * Where the full knowledge record lives: a playbook position opens on its playbook, any other
+ * published source on its source page. Contract evidence has no knowledge page.
+ */
+export function sourceLink(item: EvidenceItem): { to: string; label: string } | null {
+  if (!item.sourceArtifactId || item.authorityClass === 'CURRENT_CONTRACT') return null
+  const position = item.sourceCandidateId ? `?position=${item.sourceCandidateId}` : ''
+  if (item.authorityClass === 'POLICY' && item.sourceCandidateId) {
+    return { to: `/knowledge/playbooks/${item.sourceArtifactId}${position}`, label: 'Open in Playbooks' }
+  }
+  return { to: `/knowledge/sources/${item.sourceArtifactId}${position}`, label: 'Open the source' }
+}

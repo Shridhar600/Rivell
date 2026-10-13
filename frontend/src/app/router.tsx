@@ -1,15 +1,11 @@
-import { createBrowserRouter } from 'react-router'
-import { AppShell, LegacySurface } from '../components/shell/AppShell'
-import { ContractAnalysisPage } from '../routes/ContractAnalysisPage'
-import { ContractPage } from '../routes/ContractPage'
-import { EvidenceInspectorPage } from '../routes/EvidenceInspectorPage'
+import { createBrowserRouter, Navigate } from 'react-router'
+import { AppShell } from '../components/shell/AppShell'
 import { HomePage } from '../routes/HomePage'
-import { KnowledgePublicationPage } from '../routes/KnowledgePublicationPage'
-import { KnowledgePublicationsPage } from '../routes/KnowledgePublicationsPage'
 import { ReviewLifecyclePage } from '../routes/ReviewLifecyclePage'
 import { CompilationPage } from '../routes/knowledge/CompilationPage'
 import { KnowledgeLayout } from '../routes/knowledge/KnowledgeLayout'
 import { AddKnowledgeRedirect, ArtifactRedirect } from '../routes/knowledge/redirects'
+import { ContractPageRedirect } from '../routes/retiredRedirects'
 import { ClauseDetailPage } from '../routes/knowledge/ClauseDetailPage'
 import { ClausesPage } from '../routes/knowledge/ClausesPage'
 import { KnowledgeOverviewPage } from '../routes/knowledge/KnowledgeOverviewPage'
@@ -29,7 +25,7 @@ export const appRoutes = [
       { index: true, element: <HomePage /> },
       { path: 'reviews', element: <ReviewsPage /> },
       { path: 'reviews/new', element: <StartReviewPage /> },
-      // The per-Review lifecycle surface. It sits outside LegacySurface: it is a canonical M10B page.
+      // The per-Review lifecycle surface.
       { path: 'reviews/:contractId/overview/:reviewId/:tab?', element: <ReviewLifecyclePage /> },
       {
         // One layout for every Knowledge page, so Add knowledge opens on any of them without being rebuilt.
@@ -46,18 +42,15 @@ export const appRoutes = [
       },
       { path: 'knowledge/new', element: <AddKnowledgeRedirect /> },
       { path: 'knowledge/artifacts/:artifactId', element: <ArtifactRedirect /> },
-      {
-        // Temporary seam: these surfaces keep their existing layout until they are restyled. The
-        // publication records stay here: they are not part of the canonical Knowledge design.
-        element: <LegacySurface />,
-        children: [
-          { path: 'reviews/:contractId', element: <ContractPage /> },
-          { path: 'reviews/:contractId/analysis', element: <ContractAnalysisPage /> },
-          { path: 'reviews/:contractId/evidence', element: <EvidenceInspectorPage /> },
-          { path: 'knowledge/publications', element: <KnowledgePublicationsPage /> },
-          { path: 'knowledge/publications/:publicationId', element: <KnowledgePublicationPage /> },
-        ],
-      },
+      // Retired v1 pages: the contract page and its evidence inspector (a contract's analysis lives
+      // in its review now), the old analysis page (Start review and the Reviews list replace it) and
+      // the publication records (the Knowledge pages show what each version published). Old links
+      // land on the page that replaced them.
+      { path: 'reviews/:contractId', element: <ContractPageRedirect /> },
+      { path: 'reviews/:contractId/evidence', element: <ContractPageRedirect /> },
+      { path: 'reviews/:contractId/analysis', element: <Navigate replace to="/reviews" /> },
+      { path: 'knowledge/publications', element: <Navigate replace to="/knowledge" /> },
+      { path: 'knowledge/publications/:publicationId', element: <Navigate replace to="/knowledge" /> },
     ],
   },
   // The workspace is full-bleed and carries its own top bar, as in the canonical design, so it

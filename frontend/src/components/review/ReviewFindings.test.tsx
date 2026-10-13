@@ -675,6 +675,33 @@ describe('finding evidence amendment', () => {
     expect(card).toHaveTextContent('Uncapped liability or consequential damages')
   })
 
+  it('links a cited source to its published knowledge page, never to the old publication record', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    await findDetailTitle('6. Limitation of Liability')
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Policy/ }))
+    const policy = screen.getByRole('dialog', { name: 'Source' })
+    expect(within(policy).getByRole('link', { name: 'Open in Playbooks' })).toHaveAttribute(
+      'href',
+      '/knowledge/playbooks/a-playbook?position=k-rule',
+    )
+    expect(within(policy).getByText('Published v2')).toBeInTheDocument()
+    expect(policy.querySelector('a[href^="/knowledge/publications"]')).toBeNull()
+
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Approved drafting/ }))
+    const drafting = screen.getByRole('dialog', { name: 'Source' })
+    expect(within(drafting).getByRole('link', { name: 'Open the source' })).toHaveAttribute(
+      'href',
+      '/knowledge/sources/a-clauses?position=k-variant',
+    )
+
+    // Contract evidence has no knowledge page: the sheet offers the document instead.
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Current contract/ }))
+    const contract = screen.getByRole('dialog', { name: 'Source' })
+    expect(within(contract).queryByRole('link', { name: /^Open/ })).not.toBeInTheDocument()
+    expect(within(contract).getByRole('button', { name: '6. Limitation of Liability' })).toBeInTheDocument()
+  })
+
   it('tells several sources of one authority apart by number', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-4')
 
@@ -697,13 +724,12 @@ describe('finding evidence amendment', () => {
 
     const sheet = screen.getByRole('dialog', { name: 'Source' })
     expect(sheet).toHaveTextContent('3. Fees. Fees are invoiced monthly and payable within 30 days.')
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Open clause semantics' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Clause details' }))
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c1'))
-    const search = new URLSearchParams(router.state.location.search)
-    expect(search.get('view')).toBe('semantics')
-    expect(search.get('clause')).toBe('node-5')
-    expect(router.state.location.search).not.toContain('node-63')
+    // The clause opens in place, on the clause the backend recorded (cl5 -> node-5), not node-63.
+    const details = await screen.findByRole('dialog', { name: 'Clause details' })
+    expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
+    expect(within(details).getByRole('heading', { level: 2 })).toHaveTextContent('5. Termination')
   })
 
   it('keeps a source region inside the workspace and highlights the clause it came from', async () => {
@@ -737,10 +763,7 @@ describe('finding evidence amendment', () => {
     await findDetailTitle('6. Limitation of Liability')
     await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Current contract/ }))
     const sheet = screen.getByRole('dialog', { name: 'Source' })
-    // Clause semantics open the latest version, so a pinned older review does not offer them.
-    expect(
-      within(sheet).queryByRole('button', { name: 'Open clause semantics' }),
-    ).not.toBeInTheDocument()
+    // Clause details open in place on the pinned version; a pinned older review shows them read-only.
 
     // "View in document" still works: the workspace document is the version the review pinned.
     await userEvent.click(within(sheet).getByRole('button', { name: '6. Limitation of Liability' }))
@@ -838,7 +861,7 @@ describe('finding evidence amendment', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
     const sheet = screen.getByRole('dialog', { name: 'Review notes' })
     const heading = within(sheet).getByText('Contract pack')
-    const row = heading.closest('.data-list__row') as HTMLElement
+    const row = heading.parentElement as HTMLElement
     expect(within(row).getByText('Pack context unavailable')).toBeInTheDocument()
   })
 
@@ -1013,7 +1036,7 @@ describe('engine v2: who decided', () => {
     // the frozen context lives in the Review notes sheet
     await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
     const sheet = screen.getByRole('dialog', { name: 'Review notes' })
-    const row = within(sheet).getByText('Review engine').closest('.data-list__row') as HTMLElement
+    const row = within(sheet).getByText('Review engine').parentElement as HTMLElement
     expect(row).toHaveTextContent(
       'v2: a second opinion when the first review is unsure · 1 decided with a second opinion · 1 needs your look',
     )

@@ -59,6 +59,10 @@ import { FindingNavigator } from '../components/workspace/FindingNavigator'
 import { FindingPanel, SUMMARY_LINK_ID } from '../components/workspace/FindingPanel'
 import { FinalizeDialog } from '../components/workspace/FinalizeDialog'
 import { SourceContent } from '../components/workspace/SourceContent'
+import { ClauseDetails } from '../components/workspace/ClauseDetails'
+import { ContractAnalysis } from '../components/workspace/ContractAnalysis'
+import { LinkButton } from '../components/ui/Button'
+import { sourceLink } from '../lib/evidence'
 import { useDecisionFlow } from '../components/workspace/useDecisionFlow'
 import { WorkspaceSheet } from '../components/workspace/WorkspaceSheet'
 import { FROZEN_NOTE_ID, WorkspaceTopBar } from '../components/workspace/WorkspaceTopBar'
@@ -77,7 +81,7 @@ const LEFT_KEY = 'rv-l'
 const RIGHT_KEY = 'rv-r'
 const MODE_CYCLE: Record<DocMode, DocMode> = { changes: 'orig', orig: 'final', final: 'changes' }
 
-type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' }
+type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'clause'; headingNodeId: string } | { kind: 'contract' }
 
 function Gate({ children }: { children: ReactNode }) {
   return (
@@ -444,6 +448,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       ? [{ group: 'Review', label: 'Finalize review', icon: <LockIcon />, run: startFinalize }]
       : []),
     { group: 'Review', label: 'Review context, coverage and notes', icon: <ClauseIcon />, run: () => setSheet({ kind: 'notes' }) },
+    { group: 'Review', label: 'Contract analysis: parties, defined terms, references', icon: <ClauseIcon />, run: () => setSheet({ kind: 'contract' }) },
     { group: 'Go to', label: 'Home', icon: <HomeIcon className="rv-icon" />, run: () => void navigate('/') },
     { group: 'Go to', label: 'Contract reviews', icon: <DocumentIcon className="rv-icon" />, run: () => void navigate('/reviews') },
     { group: 'Go to', label: 'Knowledge', icon: <BookIcon className="rv-icon" />, run: () => void navigate('/knowledge') },
@@ -494,7 +499,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       {!analysisCompleted ? (
         <div className="rv-ws-lifecycle">
           <ReviewLifecyclePanel
-            contractId={contractId}
             reviewId={reviewId}
             summary={summary}
             coverageLimited={coverageLimitations(summary.coverage).length > 0}
@@ -526,6 +530,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   )
 
   const sourceItem = sheet?.kind === 'source' ? finding?.evidenceItems.find((item) => item.evidenceId === sheet.evidenceId) : undefined
+  const sourceRecord = sourceItem ? sourceLink(sourceItem) : null
   // "View in document" stays in this workspace: the clause is revealed in the document beside the
   // panel, keyed by the exact node the evidence recorded, on the version the review pinned.
   function showInDocumentAt(nodeId: string) {
@@ -534,8 +539,18 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     setTerm('')
     setDocFocus({ nodeId })
   }
-  const goToClause = (headingNodeId: string) =>
-    void navigate(`/reviews/${contractId}?${new URLSearchParams({ view: 'semantics', section: 'clauses', clause: headingNodeId })}`)
+  // Clause semantics open in place, on the version the review pinned; corrections are offered only
+  // when that is the contract's latest version.
+  const openClause = (headingNodeId: string) => setSheet({ kind: 'clause', headingNodeId })
+  const semantics = semanticsQuery.data
+  const analysedHeadings = new Set(
+    [...(semantics?.clauses ?? []), ...(semantics?.structuralRegions ?? [])].map((clause) => clause.headingNodeId),
+  )
+  const sheetClause =
+    sheet?.kind === 'clause'
+      ? (semantics?.clauses.find((clause) => clause.headingNodeId === sheet.headingNodeId) ??
+        semantics?.structuralRegions.find((region) => region.headingNodeId === sheet.headingNodeId))
+      : undefined
   const contractType = summary.snapshot?.profile?.contractType
   const pin = summary.snapshot?.knowledgePinNumber
   const context = [profileLine(summary.snapshot), pin ? `Knowledge publication ${pin}` : null].filter(Boolean).join('. ') || null
@@ -599,6 +614,9 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           focusTarget={docFocus}
           marks={clauseMarks}
           onAddFinding={canAddFinding ? addFinding : null}
+          onClauseDetails={semantics ? openClause : null}
+          onContractAnalysis={semantics ? () => setSheet({ kind: 'contract' }) : null}
+          analysedHeadings={analysedHeadings}
         />
         <FindingPanel
           finding={finding}
@@ -627,8 +645,9 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
 
       <WorkspaceSheet
         open={sheet !== null}
-        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : 'Source'}
+        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : sheet?.kind === 'contract' ? 'Contract analysis' : 'Source'}
         onClose={() => setSheet(null)}
+        actions={sourceRecord ? <LinkButton to={sourceRecord.to}>{sourceRecord.label}</LinkButton> : null}
       >
         {sheet?.kind === 'source' ? (
           sourceItem ? (
@@ -637,10 +656,44 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
               regionLabels={regionLabels}
               clauseHeadings={clauseHeadings}
               onNavigateToNode={showInDocumentAt}
-              onOpenClauseSemantics={pinnedVersion === latestVersion ? goToClause : undefined}
+              onOpenClauseSemantics={semantics ? openClause : undefined}
             />
           ) : (
             <p className="rv-ws-caption">This evidence is not part of the selected finding.</p>
+          )
+        ) : null}
+        {sheet?.kind === 'clause' ? (
+          sheetClause && semantics && nodes ? (
+            <ClauseDetails
+              key={sheetClause.id}
+              clause={sheetClause}
+              semantics={semantics}
+              nodes={nodes}
+              contractId={contractId}
+              versionNumber={semantics.versionNumber}
+              editable={pinnedVersion === latestVersion}
+              latestVersionNumber={latestVersion}
+              regionLabels={regionLabels}
+              onNavigateToNode={showInDocumentAt}
+              onRefresh={() => void semanticsQuery.refetch()}
+            />
+          ) : (
+            <p className="rv-ws-caption">The analysis of this clause is not available.</p>
+          )
+        ) : null}
+        {sheet?.kind === 'contract' ? (
+          semantics ? (
+            <ContractAnalysis
+              semantics={semantics}
+              contractId={contractId}
+              editable={pinnedVersion === latestVersion}
+              latestVersionNumber={latestVersion}
+              regionLabels={regionLabels}
+              onNavigateToNode={showInDocumentAt}
+              onRefresh={() => void semanticsQuery.refetch()}
+            />
+          ) : (
+            <p className="rv-ws-caption">The analysis of this contract version is not available.</p>
           )
         ) : null}
         {sheet?.kind === 'history' && selectedId ? (

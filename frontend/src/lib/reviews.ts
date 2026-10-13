@@ -310,10 +310,6 @@ export function coverageExpectationLabel(expectation: string): string {
   }
 }
 
-export function coverageModifier(state: string): string {
-  return state === 'PRESENT_PRIMARY' ? 'badge--muted' : 'badge--status-active'
-}
-
 export function coverageLimitations(coverage: ReviewCoverage[]): ReviewCoverage[] {
   return coverage.filter((entry) => entry.coverage !== 'PRESENT_PRIMARY')
 }

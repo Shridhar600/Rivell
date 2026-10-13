@@ -256,7 +256,8 @@ describe('Start Review: the three requests', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('The semantic analysis service is unavailable right now.')
     expect(alert).toHaveTextContent('uploaded and stored unchanged')
-    expect(within(alert).getByRole('link', { name: 'Open the stored contract' })).toHaveAttribute('href', '/reviews/c9')
+    // the retry below resumes on this page; there is no separate contract page to open
+    expect(within(alert).queryByRole('link', { name: 'Open the stored contract' })).not.toBeInTheDocument()
 
     await userEvent.click(startButton())
     await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/overview/r-new'))

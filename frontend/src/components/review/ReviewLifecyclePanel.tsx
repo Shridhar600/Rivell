@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router'
 import type { ReviewSummary } from '../../api/reviews'
 import { useReviewProgressQuery } from '../../api/reviews'
@@ -11,7 +11,7 @@ import {
   reviewFailureMessage,
   runStatusLabel,
 } from '../../lib/reviews'
-import { LoadingState } from '../LoadingState'
+import { LoadingState } from '../ui/State'
 
 export function AnalysisWarnings({
   summary,
@@ -21,15 +21,15 @@ export function AnalysisWarnings({
   const { labelFor } = useTaxonomy()
   if (summary.analysisWarnings.length === 0) return null
   return (
-    <div className="analysis-warnings">
-      <h3>Analysis warnings</h3>
-      <p className="panel__hint">
+    <div className="rv-ws-sec rv-ws-life-warn">
+      <h3 className="rv-ws-sec-h">Analysis warnings</h3>
+      <p className="rv-ws-caption">
         These checks ran with reduced certainty. Their results may be incomplete.
       </p>
       <ul>
         {summary.analysisWarnings.map((warning, index) => (
           <li key={`${warning.checkKey}-${index}`}>
-            <span className="analysis-warnings__check">
+            <span className="rv-ws-cov-c">
               {checkKeyLabel(warning.checkKey, labelFor)}
             </span>{' '}
             {analysisWarningMessage(warning)}
@@ -37,7 +37,7 @@ export function AnalysisWarnings({
         ))}
       </ul>
       {summary.analysisWarningsTruncated ? (
-        <p className="panel__hint">Additional warnings were omitted.</p>
+        <p className="rv-ws-caption">Additional warnings were omitted.</p>
       ) : null}
     </div>
   )
@@ -45,62 +45,69 @@ export function AnalysisWarnings({
 
 function ProgressDetail({ reviewId, poll }: { reviewId: string; poll: boolean }) {
   const [open, setOpen] = useState(false)
+  const regionId = useId()
   const progressQuery = useReviewProgressQuery(reviewId, open, open && poll)
 
   return (
-    <details
-      className="analysis-detail"
-      onToggle={(event) => setOpen(event.currentTarget.open)}
-    >
-      <summary>Analysis detail</summary>
-      {progressQuery.isPending ? (
+    <div className="rv-ws-sec">
+      <button
+        type="button"
+        className="rv-ws-link"
+        aria-expanded={open}
+        aria-controls={regionId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        Analysis detail
+      </button>
+      <div id={regionId} hidden={!open}>
+      {open && progressQuery.isPending ? (
         <LoadingState label="Loading analysis detail…" />
       ) : null}
-      {progressQuery.isError ? (
-        <p className="state state--warning">Analysis detail is unavailable.</p>
+      {open && progressQuery.isError ? (
+        <p className="rv-ws-warn">Analysis detail is unavailable.</p>
       ) : null}
-      {progressQuery.data ? (
-        <dl className="data-list" aria-label="Analysis check counts">
-          <div className="data-list__row">
+      {open && progressQuery.data ? (
+        <dl className="rv-ws-props" aria-label="Analysis check counts">
+          <div>
             <dt>Planned checks</dt>
             <dd>{progressQuery.data.plannedChecks}</dd>
           </div>
-          <div className="data-list__row">
+          <div>
             <dt>Waiting</dt>
             <dd>{progressQuery.data.pendingChecks}</dd>
           </div>
-          <div className="data-list__row">
+          <div>
             <dt>Running</dt>
             <dd>{progressQuery.data.runningChecks}</dd>
           </div>
-          <div className="data-list__row">
+          <div>
             <dt>Completed</dt>
             <dd>{progressQuery.data.completedChecks}</dd>
           </div>
-          <div className="data-list__row">
+          <div>
             <dt>Degraded</dt>
             <dd>{progressQuery.data.degradedChecks}</dd>
           </div>
-          <div className="data-list__row">
+          <div>
             <dt>Failed</dt>
             <dd>{progressQuery.data.failedChecks}</dd>
           </div>
-          <div className="data-list__row">
+          <div>
             <dt>Skipped</dt>
             <dd>{progressQuery.data.skippedChecks}</dd>
           </div>
-          <div className="data-list__row">
+          <div>
             <dt>Latest attempt</dt>
             <dd>{runStatusLabel(progressQuery.data.latestRunStatus ?? 'UNKNOWN')}</dd>
           </div>
         </dl>
       ) : null}
-    </details>
+      </div>
+    </div>
   )
 }
 
 type Props = {
-  contractId: string
   reviewId: string
   summary: ReviewSummary
   coverageLimited: boolean
@@ -108,7 +115,6 @@ type Props = {
 }
 
 export function ReviewLifecyclePanel({
-  contractId,
   reviewId,
   summary,
   coverageLimited,
@@ -118,8 +124,8 @@ export function ReviewLifecyclePanel({
   const pending = summary.status === 'ANALYSIS_QUEUED' || summary.status === 'ANALYZING'
 
   return (
-    <section className="panel" aria-labelledby="analysis-state-heading">
-      <h2 id="analysis-state-heading">Analysis state</h2>
+    <section className="rv-ws-life" aria-labelledby="analysis-state-heading">
+      <h2 id="analysis-state-heading" className="rv-ws-sec-h">Analysis state</h2>
 
       {summary.status === 'ANALYSIS_QUEUED' ? (
         <p role="status">
@@ -132,7 +138,7 @@ export function ReviewLifecyclePanel({
       ) : null}
 
       {pending ? (
-        <div className="analysis-progress">
+        <div className="rv-ws-life-prog">
           <p>
             {summary.completedChecks} of {summary.plannedChecks} checks completed
             {percent !== null ? ` (${percent}%)` : ''}
@@ -158,17 +164,17 @@ export function ReviewLifecyclePanel({
           summary.degradedChecks === 0 &&
           summary.failedChecks === 0 &&
           !coverageLimited ? (
-            <p className="state state--success">
+            <p>
               Every planned check completed without findings.
             </p>
           ) : null}
           {summary.findings === 0 && coverageLimited ? (
-            <p className="state state--warning">
+            <p className="rv-ws-warn">
               No findings were recorded, but review coverage is limited (see Review coverage).
             </p>
           ) : null}
           {summary.failedChecks > 0 ? (
-            <p className="state state--warning">
+            <p className="rv-ws-warn">
               Some checks did not complete. Review the analysis warnings.
             </p>
           ) : null}
@@ -176,29 +182,29 @@ export function ReviewLifecyclePanel({
       ) : null}
 
       {summary.status === 'FAILED' ? (
-        <div className="state state--error" role="alert">
+        <div className="rv-ws-life-alert" role="alert">
           <p>{reviewFailureMessage(summary.failure)}</p>
           <p>A new review creates a fresh frozen snapshot of the current policy state.</p>
-          <Link className="link-button" to={`/reviews/${contractId}/analysis`}>
-            Back to review history
+          <Link className="rv-ws-link" to="/reviews">
+            Back to reviews
           </Link>
         </div>
       ) : null}
 
       {summary.status === 'UNKNOWN' ? (
-        <div className="state state--warning">
+        <div className="rv-ws-life-alert">
           <p>
             This review is in a state this version of the app does not recognise. It may
             still be running.
           </p>
-          <button type="button" className="button" onClick={onRefresh}>
+          <button type="button" className="rv-btn" onClick={onRefresh}>
             Check again
           </button>
         </div>
       ) : null}
 
       {hasNewerRun(summary) ? (
-        <p className="state state--warning">
+        <p className="rv-ws-warn">
           A newer analysis attempt exists (
           {runStatusLabel(summary.latestRunStatus ?? 'UNKNOWN')}). This page shows the latest
           completed analysis.

@@ -54,6 +54,11 @@ interface Props {
   marks?: ReadonlyMap<string, ClauseMark> | null
   /** Adds a finding Rivell missed on a clause; null when the user cannot add one now. */
   onAddFinding?: ((input: AddFindingInput) => Promise<void>) | null
+  /** Opens a clause's semantics in place; given with the headings Rivell analysed. */
+  onClauseDetails?: ((headingNodeId: string) => void) | null
+  analysedHeadings?: ReadonlySet<string>
+  /** Opens the contract-level analysis (parties, defined terms, references) in place. */
+  onContractAnalysis?: (() => void) | null
 }
 
 const NOTE_LIMIT = 2000
@@ -71,6 +76,8 @@ interface Ctx {
   focusNodeId: string | null
   marks: ReadonlyMap<string, ClauseMark> | null
   onAddFinding: ((input: AddFindingInput) => Promise<void>) | null
+  onClauseDetails: ((headingNodeId: string) => void) | null
+  analysedHeadings: ReadonlySet<string>
 }
 
 /** A heading the review did not plan (a title, the signature block) is outside the review. */
@@ -126,6 +133,11 @@ function ClauseTools({ heading, ctx }: { heading: TreeNode; ctx: Ctx }) {
       {add && !open ? (
         <button type="button" className="rv-ws-link" onClick={() => setOpen(true)}>
           Add a finding
+        </button>
+      ) : null}
+      {ctx.onClauseDetails && ctx.analysedHeadings.has(heading.id) && !open ? (
+        <button type="button" className="rv-ws-link" onClick={() => ctx.onClauseDetails?.(heading.id)}>
+          Clause details
         </button>
       ) : null}
       {add && open ? (
@@ -450,6 +462,8 @@ export function ContractPane(props: Props) {
     focusNodeId,
     marks: props.marks ?? null,
     onAddFinding: props.onAddFinding ?? null,
+    onClauseDetails: props.onClauseDetails ?? null,
+    analysedHeadings: props.analysedHeadings ?? new Set(),
   }
   for (const finding of findings) {
     if (finding.subjectKind !== 'CLAUSE' || !finding.subjectHeadingNodeId) continue
@@ -497,10 +511,15 @@ export function ContractPane(props: Props) {
         </div>
         <span className="rv-ws-dnote">{note}</span>
       </div>
-      {legend ? (
-        <p className="rv-ws-legend" aria-label="What Rivell did with each clause">
-          Clauses: {legend}
-        </p>
+      {legend || props.onContractAnalysis ? (
+        <div className="rv-ws-legend">
+          {legend ? <span aria-label="What Rivell did with each clause">Clauses: {legend}</span> : null}
+          {props.onContractAnalysis ? (
+            <button type="button" className="rv-ws-link" onClick={props.onContractAnalysis}>
+              Contract analysis
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {props.notes}
       {props.isPending ? <LoadingState label="Loading contract…" /> : null}

@@ -2,7 +2,7 @@ import type { FindingDetail, FindingSummary, ReviewSnapshot } from '../api/revie
 import type { ChangeActionType, HumanDecision, HumanReview } from '../api/workflow'
 import { CONTRACT_TYPE_LABELS, PAPER_SOURCE_LABELS, roleLabel } from './contractSemantics'
 import { acceptEligibility, type AcceptEligibility } from './workflow'
-import { buildDocumentTree, type StructureNode, type TreeNode } from './documentTree'
+import { buildDocumentTree, subtreeNodes, type StructureNode, type TreeNode } from './documentTree'
 
 /**
  * View logic for the review workspace. Everything here reads fields the backend already sends.
@@ -167,6 +167,23 @@ export function clauseBody(top: readonly TreeNode[], headingIndex: number): Tree
   const body: TreeNode[] = []
   for (let i = headingIndex + 1; i < top.length && top[i].nodeType !== 'HEADING'; i += 1) body.push(top[i])
   return body
+}
+
+/**
+ * Every node of a clause by the same rule: the top-level heading, the passages after it up to the
+ * next heading, and everything beneath them. A heading below the top level is its own subtree.
+ */
+export function clauseNodeIds(nodes: StructureNode[], headingNodeId: string): Set<string> {
+  const top = topLevelNodes(nodes)
+  const at = top.findIndex((node) => node.id === headingNodeId)
+  const ids = new Set<string>()
+  const walk = (node: TreeNode) => {
+    ids.add(node.id)
+    node.children.forEach(walk)
+  }
+  if (at === -1) subtreeNodes(nodes, headingNodeId).forEach((node) => ids.add(node.id))
+  else [top[at], ...clauseBody(top, at)].forEach(walk)
+  return ids
 }
 
 /** The clause as received: its heading and body, one passage per line. */

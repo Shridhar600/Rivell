@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { appRoutes } from '../../app/router'
-import { LIFECYCLE_ROWS } from '../../test/reviewListFixtures'
+import { LIFECYCLE_ROWS, reviewWire } from '../../test/reviewListFixtures'
 
 function envelope(data: unknown) {
   return { data, status: 200, timestamp: '2026-10-02T09:00:00Z' }
@@ -243,19 +243,56 @@ describe('legacy surfaces still work', () => {
     expect(await screen.findByRole('heading', { name: /knowledge/i })).toBeInTheDocument()
   })
 
-  it('keeps the legacy content wrapper so existing layout is preserved', () => {
-    stubApi()
-    const { container } = renderAt('/knowledge/publications')
-    expect(container.querySelector('.rv-legacy')).toBeInTheDocument()
-  })
-
-  it('lets long legacy pages scroll inside the fixed-height shell', () => {
-    stubApi()
-    const { container } = renderAt('/knowledge/publications')
-    expect(container.querySelector('.rv-legacy')).toBeInTheDocument()
-  })
 
 })
+describe('retired v1 addresses', () => {
+  it.each([
+    ['/knowledge/publications', '/knowledge', ''],
+    ['/knowledge/publications/p-1', '/knowledge', ''],
+    ['/reviews/c1/analysis', '/reviews', ''],
+    ['/reviews/c1/evidence?clause=node-6', '/reviews', ''],
+  ])('%s opens %s', async (from, to, search) => {
+    stubApi()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
+    const router = createMemoryRouter(appRoutes, { initialEntries: [from] })
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(router.state.location.pathname).toBe(to))
+    expect(router.state.location.search).toBe(search)
+  })
+})
+
+describe('the retired contract page address', () => {
+  function routerAt(path: string) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
+    const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    )
+    return router
+  }
+
+  it('opens the contract’s latest review', async () => {
+    stubApi([
+      reviewWire('r-old', 'COMPLETED', 'a.docx', { contractId: 'c7', createdAt: '2026-10-01T08:00:00Z' }),
+      reviewWire('r-new', 'COMPLETED', 'a.docx', { contractId: 'c7', createdAt: '2026-10-03T08:00:00Z' }),
+    ])
+    const router = routerAt('/reviews/c7?view=semantics')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c7/overview/r-new'))
+  })
+
+  it('opens the Reviews list when the contract has no review', async () => {
+    stubApi([])
+    const router = routerAt('/reviews/c7')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews'))
+  })
+})
+
 describe('responsive shell structure', () => {
   it('keeps the collapsed inspector in the grid rather than removing the column', async () => {
     stubApi()

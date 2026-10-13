@@ -2,7 +2,7 @@
    Values are copied unchanged from the frozen Product Design package
    (product-design/m10b/frozen-reference/design/rivell-tokens.css).
    Token names are used verbatim by the M10B primitives in this app.
-   Loaded after the legacy tokens.css; the two sets share no token names. */
+*/
 :root{
   /* Neutrals: sage-tinted paper */
   --bg:#FFFFFF;          /* cards, inputs, panels */
