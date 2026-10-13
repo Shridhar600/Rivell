@@ -31,6 +31,7 @@ from provider_guard import LogWatch, ProviderFatal, preflight
 from redline_flow import run_redline
 from rivell_api import ApiError, RivellApi, items
 from scoring import score_contract, score_knowledge
+import p3_metrics
 import p4_metrics
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -237,6 +238,9 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
     score["omissions"] = p4_metrics.omission_metrics(answer, findings)
     score["lookReasons"] = p4_metrics.look_reasons(findings)
     score["triageVsRead"] = p4_metrics.triage_vs_read(answer, nodes, clauses, checks)
+    # engine v2 P3: definition extraction and reference resolution, pure functions of this run
+    score["definitions"] = p3_metrics.definition_metrics(semantics, checks)
+    score["references"] = p3_metrics.reference_metrics(semantics)
     for lever, drop in (("withoutSearchFound", p4_metrics.drop_search_found),
                         ("withoutAdvisory", p4_metrics.drop_advisory),
                         ("withoutOmissions", p4_metrics.drop_omissions)):
@@ -597,10 +601,46 @@ def p4_lines(results):
     return lines
 
 
+P3_REFERENCE_KEYS = ("resolved", "broken", "ambiguous", "external")
+
+
+def p3_data(contract):
+    """Any P3 definition or reference activity in one scored contract; an older run has none."""
+    definitions = contract.get("definitions") or {}
+    references = contract.get("references") or {}
+    return bool(definitions.get("terms")
+                or any(references.get(key, 0) for key in P3_REFERENCE_KEYS))
+
+
+def p3_lines(results):
+    """Engine v2 P3 measurements: definitions extracted and shown, references by status.
+
+    Only emitted when at least one contract reports an extracted term or a reference, so a run
+    with neither leaves the report unchanged.
+    """
+    contracts = [c for r in results for c in r.get("contracts", [])]
+    if not any(p3_data(contract) for contract in contracts):
+        return []
+    n = len(contracts)
+    definitions = [c.get("definitions") or {} for c in contracts]
+    terms = sum(d.get("terms", 0) for d in definitions)
+    judged = sum(d.get("judgedClauses", 0) for d in definitions)
+    shown = sum(d.get("clausesShown", 0) for d in definitions)
+    terms_shown = sum(d.get("termsShown", 0) for d in definitions)
+    references = [c.get("references") or {} for c in contracts]
+    counts = {key: sum(r.get(key, 0) for r in references) for key in P3_REFERENCE_KEYS}
+    return ["", "## Structure (P3)", "",
+            f"- Definitions: {terms} extracted ({terms / n:.1f}/contract); judged clauses shown "
+            f"definitions {pct(shown, judged)}; definitions shown {terms_shown}",
+            f"- References: resolved {counts['resolved']}, broken {counts['broken']}, "
+            f"ambiguous {counts['ambiguous']}, external {counts['external']}"]
+
+
 def engine_meta():
     """The engine settings the backend starts with, as an eval run reports them."""
     return {"engine": os.environ.get("RIVELL_REVIEW_ENGINE", "v2").lower(),
-            "omissions": os.environ.get("RIVELL_REVIEW_OMISSIONS", "false").lower()}
+            "omissions": os.environ.get("RIVELL_REVIEW_OMISSIONS", "false").lower(),
+            "definitions": os.environ.get("RIVELL_REVIEW_DEFINITIONS", "false").lower()}
 
 
 def header_lines(meta):
@@ -611,7 +651,8 @@ def header_lines(meta):
             + (f" · order probe `{meta['orderProbe']}` (measurement only)"
                if meta.get("orderProbe", "off") != "off" else "")
             + (f" · engine `{meta['engine']}`" if meta.get("engine", "v2") != "v2" else "")
-            + (" · omissions on" if meta.get("omissions") == "true" else ""), ""]
+            + (" · omissions on" if meta.get("omissions") == "true" else "")
+            + (" · definitions on" if meta.get("definitions") == "true" else ""), ""]
 
 
 def write_report(out, results, meta):
@@ -664,6 +705,7 @@ def write_report(out, results, meta):
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]
     lines += p4_lines(results)
+    lines += p3_lines(results)
     lines += coverage_report(results) + redline_report(results) + usage_report(results)
     errs = [f"- {r['org']}: {e}" for r in results for e in r["errors"]]
     errs += [f"- {c['file']}: checks not completed: {', '.join(c['checkFailures'])}"

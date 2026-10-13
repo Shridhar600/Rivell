@@ -72,6 +72,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private final PolicyComparisonProperties properties;
     private final ContractIssueSpotter spotter;
     private final ReviewEngineProperties.Routing routing;
+    private final boolean definitionsEnabled;
     private final LlmAdjudicator adjudicator;
     private final AdjudicationBudget budget;
 
@@ -90,6 +91,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         this.properties = properties;
         this.spotter = new ContractIssueSpotter(reasoningService, evidenceService);
         this.routing = engineProperties.routing();
+        this.definitionsEnabled = engineProperties.definitions();
         this.adjudicator = new LlmAdjudicator(reasoningService);
         this.budget = new AdjudicationBudget(routing.maxAdjudications());
     }
@@ -133,13 +135,20 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 bundle.degradationWarnings().contains("POLICY_POSITIONS_TRUNCATED"));
         var state = comparisonState(context, clause);
         var v2 = context.snapshot().reviewEngine() == ReviewEngine.V2;
+        // engine v2 P3: the judge reads the definitions of the terms the clause uses; v1 and the
+        // property off keep the state exactly as before, and the triage and probe keep it always
+        var definitions = v2 && definitionsEnabled
+                ? ClauseDefinitions.of(bundle) : ClauseDefinitions.empty();
+        var judgeState = comparisonState(context, clause, definitions.texts());
+        var definitionsUsed = new boolean[1];
         var judgedPositions = new ArrayList<JudgedPosition>(positions.size());
         Map<String, PolicyComparisonOutcome.Judgement> probe = Map.of();
         if (!positions.isEmpty()) {
             DecisionExecution execution;
             try {
                 execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
-                        PolicyPositionQuestions.build(positions, clause, conceptRegistry)), state);
+                        PolicyPositionQuestions.build(positions, clause, conceptRegistry)), judgeState);
+                definitionsUsed[0] |= !definitions.isEmpty();
             } catch (SpecStateMismatchException | UnknownDecisionSpecException
                     | NoProviderConfiguredException e) {
                 return CheckOutcome.failed(
@@ -172,7 +181,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 detail.put("route", SEARCH);
                 try {
                     var execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
-                            PolicyPositionQuestions.build(found, clause, conceptRegistry)), state);
+                            PolicyPositionQuestions.build(found, clause, conceptRegistry)), judgeState);
+                    definitionsUsed[0] |= !definitions.isEmpty();
                     var missing = judge(found, execution, searchBundle, SEARCH_KEY_PREFIX,
                             judgedPositions);
                     if (missing != null) {
@@ -192,7 +202,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         // the clause marks read this: a clause a position addresses was checked against the playbook
         var addressed = judgedPositions.stream().anyMatch(PolicyComparisonCheckExecutor::addresses);
         detail.put("addressed", addressed);
-        var opinions = secondOpinions(context, clause, state, judgedPositions);
+        var opinions = secondOpinions(context, clause, judgeState, judgedPositions,
+                definitions.texts(), definitionsUsed);
         if (!judgedPositions.isEmpty()) {
             var probeAnswers = probe;
             detail.put("positions", judgedPositions.stream()
@@ -201,13 +212,18 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     .toList());
         }
         var signals = new ArrayList<RawReviewSignal>();
+        var definitionsCarried = !definitions.isEmpty();
         for (var judged : judgedPositions) {
             var opinion = opinions.get(judged.key());
             if (opinion != null && !opinion.agreed()) {
-                signals.add(needsYourLook(context, clause, judged, opinion));
+                signals.add(needsYourLook(context, clause, judged, opinion, definitionsCarried));
             } else if (judged.judgement().flagged()) {
-                signals.addAll(flaggedSignals(context, clause, judged, opinion, detail));
+                signals.addAll(flaggedSignals(context, clause, judged, opinion, detail,
+                        definitionsCarried));
             }
+        }
+        if (definitionsUsed[0]) {
+            detail.put("definitionTerms", definitions.terms());
         }
         var cited = searchBundle == null ? List.of(bundle) : List.of(bundle, searchBundle);
         if (searchFailed) {
@@ -288,10 +304,12 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * Engine v2 (spec §6): every position Jev was unsure about gets one second opinion, within the
      * run's budget; over budget it goes to the user without a call. A review frozen on v1 asks none.
+     * The definitions the judging state carried go to every call made.
      */
     private Map<String, LlmAdjudicator.SecondOpinion> secondOpinions(
             ReviewCheckContext context, ClauseSemantics clause,
-            PolicyComparisonSpecs.PolicyComparisonState state, List<JudgedPosition> judgedPositions) {
+            PolicyComparisonSpecs.PolicyComparisonState state, List<JudgedPosition> judgedPositions,
+            List<String> definitions, boolean[] definitionsUsed) {
         if (context.snapshot().reviewEngine() != ReviewEngine.V2) {
             return Map.of();
         }
@@ -301,14 +319,19 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     != DecisionRouter.Route.ADJUDICATE) {
                 continue;
             }
-            opinions.put(judged.key(), budget.take(context.runId())
-                    ? adjudicator.ask(new LlmAdjudicator.Ask(
-                            OurSide.describe(context.snapshot().ourSideRole()),
-                            state.contractType(), state.heading(), state.clause(),
-                            PolicyPositionQuestions.instructions(judged.position(), clause,
-                                    conceptRegistry)),
-                            judged.judgement())
-                    : LlmAdjudicator.SecondOpinion.failed(LlmAdjudicator.SecondOpinion.OVER_BUDGET));
+            if (!budget.take(context.runId())) {
+                opinions.put(judged.key(),
+                        LlmAdjudicator.SecondOpinion.failed(LlmAdjudicator.SecondOpinion.OVER_BUDGET));
+                continue;
+            }
+            definitionsUsed[0] |= !definitions.isEmpty();
+            opinions.put(judged.key(), adjudicator.ask(new LlmAdjudicator.Ask(
+                    OurSide.describe(context.snapshot().ourSideRole()),
+                    state.contractType(), state.heading(), state.clause(),
+                    PolicyPositionQuestions.instructions(judged.position(), clause,
+                            conceptRegistry),
+                    definitions),
+                    judged.judgement()));
         }
         return opinions;
     }
@@ -320,11 +343,16 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
      */
     private RawReviewSignal needsYourLook(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
-            LlmAdjudicator.SecondOpinion opinion) {
+            LlmAdjudicator.SecondOpinion opinion, boolean definitionsCarried) {
         var bundle = judged.bundle();
         var execution = judged.execution();
-        var evidence = union(List.of(judged.position().evidenceId()),
-                subjectEvidence(bundle, clause.id()));
+        // when the judge read this position's own bundle's definitions, the finding cites them
+        var evidence = definitionsCarried
+                ? union(union(List.of(judged.position().evidenceId()),
+                        subjectEvidence(bundle, clause.id())),
+                        ClauseDefinitions.of(bundle).evidenceIds())
+                : union(List.of(judged.position().evidenceId()),
+                        subjectEvidence(bundle, clause.id()));
         validateEvidence(bundle, evidence);
         var jev = judged.judgement();
         var quality = new LinkedHashMap<String, Object>();
@@ -372,12 +400,18 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
 
     private List<RawReviewSignal> flaggedSignals(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
-            LlmAdjudicator.SecondOpinion opinion, Map<String, Object> detail) {
+            LlmAdjudicator.SecondOpinion opinion, Map<String, Object> detail,
+            boolean definitionsCarried) {
         var bundle = judged.bundle();
         var execution = judged.execution();
         var family = PolicyComparisonOutcome.family(judged.judgement().category());
-        var evidence = union(List.of(judged.position().evidenceId()),
-                subjectEvidence(bundle, clause.id()));
+        // when the judge read this position's own bundle's definitions, the finding cites them
+        var evidence = definitionsCarried
+                ? union(union(List.of(judged.position().evidenceId()),
+                        subjectEvidence(bundle, clause.id())),
+                        ClauseDefinitions.of(bundle).evidenceIds())
+                : union(List.of(judged.position().evidenceId()),
+                        subjectEvidence(bundle, clause.id()));
         validateEvidence(bundle, evidence);
         // a position the text search found and Jev confirmed was not paired through a topic the
         // clause only touches, so the secondary-topic demotion does not apply to it
@@ -661,17 +695,24 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
 
     /**
      * The comparison state of one clause, shared with the omissions lane: the engine frozen
-     * values plus the clause's own heading and text.
+     * values plus the clause's own heading and text. The definitions are read by the judge only
+     * (engine v2 P3); the omissions lane keeps the plain, definitions-free state.
      */
     static PolicyComparisonSpecs.PolicyComparisonState comparisonState(
             ReviewCheckContext context, ClauseSemantics clause) {
+        return comparisonState(context, clause, List.of());
+    }
+
+    static PolicyComparisonSpecs.PolicyComparisonState comparisonState(
+            ReviewCheckContext context, ClauseSemantics clause, List<String> definitions) {
         return new PolicyComparisonSpecs.PolicyComparisonState(
                 PolicyComparisonSpecs.STATE_SCHEMA_VERSION,
                 context.snapshot().contractType().label(),
                 context.snapshot().ourSideRole() == null
                         ? "" : context.snapshot().ourSideRole().name(),
                 context.headingTexts().getOrDefault(clause.headingNodeId(), ""),
-                truncate(clause.contentText(), MAX_CLAUSE_LENGTH));
+                truncate(clause.contentText(), MAX_CLAUSE_LENGTH),
+                definitions);
     }
 
     static EvidenceRequest request(

@@ -12,16 +12,17 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * <p>This is the surface the M10 milestone asks for: enough to answer "what happened, and why is it
  * not moving" without a database session. It is strictly read-only and strictly diagnostic — it
- * carries no contract text, no model prose, and no legal judgement, and it never proposes an action.
- * A finding is reported by count and by the decision recorded against it, not by restating the clause.
+ * carries no clause text, no definitions and no model prose (defined-term names only), and no legal
+ * judgement, and it never proposes an action. A finding is reported by count and by the decision
+ * recorded against it, not by restating the clause.
  *
  * <p>{@code stalled} is the field that matters operationally. A review whose analysis was enqueued
  * but never picked up, or whose run has been RUNNING far longer than any real run takes, is the
  * single most confusing failure in the product today, because the default configuration has no
  * background worker and nothing says so.
  */
-@Schema(description = "Developer diagnostics for one review run. Read-only; contains no contract "
-        + "text and no model output.")
+@Schema(description = "Developer diagnostics for one review run. Read-only; contains no clause "
+        + "text, no definitions and no model output; defined-term names only.")
 public record ReviewDiagnosticsView(
         @Schema(description = "Review the diagnostics describe") UUID reviewId,
         @Schema(description = "Contract version under review") UUID contractId,
@@ -97,7 +98,10 @@ public record ReviewDiagnosticsView(
             @Schema(description = "Count of positions the omission search addressed")
             Integer addressedBySearch,
             @Schema(description = "Count of positions the omission search flagged")
-            Integer flaggedBySearch) {
+            Integer flaggedBySearch,
+            @Schema(description = "Engine v2: defined terms whose definitions the judge read for "
+                    + "this clause; absent when none")
+            List<String> definitionTerms) {
     }
 
     @Schema(description = "One judged playbook position: ids, categories and probabilities only")

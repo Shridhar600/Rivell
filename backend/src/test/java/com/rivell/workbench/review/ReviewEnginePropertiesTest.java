@@ -9,7 +9,7 @@ class ReviewEnginePropertiesTest {
 
     @Test
     void unsetPropertiesDefaultToEngineTwoAndTheBandMeasuredInP0() {
-        var properties = new ReviewEngineProperties(null, null, null);
+        var properties = new ReviewEngineProperties(null, null, null, null);
 
         assertThat(properties.engine()).isEqualTo(ReviewEngine.V2);
         assertThat(properties.routing().adjudicateFrom()).isEqualTo(0.4);

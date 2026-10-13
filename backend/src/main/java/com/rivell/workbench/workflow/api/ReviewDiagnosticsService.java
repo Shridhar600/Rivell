@@ -182,7 +182,8 @@ public class ReviewDiagnosticsService {
                     integer(execution.detail(), "searchedClauses"),
                     presenceProbabilities(execution.detail()),
                     count(execution.detail(), "addressedBySearch"),
-                    count(execution.detail(), "flaggedBySearch")));
+                    count(execution.detail(), "flaggedBySearch"),
+                    strings(execution.detail(), "definitionTerms")));
         }
         return new ReviewDiagnosticsView.AnalysisRunView(run.id(), run.runNumber(),
                 run.status().name(), run.trigger().name(), run.pipelineVersion(),
@@ -280,6 +281,20 @@ public class ReviewDiagnosticsService {
     private static Integer count(Map<String, Object> detail, String key) {
         return detail != null && detail.get(key) instanceof List<?> entries
                 ? entries.size() : null;
+    }
+
+    /** The detail's string list under one key; null when the detail does not carry it. */
+    private static List<String> strings(Map<String, Object> detail, String key) {
+        if (detail == null || !(detail.get(key) instanceof List<?> entries)) {
+            return null;
+        }
+        var result = new ArrayList<String>();
+        for (var entry : entries) {
+            if (entry instanceof String text && !text.isEmpty()) {
+                result.add(text);
+            }
+        }
+        return result;
     }
 
     private static Integer searchFound(Map<String, Object> detail) {

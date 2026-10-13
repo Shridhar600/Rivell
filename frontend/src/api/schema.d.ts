@@ -2111,6 +2111,8 @@ export interface components {
              * @description Count of positions the omission search flagged
              */
             flaggedBySearch?: number;
+            /** @description Engine v2: defined terms whose definitions the judge read for this clause; absent when none */
+            definitionTerms?: string[];
         };
         /** @description Finding counts, no finding content */
         CountsView: {
@@ -2177,7 +2179,7 @@ export interface components {
             /** Format: int64 */
             ageSeconds?: number;
         };
-        /** @description Developer diagnostics for one review run. Read-only; contains no contract text and no model output. */
+        /** @description Developer diagnostics for one review run. Read-only; contains no clause text, no definitions and no model output; defined-term names only. */
         ReviewDiagnosticsView: {
             /**
              * Format: uuid

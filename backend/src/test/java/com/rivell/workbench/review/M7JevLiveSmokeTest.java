@@ -38,7 +38,8 @@ class M7JevLiveSmokeTest {
         var state = new PolicyComparisonSpecs.PolicyComparisonState(
                 1, "MSA", "Customer", "Limitation of Liability",
                 "The liability of Supplier under this Agreement is uncapped and unlimited, "
-                        + "however arising.");
+                        + "however arising.",
+                java.util.List.of());
         observe("uncapped", state, position(
                 "Total liability should not exceed the fees paid in the preceding 12 months.",
                 "Uncapped or unlimited liability is prohibited."));
@@ -50,7 +51,8 @@ class M7JevLiveSmokeTest {
                 1, "MSA", "Customer", "Limitation of Liability",
                 "Supplier's total aggregate liability arising out of or related to this "
                         + "Agreement shall not exceed two times the fees paid in the "
-                        + "preceding 12 months.");
+                        + "preceding 12 months.",
+                java.util.List.of());
         observe("within_fallback", state, position(
                 "Total liability should not exceed the fees paid in the preceding 12 months.",
                 "Uncapped or unlimited liability is prohibited."));

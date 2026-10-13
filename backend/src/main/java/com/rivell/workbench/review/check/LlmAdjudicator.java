@@ -27,7 +27,8 @@ final class LlmAdjudicator {
     /** Shorter than this ("the", "shall not"), a quote cannot show what the answer rests on. */
     static final int MIN_QUOTE_LENGTH = 12;
 
-    record Ask(String ourSide, String contractType, String heading, String clause, String position) {
+    record Ask(String ourSide, String contractType, String heading, String clause, String position,
+            List<String> definitions) {
     }
 
     /**
@@ -70,7 +71,7 @@ final class LlmAdjudicator {
             var execution = generation.generate(AdjudicationSpecs.secondOpinion(options.keySet()),
                     new AdjudicationSpecs.SecondOpinionState(AdjudicationSpecs.STATE_SCHEMA,
                             ask.ourSide(), ask.contractType(), ask.heading(), ask.clause(),
-                            ask.position(), options));
+                            ask.position(), options, ask.definitions()));
             var category = execution.fields().get(AdjudicationSpecs.CATEGORY);
             var quote = execution.fields().get(AdjudicationSpecs.QUOTE);
             if (!quoted(quote, ask.clause())) {

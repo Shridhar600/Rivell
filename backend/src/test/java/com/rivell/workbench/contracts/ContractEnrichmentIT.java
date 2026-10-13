@@ -862,6 +862,47 @@ public class ContractEnrichmentIT {
         }
     }
 
+    /**
+     * The dev eval read: Word writes defined terms in curly quotes, and one paragraph may
+     * state several definitions. Both must reach the semantics, and a term used by a later
+     * clause must carry that clause as a reference.
+     */
+    @Test
+    void curlyQuotedDefinitionsReachTheSemantics() throws Exception {
+        var pkg = org.docx4j.openpackaging.packages.WordprocessingMLPackage.createPackage();
+        var docPart = pkg.getMainDocumentPart();
+        docPart.addStyledParagraphOfText("Heading1", "Definitions");
+        docPart.addParagraphOfText("“Scheduled Maintenance” means maintenance performed under "
+                + "the then-current Documentation; and “Users” means named users.");
+        docPart.addStyledParagraphOfText("Heading1", "Service Levels");
+        docPart.addParagraphOfText(
+                "Scheduled Maintenance is excluded from the availability measure.");
+        var out = new java.io.ByteArrayOutputStream();
+        pkg.save(out);
+        var ingested = ingestionService.ingest("curly-definitions.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(out.toByteArray()));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+
+        var terms = semantics.definedTerms().stream()
+                .collect(java.util.stream.Collectors.toMap(DefinedTerm::term, term -> term));
+        assertThat(terms).containsKeys("Scheduled Maintenance", "Users");
+        assertThat(terms.get("Scheduled Maintenance").definition())
+                .isEqualTo("maintenance performed under the then-current Documentation");
+        assertThat(terms.get("Users").definition()).isEqualTo("named users.");
+
+        var serviceLevelsParagraph = queryService.getStructure(ingested.contractId(), 1).nodes()
+                .stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.PARAGRAPH)
+                .filter(node -> node.text() != null
+                        && node.text().contains("excluded from the availability measure"))
+                .findFirst().orElseThrow();
+        assertThat(terms.get("Scheduled Maintenance").referenceNodeIds())
+                .contains(serviceLevelsParagraph.id());
+    }
+
     @Test
     void crossOrganizationSemanticStateIsInvisible() throws Exception {
         var bytes = fixtureBytes("m5-nda-counterparty.docx");
