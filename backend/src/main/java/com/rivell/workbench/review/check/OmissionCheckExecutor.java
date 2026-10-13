@@ -292,6 +292,7 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
         quality.put("searchedClauses", searchedClauses);
         quality.put("comparedClauses", comparedClauses);
         quality.put("presenceProbability", probability);
+        quality.put("positionLabel", candidate.label());
         quality.put("route", route);
         if (NEEDS_YOUR_LOOK.equals(route)) {
             quality.put("uncertaintyReason", OMISSION_UNSURE);

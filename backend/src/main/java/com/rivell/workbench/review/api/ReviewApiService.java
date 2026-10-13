@@ -678,7 +678,18 @@ public class ReviewApiService {
                 finding.proposedLanguageSource(),
                 Boolean.TRUE.equals(finding.quality().get("secondaryTopic")),
                 finding.quality().get("route") instanceof String route ? route : null,
-                finding.createdAt(), addedBy(finding));
+                finding.createdAt(), addedBy(finding),
+                firstReviewCategory(finding), positionLabel(finding));
+    }
+
+    /** The review that declined to decide shows its own category; nothing else does. */
+    private static String firstReviewCategory(Finding finding) {
+        return finding.quality().get("jevCategory") instanceof String category ? category : null;
+    }
+
+    /** An omission finding carries the raw playbook position label it searched for. */
+    private static String positionLabel(Finding finding) {
+        return finding.quality().get("positionLabel") instanceof String label ? label : null;
     }
 
     private static String addedBy(Finding finding) {
@@ -710,7 +721,8 @@ public class ReviewApiService {
                         .toList(),
                 finding.evidenceItemIds(), evidenceItems,
                 FindingPositionComparison.from(evidenceItems), finding.signalIds(), absenceBasis,
-                finding.createdAt(), addedBy(finding));
+                finding.createdAt(), addedBy(finding),
+                firstReviewCategory(finding), positionLabel(finding));
     }
 
     private record Warnings(List<AnalysisWarningView> items, boolean truncated) {

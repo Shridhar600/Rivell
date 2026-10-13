@@ -75,7 +75,29 @@ public record ReviewDiagnosticsView(
                     + "REPEAT or UNAVAILABLE; absent when off")
             String probe,
             @Schema(description = "Uncovered-clause triage probability, when the triage ran")
-            Double uncoveredProbability) {
+            Double uncoveredProbability,
+            @Schema(description = "Engine v2 route that judged the clause: SEARCH when the "
+                    + "position search route ran; absent otherwise")
+            String route,
+            @Schema(description = "Whether any judged position addresses the clause")
+            Boolean addressed,
+            @Schema(description = "Positions the search route retrieved, when it ran")
+            Integer searchFound,
+            @Schema(description = "Whether the search route's comparison failed")
+            Boolean searchFailed,
+            @Schema(description = "Severity the whole-contract read recorded on this clause: "
+                    + "MEDIUM or HIGH; absent when the read named none")
+            String spottedSeverity,
+            @Schema(description = "Applicable positions the omission check judged")
+            Integer omissionCandidates,
+            @Schema(description = "Contract clauses the omission check searched")
+            Integer searchedClauses,
+            @Schema(description = "Omission presence probability per candidate position id")
+            Map<String, Double> presenceProbabilities,
+            @Schema(description = "Count of positions the omission search addressed")
+            Integer addressedBySearch,
+            @Schema(description = "Count of positions the omission search flagged")
+            Integer flaggedBySearch) {
     }
 
     @Schema(description = "One judged playbook position: ids, categories and probabilities only")
@@ -91,7 +113,10 @@ public record ReviewDiagnosticsView(
             Map<String, Double> probeProbabilities,
             String route,
             String secondOpinionOutcome,
-            String secondOpinionCategory) {
+            String secondOpinionCategory,
+            @Schema(description = "SEARCH when the text search, not a topic, found this position; "
+                    + "absent otherwise")
+            String foundBy) {
     }
 
     @Schema(description = "Finding counts, no finding content")

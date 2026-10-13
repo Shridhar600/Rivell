@@ -1,6 +1,8 @@
 package com.rivell.workbench.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
@@ -12,16 +14,20 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
@@ -41,6 +47,7 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
  * degrades the check and invents nothing. A review frozen on v1 never searches.
  */
 @SpringBootTest
+@AutoConfigureMockMvc
 @Testcontainers
 @Import({LiabilityReviewIT.FakeIntelligenceConfiguration.class,
         LiabilityReviewIT.CorpusConfiguration.class,
@@ -104,6 +111,17 @@ class PositionSearchRouteIT {
 
     @Autowired
     com.rivell.workbench.retrieval.RetrievalRepository retrievalRepository;
+
+    @Autowired
+    MockMvc mockMvc;
+
+    @Autowired
+    ObjectMapper objectMapper;
+
+    private JsonNode json(String url, Object... variables) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(get(url, variables))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
 
     private List<KnowledgeCandidate> positions;
 
@@ -200,6 +218,30 @@ class PositionSearchRouteIT {
                 UUID.fromString((String) search.get("traceId"))).orElseThrow();
         assertThat(trace.degradation()).contains("VECTOR_LANE_UNCONFIGURED");
         assertThat(trace.stages()).containsKeys("structured", "lexical", "vector", "fusion");
+
+        // diagnostics expose the search route's own numbers and the per-position foundBy
+        JsonNode searched = null;
+        for (var view : json("/api/reviews/{id}/diagnostics", reviewId)
+                .at("/data/analysis/checks")) {
+            if ("SEARCH".equals(view.path("route").asText())) {
+                searched = view;
+            }
+        }
+        assertThat(searched).as("a SEARCH check must reach diagnostics").isNotNull();
+        assertThat(searched.path("addressed").asBoolean()).isTrue();
+        assertThat(searched.path("searchFound").asInt()).isGreaterThanOrEqualTo(1);
+        assertThat(searched.path("searchFailed").asBoolean()).isFalse();
+        JsonNode judgedView = null;
+        for (var position : searched.path("judgedPositions")) {
+            if (terminationPositionId().toString()
+                    .equals(position.path("positionCandidateId").asText())
+                    && position.path("positionKey").asText().startsWith("search_")) {
+                judgedView = position;
+            }
+        }
+        assertThat(judgedView).as("the searched termination position must be listed").isNotNull();
+        assertThat(judgedView.path("foundBy").asText()).isEqualTo("SEARCH");
+        assertThat(judgedView.has("foundBy")).isTrue();
     }
 
     @Test

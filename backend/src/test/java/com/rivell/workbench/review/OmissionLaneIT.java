@@ -1,6 +1,8 @@
 package com.rivell.workbench.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
@@ -13,16 +15,20 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
@@ -44,6 +50,7 @@ import com.rivell.workbench.taxonomy.CoreConcepts;
  * an incomplete run never invents an omission, and a v1 plan has no OMISSION check.
  */
 @SpringBootTest
+@AutoConfigureMockMvc
 @Testcontainers
 @Import({LiabilityReviewIT.FakeIntelligenceConfiguration.class,
         LiabilityReviewIT.CorpusConfiguration.class,
@@ -115,6 +122,28 @@ class OmissionLaneIT {
 
     @Autowired
     JdbcClient jdbcClient;
+
+    @Autowired
+    MockMvc mockMvc;
+
+    @Autowired
+    ObjectMapper objectMapper;
+
+    private JsonNode json(String url, Object... variables) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(get(url, variables))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
+
+    /** The diagnostics CheckView for one plan check key, over the HTTP surface. */
+    private JsonNode diagnosticsCheck(UUID reviewId, String checkKey) throws Exception {
+        for (var check : json("/api/reviews/{id}/diagnostics", reviewId)
+                .at("/data/analysis/checks")) {
+            if (checkKey.equals(check.path("key").asText())) {
+                return check;
+            }
+        }
+        throw new AssertionError("no diagnostics check " + checkKey);
+    }
 
     private List<KnowledgeCandidate> positions;
 
@@ -247,6 +276,31 @@ class OmissionLaneIT {
         assertThat(addressedBySearch(omission)).isEmpty();
         assertThat(flaggedEntries(omission)).isEmpty();
         assertThat(searchDegradation(omission)).contains("VECTOR_LANE_UNCONFIGURED");
+
+        // the omission's position label reaches the findings API; firstReviewCategory stays null
+        JsonNode summary = null;
+        for (var item : json("/api/reviews/{id}/findings?limit=100", reviewId).at("/data/items")) {
+            if (MISSING_POSITION.equals(item.path("observationKind").asText())) {
+                summary = item;
+            }
+        }
+        assertThat(summary).as("the omission finding must be listed").isNotNull();
+        assertThat(summary.path("positionLabel").asText()).isEqualTo(CAP_EXCEPTIONS);
+        assertThat(summary.has("firstReviewCategory")).isTrue();
+        assertThat(summary.path("firstReviewCategory").isNull()).isTrue();
+        var detail = json("/api/reviews/{id}/findings/{findingId}", reviewId,
+                UUID.fromString(summary.path("id").asText())).at("/data");
+        assertThat(detail.path("positionLabel").asText()).isEqualTo(CAP_EXCEPTIONS);
+        assertThat(detail.path("firstReviewCategory").isNull()).isTrue();
+
+        // the omission check's numbers reach diagnostics without any contract text
+        var omissionView = diagnosticsCheck(reviewId, "OMISSION");
+        assertThat(omissionView.path("omissionCandidates").asInt()).isEqualTo(1);
+        assertThat(omissionView.path("searchedClauses").asInt()).isEqualTo(clauseCount(reviewId));
+        assertThat(omissionView.path("addressedBySearch").asInt()).isZero();
+        assertThat(omissionView.path("flaggedBySearch").asInt()).isZero();
+        assertThat(omissionView.path("presenceProbabilities").get(capExceptions.toString()).asDouble())
+                .isEqualTo(0.92);
     }
 
     @Test
@@ -362,6 +416,10 @@ class OmissionLaneIT {
         assertThat(presenceEntries(omission)).noneSatisfy(entry ->
                 assertThat(entry).containsEntry("candidateId", capExceptions.toString()));
         assertThat(omissionFindings(run.id())).isEmpty();
+        // diagnostics keep the two search outcomes apart: addressed, never flagged
+        var omissionView = diagnosticsCheck(reviewId, "OMISSION");
+        assertThat(omissionView.path("addressedBySearch").asInt()).isGreaterThanOrEqualTo(1);
+        assertThat(omissionView.path("flaggedBySearch").asInt()).isZero();
     }
 
     @Test

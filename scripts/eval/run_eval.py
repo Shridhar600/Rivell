@@ -31,6 +31,7 @@ from provider_guard import LogWatch, ProviderFatal, preflight
 from redline_flow import run_redline
 from rivell_api import ApiError, RivellApi, items
 from scoring import score_contract, score_knowledge
+import p4_metrics
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 BACKEND = REPO / "backend"
@@ -202,16 +203,23 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
     nodes = structure if isinstance(structure, list) else structure.get("nodes", [])
     semantics = api.get(f"{base}/semantics")
     findings = items(api.get(f"/api/reviews/{review['id']}/findings?limit=500"))
+    for finding in findings:
+        # one detail read per finding: keep the quality subset the P4 metrics are defined on
+        detail = api.get(f"/api/reviews/{review['id']}/findings/{finding['id']}")
+        quality = detail.get("quality") or {}
+        finding["quality"] = {key: quality[key] for key in p4_metrics.QUALITY_KEYS
+                              if quality.get(key) is not None}
     coverage = api.get(f"{base}/coverage")
     checks = (api.get(f"/api/reviews/{review['id']}/diagnostics").get("analysis") or {}).get("checks") or []
+    clauses = semantics.get("clauses", [])
     raw = {"upload": upload, "profile": profile, "enrichmentStatus": enrichment.get("enrichmentStatus"),
            "review": review, "nodes": nodes, "semantics": semantics, "findings": findings,
            "coverage": coverage, "checks": checks}
-    score = score_contract(answer, nodes, semantics.get("clauses", []), findings)
+    score = score_contract(answer, nodes, clauses, findings)
     if any(f.get("observationKind") == SPOTTED for f in findings):
         # the spotter only adds findings where no position judged a clause, so the same run
         # scored without them is Rivell alone on identical decisions
-        alone = score_contract(answer, nodes, semantics.get("clauses", []),
+        alone = score_contract(answer, nodes, clauses,
                                [f for f in findings if f.get("observationKind") != SPOTTED])
         score["withoutSpotted"] = {k: alone[k] for k in ("issues", "issuesDetected", "falseAlarmSections",
                                                          "seriousFalseAlarmSections", "findings")}
@@ -219,10 +227,21 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
     score["decidedBy"] = dict(Counter(f.get("decidedBy") or "NONE" for f in findings))
     if any(f.get("decidedBy") == NEEDS_LOOK for f in findings):
         # the same run scored without the "needs your look" group: what the group adds for the user
-        rest = score_contract(answer, nodes, semantics.get("clauses", []),
+        rest = score_contract(answer, nodes, clauses,
                               [f for f in findings if f.get("decidedBy") != NEEDS_LOOK])
         score["withoutNeedsYourLook"] = {k: rest[k] for k in ("issues", "issuesDetected", "falseAlarmSections",
                                                               "seriousFalseAlarmSections", "findings")}
+    # engine v2 P4: the levers and the diagnostics-only measurements, pure functions of this run
+    score["search"] = p4_metrics.search_metrics(checks)
+    score["advisory"] = p4_metrics.advisory_metrics(answer, nodes, clauses, findings)
+    score["omissions"] = p4_metrics.omission_metrics(answer, findings)
+    score["lookReasons"] = p4_metrics.look_reasons(findings)
+    score["triageVsRead"] = p4_metrics.triage_vs_read(answer, nodes, clauses, checks)
+    for lever, drop in (("withoutSearchFound", p4_metrics.drop_search_found),
+                        ("withoutAdvisory", p4_metrics.drop_advisory),
+                        ("withoutOmissions", p4_metrics.drop_omissions)):
+        score[lever] = p4_metrics.lever_score(
+            score_contract, answer, nodes, clauses, findings, drop)
     score["coverage"] = coverage
     score["checkStatus"] = {}
     for c in checks:
@@ -491,6 +510,93 @@ def needs_look_line(results):
             f"compliant sections only they touch: {on_compliant}"]
 
 
+P4_LOOK_REASONS = ("second_opinion_disagrees", "second_opinion_unavailable",
+                   "playbook_silent", "omission_unsure", "other")
+P4_D12B_CELLS = ("flaggedPicked", "flaggedUnpicked", "clearPicked", "clearUnpicked")
+
+
+def p4_data(contract):
+    """Any engine v2 P4 activity in one scored contract; a v1 contract has none."""
+    search = contract.get("search") or {}
+    return bool(search.get("route") or search.get("found")
+                or (contract.get("advisory") or {}).get("picks")
+                or (contract.get("omissions") or {}).get("list")
+                or any((contract.get("lookReasons") or {}).values()))
+
+
+def _d12b_totals(contracts, key):
+    totals = {cell: 0 for cell in P4_D12B_CELLS}
+    for contract in contracts:
+        for cell, count in ((contract.get("triageVsRead") or {}).get(key) or {}).items():
+            if cell in totals:
+                totals[cell] += count
+    return totals
+
+
+def _d12b_line(label, totals):
+    return (f"- D12b {label} (triage x read): flagged+picked {totals['flaggedPicked']}, "
+            f"flagged+not picked {totals['flaggedUnpicked']}, clear+picked {totals['clearPicked']}, "
+            f"clear+not picked {totals['clearUnpicked']}")
+
+
+def p4_lines(results):
+    """Engine v2 P4 measurements: search, advisory picks, omissions, look reasons, D12b, levers.
+
+    Only emitted when at least one contract carries P4 activity, so a v1 run's report is unchanged.
+    """
+    contracts = [c for r in results for c in r.get("contracts", [])]
+    if not any(p4_data(contract) for contract in contracts):
+        return []
+    n = len(contracts)
+    searched = [c.get("search") or {} for c in contracts]
+    advisory = [c.get("advisory") or {} for c in contracts]
+    omissions = [c.get("omissions") or {} for c in contracts]
+    routes = sum(s.get("route", 0) for s in searched)
+    found = sum(s.get("found", 0) for s in searched)
+    addressing = sum(s.get("addressing", 0) for s in searched)
+    top1 = sum(s.get("top1Confirmed", 0) for s in searched)
+    top1_checks = sum(s.get("top1Checks", 0) for s in searched)
+    only_meets = sum(s.get("addressedOnlyBySearchMeets", 0) for s in searched)
+    picks = sum(a.get("picks", 0) for a in advisory)
+    high = sum(a.get("high", 0) for a in advisory)
+    hits = sum(a.get("hits", 0) for a in advisory)
+    high_hits = sum(a.get("highHits", 0) for a in advisory)
+    medium = sum(o.get("medium", 0) for o in omissions)
+    low = sum(o.get("low", 0) for o in omissions)
+    alarms = sum(o.get("alarms", 0) for o in omissions)
+    reasons = {key: sum((c.get("lookReasons") or {}).get(key, 0) for c in contracts)
+               for key in P4_LOOK_REASONS}
+    lines = ["", "## Engine v2 P4", "",
+             f"- Search: {routes} routes ({routes / n:.1f}/contract); {found} positions found; "
+             f"addressing {pct(addressing, found)}; top-1 confirmed {pct(top1, top1_checks)}; "
+             f"addressed only by search-meets {pct(only_meets, routes)}",
+             f"- Advisory picks: {picks} ({picks / n:.1f}/contract; as if all were HIGH: {high}); "
+             f"issue-section hits {pct(hits, picks)} (HIGH {pct(high_hits, high)})",
+             f"- Omissions: MEDIUM {medium} ({medium / n:.1f}/contract), LOW {low} "
+             f"({low / n:.1f}/contract); alarms (MEDIUM matching no MISSING_PROVISION issue) {alarms}"]
+    for contract in contracts:
+        for omission in (contract.get("omissions") or {}).get("list", []):
+            presence = omission.get("presence")
+            presence_text = "-" if presence is None else f"{presence:g}"
+            lines.append(f"- Omission: {contract.get('file', '?')}: {omission.get('label') or '?'} "
+                         f"· {omission.get('severity') or '?'} · {presence_text} · "
+                         f"{'matched' if omission.get('matched') else 'unmatched'}")
+    lines.append("- Look reasons: " + ", ".join(f"{key} {reasons[key]}" for key in P4_LOOK_REASONS))
+    lines.append(_d12b_line("unaddressed-by-playbook sections",
+                            _d12b_totals(contracts, "unaddressed")))
+    lines.append(_d12b_line("compliant sections", _d12b_totals(contracts, "compliant")))
+    for lever, label in (("withoutSearchFound", "search-found"),
+                         ("withoutAdvisory", "advisory picks"),
+                         ("withoutOmissions", "omissions")):
+        with_issues = sum(c.get("issuesDetected", 0) for c in contracts)
+        without_issues = sum((c.get(lever) or {}).get("issuesDetected", 0) for c in contracts)
+        with_alarms = sum(c.get("falseAlarmSections", 0) for c in contracts)
+        without_alarms = sum((c.get(lever) or {}).get("falseAlarmSections", 0) for c in contracts)
+        lines.append(f"- Without {label}: issues detected {with_issues} -> {without_issues}; "
+                     f"false-alarm sections {with_alarms} -> {without_alarms}")
+    return lines
+
+
 def write_report(out, results, meta):
     lines = [f"# Eval run {meta['runId']}", "",
              f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
@@ -546,6 +652,7 @@ def write_report(out, results, meta):
               check_line(results), "",
               "| Issue category | Detected |", "|---|---|"]
     lines += [f"| {k} | {pct(*v)} |" for k, v in sorted(by_cat.items())]
+    lines += p4_lines(results)
     lines += coverage_report(results) + redline_report(results) + usage_report(results)
     errs = [f"- {r['org']}: {e}" for r in results for e in r["errors"]]
     errs += [f"- {c['file']}: checks not completed: {', '.join(c['checkFailures'])}"

@@ -1,6 +1,8 @@
 package com.rivell.workbench.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
@@ -11,16 +13,20 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
@@ -38,6 +44,7 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
  * and v1 keeps the opt-in MEDIUM behaviour.
  */
 @SpringBootTest
+@AutoConfigureMockMvc
 @Testcontainers
 @Import({LiabilityReviewIT.FakeIntelligenceConfiguration.class,
         LiabilityReviewIT.CorpusConfiguration.class,
@@ -100,6 +107,17 @@ class AdvisoryPickIT {
 
     @Autowired
     JdbcClient jdbcClient;
+
+    @Autowired
+    MockMvc mockMvc;
+
+    @Autowired
+    ObjectMapper objectMapper;
+
+    private JsonNode json(String url, Object... variables) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(get(url, variables))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
 
     @BeforeEach
     void freshOrganization() {
@@ -166,6 +184,17 @@ class AdvisoryPickIT {
                 .containsEntry("uncoveredProbability", 0.05);
         // the check detail keeps the read's own severity
         assertThat(spottedCheck(run.id(), "HIGH").detail()).containsEntry("addressed", false);
+        // and the diagnostics view exposes the read's severity and the addressed flag
+        JsonNode spottedView = null;
+        for (var view : json("/api/reviews/{id}/diagnostics", reviewId)
+                .at("/data/analysis/checks")) {
+            if ("HIGH".equals(view.path("spottedSeverity").asText())) {
+                spottedView = view;
+            }
+        }
+        assertThat(spottedView).as("the read's pick must reach diagnostics with its severity")
+                .isNotNull();
+        assertThat(spottedView.path("addressed").asBoolean()).isFalse();
     }
 
     @Test

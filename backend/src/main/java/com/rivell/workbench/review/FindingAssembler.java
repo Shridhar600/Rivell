@@ -457,7 +457,8 @@ public final class FindingAssembler {
             "probabilities", "secondaryTopic", "uncoveredProbability", "route", "jevCategory",
             "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
             "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
-            "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability");
+            "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
+            "positionLabel");
 
     private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
