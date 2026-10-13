@@ -63,11 +63,13 @@ function Regions({ nodeIds, regionLabels, onNavigateToNode }: { nodeIds: string[
 function RoleEditor({ party, contractId, versionNumber, onRefresh }: { party: SemanticParty; contractId: string; versionNumber: number; onRefresh: () => void }) {
   const correct = useCorrectPartyRole(contractId, versionNumber)
   const [open, setOpen] = useState(false)
-  const [serverRoles, setServerRoles] = useState(party.effectiveRoles)
+  // Reset the draft when the saved roles change, not when a refetch re-creates the same roles.
+  const savedKey = party.effectiveRoles.join('|')
+  const [serverKey, setServerKey] = useState(savedKey)
   const [selected, setSelected] = useState<string[]>(party.effectiveRoles)
   const [error, setError] = useState<string | null>(null)
-  if (serverRoles !== party.effectiveRoles) {
-    setServerRoles(party.effectiveRoles)
+  if (serverKey !== savedKey) {
+    setServerKey(savedKey)
     setSelected(party.effectiveRoles)
   }
   const toggle = (role: PartyRole) =>

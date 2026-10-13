@@ -8,7 +8,8 @@ import type {
 import { isConflictError, useCorrectClauseConcept, useCorrectClauseFacts } from '../../api/semantics'
 import { useTaxonomy } from '../../api/taxonomy'
 import { humanizeCode } from '../../lib/domainLabels'
-import { subtreeNodes, type StructureNode } from '../../lib/documentTree'
+import type { StructureNode } from '../../lib/documentTree'
+import { clauseNodeIds } from '../../lib/workspace'
 import {
   describeFact,
   effectivePrimaryConcept,
@@ -177,11 +178,13 @@ function ConceptEditor({ clause, contractId, versionNumber, onRefresh }: { claus
 function FactEditor({ fact, clauseId, contractId, versionNumber, onRefresh }: { fact: SemanticFact; clauseId: string; contractId: string; versionNumber: number; onRefresh: () => void }) {
   const fields = factEditorFields(fact.factSchema)
   const correct = useCorrectClauseFacts(contractId, versionNumber)
-  const [serverValues, setServerValues] = useState(fact.values)
+  // Reset the draft when the saved values change, not when a refetch re-creates the same values.
+  const savedKey = JSON.stringify(fact.values)
+  const [serverKey, setServerKey] = useState(savedKey)
   const [draft, setDraft] = useState<Record<string, string>>(() => ({ ...fact.values }))
   const [error, setError] = useState<string | null>(null)
-  if (serverValues !== fact.values) {
-    setServerValues(fact.values)
+  if (serverKey !== savedKey) {
+    setServerKey(savedKey)
     setDraft({ ...fact.values })
   }
   if (!fields) return null
@@ -342,7 +345,7 @@ export function ClauseDetails({ clause, semantics, nodes, contractId, versionNum
   const headingId = useId()
   const effective = effectivePrimaryConcept(clause)
   const machine = machinePrimaryConcept(clause)
-  const inClause = new Set(subtreeNodes(nodes, clause.headingNodeId).map((node) => node.id))
+  const inClause = clauseNodeIds(nodes, clause.headingNodeId)
   const machineBySchema = new Map(clause.machineFacts.map((fact) => [fact.factSchema, fact]))
   const covered = new Set(clause.effectiveFacts.flatMap((fact) => Object.keys(fact.values)))
   const otherInterpretations = clause.interpretations.filter((entry) => !covered.has(entry.field))

@@ -457,6 +457,21 @@ describe('clause details in place', () => {
     expect(within(sheet).getAllByText('Corrected by you').length).toBeGreaterThan(0)
   })
 
+  it('keeps keyboard focus where it is when the workspace updates behind the sheet', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+    await within(sheet).findByRole('option', { name: 'Indemnification' })
+    await userEvent.selectOptions(within(sheet).getByLabelText('Topic'), 'INDEMNIFICATION')
+    const save = within(sheet).getByRole('button', { name: 'Save topic' })
+    await userEvent.click(save)
+
+    // the saved correction re-renders the workspace; focus must not jump to the sheet's Close button
+    expect(await within(sheet).findByText(/Topic updated/)).toBeInTheDocument()
+    expect(document.activeElement).not.toBe(within(sheet).getAllByRole('button', { name: 'Close' })[0])
+    expect(document.activeElement).toBe(save)
+  })
+
   it('checks corrected values before sending them, then sends only what changed', async () => {
     const api = stubContractApi(options({ clauseMarks: fixtureClauseMarks }))
     renderWorkspace(api)
@@ -505,6 +520,33 @@ describe('clause details in place', () => {
     await waitFor(() =>
       expect(api.requests.filter((request) => request.method === 'GET' && request.url.includes('/semantics')).length).toBeGreaterThan(before),
     )
+  })
+
+  it('reads a clause as its heading and the passages under it, for terms and references', async () => {
+    const semantics = fixtureSemantics()
+    renderWorkspace(
+      stubContractApi(
+        options({
+          clauseMarks: fixtureClauseMarks,
+          semantics: {
+            ...semantics,
+            definedTerms: [
+              ...semantics.definedTerms,
+              { id: 't9', term: 'Exclusions', definition: 'the exclusions in Section 6.2.', definingNodeId: 'node-1', referenceNodeIds: ['node-63'], duplicate: false },
+            ],
+          },
+        }),
+      ),
+    )
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+
+    // Section 5 is cited in 6.3, a passage under heading 6, not in the heading itself.
+    const references = within(sheet).getByText('References it makes').parentElement as HTMLElement
+    expect(references).toHaveTextContent('Section 99')
+    expect(references).toHaveTextContent('Section 5')
+    expect(references).not.toHaveTextContent('Section 6.3')
+    const terms = within(sheet).getByText('Defined terms it uses').parentElement as HTMLElement
+    expect(within(terms).getByRole('button', { name: 'Exclusions' })).toBeInTheDocument()
   })
 
   it('disables the topic picker and says so when the topic list cannot be loaded', async () => {

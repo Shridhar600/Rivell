@@ -14,6 +14,12 @@ interface Props {
 export function WorkspaceSheet({ open, title, onClose, children, actions }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
+  // The latest onClose, read at key time: the effect must run only when the sheet opens or closes,
+  // or every re-render of the page behind would move focus back to Close.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
 
   useEffect(() => {
     if (!open) return
@@ -22,14 +28,14 @@ export function WorkspaceSheet({ open, title, onClose, children, actions }: Prop
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      onClose()
+      onCloseRef.current()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
       returnFocus.current?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   return (
     <>
