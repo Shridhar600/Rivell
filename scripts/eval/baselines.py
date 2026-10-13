@@ -344,12 +344,11 @@ def main():
     if problem:
         sys.exit(f"preflight failed, nothing run: OpenAI {args.model}: {problem}")
     import run_eval  # contract_type() mapping shared with the Rivell run
-    manifest = json.loads((args.corpus / "manifest.json").read_text())
     run_dir = args.out / f"{args.mode}-{args.model}" / time.strftime("%Y%m%d-%H%M%S")
     (run_dir / "raw").mkdir(parents=True)
     usage = {"calls": 0, "failed": 0, "input": 0, "output": 0}
     jobs = []
-    for org in manifest["organisations"]:
+    for org in run_eval.load_orgs(args.corpus):
         knowledge = []
         for kind in ("playbook", "clauseLibrary"):
             if org.get(kind):
