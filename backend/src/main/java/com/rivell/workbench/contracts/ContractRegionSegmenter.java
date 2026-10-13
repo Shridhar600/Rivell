@@ -138,7 +138,7 @@ public final class ContractRegionSegmenter {
                 case TABLE, TEXT_BOX -> {
                     var tableText = node.nodeType() == DocumentNodeType.TEXT_BOX
                             ? (node.text() == null ? "" : node.text())
-                            : tableText(node, byId);
+                            : tableText(node, nodes, byId);
                     if (currentHeading != null) {
                         currentTexts.add(node.id());
                         if (currentText.length() > 0) {
@@ -170,9 +170,10 @@ public final class ContractRegionSegmenter {
         return regions;
     }
 
-    private String tableText(DocumentNode table, Map<UUID, DocumentNode> byId) {
+    private String tableText(
+            DocumentNode table, List<DocumentNode> nodes, Map<UUID, DocumentNode> byId) {
         var text = new StringBuilder();
-        for (var node : byId.values()) {
+        for (var node : nodes) {
             if (node.nodeType() == DocumentNodeType.TABLE_CELL
                     && node.parentId() != null
                     && byId.containsKey(node.parentId())

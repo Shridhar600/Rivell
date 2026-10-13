@@ -117,6 +117,50 @@ class ContractRegionSegmenterTest {
     }
 
     @Test
+    void tableCellsKeepDocumentOrder() {
+        var table = new DocumentNode(UUID.randomUUID(), VERSION, BODY_ID,
+                DocumentNodeType.TABLE, 2, null, null, null,
+                SourceSpan.ofTable("word/document.xml", 2, 0), null);
+        var rowA = new DocumentNode(UUID.randomUUID(), VERSION, table.id(),
+                DocumentNodeType.TABLE_ROW, 0, null, null, null,
+                SourceSpan.ofRow("word/document.xml", 2, 0, 0), null);
+        var rowB = new DocumentNode(UUID.randomUUID(), VERSION, table.id(),
+                DocumentNodeType.TABLE_ROW, 1, null, null, null,
+                SourceSpan.ofRow("word/document.xml", 2, 0, 1), null);
+        var cellA1 = tableCell(rowA, "A1", 3, 0);
+        var cellA2 = tableCell(rowA, "A2", 12, 1);
+        var cellB1 = tableCell(rowB, "B1", 7, 0);
+        var cellB2 = tableCell(rowB, "B2", 1, 1);
+        var nodes = List.of(BODY_NODE, heading("Schedule A — Services", "8", 1),
+                table, rowA, cellA1, cellA2, rowB, cellB1, cellB2);
+
+        var byHash = new java.util.HashMap<UUID, DocumentNode>();
+        for (var node : nodes) {
+            byHash.put(node.id(), node);
+        }
+        var hashOrder = byHash.values().stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.TABLE_CELL)
+                .map(DocumentNode::text)
+                .toList();
+        assertThat(hashOrder).containsExactlyInAnyOrder("A1", "A2", "B1", "B2");
+        assertThat(hashOrder)
+                .as("precondition: the old HashMap walk scrambles the cells, otherwise this "
+                        + "test cannot catch the defect")
+                .isNotEqualTo(List.of("A1", "A2", "B1", "B2"));
+
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        assertThat(regions).hasSize(1);
+        assertThat(regions.get(0).contentText()).contains("A1\nA2\nB1\nB2");
+    }
+
+    private static DocumentNode tableCell(DocumentNode row, String text, long highBits, int ordinal) {
+        return new DocumentNode(new UUID(highBits, 0), VERSION, row.id(),
+                DocumentNodeType.TABLE_CELL, ordinal, text, null, null,
+                SourceSpan.ofCell("word/document.xml", 2, 0, row.ordinal(), ordinal), null);
+    }
+
+    @Test
     void aTrackedChangeCanReplaceOnlyParagraphClauses() {
         var fees = heading("4. Fees", "4", 1);
         var table = new DocumentNode(UUID.randomUUID(), VERSION, BODY_ID,
