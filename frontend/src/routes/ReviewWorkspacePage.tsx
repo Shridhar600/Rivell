@@ -60,6 +60,7 @@ import { FindingPanel, SUMMARY_LINK_ID } from '../components/workspace/FindingPa
 import { FinalizeDialog } from '../components/workspace/FinalizeDialog'
 import { SourceContent } from '../components/workspace/SourceContent'
 import { ClauseDetails } from '../components/workspace/ClauseDetails'
+import { ContractAnalysis } from '../components/workspace/ContractAnalysis'
 import { LinkButton } from '../components/ui/Button'
 import { sourceLink } from '../lib/evidence'
 import { useDecisionFlow } from '../components/workspace/useDecisionFlow'
@@ -80,7 +81,7 @@ const LEFT_KEY = 'rv-l'
 const RIGHT_KEY = 'rv-r'
 const MODE_CYCLE: Record<DocMode, DocMode> = { changes: 'orig', orig: 'final', final: 'changes' }
 
-type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'clause'; headingNodeId: string }
+type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'clause'; headingNodeId: string } | { kind: 'contract' }
 
 function Gate({ children }: { children: ReactNode }) {
   return (
@@ -447,6 +448,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       ? [{ group: 'Review', label: 'Finalize review', icon: <LockIcon />, run: startFinalize }]
       : []),
     { group: 'Review', label: 'Review context, coverage and notes', icon: <ClauseIcon />, run: () => setSheet({ kind: 'notes' }) },
+    { group: 'Review', label: 'Contract analysis: parties, defined terms, references', icon: <ClauseIcon />, run: () => setSheet({ kind: 'contract' }) },
     { group: 'Go to', label: 'Home', icon: <HomeIcon className="rv-icon" />, run: () => void navigate('/') },
     { group: 'Go to', label: 'Contract reviews', icon: <DocumentIcon className="rv-icon" />, run: () => void navigate('/reviews') },
     { group: 'Go to', label: 'Knowledge', icon: <BookIcon className="rv-icon" />, run: () => void navigate('/knowledge') },
@@ -522,6 +524,11 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           <button type="button" className="rv-ws-link" onClick={() => setSheet({ kind: 'notes' })}>
             Review coverage and notes
           </button>
+          {semanticsQuery.data ? (
+            <button type="button" className="rv-ws-link" onClick={() => setSheet({ kind: 'contract' })}>
+              Contract analysis
+            </button>
+          ) : null}
         </div>
       ) : null}
     </>
@@ -642,7 +649,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
 
       <WorkspaceSheet
         open={sheet !== null}
-        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : 'Source'}
+        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : sheet?.kind === 'contract' ? 'Contract analysis' : 'Source'}
         onClose={() => setSheet(null)}
         actions={sourceRecord ? <LinkButton to={sourceRecord.to}>{sourceRecord.label}</LinkButton> : null}
       >
@@ -675,6 +682,21 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
             />
           ) : (
             <p className="rv-ws-caption">The analysis of this clause is not available.</p>
+          )
+        ) : null}
+        {sheet?.kind === 'contract' ? (
+          semantics ? (
+            <ContractAnalysis
+              semantics={semantics}
+              contractId={contractId}
+              editable={pinnedVersion === latestVersion}
+              latestVersionNumber={latestVersion}
+              regionLabels={regionLabels}
+              onNavigateToNode={showInDocumentAt}
+              onRefresh={() => void semanticsQuery.refetch()}
+            />
+          ) : (
+            <p className="rv-ws-caption">The analysis of this contract version is not available.</p>
           )
         ) : null}
         {sheet?.kind === 'history' && selectedId ? (

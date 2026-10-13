@@ -523,3 +523,94 @@ describe('clause details in place', () => {
     expect(sheet).toHaveTextContent('Corrections apply to the latest contract version (version 2). This review uses version 1')
   })
 })
+
+describe('contract analysis in place', () => {
+  async function openContractAnalysis() {
+    await userEvent.click(await screen.findByRole('button', { name: 'Contract analysis' }))
+    return screen.getByRole('dialog', { name: 'Contract analysis' })
+  }
+
+  async function openGroup(sheet: HTMLElement, name: string) {
+    const group = within(sheet).getByRole('region', { name })
+    await userEvent.click(within(group).getByRole('button', { name: new RegExp(`^${name}`) }))
+    return group
+  }
+
+  it('lists defined terms, flags a term defined twice, and opens the defining clause in the document', async () => {
+    const router = renderWorkspace(stubContractApi(options()))
+    const sheet = await openContractAnalysis()
+    const terms = await openGroup(sheet, 'Defined terms')
+
+    expect(terms).toHaveTextContent('the managed cloud services described in Schedule A.')
+    expect(terms).toHaveTextContent('Used in 2 places')
+    expect(within(terms).getByText('Defined more than once')).toBeInTheDocument()
+    await userEvent.click(within(terms).getByRole('button', { name: 'Services' }))
+    expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Contract analysis' })).not.toBeInTheDocument())
+  })
+
+  it('shows each cross-reference’s state, broken ones first, and never invents a target', async () => {
+    renderWorkspace(stubContractApi(options()))
+    const sheet = await openContractAnalysis()
+    const refs = await openGroup(sheet, 'Cross-references')
+
+    const rows = within(refs).getAllByRole('listitem')
+    expect(rows[0]).toHaveTextContent('Section 99')
+    expect(within(rows[0]).queryByRole('button')).not.toBeInTheDocument()
+    const ambiguous = rows.find((row) => row.textContent?.includes('Section 5')) as HTMLElement
+    expect(ambiguous).toHaveTextContent('Possible targets')
+    const resolved = rows.find((row) => row.textContent?.includes('Section 6.3')) as HTMLElement
+    expect(within(resolved).getAllByRole('button')).toHaveLength(1)
+  })
+
+  it('says how each clause relationship was found', async () => {
+    renderWorkspace(stubContractApi(options()))
+    const sheet = await openContractAnalysis()
+    const related = await openGroup(sheet, 'Related clauses')
+
+    expect(related).toHaveTextContent('depends on')
+    expect(related).toHaveTextContent('Inferred from the clause texts')
+    expect(related).toHaveTextContent('Stated in the clause text')
+  })
+
+  it('corrects a party’s roles and keeps Rivell’s own reading', async () => {
+    const api = stubContractApi(options())
+    renderWorkspace(api)
+    const sheet = await openContractAnalysis()
+    const parties = await openGroup(sheet, 'Parties')
+    const party = within(parties).getByText('Pallas Cloud Services GmbH').closest('.rv-ws-ca-item') as HTMLElement
+
+    await userEvent.click(within(party).getByRole('button', { name: 'Correct the roles' }))
+    await userEvent.click(within(party).getByLabelText('Supplier'))
+    await userEvent.click(within(party).getByRole('button', { name: 'Save roles' }))
+    expect(await within(party).findByRole('alert')).toHaveTextContent('Choose at least one role')
+    expect(api.requests.some((request) => request.url.endsWith('/role'))).toBe(false)
+
+    await userEvent.click(within(party).getByLabelText('Customer'))
+    await userEvent.click(within(party).getByRole('button', { name: 'Save roles' }))
+    await waitFor(() =>
+      expect(api.requests.find((request) => request.method === 'POST' && request.url.endsWith('/parties/p2/role'))?.body).toEqual({
+        roles: ['CUSTOMER'],
+      }),
+    )
+  })
+
+  it('is read-only when the review pinned an older version', async () => {
+    renderWorkspace(
+      stubContractApi(
+        options({ contractSummary: { ...fixtureContractSummary, latestVersion: { ...fixtureContractSummary.latestVersion, versionNumber: 2 } } }),
+      ),
+    )
+    const sheet = await openContractAnalysis()
+    await openGroup(sheet, 'Parties')
+    expect(within(sheet).queryByRole('button', { name: 'Correct the roles' })).not.toBeInTheDocument()
+    expect(sheet).toHaveTextContent('This review uses version 1, so this view is read-only.')
+  })
+
+  it('never shows probabilities or provider plumbing', async () => {
+    renderWorkspace(stubContractApi(options()))
+    const sheet = await openContractAnalysis()
+    for (const name of ['Parties', 'Defined terms', 'Cross-references', 'Related clauses']) await openGroup(sheet, name)
+    expect(sheet.textContent).not.toMatch(/probability|0\.\d|provider|budget|token/i)
+  })
+})

@@ -1206,6 +1206,71 @@ h3.rv-ws-sec-h {
   font: 13px/1.5 var(--doc);
 }
 
+/* contract analysis (contract-level semantics, in place) */
+.rv-ws-ca-group {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+}
+.rv-ws-ca-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 500 13px var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+.rv-ws-ca-head:hover {
+  background: var(--hover);
+}
+.rv-ws-ca-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 12px 12px;
+}
+.rv-ws-ca-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.rv-ws-ca-item:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.rv-ws-ca-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.rv-ws-ca-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 12.5px;
+}
+.rv-ws-ca-roles legend {
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.rv-ws-ca-roles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 400;
+}
+
 /* analysis state (before the review's analysis completes) */
 .rv-ws-life {
   display: flex;
