@@ -4,10 +4,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
-import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
 import com.rivell.workbench.knowledge.PublishedKnowledgeQuery;
 
@@ -20,9 +18,6 @@ import com.rivell.workbench.knowledge.PublishedKnowledgeQuery;
  * is preserved: only the derived index state is written.
  */
 public class RetrievalIndexReconciliationService {
-
-    private static final Set<CandidateType> INDEXABLE_TYPES =
-            Set.of(CandidateType.PRECEDENT, CandidateType.REFERENCE);
 
     private static final org.slf4j.Logger log =
             org.slf4j.LoggerFactory.getLogger(RetrievalIndexReconciliationService.class);
@@ -79,7 +74,7 @@ public class RetrievalIndexReconciliationService {
                 var remaining = maxCandidates - examined;
                 var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(
                         PublishedKnowledgeQuery.unpublishedNever(
-                                organizationId, asOf, INDEXABLE_TYPES,
+                                organizationId, asOf, EvidenceIndexService.INDEXABLE_TYPES,
                                 null, null, null, null, null, null, null));
                 if (candidates.size() > remaining) {
                     candidates = candidates.subList(0, remaining);
