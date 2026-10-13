@@ -6,7 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * Engine v2 settings (spec §5, §6). {@code engine}: the engine new reviews are frozen on (default
  * V2 (P4 eval, rule R5); v1 stays selectable). {@code omissions}: the engine v2 omissions lane
  * (OMISSION plan check); off by default after the P4 eval. {@code definitions}: engine v2 judges
- * read the definitions of the terms a clause uses (P3). {@code routing}: a judged position
+ * read the definitions of the terms a clause uses (P3); off by default after the P3 eval (rule R1).
+ * {@code routing}: a judged position
  * that addresses the clause gets a second opinion when its flag mass is in [adjudicateFrom,
  * adjudicateBelow) — P0 measured 0.4 to 0.8, about 4.4 per contract on dev and dev2 — and at
  * most {@code maxAdjudications} second opinions run per analysis run; the rest go to the user.
@@ -19,7 +20,7 @@ public record ReviewEngineProperties(
         engine = engine == null ? ReviewEngine.V2 : engine;
         routing = routing == null ? new Routing(null, null, null) : routing;
         omissions = omissions == null ? Boolean.FALSE : omissions;
-        definitions = definitions == null ? Boolean.TRUE : definitions;
+        definitions = definitions == null ? Boolean.FALSE : definitions;
     }
 
     public record Routing(Double adjudicateFrom, Double adjudicateBelow, Integer maxAdjudications) {

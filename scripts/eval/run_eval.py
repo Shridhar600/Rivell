@@ -640,7 +640,7 @@ def engine_meta():
     """The engine settings the backend starts with, as an eval run reports them."""
     return {"engine": os.environ.get("RIVELL_REVIEW_ENGINE", "v2").lower(),
             "omissions": os.environ.get("RIVELL_REVIEW_OMISSIONS", "false").lower(),
-            "definitions": os.environ.get("RIVELL_REVIEW_DEFINITIONS", "true").lower()}
+            "definitions": os.environ.get("RIVELL_REVIEW_DEFINITIONS", "false").lower()}
 
 
 def header_lines(meta):
@@ -652,7 +652,7 @@ def header_lines(meta):
                if meta.get("orderProbe", "off") != "off" else "")
             + (f" · engine `{meta['engine']}`" if meta.get("engine", "v2") != "v2" else "")
             + (" · omissions on" if meta.get("omissions") == "true" else "")
-            + (" · definitions off" if meta.get("definitions") == "false" else ""), ""]
+            + (" · definitions on" if meta.get("definitions") == "true" else ""), ""]
 
 
 def write_report(out, results, meta):

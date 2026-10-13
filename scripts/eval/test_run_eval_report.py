@@ -37,11 +37,11 @@ class EngineMetaTest(unittest.TestCase):
     def test_the_defaults_describe_the_engine_the_backend_now_uses(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(run_eval.engine_meta(),
-                             {"engine": "v2", "omissions": "false", "definitions": "true"})
+                             {"engine": "v2", "omissions": "false", "definitions": "false"})
 
-    def test_the_default_definitions_read_is_on(self):
+    def test_the_default_definitions_read_is_off(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(run_eval.engine_meta()["definitions"], "true")
+            self.assertEqual(run_eval.engine_meta()["definitions"], "false")
 
     def test_the_environment_overrides_all_three_and_is_lower_cased(self):
         with mock.patch.dict(os.environ,
@@ -71,13 +71,13 @@ class ReportHeaderTest(unittest.TestCase):
         text = "\n".join(run_eval.header_lines(self.meta(engine="v1", omissions="false")))
         self.assertNotIn("omissions", text)
 
-    def test_definitions_off_is_named_only_when_off(self):
-        off = "\n".join(run_eval.header_lines(self.meta(engine="v2", omissions="false",
-                                                        definitions="false")))
-        self.assertIn("definitions off", off)
+    def test_definitions_on_is_named_only_when_on(self):
         on = "\n".join(run_eval.header_lines(self.meta(engine="v2", omissions="false",
                                                        definitions="true")))
-        self.assertNotIn("definitions", on)
+        self.assertIn("definitions on", on)
+        off = "\n".join(run_eval.header_lines(self.meta(engine="v2", omissions="false",
+                                                        definitions="false")))
+        self.assertNotIn("definitions", off)
 
 
 class P3LinesTest(unittest.TestCase):

@@ -7,11 +7,11 @@ import org.junit.jupiter.api.Test;
 class ReviewEngineDefaultsTest {
 
     @Test
-    void unsetPropertiesDefaultToEngineV2OmissionsOffAndDefinitionsOn() {
+    void unsetPropertiesDefaultToEngineV2OmissionsOffAndDefinitionsOff() {
         var properties = new ReviewEngineProperties(null, null, null, null);
 
         assertThat(properties.engine()).isEqualTo(ReviewEngine.V2);
         assertThat(properties.omissions()).isFalse();
-        assertThat(properties.definitions()).isTrue();
+        assertThat(properties.definitions()).isFalse();
     }
 }
