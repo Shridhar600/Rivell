@@ -79,6 +79,18 @@ class SearchMetricsTest(unittest.TestCase):
         self.assertEqual(metrics["top1Checks"], 2)
         self.assertEqual(metrics["addressedOnlyBySearchMeets"], 1)
 
+    def test_a_search_meets_has_no_category_as_the_backend_sends_it(self):
+        # the judge sets a category only when a position is flagged; a meets reads as null
+        meets = position("search_position_1", None, meets=0.9)
+        meets["flagged"] = False
+        flagged = position("search_position_1", "WALK_AWAY", flag=0.8, meets=0.1)
+        flagged["flagged"] = True
+        checks = [check(subject="n1", route="SEARCH", addressed=True, search_found=1,
+                        positions=[meets]),
+                  check(subject="n2", route="SEARCH", addressed=True, search_found=1,
+                        positions=[flagged])]
+        self.assertEqual(p4_metrics.search_metrics(checks)["addressedOnlyBySearchMeets"], 1)
+
     def test_the_addressing_line_is_inclusive(self):
         exactly_half = [check(route="SEARCH", addressed=True, search_found=1,
                               positions=[position("search_position_1", "NOT_ADDRESSED",

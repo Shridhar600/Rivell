@@ -52,9 +52,11 @@ def search_metrics(checks):
         if check.get("addressed") is True:
             addressing_positions = [position for position in (check.get("judgedPositions") or [])
                                     if _addresses(position)]
+            # the judge sets a category only on a flagged position: a meets is an unflagged one
             if addressing_positions and all(
                     (position.get("positionKey") or "").startswith("search_")
-                    and position.get("category") == MEETS_PREFERRED
+                    and position.get("flagged") is not True
+                    and position.get("category") in (None, "", MEETS_PREFERRED)
                     for position in addressing_positions):
                 addressed_only += 1
     return {"route": len(searched), "found": found, "addressing": addressing,
