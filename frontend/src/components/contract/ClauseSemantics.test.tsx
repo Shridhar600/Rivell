@@ -487,16 +487,14 @@ describe('clause semantics', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('offers evidence inspection for clauses', async () => {
+  it('no longer links to the retired evidence inspector', async () => {
     stubContractApi()
     renderRoute('/reviews/c1?view=semantics&section=clauses&clause=node-6')
 
     await screen.findByRole('heading', { name: 'Clause semantics' })
     const detail = document.querySelector('.clause-detail') as HTMLElement
 
-    expect(
-      within(detail).getByRole('link', { name: 'Inspect evidence' }),
-    ).toHaveAttribute('href', '/reviews/c1/evidence?clause=node-6')
+    expect(within(detail).queryByRole('link', { name: 'Inspect evidence' })).not.toBeInTheDocument()
   })
 
   it('rejects a blank numeric fact value before sending it', async () => {

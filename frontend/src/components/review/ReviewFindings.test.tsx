@@ -675,6 +675,33 @@ describe('finding evidence amendment', () => {
     expect(card).toHaveTextContent('Uncapped liability or consequential damages')
   })
 
+  it('links a cited source to its published knowledge page, never to the old publication record', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    await findDetailTitle('6. Limitation of Liability')
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Policy/ }))
+    const policy = screen.getByRole('dialog', { name: 'Source' })
+    expect(within(policy).getByRole('link', { name: 'Open in Playbooks' })).toHaveAttribute(
+      'href',
+      '/knowledge/playbooks/a-playbook?position=k-rule',
+    )
+    expect(within(policy).getByText('Published v2')).toBeInTheDocument()
+    expect(policy.querySelector('a[href^="/knowledge/publications"]')).toBeNull()
+
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Approved drafting/ }))
+    const drafting = screen.getByRole('dialog', { name: 'Source' })
+    expect(within(drafting).getByRole('link', { name: 'Open the source' })).toHaveAttribute(
+      'href',
+      '/knowledge/sources/a-clauses?position=k-variant',
+    )
+
+    // Contract evidence has no knowledge page: the sheet offers the document instead.
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Current contract/ }))
+    const contract = screen.getByRole('dialog', { name: 'Source' })
+    expect(within(contract).queryByRole('link', { name: /^Open/ })).not.toBeInTheDocument()
+    expect(within(contract).getByRole('button', { name: '6. Limitation of Liability' })).toBeInTheDocument()
+  })
+
   it('tells several sources of one authority apart by number', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-4')
 

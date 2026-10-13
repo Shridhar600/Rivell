@@ -59,6 +59,8 @@ import { FindingNavigator } from '../components/workspace/FindingNavigator'
 import { FindingPanel, SUMMARY_LINK_ID } from '../components/workspace/FindingPanel'
 import { FinalizeDialog } from '../components/workspace/FinalizeDialog'
 import { SourceContent } from '../components/workspace/SourceContent'
+import { LinkButton } from '../components/ui/Button'
+import { sourceLink } from '../lib/evidence'
 import { useDecisionFlow } from '../components/workspace/useDecisionFlow'
 import { WorkspaceSheet } from '../components/workspace/WorkspaceSheet'
 import { FROZEN_NOTE_ID, WorkspaceTopBar } from '../components/workspace/WorkspaceTopBar'
@@ -494,7 +496,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       {!analysisCompleted ? (
         <div className="rv-ws-lifecycle">
           <ReviewLifecyclePanel
-            contractId={contractId}
             reviewId={reviewId}
             summary={summary}
             coverageLimited={coverageLimitations(summary.coverage).length > 0}
@@ -526,6 +527,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   )
 
   const sourceItem = sheet?.kind === 'source' ? finding?.evidenceItems.find((item) => item.evidenceId === sheet.evidenceId) : undefined
+  const sourceRecord = sourceItem ? sourceLink(sourceItem) : null
   // "View in document" stays in this workspace: the clause is revealed in the document beside the
   // panel, keyed by the exact node the evidence recorded, on the version the review pinned.
   function showInDocumentAt(nodeId: string) {
@@ -629,6 +631,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         open={sheet !== null}
         title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : 'Source'}
         onClose={() => setSheet(null)}
+        actions={sourceRecord ? <LinkButton to={sourceRecord.to}>{sourceRecord.label}</LinkButton> : null}
       >
         {sheet?.kind === 'source' ? (
           sourceItem ? (

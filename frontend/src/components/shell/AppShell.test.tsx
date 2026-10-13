@@ -245,17 +245,37 @@ describe('legacy surfaces still work', () => {
 
   it('keeps the legacy content wrapper so existing layout is preserved', () => {
     stubApi()
-    const { container } = renderAt('/knowledge/publications')
+    const { container } = renderAt('/reviews/c1')
     expect(container.querySelector('.rv-legacy')).toBeInTheDocument()
   })
 
   it('lets long legacy pages scroll inside the fixed-height shell', () => {
     stubApi()
-    const { container } = renderAt('/knowledge/publications')
+    const { container } = renderAt('/reviews/c1')
     expect(container.querySelector('.rv-legacy')).toBeInTheDocument()
   })
 
 })
+describe('retired v1 addresses', () => {
+  it.each([
+    ['/knowledge/publications', '/knowledge', ''],
+    ['/knowledge/publications/p-1', '/knowledge', ''],
+    ['/reviews/c1/analysis', '/reviews', ''],
+    ['/reviews/c1/evidence?clause=node-6', '/reviews/c1', ''],
+  ])('%s opens %s', async (from, to, search) => {
+    stubApi()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
+    const router = createMemoryRouter(appRoutes, { initialEntries: [from] })
+    render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(router.state.location.pathname).toBe(to))
+    expect(router.state.location.search).toBe(search)
+  })
+})
+
 describe('responsive shell structure', () => {
   it('keeps the collapsed inspector in the grid rather than removing the column', async () => {
     stubApi()

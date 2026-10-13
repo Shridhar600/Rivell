@@ -99,10 +99,7 @@ describe('review lifecycle states', () => {
     expect(failure).toHaveTextContent(/The automated review could not be completed/)
     expect(screen.queryByText(/IllegalStateException/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Analysis warnings/)).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to review history' })).toHaveAttribute(
-      'href',
-      '/reviews/c1/analysis',
-    )
+    expect(screen.getByRole('link', { name: 'Back to reviews' })).toHaveAttribute('href', '/reviews')
   })
 
   it('does not claim a failed review recorded no findings', async () => {

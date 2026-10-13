@@ -6,10 +6,12 @@ interface Props {
   title: string
   onClose: () => void
   children: ReactNode
+  /** Footer actions shown before Close, such as the deep link to the full record. */
+  actions?: ReactNode
 }
 
 /** The canonical right-hand sheet: evidence, decision history and review notes open here. */
-export function WorkspaceSheet({ open, title, onClose, children }: Props) {
+export function WorkspaceSheet({ open, title, onClose, children, actions }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
 
@@ -55,6 +57,7 @@ export function WorkspaceSheet({ open, title, onClose, children }: Props) {
         </div>
         <div className="rv-ws-sheet-b">{open ? children : null}</div>
         <div className="rv-ws-sheet-f">
+          {open ? actions : null}
           <button type="button" className="rv-btn" onClick={onClose}>
             Close
           </button>

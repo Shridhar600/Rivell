@@ -100,7 +100,6 @@ function ProgressDetail({ reviewId, poll }: { reviewId: string; poll: boolean })
 }
 
 type Props = {
-  contractId: string
   reviewId: string
   summary: ReviewSummary
   coverageLimited: boolean
@@ -108,7 +107,6 @@ type Props = {
 }
 
 export function ReviewLifecyclePanel({
-  contractId,
   reviewId,
   summary,
   coverageLimited,
@@ -179,8 +177,8 @@ export function ReviewLifecyclePanel({
         <div className="state state--error" role="alert">
           <p>{reviewFailureMessage(summary.failure)}</p>
           <p>A new review creates a fresh frozen snapshot of the current policy state.</p>
-          <Link className="link-button" to={`/reviews/${contractId}/analysis`}>
-            Back to review history
+          <Link className="link-button" to="/reviews">
+            Back to reviews
           </Link>
         </div>
       ) : null}

@@ -1,15 +1,12 @@
-import { createBrowserRouter } from 'react-router'
+import { createBrowserRouter, Navigate } from 'react-router'
 import { AppShell, LegacySurface } from '../components/shell/AppShell'
-import { ContractAnalysisPage } from '../routes/ContractAnalysisPage'
 import { ContractPage } from '../routes/ContractPage'
-import { EvidenceInspectorPage } from '../routes/EvidenceInspectorPage'
 import { HomePage } from '../routes/HomePage'
-import { KnowledgePublicationPage } from '../routes/KnowledgePublicationPage'
-import { KnowledgePublicationsPage } from '../routes/KnowledgePublicationsPage'
 import { ReviewLifecyclePage } from '../routes/ReviewLifecyclePage'
 import { CompilationPage } from '../routes/knowledge/CompilationPage'
 import { KnowledgeLayout } from '../routes/knowledge/KnowledgeLayout'
 import { AddKnowledgeRedirect, ArtifactRedirect } from '../routes/knowledge/redirects'
+import { EvidenceInspectorRedirect } from '../routes/retiredRedirects'
 import { ClauseDetailPage } from '../routes/knowledge/ClauseDetailPage'
 import { ClausesPage } from '../routes/knowledge/ClausesPage'
 import { KnowledgeOverviewPage } from '../routes/knowledge/KnowledgeOverviewPage'
@@ -46,17 +43,18 @@ export const appRoutes = [
       },
       { path: 'knowledge/new', element: <AddKnowledgeRedirect /> },
       { path: 'knowledge/artifacts/:artifactId', element: <ArtifactRedirect /> },
+      // Retired v1 pages: the old analysis page (Start review and the Reviews list replace it), the
+      // evidence inspector (a developer view) and the publication records (the Knowledge pages show
+      // what each version published). Old links land on the page that replaced them.
+      { path: 'reviews/:contractId/analysis', element: <Navigate replace to="/reviews" /> },
+      { path: 'reviews/:contractId/evidence', element: <EvidenceInspectorRedirect /> },
+      { path: 'knowledge/publications', element: <Navigate replace to="/knowledge" /> },
+      { path: 'knowledge/publications/:publicationId', element: <Navigate replace to="/knowledge" /> },
       {
-        // Temporary seam: these surfaces keep their existing layout until they are restyled. The
-        // publication records stay here: they are not part of the canonical Knowledge design.
+        // Temporary seam: the contract page keeps its v1 layout until its semantic view moves into
+        // the review workspace and overview (DW-076 phase 2).
         element: <LegacySurface />,
-        children: [
-          { path: 'reviews/:contractId', element: <ContractPage /> },
-          { path: 'reviews/:contractId/analysis', element: <ContractAnalysisPage /> },
-          { path: 'reviews/:contractId/evidence', element: <EvidenceInspectorPage /> },
-          { path: 'knowledge/publications', element: <KnowledgePublicationsPage /> },
-          { path: 'knowledge/publications/:publicationId', element: <KnowledgePublicationPage /> },
-        ],
+        children: [{ path: 'reviews/:contractId', element: <ContractPage /> }],
       },
     ],
   },

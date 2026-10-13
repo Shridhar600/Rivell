@@ -71,6 +71,13 @@ describe('route audit', () => {
     expect(retired.map((link) => `${link.file}: ${link.address}`)).toEqual([])
   })
 
+  it('links to no retired v1 page: publication records, the old analysis page, the evidence inspector', () => {
+    const retired = LINKS.filter((link) =>
+      /^\/knowledge\/publications(\/|$)|^\/reviews\/[^/]+\/(analysis|evidence)$/.test(link.path),
+    )
+    expect(retired.map((link) => `${link.file}: ${link.address}`)).toEqual([])
+  })
+
   it('has no placeholder link or prototype filename in user-facing code', () => {
     const offenders: string[] = []
     for (const file of FILES) {

@@ -49,6 +49,17 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+describe('review identity', () => {
+  it('treats a review from another contract as not found', async () => {
+    renderWorkspace(
+      stubContractApi(options({ reviewSummary: { ...fixtureCompletedReviewSummary, id: 'r-9', contractId: 'c2' } })),
+      '/reviews/c1/analysis/r-9',
+    )
+
+    expect(await screen.findByText(/This review could not be found/)).toBeInTheDocument()
+  })
+})
+
 describe('workspace layout', () => {
   it('draws the three canonical regions, with no sidebar around them', async () => {
     renderWorkspace(stubContractApi(options()))

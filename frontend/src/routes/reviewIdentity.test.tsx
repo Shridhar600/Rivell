@@ -7,7 +7,6 @@ import { appRoutes } from '../app/router'
 import { stubContractApi } from '../components/contract/testFixtures'
 import { useContractQuery } from '../api/contracts'
 import { ReviewWorkspacePage } from './ReviewWorkspacePage'
-import { EvidenceInspectorPage } from './EvidenceInspectorPage'
 import {
   fixtureCompletedReviewSummary,
   fixtureFindingList,
@@ -98,25 +97,6 @@ describe('missing route identity', () => {
     expect(await screen.findByText(/missing contract or review id/i)).toBeTruthy()
     // Nothing at all may be requested, including the structure and semantics reads, which are
     // version-gated rather than id-gated and are the sibling hole this guards against reopening.
-    expect(api.requests).toEqual([])
-  })
-
-  /**
-   * This covers the ErrorState render only. It is NOT guard coverage, and it is worth saying so
-   * because the assertion looks like one: the page returns the error state before it renders
-   * EvidenceInspector, which is what owns the contract and semantics reads, so `api.requests` is
-   * empty by construction. Removing all three id guards leaves this test green.
-   *
-   * The guard evidence is the review-workspace test above, whose hooks genuinely run before its own
-   * early return, and the useContractQuery test, which exercises the hook directly. Both were
-   * confirmed to fail when the guards are removed; this one was not, so it is not credited.
-   */
-  it('shows a local error state on the evidence inspector when the route carries no identity', async () => {
-    const api = stubContractApi({})
-
-    renderPageWithoutParams(<EvidenceInspectorPage />)
-
-    expect(await screen.findByText(/missing contract id/i)).toBeTruthy()
     expect(api.requests).toEqual([])
   })
 })
