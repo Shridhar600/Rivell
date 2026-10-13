@@ -267,7 +267,32 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
 
 def load_answer(corpus, entry):
     path = corpus / "answers" / (pathlib.Path(entry).stem + ".json")
-    return json.loads(path.read_text()) if path.exists() else {}
+    if not path.exists():
+        return {}
+    answer = json.loads(path.read_text())
+    # newer corpora (holdout3) key a playbook as a bare list of positions
+    return {"positions": answer} if isinstance(answer, list) else answer
+
+
+def load_orgs(corpus):
+    """The manifest's organisations, with every file entry as a corpus-relative path. Newer corpora
+    (holdout3) give each entry as an object {"path": ..., ...}."""
+    manifest = json.loads((corpus / "manifest.json").read_text())
+
+    def path(entry):
+        return entry["path"] if isinstance(entry, dict) else entry
+
+    orgs = []
+    for org in manifest.get("orgs") or manifest.get("organisations") or []:
+        org = dict(org)
+        for kind in ("playbook", "clauseLibrary"):
+            if org.get(kind):
+                org[kind] = path(org[kind])
+        for kind in ("contracts", "precedents"):
+            if kind in org:
+                org[kind] = [path(e) for e in org[kind]]
+        orgs.append(org)
+    return orgs
 
 
 def run_org(api, corpus, org, raw_dir, redline=True):
@@ -730,8 +755,7 @@ def main():
     problems = preflight(jev=decisions != "openai-decider", openai_model=os.environ.get("OPENAI_MODEL", "gpt-6-luna"))
     if problems:
         sys.exit("preflight failed, nothing run:\n  " + "\n  ".join(problems))
-    manifest = json.loads((args.corpus / "manifest.json").read_text())
-    all_orgs = manifest.get("orgs") or manifest.get("organisations") or []
+    all_orgs = load_orgs(args.corpus)
     orgs = [o for o in all_orgs if not args.org or o["id"] in args.org]
 
     run_id = time.strftime("%Y%m%d-%H%M%S")
