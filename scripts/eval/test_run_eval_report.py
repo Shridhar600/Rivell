@@ -36,12 +36,19 @@ class EngineMetaTest(unittest.TestCase):
 
     def test_the_defaults_describe_the_engine_the_backend_now_uses(self):
         with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(run_eval.engine_meta(), {"engine": "v2", "omissions": "false"})
+            self.assertEqual(run_eval.engine_meta(),
+                             {"engine": "v2", "omissions": "false", "definitions": "true"})
 
-    def test_the_environment_overrides_both_and_is_lower_cased(self):
+    def test_the_default_definitions_read_is_on(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(run_eval.engine_meta()["definitions"], "true")
+
+    def test_the_environment_overrides_all_three_and_is_lower_cased(self):
         with mock.patch.dict(os.environ,
-                             {"RIVELL_REVIEW_ENGINE": "V1", "RIVELL_REVIEW_OMISSIONS": "TRUE"}):
-            self.assertEqual(run_eval.engine_meta(), {"engine": "v1", "omissions": "true"})
+                             {"RIVELL_REVIEW_ENGINE": "V1", "RIVELL_REVIEW_OMISSIONS": "TRUE",
+                              "RIVELL_REVIEW_DEFINITIONS": "FALSE"}):
+            self.assertEqual(run_eval.engine_meta(),
+                             {"engine": "v1", "omissions": "true", "definitions": "false"})
 
 
 class ReportHeaderTest(unittest.TestCase):
@@ -63,6 +70,40 @@ class ReportHeaderTest(unittest.TestCase):
     def test_a_v1_run_with_the_lane_off_does_not_name_the_lane(self):
         text = "\n".join(run_eval.header_lines(self.meta(engine="v1", omissions="false")))
         self.assertNotIn("omissions", text)
+
+    def test_definitions_off_is_named_only_when_off(self):
+        off = "\n".join(run_eval.header_lines(self.meta(engine="v2", omissions="false",
+                                                        definitions="false")))
+        self.assertIn("definitions off", off)
+        on = "\n".join(run_eval.header_lines(self.meta(engine="v2", omissions="false",
+                                                       definitions="true")))
+        self.assertNotIn("definitions", on)
+
+
+class P3LinesTest(unittest.TestCase):
+
+    @staticmethod
+    def contract(terms, judged, shown, terms_shown, **references):
+        counts = {"resolved": 0, "broken": 0, "ambiguous": 0, "external": 0}
+        counts.update(references)
+        return {"file": "x.docx",
+                "definitions": {"terms": terms, "judgedClauses": judged,
+                                "clausesShown": shown, "termsShown": terms_shown},
+                "references": counts}
+
+    def test_reports_definitions_and_references_across_contracts(self):
+        results = [{"contracts": [self.contract(4, 2, 1, 3, resolved=3, broken=1, external=2),
+                                  self.contract(2, 1, 0, 0, resolved=1)]}]
+        text = "\n".join(run_eval.p3_lines(results))
+        self.assertIn("## Structure (P3)", text)
+        self.assertIn("- Definitions: 6 extracted (3.0/contract); judged clauses shown definitions "
+                      "1/3 (33%); definitions shown 3", text)
+        self.assertIn("- References: resolved 4, broken 1, ambiguous 0, external 2", text)
+
+    def test_a_run_with_neither_definitions_nor_references_adds_nothing(self):
+        empty = self.contract(0, 2, 0, 0)
+        self.assertEqual(run_eval.p3_lines([{"contracts": [empty]}]), [])
+        self.assertEqual(run_eval.p3_lines([{"contracts": [{}]}]), [])
 
 
 if __name__ == "__main__":
