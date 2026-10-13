@@ -1,8 +1,7 @@
 /* M10B design-system layer.
    Tokens come from m10b-tokens.css (frozen Product Design values, unchanged).
    Declarations follow the canonical Home prototype (rivell-home-v5.html), expressed through those
-   tokens. Classes are prefixed rv- so the legacy M10A stylesheet keeps working untouched.
-   Every colour here is a token. No literal hex. */
+   tokens. Classes are prefixed rv-. Every colour here is a token. No literal hex. */
 
 :root {
   --rv-focus: 0 0 0 3px var(--ring), 0 0 0 1px var(--text-3);
@@ -15,13 +14,24 @@
   --rv-edge-w: 20px;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
+  margin: 0;
   background: var(--side);
   color: var(--text);
   font: 400 13px/1.45 var(--font);
   letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: 'cv11', 'ss03', 'tnum';
+}
+
+a {
+  color: var(--accent);
 }
 
 /* ---------- focus ---------- */
@@ -1342,17 +1352,6 @@ body {
 }
 .rv-chk .rv-icon {
   color: var(--accent);
-}
-
-/* ---------- legacy surface (temporary F1 seam) ---------- */
-.rv-legacy {
-  /* The shell is a fixed-height grid with overflow:hidden, so the legacy column scrolls itself. */
-  grid-column: 2 / -1;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  max-width: 60rem;
-  padding: var(--space-4);
 }
 
 /* M10B's own visually-hidden, so this layer does not depend on the legacy stylesheet. */

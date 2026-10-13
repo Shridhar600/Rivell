@@ -5,7 +5,7 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { AppProviders } from '../app/AppProviders'
 import { appRoutes } from '../app/router'
-import { fixtureContractSummary, stubContractApi, type StubOptions } from '../components/contract/testFixtures'
+import { fixtureContractSummary, fixtureSemantics, stubContractApi, type StubOptions } from '../components/contract/testFixtures'
 import {
   fixtureAbsenceFindingSummary,
   fixtureClauseFindingDetail,
@@ -505,6 +505,49 @@ describe('clause details in place', () => {
     await waitFor(() =>
       expect(api.requests.filter((request) => request.method === 'GET' && request.url.includes('/semantics')).length).toBeGreaterThan(before),
     )
+  })
+
+  it('disables the topic picker and says so when the topic list cannot be loaded', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks, taxonomyStatus: 503 })))
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+
+    await waitFor(() => expect(within(sheet).getByLabelText('Topic')).toBeDisabled())
+    expect(await within(sheet).findByText(/legal topic list could not be loaded/i, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Save topic' })).toBeDisabled()
+  })
+
+  it('shows facts of an unknown kind without offering to edit them', async () => {
+    const unknownFact = { factSchema: 'privacy-facts', schemaVersion: 1, sourceNodeIds: [], values: { retentionDays: '30' } }
+    renderWorkspace(
+      stubContractApi(
+        options({
+          clauseMarks: fixtureClauseMarks,
+          semantics: fixtureSemantics({
+            clauses: [
+              {
+                id: 'cl9',
+                headingNodeId: 'node-9',
+                regionKind: 'CLAUSE',
+                heading: 'Schedule A — Services',
+                primaryConcept: null,
+                secondaryConcepts: [],
+                correctedPrimaryConcept: null,
+                machineFacts: [unknownFact],
+                effectiveFacts: [unknownFact],
+                interpretations: [],
+                corrected: false,
+              },
+            ],
+          }),
+        }),
+      ),
+    )
+    const sheet = await openClauseDetails('Schedule A — Services')
+
+    expect(sheet).toHaveTextContent('Retention days')
+    expect(sheet).toHaveTextContent('30')
+    expect(within(sheet).queryByRole('button', { name: 'Correct the values' })).not.toBeInTheDocument()
   })
 
   it('is read-only when the review pinned an older version, and says why', async () => {

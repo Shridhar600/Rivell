@@ -270,11 +270,6 @@ export function StartReviewPage() {
                     <div role="alert" className="rv-startfail">
                       <p>{failure.message}</p>
                       {failure.intact ? <p className="rv-startfail__intact">{failure.intact}</p> : null}
-                      {failure.contractId ? (
-                        <Link className="rv-lnk" to={`/reviews/${failure.contractId}`}>
-                          Open the stored contract
-                        </Link>
-                      ) : null}
                     </div>
                   ) : null}
                 </div>
