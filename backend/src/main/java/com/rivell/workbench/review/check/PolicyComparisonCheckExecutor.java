@@ -60,6 +60,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private static final String JEV = "JEV";
     private static final String SECOND_OPINION = "SECOND_OPINION";
     private static final String NEEDS_YOUR_LOOK = "NEEDS_YOUR_LOOK";
+    private static final String PLAYBOOK_SILENT = "playbook_silent";
     private static final String SEARCH = "SEARCH";
     /** Search-found positions get their own keys, so their signals never merge with topic ones. */
     private static final String SEARCH_KEY_PREFIX = "search_";
@@ -88,8 +89,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         this.evidenceService = evidenceService;
         this.conceptRegistry = conceptRegistry;
         this.properties = properties;
-        this.spotter = properties.issueSpotting()
-                ? new ContractIssueSpotter(reasoningService, evidenceService) : null;
+        this.spotter = new ContractIssueSpotter(reasoningService, evidenceService);
         this.routing = engineProperties.routing();
         this.adjudicator = new LlmAdjudicator(reasoningService);
         this.budget = new AdjudicationBudget(routing.maxAdjudications());
@@ -250,15 +250,17 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     }
 
     /**
-     * The whole-contract read (opt-in) named this clause, no position addresses it and the
-     * triage did not flag it: a needs-review finding citing the clause. Where a position
-     * judged the clause, that judgment stands (dev eval: letting the read override it put
-     * MEDIUM+ false alarms at 35%). Never a verdict on a position, never wording.
+     * The whole-contract read named this clause, no position addresses it and no other signal
+     * exists for it: engine v2 (always) a LOW advisory "needs your look" item, v1 (opt-in) the
+     * needs-review finding as before. Where a position judged the clause, that judgment stands
+     * (dev eval: letting the read override it put MEDIUM+ false alarms at 35%). Never a verdict
+     * on a position, never wording.
      */
     private List<RawReviewSignal> spotted(
             ReviewCheckContext context, ClauseSemantics clause, EvidenceBundle bundle,
             List<RawReviewSignal> signals, Map<String, Object> detail) {
-        if (spotter == null || !signals.isEmpty()) {
+        var v2 = context.snapshot().reviewEngine() == ReviewEngine.V2;
+        if (!(v2 || properties.issueSpotting()) || !signals.isEmpty()) {
             return List.of();
         }
         var spot = spotter.spots(context, bundle.request()).get(clause.headingNodeId());
@@ -267,12 +269,27 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             return List.of();
         }
         detail.put("spotted", spot.severity());
+        if (v2 && properties.advisorySpots() == PolicyComparisonProperties.AdvisorySpots.HIGH
+                && !"HIGH".equals(spot.severity())) {
+            // the deployment wants only the read's own HIGH picks; the detail keeps the pick
+            return List.of();
+        }
+        var quality = new LinkedHashMap<String, Object>();
+        quality.put("spottedSeverity", spot.severity());
+        quality.put("spottedReason", spot.reason());
+        if (v2) {
+            quality.put("route", NEEDS_YOUR_LOOK);
+            quality.put("uncertaintyReason", PLAYBOOK_SILENT);
+            if (detail.get("uncoveredProbability") instanceof Double probability) {
+                quality.put("uncoveredProbability", probability);
+            }
+        }
         return List.of(signal(context, b -> b
                 .signalType(SignalType.POLICY_UNAVAILABLE).issueFamily(IssueFamily.POLICY_UNAVAILABLE)
                 .payload(new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED))
                 .evidence(evidence)
                 .generativeExecution(spot.executionId())
-                .quality(Map.of("spottedSeverity", spot.severity(), "spottedReason", spot.reason()))
+                .quality(quality)
                 .dedupeSuffix("spotted")));
     }
 

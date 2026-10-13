@@ -129,6 +129,9 @@ class IssueSpottingIT {
         assertThat(spotted).hasSize(1).allSatisfy(finding -> {
             assertThat(finding.issueFamily()).isEqualTo(IssueFamily.POLICY_UNAVAILABLE);
             assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+            // v1 opt-in keeps the needs-review finding; the v2 advisory shape never leaks here
+            assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
+            assertThat(finding.quality()).doesNotContainKey("route");
         });
     }
 }

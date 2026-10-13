@@ -291,6 +291,13 @@ public final class FindingAssembler {
         if (primary.signalType() == SignalType.EXPECTED_CONCEPT_ABSENT) {
             return FindingSeverity.LOW;
         }
+        if (primary.signalType() == SignalType.POLICY_UNAVAILABLE
+                && primary.payload() instanceof PolicyUnavailablePayload unavailable
+                && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())
+                && "NEEDS_YOUR_LOOK".equals(primary.quality().get("route"))) {
+            // engine v2: an advisory pick of the whole-contract read asks for a look, never an alarm
+            return FindingSeverity.LOW;
+        }
         if (primary.signalType() == SignalType.POLICY_DEVIATION
                 && primary.payload() instanceof PositionDeviationPayload deviation) {
             // severity follows the category; a named approver changes the action, not the risk;
@@ -427,7 +434,8 @@ public final class FindingAssembler {
     private static final List<String> ASSESSMENT_KEYS = List.of("category", "flagProbability",
             "probabilities", "secondaryTopic", "uncoveredProbability", "route", "jevCategory",
             "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
-            "secondOpinionReason", "foundBy");
+            "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
+            "uncertaintyReason");
 
     private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();

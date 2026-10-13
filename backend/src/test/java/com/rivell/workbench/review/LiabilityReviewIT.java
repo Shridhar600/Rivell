@@ -502,6 +502,9 @@ public class LiabilityReviewIT {
         volatile String openEndedExplanation;
         /** Headings the whole-contract spotting read names (MEDIUM); every other clause is fine. */
         final java.util.Set<String> spottedHeadings = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        /** Headings the whole-contract spotting read names as HIGH. */
+        final java.util.Set<String> spottedHighHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
         final AtomicInteger spottingCalls = new AtomicInteger();
         /** The second opinion's answer (engine v2). Its quote is the clause's first words unless set. */
         volatile String secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
@@ -528,6 +531,7 @@ public class LiabilityReviewIT {
             openEndedProposed = null;
             openEndedExplanation = null;
             spottedHeadings.clear();
+            spottedHighHeadings.clear();
             spottingCalls.set(0);
             secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
             secondOpinionQuote = null;
@@ -555,8 +559,16 @@ public class LiabilityReviewIT {
             if (request.state() instanceof IssueSpottingSpecs.SpottingState spotting) {
                 spottingCalls.incrementAndGet();
                 var lines = spotting.clauses().stream()
-                        .filter(clause -> spottedHeadings.stream().anyMatch(clause.heading()::contains))
-                        .map(clause -> clause.number() + " | MEDIUM | one-sided term against us")
+                        .map(clause -> {
+                            if (spottedHighHeadings.stream().anyMatch(clause.heading()::contains)) {
+                                return clause.number() + " | HIGH | one-sided term against us";
+                            }
+                            if (spottedHeadings.stream().anyMatch(clause.heading()::contains)) {
+                                return clause.number() + " | MEDIUM | one-sided term against us";
+                            }
+                            return null;
+                        })
+                        .filter(java.util.Objects::nonNull)
                         .collect(java.util.stream.Collectors.joining("\n"));
                 return new GenerationResult(Map.of("issues", lines.isEmpty() ? "NONE" : lines),
                         "fake-gen-v1", new TokenUsage(900, 30));
