@@ -665,6 +665,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         {sheet?.kind === 'clause' ? (
           sheetClause && semantics && nodes ? (
             <ClauseDetails
+              key={sheetClause.id}
               clause={sheetClause}
               semantics={semantics}
               nodes={nodes}

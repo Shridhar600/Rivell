@@ -550,6 +550,22 @@ describe('clause details in place', () => {
     expect(within(sheet).queryByRole('button', { name: 'Correct the values' })).not.toBeInTheDocument()
   })
 
+  it('never carries an unsaved topic draft to another clause', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    let sheet = await openClauseDetails('6. Limitation of Liability')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+    await within(sheet).findByRole('option', { name: 'Indemnification' })
+    await userEvent.selectOptions(within(sheet).getByLabelText('Topic'), 'INDEMNIFICATION')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Clause details' })).not.toBeInTheDocument())
+
+    sheet = await openClauseDetails('5. Termination')
+    expect(within(sheet).getByRole('heading', { level: 2 })).toHaveTextContent('5. Termination')
+    expect(within(sheet).queryByLabelText('Topic')).not.toBeInTheDocument()
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+    expect(within(sheet).getByLabelText('Topic')).toHaveValue('TERM')
+  })
+
   it('is read-only when the review pinned an older version, and says why', async () => {
     renderWorkspace(
       stubContractApi(
