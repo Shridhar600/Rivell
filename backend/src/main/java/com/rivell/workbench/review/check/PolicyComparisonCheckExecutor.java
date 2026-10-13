@@ -56,7 +56,6 @@ import com.rivell.workbench.taxonomy.ConceptRegistry;
 public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor {
 
     private static final int MAX_CLAUSE_LENGTH = 4000;
-    private static final double ADDRESSED = 0.5;
     private static final String JEV = "JEV";
     private static final String SECOND_OPINION = "SECOND_OPINION";
     private static final String NEEDS_YOUR_LOOK = "NEEDS_YOUR_LOOK";
@@ -132,14 +131,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         detail.put("positionCount", positions.size());
         detail.put("positionsTruncated",
                 bundle.degradationWarnings().contains("POLICY_POSITIONS_TRUNCATED"));
-        var state = new PolicyComparisonSpecs.PolicyComparisonState(
-                PolicyComparisonSpecs.STATE_SCHEMA_VERSION,
-                context.snapshot().contractType().label(),
-                context.snapshot().ourSideRole() == null
-                        ? "" : context.snapshot().ourSideRole().name(),
-                context.headingTexts().getOrDefault(
-                        context.check().subjectHeadingNodeId(), ""),
-                truncate(clause.contentText(), MAX_CLAUSE_LENGTH));
+        var state = comparisonState(context, clause);
         var v2 = context.snapshot().reviewEngine() == ReviewEngine.V2;
         var judgedPositions = new ArrayList<JudgedPosition>(positions.size());
         Map<String, PolicyComparisonOutcome.Judgement> probe = Map.of();
@@ -444,9 +436,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     }
 
     private static boolean addresses(JudgedPosition judged) {
-        var probabilities = judged.judgement().probabilities();
-        return probabilities.getOrDefault(PolicyComparisonSpecs.MEETS_PREFERRED, 0.0)
-                + judged.judgement().flagProbability() >= ADDRESSED;
+        return PolicyComparisonOutcome.addresses(
+                judged.judgement().probabilities(), judged.judgement().flagProbability());
     }
 
     /**
@@ -668,7 +659,22 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         return entry;
     }
 
-    private static EvidenceRequest request(
+    /**
+     * The comparison state of one clause, shared with the omissions lane: the engine frozen
+     * values plus the clause's own heading and text.
+     */
+    static PolicyComparisonSpecs.PolicyComparisonState comparisonState(
+            ReviewCheckContext context, ClauseSemantics clause) {
+        return new PolicyComparisonSpecs.PolicyComparisonState(
+                PolicyComparisonSpecs.STATE_SCHEMA_VERSION,
+                context.snapshot().contractType().label(),
+                context.snapshot().ourSideRole() == null
+                        ? "" : context.snapshot().ourSideRole().name(),
+                context.headingTexts().getOrDefault(clause.headingNodeId(), ""),
+                truncate(clause.contentText(), MAX_CLAUSE_LENGTH));
+    }
+
+    static EvidenceRequest request(
             ReviewCheckContext context, ClauseSemantics clause, ConceptKey concept) {
         var snapshot = context.snapshot();
         return EvidenceRequest.forClauseReview(

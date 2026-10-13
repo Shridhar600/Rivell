@@ -145,6 +145,24 @@ public class EvidenceService {
                 .candidates().stream().map(KnowledgeCandidate::effectiveContentText).toList();
     }
 
+    /**
+     * Engine v2 omissions lane (spec §4): every applicable published playbook position of
+     * the contract, with its label, for the omission check to subtract the positions the
+     * clause checks addressed. No drafting, no precedents.
+     */
+    public ApplicablePositions buildForOmissions(EvidenceRequest request, int limit) {
+        var asOfPublication = resolveAsOf(request);
+        var policy = resolver.resolveAll(request, Set.of(CandidateType.PLAYBOOK_RULE),
+                asOfPublication, limit);
+        var none = new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false);
+        var bundle = assemble(request, asOfPublication, policy, none, List.of(), false, null);
+        var labels = new LinkedHashMap<UUID, String>();
+        for (var match : policy.published()) {
+            labels.put(match.candidate().id(), match.candidate().rawLabel());
+        }
+        return new ApplicablePositions(bundle, labels, policy.truncated());
+    }
+
     private EvidenceBundle buildInternal(EvidenceRequest request) {
         var asOfPublication = resolveAsOf(request);
         return assemble(request, asOfPublication,

@@ -22,6 +22,11 @@ class RetrievalServicesConfiguration {
     }
 
     @Bean
+    ContractClauseSearch contractClauseSearch(EmbeddingService embeddingService) {
+        return new InMemoryContractClauseSearch(embeddingService);
+    }
+
+    @Bean
     PrecedentLane precedentLane(
             StructuredPolicyResolver resolver,
             KnowledgeQueryService knowledgeQueries,

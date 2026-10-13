@@ -93,6 +93,20 @@ class ReviewConfiguration {
     }
 
     @Bean
+    ReviewCheckExecutor omissionCheckExecutor(
+            com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService,
+            com.rivell.workbench.retrieval.EvidenceService evidenceService,
+            com.rivell.workbench.retrieval.ContractClauseSearch contractClauseSearch,
+            com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry,
+            PolicyComparisonProperties properties,
+            ReviewRepository reviewRepository,
+            ReviewAnalysisRepository reviewAnalysisRepository) {
+        return new com.rivell.workbench.review.check.OmissionCheckExecutor(
+                semanticDecisionService, evidenceService, contractClauseSearch, conceptRegistry,
+                properties, reviewRepository, reviewAnalysisRepository);
+    }
+
+    @Bean
     ReviewCheckExecutors reviewCheckExecutors(List<ReviewCheckExecutor> executors) {
         return new ReviewCheckExecutors(executors);
     }

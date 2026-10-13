@@ -192,6 +192,19 @@ public class LiabilityReviewIT {
         /** Comparisons of clauses whose heading contains one of these fail as if the provider were down. */
         final java.util.Set<String> failComparisonHeadings =
                 java.util.concurrent.ConcurrentHashMap.newKeySet();
+        /** A comparison call whose heading contains the key and a question the value fails. */
+        final Map<String, String> failComparisonPairs = new java.util.concurrent.ConcurrentHashMap<>();
+
+        /** Probability the presence decision answers per position whose question contains the key. */
+        final Map<String, Double> presenceAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Probability the presence decision answers when no scripted answer matches. */
+        volatile double defaultPresenceProbability = 0.1;
+        /** The presence decision fails as if the provider were down. */
+        volatile boolean failPresence;
+        private final AtomicInteger presenceCalls = new AtomicInteger();
+        /** The question instructions of every presence question asked, in order. */
+        final java.util.List<String> presenceQuestions =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
         /** Answer for every position when the options arrive reversed (order probe); null = as asked. */
         volatile String reversedOrderAnswer;
@@ -311,6 +324,10 @@ public class LiabilityReviewIT {
                         new com.rivell.workbench.intelligence.YesNoAnswer(uncoveredProbability))),
                         "fake-review-v1", new TokenUsage(90, 2));
             }
+            if (request.pack().questions().keySet().stream()
+                    .anyMatch(name -> name.startsWith("presence_"))) {
+                return presenceDecision(request);
+            }
             var firstQuestion = request.pack().questions().values().iterator().next();
             if (firstQuestion instanceof ChoiceQuestion firstChoice
                     && firstChoice.criteria().containsKey(PolicyComparisonSpecs.WALK_AWAY)) {
@@ -337,6 +354,17 @@ public class LiabilityReviewIT {
             if (failComparisonHeadings.stream().anyMatch(subjectHeading::contains)) {
                 throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                         "policy comparison provider unavailable for " + subjectHeading);
+            }
+            if (failComparisonPairs.entrySet().stream().anyMatch(entry ->
+                    subjectHeading.contains(entry.getKey())
+                            && request.pack().questions().values().stream()
+                                    .anyMatch(question -> question instanceof ChoiceQuestion choice
+                                            && choice.instructions() != null
+                                            && choice.instructions().toLowerCase(java.util.Locale.ROOT)
+                                                    .contains(entry.getValue()
+                                                            .toLowerCase(java.util.Locale.ROOT))))) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "policy comparison pair provider unavailable for " + subjectHeading);
             }
             var clause = state.clause() == null ? "" : state.clause().toLowerCase();
             var initialKeys = new java.util.ArrayList<>(request.pack().questions().keySet());
@@ -381,6 +409,32 @@ public class LiabilityReviewIT {
                 }
             }
             return null;
+        }
+
+        /** Engine v2 omissions lane: one yes/no per candidate position, scripted by its text. */
+        private ProviderExecutionResult presenceDecision(DecisionExecutionRequest request) {
+            presenceCalls.incrementAndGet();
+            if (failPresence) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "presence decision provider unavailable");
+            }
+            var answers = new LinkedHashMap<String, SemanticAnswer>();
+            for (var entry : request.pack().questions().entrySet()) {
+                var question = (com.rivell.workbench.intelligence.YesNoQuestion) entry.getValue();
+                var instructions = question.instructions();
+                presenceQuestions.add(instructions);
+                var probability = defaultPresenceProbability;
+                for (var scripted : presenceAnswers.entrySet()) {
+                    if (instructions.toLowerCase(java.util.Locale.ROOT)
+                            .contains(scripted.getKey().toLowerCase(java.util.Locale.ROOT))) {
+                        probability = scripted.getValue();
+                        break;
+                    }
+                }
+                answers.put(entry.getKey(),
+                        new com.rivell.workbench.intelligence.YesNoAnswer(probability));
+            }
+            return new ProviderExecutionResult(answers, "fake-review-v1", new TokenUsage(80, 2));
         }
 
         private LinkedHashMap<String, Double> uniformProbabilities(
@@ -454,6 +508,10 @@ public class LiabilityReviewIT {
             return java.util.List.copyOf(comparisonCalls);
         }
 
+        public int presenceCalls() {
+            return presenceCalls.get();
+        }
+
         int consistencyDecisions() {
             return consistencyDecisions.get();
         }
@@ -477,6 +535,12 @@ public class LiabilityReviewIT {
             positionAnswers.clear();
             headingAnswers.clear();
             failComparisonHeadings.clear();
+            failComparisonPairs.clear();
+            presenceAnswers.clear();
+            defaultPresenceProbability = 0.1;
+            failPresence = false;
+            presenceCalls.set(0);
+            presenceQuestions.clear();
             policyComparisonProbabilities = null;
             probabilityHeadings.clear();
             reversedOrderAnswer = null;
