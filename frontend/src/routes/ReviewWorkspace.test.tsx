@@ -5,7 +5,7 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { AppProviders } from '../app/AppProviders'
 import { appRoutes } from '../app/router'
-import { stubContractApi, type StubOptions } from '../components/contract/testFixtures'
+import { fixtureContractSummary, stubContractApi, type StubOptions } from '../components/contract/testFixtures'
 import {
   fixtureAbsenceFindingSummary,
   fixtureClauseFindingDetail,
@@ -416,5 +416,110 @@ describe('the whole contract under your control', () => {
     const clause = await clauseOf('1. Definitions')
     expect(within(clause).getByText('Checked, no issue found')).toBeInTheDocument()
     expect(within(clause).queryByRole('button', { name: 'Add a finding' })).not.toBeInTheDocument()
+  })
+})
+
+describe('clause details in place', () => {
+  async function openClauseDetails(heading: string) {
+    const clause = await clauseOf(heading)
+    await userEvent.click(within(clause).getByRole('button', { name: 'Clause details' }))
+    return screen.getByRole('dialog', { name: 'Clause details' })
+  }
+
+  it('opens a clause’s semantics beside the document, without leaving the workspace', async () => {
+    const router = renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+
+    expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
+    expect(within(sheet).getByRole('heading', { name: '6. Limitation of Liability' })).toBeInTheDocument()
+    expect(sheet).toHaveTextContent('Limitation of liability')
+    expect(sheet).toHaveTextContent('A correction is used by the next review of this contract')
+  })
+
+  it('corrects the topic and keeps Rivell’s own reading beside it', async () => {
+    const api = stubContractApi(options({ clauseMarks: fixtureClauseMarks }))
+    renderWorkspace(api)
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+    await within(sheet).findByRole('option', { name: 'Indemnification' })
+    await userEvent.selectOptions(within(sheet).getByLabelText('Topic'), 'INDEMNIFICATION')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save topic' }))
+
+    await waitFor(() =>
+      expect(api.requests.find((request) => request.method === 'POST' && request.url.endsWith('/semantics/clauses/cl6/concepts'))?.body).toEqual({
+        primary: 'INDEMNIFICATION',
+      }),
+    )
+    expect(await within(sheet).findByText(/Topic updated/)).toBeInTheDocument()
+    const reading = within(sheet).getByText('Rivell read').parentElement as HTMLElement
+    expect(reading).toHaveTextContent('Limitation of liability')
+    expect(within(sheet).getAllByText('Corrected by you').length).toBeGreaterThan(0)
+  })
+
+  it('checks corrected values before sending them, then sends only what changed', async () => {
+    const api = stubContractApi(options({ clauseMarks: fixtureClauseMarks }))
+    renderWorkspace(api)
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the values' }))
+    const cap = within(sheet).getByLabelText('Liability cap multiple')
+    await userEvent.clear(cap)
+    await userEvent.type(cap, '0')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save values' }))
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent(/greater than zero/i)
+    expect(api.requests.some((request) => request.url.endsWith('/facts'))).toBe(false)
+
+    await userEvent.clear(cap)
+    await userEvent.type(cap, '2')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save values' }))
+    await waitFor(() =>
+      expect(api.requests.find((request) => request.method === 'POST' && request.url.endsWith('/semantics/clauses/cl6/facts'))?.body).toEqual({
+        values: { liabilityCapMultiple: '2' },
+      }),
+    )
+  })
+
+  it('says what is intact when the analysis is busy, and offers a refresh', async () => {
+    const api = stubContractApi(
+      options({
+        clauseMarks: fixtureClauseMarks,
+        conceptCorrectionResponse: () =>
+          new Response(JSON.stringify({ code: '409', title: 'Invalid state', detail: 'Enrichment for contract 9f2a1c44 is already running' }), {
+            status: 409,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      }),
+    )
+    renderWorkspace(api)
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+    await within(sheet).findByRole('option', { name: 'Indemnification' })
+    await userEvent.selectOptions(within(sheet).getByLabelText('Topic'), 'INDEMNIFICATION')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save topic' }))
+
+    expect(await within(sheet).findByText(/analysis of this contract version is not ready/i)).toBeInTheDocument()
+    expect(within(sheet).queryByText(/9f2a1c44/)).not.toBeInTheDocument()
+    const before = api.requests.filter((request) => request.method === 'GET' && request.url.includes('/semantics')).length
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Refresh analysis state' }))
+    await waitFor(() =>
+      expect(api.requests.filter((request) => request.method === 'GET' && request.url.includes('/semantics')).length).toBeGreaterThan(before),
+    )
+  })
+
+  it('is read-only when the review pinned an older version, and says why', async () => {
+    renderWorkspace(
+      stubContractApi(
+        options({
+          clauseMarks: fixtureClauseMarks,
+          contractSummary: { ...fixtureContractSummary, latestVersion: { ...fixtureContractSummary.latestVersion, versionNumber: 2 } },
+        }),
+      ),
+    )
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+
+    expect(within(sheet).queryByRole('button', { name: 'Correct the topic' })).not.toBeInTheDocument()
+    expect(within(sheet).queryByRole('button', { name: 'Correct the values' })).not.toBeInTheDocument()
+    expect(sheet).toHaveTextContent('Corrections apply to the latest contract version (version 2). This review uses version 1')
   })
 })

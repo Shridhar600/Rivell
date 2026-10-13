@@ -724,13 +724,12 @@ describe('finding evidence amendment', () => {
 
     const sheet = screen.getByRole('dialog', { name: 'Source' })
     expect(sheet).toHaveTextContent('3. Fees. Fees are invoiced monthly and payable within 30 days.')
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Open clause semantics' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Clause details' }))
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c1'))
-    const search = new URLSearchParams(router.state.location.search)
-    expect(search.get('view')).toBe('semantics')
-    expect(search.get('clause')).toBe('node-5')
-    expect(router.state.location.search).not.toContain('node-63')
+    // The clause opens in place, on the clause the backend recorded (cl5 -> node-5), not node-63.
+    const details = await screen.findByRole('dialog', { name: 'Clause details' })
+    expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
+    expect(within(details).getByRole('heading', { level: 2 })).toHaveTextContent('5. Termination')
   })
 
   it('keeps a source region inside the workspace and highlights the clause it came from', async () => {
@@ -764,10 +763,7 @@ describe('finding evidence amendment', () => {
     await findDetailTitle('6. Limitation of Liability')
     await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Current contract/ }))
     const sheet = screen.getByRole('dialog', { name: 'Source' })
-    // Clause semantics open the latest version, so a pinned older review does not offer them.
-    expect(
-      within(sheet).queryByRole('button', { name: 'Open clause semantics' }),
-    ).not.toBeInTheDocument()
+    // Clause details open in place on the pinned version; a pinned older review shows them read-only.
 
     // "View in document" still works: the workspace document is the version the review pinned.
     await userEvent.click(within(sheet).getByRole('button', { name: '6. Limitation of Liability' }))

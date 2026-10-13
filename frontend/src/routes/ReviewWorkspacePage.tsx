@@ -59,6 +59,7 @@ import { FindingNavigator } from '../components/workspace/FindingNavigator'
 import { FindingPanel, SUMMARY_LINK_ID } from '../components/workspace/FindingPanel'
 import { FinalizeDialog } from '../components/workspace/FinalizeDialog'
 import { SourceContent } from '../components/workspace/SourceContent'
+import { ClauseDetails } from '../components/workspace/ClauseDetails'
 import { LinkButton } from '../components/ui/Button'
 import { sourceLink } from '../lib/evidence'
 import { useDecisionFlow } from '../components/workspace/useDecisionFlow'
@@ -79,7 +80,7 @@ const LEFT_KEY = 'rv-l'
 const RIGHT_KEY = 'rv-r'
 const MODE_CYCLE: Record<DocMode, DocMode> = { changes: 'orig', orig: 'final', final: 'changes' }
 
-type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' }
+type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'clause'; headingNodeId: string }
 
 function Gate({ children }: { children: ReactNode }) {
   return (
@@ -536,8 +537,18 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     setTerm('')
     setDocFocus({ nodeId })
   }
-  const goToClause = (headingNodeId: string) =>
-    void navigate(`/reviews/${contractId}?${new URLSearchParams({ view: 'semantics', section: 'clauses', clause: headingNodeId })}`)
+  // Clause semantics open in place, on the version the review pinned; corrections are offered only
+  // when that is the contract's latest version.
+  const openClause = (headingNodeId: string) => setSheet({ kind: 'clause', headingNodeId })
+  const semantics = semanticsQuery.data
+  const analysedHeadings = new Set(
+    [...(semantics?.clauses ?? []), ...(semantics?.structuralRegions ?? [])].map((clause) => clause.headingNodeId),
+  )
+  const sheetClause =
+    sheet?.kind === 'clause'
+      ? (semantics?.clauses.find((clause) => clause.headingNodeId === sheet.headingNodeId) ??
+        semantics?.structuralRegions.find((region) => region.headingNodeId === sheet.headingNodeId))
+      : undefined
   const contractType = summary.snapshot?.profile?.contractType
   const pin = summary.snapshot?.knowledgePinNumber
   const context = [profileLine(summary.snapshot), pin ? `Knowledge publication ${pin}` : null].filter(Boolean).join('. ') || null
@@ -601,6 +612,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           focusTarget={docFocus}
           marks={clauseMarks}
           onAddFinding={canAddFinding ? addFinding : null}
+          onClauseDetails={semantics ? openClause : null}
+          analysedHeadings={analysedHeadings}
         />
         <FindingPanel
           finding={finding}
@@ -629,7 +642,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
 
       <WorkspaceSheet
         open={sheet !== null}
-        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : 'Source'}
+        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : 'Source'}
         onClose={() => setSheet(null)}
         actions={sourceRecord ? <LinkButton to={sourceRecord.to}>{sourceRecord.label}</LinkButton> : null}
       >
@@ -640,10 +653,28 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
               regionLabels={regionLabels}
               clauseHeadings={clauseHeadings}
               onNavigateToNode={showInDocumentAt}
-              onOpenClauseSemantics={pinnedVersion === latestVersion ? goToClause : undefined}
+              onOpenClauseSemantics={semantics ? openClause : undefined}
             />
           ) : (
             <p className="rv-ws-caption">This evidence is not part of the selected finding.</p>
+          )
+        ) : null}
+        {sheet?.kind === 'clause' ? (
+          sheetClause && semantics && nodes ? (
+            <ClauseDetails
+              clause={sheetClause}
+              semantics={semantics}
+              nodes={nodes}
+              contractId={contractId}
+              versionNumber={semantics.versionNumber}
+              editable={pinnedVersion === latestVersion}
+              latestVersionNumber={latestVersion}
+              regionLabels={regionLabels}
+              onNavigateToNode={showInDocumentAt}
+              onRefresh={() => void semanticsQuery.refetch()}
+            />
+          ) : (
+            <p className="rv-ws-caption">The analysis of this clause is not available.</p>
           )
         ) : null}
         {sheet?.kind === 'history' && selectedId ? (

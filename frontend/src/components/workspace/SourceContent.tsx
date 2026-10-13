@@ -17,7 +17,7 @@ interface Props {
   clauseHeadings: Map<string, string>
   /** Reveals the node in the workspace document, which is the version the review pinned. */
   onNavigateToNode?: (nodeId: string) => void
-  /** Clause semantics open the contract's latest version, so given only when the review matches it. */
+  /** Opens the clause's semantics in place, in the clause details sheet. */
   onOpenClauseSemantics?: (headingNodeId: string) => void
 }
 
@@ -140,7 +140,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
       {onOpenClauseSemantics && clauseHeading ? (
         <div className="rv-ws-srcd-acts">
           <button type="button" className="rv-ws-link" onClick={() => onOpenClauseSemantics(clauseHeading)}>
-            Open clause semantics
+            Clause details
           </button>
         </div>
       ) : null}
