@@ -4,10 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.FutureTask;
 import java.util.regex.Pattern;
 
 import com.rivell.workbench.contracts.ClauseSemantics;
@@ -36,8 +33,7 @@ final class ContractIssueSpotter {
 
     private final GenerativeReasoningService generation;
     private final EvidenceService evidenceService;
-    private final Map<UUID, FutureTask<Map<UUID, Spot>>> runs = new ConcurrentHashMap<>();
-    private final ConcurrentLinkedDeque<UUID> order = new ConcurrentLinkedDeque<>();
+    private final RunMemo<Map<UUID, Spot>> runs = new RunMemo<>(MAX_RUNS);
 
     ContractIssueSpotter(GenerativeReasoningService generation, EvidenceService evidenceService) {
         this.generation = generation;
@@ -45,19 +41,8 @@ final class ContractIssueSpotter {
     }
 
     Map<UUID, Spot> spots(ReviewCheckContext context, EvidenceRequest anyClauseRequest) {
-        var task = runs.computeIfAbsent(context.runId(), runId -> {
-            order.addLast(runId);
-            while (order.size() > MAX_RUNS) {
-                var oldest = order.pollFirst();
-                if (oldest != null) {
-                    runs.remove(oldest);
-                }
-            }
-            return new FutureTask<>(() -> spot(context, anyClauseRequest));
-        });
-        task.run(); // no-op when another check already ran or is running it
         try {
-            return task.get();
+            return runs.get(context.runId(), () -> spot(context, anyClauseRequest));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return Map.of();
