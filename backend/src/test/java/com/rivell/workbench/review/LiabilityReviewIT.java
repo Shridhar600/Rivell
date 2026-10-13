@@ -211,8 +211,12 @@ public class LiabilityReviewIT {
         /** The reversed-order (probe) call fails as if the provider were down. */
         volatile boolean failReversedOrder;
 
-        /** One policy-comparison call: the subject heading, the question keys, the first option offered. */
-        public record ComparisonCall(String heading, java.util.List<String> questionKeys, String firstOption) {
+        /**
+         * One policy-comparison call: the subject heading, the question keys, the first option offered,
+         * the definitions the state carried and the state itself (serialized by the test's mapper).
+         */
+        public record ComparisonCall(String heading, java.util.List<String> questionKeys,
+                String firstOption, java.util.List<String> definitions, Object state) {
         }
 
         @Override
@@ -370,7 +374,8 @@ public class LiabilityReviewIT {
             var initialKeys = new java.util.ArrayList<>(request.pack().questions().keySet());
             java.util.Collections.sort(initialKeys);
             comparisonCalls.add(new ComparisonCall(
-                    state.heading() == null ? "" : state.heading(), initialKeys, firstOption));
+                    state.heading() == null ? "" : state.heading(), initialKeys, firstOption,
+                    state.definitions(), state));
             var answers = new LinkedHashMap<String, SemanticAnswer>();
             for (var entry : request.pack().questions().entrySet()) {
                 var question = (ChoiceQuestion) entry.getValue();
@@ -575,6 +580,9 @@ public class LiabilityReviewIT {
         volatile String secondOpinionQuote;
         volatile boolean failSecondOpinion;
         final AtomicInteger secondOpinionCalls = new AtomicInteger();
+        /** The definitions each second-opinion call carried, in call order. */
+        final java.util.List<java.util.List<String>> secondOpinionDefinitions =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
 
         @Override
         public String id() {
@@ -601,6 +609,7 @@ public class LiabilityReviewIT {
             secondOpinionQuote = null;
             failSecondOpinion = false;
             secondOpinionCalls.set(0);
+            secondOpinionDefinitions.clear();
         }
 
         @Override
@@ -608,6 +617,7 @@ public class LiabilityReviewIT {
             calls.incrementAndGet();
             if (request.state() instanceof AdjudicationSpecs.SecondOpinionState opinion) {
                 secondOpinionCalls.incrementAndGet();
+                secondOpinionDefinitions.add(java.util.List.copyOf(opinion.definitions()));
                 if (failSecondOpinion) {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                             "second opinion provider unavailable");

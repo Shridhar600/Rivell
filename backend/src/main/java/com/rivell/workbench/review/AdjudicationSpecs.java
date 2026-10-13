@@ -1,9 +1,11 @@
 package com.rivell.workbench.review;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.rivell.workbench.intelligence.ReasoningSpec;
 import com.rivell.workbench.intelligence.SemanticState;
 
@@ -16,7 +18,7 @@ import com.rivell.workbench.intelligence.SemanticState;
 public final class AdjudicationSpecs {
 
     public static final String SECOND_OPINION_SPEC = "policy-comparison-second-opinion";
-    public static final int SECOND_OPINION_VERSION = 1;
+    public static final int SECOND_OPINION_VERSION = 2;
     public static final int STATE_SCHEMA = 1;
     public static final String CATEGORY = "category";
     public static final String QUOTE = "quote";
@@ -38,17 +40,27 @@ public final class AdjudicationSpecs {
                 "Give a second opinion in a contract review. Judge the clause against our playbook "
                         + "position, for our side (ourSide), and pick exactly one of the given "
                         + "options. Read the clause as written: do not assume terms it does not "
-                        + "contain. A clause can deal with the subject and still be fine for us.",
+                        + "contain. When definitions are given, they are the contract's own "
+                        + "definitions of terms the clause uses: read those terms with them. "
+                        + "A clause can deal with the subject and still be fine for us.",
                 STATE_SCHEMA, fields, Map.of(CATEGORY, Set.copyOf(offered)));
     }
 
     /**
      * {@code position}: the position as Jev saw it (preferred, fallbacks, walk-away).
      * {@code options}: each offered option key with the wording Jev saw.
+     * {@code definitions}: the contract's own definitions of terms the clause uses (P3); the
+     * quote rule stays clause-only, so a quote found only in a definition is not valid.
      */
     public record SecondOpinionState(
             int schemaVersion, String ourSide, String contractType, String heading, String clause,
-            String position, Map<String, String> options) implements SemanticState {
+            String position, Map<String, String> options,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> definitions)
+            implements SemanticState {
+
+        public SecondOpinionState {
+            definitions = definitions == null ? List.of() : List.copyOf(definitions);
+        }
 
         @Override
         public Object payload() {

@@ -1,8 +1,10 @@
 package com.rivell.workbench.review;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.rivell.workbench.intelligence.ChoiceQuestion;
 import com.rivell.workbench.intelligence.DecisionSpec;
 import com.rivell.workbench.intelligence.QuestionPack;
@@ -131,10 +133,19 @@ public final class PolicyComparisonSpecs {
                                 + "us."))));
     }
 
-    /** The slice of the review a policy comparison needs. */
+    /**
+     * The slice of the review a policy comparison needs. {@code definitions}: the contract's own
+     * definitions of terms the clause uses (P3), read by the engine v2 judge; empty on v1 or when
+     * the property is off, and then never serialized (the state's schema version covers both shapes).
+     */
     public record PolicyComparisonState(
-            int schemaVersion, String contractType, String ourSide, String heading, String clause)
+            int schemaVersion, String contractType, String ourSide, String heading, String clause,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> definitions)
             implements SemanticState {
+
+        public PolicyComparisonState {
+            definitions = definitions == null ? List.of() : List.copyOf(definitions);
+        }
 
         @Override
         public Object payload() {
