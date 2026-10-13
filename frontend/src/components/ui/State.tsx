@@ -6,7 +6,7 @@ import { InfoIcon } from './Icon'
 export function LoadingState({ label = 'Loading' }: { label?: string }) {
   return (
     <p role="status" className="rv-state">
-      <span className="rv-state__body">{label}…</span>
+      <span className="rv-state__body">{label.replace(/(…|\.\.\.)$/, '')}…</span>
     </p>
   )
 }

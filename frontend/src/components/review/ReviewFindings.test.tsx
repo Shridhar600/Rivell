@@ -865,7 +865,7 @@ describe('finding evidence amendment', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
     const sheet = screen.getByRole('dialog', { name: 'Review notes' })
     const heading = within(sheet).getByText('Contract pack')
-    const row = heading.closest('.data-list__row') as HTMLElement
+    const row = heading.parentElement as HTMLElement
     expect(within(row).getByText('Pack context unavailable')).toBeInTheDocument()
   })
 
@@ -1040,7 +1040,7 @@ describe('engine v2: who decided', () => {
     // the frozen context lives in the Review notes sheet
     await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
     const sheet = screen.getByRole('dialog', { name: 'Review notes' })
-    const row = within(sheet).getByText('Review engine').closest('.data-list__row') as HTMLElement
+    const row = within(sheet).getByText('Review engine').parentElement as HTMLElement
     expect(row).toHaveTextContent(
       'v2: a second opinion when the first review is unsure · 1 decided with a second opinion · 1 needs your look',
     )

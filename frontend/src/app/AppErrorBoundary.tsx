@@ -19,13 +19,13 @@ export class AppErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.error) {
       return (
-        <main role="alert" className="state state--error">
-          <h1>Something went wrong</h1>
-          <p>
+        <main role="alert" className="rv-state rv-state--error">
+          <h1 className="rv-state__title">Something went wrong</h1>
+          <p className="rv-state__body">
             Rivell could not continue because of an unexpected error. Reload the page; if it keeps
             happening, contact an administrator.
           </p>
-          <button type="button" onClick={() => window.location.reload()}>
+          <button type="button" className="rv-btn rv-btn--compact" onClick={() => window.location.reload()}>
             Reload
           </button>
         </main>

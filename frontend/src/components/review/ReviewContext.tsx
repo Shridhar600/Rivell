@@ -27,14 +27,14 @@ export function ReviewContext({
     : null
 
   return (
-      <dl className="data-list profile-summary" aria-label="Frozen review context">
-        <div className="data-list__row">
+      <dl className="rv-ws-props" aria-label="Frozen review context">
+        <div>
           <dt>Review state</dt>
           <dd>Frozen when this review was created</dd>
         </div>
         {profile ? (
           <>
-            <div className="data-list__row">
+            <div>
               <dt>Contract type</dt>
               <dd>
                 {profile.contractType
@@ -42,11 +42,11 @@ export function ReviewContext({
                   : 'Not specified'}
               </dd>
             </div>
-            <div className="data-list__row">
+            <div>
               <dt>Our side</dt>
               <dd>{profile.ourSideRole ? roleLabel(profile.ourSideRole) : 'Not specified'}</dd>
             </div>
-            <div className="data-list__row">
+            <div>
               <dt>Paper source</dt>
               <dd>
                 {profile.paperSource
@@ -54,7 +54,7 @@ export function ReviewContext({
                   : 'Not specified'}
               </dd>
             </div>
-            <div className="data-list__row">
+            <div>
               <dt>Jurisdiction</dt>
               <dd>
                 {profile.jurisdiction
@@ -64,12 +64,12 @@ export function ReviewContext({
             </div>
           </>
         ) : (
-          <div className="data-list__row">
+          <div>
             <dt>Review profile</dt>
             <dd>Frozen profile unavailable</dd>
           </div>
         )}
-        <div className="data-list__row">
+        <div>
           <dt>Knowledge publication</dt>
           <dd>
             {snapshot?.knowledgePinNumber == null
@@ -79,7 +79,7 @@ export function ReviewContext({
                 : 'No published knowledge at creation'}
           </dd>
         </div>
-        <div className="data-list__row">
+        <div>
           <dt>Contract pack</dt>
           <dd>
             {snapshot === null
@@ -87,14 +87,14 @@ export function ReviewContext({
               : (packLabel ?? 'No pack (reduced checks)')}
           </dd>
         </div>
-        <div className="data-list__row">
+        <div>
           <dt>Review engine</dt>
           <dd>
             {[engineLabel(snapshot?.engine ?? null), routeCountsLabel(findings)].filter(Boolean).join(' · ')}
           </dd>
         </div>
         {snapshot?.effectiveOn ? (
-          <div className="data-list__row">
+          <div>
             <dt>Effective on</dt>
             <dd>{snapshot.effectiveOn}</dd>
           </div>

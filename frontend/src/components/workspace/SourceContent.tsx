@@ -57,7 +57,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
     <article className="rv-ws-srcd" aria-labelledby={headingId}>
       <div className="rv-ws-kicker">
         <span>{authorityLabel(item.authorityClass)}</span>
-        {item.publicationNumber !== null ? <span className="rv-ws-srcd-chip">Published v{item.publicationNumber}</span> : null}
+        {item.publicationNumber !== null ? <span className="rv-ws-chip">Published v{item.publicationNumber}</span> : null}
       </div>
       <h2 id={headingId}>{title}</h2>
 
