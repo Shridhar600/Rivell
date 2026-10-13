@@ -21,6 +21,9 @@ import com.rivell.workbench.knowledge.KnowledgeCandidate;
  */
 public class EvidenceService {
 
+    /** Approved variants carried with search-found positions: what a topic comparison carries. */
+    private static final int SEARCH_DRAFTING_CAP = 8;
+
     private final StructuredPolicyResolver resolver;
     private final PrecedentLane precedentLane;
     private final CurrentContractLane currentContractLane;
@@ -116,8 +119,9 @@ public class EvidenceService {
      * Engine v2 SEARCH route (spec §6): positions found by a clause's text for a clause no topic
      * paired, or whose topic-matched positions all judged it off their subject. Up to
      * {@code limit} positions not in {@code alreadyJudged}, in fused order, each carrying its lane
-     * ranks; no drafting and no precedents (the caller judges the positions first). The contract
-     * lane is gathered as for any clause, for the comparison and the triage to cite. The bundle's
+     * ranks; approved drafting for the found positions' topics, as a topic comparison would carry
+     * it; no precedents. The contract lane is gathered as for any clause, for the comparison and
+     * the triage to cite. The bundle's
      * sufficiency describes structured policy resolution and does not apply to search results:
      * several found positions are candidates for one clause, not conflicting policy.
      */
@@ -125,9 +129,14 @@ public class EvidenceService {
             EvidenceRequest request, Set<UUID> alreadyJudged, int limit) {
         var asOfPublication = resolveAsOf(request);
         var found = positionSearch.search(request, asOfPublication, alreadyJudged, limit);
-        var none = new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false);
-        return assemble(request, asOfPublication, found.resolution(), none, found.degradation(),
-                false, found);
+        var topics = found.resolution().candidates().stream()
+                .flatMap(candidate -> candidate.topicKeys().stream()).distinct().toList();
+        var drafting = topics.isEmpty()
+                ? new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false)
+                : resolver.resolveByTopics(request, Set.of(CandidateType.CLAUSE_VARIANT),
+                        asOfPublication, topics, null, SEARCH_DRAFTING_CAP);
+        return assemble(request, asOfPublication, found.resolution(), drafting,
+                found.degradation(), false, found);
     }
 
     /** The text of every published playbook position that applies to the request's contract. */

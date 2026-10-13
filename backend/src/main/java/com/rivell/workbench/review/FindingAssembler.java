@@ -427,7 +427,7 @@ public final class FindingAssembler {
     private static final List<String> ASSESSMENT_KEYS = List.of("category", "flagProbability",
             "probabilities", "secondaryTopic", "uncoveredProbability", "route", "jevCategory",
             "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
-            "secondOpinionReason");
+            "secondOpinionReason", "foundBy");
 
     private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();

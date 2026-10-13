@@ -10,12 +10,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * {@code uncoveredThreshold} (design §6c). {@code issueSpotting} (opt-in, step-6 hybrid) adds
  * one whole-contract LLM read per run: a clause it names that no check flagged becomes a
  * needs-review finding. {@code orderProbe} (measurement only) re-asks each comparison; see
- * {@link OrderProbe}.
+ * {@link OrderProbe}. {@code searchLimit} (engine v2 SEARCH route) is how many positions a text
+ * search over the playbook hands to the comparison for a clause no paired position addresses.
  */
 @ConfigurationProperties("rivell.review.policy-comparison")
 public record PolicyComparisonProperties(
         int maxPositions, double flagThreshold, double uncoveredThreshold, boolean issueSpotting,
-        OrderProbe orderProbe) {
+        OrderProbe orderProbe, int searchLimit) {
 
     /**
      * Measurement only (engine v2 P0): ask every comparison a second time, with the options
@@ -30,5 +31,6 @@ public record PolicyComparisonProperties(
         uncoveredThreshold = uncoveredThreshold <= 0.0 || uncoveredThreshold > 1.0
                 ? 0.5 : uncoveredThreshold;
         orderProbe = orderProbe == null ? OrderProbe.OFF : orderProbe;
+        searchLimit = searchLimit <= 0 ? 3 : searchLimit;
     }
 }

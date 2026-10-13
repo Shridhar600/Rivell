@@ -60,6 +60,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private static final String JEV = "JEV";
     private static final String SECOND_OPINION = "SECOND_OPINION";
     private static final String NEEDS_YOUR_LOOK = "NEEDS_YOUR_LOOK";
+    private static final String SEARCH = "SEARCH";
+    /** Search-found positions get their own keys, so their signals never merge with topic ones. */
+    private static final String SEARCH_KEY_PREFIX = "search_";
 
     private final SemanticDecisionService decisionService;
     private final PositionLanguageGenerator languageGenerator;
@@ -137,66 +140,113 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 context.headingTexts().getOrDefault(
                         context.check().subjectHeadingNodeId(), ""),
                 truncate(clause.contentText(), MAX_CLAUSE_LENGTH));
-        if (positions.isEmpty()) {
-            // no applicable position: only the uncovered-clause triage runs
-            detail.put("addressed", false);
-            var signals = new ArrayList<>(uncovered(context, clause, bundle, state, detail));
-            signals.addAll(spotted(context, clause, bundle, signals, detail));
-            return CheckOutcome.completed(signals, detail, bundle.traceId())
-                    .withCitedEvidence(List.of(bundle));
-        }
-        DecisionExecution execution;
-        try {
-            execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
-                    PolicyPositionQuestions.build(positions, clause, conceptRegistry)), state);
-        } catch (SpecStateMismatchException | UnknownDecisionSpecException
-                | NoProviderConfiguredException e) {
-            return CheckOutcome.failed(
-                    "decision_contract_error:" + e.getClass().getSimpleName());
-        } catch (SemanticDecisionException e) {
-            return providerUnavailable(context, clause, bundle, positions, detail, e);
-        }
+        var v2 = context.snapshot().reviewEngine() == ReviewEngine.V2;
         var judgedPositions = new ArrayList<JudgedPosition>(positions.size());
-        for (int index = 0; index < positions.size(); index++) {
-            var answer = execution.answers().get(PolicyPositionQuestions.key(index));
-            if (!(answer instanceof ChoiceAnswer choice)) {
+        Map<String, PolicyComparisonOutcome.Judgement> probe = Map.of();
+        if (!positions.isEmpty()) {
+            DecisionExecution execution;
+            try {
+                execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
+                        PolicyPositionQuestions.build(positions, clause, conceptRegistry)), state);
+            } catch (SpecStateMismatchException | UnknownDecisionSpecException
+                    | NoProviderConfiguredException e) {
                 return CheckOutcome.failed(
-                        "position_answer_missing:" + PolicyPositionQuestions.key(index));
+                        "decision_contract_error:" + e.getClass().getSimpleName());
+            } catch (SemanticDecisionException e) {
+                return providerUnavailable(context, clause, bundle, positions, detail, e);
             }
-            judgedPositions.add(new JudgedPosition(PolicyPositionQuestions.key(index),
-                    positions.get(index),
-                    PolicyComparisonOutcome.judge(choice, properties.flagThreshold())));
+            var missing = judge(positions, execution, bundle, "", judgedPositions);
+            if (missing != null) {
+                return CheckOutcome.failed("position_answer_missing:" + missing);
+            }
+            probe = probe(clause, positions, state, detail);
+        }
+        // engine v2 (spec §6, SEARCH route): no topic-paired position addresses the clause, so the
+        // playbook is searched by the clause's text once; Jev judges what is found the same way
+        EvidenceBundle searchBundle = null;
+        var searchFailed = false;
+        if (v2 && judgedPositions.stream().noneMatch(PolicyComparisonCheckExecutor::addresses)) {
+            searchBundle = evidenceService.buildForPositionSearch(bundle.request(),
+                    judgedPositions.stream().map(judged -> judged.position().sourceCandidateId())
+                            .collect(java.util.stream.Collectors.toSet()),
+                    properties.searchLimit());
+            var found = searchBundle.policyItems();
+            var search = new LinkedHashMap<String, Object>();
+            search.put("found", found.size());
+            search.put("traceId", searchBundle.traceId() == null
+                    ? "" : searchBundle.traceId().toString());
+            detail.put("search", search);
+            if (!found.isEmpty()) {
+                detail.put("route", SEARCH);
+                try {
+                    var execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
+                            PolicyPositionQuestions.build(found, clause, conceptRegistry)), state);
+                    var missing = judge(found, execution, searchBundle, SEARCH_KEY_PREFIX,
+                            judgedPositions);
+                    if (missing != null) {
+                        return CheckOutcome.failed("position_answer_missing:" + missing);
+                    }
+                } catch (SpecStateMismatchException | UnknownDecisionSpecException
+                        | NoProviderConfiguredException e) {
+                    return CheckOutcome.failed(
+                            "decision_contract_error:" + e.getClass().getSimpleName());
+                } catch (SemanticDecisionException e) {
+                    // never an invented "not addressed": nobody judged the found positions
+                    searchFailed = true;
+                    search.put("outcome", "FAILED");
+                }
+            }
         }
         // the clause marks read this: a clause a position addresses was checked against the playbook
-        detail.put("addressed", judgedPositions.stream()
-                .anyMatch(PolicyComparisonCheckExecutor::addresses));
+        var addressed = judgedPositions.stream().anyMatch(PolicyComparisonCheckExecutor::addresses);
+        detail.put("addressed", addressed);
         var opinions = secondOpinions(context, clause, state, judgedPositions);
-        var v2 = context.snapshot().reviewEngine() == ReviewEngine.V2;
-        var probe = probe(clause, positions, state, detail);
-        detail.put("positions", judgedPositions.stream()
-                .map(judged -> detailEntry(judged, probe.get(judged.key()), v2,
-                        opinions.get(judged.key())))
-                .toList());
+        if (!judgedPositions.isEmpty()) {
+            var probeAnswers = probe;
+            detail.put("positions", judgedPositions.stream()
+                    .map(judged -> detailEntry(judged, probeAnswers.get(judged.key()), v2,
+                            opinions.get(judged.key())))
+                    .toList());
+        }
         var signals = new ArrayList<RawReviewSignal>();
         for (var judged : judgedPositions) {
             var opinion = opinions.get(judged.key());
             if (opinion != null && !opinion.agreed()) {
-                signals.add(needsYourLook(context, clause, bundle, judged, execution, opinion));
+                signals.add(needsYourLook(context, clause, judged, opinion));
             } else if (judged.judgement().flagged()) {
-                signals.addAll(flaggedSignals(context, clause, bundle, judged, execution, opinion,
-                        detail));
+                signals.addAll(flaggedSignals(context, clause, judged, opinion, detail));
             }
         }
-        if (judgedPositions.stream().noneMatch(PolicyComparisonCheckExecutor::addresses)) {
-            // every matched position judged the clause off its subject: the playbook is silent
-            signals.addAll(uncovered(context, clause, bundle, state, detail));
+        var cited = searchBundle == null ? List.of(bundle) : List.of(bundle, searchBundle);
+        if (searchFailed) {
+            return CheckOutcome.degraded("position_search_comparison_failed", signals, detail,
+                    bundle.traceId()).withCitedEvidence(cited);
         }
-        if (judgedPositions.stream().noneMatch(PolicyComparisonCheckExecutor::addresses)) {
+        if (!addressed) {
+            // no position addresses the clause: the playbook is silent here
+            signals.addAll(uncovered(context, clause, bundle, state, detail));
             // the playbook judged nothing here: the whole-contract read may still point at it
             signals.addAll(spotted(context, clause, bundle, signals, detail));
         }
-        return CheckOutcome.completed(signals, detail, bundle.traceId())
-                .withCitedEvidence(List.of(bundle));
+        return CheckOutcome.completed(signals, detail, bundle.traceId()).withCitedEvidence(cited);
+    }
+
+    /**
+     * Reads one comparison call's answers into judged positions, each keeping the bundle that
+     * cites it and the call that judged it. Returns the missing question key, or null.
+     */
+    private String judge(List<EvidenceItem> positions, DecisionExecution execution,
+            EvidenceBundle bundle, String keyPrefix, List<JudgedPosition> into) {
+        for (int index = 0; index < positions.size(); index++) {
+            var questionKey = PolicyPositionQuestions.key(index);
+            if (!(execution.answers().get(questionKey) instanceof ChoiceAnswer choice)) {
+                return questionKey;
+            }
+            into.add(new JudgedPosition(keyPrefix + questionKey, positions.get(index),
+                    PolicyComparisonOutcome.judge(choice, properties.flagThreshold()),
+                    choice.confidence(), bundle, execution, !keyPrefix.isEmpty()));
+        }
+        return null;
     }
 
     /**
@@ -260,14 +310,19 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
      * MEDIUM+ finding and never a silent pass (spec §6 HUMAN, §7). No null goes into the quality.
      */
     private RawReviewSignal needsYourLook(
-            ReviewCheckContext context, ClauseSemantics clause, EvidenceBundle bundle,
-            JudgedPosition judged, DecisionExecution execution, LlmAdjudicator.SecondOpinion opinion) {
+            ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
+            LlmAdjudicator.SecondOpinion opinion) {
+        var bundle = judged.bundle();
+        var execution = judged.execution();
         var evidence = union(List.of(judged.position().evidenceId()),
                 subjectEvidence(bundle, clause.id()));
         validateEvidence(bundle, evidence);
         var jev = judged.judgement();
         var quality = new LinkedHashMap<String, Object>();
         quality.put("route", NEEDS_YOUR_LOOK);
+        if (judged.searched()) {
+            quality.put("foundBy", SEARCH);
+        }
         quality.put("jevCategory", jevView(jev));
         quality.put("flagProbability", jev.flagProbability());
         quality.put("probabilities", jev.probabilities());
@@ -307,14 +362,18 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     }
 
     private List<RawReviewSignal> flaggedSignals(
-            ReviewCheckContext context, ClauseSemantics clause, EvidenceBundle bundle,
-            JudgedPosition judged, DecisionExecution execution,
+            ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
             LlmAdjudicator.SecondOpinion opinion, Map<String, Object> detail) {
+        var bundle = judged.bundle();
+        var execution = judged.execution();
         var family = PolicyComparisonOutcome.family(judged.judgement().category());
         var evidence = union(List.of(judged.position().evidenceId()),
                 subjectEvidence(bundle, clause.id()));
         validateEvidence(bundle, evidence);
-        var secondaryTopic = governsOnlySecondaryTopic(clause, judged.position());
+        // a position the text search found and Jev confirmed was not paired through a topic the
+        // clause only touches, so the secondary-topic demotion does not apply to it
+        var secondaryTopic = !judged.searched()
+                && governsOnlySecondaryTopic(clause, judged.position());
         var signals = new ArrayList<RawReviewSignal>();
         signals.add(signal(context, b -> b
                 .signalType(SignalType.POLICY_DEVIATION).issueFamily(family)
@@ -328,13 +387,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 .resolvedModel(execution.metadata().resolvedModel())
                 .usage(execution.metadata().usage())
                 .generativeExecution(opinion == null ? null : opinion.executionId())
-                .quality(Map.of("flagged", true,
-                        "category", judged.judgement().category(),
-                        "flagProbability", judged.judgement().flagProbability(),
-                        "confidence", confidence(execution, judged),
-                        "probabilities", judged.judgement().probabilities(),
-                        "secondaryTopic", secondaryTopic,
-                        "route", opinion == null ? JEV : SECOND_OPINION))
+                .quality(flaggedQuality(judged, secondaryTopic,
+                        opinion == null ? JEV : SECOND_OPINION))
                 .dedupeSuffix(judged.key())));
         if (wantsLanguage(judged.judgement().category())) {
             var drafting = chooseDrafting(bundle.approvedDraftingItems(), judged.position());
@@ -528,13 +582,30 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 || PolicyComparisonSpecs.BEYOND_FALLBACK.equals(category);
     }
 
-    private static double confidence(DecisionExecution execution, JudgedPosition judged) {
-        return execution.answers().get(judged.key()) instanceof ChoiceAnswer choice
-                ? choice.confidence() : 0.0;
+    private static Map<String, Object> flaggedQuality(
+            JudgedPosition judged, boolean secondaryTopic, String route) {
+        var quality = new LinkedHashMap<String, Object>();
+        quality.put("flagged", true);
+        quality.put("category", judged.judgement().category());
+        quality.put("flagProbability", judged.judgement().flagProbability());
+        quality.put("confidence", judged.confidence());
+        quality.put("probabilities", judged.judgement().probabilities());
+        quality.put("secondaryTopic", secondaryTopic);
+        quality.put("route", route);
+        if (judged.searched()) {
+            quality.put("foundBy", SEARCH);
+        }
+        return quality;
     }
 
+    /**
+     * One position judged against the clause: the bundle that cites it, the call that judged it,
+     * and whether the text search (not a topic) found it.
+     */
     private record JudgedPosition(
-            String key, EvidenceItem position, PolicyComparisonOutcome.Judgement judgement) {
+            String key, EvidenceItem position, PolicyComparisonOutcome.Judgement judgement,
+            double confidence, EvidenceBundle bundle, DecisionExecution execution,
+            boolean searched) {
     }
 
     private static Map<String, Object> detailEntry(
@@ -556,6 +627,22 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         }
         if (v2) {
             entry.put("route", opinion == null ? "ACCEPT" : "ADJUDICATE");
+        }
+        if (judged.searched()) {
+            var laneInfo = judged.position().laneInfo();
+            // a lane that did not find the position has no rank; it is left out, never 0
+            var lanes = new LinkedHashMap<String, Object>();
+            if (laneInfo.lexicalRank() != null) {
+                lanes.put("lexicalRank", laneInfo.lexicalRank());
+            }
+            if (laneInfo.vectorRank() != null) {
+                lanes.put("vectorRank", laneInfo.vectorRank());
+            }
+            if (laneInfo.fusedRank() != null) {
+                lanes.put("fusedRank", laneInfo.fusedRank());
+            }
+            entry.put("foundBy", SEARCH);
+            entry.put("lanes", lanes);
         }
         if (opinion != null) {
             entry.put("secondOpinionOutcome", opinion.outcome());

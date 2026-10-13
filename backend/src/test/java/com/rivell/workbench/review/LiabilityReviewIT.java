@@ -185,6 +185,14 @@ public class LiabilityReviewIT {
         volatile String consistencyAnswerOverride;
         volatile double consistencyTopProbability = 0.9;
 
+        /** Answer for a position whose text contains the key (wins over {@link #headingAnswers}). */
+        final Map<String, String> positionAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Answer for every position asked about a clause whose heading contains the key. */
+        final Map<String, String> headingAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Comparisons of clauses whose heading contains one of these fail as if the provider were down. */
+        final java.util.Set<String> failComparisonHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
+
         /** Answer for every position when the options arrive reversed (order probe); null = as asked. */
         volatile String reversedOrderAnswer;
         /** The reversed-order (probe) call fails as if the provider were down. */
@@ -325,6 +333,11 @@ public class LiabilityReviewIT {
                         "order probe provider unavailable");
             }
             var state = (PolicyComparisonSpecs.PolicyComparisonState) request.state().payload();
+            var subjectHeading = state.heading() == null ? "" : state.heading();
+            if (failComparisonHeadings.stream().anyMatch(subjectHeading::contains)) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "policy comparison provider unavailable for " + subjectHeading);
+            }
             var clause = state.clause() == null ? "" : state.clause().toLowerCase();
             var initialKeys = new java.util.ArrayList<>(request.pack().questions().keySet());
             java.util.Collections.sort(initialKeys);
@@ -333,11 +346,14 @@ public class LiabilityReviewIT {
             var answers = new LinkedHashMap<String, SemanticAnswer>();
             for (var entry : request.pack().questions().entrySet()) {
                 var question = (ChoiceQuestion) entry.getValue();
+                var scriptedAnswer = scriptedAnswer(subjectHeading, question.instructions());
                 var selected = reversedOrder && reversedOrderAnswer != null
                         ? reversedOrderAnswer
                         : policyComparisonAnswerOverride != null
                                 ? policyComparisonAnswerOverride
-                                : policyComparisonSelection(clause, question.instructions());
+                                : scriptedAnswer != null
+                                        ? scriptedAnswer
+                                        : policyComparisonSelection(clause, question.instructions());
                 var scripted = policyComparisonProbabilities != null
                         && (probabilityHeadings.isEmpty() || probabilityHeadings.stream()
                                 .anyMatch(heading -> state.heading() != null
@@ -350,6 +366,21 @@ public class LiabilityReviewIT {
             }
             return new ProviderExecutionResult(answers, "fake-review-v1",
                     new TokenUsage(220, 12));
+        }
+
+        private String scriptedAnswer(String heading, String instructions) {
+            var position = instructions == null ? "" : instructions.toLowerCase();
+            for (var entry : positionAnswers.entrySet()) {
+                if (position.contains(entry.getKey().toLowerCase())) {
+                    return entry.getValue();
+                }
+            }
+            for (var entry : headingAnswers.entrySet()) {
+                if (heading.contains(entry.getKey())) {
+                    return entry.getValue();
+                }
+            }
+            return null;
         }
 
         private LinkedHashMap<String, Double> uniformProbabilities(
@@ -443,6 +474,9 @@ public class LiabilityReviewIT {
             policyComparisonTopProbability = 0.9;
             failPolicyComparisonDecision = false;
             policyComparisonAnswerOverride = null;
+            positionAnswers.clear();
+            headingAnswers.clear();
+            failComparisonHeadings.clear();
             policyComparisonProbabilities = null;
             probabilityHeadings.clear();
             reversedOrderAnswer = null;
