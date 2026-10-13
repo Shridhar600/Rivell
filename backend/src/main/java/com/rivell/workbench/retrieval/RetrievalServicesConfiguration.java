@@ -66,12 +66,14 @@ class RetrievalServicesConfiguration {
             RetrievalRepository retrievalRepository,
             KnowledgeQueryService knowledgeQueries,
             EmbeddingService embeddingService,
+            RetrievalProperties retrievalProperties,
             com.rivell.workbench.organization.IdentityProvider identityProvider,
             com.rivell.workbench.organization.AuthorizationService authorizationService,
             Clock clock) {
         return new EvidenceService(resolver, precedentLane, currentContractLane,
-                retrievalRepository, knowledgeQueries, embeddingService, identityProvider,
-                authorizationService, clock);
+                retrievalRepository,
+                new PositionSearch(resolver, retrievalRepository, embeddingService, retrievalProperties),
+                knowledgeQueries, embeddingService, identityProvider, authorizationService, clock);
     }
 
     @Bean
