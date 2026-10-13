@@ -5,6 +5,8 @@ interface Props {
   /** Evidence ids the finding's source sheet can open. A slot whose item is not among them has no link. */
   openable: ReadonlySet<string>
   onOpenSource: (evidenceId: string) => void
+  /** One line on how the position was found, when it was not by the clause's topic. */
+  caption?: string | null
 }
 
 function SourceLink({ evidenceId, label, openable, onOpenSource }: { evidenceId: string; label: string } & Pick<Props, 'openable' | 'onOpenSource'>) {
@@ -25,12 +27,13 @@ function entryLabel(entry: PositionEntry): string {
  * item the server cited for it. The contract's value is its typed facts; policy wording is shown as
  * authored. Each item keeps the link to the frozen source it came from.
  */
-export function PolicyPosition({ view, openable, onOpenSource }: Props) {
+export function PolicyPosition({ view, openable, onOpenSource, caption = null }: Props) {
   const contract = view.columns.find((column) => column.key === 'contract')
   const showFactTitles = (contract?.entries.flatMap((entry) => entry.facts).length ?? 0) > 1
   return (
     <div className="rv-ws-sec" data-testid="policy-position">
       <div className="rv-ws-sec-h">Policy position</div>
+      {caption ? <p className="rv-ws-caption">{caption}</p> : null}
       {view.columns.length > 0 ? (
         <div className="rv-ws-pos" style={{ gridTemplateColumns: `repeat(${view.columns.length}, minmax(0, 1fr))` }}>
           {view.columns.map((column) => (

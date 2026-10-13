@@ -36,6 +36,8 @@ function finding(id: string, overrides: Partial<FindingSummary> = {}): FindingSu
     relatedPosition: false,
     decidedBy: null,
     addedBy: null,
+    firstReviewCategory: null,
+    positionLabel: null,
     createdAt: '2026-10-01T00:00:00Z',
     ...overrides,
   }
@@ -284,5 +286,16 @@ describe('orderForReview', () => {
       { id: 'd', decidedBy: 'NEEDS_YOUR_LOOK' },
     ]
     expect(orderForReview(findings).map((finding) => finding.id)).toEqual(['b', 'c', 'a', 'd'])
+  })
+
+  it('puts walk-away items first inside "needs your look", the rest in server order', () => {
+    const findings = [
+      { id: 'a', decidedBy: 'NEEDS_YOUR_LOOK', firstReviewCategory: 'BEYOND_FALLBACK' },
+      { id: 'b', decidedBy: 'JEV', firstReviewCategory: null },
+      { id: 'c', decidedBy: 'NEEDS_YOUR_LOOK', firstReviewCategory: null },
+      { id: 'd', decidedBy: 'NEEDS_YOUR_LOOK', firstReviewCategory: 'WALK_AWAY' },
+      { id: 'e', decidedBy: 'NEEDS_YOUR_LOOK', firstReviewCategory: 'WALK_AWAY' },
+    ]
+    expect(orderForReview(findings).map((finding) => finding.id)).toEqual(['b', 'd', 'e', 'a', 'c'])
   })
 })

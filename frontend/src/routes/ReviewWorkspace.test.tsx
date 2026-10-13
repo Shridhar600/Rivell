@@ -300,15 +300,15 @@ async function clauseOf(heading: string): Promise<HTMLElement> {
 describe('the whole contract under your control', () => {
   it('marks every clause with what Rivell did with it, and counts the marks', async () => {
     renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
-    expect(within(await clauseOf('1. Definitions')).getByText('Checked — no issue found')).toBeInTheDocument()
+    expect(within(await clauseOf('1. Definitions')).getByText('Checked, no issue found')).toBeInTheDocument()
     expect(within(await clauseOf('5. Termination')).getByText('Not covered by your playbook')).toBeInTheDocument()
     expect(within(await clauseOf('6. Limitation of Liability')).getByText('Flagged')).toBeInTheDocument()
     expect(
-      within(await clauseOf('Schedule A — Services')).getByText('Not analysed — the check did not finish'),
+      within(await clauseOf('Schedule A — Services')).getByText('Not analysed: the check did not finish'),
     ).toBeInTheDocument()
     // a heading the review did not plan: Rivell did not look at it, and says so differently
     expect(
-      within(await clauseOf('Northwind Customer Group LLC')).getByText('Not reviewed — outside the review plan'),
+      within(await clauseOf('Northwind Customer Group LLC')).getByText('Not reviewed: outside the review plan'),
     ).toBeInTheDocument()
     expect(screen.getByRole('main', { name: 'Contract' })).toHaveTextContent(
       '1 flagged · 1 checked · 1 not covered · 1 not analysed · 1 not reviewed',
@@ -319,7 +319,7 @@ describe('the whole contract under your control', () => {
     renderWorkspace(stubContractApi(options()))
     const page = await screen.findByRole('article')
     await within(page).findByText('1. Definitions')
-    expect(within(page).queryByText('Checked — no issue found')).not.toBeInTheDocument()
+    expect(within(page).queryByText('Checked, no issue found')).not.toBeInTheDocument()
     expect(within(page).queryByText(/Not analysed|Not reviewed/)).not.toBeInTheDocument()
   })
 
@@ -378,7 +378,7 @@ describe('the whole contract under your control', () => {
   it('offers no add on a heading outside the review plan, where the server would refuse it', async () => {
     renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
     const unplanned = await clauseOf('Northwind Customer Group LLC')
-    expect(within(unplanned).getByText('Not reviewed — outside the review plan')).toBeInTheDocument()
+    expect(within(unplanned).getByText('Not reviewed: outside the review plan')).toBeInTheDocument()
     expect(within(unplanned).queryByRole('button', { name: 'Add a finding' })).not.toBeInTheDocument()
     expect(within(await clauseOf('5. Termination')).getByRole('button', { name: 'Add a finding' })).toBeInTheDocument()
   })
@@ -403,7 +403,7 @@ describe('the whole contract under your control', () => {
       ),
     )
     const clause = await clauseOf('1. Definitions')
-    expect(within(clause).getByText('Checked — no issue found')).toBeInTheDocument()
+    expect(within(clause).getByText('Checked, no issue found')).toBeInTheDocument()
     expect(within(clause).queryByRole('button', { name: 'Add a finding' })).not.toBeInTheDocument()
   })
 })

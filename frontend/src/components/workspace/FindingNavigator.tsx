@@ -2,8 +2,8 @@ import { useState, type KeyboardEvent } from 'react'
 import type { FindingSummary } from '../../api/reviews'
 import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
-import { findingIssueLabel, findingSubjectLabel } from '../../lib/reviews'
-import { findingState, isNeedsYourLook, type FindingTone } from '../../lib/workspace'
+import { comparisonCategoryLabel, findingIssueLabel, findingSubjectLabel } from '../../lib/reviews'
+import { findingState, isNeedsYourLook, orderNeedsYourLook, type FindingTone } from '../../lib/workspace'
 import { ErrorState, LoadingState } from '../ui/State'
 import { GlyphEscalated, GlyphOpen, GlyphRejected, GlyphResolved } from './WorkspaceIcons'
 
@@ -50,7 +50,7 @@ export function FindingNavigator({
 }: Props) {
   const { labelFor } = useTaxonomy()
   const [lookOpen, setLookOpen] = useState(false)
-  const look = findings.filter(isNeedsYourLook)
+  const look = orderNeedsYourLook(findings.filter(isNeedsYourLook))
   // the group opens by itself when one of its items is selected (keyboard or URL)
   const showLook = lookOpen || look.some((finding) => finding.id === selectedId)
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>, id: string) {
@@ -58,6 +58,18 @@ export function FindingNavigator({
       event.preventDefault()
       onSelect(id)
     }
+  }
+
+  /** What a row says the item is. A look item says why Rivell left it to the user. */
+  function issueLine(finding: FindingSummary): string {
+    if (finding.relatedPosition) return 'Related position'
+    if (isNeedsYourLook(finding) && finding.firstReviewCategory) {
+      return `First review: ${comparisonCategoryLabel(finding.firstReviewCategory)}`
+    }
+    if (isNeedsYourLook(finding) && finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ') {
+      return 'Not covered by your playbook'
+    }
+    return findingIssueLabel(finding)
   }
 
   function row(finding: FindingSummary) {
@@ -79,7 +91,7 @@ export function FindingNavigator({
           <b>{findingSubjectLabel(finding, regionLabels, labelFor)}</b>
           <span>
             {showState ? `${state.label} · ` : ''}
-            {finding.relatedPosition ? 'Related position' : findingIssueLabel(finding)}
+            {issueLine(finding)}
           </span>
           {finding.subjectKind === 'ABSENCE' ? <div className="rv-ws-miss">Not in contract</div> : null}
         </div>
@@ -117,7 +129,9 @@ export function FindingNavigator({
             Needs your look ({look.length})
           </button>
           <p className="rv-ws-fl-note">
-            Rivell’s two reviewers disagreed, or a second opinion was not available. Rivell did not decide these.
+            Rivell did not decide these. Rivell’s first review and a second opinion disagreed, a second opinion
+            was not available, your playbook is silent on the clause, or Rivell is unsure a missing provision is
+            required.
           </p>
           {showLook ? (
             <div role="listbox" aria-label="Needs your look list">

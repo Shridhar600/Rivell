@@ -275,6 +275,11 @@ describe('review parsers', () => {
       secondOpinionCategory: null,
       secondOpinionQuote: null,
       secondOpinionReason: null,
+      uncertaintyReason: null,
+      foundBy: null,
+      spottedSeverity: null,
+      spottedReason: null,
+      presenceProbability: null,
     })
     expect(detail.claims.map((claim) => claim.claimKind)).toEqual([
       'OBSERVATION',
@@ -303,6 +308,34 @@ describe('review parsers', () => {
     expect(detail.quality?.jevCategory).toBe('BEYOND_FALLBACK')
     expect(detail.quality?.secondOpinionCategory).toBe('MEETS_PREFERRED')
     expect(detail.quality?.secondOpinionQuote).toBe('shall not exceed the fees paid')
+  })
+
+  it('reads what engine v2 P4 adds: search provenance, the read’s pick, an omission’s estimate and label', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      firstReviewCategory: 'WALK_AWAY',
+      positionLabel: 'Cap Exceptions',
+      quality: {
+        ...clauseFindingDetail.quality,
+        uncertaintyReason: 'playbook_silent',
+        foundBy: 'SEARCH',
+        spottedSeverity: 'HIGH',
+        spottedReason: 'Only damages are available to us.',
+        presenceProbability: 0.92,
+      },
+    })
+    expect(detail.firstReviewCategory).toBe('WALK_AWAY')
+    expect(detail.positionLabel).toBe('Cap Exceptions')
+    expect(detail.quality?.uncertaintyReason).toBe('playbook_silent')
+    expect(detail.quality?.foundBy).toBe('SEARCH')
+    expect(detail.quality?.spottedSeverity).toBe('HIGH')
+    expect(detail.quality?.spottedReason).toBe('Only damages are available to us.')
+    expect(detail.quality?.presenceProbability).toBe(0.92)
+    // an estimate off the 0–1 scale is not shown
+    expect(
+      parseFindingDetail({ ...clauseFindingDetail, quality: { ...clauseFindingDetail.quality, presenceProbability: 92 } })
+        .quality?.presenceProbability,
+    ).toBeNull()
   })
 
   it('drops a flag probability that is not on the comparison’s 0–1 scale', () => {

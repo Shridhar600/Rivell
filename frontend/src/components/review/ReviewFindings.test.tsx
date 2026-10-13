@@ -35,6 +35,16 @@ import {
   fixtureNeedsYourLookFindingSummary,
   fixtureSecondOpinionFindingDetail,
   fixtureSecondOpinionFindingSummary,
+  fixtureWalkAwayLookFindingDetail,
+  fixtureWalkAwayLookFindingSummary,
+  fixturePlaybookSilentFindingDetail,
+  fixturePlaybookSilentFindingSummary,
+  fixtureOmissionFindingDetail,
+  fixtureOmissionFindingSummary,
+  fixtureOmissionUnsureFindingDetail,
+  fixtureOmissionUnsureFindingSummary,
+  fixtureSearchFoundFindingDetail,
+  fixtureSearchFoundFindingSummary,
 } from './testFixtures'
 import { fixtureHumanReview } from './workflowFixtures'
 
@@ -62,6 +72,11 @@ const detailById: Record<string, unknown> = {
   'f-10': fixtureNotCoveredFindingDetail,
   'f-11': fixtureNeedsYourLookFindingDetail,
   'f-12': fixtureSecondOpinionFindingDetail,
+  'f-13': fixtureWalkAwayLookFindingDetail,
+  'f-14': fixturePlaybookSilentFindingDetail,
+  'f-15': fixtureOmissionFindingDetail,
+  'f-16': fixtureOmissionUnsureFindingDetail,
+  'f-17': fixtureSearchFoundFindingDetail,
 }
 
 /**
@@ -464,14 +479,14 @@ describe('finding detail', () => {
 
     await findDetailText('Rivell found')
     const pane = within(detailPane())
-    expect(pane.getAllByText(/Not covered by playbook — review/).length).toBeGreaterThan(0)
+    expect(pane.getAllByText(/Unusual clause, not covered by your playbook/).length).toBeGreaterThan(0)
     expect(pane.queryByText('Policy unavailable')).not.toBeInTheDocument()
     expect(pane.getByText(/No playbook position addresses this clause/)).toBeInTheDocument()
     expect(pane.getByText(/Model confidence 90%/)).toBeInTheDocument()
     expect(pane.getByText(/not a certainty/)).toBeInTheDocument()
     // The list names the same kind, not the generic policy-unavailable family.
     expect(
-      await (await findFindingsList()).findByRole('option', { name: /Not covered by playbook — review/ }),
+      await (await findFindingsList()).findByRole('option', { name: /Unusual clause, not covered by your playbook/ }),
     ).toBeInTheDocument()
   })
 
@@ -969,7 +984,7 @@ describe('engine v2: who decided', () => {
   it('shows both views on a "needs your look" item, with the quoted words and no provider name', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-11', withV2)
 
-    await findDetailText('Two views — you decide')
+    await findDetailText('Two views: you decide')
     const views = within(screen.getByTestId('second-opinion-views'))
     expect(views.getByText('First review')).toBeInTheDocument()
     expect(views.getByText(/Beyond every listed fallback/)).toBeInTheDocument()
@@ -1004,3 +1019,110 @@ describe('engine v2: who decided', () => {
     )
   })
 })
+
+describe('engine v2: the items P4 adds', () => {
+  const withP4 = {
+    reviewSummary: {
+      ...fixtureCompletedReviewSummary,
+      snapshot: { ...fixtureCompletedReviewSummary.snapshot, engine: 'V2' },
+    },
+    findings: {
+      items: [
+        fixtureNeedsYourLookFindingSummary,
+        fixtureWalkAwayLookFindingSummary,
+        fixturePlaybookSilentFindingSummary,
+        fixtureOmissionUnsureFindingSummary,
+        ...findingsForThisReview.items,
+        fixtureOmissionFindingSummary,
+        fixtureSearchFoundFindingSummary,
+      ],
+      truncated: false,
+    },
+  }
+
+  async function openLookGroup() {
+    await userEvent.click(await screen.findByRole('button', { name: 'Needs your look (4)' }))
+    return within(screen.getByRole('listbox', { name: 'Needs your look list' }))
+  }
+
+  it('puts walk-away items first in needs your look and shows the first review on the row', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', withP4)
+
+    const options = (await openLookGroup()).getAllByRole('option')
+    expect(options[0]).toHaveTextContent('First review: Breaches the walk-away')
+    // the rest keep the server's order
+    expect(options[1]).toHaveTextContent(/two reviewers disagree/)
+  })
+
+  it('tells the reviewer what each kind of look item is', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', withP4)
+
+    expect(
+      await screen.findByText(
+        'Rivell did not decide these. Rivell’s first review and a second opinion disagreed, a second opinion was not available, your playbook is silent on the clause, or Rivell is unsure a missing provision is required.',
+      ),
+    ).toBeInTheDocument()
+    const group = await openLookGroup()
+    expect(group.getByRole('option', { name: /Not covered by your playbook/ })).toBeInTheDocument()
+    expect(group.getByRole('option', { name: /Missing: Data protection/ })).toHaveTextContent('Not in contract')
+  })
+
+  it('shows the playbook and the whole-contract read side by side on a playbook-silent item', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-14', withP4)
+
+    await findDetailText('Two views: you decide')
+    const views = within(screen.getByTestId('playbook-silent-views'))
+    expect(views.getByText(/No position in your playbook addresses this clause/)).toBeInTheDocument()
+    expect(views.getByText(/estimate 12%/)).toBeInTheDocument()
+    expect(views.getByText(/Picked as high risk/)).toBeInTheDocument()
+    expect(views.getByText('Only damages are available to us for a breach.')).toBeInTheDocument()
+    // not a disagreement between two reviews, and not a failure
+    expect(screen.queryByTestId('second-opinion-views')).not.toBeInTheDocument()
+    expect(detailPane()).not.toHaveTextContent(/degraded mode/)
+    // the triage estimate is in the views; it is not repeated as a confidence in an issue
+    expect(screen.queryByTestId('finding-assessment')).not.toBeInTheDocument()
+  })
+
+  it('reads an omission as missing, with the clauses searched', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-15', withP4)
+
+    await findDetailTitle('Missing: Cap Exceptions')
+    expect(section('Rivell found')).toHaveTextContent('Missing: Cap Exceptions. Searched 5 clauses; none addresses it.')
+    expect(section('Rivell found')).toHaveTextContent('Missing from the contract')
+    expect(within(detailPane()).getByTestId('finding-decided-by')).toHaveTextContent(
+      'Decided by Rivell’s first review · 92%',
+    )
+    expect(within(detailPane()).getByText(/No location in contract/)).toBeInTheDocument()
+  })
+
+  it('keeps an omission Rivell is unsure about honest: an estimate, not a failure', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-16', withP4)
+
+    await findDetailTitle('Missing: Data protection')
+    expect(within(detailPane()).getByTestId('finding-assessment')).toHaveTextContent(
+      'Required by your playbook: estimate 62% (an estimate, not a certainty)',
+    )
+    expect(screen.queryByTestId('second-opinion-views')).not.toBeInTheDocument()
+    expect(detailPane()).not.toHaveTextContent(/degraded mode/)
+  })
+
+  it('says how a position found by search was found', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-17', withP4)
+
+    await findDetailText('Rivell found')
+    expect(within(screen.getByTestId('policy-position')).getByText(
+      'Found by searching your playbook for this clause. No position matched by topic addressed it.',
+    )).toBeInTheDocument()
+  })
+
+  it('writes no label with an em dash', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-14', withP4)
+
+    await findDetailText('Two views: you decide')
+    await openLookGroup()
+    // Rivell's own words only: the contract pane shows the document as received
+    expect(screen.getByRole('complementary', { name: 'Findings' }).textContent ?? '').not.toMatch(/\u2014/)
+    expect(detailPane().textContent ?? '').not.toMatch(/\u2014/)
+  })
+})
+

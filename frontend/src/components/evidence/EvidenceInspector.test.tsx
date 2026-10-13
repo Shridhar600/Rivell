@@ -158,7 +158,7 @@ describe('evidence inspector lifecycle', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Rebuild evidence' }))
     expect(await screen.findByText('Evidence partially complete')).toBeInTheDocument()
     expect(
-      screen.getByText('Some precedent index entries are not currently searchable.'),
+      screen.getByText('Some index entries are not currently searchable.'),
     ).toBeInTheDocument()
     expect(evidenceRequests(api)).toHaveLength(2)
   })
@@ -316,7 +316,7 @@ describe('retrieval details', () => {
     expect(await screen.findByText('Rank fusion')).toBeInTheDocument()
     expect(screen.getByText(/different legal issue/)).toBeInTheDocument()
     expect(
-      screen.getByText('Some precedent index entries are not currently searchable.'),
+      screen.getByText('Some index entries are not currently searchable.'),
     ).toBeInTheDocument()
     expect(screen.getByText('300 ms')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Request' })).toBeInTheDocument()

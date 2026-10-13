@@ -52,7 +52,7 @@ const EVIDENCE_LANES: readonly EvidenceLane[] = [
     authority: 'PRECEDENT',
     label: 'Precedents',
     description:
-      'Historical comparable agreements — lower authority than published policy or approved drafting.',
+      'Historical comparable agreements, with lower authority than published policy or approved drafting.',
     emptyState: 'No comparable precedent was found for this concept.',
     prominence: 'historical',
   },
@@ -298,7 +298,7 @@ export function staleClassificationNote(
   const current = currentConcept === null ? 'not set' : label(currentConcept)
   return `This evidence was built with the classification ${label(
     builtConcept,
-  )}. The contract's current classification is ${current} — rebuild to refresh the evidence.`
+  )}. The contract's current classification is ${current}; rebuild to refresh the evidence.`
 }
 
 const DEGRADATION_MESSAGES: Record<string, string> = {
@@ -309,7 +309,8 @@ const DEGRADATION_MESSAGES: Record<string, string> = {
   COMPATIBILITY_UNAVAILABLE: 'Policy compatibility could not be assessed.',
   STRUCTURED_LANE_TRUNCATED:
     'Structured evidence exceeded the bounded retrieval window; results may be incomplete.',
-  INDEX_INCOMPLETE: 'Some precedent index entries are not currently searchable.',
+  INDEX_INCOMPLETE: 'Some index entries are not currently searchable.',
+  VECTOR_INDEX_INCOMPLETE: 'Some index entries can be found by their words only, not by their meaning.',
 }
 
 export function degradationMessage(code: string): string {

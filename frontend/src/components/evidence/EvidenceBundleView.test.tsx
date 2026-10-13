@@ -139,7 +139,7 @@ describe('authority lanes', () => {
 
     expect(screen.getByText('Evidence partially complete')).toBeInTheDocument()
     expect(
-      screen.getByText('Some precedent index entries are not currently searchable.'),
+      screen.getByText('Some index entries are not currently searchable.'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Precedents' })).toBeInTheDocument()

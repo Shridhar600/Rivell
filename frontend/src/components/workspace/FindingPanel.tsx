@@ -42,6 +42,9 @@ import { CheckIcon, EditIcon, EscalateIcon, CloseIcon, LockIcon } from './Worksp
 
 const SOURCES_SHOWN = 3
 
+/** How a position the clause's topics did not bring was found (engine v2 SEARCH route). */
+const SEARCH_CAPTION = 'Found by searching your playbook for this clause. No position matched by topic addressed it.'
+
 /** Where focus lands after Finalize, so it is not lost when the Finalize button becomes disabled. */
 export const SUMMARY_LINK_ID = 'rv-ws-summary-link'
 
@@ -176,7 +179,9 @@ export function FindingPanel(props: Props) {
   const recommendations = recommendationClaims(finding.claims)
   const absences = absenceClaims(finding.claims)
   const quality = qualityFactorRows(finding.quality)
-  const assessment = assessmentSummary(finding.quality)
+  // a playbook-silent item shows the triage estimate in its two views, not as a confidence in an issue
+  const silent = finding.quality?.route === 'NEEDS_YOUR_LOOK' && finding.quality.uncertaintyReason === 'playbook_silent'
+  const assessment = silent ? null : assessmentSummary(finding.quality)
   // a finding a reviewer added has no machine decider; its kicker and note say who raised it
   const added = Boolean(finding.addedBy)
   const decidedBy = added ? null : decidedByLabel(finding.quality)
@@ -248,7 +253,7 @@ export function FindingPanel(props: Props) {
                 <>
                   <br />
                   <span className="rv-ws-authority">
-                    {related ? 'Related position — secondary topic' : observationKindLabel(finding.observationKind)}
+                    {related ? 'Related position on a secondary topic' : observationKindLabel(finding.observationKind)}
                   </span>
                 </>
               )}
@@ -290,7 +295,10 @@ export function FindingPanel(props: Props) {
           </div>
         </div>
 
-        {finding.quality?.route === 'NEEDS_YOUR_LOOK' ? <SecondOpinionViews quality={finding.quality} /> : null}
+        {finding.quality?.route === 'NEEDS_YOUR_LOOK' && finding.quality.secondOpinionOutcome ? (
+          <SecondOpinionViews quality={finding.quality} />
+        ) : null}
+        {silent && finding.quality ? <PlaybookSilentViews quality={finding.quality} /> : null}
 
         {withinFallback ? (
           <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
@@ -309,7 +317,14 @@ export function FindingPanel(props: Props) {
           </p>
         ) : null}
 
-        {position ? <PolicyPosition view={position} openable={new Set(items.keys())} onOpenSource={props.onOpenSource} /> : null}
+        {position ? (
+          <PolicyPosition
+            view={position}
+            openable={new Set(items.keys())}
+            onOpenSource={props.onOpenSource}
+            caption={finding.quality?.foundBy === 'SEARCH' ? SEARCH_CAPTION : null}
+          />
+        ) : null}
 
         <div className="rv-ws-sec">
           <div className="rv-ws-sec-h">
@@ -501,7 +516,7 @@ function SecondOpinionViews({ quality }: { quality: FindingQuality }) {
     quality.flagProbability === null ? '' : ` (issue estimate ${Math.round(quality.flagProbability * 100)}%)`
   return (
     <div className="rv-ws-sec" data-testid="second-opinion-views">
-      <div className="rv-ws-sec-h">Two views — you decide</div>
+      <div className="rv-ws-sec-h">Two views: you decide</div>
       <dl className="rv-ws-views">
         <div>
           <dt>First review</dt>
@@ -524,3 +539,38 @@ function SecondOpinionViews({ quality }: { quality: FindingQuality }) {
     </div>
   )
 }
+
+const SPOTTED_SEVERITY_LABELS: Record<string, string> = {
+  HIGH: 'Picked as high risk',
+  MEDIUM: 'Picked as medium risk',
+}
+
+/**
+ * Engine v2 playbook-silent item (P4 D3): no position addresses the clause and the first review did
+ * not flag it as unusual, but the whole-contract read picked it. Both views, so the user decides.
+ */
+function PlaybookSilentViews({ quality }: { quality: FindingQuality }) {
+  const estimate =
+    quality.uncoveredProbability === null ? '' : ` (estimate ${Math.round(quality.uncoveredProbability * 100)}%)`
+  return (
+    <div className="rv-ws-sec" data-testid="playbook-silent-views">
+      <div className="rv-ws-sec-h">Two views: you decide</div>
+      <dl className="rv-ws-views">
+        <div>
+          <dt>First review</dt>
+          <dd>
+            No position in your playbook addresses this clause. Not flagged as unusual{estimate}.
+          </dd>
+        </div>
+        <div>
+          <dt>Whole-contract read</dt>
+          <dd>
+            {SPOTTED_SEVERITY_LABELS[quality.spottedSeverity ?? ''] ?? 'Picked for a look'}
+            {quality.spottedReason ? <p>{quality.spottedReason}</p> : null}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  )
+}
+
