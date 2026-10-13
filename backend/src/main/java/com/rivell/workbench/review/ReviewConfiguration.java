@@ -34,8 +34,9 @@ class ReviewConfiguration {
     }
 
     @Bean
-    ReviewPlanBuilder reviewPlanBuilder(ReviewPackRegistry reviewPackRegistry) {
-        return new ReviewPlanBuilder(reviewPackRegistry);
+    ReviewPlanBuilder reviewPlanBuilder(ReviewPackRegistry reviewPackRegistry,
+            ReviewEngineProperties reviewEngineProperties) {
+        return new ReviewPlanBuilder(reviewPackRegistry, reviewEngineProperties.omissions());
     }
 
     @Bean

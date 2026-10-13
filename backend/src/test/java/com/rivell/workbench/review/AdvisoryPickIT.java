@@ -91,6 +91,9 @@ class AdvisoryPickIT {
     FindingRepository findingRepository;
 
     @Autowired
+    ReviewRepository reviewRepository;
+
+    @Autowired
     LiabilityReviewIT.ReviewScriptedProvider scriptedProvider;
 
     @Autowired
@@ -290,5 +293,16 @@ class AdvisoryPickIT {
         assertThat(analysisRepository.findExecutions(organizationId(), run.id()))
                 .anySatisfy(execution -> assertThat(execution.detail())
                         .containsEntry("uncoveredProbability", 0.05));
+    }
+
+    @Test
+    void aV2PlanHasNoOmissionCheckWhenThePropertyIsOff() throws Exception {
+        var reviewId = reviewedContract();
+
+        var snapshot = reviewRepository.findSnapshot(organizationId(), reviewId).orElseThrow();
+        assertThat(snapshot.reviewEngine()).isEqualTo(ReviewEngine.V2);
+        // this IT leaves rivell.review.omissions unset: the wired bean must keep the lane off
+        assertThat(reviewRepository.findPlanChecks(organizationId(), reviewId))
+                .noneMatch(check -> check.mechanism() == CheckMechanism.OMISSION);
     }
 }

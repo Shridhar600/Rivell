@@ -20,9 +20,11 @@ import com.rivell.workbench.taxonomy.ConceptKey;
 public final class ReviewPlanBuilder {
 
     private final ReviewPackRegistry packs;
+    private final boolean omissions;
 
-    public ReviewPlanBuilder(ReviewPackRegistry packs) {
+    public ReviewPlanBuilder(ReviewPackRegistry packs, boolean omissions) {
         this.packs = packs;
+        this.omissions = omissions;
     }
 
     public List<ReviewPlanCheck> build(
@@ -60,7 +62,7 @@ public final class ReviewPlanBuilder {
                 }
             }
         }
-        if (snapshot.reviewEngine() == ReviewEngine.V2) {
+        if (snapshot.reviewEngine() == ReviewEngine.V2 && omissions) {
             // engine v2 omissions lane (spec §4): one check, last, once every clause was judged
             checks.add(omissionCheck(reviewId, organizationId, snapshot.createdAt(), ordinal[0]++));
         }

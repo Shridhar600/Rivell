@@ -597,14 +597,25 @@ def p4_lines(results):
     return lines
 
 
+def engine_meta():
+    """The engine settings the backend starts with, as an eval run reports them."""
+    return {"engine": os.environ.get("RIVELL_REVIEW_ENGINE", "v2").lower(),
+            "omissions": os.environ.get("RIVELL_REVIEW_OMISSIONS", "false").lower()}
+
+
+def header_lines(meta):
+    return [f"# Eval run {meta['runId']}", "",
+            f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
+            + (f" · decisions `{meta['decisions']}`" if meta.get("decisions") else "")
+            + (" · issue spotting on" if meta.get("issueSpotting") else "")
+            + (f" · order probe `{meta['orderProbe']}` (measurement only)"
+               if meta.get("orderProbe", "off") != "off" else "")
+            + (f" · engine `{meta['engine']}`" if meta.get("engine", "v2") != "v2" else "")
+            + (" · omissions on" if meta.get("omissions") == "true" else ""), ""]
+
+
 def write_report(out, results, meta):
-    lines = [f"# Eval run {meta['runId']}", "",
-             f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
-             + (f" · decisions `{meta['decisions']}`" if meta.get("decisions") else "")
-             + (" · issue spotting on" if meta.get("issueSpotting") else "")
-             + (f" · order probe `{meta['orderProbe']}` (measurement only)"
-                if meta.get("orderProbe", "off") != "off" else "")
-             + (f" · engine `{meta['engine']}`" if meta.get("engine", "v1") != "v1" else ""), ""]
+    lines = header_lines(meta)
     if meta.get("aborted"):
         lines += [f"**⚠️ RUN ABORTED: {meta['aborted']}. Numbers below cover finished orgs only.**", ""]
     tot = {k: 0 for k in ("sx", "sm", "cl", "cc", "ix", "id", "cs", "fa", "fas", "pos", "posf", "cand", "candc")}
@@ -691,7 +702,7 @@ def main():
             "started": time.strftime("%Y-%m-%d %H:%M"), "decisions": decisions,
             "issueSpotting": os.environ.get("RIVELL_ISSUE_SPOTTING", "false").lower() == "true",
             "orderProbe": os.environ.get("RIVELL_ORDER_PROBE", "off").lower(),
-            "engine": os.environ.get("RIVELL_REVIEW_ENGINE", "v1").lower()}
+            **engine_meta()}
     started = time.monotonic()
 
     if not args.no_build:

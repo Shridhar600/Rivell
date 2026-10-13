@@ -49,7 +49,7 @@ import com.rivell.workbench.taxonomy.CoreConcepts;
  * finding; unsure -> LOW needs-your-look item; not required -> nothing. A provider failure or
  * an incomplete run never invents an omission, and a v1 plan has no OMISSION check.
  */
-@SpringBootTest
+@SpringBootTest(properties = "rivell.review.omissions=true")
 @AutoConfigureMockMvc
 @Testcontainers
 @Import({LiabilityReviewIT.FakeIntelligenceConfiguration.class,
@@ -95,6 +95,9 @@ class OmissionLaneIT {
 
     @Autowired
     ReviewPlanBuilder planBuilder;
+
+    @Autowired
+    ReviewPackRegistry reviewPackRegistry;
 
     @Autowired
     ReviewAnalysisService analysisService;
@@ -599,5 +602,24 @@ class OmissionLaneIT {
                 .count();
         assertThat(scriptedProvider.policyComparisonCalls().size() - callsBefore)
                 .isEqualTo((int) clauseCheckCalls);
+    }
+
+    @Test
+    void aV2PlanHasNoOmissionCheckWhenTheLaneIsOff() throws Exception {
+        var reviewId = reviewedContract();
+
+        var snapshot = reviewRepository.findSnapshot(organizationId(), reviewId).orElseThrow();
+        assertThat(snapshot.reviewEngine()).isEqualTo(ReviewEngine.V2);
+        var semantics = enrichmentService.getSemantics(snapshot.contractId(),
+                snapshot.contractVersionNumber());
+
+        var laneOff = new ReviewPlanBuilder(reviewPackRegistry, false)
+                .build(reviewId, organizationId(), snapshot, semantics);
+        assertThat(laneOff).noneMatch(check -> check.mechanism() == CheckMechanism.OMISSION);
+
+        var laneOn = planBuilder.build(reviewId, organizationId(), snapshot, semantics);
+        assertThat(laneOn.getLast().mechanism()).isEqualTo(CheckMechanism.OMISSION);
+        assertThat(laneOn.stream().filter(check -> check.mechanism() == CheckMechanism.OMISSION))
+                .hasSize(1);
     }
 }
