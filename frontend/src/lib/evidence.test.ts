@@ -263,7 +263,7 @@ describe('sufficiencyPresentation', () => {
     expect(staleClassificationNote(null, 'TERM', humanizeCode)).toBeNull()
     expect(staleClassificationNote('TERM', 'TERM', humanizeCode)).toBeNull()
     expect(staleClassificationNote('TERM', 'CONFIDENTIALITY_OBLIGATIONS', humanizeCode)).toBe(
-      "This evidence was built with the classification Term. The contract's current classification is Confidentiality obligations — rebuild to refresh the evidence.",
+      "This evidence was built with the classification Term. The contract's current classification is Confidentiality obligations; rebuild to refresh the evidence.",
     )
     expect(staleClassificationNote('TERM', null, humanizeCode)).toMatch(/is not set/)
   })

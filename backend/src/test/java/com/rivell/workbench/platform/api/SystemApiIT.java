@@ -137,6 +137,22 @@ class SystemApiIT {
         assertThat(openApi.at("/paths/~1api~1system~1status/get/responses/200/content/application~1json/schema/$ref")
                 .asText()).endsWith("SystemStatusResponse");
 
+        // engine v2 P4: the exposed quality projections and diagnostics numbers are part of the contract
+        for (var field : new String[] {"firstReviewCategory", "positionLabel"}) {
+            assertThat(openApi.at("/components/schemas/FindingSummaryView/properties/" + field)
+                    .isMissingNode()).as("FindingSummaryView." + field).isFalse();
+            assertThat(openApi.at("/components/schemas/FindingDetailView/properties/" + field)
+                    .isMissingNode()).as("FindingDetailView." + field).isFalse();
+        }
+        for (var field : new String[] {"route", "addressed", "searchFound", "searchFailed",
+                "spottedSeverity", "omissionCandidates", "searchedClauses", "presenceProbabilities",
+                "addressedBySearch", "flaggedBySearch"}) {
+            assertThat(openApi.at("/components/schemas/CheckView/properties/" + field)
+                    .isMissingNode()).as("CheckView." + field).isFalse();
+        }
+        assertThat(openApi.at("/components/schemas/JudgedPositionView/properties/foundBy")
+                .isMissingNode()).as("JudgedPositionView.foundBy").isFalse();
+
         var output = Path.of("target/openapi/openapi.json");
         Files.createDirectories(output.getParent());
         Files.write(output, openApiJson);

@@ -14,6 +14,9 @@ import com.rivell.workbench.review.PolicyComparisonSpecs;
  */
 public final class PolicyComparisonOutcome {
 
+    /** P(MEETS_PREFERRED) + flag mass at or above this line means the position addresses the clause. */
+    private static final double ADDRESSED = 0.5;
+
     private PolicyComparisonOutcome() {
     }
 
@@ -24,6 +27,15 @@ public final class PolicyComparisonOutcome {
         public Judgement {
             probabilities = probabilities == null ? Map.of() : Map.copyOf(probabilities);
         }
+    }
+
+    /**
+     * The one "addresses" rule both the clause checks and the omissions lane use: a position
+     * addresses a clause when its preferred mass plus its flag mass reaches the line.
+     */
+    public static boolean addresses(Map<String, Double> probabilities, double flagProbability) {
+        return probabilities.getOrDefault(PolicyComparisonSpecs.MEETS_PREFERRED, 0.0)
+                + flagProbability >= ADDRESSED;
     }
 
     public static Judgement judge(ChoiceAnswer answer, double flagThreshold) {

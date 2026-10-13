@@ -17,6 +17,8 @@ import com.rivell.workbench.review.ProposedLanguageSource;
  * agreeing second opinion) or NEEDS_YOUR_LOOK (they disagreed or the second opinion was not
  * available, so the user decides); null for other findings. {@code addedBy}: the user who added
  * a {@code USER_ADDED} finding (Rivell missed it); null for findings Rivell assembled.
+ * {@code firstReviewCategory}: the first review's category on a needs-your-look item; null otherwise.
+ * {@code positionLabel}: the playbook position label of an omission finding; null otherwise.
  */
 public record FindingSummaryView(
         UUID id,
@@ -34,5 +36,7 @@ public record FindingSummaryView(
         boolean relatedPosition,
         String decidedBy,
         Instant createdAt,
-        String addedBy) {
+        String addedBy,
+        String firstReviewCategory,
+        String positionLabel) {
 }

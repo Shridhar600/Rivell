@@ -24,8 +24,9 @@ public class EvidenceIndexService {
     private static final org.slf4j.Logger log =
             org.slf4j.LoggerFactory.getLogger(EvidenceIndexService.class);
 
-    private static final Set<CandidateType> INDEXABLE_TYPES =
-            Set.of(CandidateType.PRECEDENT, CandidateType.REFERENCE);
+    static final Set<CandidateType> INDEXABLE_TYPES =
+            Set.of(CandidateType.PRECEDENT, CandidateType.REFERENCE,
+                    CandidateType.PLAYBOOK_RULE);
 
     private final KnowledgeQueryService knowledgeQueries;
     private final EmbeddingService embeddingService;

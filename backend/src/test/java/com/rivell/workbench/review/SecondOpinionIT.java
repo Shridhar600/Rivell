@@ -406,6 +406,39 @@ class SecondOpinionIT {
                 .forEach(item -> decidedBy.add(item.path("decidedBy").asText()));
         assertThat(decidedBy).contains("NEEDS_YOUR_LOOK", "JEV");
 
+        // the exposed quality projections: firstReviewCategory on the needs-your-look item,
+        // positionLabel only on an omission (none here), both null on an ordinary finding
+        var items = json("/api/reviews/{id}/findings?limit=100", reviewId).at("/data/items");
+        JsonNode look = null;
+        JsonNode ordinary = null;
+        for (var item : items) {
+            if ("NEEDS_YOUR_LOOK".equals(item.path("decidedBy").asText())) {
+                look = item;
+            } else if ("JEV".equals(item.path("decidedBy").asText()) && ordinary == null) {
+                ordinary = item;
+            }
+        }
+        assertThat(look).as("a needs-your-look item to pin").isNotNull();
+        assertThat(ordinary).as("an ordinary finding to pin").isNotNull();
+        assertThat(look.path("firstReviewCategory").asText())
+                .isEqualTo(PolicyComparisonSpecs.BEYOND_FALLBACK);
+        assertThat(look.has("positionLabel")).isTrue();
+        assertThat(look.path("positionLabel").isNull()).isTrue();
+        assertThat(ordinary.has("firstReviewCategory")).isTrue();
+        assertThat(ordinary.path("firstReviewCategory").isNull()).isTrue();
+        assertThat(ordinary.has("positionLabel")).isTrue();
+        assertThat(ordinary.path("positionLabel").isNull()).isTrue();
+
+        var lookDetail = json("/api/reviews/{id}/findings/{findingId}", reviewId,
+                UUID.fromString(look.path("id").asText())).at("/data");
+        assertThat(lookDetail.path("firstReviewCategory").asText())
+                .isEqualTo(PolicyComparisonSpecs.BEYOND_FALLBACK);
+        assertThat(lookDetail.path("positionLabel").isNull()).isTrue();
+        var ordinaryDetail = json("/api/reviews/{id}/findings/{findingId}", reviewId,
+                UUID.fromString(ordinary.path("id").asText())).at("/data");
+        assertThat(ordinaryDetail.path("firstReviewCategory").isNull()).isTrue();
+        assertThat(ordinaryDetail.path("positionLabel").isNull()).isTrue();
+
         var body = mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         var judged = new ArrayList<JsonNode>();

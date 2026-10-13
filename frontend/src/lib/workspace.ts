@@ -250,12 +250,30 @@ export function acceptEligibilityFor(finding: FindingDetail): AcceptEligibility 
   }
 }
 
-/** A "needs your look" item: the two reviewers disagreed, or the second opinion was not available. */
+/**
+ * A "needs your look" item: Rivell did not decide it. The two reviewers disagreed, a second opinion
+ * was not available, the playbook is silent on a clause the whole-contract read picked, or Rivell is
+ * unsure a missing provision is required.
+ */
 export function isNeedsYourLook(finding: Pick<FindingSummary, 'decidedBy'>): boolean {
   return finding.decidedBy === 'NEEDS_YOUR_LOOK'
 }
 
+type Ordered = Pick<FindingSummary, 'decidedBy'> & { firstReviewCategory?: string | null }
+
+/**
+ * "Needs your look" items with the first review's walk-away answer first: a possible walk-away
+ * breach is the one to look at before the rest. Each part keeps the server's order.
+ */
+export function orderNeedsYourLook<T extends Ordered>(look: readonly T[]): T[] {
+  const walkAway = (finding: T) => finding.firstReviewCategory === 'WALK_AWAY'
+  return [...look.filter(walkAway), ...look.filter((finding) => !walkAway(finding))]
+}
+
 /** Findings in review order: "needs your look" items after the others, each group in server order. */
-export function orderForReview<T extends Pick<FindingSummary, 'decidedBy'>>(findings: readonly T[]): T[] {
-  return [...findings.filter((finding) => !isNeedsYourLook(finding)), ...findings.filter(isNeedsYourLook)]
+export function orderForReview<T extends Ordered>(findings: readonly T[]): T[] {
+  return [
+    ...findings.filter((finding) => !isNeedsYourLook(finding)),
+    ...orderNeedsYourLook(findings.filter(isNeedsYourLook)),
+  ]
 }

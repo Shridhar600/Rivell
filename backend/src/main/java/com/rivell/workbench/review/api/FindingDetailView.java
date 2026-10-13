@@ -22,6 +22,8 @@ import com.rivell.workbench.retrieval.api.RetrievalResponses;
  * from latest knowledge; every claim evidence id resolves inside this set. Signal ids
  * are provenance references only; no raw signal surface is exposed. {@code addedBy} is the
  * user who added a {@code USER_ADDED} finding, null for findings Rivell assembled.
+ * {@code firstReviewCategory}: the first review's category on a needs-your-look item; null otherwise.
+ * {@code positionLabel}: the playbook position label of an omission finding; null otherwise.
  */
 public record FindingDetailView(
         UUID id,
@@ -50,7 +52,9 @@ public record FindingDetailView(
         List<UUID> signalIds,
         AbsenceBasisView absenceBasis,
         Instant createdAt,
-        String addedBy) {
+        String addedBy,
+        String firstReviewCategory,
+        String positionLabel) {
 
     public record ClaimView(
             int ordinal,

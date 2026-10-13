@@ -240,7 +240,7 @@ class ReviewCreationIT {
         assertThat(snapshot.modelPolicy().decisionModelAlias()).isEqualTo("fake-decision-model");
         assertThat(snapshot.modelPolicy().generativeProviderId()).isEqualTo("fake");
         assertThat(snapshot.modelPolicy().generativeModelAlias()).isEqualTo("fake-gen-model");
-        // no engine configured: the review is frozen on engine v1 (Jev only)
+        // test config pins engine v1; production default is v2 (P4 rule R5)
         assertThat(snapshot.reviewEngine()).isEqualTo(ReviewEngine.V1);
 
         var checks = reviewRepository.findPlanChecks(organizationId, review.id());

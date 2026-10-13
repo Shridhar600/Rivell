@@ -17,6 +17,11 @@ const quality = (overrides: Partial<FindingQuality>): FindingQuality => ({
   secondOpinionCategory: null,
   secondOpinionQuote: null,
   secondOpinionReason: null,
+  uncertaintyReason: null,
+  foundBy: null,
+  spottedSeverity: null,
+  spottedReason: null,
+  presenceProbability: null,
   ...overrides,
 })
 
@@ -41,10 +46,10 @@ describe('decidedByLabel', () => {
 describe('clause marks', () => {
   it('says in plain words what Rivell did with each clause', () => {
     expect(clauseMarkLabel('FLAGGED')).toBe('Flagged')
-    expect(clauseMarkLabel('CHECKED')).toBe('Checked — no issue found')
+    expect(clauseMarkLabel('CHECKED')).toBe('Checked, no issue found')
     expect(clauseMarkLabel('NOT_COVERED')).toBe('Not covered by your playbook')
-    expect(clauseMarkLabel('NOT_ANALYSED')).toBe('Not analysed — the check did not finish')
-    expect(clauseMarkLabel('NOT_PLANNED')).toBe('Not reviewed — outside the review plan')
+    expect(clauseMarkLabel('NOT_ANALYSED')).toBe('Not analysed: the check did not finish')
+    expect(clauseMarkLabel('NOT_PLANNED')).toBe('Not reviewed: outside the review plan')
   })
 
   it('counts the marks for the legend and leaves out a mark no clause has', () => {

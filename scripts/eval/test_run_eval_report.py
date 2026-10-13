@@ -1,5 +1,7 @@
 """Unit tests for the engine v2 lines of the eval report. Run: cd scripts/eval && python3 -m unittest test_run_eval_report.py"""
+import os
 import unittest
+from unittest import mock
 
 import run_eval
 
@@ -28,6 +30,39 @@ class NeedsLookLineTest(unittest.TestCase):
 
     def test_an_engine_v1_run_adds_no_line(self):
         self.assertEqual(run_eval.needs_look_line([{"contracts": [contract(3, 0, {"JEV": 3})]}]), [])
+
+
+class EngineMetaTest(unittest.TestCase):
+
+    def test_the_defaults_describe_the_engine_the_backend_now_uses(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(run_eval.engine_meta(), {"engine": "v2", "omissions": "false"})
+
+    def test_the_environment_overrides_both_and_is_lower_cased(self):
+        with mock.patch.dict(os.environ,
+                             {"RIVELL_REVIEW_ENGINE": "V1", "RIVELL_REVIEW_OMISSIONS": "TRUE"}):
+            self.assertEqual(run_eval.engine_meta(), {"engine": "v1", "omissions": "true"})
+
+
+class ReportHeaderTest(unittest.TestCase):
+
+    @staticmethod
+    def meta(**overrides):
+        return {"runId": "r", "corpus": "c", "git": "g", "started": "s", **overrides}
+
+    def test_the_v2_default_engine_and_the_lane_off_add_nothing(self):
+        text = "\n".join(run_eval.header_lines(self.meta(engine="v2", omissions="false")))
+        self.assertNotIn("engine", text)
+        self.assertNotIn("omissions", text)
+
+    def test_a_v1_run_names_the_engine_and_the_lane_only_when_on(self):
+        text = "\n".join(run_eval.header_lines(self.meta(engine="v1", omissions="true")))
+        self.assertIn("engine `v1`", text)
+        self.assertIn("omissions on", text)
+
+    def test_a_v1_run_with_the_lane_off_does_not_name_the_lane(self):
+        text = "\n".join(run_eval.header_lines(self.meta(engine="v1", omissions="false")))
+        self.assertNotIn("omissions", text)
 
 
 if __name__ == "__main__":

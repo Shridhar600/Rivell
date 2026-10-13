@@ -21,10 +21,14 @@ import com.rivell.workbench.knowledge.KnowledgeCandidate;
  */
 public class EvidenceService {
 
+    /** Approved variants carried with search-found positions: what a topic comparison carries. */
+    private static final int SEARCH_DRAFTING_CAP = 8;
+
     private final StructuredPolicyResolver resolver;
     private final PrecedentLane precedentLane;
     private final CurrentContractLane currentContractLane;
     private final RetrievalRepository repository;
+    private final PositionSearch positionSearch;
     private final com.rivell.workbench.knowledge.KnowledgeQueryService knowledgeQueries;
     private final com.rivell.workbench.intelligence.EmbeddingService embeddingService;
     private final com.rivell.workbench.organization.IdentityProvider identityProvider;
@@ -36,6 +40,7 @@ public class EvidenceService {
             PrecedentLane precedentLane,
             CurrentContractLane currentContractLane,
             RetrievalRepository repository,
+            PositionSearch positionSearch,
             com.rivell.workbench.knowledge.KnowledgeQueryService knowledgeQueries,
             com.rivell.workbench.intelligence.EmbeddingService embeddingService,
             com.rivell.workbench.organization.IdentityProvider identityProvider,
@@ -45,6 +50,7 @@ public class EvidenceService {
         this.precedentLane = precedentLane;
         this.currentContractLane = currentContractLane;
         this.repository = repository;
+        this.positionSearch = positionSearch;
         this.knowledgeQueries = knowledgeQueries;
         this.embeddingService = embeddingService;
         this.identityProvider = identityProvider;
@@ -94,7 +100,7 @@ public class EvidenceService {
             // more positions matched than the cap allows; the omission is visible, not silent
             warnings.add("POLICY_POSITIONS_TRUNCATED");
         }
-        return assemble(request, asOfPublication, policy, drafting, warnings, true);
+        return assemble(request, asOfPublication, policy, drafting, warnings, true, null);
     }
 
     /**
@@ -106,7 +112,31 @@ public class EvidenceService {
     public EvidenceBundle buildForUncoveredClause(EvidenceRequest request) {
         var asOfPublication = resolveAsOf(request);
         var none = new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false);
-        return assemble(request, asOfPublication, none, none, List.of(), false);
+        return assemble(request, asOfPublication, none, none, List.of(), false, null);
+    }
+
+    /**
+     * Engine v2 SEARCH route (spec §6): positions found by a clause's text for a clause no topic
+     * paired, or whose topic-matched positions all judged it off their subject. Up to
+     * {@code limit} positions not in {@code alreadyJudged}, in fused order, each carrying its lane
+     * ranks; approved drafting for the found positions' topics, as a topic comparison would carry
+     * it; no precedents. The contract lane is gathered as for any clause, for the comparison and
+     * the triage to cite. The bundle's
+     * sufficiency describes structured policy resolution and does not apply to search results:
+     * several found positions are candidates for one clause, not conflicting policy.
+     */
+    public EvidenceBundle buildForPositionSearch(
+            EvidenceRequest request, Set<UUID> alreadyJudged, int limit) {
+        var asOfPublication = resolveAsOf(request);
+        var found = positionSearch.search(request, asOfPublication, alreadyJudged, limit);
+        var topics = found.resolution().candidates().stream()
+                .flatMap(candidate -> candidate.topicKeys().stream()).distinct().toList();
+        var drafting = topics.isEmpty()
+                ? new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false)
+                : resolver.resolveByTopics(request, Set.of(CandidateType.CLAUSE_VARIANT),
+                        asOfPublication, topics, null, SEARCH_DRAFTING_CAP);
+        return assemble(request, asOfPublication, found.resolution(), drafting,
+                found.degradation(), false, found);
     }
 
     /** The text of every published playbook position that applies to the request's contract. */
@@ -115,19 +145,37 @@ public class EvidenceService {
                 .candidates().stream().map(KnowledgeCandidate::effectiveContentText).toList();
     }
 
+    /**
+     * Engine v2 omissions lane (spec §4): every applicable published playbook position of
+     * the contract, with its label, for the omission check to subtract the positions the
+     * clause checks addressed. No drafting, no precedents.
+     */
+    public ApplicablePositions buildForOmissions(EvidenceRequest request, int limit) {
+        var asOfPublication = resolveAsOf(request);
+        var policy = resolver.resolveAll(request, Set.of(CandidateType.PLAYBOOK_RULE),
+                asOfPublication, limit);
+        var none = new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false);
+        var bundle = assemble(request, asOfPublication, policy, none, List.of(), false, null);
+        var labels = new LinkedHashMap<UUID, String>();
+        for (var match : policy.published()) {
+            labels.put(match.candidate().id(), match.candidate().rawLabel());
+        }
+        return new ApplicablePositions(bundle, labels, policy.truncated());
+    }
+
     private EvidenceBundle buildInternal(EvidenceRequest request) {
         var asOfPublication = resolveAsOf(request);
         return assemble(request, asOfPublication,
                 resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE), asOfPublication),
                 resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT), asOfPublication),
-                List.of(), true);
+                List.of(), true, null);
     }
 
     private EvidenceBundle assemble(
             EvidenceRequest request, long asOfPublication,
             StructuredPolicyResolver.Resolution policyResolution,
             StructuredPolicyResolver.Resolution draftingResolution,
-            List<String> extraWarnings, boolean withPrecedents) {
+            List<String> extraWarnings, boolean withPrecedents, PositionSearch.Found search) {
         var startedAt = clock.instant();
         var stageStart = startedAt;
         var stageTimings = new LinkedHashMap<String, Long>();
@@ -154,9 +202,10 @@ public class EvidenceService {
         var sufficiency = sufficiency(policyResolution, draftingResolution,
                 precedentOutcome, currentOutcome, asOfPublication);
         var policyItems = items(policyResolution, request.organizationId(),
-                AuthorityClass.POLICY, "PUBLISHED_PLAYBOOK_RULE");
+                AuthorityClass.POLICY, "PUBLISHED_PLAYBOOK_RULE",
+                search == null ? Map.of() : search.lanes());
         var draftingItems = items(draftingResolution, request.organizationId(),
-                AuthorityClass.APPROVED_DRAFTING, "PUBLISHED_CLAUSE_VARIANT");
+                AuthorityClass.APPROVED_DRAFTING, "PUBLISHED_CLAUSE_VARIANT", Map.of());
         var warnings = new java.util.ArrayList<String>(extraWarnings);
         warnings.addAll(degradationOf(precedentOutcome, currentOutcome));
         var bundle = new EvidenceBundle(UUID.randomUUID(), request,
@@ -164,7 +213,7 @@ public class EvidenceService {
                 precedentOutcome.items(), currentOutcome.items(), List.of(),
                 sufficiency, warnings, null);
         var traceId = persistTrace(request, asOfPublication, policyResolution,
-                draftingResolution, precedentOutcome, currentOutcome, bundle,
+                draftingResolution, precedentOutcome, currentOutcome, search, bundle,
                 startedAt, stageTimings);
         return new EvidenceBundle(bundle.id(), request, bundle.policyItems(),
                 bundle.approvedDraftingItems(), bundle.precedentItems(),
@@ -189,6 +238,7 @@ public class EvidenceService {
             StructuredPolicyResolver.Resolution drafting,
             PrecedentLane.Outcome precedent,
             CurrentContractLane.Outcome current,
+            PositionSearch.Found search,
             EvidenceBundle bundle,
             Instant startedAt,
             Map<String, Long> stageTimings) {
@@ -198,12 +248,20 @@ public class EvidenceService {
         for (var stage : precedent.stages()) {
             stages.put(stage.stage(), stage);
         }
+        if (search != null) {
+            for (var stage : search.stages()) {
+                stages.put(stage.stage(), stage);
+            }
+        }
         stages.put("currentContract", new RetrievalTrace.StageSummary(
                 "currentContract", current.items().size(),
                 current.items().stream().map(item -> item.evidenceId().toString()).toList(),
                 List.of(), List.of()));
         var degradation = new java.util.LinkedHashSet<String>();
         degradation.addAll(precedent.degradation());
+        if (search != null) {
+            degradation.addAll(search.degradation());
+        }
         if (current.degradation() != null) {
             degradation.add(current.degradation());
         }
@@ -329,7 +387,8 @@ public class EvidenceService {
     }
 
     private List<EvidenceItem> items(StructuredPolicyResolver.Resolution resolution,
-            UUID organizationId, AuthorityClass authority, String sourceType) {
+            UUID organizationId, AuthorityClass authority, String sourceType,
+            Map<UUID, LaneInfo> lanes) {
         var matches = new java.util.ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>(
                 resolution.published());
         if (authority == AuthorityClass.APPROVED_DRAFTING) {
@@ -338,7 +397,8 @@ public class EvidenceService {
         }
         var items = new java.util.ArrayList<EvidenceItem>();
         for (var match : matches) {
-            items.add(item(match, organizationId, authority, sourceType));
+            items.add(item(match, organizationId, authority, sourceType,
+                    lanes.get(match.candidate().id())));
         }
         return List.copyOf(items);
     }
@@ -354,7 +414,7 @@ public class EvidenceService {
 
     private EvidenceItem item(
             com.rivell.workbench.knowledge.PublishedCandidate match,
-            UUID organizationId, AuthorityClass authority, String sourceType) {
+            UUID organizationId, AuthorityClass authority, String sourceType, LaneInfo lanes) {
         var candidate = match.candidate();
         return new EvidenceItem(
                 UUID.randomUUID(),
@@ -370,8 +430,8 @@ public class EvidenceService {
                 candidate.effectiveContentText(),
                 authority == AuthorityClass.POLICY ? policyFacts(candidate) : null,
                 List.of(),
-                "STRUCTURED",
-                LaneInfo.NONE,
+                lanes == null ? "STRUCTURED" : "SEARCH",
+                lanes == null ? LaneInfo.NONE : lanes,
                 null,
                 PolicyCompatibility.NOT_ASSESSED,
                 provenance(organizationId, candidate),

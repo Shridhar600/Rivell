@@ -185,6 +185,27 @@ public class LiabilityReviewIT {
         volatile String consistencyAnswerOverride;
         volatile double consistencyTopProbability = 0.9;
 
+        /** Answer for a position whose text contains the key (wins over {@link #headingAnswers}). */
+        final Map<String, String> positionAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Answer for every position asked about a clause whose heading contains the key. */
+        final Map<String, String> headingAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Comparisons of clauses whose heading contains one of these fail as if the provider were down. */
+        final java.util.Set<String> failComparisonHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
+        /** A comparison call whose heading contains the key and a question the value fails. */
+        final Map<String, String> failComparisonPairs = new java.util.concurrent.ConcurrentHashMap<>();
+
+        /** Probability the presence decision answers per position whose question contains the key. */
+        final Map<String, Double> presenceAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Probability the presence decision answers when no scripted answer matches. */
+        volatile double defaultPresenceProbability = 0.1;
+        /** The presence decision fails as if the provider were down. */
+        volatile boolean failPresence;
+        private final AtomicInteger presenceCalls = new AtomicInteger();
+        /** The question instructions of every presence question asked, in order. */
+        final java.util.List<String> presenceQuestions =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
         /** Answer for every position when the options arrive reversed (order probe); null = as asked. */
         volatile String reversedOrderAnswer;
         /** The reversed-order (probe) call fails as if the provider were down. */
@@ -303,6 +324,10 @@ public class LiabilityReviewIT {
                         new com.rivell.workbench.intelligence.YesNoAnswer(uncoveredProbability))),
                         "fake-review-v1", new TokenUsage(90, 2));
             }
+            if (request.pack().questions().keySet().stream()
+                    .anyMatch(name -> name.startsWith("presence_"))) {
+                return presenceDecision(request);
+            }
             var firstQuestion = request.pack().questions().values().iterator().next();
             if (firstQuestion instanceof ChoiceQuestion firstChoice
                     && firstChoice.criteria().containsKey(PolicyComparisonSpecs.WALK_AWAY)) {
@@ -325,6 +350,22 @@ public class LiabilityReviewIT {
                         "order probe provider unavailable");
             }
             var state = (PolicyComparisonSpecs.PolicyComparisonState) request.state().payload();
+            var subjectHeading = state.heading() == null ? "" : state.heading();
+            if (failComparisonHeadings.stream().anyMatch(subjectHeading::contains)) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "policy comparison provider unavailable for " + subjectHeading);
+            }
+            if (failComparisonPairs.entrySet().stream().anyMatch(entry ->
+                    subjectHeading.contains(entry.getKey())
+                            && request.pack().questions().values().stream()
+                                    .anyMatch(question -> question instanceof ChoiceQuestion choice
+                                            && choice.instructions() != null
+                                            && choice.instructions().toLowerCase(java.util.Locale.ROOT)
+                                                    .contains(entry.getValue()
+                                                            .toLowerCase(java.util.Locale.ROOT))))) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "policy comparison pair provider unavailable for " + subjectHeading);
+            }
             var clause = state.clause() == null ? "" : state.clause().toLowerCase();
             var initialKeys = new java.util.ArrayList<>(request.pack().questions().keySet());
             java.util.Collections.sort(initialKeys);
@@ -333,11 +374,14 @@ public class LiabilityReviewIT {
             var answers = new LinkedHashMap<String, SemanticAnswer>();
             for (var entry : request.pack().questions().entrySet()) {
                 var question = (ChoiceQuestion) entry.getValue();
+                var scriptedAnswer = scriptedAnswer(subjectHeading, question.instructions());
                 var selected = reversedOrder && reversedOrderAnswer != null
                         ? reversedOrderAnswer
                         : policyComparisonAnswerOverride != null
                                 ? policyComparisonAnswerOverride
-                                : policyComparisonSelection(clause, question.instructions());
+                                : scriptedAnswer != null
+                                        ? scriptedAnswer
+                                        : policyComparisonSelection(clause, question.instructions());
                 var scripted = policyComparisonProbabilities != null
                         && (probabilityHeadings.isEmpty() || probabilityHeadings.stream()
                                 .anyMatch(heading -> state.heading() != null
@@ -350,6 +394,47 @@ public class LiabilityReviewIT {
             }
             return new ProviderExecutionResult(answers, "fake-review-v1",
                     new TokenUsage(220, 12));
+        }
+
+        private String scriptedAnswer(String heading, String instructions) {
+            var position = instructions == null ? "" : instructions.toLowerCase();
+            for (var entry : positionAnswers.entrySet()) {
+                if (position.contains(entry.getKey().toLowerCase())) {
+                    return entry.getValue();
+                }
+            }
+            for (var entry : headingAnswers.entrySet()) {
+                if (heading.contains(entry.getKey())) {
+                    return entry.getValue();
+                }
+            }
+            return null;
+        }
+
+        /** Engine v2 omissions lane: one yes/no per candidate position, scripted by its text. */
+        private ProviderExecutionResult presenceDecision(DecisionExecutionRequest request) {
+            presenceCalls.incrementAndGet();
+            if (failPresence) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "presence decision provider unavailable");
+            }
+            var answers = new LinkedHashMap<String, SemanticAnswer>();
+            for (var entry : request.pack().questions().entrySet()) {
+                var question = (com.rivell.workbench.intelligence.YesNoQuestion) entry.getValue();
+                var instructions = question.instructions();
+                presenceQuestions.add(instructions);
+                var probability = defaultPresenceProbability;
+                for (var scripted : presenceAnswers.entrySet()) {
+                    if (instructions.toLowerCase(java.util.Locale.ROOT)
+                            .contains(scripted.getKey().toLowerCase(java.util.Locale.ROOT))) {
+                        probability = scripted.getValue();
+                        break;
+                    }
+                }
+                answers.put(entry.getKey(),
+                        new com.rivell.workbench.intelligence.YesNoAnswer(probability));
+            }
+            return new ProviderExecutionResult(answers, "fake-review-v1", new TokenUsage(80, 2));
         }
 
         private LinkedHashMap<String, Double> uniformProbabilities(
@@ -423,6 +508,10 @@ public class LiabilityReviewIT {
             return java.util.List.copyOf(comparisonCalls);
         }
 
+        public int presenceCalls() {
+            return presenceCalls.get();
+        }
+
         int consistencyDecisions() {
             return consistencyDecisions.get();
         }
@@ -443,6 +532,15 @@ public class LiabilityReviewIT {
             policyComparisonTopProbability = 0.9;
             failPolicyComparisonDecision = false;
             policyComparisonAnswerOverride = null;
+            positionAnswers.clear();
+            headingAnswers.clear();
+            failComparisonHeadings.clear();
+            failComparisonPairs.clear();
+            presenceAnswers.clear();
+            defaultPresenceProbability = 0.1;
+            failPresence = false;
+            presenceCalls.set(0);
+            presenceQuestions.clear();
             policyComparisonProbabilities = null;
             probabilityHeadings.clear();
             reversedOrderAnswer = null;
@@ -468,6 +566,9 @@ public class LiabilityReviewIT {
         volatile String openEndedExplanation;
         /** Headings the whole-contract spotting read names (MEDIUM); every other clause is fine. */
         final java.util.Set<String> spottedHeadings = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        /** Headings the whole-contract spotting read names as HIGH. */
+        final java.util.Set<String> spottedHighHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
         final AtomicInteger spottingCalls = new AtomicInteger();
         /** The second opinion's answer (engine v2). Its quote is the clause's first words unless set. */
         volatile String secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
@@ -494,6 +595,7 @@ public class LiabilityReviewIT {
             openEndedProposed = null;
             openEndedExplanation = null;
             spottedHeadings.clear();
+            spottedHighHeadings.clear();
             spottingCalls.set(0);
             secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
             secondOpinionQuote = null;
@@ -521,8 +623,16 @@ public class LiabilityReviewIT {
             if (request.state() instanceof IssueSpottingSpecs.SpottingState spotting) {
                 spottingCalls.incrementAndGet();
                 var lines = spotting.clauses().stream()
-                        .filter(clause -> spottedHeadings.stream().anyMatch(clause.heading()::contains))
-                        .map(clause -> clause.number() + " | MEDIUM | one-sided term against us")
+                        .map(clause -> {
+                            if (spottedHighHeadings.stream().anyMatch(clause.heading()::contains)) {
+                                return clause.number() + " | HIGH | one-sided term against us";
+                            }
+                            if (spottedHeadings.stream().anyMatch(clause.heading()::contains)) {
+                                return clause.number() + " | MEDIUM | one-sided term against us";
+                            }
+                            return null;
+                        })
+                        .filter(java.util.Objects::nonNull)
                         .collect(java.util.stream.Collectors.joining("\n"));
                 return new GenerationResult(Map.of("issues", lines.isEmpty() ? "NONE" : lines),
                         "fake-gen-v1", new TokenUsage(900, 30));

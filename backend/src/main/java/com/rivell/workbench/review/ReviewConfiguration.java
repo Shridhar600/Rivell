@@ -34,8 +34,9 @@ class ReviewConfiguration {
     }
 
     @Bean
-    ReviewPlanBuilder reviewPlanBuilder(ReviewPackRegistry reviewPackRegistry) {
-        return new ReviewPlanBuilder(reviewPackRegistry);
+    ReviewPlanBuilder reviewPlanBuilder(ReviewPackRegistry reviewPackRegistry,
+            ReviewEngineProperties reviewEngineProperties) {
+        return new ReviewPlanBuilder(reviewPackRegistry, reviewEngineProperties.omissions());
     }
 
     @Bean
@@ -90,6 +91,20 @@ class ReviewConfiguration {
         return new com.rivell.workbench.review.check.PolicyComparisonCheckExecutor(
                 semanticDecisionService, generativeReasoningService, evidenceService,
                 conceptRegistry, properties, reviewEngineProperties);
+    }
+
+    @Bean
+    ReviewCheckExecutor omissionCheckExecutor(
+            com.rivell.workbench.intelligence.SemanticDecisionService semanticDecisionService,
+            com.rivell.workbench.retrieval.EvidenceService evidenceService,
+            com.rivell.workbench.retrieval.ContractClauseSearch contractClauseSearch,
+            com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry,
+            PolicyComparisonProperties properties,
+            ReviewRepository reviewRepository,
+            ReviewAnalysisRepository reviewAnalysisRepository) {
+        return new com.rivell.workbench.review.check.OmissionCheckExecutor(
+                semanticDecisionService, evidenceService, contractClauseSearch, conceptRegistry,
+                properties, reviewRepository, reviewAnalysisRepository);
     }
 
     @Bean

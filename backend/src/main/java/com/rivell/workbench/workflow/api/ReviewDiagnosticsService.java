@@ -172,7 +172,17 @@ public class ReviewDiagnosticsService {
                     judgedPositions(execution.detail()),
                     text(execution.detail(), "probe"),
                     number(execution.detail() == null ? null
-                            : execution.detail().get("uncoveredProbability"))));
+                            : execution.detail().get("uncoveredProbability")),
+                    text(execution.detail(), "route"),
+                    bool(execution.detail(), "addressed"),
+                    searchFound(execution.detail()),
+                    searchFailed(execution.detail()),
+                    text(execution.detail(), "spotted"),
+                    integer(execution.detail(), "omissionCandidates"),
+                    integer(execution.detail(), "searchedClauses"),
+                    presenceProbabilities(execution.detail()),
+                    count(execution.detail(), "addressedBySearch"),
+                    count(execution.detail(), "flaggedBySearch")));
         }
         return new ReviewDiagnosticsView.AnalysisRunView(run.id(), run.runNumber(),
                 run.status().name(), run.trigger().name(), run.pipelineVersion(),
@@ -235,7 +245,8 @@ public class ReviewDiagnosticsService {
                         probabilities(entry.get("probeProbabilities")),
                         text(entry.get("route")),
                         text(entry.get("secondOpinionOutcome")),
-                        text(entry.get("secondOpinionCategory"))));
+                        text(entry.get("secondOpinionCategory")),
+                        text(entry.get("foundBy"))));
             }
         }
         return views;
@@ -251,6 +262,51 @@ public class ReviewDiagnosticsService {
 
     private static Double number(Object value) {
         return value instanceof Number number ? number.doubleValue() : null;
+    }
+
+    private static Boolean bool(Map<String, Object> detail, String key) {
+        return detail != null && detail.get(key) instanceof Boolean flag ? flag : null;
+    }
+
+    private static Integer integer(Map<String, Object> detail, String key) {
+        return detail == null ? null : integer(detail.get(key));
+    }
+
+    private static Integer integer(Object value) {
+        return value instanceof Number number ? number.intValue() : null;
+    }
+
+    /** Count of one detailed list, or null when the detail does not carry it. */
+    private static Integer count(Map<String, Object> detail, String key) {
+        return detail != null && detail.get(key) instanceof List<?> entries
+                ? entries.size() : null;
+    }
+
+    private static Integer searchFound(Map<String, Object> detail) {
+        var search = detail == null ? null : detail.get("search");
+        return search instanceof Map<?, ?> map && map.get("found") instanceof Number found
+                ? found.intValue() : null;
+    }
+
+    private static Boolean searchFailed(Map<String, Object> detail) {
+        var search = detail == null ? null : detail.get("search");
+        return search instanceof Map<?, ?> map ? "FAILED".equals(map.get("outcome")) : null;
+    }
+
+    /** The omission detail's presence entries as candidateId -> probability; null when absent. */
+    private static Map<String, Double> presenceProbabilities(Map<String, Object> detail) {
+        if (detail == null || !(detail.get("presence") instanceof List<?> entries)) {
+            return null;
+        }
+        var result = new java.util.LinkedHashMap<String, Double>();
+        for (var entry : entries) {
+            if (entry instanceof Map<?, ?> map
+                    && map.get("candidateId") instanceof String id
+                    && map.get("probability") instanceof Number probability) {
+                result.put(id, probability.doubleValue());
+            }
+        }
+        return result;
     }
 
     private static Map<String, Double> probabilities(Object value) {

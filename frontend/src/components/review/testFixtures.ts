@@ -553,6 +553,122 @@ export const fixtureSecondOpinionFindingDetail = {
   },
 }
 
+/** A "needs your look" item whose first review called a walk-away breach (engine v2, P4 D9). */
+export const fixtureWalkAwayLookFindingSummary = {
+  ...fixtureNeedsYourLookFindingSummary,
+  id: 'f-13',
+  firstReviewCategory: 'WALK_AWAY',
+}
+
+export const fixtureWalkAwayLookFindingDetail = {
+  ...fixtureNeedsYourLookFindingDetail,
+  ...fixtureWalkAwayLookFindingSummary,
+  quality: { ...fixtureNeedsYourLookFindingDetail.quality, jevCategory: 'WALK_AWAY' },
+}
+
+/** The whole-contract read picked a clause the playbook says nothing about (engine v2, P4 D3). */
+export const fixturePlaybookSilentFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-14',
+  issueFamily: 'POLICY_UNAVAILABLE',
+  observationKind: 'SPOTTED_IN_WHOLE_CONTRACT_READ',
+  severity: 'LOW',
+  proposedAction: 'ESCALATE_TO_HUMAN',
+  proposedLanguageSource: 'NONE',
+  decidedBy: 'NEEDS_YOUR_LOOK',
+}
+
+export const fixturePlaybookSilentFindingDetail = {
+  ...fixtureClauseFindingDetail,
+  ...fixturePlaybookSilentFindingSummary,
+  observationText:
+    'A whole-contract read named this clause as one our side must act on, and no playbook position check flagged it; a lawyer should review it.',
+  proposedLanguage: null,
+  approvedDraftingEvidenceId: null,
+  positionComparison: null,
+  quality: {
+    sufficiency: 'POLICY_MISSING',
+    verificationOutcome: null,
+    degradationFlags: ['playbook_silent'],
+    route: 'NEEDS_YOUR_LOOK',
+    uncertaintyReason: 'playbook_silent',
+    uncoveredProbability: 0.12,
+    spottedSeverity: 'HIGH',
+    spottedReason: 'Only damages are available to us for a breach.',
+  },
+}
+
+/** A playbook position no clause addresses, which the playbook requires (engine v2 omissions lane). */
+export const fixtureOmissionFindingSummary = {
+  ...fixtureAbsenceFindingSummary,
+  id: 'f-15',
+  observationKind: 'MISSING_POSITION',
+  severity: 'MEDIUM',
+  reviewClassification: 'REVIEW_REQUIRED',
+  positionLabel: 'Cap Exceptions',
+  decidedBy: 'JEV',
+}
+
+export const fixtureOmissionFindingDetail = {
+  ...fixtureAbsenceFindingDetail,
+  ...fixtureOmissionFindingSummary,
+  observationText: 'Missing: Cap Exceptions. Searched 5 clauses; none addresses it.',
+  quality: {
+    sufficiency: null,
+    verificationOutcome: null,
+    degradationFlags: [],
+    route: 'JEV',
+    searchedClauses: 5,
+    comparedClauses: 2,
+    presenceProbability: 0.92,
+  },
+  claims: [
+    {
+      ordinal: 0,
+      claimKind: 'ABSENCE_BASIS',
+      text: 'No clause in this contract addresses this playbook position; the absence is the observation.',
+      absence: true,
+      evidenceItemIds: [],
+    },
+  ],
+  absenceBasis: { planCheckId: 'pc-9', checkKey: 'OMISSION' },
+}
+
+/** The same kind of omission, where Rivell is unsure the playbook requires the provision. */
+export const fixtureOmissionUnsureFindingSummary = {
+  ...fixtureOmissionFindingSummary,
+  id: 'f-16',
+  positionLabel: 'Data protection',
+  severity: 'LOW',
+  decidedBy: 'NEEDS_YOUR_LOOK',
+}
+
+export const fixtureOmissionUnsureFindingDetail = {
+  ...fixtureOmissionFindingDetail,
+  ...fixtureOmissionUnsureFindingSummary,
+  observationText: 'Missing: Data protection. Searched 5 clauses; none addresses it.',
+  quality: {
+    ...fixtureOmissionFindingDetail.quality,
+    degradationFlags: ['omission_unsure'],
+    route: 'NEEDS_YOUR_LOOK',
+    uncertaintyReason: 'omission_unsure',
+    presenceProbability: 0.62,
+  },
+}
+
+/** A clause no topic paired with a position, compared with a position a playbook search found. */
+export const fixtureSearchFoundFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-17',
+  decidedBy: 'JEV',
+}
+
+export const fixtureSearchFoundFindingDetail = {
+  ...fixtureClauseFindingDetail,
+  ...fixtureSearchFoundFindingSummary,
+  quality: { ...fixtureClauseFindingDetail.quality, route: 'JEV', foundBy: 'SEARCH' },
+}
+
 export const fixtureAmbiguousPolicyFindingDetail = {
   ...fixturePolicyMissingFindingDetail,
   id: 'f-4',

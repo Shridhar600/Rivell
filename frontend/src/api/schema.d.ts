@@ -1907,6 +1907,8 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             addedBy?: string;
+            firstReviewCategory?: string;
+            positionLabel?: string;
         };
         AbsenceBasisView: {
             /** Format: uuid */
@@ -1986,6 +1988,8 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             addedBy?: string;
+            firstReviewCategory?: string;
+            positionLabel?: string;
         };
         FindingPositionComparison: {
             contract?: components["schemas"]["ContractPositionSlot"][];
@@ -2070,6 +2074,43 @@ export interface components {
              * @description Uncovered-clause triage probability, when the triage ran
              */
             uncoveredProbability?: number;
+            /** @description Engine v2 route that judged the clause: SEARCH when the position search route ran; absent otherwise */
+            route?: string;
+            /** @description Whether any judged position addresses the clause */
+            addressed?: boolean;
+            /**
+             * Format: int32
+             * @description Positions the search route retrieved, when it ran
+             */
+            searchFound?: number;
+            /** @description Whether the search route's comparison failed */
+            searchFailed?: boolean;
+            /** @description Severity the whole-contract read recorded on this clause: MEDIUM or HIGH; absent when the read named none */
+            spottedSeverity?: string;
+            /**
+             * Format: int32
+             * @description Applicable positions the omission check judged
+             */
+            omissionCandidates?: number;
+            /**
+             * Format: int32
+             * @description Contract clauses the omission check searched
+             */
+            searchedClauses?: number;
+            /** @description Omission presence probability per candidate position id */
+            presenceProbabilities?: {
+                [key: string]: number;
+            };
+            /**
+             * Format: int32
+             * @description Count of positions the omission search addressed
+             */
+            addressedBySearch?: number;
+            /**
+             * Format: int32
+             * @description Count of positions the omission search flagged
+             */
+            flaggedBySearch?: number;
         };
         /** @description Finding counts, no finding content */
         CountsView: {
@@ -2122,6 +2163,8 @@ export interface components {
             route?: string;
             secondOpinionOutcome?: string;
             secondOpinionCategory?: string;
+            /** @description SEARCH when the text search, not a topic, found this position; absent otherwise */
+            foundBy?: string;
         };
         /** @description Deterministic redline state */
         RedlineView: {

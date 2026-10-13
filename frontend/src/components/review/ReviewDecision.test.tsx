@@ -50,6 +50,8 @@ function summaryOf(detail: FindingDetail): FindingSummary {
     relatedPosition: detail.relatedPosition,
     decidedBy: detail.decidedBy,
     addedBy: detail.addedBy,
+    firstReviewCategory: detail.firstReviewCategory,
+    positionLabel: detail.positionLabel,
     createdAt: detail.createdAt,
   }
 }

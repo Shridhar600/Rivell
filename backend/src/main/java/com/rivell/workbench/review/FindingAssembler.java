@@ -36,7 +36,12 @@ public final class FindingAssembler {
         var subject = signal.subjectKind() == FindingSubjectKind.CLAUSE
                 ? signal.subjectHeadingNodeId().toString()
                 : signal.absenceConcept().value();
-        return signal.subjectKind().name() + ":" + subject + ":" + signal.issueFamily().name();
+        var key = signal.subjectKind().name() + ":" + subject + ":" + signal.issueFamily().name();
+        // engine v2 omissions lane: two missing positions on one concept stay two findings
+        if (signal.payload() instanceof OmissionPayload omission) {
+            key = key + ":" + omission.candidateId();
+        }
+        return key;
     }
 
     private Finding build(
@@ -113,6 +118,12 @@ public final class FindingAssembler {
     }
 
     private static Observation observation(RawReviewSignal signal) {
+        if (signal.payload() instanceof OmissionPayload omission) {
+            // engine v2 omissions lane: the code-owned text, never model prose
+            return new Observation("MISSING_POSITION",
+                    "Missing: " + omission.label() + ". Searched " + omission.searchedClauses()
+                            + " clauses; none addresses it.");
+        }
         if (signal.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return new Observation("MISSING_REQUIRED_CONCEPT",
                     "The required provision " + signal.concept().value()
@@ -285,10 +296,22 @@ public final class FindingAssembler {
     }
 
     private static FindingSeverity severity(RawReviewSignal primary) {
+        if (primary.payload() instanceof OmissionPayload) {
+            // engine v2 omissions lane: a required absence is an alarm; an unsure one asks for a look
+            return "NEEDS_YOUR_LOOK".equals(primary.quality().get("route"))
+                    ? FindingSeverity.LOW : FindingSeverity.MEDIUM;
+        }
         if (primary.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return FindingSeverity.HIGH;
         }
         if (primary.signalType() == SignalType.EXPECTED_CONCEPT_ABSENT) {
+            return FindingSeverity.LOW;
+        }
+        if (primary.signalType() == SignalType.POLICY_UNAVAILABLE
+                && primary.payload() instanceof PolicyUnavailablePayload unavailable
+                && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())
+                && "NEEDS_YOUR_LOOK".equals(primary.quality().get("route"))) {
+            // engine v2: an advisory pick of the whole-contract read asks for a look, never an alarm
             return FindingSeverity.LOW;
         }
         if (primary.signalType() == SignalType.POLICY_DEVIATION
@@ -319,6 +342,10 @@ public final class FindingAssembler {
 
     private static FindingClassification classification(
             RawReviewSignal primary, EscalationPayload escalation) {
+        if (primary.payload() instanceof OmissionPayload) {
+            // engine v2 omissions lane: a missing position needs review, it does not block
+            return FindingClassification.REVIEW_REQUIRED;
+        }
         if (primary.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return FindingClassification.BLOCKING;
         }
@@ -351,10 +378,12 @@ public final class FindingAssembler {
         // absence-subject findings are grounded in the plan-check/absence identity
         var absenceSubject = primary.subjectKind() == FindingSubjectKind.ABSENCE;
         if (absenceSubject) {
-            claims.add(FindingClaim.of(0, ClaimKind.ABSENCE_BASIS,
-                    "No clause in this contract carries " + primary.absenceConcept().value()
-                            + "; the absence is the observation.",
-                    true, List.of()));
+            var basis = primary.payload() instanceof OmissionPayload
+                    ? "No clause in this contract addresses this playbook position; the "
+                            + "absence is the observation."
+                    : "No clause in this contract carries " + primary.absenceConcept().value()
+                            + "; the absence is the observation.";
+            claims.add(FindingClaim.of(0, ClaimKind.ABSENCE_BASIS, basis, true, List.of()));
         } else {
             claims.add(FindingClaim.of(0, ClaimKind.OBSERVATION, observation.text(),
                     false, evidence));
@@ -427,7 +456,9 @@ public final class FindingAssembler {
     private static final List<String> ASSESSMENT_KEYS = List.of("category", "flagProbability",
             "probabilities", "secondaryTopic", "uncoveredProbability", "route", "jevCategory",
             "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
-            "secondOpinionReason");
+            "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
+            "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
+            "positionLabel");
 
     private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();

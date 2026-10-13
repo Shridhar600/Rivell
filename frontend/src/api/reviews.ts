@@ -255,6 +255,10 @@ export type FindingSummary = {
   createdAt: string
   /** The user who added this finding because Rivell missed it; null for Rivell's own findings. */
   addedBy: string | null
+  /** A "needs your look" item's first-review answer (a comparison category); null otherwise. */
+  firstReviewCategory: string | null
+  /** The missing playbook position's own label on an omission finding; null otherwise. */
+  positionLabel: string | null
 }
 
 export type FindingListResponse = {
@@ -294,6 +298,15 @@ export type FindingQuality = {
   /** The clause words the second opinion rests on: model output, shown as a quote. */
   secondOpinionQuote: string | null
   secondOpinionReason: string | null
+  /** Why Rivell left the item to the user: playbook_silent, omission_unsure, second_opinion_unavailable. */
+  uncertaintyReason: string | null
+  /** 'SEARCH' when the position was found by searching the playbook for the clause's text. */
+  foundBy: string | null
+  /** The whole-contract read's own severity (HIGH or MEDIUM) and reason for a playbook-silent pick. */
+  spottedSeverity: string | null
+  spottedReason: string | null
+  /** Omission check: the estimate that the playbook position requires the provision, 0–1. */
+  presenceProbability: number | null
 }
 
 export type AbsenceBasis = {
@@ -658,6 +671,8 @@ function parseFindingSummary(value: unknown, what: string): FindingSummary {
     decidedBy: readOptionalNullableString(finding, 'decidedBy', what),
     createdAt: readOptionalNullableString(finding, 'createdAt', what) ?? '',
     addedBy: readOptionalNullableString(finding, 'addedBy', what),
+    firstReviewCategory: readOptionalNullableString(finding, 'firstReviewCategory', what),
+    positionLabel: readOptionalNullableString(finding, 'positionLabel', what),
   }
 }
 
@@ -721,6 +736,7 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
   const quality = asRecord(value, what)
   const flagProbability = readOptionalNullableNumber(quality, 'flagProbability', what)
   const uncoveredProbability = readOptionalNullableNumber(quality, 'uncoveredProbability', what)
+  const presenceProbability = readOptionalNullableNumber(quality, 'presenceProbability', what)
   return {
     sufficiency: readOptionalNullableString(quality, 'sufficiency', what),
     verificationOutcome: readOptionalNullableString(quality, 'verificationOutcome', what),
@@ -743,6 +759,14 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
     secondOpinionCategory: readOptionalNullableString(quality, 'secondOpinionCategory', what),
     secondOpinionQuote: readOptionalNullableString(quality, 'secondOpinionQuote', what),
     secondOpinionReason: readOptionalNullableString(quality, 'secondOpinionReason', what),
+    uncertaintyReason: readOptionalNullableString(quality, 'uncertaintyReason', what),
+    foundBy: readOptionalNullableString(quality, 'foundBy', what),
+    spottedSeverity: readOptionalNullableString(quality, 'spottedSeverity', what),
+    spottedReason: readOptionalNullableString(quality, 'spottedReason', what),
+    presenceProbability:
+      presenceProbability !== null && presenceProbability >= 0 && presenceProbability <= 1
+        ? presenceProbability
+        : null,
   }
 }
 

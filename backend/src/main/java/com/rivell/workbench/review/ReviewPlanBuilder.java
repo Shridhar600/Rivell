@@ -20,9 +20,11 @@ import com.rivell.workbench.taxonomy.ConceptKey;
 public final class ReviewPlanBuilder {
 
     private final ReviewPackRegistry packs;
+    private final boolean omissions;
 
-    public ReviewPlanBuilder(ReviewPackRegistry packs) {
+    public ReviewPlanBuilder(ReviewPackRegistry packs, boolean omissions) {
         this.packs = packs;
+        this.omissions = omissions;
     }
 
     public List<ReviewPlanCheck> build(
@@ -59,6 +61,10 @@ public final class ReviewPlanBuilder {
                             subject.headingNodeId()));
                 }
             }
+        }
+        if (snapshot.reviewEngine() == ReviewEngine.V2 && omissions) {
+            // engine v2 omissions lane (spec §4): one check, last, once every clause was judged
+            checks.add(omissionCheck(reviewId, organizationId, snapshot.createdAt(), ordinal[0]++));
         }
         return List.copyOf(checks);
     }
@@ -99,5 +105,13 @@ public final class ReviewPlanBuilder {
                         + rule.secondaryConcept() + ":" + subjectHeadingNodeId,
                 CheckFamily.CROSS_CLAUSE, null, rule.mechanism(), rule.concept(),
                 rule.secondaryConcept(), subjectHeadingNodeId, createdAt);
+    }
+
+    /** Engine v2 omissions lane: no subject; the check reads the run's clause comparisons. */
+    private static ReviewPlanCheck omissionCheck(
+            UUID reviewId, UUID organizationId, Instant createdAt, int ordinal) {
+        return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,
+                "OMISSION", CheckFamily.CONCEPT_PRESENCE, CheckExpectation.REQUIRED,
+                CheckMechanism.OMISSION, ClauseTopics.NO_TOPIC, null, null, createdAt);
     }
 }

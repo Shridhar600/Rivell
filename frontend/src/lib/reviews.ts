@@ -110,8 +110,9 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
   MISSING_REQUIRED_CONCEPT: 'Required provision missing',
   EXPECTED_CONCEPT_ABSENT: 'Expected provision absent',
   POLICY_UNAVAILABLE: 'Policy unavailable',
-  NOT_COVERED_BY_PLAYBOOK: 'Not covered by playbook — review',
-  SPOTTED_IN_WHOLE_CONTRACT_READ: 'Flagged by whole-contract read — review',
+  NOT_COVERED_BY_PLAYBOOK: 'Unusual clause, not covered by your playbook',
+  SPOTTED_IN_WHOLE_CONTRACT_READ: 'Picked by the whole-contract read',
+  MISSING_POSITION: 'Missing from the contract',
   AMBIGUOUS_POLICY: 'Policy ambiguous',
   SURVIVAL_COVERAGE_GAP: 'Survival coverage gap',
   CARVE_OUT_INCONSISTENCY: 'Carve-out inconsistency',
@@ -124,8 +125,8 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
 
 const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
   bounded_decision_unavailable: 'Could not be assessed',
-  second_opinion_disagrees: 'Needs your look — two reviewers disagree',
-  second_opinion_unavailable: 'Needs your look — no second opinion',
+  second_opinion_disagrees: 'Needs your look: two reviewers disagree',
+  second_opinion_unavailable: 'Needs your look: no second opinion',
 }
 
 export function observationKindLabel(kind: string): string {
@@ -161,6 +162,11 @@ export function assessmentSummary(quality: FindingQuality | null): string | null
   const probability = quality?.flagProbability ?? quality?.uncoveredProbability ?? null
   if (probability !== null) {
     parts.push(`Model confidence ${Math.round(probability * 100)}% (an estimate, not a certainty)`)
+  } else if (quality?.presenceProbability != null) {
+    // an omission: how likely the playbook position requires the provision at all
+    parts.push(
+      `Required by your playbook: estimate ${Math.round(quality.presenceProbability * 100)}% (an estimate, not a certainty)`,
+    )
   }
   return parts.length > 0 ? parts.join(' · ') : null
 }
@@ -230,10 +236,19 @@ export function qualityFactorRows(quality: FindingQuality | null): string[] {
     )
   }
   for (const flag of quality.degradationFlags) {
+    // why Rivell left an item to the user is said by the item itself; it is not a degraded check
+    if (LOOK_REASONS.has(flag)) continue
     rows.push(degradationFlagLabel(flag))
   }
   return rows
 }
+
+const LOOK_REASONS = new Set([
+  'second_opinion_disagrees',
+  'second_opinion_unavailable',
+  'playbook_silent',
+  'omission_unsure',
+])
 
 function degradationFlagLabel(flag: string): string {
   if (flag.includes('provider_unavailable') || flag.includes('unavailable')) {
@@ -319,10 +334,12 @@ export function findingSubjectLabel(
   finding: Pick<
     FindingSummary,
     'subjectKind' | 'subjectHeadingNodeId' | 'absenceConcept' | 'concept'
-  >,
+  > & { positionLabel?: string | null },
   regionLabels: Map<string, string>,
   label: ConceptLabel,
 ): string {
+  // an omission names the playbook position it misses: its concept may be one the contract covers
+  if (finding.subjectKind === 'ABSENCE' && finding.positionLabel) return `Missing: ${finding.positionLabel}`
   if (finding.subjectKind === 'ABSENCE' && finding.absenceConcept) {
     return `Missing: ${label(finding.absenceConcept)}`
   }
@@ -407,7 +424,7 @@ export function isRelatedPosition(
 export function findingIssueLabel(
   finding: Pick<FindingSummary, 'issueFamily' | 'observationKind'>,
 ): string {
-  if (finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK') return 'Not covered by playbook — review'
+  if (finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK') return observationKindLabel(finding.observationKind)
   if (finding.observationKind.startsWith('UNCERTAINTY:second_opinion_')) {
     return observationKindLabel(finding.observationKind)
   }
@@ -423,7 +440,7 @@ export function findingIssueLabel(
 export function decidedByLabel(quality: FindingQuality | null): string | null {
   if (!quality) return null
   if (quality.route === 'JEV') {
-    const probability = quality.flagProbability ?? quality.uncoveredProbability
+    const probability = quality.flagProbability ?? quality.uncoveredProbability ?? quality.presenceProbability
     return probability === null
       ? 'Decided by Rivell’s first review'
       : `Decided by Rivell’s first review · ${Math.round(probability * 100)}%`
@@ -442,10 +459,10 @@ export type ShownClauseMark = ClauseMark | 'NOT_PLANNED'
 
 const CLAUSE_MARK_LABELS: Record<ShownClauseMark, string> = {
   FLAGGED: 'Flagged',
-  CHECKED: 'Checked — no issue found',
+  CHECKED: 'Checked, no issue found',
   NOT_COVERED: 'Not covered by your playbook',
-  NOT_ANALYSED: 'Not analysed — the check did not finish',
-  NOT_PLANNED: 'Not reviewed — outside the review plan',
+  NOT_ANALYSED: 'Not analysed: the check did not finish',
+  NOT_PLANNED: 'Not reviewed: outside the review plan',
 }
 
 const CLAUSE_MARK_COUNTS: Record<ShownClauseMark, string> = {

@@ -18,6 +18,8 @@ export const fixtureAcceptableFinding = {
   relatedPosition: false,
   decidedBy: null,
   addedBy: null,
+  firstReviewCategory: null,
+  positionLabel: null,
   createdAt: '2026-09-26T09:01:10Z',
 } satisfies FindingSummary
 
@@ -44,6 +46,11 @@ export const fixtureAcceptableFindingDetail = {
     secondOpinionCategory: null,
     secondOpinionQuote: null,
     secondOpinionReason: null,
+    uncertaintyReason: null,
+    foundBy: null,
+    spottedSeverity: null,
+    spottedReason: null,
+    presenceProbability: null,
   },
   claims: [],
   // Accept adopts approved wording, so the evidence it cites is part of the finding, as the backend guarantees.
