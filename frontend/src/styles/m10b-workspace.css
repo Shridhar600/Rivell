@@ -1488,6 +1488,11 @@ h3.rv-ws-sec-h {
 
 /* P2b: what Rivell did with each clause, and the way to add what it missed. */
 .rv-ws-legend {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   margin: 0 0 8px;
   color: var(--text-3);
   font-size: 12px;

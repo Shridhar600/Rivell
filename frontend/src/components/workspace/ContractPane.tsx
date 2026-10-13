@@ -57,6 +57,8 @@ interface Props {
   /** Opens a clause's semantics in place; given with the headings Rivell analysed. */
   onClauseDetails?: ((headingNodeId: string) => void) | null
   analysedHeadings?: ReadonlySet<string>
+  /** Opens the contract-level analysis (parties, defined terms, references) in place. */
+  onContractAnalysis?: (() => void) | null
 }
 
 const NOTE_LIMIT = 2000
@@ -509,10 +511,15 @@ export function ContractPane(props: Props) {
         </div>
         <span className="rv-ws-dnote">{note}</span>
       </div>
-      {legend ? (
-        <p className="rv-ws-legend" aria-label="What Rivell did with each clause">
-          Clauses: {legend}
-        </p>
+      {legend || props.onContractAnalysis ? (
+        <div className="rv-ws-legend">
+          {legend ? <span aria-label="What Rivell did with each clause">Clauses: {legend}</span> : null}
+          {props.onContractAnalysis ? (
+            <button type="button" className="rv-ws-link" onClick={props.onContractAnalysis}>
+              Contract analysis
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {props.notes}
       {props.isPending ? <LoadingState label="Loading contract…" /> : null}

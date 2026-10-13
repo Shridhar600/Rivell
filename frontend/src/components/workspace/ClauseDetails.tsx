@@ -416,7 +416,7 @@ export function ClauseDetails({ clause, semantics, nodes, contractId, versionNum
               <div key={`${entry.field}-${entry.proposedValue}`}>
                 <dt>{humanizeCode(entry.field)}</dt>
                 <dd>
-                  <span>{entry.proposedValue}</span> <span className="rv-ws-chip">{verificationLabel(entry.verification)}</span>
+                  <span>{/^[A-Z][A-Z0-9_]*$/.test(entry.proposedValue) ? humanizeCode(entry.proposedValue) : entry.proposedValue}</span> <span className="rv-ws-chip">{verificationLabel(entry.verification)}</span>
                   <span className="rv-ws-cd-machine">
                     <RegionButtons nodeIds={entry.sourceNodeIds} regionLabels={regionLabels} onNavigateToNode={onNavigateToNode} empty="no source region recorded" />
                   </span>

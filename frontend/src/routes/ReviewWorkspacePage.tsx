@@ -524,11 +524,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           <button type="button" className="rv-ws-link" onClick={() => setSheet({ kind: 'notes' })}>
             Review coverage and notes
           </button>
-          {semanticsQuery.data ? (
-            <button type="button" className="rv-ws-link" onClick={() => setSheet({ kind: 'contract' })}>
-              Contract analysis
-            </button>
-          ) : null}
         </div>
       ) : null}
     </>
@@ -620,6 +615,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           marks={clauseMarks}
           onAddFinding={canAddFinding ? addFinding : null}
           onClauseDetails={semantics ? openClause : null}
+          onContractAnalysis={semantics ? () => setSheet({ kind: 'contract' }) : null}
           analysedHeadings={analysedHeadings}
         />
         <FindingPanel
