@@ -110,33 +110,14 @@ a {
 .rv-side__brand:hover {
   background: var(--hover);
 }
-.rv-logo {
-  position: relative;
-  display: grid;
-  place-items: center;
+.rv-side__wordmark {
+  display: block;
   flex: none;
-  width: 20px;
-  height: 20px;
-  overflow: hidden;
-  border-radius: 7px;
-  background: var(--text);
-  color: var(--bg);
-  font-size: 11px;
-  font-weight: 600;
 }
-.rv-logo::after {
-  content: '';
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  top: 13px;
-  height: 2px;
-  background: var(--redline);
-  transform: rotate(-14deg);
-}
-.rv-side__brand-text {
-  white-space: nowrap;
-  overflow: hidden;
+.rv-side__icon {
+  display: none;
+  flex: none;
+  border-radius: 6px;
 }
 .rv-side__toggle {
   color: var(--text-3);
@@ -208,7 +189,12 @@ a {
   width: 100%;
   padding: 0;
 }
-.rv-shell[data-sidebar='collapsed'] .rv-side__brand-text,
+.rv-shell[data-sidebar='collapsed'] .rv-side__wordmark {
+  display: none;
+}
+.rv-shell[data-sidebar='collapsed'] .rv-side__icon {
+  display: block;
+}
 .rv-shell[data-sidebar='collapsed'] .rv-nav__text {
   position: absolute;
   width: 1px;
