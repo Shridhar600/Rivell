@@ -295,6 +295,21 @@ def load_orgs(corpus):
     return orgs
 
 
+def select_orgs(orgs, org_ids, stems):
+    """Organisations to run: those named (all when none), each with only the named contracts
+    (by file stem; all when none). An organisation left with no contract is dropped."""
+    selected = []
+    for org in orgs:
+        if org_ids and org["id"] not in org_ids:
+            continue
+        if stems:
+            org = dict(org, contracts=[c for c in org["contracts"] if pathlib.Path(c).stem in stems])
+            if not org["contracts"]:
+                continue
+        selected.append(org)
+    return selected
+
+
 def run_org(api, corpus, org, raw_dir, redline=True):
     errors = []
     result = {"org": org["id"], "knowledge": [], "contracts": [], "errors": errors}
@@ -744,6 +759,7 @@ def main():
     ap.add_argument("--corpus", required=True, type=pathlib.Path)
     ap.add_argument("--out", required=True, type=pathlib.Path)
     ap.add_argument("--org", action="append", help="limit to these org ids")
+    ap.add_argument("--contract", action="append", help="limit to these contract file stems")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--no-redline", action="store_true", help="skip the redline round trip")
     args = ap.parse_args()
@@ -756,7 +772,7 @@ def main():
     if problems:
         sys.exit("preflight failed, nothing run:\n  " + "\n  ".join(problems))
     all_orgs = load_orgs(args.corpus)
-    orgs = [o for o in all_orgs if not args.org or o["id"] in args.org]
+    orgs = select_orgs(all_orgs, args.org, args.contract)
 
     run_id = time.strftime("%Y%m%d-%H%M%S")
     out = args.out / run_id
