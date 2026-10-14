@@ -75,8 +75,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems as described in
 
 ## License
 
-Copyright (C) 2026 Shridhar600.
+Copyright 2026 Shridhar600.
 
-Rivell is licensed under the [GNU Affero General Public License v3.0](LICENSE). You can use, study and change it. If you distribute it, or run a changed version as a service for others, you must publish your complete source code under the same license.
-
-For a commercial license without these terms, contact the maintainer through GitHub.
+Rivell is licensed under the [Apache License 2.0](LICENSE).

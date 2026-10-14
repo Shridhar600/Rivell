@@ -15,8 +15,4 @@ Open an issue first and describe the change. Small fixes are welcome. For larger
 
 ## License of your contribution
 
-Rivell is licensed under the GNU AGPL-3.0, and the maintainer also offers it under separate commercial licenses. So that this stays possible, every contribution needs this statement in the pull request description:
-
-> I wrote this contribution and I have the right to submit it. I license it under the AGPL-3.0 and I grant Shridhar600 a perpetual, worldwide, irrevocable, royalty-free license to use, change and relicense it under any terms, including commercial terms.
-
-Pull requests without this statement are not merged.
+By opening a pull request, you agree that your contribution is licensed under the [Apache License 2.0](LICENSE), the same license as the project.
