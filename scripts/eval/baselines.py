@@ -12,7 +12,7 @@ false alarms are counted exactly as `scoring.score_contract` counts them for Riv
 
 Usage (keys from the environment, never printed):
   python3 scripts/eval/baselines.py --mode whole --model gpt-6-luna \
-      --corpus ../Rivell-context/eval/corpus/dev2 --out ../Rivell-context/eval/runs/dev2-baseline
+      --corpus <corpus dir> --out <output dir>
 """
 import argparse
 import concurrent.futures
