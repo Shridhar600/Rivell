@@ -13,7 +13,7 @@ A contract review workbench that checks Word contracts against your playbook and
 ![PostgreSQL + pgvector](https://img.shields.io/badge/PostgreSQL_%2B_pgvector-4169E1.svg)
 [![CI](https://github.com/Shridhar600/Rivell/actions/workflows/ci.yml/badge.svg)](https://github.com/Shridhar600/Rivell/actions/workflows/ci.yml)
 
-<!-- Demo GIF: add .github/assets/rivell-demo.gif, then restore: <img src=".github/assets/rivell-demo.gif" alt="Rivell demo" width="900"> -->
+<img src=".github/assets/rivell-demo.gif" alt="Rivell demo" width="900">
 
 </div>
 
