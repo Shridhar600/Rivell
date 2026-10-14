@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.rivell.workbench.contracts.ContractNotFoundException;
+import com.rivell.workbench.contracts.ContractNotReadableException;
 import com.rivell.workbench.contracts.ContractVersionNotFoundException;
 import com.rivell.workbench.contracts.EnrichmentFailedException;
 import com.rivell.workbench.contracts.EnrichmentInProgressException;
@@ -134,6 +135,12 @@ public class GlobalExceptionHandler {
             com.rivell.workbench.knowledge.InvalidConceptCorrectionException.class})
     ResponseEntity<ErrorResponse> invalidCorrection(RuntimeException e) {
         return error(HttpStatus.BAD_REQUEST, "400", "Invalid correction", e.getMessage());
+    }
+
+    @ExceptionHandler(ContractNotReadableException.class)
+    ResponseEntity<ErrorResponse> contractNotReadable(ContractNotReadableException e) {
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "422", "Contract not readable",
+                e.getMessage());
     }
 
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)

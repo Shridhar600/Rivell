@@ -62,7 +62,8 @@ public class DocxRedlineRenderer implements RedlineRenderer {
 
     @Override
     public RenderedRedline render(byte[] sourceBytes, DocumentExecutionPlan plan) {
-        var wordPackage = load(sourceBytes);
+        var loaded = load(sourceBytes);
+        var wordPackage = loaded.wordPackage();
         if (!DocxRedlineSupport.isDocxMainPart(wordPackage)) {
             throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_FORMAT, null,
                     "Only tracked-change-capable DOCX documents can be executed.");
@@ -131,7 +132,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                     start, nextId.get() - 1));
         }
 
-        var bytes = serialize(wordPackage, sourceBytes);
+        var bytes = serialize(wordPackage, loaded.packageBytes());
         return new RenderedRedline(bytes, Hashes.sha256Hex(bytes), reports);
     }
 
@@ -526,13 +527,17 @@ public class DocxRedlineRenderer implements RedlineRenderer {
      * Loads the source with the same decompression bound the ingest parser applies, before docx4j
      * materialises the package. Without it the redline path is the one place in the system where a
      * crafted package reaches the heap unbounded, and it is reachable with stored bytes that were
-     * never re-checked after ingestion.
+     * never re-checked after ingestion. Repairs the package first (after the bound), so a damaged
+     * source is read and output the way Word would repair it.
      */
-    private WordprocessingMLPackage load(byte[] sourceBytes) {
+    private LoadedSource load(byte[] sourceBytes) {
         try {
             com.rivell.workbench.platform.parsing.ZipGuard.verify(sourceBytes,
                     properties.maxUncompressedBytes());
-            return WordprocessingMLPackage.load(new ByteArrayInputStream(sourceBytes));
+            var repair = DocxPackageRepair.repair(sourceBytes);
+            return new LoadedSource(
+                    WordprocessingMLPackage.load(new ByteArrayInputStream(repair.bytes())),
+                    repair.bytes());
         } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {
             throw failure(RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED, null,
                     "The source document expands beyond the permitted size for execution.");
@@ -543,10 +548,12 @@ public class DocxRedlineRenderer implements RedlineRenderer {
     }
 
     /**
-     * The source package with only the main document part replaced. docx4j re-serializes every
-     * part whose JAXB tree was read (the settings part is read for the protection check) and drops
-     * markup its schema rejects, so saving the whole package would change parts the redline never
-     * edits. Copying them from the source keeps them byte-identical.
+     * The package as loaded (repaired when relationships dangled) with only the main document part
+     * replaced. docx4j re-serializes every part whose JAXB tree was read (the settings part is read
+     * for the protection check) and drops markup its schema rejects, so saving the whole package
+     * would change parts the redline never edits. Copying them from the loaded package keeps them
+     * byte-identical, and keeps the produced redline free of the dangling relationships the
+     * repaired read dropped.
      */
     private byte[] serialize(WordprocessingMLPackage wordPackage, byte[] sourceBytes) {
         try (var output = new ByteArrayOutputStream()) {
@@ -576,5 +583,9 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             Object anchorKey,
             PPr paragraphTemplate,
             RPr runTemplate) {
+    }
+
+    /** The loaded package and the bytes it was loaded from, after any package repair. */
+    private record LoadedSource(WordprocessingMLPackage wordPackage, byte[] packageBytes) {
     }
 }

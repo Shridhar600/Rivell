@@ -174,12 +174,17 @@ public final class DeterministicContractExtractors {
                     matcher.end()));
         }
         var hits = new ArrayList<DefinitionHit>();
+        var seenTerms = new java.util.HashSet<String>();
         for (var i = 0; i < heads.size(); i++) {
             var head = heads.get(i);
             var end = i + 1 < heads.size() ? heads.get(i + 1).start() : text.length();
             var definition = definitionText(text.substring(head.end(), end), end == text.length());
             if (definition.isBlank()) {
                 continue; // adjacent definition starts leave no text for this one
+            }
+            if (!seenTerms.add(head.term())) {
+                // one row per (term, defining node) is what the schema allows: first wording wins
+                continue;
             }
             hits.add(new DefinitionHit(head.term(), definition, nodeId));
         }

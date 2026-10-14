@@ -74,7 +74,8 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             throw new IllegalStateException("Package could not be scanned", e);
         }
         try {
-            return WordprocessingMLPackage.load(new ByteArrayInputStream(bytes));
+            var repair = DocxPackageRepair.repair(bytes);
+            return WordprocessingMLPackage.load(new ByteArrayInputStream(repair.bytes()));
         } catch (Exception e) {
             throw new IllegalStateException("Package could not be loaded", e);
         }
