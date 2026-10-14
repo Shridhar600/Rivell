@@ -16,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -40,8 +39,7 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 /**
  * Engine v2 playbook-silent advisory picks (P4): the whole-contract read runs in every v2 review,
  * and a clause no position addresses, the triage did not flag and the comparison left alone
- * becomes a LOW "needs your look" item; a clause with a finding or a flagged triage keeps it out,
- * and v1 keeps the opt-in MEDIUM behaviour.
+ * becomes a LOW "needs your look" item; a clause with a finding or a flagged triage keeps it out.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -70,7 +68,6 @@ class AdvisoryPickIT {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("rivell.review.engine", () -> "v2");
         registry.add("rivell.storage.local.root",
                 () -> "target/test-documents/" + UUID.randomUUID());
     }
@@ -107,9 +104,6 @@ class AdvisoryPickIT {
 
     @Autowired
     ContractEnrichmentService enrichmentService;
-
-    @Autowired
-    JdbcClient jdbcClient;
 
     @Autowired
     MockMvc mockMvc;
@@ -273,26 +267,6 @@ class AdvisoryPickIT {
                 .containsEntry("uncertaintyReason", "playbook_silent")
                 .containsEntry("spottedSeverity", "HIGH")
                 .containsEntry("uncoveredProbability", 0.05);
-    }
-
-    @Test
-    void v1KeepsTheOptInBehaviour() throws Exception {
-        var reviewId = reviewedContract();
-        // a review frozen on v1: the live v2 setting must not make the read run or report
-        jdbcClient.sql("update review_snapshot set review_engine = 'V1' where review_id = :id")
-                .param("id", reviewId).update();
-        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
-        generativeProvider.spottedHighHeadings.add(GOVERNING_LAW);
-
-        var run = analysisService.analyze(organizationId(), reviewId);
-
-        assertThat(generativeProvider.spottingCalls).as("v1 without the opt-in never reads")
-                .hasValue(0);
-        assertThat(spottedFindings(findings(run.id()))).isEmpty();
-        // the playbook-silent clause was still triaged and stayed below the threshold
-        assertThat(analysisRepository.findExecutions(organizationId(), run.id()))
-                .anySatisfy(execution -> assertThat(execution.detail())
-                        .containsEntry("uncoveredProbability", 0.05));
     }
 
     @Test

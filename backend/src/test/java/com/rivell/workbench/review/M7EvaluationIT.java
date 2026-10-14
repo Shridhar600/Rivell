@@ -194,7 +194,9 @@ class M7EvaluationIT {
             assertThat(finding.subjectHeadingNodeId()).isNull();
             assertThat(finding.absenceConcept()).isNotNull();
         });
-        assertThat(generativeProvider.calls()).isZero();
+        // P6/v2: the whole-contract read runs once and names nothing; no other generative call
+        assertThat(generativeProvider.spottingCalls).hasValue(1);
+        assertThat(generativeProvider.calls()).isEqualTo(1);
         record("S3 required + expected absence findings", organizationId, review.id(),
                 Set.of(IssueFamily.MISSING_REQUIRED_PROVISION,
                         IssueFamily.EXPECTED_PROVISION_ABSENT),
@@ -213,7 +215,9 @@ class M7EvaluationIT {
         var elapsed = (System.nanoTime() - start) / 1_000_000;
 
         assertThat(scriptedProvider.policyComparisonDecisions()).isZero();
-        assertThat(generativeProvider.calls()).isZero();
+        // P6/v2: the whole-contract read runs once and names nothing; no other generative call
+        assertThat(generativeProvider.spottingCalls).hasValue(1);
+        assertThat(generativeProvider.calls()).isEqualTo(1);
         assertThat(findingRepository.findFindings(organizationId, run.id())).isEmpty();
         record("S6 no published position, no call and no inference",
                 organizationId, review.id(), Set.of(), 0, 0, elapsed);
@@ -269,7 +273,9 @@ class M7EvaluationIT {
         assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.BLOCKING);
         assertThat(finding.claims()).anyMatch(claim -> claim.claimKind() == ClaimKind.POLICY_BASIS);
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
-        assertThat(generativeProvider.calls()).isZero();
+        // P6/v2: the whole-contract read runs once and names nothing; no other generative call
+        assertThat(generativeProvider.spottingCalls).hasValue(1);
+        assertThat(generativeProvider.calls()).isEqualTo(1);
         record("S8 walk-away grounded in policy, precedent not policy",
                 organizationId, review.id(),
                 Set.of(IssueFamily.POSITION_WALK_AWAY), 1, 0, elapsed);
@@ -413,10 +419,16 @@ class M7EvaluationIT {
         var correctedStart = System.nanoTime();
         var correctedRun = analysisService.analyze(organizationId, correctedReview.id());
         var correctedElapsed = (System.nanoTime() - correctedStart) / 1_000_000;
-        assertThat(analysisRepository.findSignals(organizationId, correctedRun.id()))
-                .noneMatch(signal -> signal.signalType() == SignalType.POLICY_DEVIATION);
-        record("S14 corrected concept no longer matches liability positions",
-                organizationId, correctedReview.id(), Set.of(), 0, 0, correctedElapsed);
+        // P6/v2: no position is paired by the corrected topic any more; the text search still
+        // finds the liability position, so the judgment says it came from the search lane
+        var correctedDeviations = analysisRepository.findSignals(organizationId, correctedRun.id())
+                .stream().filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
+                .toList();
+        assertThat(correctedDeviations).isNotEmpty().allSatisfy(signal ->
+                assertThat(signal.quality()).containsEntry("foundBy", "SEARCH"));
+        record("S14 corrected concept drops the topic match; the text search finds it",
+                organizationId, correctedReview.id(),
+                Set.of(IssueFamily.POSITION_NEEDS_FALLBACK), 1, 0, correctedElapsed);
 
         enrichmentService.correctClause(contractId, 1, liability.id(),
                 FactCorrection.ofPrimary(CoreConcepts.LIMITATION_OF_LIABILITY));

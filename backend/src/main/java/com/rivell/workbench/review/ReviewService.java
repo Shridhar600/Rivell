@@ -43,7 +43,6 @@ public class ReviewService {
     private final ReviewRepository reviewRepository;
     private final TransactionTemplate transactionTemplate;
     private final ApplicationEventPublisher eventPublisher;
-    private final ReviewEngineProperties engineProperties;
     private final Clock clock;
 
     public ReviewService(
@@ -60,7 +59,6 @@ public class ReviewService {
             ReviewRepository reviewRepository,
             TransactionTemplate transactionTemplate,
             ApplicationEventPublisher eventPublisher,
-            ReviewEngineProperties engineProperties,
             Clock clock) {
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
@@ -75,7 +73,6 @@ public class ReviewService {
         this.reviewRepository = reviewRepository;
         this.transactionTemplate = transactionTemplate;
         this.eventPublisher = eventPublisher;
-        this.engineProperties = engineProperties;
         this.clock = clock;
     }
 
@@ -157,7 +154,7 @@ public class ReviewService {
                         bindings.decisionProvider().modelAlias(),
                         bindings.generativeProvider().providerId(),
                         bindings.generativeProvider().modelAlias()),
-                engineProperties.engine(),
+                ReviewEngine.V2,
                 now);
         var review = Review.analysisQueued(
                 reviewId, organizationId, contractId, version.versionId(), versionNumber,

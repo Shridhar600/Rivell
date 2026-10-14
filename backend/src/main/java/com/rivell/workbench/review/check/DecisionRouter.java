@@ -5,8 +5,8 @@ import com.rivell.workbench.review.ReviewEngineProperties;
 
 /**
  * Engine v2 routing (spec §6): which judged positions get a second opinion. Pure: no calls, no
- * state. A position that does not address the clause stays with the uncovered-clause triage, as in
- * v1. A position that addresses it gets a second opinion when Jev's flag mass is in the doubt band;
+ * state. A position that does not address the clause stays with the uncovered-clause triage.
+ * A position that addresses it gets a second opinion when Jev's flag mass is in the doubt band;
  * outside the band, Jev's answer stands.
  */
 final class DecisionRouter {

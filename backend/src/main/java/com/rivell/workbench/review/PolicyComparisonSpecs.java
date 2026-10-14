@@ -135,8 +135,8 @@ public final class PolicyComparisonSpecs {
 
     /**
      * The slice of the review a policy comparison needs. {@code definitions}: the contract's own
-     * definitions of terms the clause uses (P3), read by the engine v2 judge; empty on v1 or when
-     * the property is off, and then never serialized (the state's schema version covers both shapes).
+     * definitions of terms the clause uses (P3), read by the engine v2 judge; empty when the
+     * property is off, and then never serialized (the state's schema version covers both shapes).
      */
     public record PolicyComparisonState(
             int schemaVersion, String contractType, String ourSide, String heading, String clause,

@@ -3,8 +3,7 @@ package com.rivell.workbench.review;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Engine v2 settings (spec §5, §6). {@code engine}: the engine new reviews are frozen on (default
- * V2 (P4 eval, rule R5); v1 stays selectable). {@code omissions}: the engine v2 omissions lane
+ * Engine v2 settings (spec §5, §6). {@code omissions}: the engine v2 omissions lane
  * (OMISSION plan check); off by default after the P4 eval. {@code definitions}: engine v2 judges
  * read the definitions of the terms a clause uses (P3); off by default after the P3 eval (rule R1).
  * {@code routing}: a judged position
@@ -14,10 +13,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties("rivell.review")
 public record ReviewEngineProperties(
-        ReviewEngine engine, Routing routing, Boolean omissions, Boolean definitions) {
+        Routing routing, Boolean omissions, Boolean definitions) {
 
     public ReviewEngineProperties {
-        engine = engine == null ? ReviewEngine.V2 : engine;
         routing = routing == null ? new Routing(null, null, null) : routing;
         omissions = omissions == null ? Boolean.FALSE : omissions;
         definitions = definitions == null ? Boolean.FALSE : definitions;

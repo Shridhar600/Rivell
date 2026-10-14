@@ -53,7 +53,8 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
  * second opinion. Agreement keeps Jev's finding and says who decided; a disagreement, a failure,
  * an invalid answer or an exhausted budget becomes a "needs your look" finding with both views;
  * a disagreement naming a walk-away or beyond-fallback is MEDIUM, every other one LOW.
- * The engine frozen in the snapshot decides, never the live setting.
+ * P6: every analysis runs the v2 path; the stored engine is a record of how the review
+ * was created.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -78,7 +79,6 @@ class SecondOpinionIT {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("rivell.review.engine", () -> "v2");
         // the liability clause has two positions: two second opinions fit, a third does not
         registry.add("rivell.review.routing.max-adjudications", () -> "2");
         registry.add("rivell.storage.local.root",
@@ -216,7 +216,7 @@ class SecondOpinionIT {
 
         assertThat(reviewRepository.findSnapshot(organizationId(), reviewId).orElseThrow()
                 .reviewEngine()).isEqualTo(ReviewEngine.V2);
-        // Jev was sure everywhere (0.9): the findings engine v1 gives, and no second opinion
+        // Jev was sure everywhere (0.9): Jev's own findings stand, and no second opinion fires
         assertThat(generativeProvider.secondOpinionCalls.get()).isZero();
         var all = findings(run.id());
         assertThat(all).extracting(Finding::issueFamily).containsExactlyInAnyOrder(
@@ -372,20 +372,25 @@ class SecondOpinionIT {
     }
 
     @Test
-    void theEngineFrozenInTheSnapshotDecidesNotTheLiveSetting() throws Exception {
+    void aReviewStoredAsV1RunsTheV2PathWhenAnalysedAgainButKeepsItsStoredValue() throws Exception {
         var reviewId = reviewedContract();
-        // a review created before the switch to v2: its snapshot says v1
+        // a review created before v2: the stored value is a record, not a live setting
         jdbcClient.sql("update review_snapshot set review_engine = 'V1' where review_id = :id")
                 .param("id", reviewId).update();
         jevUnsureOnLiability(UNSURE_FLAG);
 
         var run = analysisService.analyze(organizationId(), reviewId);
 
-        assertThat(generativeProvider.secondOpinionCalls.get()).isZero();
-        assertThat(only(findings(run.id()), IssueFamily.POSITION_NEEDS_FALLBACK).quality())
-                .containsEntry("route", "JEV");
-        assertThat(judged(run.id())).allSatisfy(position ->
-                assertThat(position).doesNotContainKey("route"));
+        // P6: a retry runs the v2 path, so Jev's unsure positions get their second opinions ...
+        assertThat(generativeProvider.secondOpinionCalls.get()).isEqualTo(2);
+        assertThat(judged(run.id())).anySatisfy(position -> assertThat(position)
+                .containsEntry("route", "ADJUDICATE")
+                .containsEntry("secondOpinionOutcome", "DISAGREED"));
+        assertThat(findings(run.id())).anySatisfy(finding ->
+                assertThat(finding.issueFamily()).isEqualTo(IssueFamily.POSITION_UNCERTAIN));
+        // ... while the snapshot keeps V1 as the record of how the review was created
+        assertThat(reviewRepository.findSnapshot(organizationId(), reviewId).orElseThrow()
+                .reviewEngine()).isEqualTo(ReviewEngine.V1);
     }
 
     private JsonNode json(String url, Object... variables) throws Exception {
@@ -456,6 +461,17 @@ class SecondOpinionIT {
                 .doesNotContain("The quoted words decide")
                 .doesNotContain("secondOpinionQuote")
                 .doesNotContain("secondOpinionReason");
+    }
+
+    @Test
+    void aReviewStoredAsV1StillReadsBackAsV1ThroughTheApi() throws Exception {
+        var reviewId = reviewedContract();
+        // an old review created before v2: the stored value is a record, not a live setting
+        jdbcClient.sql("update review_snapshot set review_engine = 'V1' where review_id = :id")
+                .param("id", reviewId).update();
+
+        assertThat(json("/api/reviews/{id}", reviewId).at("/data/snapshot/engine").asText())
+                .isEqualTo("V1");
     }
 
     @Test

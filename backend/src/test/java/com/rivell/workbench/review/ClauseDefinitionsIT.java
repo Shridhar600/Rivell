@@ -17,7 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -46,7 +45,7 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 /**
  * Engine v2 P3: the judges read the definitions of the terms a clause uses. The comparison state
  * carries them for the topic and SEARCH comparisons and the second opinions, findings cite them,
- * the check detail and diagnostics name the terms — and never on v1 or with the property off.
+ * the check detail and diagnostics name the terms — and never with the property off.
  * The current-contract lane gathers them for the clause's heading node too, and not for a term
  * the clause itself defines.
  */
@@ -73,7 +72,6 @@ class ClauseDefinitionsIT {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("rivell.review.engine", () -> "v2");
         registry.add("rivell.review.definitions", () -> "true");
         registry.add("rivell.storage.local.root",
                 () -> "target/test-documents/" + UUID.randomUUID());
@@ -126,9 +124,6 @@ class ClauseDefinitionsIT {
 
     @Autowired
     EvidenceService evidenceService;
-
-    @Autowired
-    JdbcClient jdbcClient;
 
     @Autowired
     MockMvc mockMvc;
@@ -279,20 +274,6 @@ class ClauseDefinitionsIT {
         }
         assertThat(diagnostics).isNotNull();
         assertThat(diagnostics.path("definitionTerms").get(0).asText()).isEqualTo("Fees");
-    }
-
-    @Test
-    void aV1ReviewSendsNoDefinitions() throws Exception {
-        var reviewId = reviewedContract();
-        jdbcClient.sql("update review_snapshot set review_engine = 'V1' where review_id = :id")
-                .param("id", reviewId).update();
-
-        var run = analysisService.analyze(organizationId(), reviewId);
-
-        var state = objectMapper.readTree(objectMapper.writeValueAsString(liabilityCall().state()));
-        assertThat(state.has("definitions")).isFalse();
-        assertThat(liabilityCheck(reviewId, run.id()).detail())
-                .doesNotContainKey("definitionTerms");
     }
 
     @Test
