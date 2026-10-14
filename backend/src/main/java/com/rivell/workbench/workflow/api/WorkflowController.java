@@ -32,9 +32,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 class WorkflowController {
 
     private final WorkflowApiService apiService;
+    private final ReviewDiagnosticsService diagnosticsService;
 
-    WorkflowController(WorkflowApiService apiService) {
+    WorkflowController(WorkflowApiService apiService,
+            ReviewDiagnosticsService diagnosticsService) {
         this.apiService = apiService;
+        this.diagnosticsService = diagnosticsService;
     }
 
     @Operation(summary = "Write or revise the current human decision for a finding")
@@ -55,6 +58,26 @@ class WorkflowController {
             @PathVariable UUID findingId,
             @RequestBody DecisionRequest request) {
         return ApiResult.ok(apiService.decide(id, findingId, request));
+    }
+
+    @Operation(summary = "Add a finding Rivell missed on one planned clause of the active run; "
+            + "it is decided like any other finding")
+    @ResponseStatus(HttpStatus.CREATED)
+    @ApiResponses({
+            @ApiResponse(responseCode = "400", description = "Missing or too long note, or not a "
+                    + "planned clause of this review",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Missing reviews:decide",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Unknown review",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Analysis incomplete or already "
+                    + "finalized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
+    @PostMapping("/reviews/{id}/findings")
+    ApiResult<AddedFindingView> addFinding(
+            @PathVariable UUID id, @RequestBody AddFindingRequest request) {
+        return ApiResult.ok(apiService.addFinding(id, request));
     }
 
     @Operation(summary = "List the current effective decisions of a review's active run")
@@ -85,6 +108,17 @@ class WorkflowController {
     @GetMapping("/reviews/{id}/human-review")
     ApiResult<HumanReviewView> humanReview(@PathVariable UUID id) {
         return ApiResult.ok(apiService.humanReview(id));
+    }
+
+    @Operation(summary = "Developer diagnostics for one review: run state, check outcomes, counts, decision outcomes, finalization, redline, and anything stalling progress")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({@ApiResponse(responseCode = "403", description = "Missing reviews:read",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Unknown review",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))})
+    @GetMapping("/reviews/{id}/diagnostics")
+    ApiResult<ReviewDiagnosticsView> diagnostics(@PathVariable UUID id) {
+        return ApiResult.ok(diagnosticsService.forReview(id));
     }
 
     @Operation(summary = "Finalize the review and freeze the approved change set for redline")

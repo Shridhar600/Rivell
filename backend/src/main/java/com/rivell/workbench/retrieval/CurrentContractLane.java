@@ -108,12 +108,19 @@ public class CurrentContractLane {
                 .toList();
     }
 
+    /**
+     * Defined terms the subject uses. The subject's node set includes its heading: a run-in
+     * heading can hold the clause's own text and a term reference (Task 1). A term the clause
+     * itself defines is skipped — its definition is already in the clause text.
+     */
     private List<com.rivell.workbench.contracts.DefinedTerm> definedTermsReferencedBy(
             ContractSemantics semantics, ClauseSemantics subject) {
-        var subjectTextNodes = new java.util.HashSet<>(subject.textNodeIds());
+        var subjectNodes = new java.util.HashSet<>(subject.textNodeIds());
+        subjectNodes.add(subject.headingNodeId());
         return semantics.definedTerms().stream()
+                .filter(term -> !subjectNodes.contains(term.definingNodeId()))
                 .filter(term -> term.referenceNodeIds().stream()
-                        .anyMatch(subjectTextNodes::contains))
+                        .anyMatch(subjectNodes::contains))
                 .toList();
     }
 

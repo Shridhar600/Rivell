@@ -158,6 +158,24 @@ class ContractApiIT {
     }
 
     @Test
+    void reportsTextTheStructureDoesNotHoldFromTheStoredCoverageCheck() throws Exception {
+        var result = uploadFixture("fixtures/coverage-mixed-parts.docx", "coverage.docx");
+
+        assertThat(result.parseWarnings()).contains("TRACKED_CHANGES_PRESENT");
+        mockMvc.perform(get("/api/contracts/{id}/versions/{n}/coverage", result.contractId(), 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.checked").value(true))
+                .andExpect(jsonPath("$.data.exact").value(true))
+                .andExpect(jsonPath("$.data.extraWords").value(0))
+                .andExpect(jsonPath("$.data.gaps[?(@.location == 'TEXT_BOX')]").isEmpty())
+                .andExpect(jsonPath("$.data.totals[?(@.location == 'TEXT_BOX')].capturedWords").value(10))
+                .andExpect(jsonPath("$.data.gaps[?(@.location == 'BODY')]").isEmpty())
+                .andExpect(jsonPath("$.data.gaps[?(@.location == 'FOOTER')].part")
+                        .value("word/footer1.xml"))
+                .andExpect(jsonPath("$.data.totals[?(@.location == 'TABLE')].capturedWords").value(6));
+    }
+
+    @Test
     void reportsFailedParseThroughPublicContract() throws Exception {
         var result = uploadFixture("fixtures/invalid-bytes.docx", "broken.docx");
 

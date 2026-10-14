@@ -1,8 +1,13 @@
 package com.rivell.workbench.retrieval;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+import com.rivell.workbench.knowledge.CandidateType;
+import com.rivell.workbench.knowledge.KnowledgeCandidate;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +24,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
@@ -127,6 +131,12 @@ class RetrievalIndexReconciliationIT {
     RetrievalIndexReconciliationService reconciliationService;
 
     @Autowired
+    RetrievalRepository repository;
+
+    @Autowired
+    RetrievalProperties properties;
+
+    @Autowired
     org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
 
     @BeforeEach
@@ -139,10 +149,10 @@ class RetrievalIndexReconciliationIT {
         var organizationId = identityProvider.currentIdentity().organizationId();
         var clauseId = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.primaryConcept().isPresent()
-                        && clause.primaryConcept().get() == LegalConcept.LIMITATION_OF_LIABILITY)
+                        && clause.primaryConcept().get().equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                 .findFirst().orElseThrow().id();
         return EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.LIMITATION_OF_LIABILITY,
+                organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 corpus.contract().contractId(), 1, clauseId,
                 M6EvidenceCorpus.SUBJECT_CLAUSE_TEXT, M6EvidenceCorpus.msaProfile(),
                 LocalDate.of(2026, 9, 24), KnowledgePin.LATEST);
@@ -203,5 +213,64 @@ class RetrievalIndexReconciliationIT {
         var orgBRowsBefore = indexRowCount(organizationB);
         reconciliationService.reconcile(100);
         assertThat(indexRowCount(organizationB)).isEqualTo(orgBRowsBefore);
+    }
+
+    @Test
+    void publishedPlaybookPositionsAreSearchable() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        // every position of the playbook is published (the main corpus publishes only one)
+        var positions = corpusBuilder.publishAll(organizationId,
+                        M6EvidenceCorpus.Fixture.POLICY_MAIN, M6EvidenceCorpus.msaManifest2026(), null)
+                .stream()
+                .filter(candidate -> candidate.candidateType() == CandidateType.PLAYBOOK_RULE)
+                .toList();
+        assertThat(positions).hasSizeGreaterThanOrEqualTo(2);
+
+        var positionIds = positions.stream().map(KnowledgeCandidate::id).toList();
+        var labelsById = positions.stream().collect(java.util.stream.Collectors.toMap(
+                KnowledgeCandidate::id, KnowledgeCandidate::rawLabel));
+
+        assertThat(repository.findIndexedIds(organizationId, positionIds, properties.indexVersion()))
+                .as("indexed playbook positions %s", labelsById)
+                .containsAll(positionIds);
+
+        assertThat(repository.findEmbeddingReadyIds(
+                organizationId, positionIds, properties.indexVersion()))
+                .as("embedding-ready playbook positions %s", labelsById)
+                .containsAll(positionIds);
+
+        var searchPosition = positions.get(0);
+        var otherTexts = positions.stream()
+                .filter(candidate -> !candidate.id().equals(searchPosition.id()))
+                .map(KnowledgeCandidate::effectiveContentText)
+                .toList();
+        var word = distinctiveWord(searchPosition.effectiveContentText(), otherTexts);
+        var lexicalHits = repository.findLexicalCandidates(organizationId, positionIds,
+                LexicalQueries.orTerms(word), 5, properties.indexVersion());
+        assertThat(lexicalHits).as("lexical hits for '%s'", word).isNotEmpty();
+        assertThat(lexicalHits.get(0).candidateId()).isEqualTo(searchPosition.id());
+
+        // the healing path restores lost index rows for published positions too
+        jdbcClient.sql("delete from retrieval_evidence_index where organization_id = ?")
+                .param(organizationId).update();
+        reconciliationService.reconcile(500);
+        assertThat(repository.findIndexedIds(organizationId, positionIds, properties.indexVersion()))
+                .as("healed playbook positions %s", labelsById)
+                .containsAll(positionIds);
+    }
+
+    private static String distinctiveWord(String text, List<String> otherTexts) {
+        for (var token : text.split("\\s+")) {
+            var word = token.replaceAll("[^A-Za-z]", "");
+            if (word.length() < 5) {
+                continue;
+            }
+            var lower = word.toLowerCase(java.util.Locale.ROOT);
+            if (otherTexts.stream().noneMatch(
+                    other -> other.toLowerCase(java.util.Locale.ROOT).contains(lower))) {
+                return word;
+            }
+        }
+        throw new IllegalStateException("No distinctive word in: " + text);
     }
 }

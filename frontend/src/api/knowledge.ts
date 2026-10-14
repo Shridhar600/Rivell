@@ -5,10 +5,9 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query'
-import { apiBaseUrl, createApiClient } from './client'
+import { createApiClient } from './client'
 import {
   asRecord,
-  errorMessage,
   parseApiResult,
   readArray,
   readArrayValue,
@@ -25,12 +24,15 @@ import {
   readStringMap,
 } from './envelope'
 import type { components, paths } from './schema'
+import { UploadApiError } from './uploadError'
+import { boundedErrorMessage } from './errorMessage'
 
 type SchemaArtifactSummary = components['schemas']['KnowledgeArtifactSummaryResponse']
 type SchemaArtifactType = NonNullable<SchemaArtifactSummary['artifactType']>
 type SchemaIngestStatus = NonNullable<SchemaArtifactSummary['ingestStatus']>
 type SchemaCandidate = components['schemas']['CandidateView']
 type SchemaUnitKind = NonNullable<components['schemas']['ExtractionUnitView']['kind']>
+type SchemaRecordKind = NonNullable<components['schemas']['ExtractionUnitView']['recordKind']>
 type SchemaConflictType = NonNullable<
   components['schemas']['ConflictSignalView']['conflictType']
 >
@@ -82,6 +84,17 @@ export const UNIT_KINDS = [
   'TABLE',
   'SPREADSHEET_ROW',
 ] as const satisfies readonly SchemaUnitKind[]
+
+export const RECORD_KINDS = [
+  'POSITION',
+  'WORDING',
+  'ESCALATION',
+  'GUIDANCE',
+  'DOCUMENT_CONTROL',
+  'OTHER',
+] as const satisfies readonly SchemaRecordKind[]
+
+export type RecordKind = (typeof RECORD_KINDS)[number]
 
 export const CONFLICT_TYPES = [
   'DUPLICATE',
@@ -222,6 +235,11 @@ export interface ExtractionUnit {
   title: string | null
   contentText: string | null
   sourceNodeIds: string[]
+  /** What the compiler judged this record to be. Null for data compiled before record kinds. */
+  recordKind: RecordKind | null
+  /** A person's correction of that reading ("make this a position"); null when nobody corrected it. */
+  recordKindOverride: RecordKind | null
+  recordKindOverriddenAt: string | null
 }
 
 export interface ConflictSignal {
@@ -250,6 +268,10 @@ export interface Candidate {
   contentText: string | null
   payloadColumns: Record<string, string>
   legalConceptKey: string | null
+  /** The human correction when one exists, otherwise the classified concept. Absent when neither is set. */
+  effectiveConceptKey: string | null
+  /** A reviewer's taxonomy-key correction. An empty string means the reviewer cleared the concept. */
+  conceptCorrection: string | null
   classifiedConcepts: Record<string, number>
   positions: PositionRole[]
   variantRole: PositionRole | null
@@ -414,6 +436,17 @@ export function parseExtractionUnit(
     title: readNullableString(record, 'title', what),
     contentText: readNullableString(record, 'contentText', what),
     sourceNodeIds: readStringArray(record, 'sourceNodeIds', what),
+    // Old data carries no kind at all: an absent key is read as null, never as malformed.
+    recordKind:
+      record.recordKind === undefined || record.recordKind === null
+        ? null
+        : readNullableEnum(record, 'recordKind', what, RECORD_KINDS),
+    recordKindOverride:
+      record.recordKindOverride === undefined || record.recordKindOverride === null
+        ? null
+        : readNullableEnum(record, 'recordKindOverride', what, RECORD_KINDS),
+    recordKindOverriddenAt:
+      typeof record.recordKindOverriddenAt === 'string' ? record.recordKindOverriddenAt : null,
   }
 }
 
@@ -462,6 +495,8 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     contentText: readNullableString(record, 'contentText', what),
     payloadColumns: readStringMap(record, 'payloadColumns', what),
     legalConceptKey: readNullableString(record, 'legalConceptKey', what),
+    effectiveConceptKey: readNullableString(record, 'effectiveConceptKey', what),
+    conceptCorrection: readNullableString(record, 'conceptCorrection', what),
     classifiedConcepts: readNumberMap(record, 'classifiedConcepts', what),
     positions: readEnumArray(record, 'positions', what, POSITION_ROLES),
     variantRole: readNullableEnum(record, 'variantRole', what, POSITION_ROLES),
@@ -513,6 +548,68 @@ export function parsePublication(value: unknown, what = 'publication'): Publicat
   }
 }
 
+const PUBLISH_MESSAGES: Partial<Record<number, string>> = {
+  404: 'That knowledge source could not be found.',
+  409: 'Only candidates that have been approved can be published. Review the candidate states, then try again.',
+  500: 'The knowledge version could not be published.',
+  503: 'The knowledge service is unavailable right now.',
+}
+
+export function knowledgeRetry(failureCount: number, error: Error): boolean {
+  // A denial or a missing resource cannot become true on a second identical request, and these
+  // queries otherwise inherit the app-wide single retry.
+  return failureCount < 1 && !isKnowledgeForbiddenError(error) && !(error instanceof KnowledgeApiError && error.status === 404)
+}
+
+export class KnowledgeApiError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'KnowledgeApiError'
+    this.status = status
+  }
+}
+
+export function isKnowledgeForbiddenError(error: unknown): boolean {
+  return error instanceof KnowledgeApiError && error.status === 403
+}
+
+/**
+ * A failed extraction is stored as a failed source, so an upload that fails on the server may still
+ * have left one behind. These do not claim that nothing was changed.
+ */
+const KNOWLEDGE_UPLOAD_MESSAGES: Partial<Record<number, string>> = {
+  400: 'The file was not accepted. Use a .docx or .xlsx file.',
+  500: 'Rivell could not process this file. If it was stored, it appears in Sources as a failed source. Nothing was published.',
+}
+
+const CONCEPT_MESSAGES: Partial<Record<number, string>> = {
+  400: 'That legal concept is not one Rivell knows.',
+  404: 'That candidate could not be found.',
+  409: 'A published or rejected candidate cannot be corrected.',
+  500: 'The legal concept could not be corrected.',
+  503: 'The knowledge service is unavailable right now.',
+}
+
+const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
+  404: 'That knowledge source or candidate could not be found.',
+  409: 'That knowledge request does not apply in the current state.',
+  413: 'The submitted content is larger than this Rivell deployment accepts.',
+  500: 'The knowledge request could not be completed.',
+  503: 'The knowledge service is unavailable right now.',
+}
+
+/**
+ * Bounded so Home and the legacy lists cannot request an unbounded page. The backend caps both
+ * knowledge lists at 100. Neither list has a cursor yet, so a page is not the whole set; the
+ * remaining GAP-C items are recorded in DEFERRED_WORK.md.
+ */
+export const KNOWLEDGE_PAGE_LIMIT = 20
+
+/** The backend's own cap on both lists. The read surfaces ask for all of it. */
+export const KNOWLEDGE_READ_LIMIT = 100
+
 export const knowledgeKeys = {
   artifacts: ['knowledge', 'artifacts'] as const,
   artifact: (id: string) => ['knowledge', 'artifacts', id] as const,
@@ -528,12 +625,14 @@ export function isProcessingArtifact(status: IngestStatus): boolean {
   return status === 'RECEIVED' || status === 'EXTRACTING'
 }
 
-export async function fetchArtifacts(): Promise<ArtifactSummary[]> {
+export async function fetchArtifacts(limit = KNOWLEDGE_PAGE_LIMIT): Promise<ArtifactSummary[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts')
+  const { data, response } = await client.GET('/api/knowledge/artifacts', {
+    params: { query: { limit } },
+  })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Knowledge sources unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge sources unavailable'))
   }
   return parseApiResult(
     data,
@@ -544,12 +643,12 @@ export async function fetchArtifacts(): Promise<ArtifactSummary[]> {
 
 export async function fetchArtifact(artifactId: string): Promise<ArtifactDetail> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts/{id}', {
+  const { data, response } = await client.GET('/api/knowledge/artifacts/{id}', {
     params: { path: { id: artifactId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Knowledge source unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge source unavailable'))
   }
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
 }
@@ -558,12 +657,12 @@ export async function fetchKnowledgeStructure(
   artifactId: string,
 ): Promise<KnowledgeNode[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts/{id}/structure', {
+  const { data, response } = await client.GET('/api/knowledge/artifacts/{id}/structure', {
     params: { path: { id: artifactId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Knowledge structure unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge structure unavailable'))
   }
   return parseApiResult(
     data,
@@ -576,12 +675,12 @@ export async function fetchExtractionUnits(
   artifactId: string,
 ): Promise<ExtractionUnit[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts/{id}/units', {
+  const { data, response } = await client.GET('/api/knowledge/artifacts/{id}/units', {
     params: { path: { id: artifactId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Extraction units unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Extraction units unavailable'))
   }
   return parseApiResult(
     data,
@@ -592,12 +691,12 @@ export async function fetchExtractionUnits(
 
 export async function fetchCandidates(artifactId: string): Promise<Candidate[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/artifacts/{id}/candidates', {
+  const { data, response } = await client.GET('/api/knowledge/artifacts/{id}/candidates', {
     params: { path: { id: artifactId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Knowledge candidates unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge candidates unavailable'))
   }
   return parseApiResult(
     data,
@@ -608,22 +707,24 @@ export async function fetchCandidates(artifactId: string): Promise<Candidate[]> 
 
 export async function fetchCandidate(candidateId: string): Promise<Candidate> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/candidates/{id}', {
+  const { data, response } = await client.GET('/api/knowledge/candidates/{id}', {
     params: { path: { id: candidateId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Candidate unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Candidate unavailable'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
 
-export async function fetchPublications(): Promise<Publication[]> {
+export async function fetchPublications(limit = KNOWLEDGE_PAGE_LIMIT): Promise<Publication[]> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/publications')
+  const { data, response } = await client.GET('/api/knowledge/publications', {
+    params: { query: { limit } },
+  })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Publications unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publications unavailable'))
   }
   return parseApiResult(
     data,
@@ -634,12 +735,12 @@ export async function fetchPublications(): Promise<Publication[]> {
 
 export async function fetchPublication(publicationId: string): Promise<Publication> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/knowledge/publications/{id}', {
+  const { data, response } = await client.GET('/api/knowledge/publications/{id}', {
     params: { path: { id: publicationId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Publication unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publication unavailable'))
   }
   return parseApiResult(data, parsePublication, 'publication')
 }
@@ -676,27 +777,40 @@ export async function uploadKnowledge(
   const formData = new FormData()
   formData.append('file', file)
 
-  const { data, error } = await client.POST('/api/knowledge/artifacts', {
+  const { data, response } = await client.POST('/api/knowledge/artifacts', {
     params: { query: manifestQuery(manifest) },
     body: { file: file.name },
     bodySerializer: () => formData,
   })
 
-  if (!data) {
-    throw new Error(errorMessage(error, 'Upload failed'))
-  }
+  if (!data) throw new UploadApiError(response.status, KNOWLEDGE_UPLOAD_MESSAGES)
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
+}
+
+/** Makes a part Rivell did not take as a position into one; returns the new pending candidates. */
+async function makePosition(artifactId: string, unitId: string): Promise<Candidate[]> {
+  const client = createApiClient()
+  const { data, response } = await client.POST('/api/knowledge/artifacts/{artifactId}/units/{unitId}/position', {
+    params: { path: { artifactId, unitId } },
+  })
+  if (!data) {
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'The part could not be made a position'))
+  }
+  return parseApiResult(data, (value, what) => {
+    if (!Array.isArray(value)) throw new Error(`${what} is not a list`)
+    return value.map((entry, index) => parseCandidate(entry, `${what}[${index}]`))
+  }, 'made position')
 }
 
 async function approveCandidate(candidateId: string, note?: string): Promise<Candidate> {
   const client = createApiClient()
-  const { data, error } = await client.POST('/api/knowledge/candidates/{id}/approve', {
+  const { data, response } = await client.POST('/api/knowledge/candidates/{id}/approve', {
     params: { path: { id: candidateId } },
     body: note && note.trim().length > 0 ? { note } : {},
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Approval failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Approval failed'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -740,26 +854,39 @@ async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
   if (input.semanticFields !== undefined) body.semanticFields = input.semanticFields
   if (input.note !== undefined && input.note.trim().length > 0) body.note = input.note
 
-  const { data, error } = await client.POST('/api/knowledge/candidates/{id}/edit', {
+  const { data, response } = await client.POST('/api/knowledge/candidates/{id}/edit', {
     params: { path: { id: input.candidateId } },
     body,
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Edit failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Edit failed'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
 
 async function rejectCandidate(candidateId: string, note?: string): Promise<Candidate> {
   const client = createApiClient()
-  const { data, error } = await client.POST('/api/knowledge/candidates/{id}/reject', {
+  const { data, response } = await client.POST('/api/knowledge/candidates/{id}/reject', {
     params: { path: { id: candidateId } },
     body: note && note.trim().length > 0 ? { note } : {},
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Rejection failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Rejection failed'))
+  }
+  return parseApiResult(data, parseCandidate, 'candidate')
+}
+
+async function correctConcept(candidateId: string, primary: string): Promise<Candidate> {
+  const client = createApiClient()
+  const { data, response } = await client.POST('/api/knowledge/candidates/{id}/concept', {
+    params: { path: { id: candidateId } },
+    body: { primary },
+  })
+
+  if (!data) {
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, CONCEPT_MESSAGES, 'The legal concept could not be corrected.'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -784,18 +911,18 @@ async function bulkApproveCandidates(
   candidateIds: string[],
 ): Promise<BulkApprovalResult> {
   const client = createApiClient()
-  const { data, error } = await client.POST(
+  const { data, response } = await client.POST(
     '/api/knowledge/candidates/bulk-approve',
     { body: { candidateIds } },
   )
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Bulk approval failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Bulk approval failed'))
   }
   return parseApiResult(data, parseBulkApprovalResult, 'bulk approval')
 }
 
-async function publishKnowledge(
+export async function publishKnowledge(
   candidateIds: string[],
   supersededCandidates: Record<string, string> | undefined,
   note?: string,
@@ -811,18 +938,19 @@ async function publishKnowledge(
   }
   if (note && note.trim().length > 0) body.note = note
 
-  const { data, error } = await client.POST('/api/knowledge/publications', { body })
+  const { data, response } = await client.POST('/api/knowledge/publications', { body })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Publication failed'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, PUBLISH_MESSAGES, 'The knowledge version could not be published.'))
   }
   return parseApiResult(data, parsePublication, 'publication')
 }
 
 export function useArtifactsQuery(): UseQueryResult<ArtifactSummary[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.artifacts,
-    queryFn: fetchArtifacts,
+    queryFn: () => fetchArtifacts(),
     refetchInterval: (query) =>
       query.state.data?.some((artifact) => isProcessingArtifact(artifact.ingestStatus))
         ? 3000
@@ -834,6 +962,7 @@ export function useArtifactQuery(
   artifactId: string,
 ): UseQueryResult<ArtifactDetail, Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.artifact(artifactId),
     queryFn: () => fetchArtifact(artifactId),
     refetchInterval: (query) =>
@@ -845,6 +974,7 @@ export function useKnowledgeStructureQuery(
   artifactId: string,
 ): UseQueryResult<KnowledgeNode[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.structure(artifactId),
     queryFn: () => fetchKnowledgeStructure(artifactId),
   })
@@ -854,6 +984,7 @@ export function useExtractionUnitsQuery(
   artifactId: string,
 ): UseQueryResult<ExtractionUnit[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.units(artifactId),
     queryFn: () => fetchExtractionUnits(artifactId),
   })
@@ -863,6 +994,7 @@ export function useCandidatesQuery(
   artifactId: string,
 ): UseQueryResult<Candidate[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.candidates(artifactId),
     queryFn: () => fetchCandidates(artifactId),
   })
@@ -872,6 +1004,7 @@ export function useCandidateQuery(
   candidateId: string | undefined,
 ): UseQueryResult<Candidate, Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.candidate(candidateId ?? ''),
     queryFn: () => {
       if (!candidateId) throw new Error('Candidate id is required')
@@ -885,8 +1018,9 @@ export function usePublicationsQuery(
   enabled = true,
 ): UseQueryResult<Publication[], Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.publications,
-    queryFn: fetchPublications,
+    queryFn: () => fetchPublications(),
     enabled,
   })
 }
@@ -895,6 +1029,7 @@ export function usePublicationQuery(
   publicationId: string,
 ): UseQueryResult<Publication, Error> {
   return useQuery({
+    retry: knowledgeRetry,
     queryKey: knowledgeKeys.publication(publicationId),
     queryFn: () => fetchPublication(publicationId),
   })
@@ -928,6 +1063,34 @@ function useCandidateReviewInvalidation() {
       queryKey: knowledgeKeys.candidates(candidate.artifactId),
     })
   }
+}
+
+export interface ConceptCorrectionVariables {
+  candidateId: string
+  /** A taxonomy key, or an empty string to clear the concept. */
+  primary: string
+}
+
+export function useCorrectCandidateConcept(): UseMutationResult<Candidate, Error, ConceptCorrectionVariables> {
+  const invalidate = useCandidateReviewInvalidation()
+  return useMutation({
+    mutationFn: ({ candidateId, primary }: ConceptCorrectionVariables) => correctConcept(candidateId, primary),
+    onSuccess: invalidate,
+  })
+}
+
+/** The part's units and candidates both change, so both are read again. */
+export function useMakePosition(artifactId: string): UseMutationResult<Candidate[], Error, string> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (unitId: string) => makePosition(artifactId, unitId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: knowledgeKeys.units(artifactId) }),
+        queryClient.invalidateQueries({ queryKey: knowledgeKeys.candidates(artifactId) }),
+      ])
+    },
+  })
 }
 
 export interface CandidateReviewVariables {
@@ -1024,6 +1187,3 @@ export function usePublishKnowledge(): UseMutationResult<
   })
 }
 
-export function originalArtifactUrl(artifactId: string): string {
-  return `${apiBaseUrl}/api/knowledge/artifacts/${artifactId}/original`
-}

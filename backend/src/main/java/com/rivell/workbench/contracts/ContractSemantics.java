@@ -24,7 +24,8 @@ public record ContractSemantics(
         List<SemanticRelationship> relationships,
         QualityReasons quality,
         Observations observations,
-        List<String> warnings) {
+        List<String> warnings,
+        EnrichmentFailureReason failureReason) {
 
     public static final String PIPELINE_VERSION = "rivell-contract-enrichment-1";
 
@@ -52,7 +53,7 @@ public record ContractSemantics(
         return new ContractSemantics(stableId, contractVersionId, organizationId,
                 enrichmentStatus, pipelineVersion, reviewProfile, metadata, parties,
                 definedTerms, references, clauses, relationships, quality, observations,
-                warnings);
+                warnings, failureReason);
     }
 }
 

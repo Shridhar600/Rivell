@@ -33,6 +33,7 @@ export function fixtureRedlineExecution(
     contractId: 'c1',
     contractVersionNumber: 1,
     changeSetVersion: 1,
+    attempt: 1,
     status: 'COMPLETED',
     outcome: 'REDLINE_GENERATED',
     failureCode: null,
@@ -63,8 +64,8 @@ export function fixtureMixedRedlineExecution(): RedlineExecution {
         ordinal: 2,
         actionType: 'INSERT',
         targetKind: 'ABSENCE',
-        placement: 'AFTER_CLAUSE[CONFIDENTIALITY]',
-        resolvedTarget: 'CONFIDENTIALITY',
+        placement: 'AFTER_CLAUSE[CONFIDENTIALITY_OBLIGATIONS]',
+        resolvedTarget: 'CONFIDENTIALITY_OBLIGATIONS',
         paragraphsDeleted: 0,
         paragraphsInserted: 1,
       }),
@@ -83,6 +84,7 @@ export function fixtureMixedRedlineExecution(): RedlineExecution {
 
 export function fixtureFailedRedlineExecution(
   failureCode: RedlineFailureCode = 'PREEXISTING_REVISIONS_UNSUPPORTED',
+  overrides: Partial<RedlineExecution> = {},
 ): RedlineExecution {
   return fixtureRedlineExecution({
     status: 'FAILED',
@@ -103,5 +105,6 @@ export function fixtureFailedRedlineExecution(
         paragraphsInserted: null,
       }),
     ],
+    ...overrides,
   })
 }

@@ -20,6 +20,7 @@ import {
   traceStageLabel,
   traceTimingLabel,
 } from './evidence'
+import { humanizeCode } from './domainLabels'
 
 function item(partial: Partial<EvidenceItem> & { authorityClass: EvidenceItem['authorityClass'] }): EvidenceItem {
   return {
@@ -259,12 +260,12 @@ describe('sufficiencyPresentation', () => {
   })
 
   it('describes a changed classification after the build', () => {
-    expect(staleClassificationNote(null, 'TERM_TERMINATION')).toBeNull()
-    expect(staleClassificationNote('TERM_TERMINATION', 'TERM_TERMINATION')).toBeNull()
-    expect(staleClassificationNote('TERM_TERMINATION', 'CONFIDENTIALITY')).toBe(
-      "This evidence was built with the classification Term and termination. The contract's current classification is Confidentiality — rebuild to refresh the evidence.",
+    expect(staleClassificationNote(null, 'TERM', humanizeCode)).toBeNull()
+    expect(staleClassificationNote('TERM', 'TERM', humanizeCode)).toBeNull()
+    expect(staleClassificationNote('TERM', 'CONFIDENTIALITY_OBLIGATIONS', humanizeCode)).toBe(
+      "This evidence was built with the classification Term. The contract's current classification is Confidentiality obligations; rebuild to refresh the evidence.",
     )
-    expect(staleClassificationNote('TERM_TERMINATION', null)).toMatch(/is not set/)
+    expect(staleClassificationNote('TERM', null, humanizeCode)).toMatch(/is not set/)
   })
 })
 
@@ -339,7 +340,7 @@ describe('traceRequestEntries', () => {
       clauseText: 'x'.repeat(500),
       providerPayload: { apiKey: 'nope2' },
       nested: { provider: { secret: 'nope' } },
-    })
+    }, humanizeCode)
 
     const labels = entries.map((entry) => entry.label)
     expect(labels).toContain('Legal concept')

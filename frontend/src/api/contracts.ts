@@ -1,4 +1,5 @@
 import {
+  skipToken,
   useMutation,
   useQuery,
   type UseMutationResult,
@@ -7,7 +8,6 @@ import {
 import { apiBaseUrl, createApiClient } from './client'
 import {
   asRecord,
-  errorMessage,
   parseApiResult,
   readArray,
   readEnum,
@@ -18,6 +18,8 @@ import {
   readStringArray,
 } from './envelope'
 import type { components } from './schema'
+import { UploadApiError } from './uploadError'
+import { boundedErrorMessage } from './errorMessage'
 
 export type IngestResponse = components['schemas']['IngestResponse']
 export type ContractSummary = components['schemas']['ContractSummaryResponse']
@@ -105,14 +107,35 @@ export function parseStructureResponse(
   }
 }
 
+export class ContractApiError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ContractApiError'
+    this.status = status
+  }
+}
+
+export function isContractNotFoundError(error: unknown): boolean {
+  return error instanceof ContractApiError && error.status === 404
+}
+
+export function isContractForbiddenError(error: unknown): boolean {
+  return error instanceof ContractApiError && error.status === 403
+}
+
 export async function fetchContract(contractId: string): Promise<ContractSummary> {
   const client = createApiClient()
-  const { data, error } = await client.GET('/api/contracts/{id}', {
+  const { data, response } = await client.GET('/api/contracts/{id}', {
     params: { path: { id: contractId } },
   })
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Contract unavailable'))
+    throw new ContractApiError(
+      boundedErrorMessage(response.status, CONTRACT_MESSAGES, 'The contract could not be loaded.'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseContractSummary, 'contract')
 }
@@ -122,15 +145,30 @@ export async function fetchContractStructure(
   versionNumber: number,
 ): Promise<StructureResponse> {
   const client = createApiClient()
-  const { data, error } = await client.GET(
+  const { data, response } = await client.GET(
     '/api/contracts/{id}/versions/{versionNumber}/structure',
     { params: { path: { id: contractId, versionNumber } } },
   )
 
   if (!data) {
-    throw new Error(errorMessage(error, 'Structure unavailable'))
+    throw new Error(
+      boundedErrorMessage(response.status, STRUCTURE_MESSAGES, 'The document structure could not be loaded.'),
+    )
   }
   return parseApiResult(data, parseStructureResponse, 'structure')
+}
+
+const CONTRACT_MESSAGES: Partial<Record<number, string>> = {
+  404: 'This contract could not be found.',
+  500: 'The contract could not be loaded.',
+  503: 'Contract storage is unavailable right now.',
+}
+
+const STRUCTURE_MESSAGES: Partial<Record<number, string>> = {
+  404: 'This contract version has no parsed document structure.',
+  409: 'This contract version is not parsed yet, so its structure is not available.',
+  500: 'The document structure could not be loaded.',
+  503: 'Document storage is unavailable right now.',
 }
 
 export function createUploadFormData(file: File): FormData {
@@ -141,14 +179,12 @@ export function createUploadFormData(file: File): FormData {
 
 export async function uploadContract(file: File): Promise<IngestResponse> {
   const client = createApiClient()
-  const { data, error } = await client.POST('/api/contracts', {
+  const { data, response } = await client.POST('/api/contracts', {
     body: { file: file.name },
     bodySerializer: () => createUploadFormData(file),
   })
 
-  if (!data) {
-    throw new Error(errorMessage(error, 'Upload failed'))
-  }
+  if (!data) throw new UploadApiError(response.status)
   return parseApiResult(data, parseIngestResponse, 'upload')
 }
 
@@ -157,7 +193,10 @@ export function useContractQuery(
 ): UseQueryResult<ContractSummary, Error> {
   return useQuery({
     queryKey: ['contract', contractId],
-    queryFn: () => fetchContract(contractId),
+    // A route can be reached without the identity it needs. Without this the read is issued
+    // against an empty path segment, which is a request for a contract that cannot exist.
+    queryFn: contractId ? () => fetchContract(contractId) : skipToken,
+    enabled: Boolean(contractId),
   })
 }
 
@@ -173,7 +212,9 @@ export function useContractStructureQuery(
       }
       return fetchContractStructure(contractId, versionNumber)
     },
-    enabled: versionNumber !== undefined,
+    // Same guard as useContractQuery: a missing route identity must not produce a read against an
+    // empty path segment, and a defined version number does not imply a defined contract id.
+    enabled: versionNumber !== undefined && Boolean(contractId),
   })
 }
 
@@ -189,5 +230,5 @@ export function originalDocumentUrl(
   contractId: string,
   versionNumber: number,
 ): string {
-  return `${apiBaseUrl}/api/contracts/${contractId}/versions/${versionNumber}/original`
+  return `${apiBaseUrl}/api/contracts/${encodeURIComponent(contractId)}/versions/${versionNumber}/original`
 }

@@ -1,16 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Candidate, ExtractionUnit, KnowledgeNode } from '../api/knowledge'
-import {
-  approvedCandidates,
-  countByReviewStatus,
-  effectiveContentText,
-  effectivePayloadColumns,
-  filterCandidates,
-  hasConflicts,
-  isEdited,
-  isReviewable,
-  resolveCandidateSource,
-} from './candidates'
+import { effectiveContentText, effectivePayloadColumns, resolveCandidateSource } from './candidates'
 
 function candidate(
   partial: Partial<Candidate> & { id: string },
@@ -24,6 +14,8 @@ function candidate(
     contentText: 'Original text',
     payloadColumns: {},
     legalConceptKey: null,
+    effectiveConceptKey: null,
+    conceptCorrection: null,
     editedContentText: null,
     editedPayloadColumns: {},
     supersedingCandidateId: null,
@@ -59,6 +51,9 @@ function unit(partial: Partial<ExtractionUnit> & { id: string }): ExtractionUnit
     title: null,
     contentText: null,
     sourceNodeIds: [],
+    recordKind: null,
+    recordKindOverride: null,
+    recordKindOverriddenAt: null,
     ...partial,
   }
 }
@@ -102,31 +97,6 @@ describe('candidate review helpers', () => {
     candidate({ id: 'x', reviewStatus: 'PUBLISHED' }),
   ]
 
-  it('counts candidates per review status', () => {
-    const counts = countByReviewStatus(candidates)
-
-    expect(counts).toEqual({
-      total: 5,
-      PENDING: 1,
-      APPROVED: 1,
-      EDITED: 1,
-      REJECTED: 1,
-      PUBLISHED: 1,
-    })
-  })
-
-  it('filters by status and conflicts', () => {
-    expect(filterCandidates(candidates, { status: 'EDITED', conflictsOnly: false })).toHaveLength(1)
-    expect(filterCandidates(candidates, { status: 'ALL', conflictsOnly: true })).toEqual([
-      candidates[2],
-    ])
-    expect(
-      filterCandidates(candidates, { status: 'APPROVED', conflictsOnly: true }),
-    ).toHaveLength(0)
-    expect(hasConflicts(candidates[0])).toBe(false)
-    expect(hasConflicts(candidates[2])).toBe(true)
-  })
-
   it('prefers the human edit over the machine proposal', () => {
     const edited = candidate({
       id: 'e',
@@ -138,19 +108,96 @@ describe('candidate review helpers', () => {
 
     expect(effectiveContentText(edited)).toBe('Human text')
     expect(effectivePayloadColumns(edited)).toEqual({ Clause: 'Human' })
-    expect(isEdited(edited)).toBe(true)
 
     const untouched = candidate({ id: 'p' })
     expect(effectiveContentText(untouched)).toBe('Original text')
     expect(effectivePayloadColumns(untouched)).toEqual({})
-    expect(isEdited(untouched)).toBe(false)
   })
 
-  it('treats rejected and published candidates as not reviewable', () => {
-    expect(isReviewable(candidate({ id: 'p' }))).toBe(true)
-    expect(isReviewable(candidate({ id: 'r', reviewStatus: 'REJECTED' }))).toBe(false)
-    expect(isReviewable(candidate({ id: 'x', reviewStatus: 'PUBLISHED' }))).toBe(false)
-    expect(approvedCandidates(candidates).map((entry) => entry.id)).toEqual(['a'])
+  it('renders a structured-only correction in source order when no wording was typed', () => {
+    const corrected = candidate({
+      id: 'c',
+      contentText: 'Preferred | Fallback | Escalate',
+      editedContentText: null,
+      payloadColumns: { Position: 'Preferred', Alternative: 'Fallback', Trigger: 'Escalate' },
+      editedPayloadColumns: {
+        Position: 'Preferred',
+        Alternative: 'Fallback',
+        Trigger: 'Escalate to the board',
+      },
+    })
+
+    expect(effectiveContentText(corrected)).toBe('Preferred | Fallback | Escalate to the board')
+    expect(effectivePayloadColumns(corrected)).toEqual({
+      Position: 'Preferred',
+      Alternative: 'Fallback',
+      Trigger: 'Escalate to the board',
+    })
+  })
+
+  it('renders corrected columns in source order even when the columns arrive out of order', () => {
+    const corrected = candidate({
+      id: 'c',
+      contentText: 'Liability cap | Notification',
+      editedContentText: null,
+      payloadColumns: { Cap: 'Liability cap', Notice: 'Notification' },
+      editedPayloadColumns: { Notice: 'Notification within 5 days', Cap: 'Liability cap' },
+    })
+
+    expect(effectiveContentText(corrected)).toBe('Liability cap | Notification within 5 days')
+  })
+
+  it('keeps explicit human wording ahead of corrected columns', () => {
+    const both = candidate({
+      id: 'b',
+      contentText: 'Preferred | Fallback',
+      editedContentText: 'Counsel agreed wording',
+      payloadColumns: { Position: 'Preferred', Alternative: 'Fallback' },
+      editedPayloadColumns: { Position: 'Prohibited', Alternative: 'Fallback' },
+    })
+
+    expect(effectiveContentText(both)).toBe('Counsel agreed wording')
+  })
+
+  it('composes sequential structured corrections instead of dropping the earlier one', () => {
+    const firstCorrection = candidate({
+      id: 's',
+      contentText: 'A1 | B1 | C1',
+      editedContentText: null,
+      payloadColumns: { One: 'A1', Two: 'B1', Three: 'C1' },
+      editedPayloadColumns: { One: 'A1 edited', Two: 'B1', Three: 'C1' },
+    })
+    expect(effectiveContentText(firstCorrection)).toBe('A1 edited | B1 | C1')
+
+    const secondCorrection = candidate({
+      ...firstCorrection,
+      editedPayloadColumns: { One: 'A1 edited', Two: 'B1 edited', Three: 'C1' },
+    })
+    expect(effectiveContentText(secondCorrection)).toBe('A1 edited | B1 edited | C1')
+  })
+
+  it('falls back to machine wording when no correction was made', () => {
+    const untouched = candidate({
+      id: 'u',
+      contentText: 'Machine wording',
+      editedContentText: null,
+      payloadColumns: { Clause: 'Machine' },
+      editedPayloadColumns: {},
+    })
+
+    expect(effectiveContentText(untouched)).toBe('Machine wording')
+  })
+
+  it('does not let a blank correction hide valid machine wording', () => {
+    const blank = candidate({
+      id: 'k',
+      contentText: 'Machine wording',
+      editedContentText: '   ',
+      payloadColumns: { Clause: 'Machine' },
+      editedPayloadColumns: { Clause: '   ' },
+    })
+
+    expect(effectiveContentText(blank)).toBe('Machine wording')
   })
 
   it('resolves the source unit and its provenance nodes', () => {

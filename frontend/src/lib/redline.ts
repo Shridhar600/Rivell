@@ -1,7 +1,7 @@
 import type { ApprovedChange, ChangeActionType } from '../api/workflow'
 import type { RedlineExecution, RedlineExecutionChange } from '../api/redline'
+import type { ConceptLabel } from '../api/taxonomy'
 import { changeTargetLabel } from './workflow'
-import { conceptLabel } from './contractSemantics'
 
 export function redlineExecutionTitle(execution: RedlineExecution): string {
   if (execution.status === 'FAILED') return 'Redline could not be generated'
@@ -53,6 +53,8 @@ const FAILURE_TITLES: Record<string, string> = {
     'The frozen source document failed its integrity check and was not used.',
   UNSUPPORTED_SOURCE_FORMAT:
     'This document format cannot be redlined automatically.',
+  SOURCE_EXPANSION_LIMIT_EXCEEDED:
+    'This document expands beyond the size Rivell will process, so it was not redlined.',
   UNSUPPORTED_CHANGESET_VERSION:
     'This approved change set version is not supported by the redline engine.',
   PROTECTED_DOCUMENT_UNSUPPORTED:
@@ -71,6 +73,8 @@ const FAILURE_TITLES: Record<string, string> = {
     'An approved change is missing its final approved language.',
   INSERT_PLACEMENT_UNRESOLVED:
     'Rivell could not determine a safe insertion location for a missing provision.',
+  APPROVED_SEMANTICS_DRIFT:
+    'The contract semantics changed after this review was approved, so Rivell placed none of the approved changes. The approved change set is unchanged.',
   DOCX_LOAD_FAILED: 'The frozen document could not be opened for redlining.',
   DOCX_SERIALIZATION_FAILED: 'The redlined document could not be written.',
   ROUND_TRIP_FAILED: 'The generated document could not be reopened for verification.',
@@ -85,10 +89,21 @@ export function redlineFailureTitle(code: string): string {
   )
 }
 
-export function redlinePlacementLabel(placement: string | null): string | null {
+/**
+ * Retry is offered only for the one recorded failure the frozen inputs do not determine:
+ * APPROVED_SEMANTICS_DRIFT, which is raised when the contract's semantics changed after
+ * approval. If that later change is reverted, re-executing the same frozen change set can
+ * succeed. Every other failure code follows from the frozen inputs, so a rerun would
+ * reproduce it and no Retry is offered.
+ */
+export function redlineRetryAvailable(execution: RedlineExecution): boolean {
+  return execution.status === 'FAILED' && execution.failureCode === 'APPROVED_SEMANTICS_DRIFT'
+}
+
+export function redlinePlacementLabel(placement: string | null, label: ConceptLabel): string | null {
   if (placement === null) return null
   const afterClause = /^AFTER_CLAUSE\[([^\]]+)\]$/.exec(placement)
-  if (afterClause) return `After clause: ${conceptLabel(afterClause[1])}`
+  if (afterClause) return `After clause: ${label(afterClause[1])}`
   if (placement === 'BEFORE_SIGNATURE_BLOCK') return 'Before the signature block'
   if (placement === 'END_OF_BODY') return 'At the end of the document'
   return 'Placement recorded by Rivell'
@@ -153,16 +168,17 @@ function resolvedTargetLabel(
   change: RedlineExecutionChange,
   approved: ApprovedChange | undefined,
   regionLabels: Map<string, string>,
+  label: ConceptLabel,
 ): string {
   if (change.actionType === 'INSERT') {
-    if (approved) return changeTargetLabel(approved, regionLabels)
+    if (approved) return changeTargetLabel(approved, regionLabels, label)
     if (change.resolvedTarget) {
-      return `Missing provision: ${conceptLabel(change.resolvedTarget)}`
+      return `Missing provision: ${label(change.resolvedTarget)}`
     }
     return 'Target not recorded'
   }
   if (change.resolvedTarget) return change.resolvedTarget
-  if (approved) return changeTargetLabel(approved, regionLabels)
+  if (approved) return changeTargetLabel(approved, regionLabels, label)
   return 'Target not recorded'
 }
 
@@ -181,7 +197,7 @@ export type RedlineChangeRow = {
 
 export function buildRedlineChangeRows(
   execution: RedlineExecution,
-  context: { approvedChanges: ApprovedChange[]; regionLabels: Map<string, string> },
+  context: { approvedChanges: ApprovedChange[]; regionLabels: Map<string, string>; label: ConceptLabel },
 ): RedlineChangeRow[] {
   const approvedById = new Map(context.approvedChanges.map((change) => [change.id, change]))
   return execution.changes.map((change) => {
@@ -190,11 +206,11 @@ export function buildRedlineChangeRows(
       id: change.approvedChangeId,
       ordinal: change.ordinal,
       actionLabel: actionLabel(change.actionType),
-      targetLabel: resolvedTargetLabel(change, approved, context.regionLabels),
+      targetLabel: resolvedTargetLabel(change, approved, context.regionLabels, context.label),
       statusLabel: redlineChangeStatusLabel(change.status),
       verificationLabel: redlineVerificationLabel(change.verification),
       placementLabel:
-        change.actionType === 'INSERT' ? redlinePlacementLabel(change.placement) : null,
+        change.actionType === 'INSERT' ? redlinePlacementLabel(change.placement, context.label) : null,
       paragraphSummary: paragraphSummary(change),
       failureTitle: change.failureCode ? redlineFailureTitle(change.failureCode) : null,
       findingId: approved?.findingId ?? null,
@@ -222,6 +238,7 @@ export type RedlineTriggerErrorKind =
   | 'NOT_AVAILABLE'
   | 'UNCONFIRMED'
   | 'ENGINE_UNAVAILABLE'
+  | 'STORAGE_UNAVAILABLE'
   | 'TRANSPORT'
 
 export function classifyTriggerError(input: {
@@ -236,7 +253,8 @@ export function classifyTriggerError(input: {
     if (input.execution?.status === 'FAILED') return 'FAILED_EXECUTION'
     return 'NOT_AVAILABLE'
   }
-  if (input.status === 500 || input.status === 503) return 'ENGINE_UNAVAILABLE'
+  if (input.status === 503) return 'STORAGE_UNAVAILABLE'
+  if (input.status === 500) return 'ENGINE_UNAVAILABLE'
   return 'TRANSPORT'
 }
 
@@ -252,6 +270,8 @@ const TRIGGER_ERROR_NOTICES: Record<RedlineTriggerErrorKind, string> = {
     'The redline request could not be confirmed. Reopen this review to check whether an execution exists.',
   ENGINE_UNAVAILABLE:
     'The redline engine is unavailable right now. The approved change set is unchanged; try again later.',
+  STORAGE_UNAVAILABLE:
+    'The generated redline could not be stored, so no document was produced. This review and its approved change set are unchanged; you can generate the redline again once storage is available.',
   TRANSPORT:
     'The redline could not be generated. Check your connection and try again.',
 }

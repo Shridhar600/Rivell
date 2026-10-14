@@ -8,5 +8,5 @@
 @org.springframework.modulith.ApplicationModule(
         displayName = "Retrieval",
         allowedDependencies = {"foundation", "organization", "knowledge", "contracts",
-                "intelligence"})
+                "intelligence", "taxonomy"})
 package com.rivell.workbench.retrieval;

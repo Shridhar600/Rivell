@@ -12,12 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.Contract;
+import com.rivell.workbench.contracts.ContractListEntry;
 import com.rivell.workbench.contracts.ContractRepository;
 import com.rivell.workbench.contracts.ContractSource;
 import com.rivell.workbench.contracts.ContractStructure;
 import com.rivell.workbench.contracts.ContractVersionSummary;
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
+import com.rivell.workbench.contracts.ParseCoverage;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
 import java.time.Instant;
@@ -25,14 +27,24 @@ import java.time.Instant;
 @Repository
 class JdbcContractRepository implements ContractRepository {
 
+    /**
+     * The latest-version projection, shared by the single-contract read and the list so
+     * the two surfaces cannot drift. {@code node_count} is the one correlated subquery,
+     * evaluated per row inside a single statement rather than as a round trip per row.
+     */
+    private static final String VERSION_SUMMARY_COLUMNS = """
+            cv.id, cv.contract_id, cv.version_number, cv.parse_status, cv.parse_warnings,
+            cv.parser_version, sa.sha256, sa.filename,
+            (select count(*) from document_node n where n.contract_version_id = cv.id)
+                as node_count
+            """;
+
     private static final String VERSION_SUMMARY_SQL = """
-            select cv.id, cv.contract_id, cv.version_number, cv.parse_status, cv.parse_warnings,
-                   cv.parser_version, sa.sha256, sa.filename,
-                   (select count(*) from document_node n where n.contract_version_id = cv.id) as node_count
+            select %s
             from contract_version cv
             join contract c on c.id = cv.contract_id
             join source_artifact sa on sa.id = cv.source_artifact_id
-            """;
+            """.formatted(VERSION_SUMMARY_COLUMNS);
 
     private final JdbcClient jdbcClient;
     private final ObjectMapper objectMapper;
@@ -125,7 +137,7 @@ class JdbcContractRepository implements ContractRepository {
                 )
                 select id, parent_id, node_type, ordinal, text, heading_level, numbering_label,
                        part_path, body_index, paragraph_index, table_index, row_index, cell_index,
-                       run_start, run_end, raw_style_id
+                       run_start, run_end, raw_style_id, run_in_heading, untrackable_content
                 from tree
                 order by sort_path
                 """)
@@ -149,7 +161,9 @@ class JdbcContractRepository implements ContractRepository {
                                 nullableInt(rs, "cell_index"),
                                 nullableInt(rs, "run_start"),
                                 nullableInt(rs, "run_end")),
-                        rs.getString("raw_style_id")))
+                        rs.getString("raw_style_id"),
+                        rs.getString("run_in_heading"),
+                        rs.getBoolean("untrackable_content")))
                 .list();
 
         return new ContractStructure(
@@ -248,17 +262,20 @@ class JdbcContractRepository implements ContractRepository {
     @Override
     @Transactional
     public void updateVersionParseOutcome(
-            UUID versionId, String parserVersion, ParseStatus status, List<String> warnings) {
+            UUID versionId, String parserVersion, ParseStatus status, List<String> warnings,
+            ParseCoverage coverage) {
         var updated = jdbcClient.sql("""
                 update contract_version
                 set parser_version = :parserVersion, parse_status = :parseStatus,
-                    parse_warnings = cast(:warnings as jsonb)
+                    parse_warnings = cast(:warnings as jsonb),
+                    parse_coverage = cast(:coverage as jsonb)
                 where id = :versionId
                 """)
                 .param("versionId", versionId)
                 .param("parserVersion", parserVersion)
                 .param("parseStatus", status.name())
                 .param("warnings", toJson(warnings))
+                .param("coverage", coverage == null ? null : writeJson(coverage))
                 .update();
         if (updated != 1) {
             throw new IllegalStateException("Version parse outcome not recorded: " + versionId);
@@ -283,10 +300,12 @@ class JdbcContractRepository implements ContractRepository {
                     insert into document_node
                       (id, contract_version_id, parent_id, node_type, ordinal, text, heading_level,
                        numbering_label, part_path, body_index, paragraph_index, table_index,
-                       row_index, cell_index, run_start, run_end, raw_style_id)
+                       row_index, cell_index, run_start, run_end, raw_style_id, run_in_heading,
+                       untrackable_content)
                     values (:nodeId, :versionId, :parentId, :nodeType, :ordinal, :text, :headingLevel,
                             :numberingLabel, :partPath, :bodyIndex, :paragraphIndex, :tableIndex,
-                            :rowIndex, :cellIndex, :runStart, :runEnd, :rawStyleId)
+                            :rowIndex, :cellIndex, :runStart, :runEnd, :rawStyleId, :runInHeading,
+                            :untrackableContent)
                     """)
                     .param("nodeId", node.id())
                     .param("versionId", contractVersionId)
@@ -305,8 +324,60 @@ class JdbcContractRepository implements ContractRepository {
                     .param("runStart", span.runStart())
                     .param("runEnd", span.runEnd())
                     .param("rawStyleId", node.rawStyleId())
+                    .param("runInHeading", node.runInHeading())
+                    .param("untrackableContent", node.untrackableContent())
                     .update();
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<ContractListEntry> findContracts(
+            UUID organizationId, java.time.Instant afterCreatedAt, UUID afterId, int limit) {
+        var cursor = "";
+        if (afterCreatedAt != null && afterId != null) {
+            cursor = """
+                    and (c.created_at, c.id) < (
+                          cast(:afterCreatedAt as timestamptz), cast(:afterId as uuid))
+                    """;
+        }
+        var client = jdbcClient.sql("""
+                select c.title, c.created_at,
+                       %s
+                from contract c
+                join contract_version cv
+                  on cv.contract_id = c.id
+                 and cv.version_number = (
+                        select max(newer.version_number) from contract_version newer
+                        where newer.contract_id = c.id)
+                join source_artifact sa
+                  on sa.id = cv.source_artifact_id
+                 and sa.organization_id = c.organization_id
+                where c.organization_id = :organizationId
+                """.formatted(VERSION_SUMMARY_COLUMNS) + cursor + """
+                order by c.created_at desc, c.id desc
+                limit :limit
+                """)
+                .param("organizationId", organizationId)
+                .param("limit", limit + 1);
+        if (afterCreatedAt != null && afterId != null) {
+            // Bound at full TIMESTAMPTZ precision: a truncated resume position would skip
+            // contracts sharing that millisecond.
+            client = client
+                    .param("afterCreatedAt",
+                            OffsetDateTime.ofInstant(afterCreatedAt, ZoneOffset.UTC))
+                    .param("afterId", afterId.toString());
+        }
+        return client
+                .query((rs, rowNum) -> new ContractListEntry(
+                        // contract_version.contract_id equals contract.id by the join, so
+                        // the row's contract id is read from the same label the single-contract
+                        // read uses rather than selecting a second column under that name.
+                        rs.getObject("contract_id", UUID.class),
+                        rs.getString("title"),
+                        rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+                        mapVersionSummary(rs, rowNum)))
+                .list();
     }
 
     private ContractVersionSummary mapVersionSummary(java.sql.ResultSet rs, int rowNum)
@@ -321,6 +392,30 @@ class JdbcContractRepository implements ContractRepository {
                 rs.getString("sha256"),
                 rs.getString("filename"),
                 rs.getInt("node_count"));
+    }
+
+    @Override
+    public Optional<ParseCoverage> findParseCoverage(UUID versionId) {
+        return jdbcClient.sql("select parse_coverage from contract_version where id = :versionId")
+                .param("versionId", versionId)
+                .query((rs, rowNum) -> Optional.ofNullable(rs.getString("parse_coverage")))
+                .optional()
+                .flatMap(json -> json)
+                .map(json -> {
+                    try {
+                        return objectMapper.readValue(json, ParseCoverage.class);
+                    } catch (Exception e) {
+                        throw new IllegalStateException("Unreadable parse coverage for a version", e);
+                    }
+                });
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not serialise " + value.getClass().getSimpleName(), e);
+        }
     }
 
     private List<String> readWarnings(String json) {

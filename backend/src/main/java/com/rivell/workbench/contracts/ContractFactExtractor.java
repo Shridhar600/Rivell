@@ -12,6 +12,8 @@ import com.rivell.workbench.intelligence.GenerativeReasoningService;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.CoreConcepts;
 
 /**
  * Typed fact extraction (S8). Responsibility ladder per fact: deterministic parse
@@ -37,15 +39,15 @@ public final class ContractFactExtractor {
     public record FactResult(List<LegalFact> facts, Map<String, Interpretation> interpretations) {
     }
 
-    public FactResult extract(LegalConcept concept, String heading, String text,
+    public FactResult extract(ConceptKey concept, String heading, String text,
             List<UUID> provenance, boolean generativeAllowed) {
-        return switch (concept) {
-            case LIMITATION_OF_LIABILITY -> liabilityFacts(heading, text, provenance,
-                    generativeAllowed);
-            case TERM_TERMINATION -> terminationFacts(heading, text, provenance,
-                    generativeAllowed);
-            default -> new FactResult(List.of(), Map.of());
-        };
+        if (CoreConcepts.LIMITATION_OF_LIABILITY.equals(concept)) {
+            return liabilityFacts(heading, text, provenance, generativeAllowed);
+        }
+        if (CoreConcepts.TERM.equals(concept)) {
+            return terminationFacts(heading, text, provenance, generativeAllowed);
+        }
+        return new FactResult(List.of(), Map.of());
     }
 
     private FactResult liabilityFacts(
@@ -218,6 +220,10 @@ public final class ContractFactExtractor {
                     new M5SemanticStates.ClauseState(heading, sample(text)));
             var multiple = execution.fields().get("liabilityCapMultiple");
             var basis = execution.fields().get("capBasis");
+            if (M5ReasoningSpecs.NOT_STATED.equalsIgnoreCase(multiple.strip())) {
+                return notStated("liabilityCapMultiple", M5ReasoningSpecs.LIABILITY_CAP_SPEC,
+                        M5ReasoningSpecs.liabilityCap().version(), execution, provenance);
+            }
             new LegalFact(FactSchema.LIABILITY_FACTS.id(),
                     FactSchema.LIABILITY_FACTS.version(),
                     Map.of("liabilityCapMultiple", multiple, "capBasis", basis));
@@ -255,6 +261,10 @@ public final class ContractFactExtractor {
                     M5ReasoningSpecs.terminationNotice(),
                     new M5SemanticStates.ClauseState(heading, sample(text)));
             var days = execution.fields().get("noticePeriodDays");
+            if (M5ReasoningSpecs.NOT_STATED.equalsIgnoreCase(days.strip())) {
+                return notStated("noticePeriodDays", M5ReasoningSpecs.TERMINATION_NOTICE_SPEC,
+                        M5ReasoningSpecs.terminationNotice().version(), execution, provenance);
+            }
             new LegalFact(FactSchema.TERMINATION_FACTS.id(),
                     FactSchema.TERMINATION_FACTS.version(),
                     Map.of("noticePeriodDays", days));
@@ -281,6 +291,15 @@ public final class ContractFactExtractor {
                     VerificationState.UNCERTAIN, null);
             return new Extracted(Map.of(), Map.of("noticePeriodDays", interpretation));
         }
+    }
+
+    /** The model read the clause and found no value: recorded, never used as a fact. */
+    private static Extracted notStated(String field, String specId, int specVersion,
+            GenerativeReasoningService.GenerativeExecution execution, List<UUID> provenance) {
+        var interpretation = new Interpretation(
+                field, InterpretationKind.GENERATIVE_EXTRACTION, "NOT_STATED", specId, specVersion,
+                execution.metadata().executionId(), provenance, VerificationState.NOT_VERIFIED, null);
+        return new Extracted(Map.of(), Map.of(field, interpretation));
     }
 
     private record Extracted(

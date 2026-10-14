@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.review.ClaimKind;
 import com.rivell.workbench.review.FindingClassification;
+import com.rivell.workbench.review.FindingPositionComparison;
 import com.rivell.workbench.review.FindingSeverity;
 import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.IssueFamily;
@@ -20,7 +20,10 @@ import com.rivell.workbench.retrieval.api.RetrievalResponses;
  * plan-check basis for absence findings. {@code evidenceItems} are the exact frozen
  * items the finding cites (G-M7-1), resolved from the finding's run and never rebuilt
  * from latest knowledge; every claim evidence id resolves inside this set. Signal ids
- * are provenance references only; no raw signal surface is exposed.
+ * are provenance references only; no raw signal surface is exposed. {@code addedBy} is the
+ * user who added a {@code USER_ADDED} finding, null for findings Rivell assembled.
+ * {@code firstReviewCategory}: the first review's category on a needs-your-look item; null otherwise.
+ * {@code positionLabel}: the playbook position label of an omission finding; null otherwise.
  */
 public record FindingDetailView(
         UUID id,
@@ -28,10 +31,10 @@ public record FindingDetailView(
         UUID runId,
         FindingSubjectKind subjectKind,
         UUID subjectHeadingNodeId,
-        LegalConcept absenceConcept,
-        LegalConcept concept,
-        LegalConcept secondaryConcept,
-        List<LegalConcept> concepts,
+        String absenceConcept,
+        String concept,
+        String secondaryConcept,
+        List<String> concepts,
         IssueFamily issueFamily,
         String observationKind,
         String observationText,
@@ -45,9 +48,13 @@ public record FindingDetailView(
         List<ClaimView> claims,
         List<UUID> evidenceItemIds,
         List<RetrievalResponses.EvidenceItemResponse> evidenceItems,
+        FindingPositionComparison positionComparison,
         List<UUID> signalIds,
         AbsenceBasisView absenceBasis,
-        Instant createdAt) {
+        Instant createdAt,
+        String addedBy,
+        String firstReviewCategory,
+        String positionLabel) {
 
     public record ClaimView(
             int ordinal,

@@ -2,6 +2,7 @@ import type {
   ArtifactType,
   CandidateType,
   IngestStatus,
+  RecordKind,
   ReviewStatus,
   UnitKind,
 } from '../api/knowledge'
@@ -54,6 +55,15 @@ export const UNIT_KIND_LABELS: Record<UnitKind, string> = {
   HEADING_SECTION: 'Heading section',
   TABLE: 'Table',
   SPREADSHEET_ROW: 'Spreadsheet row',
+}
+
+export const RECORD_KIND_LABELS: Record<RecordKind, string> = {
+  POSITION: 'Position',
+  WORDING: 'Wording',
+  ESCALATION: 'Escalation row',
+  GUIDANCE: 'Guidance',
+  DOCUMENT_CONTROL: 'Document control',
+  OTHER: 'Other',
 }
 
 export const PUBLICATION_ACTION_LABELS = {

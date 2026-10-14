@@ -24,6 +24,43 @@ public class StructuredPolicyResolver {
         this.knowledgeQueries = knowledgeQueryService;
     }
 
+    /**
+     * Resolves applicable published candidates by topic membership for evidence whose
+     * topics come from contract classification rather than one concept key (design 6a):
+     * the candidate's stored topic set must intersect the request topics, and the same
+     * scope dimensions and effective window apply. Ordered primary-match first, then
+     * shared-topic count, capped at {@code limit}.
+     */
+    public Resolution resolveByTopics(
+            EvidenceRequest request, Set<CandidateType> candidateTypes,
+            long asOfPublicationNumber, List<String> topicKeys, String primaryTopicKey,
+            int limit) {
+        if (asOfPublicationNumber < 1 || topicKeys.isEmpty()) {
+            return new Resolution(List.of(), asOfPublicationNumber, false);
+        }
+        var profile = request.reviewProfile();
+        var query = PublishedKnowledgeQuery.byTopics(
+                request.organizationId(),
+                asOfPublicationNumber,
+                candidateTypes,
+                Set.copyOf(topicKeys),
+                primaryTopicKey,
+                profile.contractPackKey(),
+                profile.contractType() == null ? null : profile.contractType().name(),
+                profile.ourSideRole() == null ? null : profile.ourSideRole().name(),
+                profile.paperSource() == null ? null : profile.paperSource().name(),
+                profile.jurisdiction() == Jurisdiction.UNSPECIFIED
+                        ? null : profile.jurisdiction().name(),
+                request.effectiveOn(),
+                limit + 1); // one row past the cap reveals truncation
+        // system-level read: the request's organization is authoritative and the
+        // caller (EvidenceService) already enforced identity/authorization
+        var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
+        var truncated = candidates.size() > limit;
+        var bounded = truncated ? candidates.subList(0, limit) : candidates;
+        return new Resolution(List.copyOf(bounded), asOfPublicationNumber, truncated);
+    }
+
     public record Resolution(
             List<com.rivell.workbench.knowledge.PublishedCandidate> published,
             long asOfPublication,
@@ -50,6 +87,32 @@ public class StructuredPolicyResolver {
      * nothing) + effective window containing the request's effective date, all within
      * the pinned publication set.
      */
+    /**
+     * Every applicable published candidate of the given families regardless of topic, for a
+     * whole-contract read; same scope rules as {@link #resolve}.
+     */
+    public Resolution resolveAll(
+            EvidenceRequest request, Set<CandidateType> candidateTypes,
+            long asOfPublicationNumber, int limit) {
+        if (asOfPublicationNumber < 1) {
+            return new Resolution(List.of(), asOfPublicationNumber, false);
+        }
+        var profile = request.reviewProfile();
+        var query = PublishedKnowledgeQuery.byTopics(
+                request.organizationId(), asOfPublicationNumber, candidateTypes, Set.of(), null,
+                profile.contractPackKey(),
+                profile.contractType() == null ? null : profile.contractType().name(),
+                profile.ourSideRole() == null ? null : profile.ourSideRole().name(),
+                profile.paperSource() == null ? null : profile.paperSource().name(),
+                profile.jurisdiction() == Jurisdiction.UNSPECIFIED
+                        ? null : profile.jurisdiction().name(),
+                request.effectiveOn(), limit);
+        var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
+        var truncated = candidates.size() > limit;
+        return new Resolution(List.copyOf(truncated ? candidates.subList(0, limit) : candidates),
+                asOfPublicationNumber, truncated);
+    }
+
     public Resolution resolve(
             EvidenceRequest request, Set<CandidateType> candidateTypes,
             long asOfPublicationNumber) {
@@ -61,7 +124,7 @@ public class StructuredPolicyResolver {
                 request.organizationId(),
                 asOfPublicationNumber,
                 candidateTypes,
-                request.legalConcept().name(),
+                request.legalConcept().value(),
                 profile.contractPackKey(),
                 profile.contractType() == null ? null : profile.contractType().name(),
                 profile.ourSideRole() == null ? null : profile.ourSideRole().name(),

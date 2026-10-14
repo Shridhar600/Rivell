@@ -33,6 +33,7 @@ export const REDLINE_FAILURE_CODES = [
   'SOURCE_VERSION_MISMATCH',
   'SOURCE_INTEGRITY_MISMATCH',
   'UNSUPPORTED_SOURCE_FORMAT',
+  'SOURCE_EXPANSION_LIMIT_EXCEEDED',
   'UNSUPPORTED_CHANGESET_VERSION',
   'PROTECTED_DOCUMENT_UNSUPPORTED',
   'PREEXISTING_REVISIONS_UNSUPPORTED',
@@ -42,6 +43,7 @@ export const REDLINE_FAILURE_CODES = [
   'CHANGE_OVERLAP',
   'MISSING_APPROVED_LANGUAGE',
   'INSERT_PLACEMENT_UNRESOLVED',
+  'APPROVED_SEMANTICS_DRIFT',
   'DOCX_LOAD_FAILED',
   'DOCX_SERIALIZATION_FAILED',
   'ROUND_TRIP_FAILED',
@@ -70,6 +72,7 @@ export type RedlineExecution = {
   contractId: string
   contractVersionNumber: number
   changeSetVersion: number
+  attempt: number
   status: RedlineExecutionStatus
   outcome: RedlineOutcome | null
   failureCode: RedlineFailureCode | null
@@ -145,6 +148,7 @@ export function parseRedlineExecution(
     contractId: readString(execution, 'contractId', what),
     contractVersionNumber: readNumber(execution, 'contractVersionNumber', what),
     changeSetVersion: readNumber(execution, 'changeSetVersion', what),
+    attempt: readNumber(execution, 'attempt', what),
     status: readStatus(execution, 'status', REDLINE_EXECUTION_STATUSES),
     outcome: readNullableStatus(execution, 'outcome', REDLINE_OUTCOMES),
     failureCode: readNullableStatus(execution, 'failureCode', REDLINE_FAILURE_CODES),
@@ -171,7 +175,7 @@ const SAFE_ERROR_MESSAGES: Record<number, string> = {
   404: 'This review or its redline could not be found.',
   409: 'The redline is not available in its current state.',
   500: 'The redline engine is unavailable right now.',
-  503: 'The redline engine is unavailable right now.',
+  503: 'Document storage is unavailable, so the redline was not produced.',
 }
 
 export class RedlineApiError extends Error {
@@ -214,6 +218,19 @@ export async function fetchRedlineExecution(reviewId: string): Promise<RedlineEx
 export async function triggerRedline(reviewId: string): Promise<RedlineExecution> {
   const client = createApiClient()
   const { data, response } = await client.POST('/api/reviews/{id}/redline', {
+    params: { path: { id: reviewId } },
+  })
+  if (!data) throw new RedlineApiError(response.status)
+  return parseApiResult(data, parseRedlineExecution, 'redline execution')
+}
+
+/**
+ * Re-runs a persisted FAILED attempt against the same frozen ApprovedChangeSet. The prior
+ * attempt is kept; the server appends the next numbered attempt.
+ */
+export async function retryRedline(reviewId: string): Promise<RedlineExecution> {
+  const client = createApiClient()
+  const { data, response } = await client.POST('/api/reviews/{id}/redline/retry', {
     params: { path: { id: reviewId } },
   })
   if (!data) throw new RedlineApiError(response.status)
@@ -278,6 +295,23 @@ export function useTriggerRedline(
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => triggerRedline(reviewId),
+    retry: false,
+    networkMode: 'always',
+    onSuccess: (execution) => {
+      queryClient.setQueryData(redlineKeys.execution(reviewId), execution)
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: redlineKeys.execution(reviewId) })
+    },
+  })
+}
+
+export function useRetryRedline(
+  reviewId: string,
+): UseMutationResult<RedlineExecution, Error, void> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => retryRedline(reviewId),
     retry: false,
     networkMode: 'always',
     onSuccess: (execution) => {

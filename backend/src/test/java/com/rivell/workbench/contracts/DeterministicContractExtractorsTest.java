@@ -132,6 +132,86 @@ class DeterministicContractExtractorsTest {
         assertThat(terms.stream().allMatch(DefinedTerm::duplicate)).isTrue();
     }
 
+    /**
+     * DW-080: the same term stated twice in one node is one definition (the persistence key is
+     * per defining node), and the first wording is the one kept.
+     */
+    @Test
+    void aTermDefinedTwiceInOneParagraphIsKeptOnce() {
+        var nodes = List.of(
+                bodyNode(),
+                heading("Definitions", "1", 1),
+                paragraph("“Fees” means the fees set out in Schedule A; "
+                        + "“Fees” means the fees payable under an Order.", 2));
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var terms = new DeterministicContractExtractors().definedTerms(VERSION_ID, regions, nodes);
+
+        assertThat(terms).hasSize(1);
+        assertThat(terms.get(0).term()).isEqualTo("Fees");
+        assertThat(terms.get(0).definition()).isEqualTo("the fees set out in Schedule A");
+        assertThat(terms.get(0).duplicate()).isFalse();
+    }
+
+    @Test
+    void severalCurlyQuotedDefinitionsInOneParagraphEachKeepTheirOwnText() {
+        var definitions = paragraph("In this Agreement: “Downtime” means any period during which "
+                + "the Production Service is unavailable; “Scheduled Maintenance” means maintenance "
+                + "performed by Cloudberry in accordance with the then-current Documentation; and "
+                + "“Users” means named users.", 2);
+        var nodes = List.of(
+                bodyNode(),
+                heading("Definitions", "1", 1),
+                definitions);
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var terms = new DeterministicContractExtractors().definedTerms(VERSION_ID, regions, nodes);
+
+        assertThat(terms).hasSize(3);
+        var byTerm = terms.stream()
+                .collect(Collectors.toMap(DefinedTerm::term, term -> term));
+        assertThat(byTerm).containsOnlyKeys("Downtime", "Scheduled Maintenance", "Users");
+        assertThat(byTerm.get("Downtime").definition())
+                .isEqualTo("any period during which the Production Service is unavailable");
+        assertThat(byTerm.get("Scheduled Maintenance").definition())
+                .isEqualTo("maintenance performed by Cloudberry in accordance with "
+                        + "the then-current Documentation");
+        assertThat(byTerm.get("Users").definition()).isEqualTo("named users.");
+    }
+
+    @Test
+    void aDefinitionInAHeadingParagraphIsFoundAndReferencedFromHeadingText() {
+        var defining = heading("1. Definitions. “Scheduled Maintenance” means maintenance under "
+                + "the Documentation.", "1.", 1);
+        var reference = heading("3. Service Levels. Scheduled Maintenance is excluded from "
+                + "availability.", "3.", 2);
+        var nodes = List.of(bodyNode(), defining, reference);
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var terms = new DeterministicContractExtractors().definedTerms(VERSION_ID, regions, nodes);
+
+        assertThat(terms).hasSize(1);
+        var term = terms.get(0);
+        assertThat(term.term()).isEqualTo("Scheduled Maintenance");
+        assertThat(term.definingNodeId()).isEqualTo(defining.id());
+        assertThat(term.referenceNodeIds()).containsExactly(reference.id());
+    }
+
+    @Test
+    void aDefinitionWithNoTextBeforeTheNextStartIsSkippedInsteadOfFailing() {
+        var malformed = paragraph("“Downtime” means “Users” means named users.", 2);
+        var nodes = List.of(
+                bodyNode(),
+                heading("Definitions", "1", 1),
+                malformed);
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var terms = new DeterministicContractExtractors().definedTerms(VERSION_ID, regions, nodes);
+
+        assertThat(terms).extracting(DefinedTerm::term).containsExactly("Users");
+        assertThat(terms.get(0).definition()).isEqualTo("named users.");
+    }
+
     @Test
     void resolvesSectionScheduleAndExternalReferences() {
         var nodes = List.of(

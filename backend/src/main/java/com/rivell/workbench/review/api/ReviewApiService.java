@@ -5,11 +5,13 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.rivell.workbench.contracts.ContractQueryService;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.foundation.PageCursor;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
@@ -26,15 +28,30 @@ import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.Review;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
 import com.rivell.workbench.review.ReviewAnalysisRun;
+import com.rivell.workbench.review.ReviewExecutionCounts;
+import com.rivell.workbench.review.ReviewHumanReviewListInput;
+import com.rivell.workbench.review.ReviewHumanReviewListQuery;
+import com.rivell.workbench.review.ReviewHumanReviewSummary;
+import com.rivell.workbench.review.ReviewListFinalization;
+import com.rivell.workbench.review.ReviewListQuery;
+import com.rivell.workbench.review.ReviewListRedline;
+import com.rivell.workbench.review.ReviewListRow;
+import com.rivell.workbench.review.ReviewListRunState;
 import com.rivell.workbench.review.ReviewAnalysisService;
 import com.rivell.workbench.review.ReviewCheckExecution;
 import com.rivell.workbench.review.ReviewEvidenceIntegrityException;
+import com.rivell.workbench.review.FindingPositionComparison;
+import com.rivell.workbench.review.ProposedChangeCounts;
+import com.rivell.workbench.review.ReviewDocumentQuery;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.ReviewPackRegistry;
 import com.rivell.workbench.review.ReviewPlanCheck;
 import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewService;
+import com.rivell.workbench.review.ReviewStatus;
 import com.rivell.workbench.review.UnauthorizedReviewAccessException;
+import com.rivell.workbench.taxonomy.ConceptKey;
+import com.rivell.workbench.taxonomy.ConceptRegistry;
 
 /**
  * Composes the review HTTP surface from domain read models and ports: authorization,
@@ -57,8 +74,12 @@ public class ReviewApiService {
     private final FindingRepository findingRepository;
     private final ContractQueryService contractQueryService;
     private final ReviewPackRegistry reviewPackRegistry;
+    private final ReviewListQuery reviewListQuery;
+    private final ReviewHumanReviewListQuery reviewHumanReviewListQuery;
+    private final ReviewDocumentQuery reviewDocumentQuery;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
+    private final ConceptRegistry conceptRegistry;
 
     public ReviewApiService(
             ReviewService reviewService,
@@ -68,8 +89,12 @@ public class ReviewApiService {
             FindingRepository findingRepository,
             ContractQueryService contractQueryService,
             ReviewPackRegistry reviewPackRegistry,
+            ReviewListQuery reviewListQuery,
+            ReviewHumanReviewListQuery reviewHumanReviewListQuery,
+            ReviewDocumentQuery reviewDocumentQuery,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            ConceptRegistry conceptRegistry) {
         this.reviewService = reviewService;
         this.analysisService = analysisService;
         this.reviewRepository = reviewRepository;
@@ -77,13 +102,19 @@ public class ReviewApiService {
         this.findingRepository = findingRepository;
         this.contractQueryService = contractQueryService;
         this.reviewPackRegistry = reviewPackRegistry;
+        this.reviewListQuery = reviewListQuery;
+        this.reviewHumanReviewListQuery = reviewHumanReviewListQuery;
+        this.reviewDocumentQuery = reviewDocumentQuery;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+        this.conceptRegistry = conceptRegistry;
     }
 
     public ReviewSummaryView create(
-            UUID contractId, int versionNumber, String requestedPackKey) {
-        var review = reviewService.create(contractId, versionNumber, requestedPackKey);
+            UUID contractId, int versionNumber, String requestedPackKey,
+            java.util.UUID clientRequestId) {
+        var review = reviewService.create(contractId, versionNumber, requestedPackKey,
+                clientRequestId);
         return summaryFor(review.organizationId(), review.id());
     }
 
@@ -122,31 +153,203 @@ public class ReviewApiService {
                 warnings.truncated());
     }
 
-    public ReviewListResponse list(UUID contractId, Integer limit) {
+    /**
+     * Bounded newest-first page of reviews for the organization, or of one contract when
+     * {@code contractId} is supplied.
+     *
+     * <p>When a contract filter is present the contract is still resolved, which preserves
+     * the 404 on an unknown or cross-organization contract and the transitive
+     * {@code contracts:read} this list has always required. An organization-wide list needs
+     * no such resolution, so an absent filter narrows the required authority to
+     * {@code reviews:read} rather than widening it.
+     */
+    public ReviewListResponse list(UUID contractId, Integer limit, String cursorToken) {
         var organizationId = requireRead();
-        contractQueryService.getContract(contractId);
+        if (contractId != null) {
+            contractQueryService.getContract(contractId);
+        }
         var bounded = boundedLimit(limit);
-        var rows = reviewRepository.findReviews(organizationId, contractId, bounded);
+        var after = PageCursor.decode(cursorToken);
+        var rows = reviewListQuery.findPage(organizationId, contractId,
+                after == null ? null : after.createdAt(),
+                after == null ? null : after.id(),
+                bounded);
+
         var truncated = rows.size() > bounded;
-        var items = rows.stream().limit(bounded).map(ReviewApiService::toListItem).toList();
-        return new ReviewListResponse(items, truncated);
+        var page = rows.stream().limit(bounded).toList();
+        var nextCursor = truncated && !page.isEmpty()
+                ? PageCursor.encode(new PageCursor(
+                        page.get(page.size() - 1).createdAt(),
+                        page.get(page.size() - 1).reviewId()))
+                : null;
+        return new ReviewListResponse(assemble(organizationId, page), truncated, nextCursor);
+    }
+
+    /**
+     * Assembles a page from a fixed number of aggregate queries keyed on the page's own
+     * ids. Progress numbers are never obtained by reading each review individually, and
+     * the counted generation is resolved exactly as {@link #summaryFor} resolves it so a
+     * row and its summary can never disagree.
+     */
+    private List<ReviewListItemView> assemble(UUID organizationId, List<ReviewListRow> page) {
+        if (page.isEmpty()) {
+            return List.of();
+        }
+        var reviewIds = page.stream().map(ReviewListRow::reviewId).toList();
+        var runStates = reviewListQuery.findRunStates(organizationId, reviewIds);
+        var planned = reviewListQuery.countPlannedChecks(organizationId, reviewIds);
+        var countedRunIds = runStates.values().stream()
+                .map(ReviewListRunState::countedRunId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        var executions = reviewListQuery.countExecutions(organizationId, countedRunIds);
+        var signals = reviewListQuery.countSignals(organizationId, countedRunIds);
+        var findings = reviewListQuery.countFindings(organizationId, countedRunIds);
+        var finalizations = reviewListQuery.findFinalizations(organizationId, reviewIds);
+        var redlines = reviewListQuery.findRedlines(organizationId, reviewIds);
+
+        var humanInputs = page.stream()
+                .map(row -> humanReviewInput(row, runStates.get(row.reviewId()),
+                        planned.getOrDefault(row.reviewId(), 0),
+                        executions, finalizations.containsKey(row.reviewId())))
+                .toList();
+        var humanReviews = reviewHumanReviewListQuery.findProgress(
+                organizationId, humanInputs);
+
+        var items = new ArrayList<ReviewListItemView>(page.size());
+        for (var row : page) {
+            var state = runStates.get(row.reviewId());
+            var countedRunId = state == null ? null : state.countedRunId();
+            var counts = countedRunId == null ? null : executions.get(countedRunId);
+            var human = humanReviews.get(row.reviewId());
+            var finalization = finalizations.get(row.reviewId());
+            var redline = redlines.get(row.reviewId());
+            items.add(new ReviewListItemView(
+                    row.reviewId(),
+                    row.contractId(),
+                    row.contractVersionNumber(),
+                    row.contractFilename(),
+                    row.uploadedAt(),
+                    row.status(),
+                    failure(row.failureReason()),
+                    row.createdAt(),
+                    row.startedAt(),
+                    row.completedAt(),
+                    state == null ? null : state.latestCompletedRunNumber(),
+                    state == null ? null : state.latestCompletedRunStatus(),
+                    state == null || !state.hasNewerRunThanCounted() ? null : state.latestRunStatus(),
+                    planned.getOrDefault(row.reviewId(), 0),
+                    counts == null ? 0 : counts.completed(),
+                    counts == null ? 0 : counts.degraded(),
+                    counts == null ? 0 : counts.failed(),
+                    countedRunId == null ? 0 : signals.getOrDefault(countedRunId, 0),
+                    countedRunId == null ? 0 : findings.getOrDefault(countedRunId, 0),
+                    context(row),
+                    humanReview(human),
+                    finalization == null ? null : new ReviewListItemView.FinalizationSummaryView(
+                            finalization.finalizedAt(), finalization.approvedChanges()),
+                    redline == null ? null : new ReviewListItemView.RedlineSummaryView(
+                            redline.status(), redline.outcome(),
+                            redline.verifiedChangeCount(), redline.downloadAvailable(),
+                            redline.completedAt())));
+        }
+        return List.copyOf(items);
+    }
+
+    /**
+     * Lifecycle meaning for one row, handed to the batched human-review read.
+     *
+     * <p>Analysis counts as complete only when the review completed and a completed
+     * generation exists, which is the same rule the human-review read applies, so the two
+     * surfaces cannot disagree about whether a review may be decided on yet.
+     */
+    private static ReviewHumanReviewListInput humanReviewInput(
+            ReviewListRow row, ReviewListRunState state, int plannedChecks,
+            Map<UUID, ReviewExecutionCounts> executions, boolean finalized) {
+        var countedRunId = state == null ? null : state.countedRunId();
+        var completedRunId = state == null ? null : state.latestCompletedRunId();
+        var counts = countedRunId == null ? null : executions.get(countedRunId);
+        var analysisComplete = ReviewStatus.COMPLETED.name().equals(row.status())
+                && completedRunId != null;
+        return new ReviewHumanReviewListInput(
+                row.reviewId(),
+                countedRunId,
+                analysisComplete,
+                plannedChecks,
+                counts == null ? 0 : counts.completed(),
+                finalized,
+                row.contractId(),
+                row.contractVersionNumber());
+    }
+
+    private static ReviewListItemView.ContextView context(ReviewListRow row) {
+        var context = row.context();
+        return new ReviewListItemView.ContextView(
+                context.contractType(),
+                context.ourSideRole(),
+                context.paperSource(),
+                context.jurisdiction());
+    }
+
+    private static ReviewListItemView.HumanReviewSummaryView humanReview(
+            ReviewHumanReviewSummary summary) {
+        return new ReviewListItemView.HumanReviewSummaryView(
+                summary.status(),
+                summary.actionableFindings(),
+                summary.resolvedFindings(),
+                summary.remainingFindings(),
+                summary.escalated(),
+                summary.readyToFinalize(),
+                summary.blockers());
     }
 
     public FindingListResponse findings(
-            UUID reviewId, LegalConcept concept, FindingClassification classification,
+            UUID reviewId, String concept, FindingClassification classification,
             FindingSeverity severity, Integer limit) {
         var organizationId = requireRead();
         requireReview(organizationId, reviewId);
+        var conceptKey = requestConcept(concept);
         var activeRun = analysisRepository.findLatestCompletedRun(organizationId, reviewId);
         if (activeRun.isEmpty()) {
             return new FindingListResponse(List.of(), false);
         }
         var bounded = boundedLimit(limit);
         var rows = findingRepository.findFindings(organizationId, activeRun.get().id(),
-                concept, classification, severity, bounded);
+                conceptKey, classification, severity, bounded);
         var truncated = rows.size() > bounded;
         var items = rows.stream().limit(bounded).map(ReviewApiService::toSummary).toList();
         return new FindingListResponse(items, truncated);
+    }
+
+    /** What the active run did with each planned clause: flagged, checked, not covered, not analysed. */
+    public ClauseMarksView clauseMarks(UUID reviewId) {
+        var organizationId = requireRead();
+        requireReview(organizationId, reviewId);
+        var activeRun = analysisRepository.findLatestCompletedRun(organizationId, reviewId);
+        if (activeRun.isEmpty()) {
+            return new ClauseMarksView(null, List.of());
+        }
+        var runId = activeRun.get().id();
+        var marks = com.rivell.workbench.review.ClauseMarks.of(
+                reviewRepository.findPlanChecks(organizationId, reviewId),
+                analysisRepository.findExecutions(organizationId, runId),
+                findingRepository.findFindings(organizationId, runId));
+        return new ClauseMarksView(runId, marks.entrySet().stream()
+                .map(entry -> new ClauseMarksView.Clause(entry.getKey(), entry.getValue()))
+                .toList());
+    }
+
+    /** Optional request filter keyed by a taxonomy topic; unknown or malformed is a 400. */
+    private ConceptKey requestConcept(String concept) {
+        if (concept == null || concept.isBlank()) {
+            return null;
+        }
+        var key = ConceptKey.of(concept.trim());
+        if (!conceptRegistry.contains(key)) {
+            throw new IllegalArgumentException("Unknown concept key: " + concept);
+        }
+        return key;
     }
 
     public FindingDetailView finding(UUID reviewId, UUID findingId) {
@@ -199,6 +402,29 @@ public class ReviewApiService {
         return List.copyOf(ordered);
     }
 
+    /**
+     * Proposal counts for the same generation {@link ReviewAnalysisService#progress} counts,
+     * so a summary never mixes one generation's totals with another's breakdown. A review
+     * with no run yet proposes nothing.
+     */
+    private ProposedChangeCounts proposedChanges(
+            UUID organizationId, Optional<ReviewAnalysisRun> counted) {
+        return counted
+                .map(run -> findingRepository.countProposedChanges(organizationId, run.id()))
+                .orElse(ProposedChangeCounts.NONE);
+    }
+
+    /**
+     * The uploaded document behind the version this review pinned, read by version id so a
+     * newer version of the same contract cannot change what an existing review reports.
+     */
+    private ReviewSummaryView.DocumentView document(Review review) {
+        return reviewDocumentQuery.find(review.organizationId(), review.contractVersionId())
+                .map(document -> new ReviewSummaryView.DocumentView(
+                        document.filename(), document.uploadedAt(), document.sizeBytes()))
+                .orElse(null);
+    }
+
     private ReviewSummaryView summaryFor(UUID organizationId, UUID reviewId) {
         var review = reviewRepository.find(organizationId, reviewId)
                 .orElseThrow(() -> new ReviewNotFoundException(reviewId));
@@ -233,6 +459,8 @@ public class ReviewApiService {
                 progress.failedChecks(),
                 progress.signals(),
                 progress.findings(),
+                proposedChanges(organizationId, counted),
+                document(review),
                 new ReviewSummaryView.SnapshotView(
                         new ReviewSummaryView.ProfileView(
                                 snapshot.contractType().name(),
@@ -244,7 +472,8 @@ public class ReviewApiService {
                                 snapshot.contractPackKey()),
                         snapshot.packVersion(),
                         snapshot.knowledgePinNumber(),
-                        snapshot.effectiveOn()),
+                        snapshot.effectiveOn(),
+                        snapshot.reviewEngine().name()),
                 coverage(organizationId, reviewId, counted),
                 warnings.items(),
                 warnings.truncated());
@@ -310,9 +539,6 @@ public class ReviewApiService {
         return switch (prefix) {
             case "provider_unavailable" -> new WarningReason("PROVIDER_UNAVAILABLE",
                     "An external analysis provider was unavailable for this check.");
-            case "open_ended_generation_unavailable" -> new WarningReason(
-                    "GENERATION_UNAVAILABLE",
-                    "Candidate language could not be generated for this check.");
             case "classification_uncertain", "cross_clause_classification_uncertain" ->
                     new WarningReason("CLASSIFICATION_UNCERTAIN",
                             "The bounded classification was not confident enough to trust.");
@@ -408,7 +634,7 @@ public class ReviewApiService {
         }
         var views = new ArrayList<ReviewCoverageView>();
         for (var check : presenceChecks) {
-            views.add(new ReviewCoverageView(check.concept(), check.expectation(),
+            views.add(new ReviewCoverageView(check.concept().value(), check.expectation(),
                     recorded.getOrDefault(check.id(), ReviewCoverageView.Coverage.UNKNOWN)));
         }
         return List.copyOf(views);
@@ -443,18 +669,35 @@ public class ReviewApiService {
         return Math.min(limit, MAX_PAGE_LIMIT);
     }
 
-    private static ReviewListItemView toListItem(Review review) {
-        return new ReviewListItemView(review.id(), review.contractId(),
-                review.contractVersionNumber(), review.status().name(), review.createdAt(),
-                review.completedAt());
-    }
-
     private static FindingSummaryView toSummary(Finding finding) {
         return new FindingSummaryView(finding.id(), finding.subjectKind(),
-                finding.subjectHeadingNodeId(), finding.absenceConcept(), finding.concept(),
-                finding.secondaryConcept(), finding.issueFamily(), finding.observationKind(),
+                finding.subjectHeadingNodeId(), name(finding.absenceConcept()),
+                name(finding.concept()), name(finding.secondaryConcept()),
+                finding.issueFamily(), finding.observationKind(),
                 finding.severity(), finding.reviewClassification(), finding.proposedAction(),
-                finding.proposedLanguageSource(), finding.createdAt());
+                finding.proposedLanguageSource(),
+                Boolean.TRUE.equals(finding.quality().get("secondaryTopic")),
+                finding.quality().get("route") instanceof String route ? route : null,
+                finding.createdAt(), addedBy(finding),
+                firstReviewCategory(finding), positionLabel(finding));
+    }
+
+    /** The review that declined to decide shows its own category; nothing else does. */
+    private static String firstReviewCategory(Finding finding) {
+        return finding.quality().get("jevCategory") instanceof String category ? category : null;
+    }
+
+    /** An omission finding carries the raw playbook position label it searched for. */
+    private static String positionLabel(Finding finding) {
+        return finding.quality().get("positionLabel") instanceof String label ? label : null;
+    }
+
+    private static String addedBy(Finding finding) {
+        return finding.addedBy() == null ? null : finding.addedBy().toString();
+    }
+
+    private static String name(ConceptKey concept) {
+        return concept == null ? null : concept.value();
     }
 
     private static FindingDetailView toDetail(
@@ -463,8 +706,10 @@ public class ReviewApiService {
             FindingDetailView.AbsenceBasisView absenceBasis) {
         return new FindingDetailView(finding.id(), finding.reviewId(), finding.runId(),
                 finding.subjectKind(), finding.subjectHeadingNodeId(),
-                finding.absenceConcept(), finding.concept(), finding.secondaryConcept(),
-                finding.concepts(), finding.issueFamily(), finding.observationKind(),
+                name(finding.absenceConcept()), name(finding.concept()),
+                name(finding.secondaryConcept()),
+                finding.concepts().stream().map(ConceptKey::value).toList(),
+                finding.issueFamily(), finding.observationKind(),
                 finding.observationText(), finding.severity(),
                 finding.reviewClassification(), finding.proposedAction(),
                 finding.proposedLanguage(), finding.proposedLanguageSource(),
@@ -474,8 +719,10 @@ public class ReviewApiService {
                                 claim.claimKind(), claim.text(), claim.absence(),
                                 claim.evidenceItemIds()))
                         .toList(),
-                finding.evidenceItemIds(), evidenceItems, finding.signalIds(), absenceBasis,
-                finding.createdAt());
+                finding.evidenceItemIds(), evidenceItems,
+                FindingPositionComparison.from(evidenceItems), finding.signalIds(), absenceBasis,
+                finding.createdAt(), addedBy(finding),
+                firstReviewCategory(finding), positionLabel(finding));
     }
 
     private record Warnings(List<AnalysisWarningView> items, boolean truncated) {

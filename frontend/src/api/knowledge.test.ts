@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { UploadApiError } from './uploadError'
 import {
   fetchArtifacts,
   fetchCandidates,
@@ -77,6 +78,8 @@ const candidate = {
     Fallback: '2x annual fees',
   },
   legalConceptKey: null,
+  effectiveConceptKey: null,
+  conceptCorrection: null,
   classifiedConcepts: { LIMITATION_OF_LIABILITY: 0.91 },
   positions: ['FALLBACK', 'PREFERRED'],
   variantRole: null,
@@ -301,12 +304,25 @@ describe('knowledge parsers', () => {
     expect(result.skipped.c3).toBe('not ROUTINE')
   })
 
+  it('reads the effective legal concept, which a human correction can change', () => {
+    expect(parseCandidate({ ...candidate, effectiveConceptKey: 'INDEMNIFICATION' }).effectiveConceptKey).toBe('INDEMNIFICATION')
+    expect(parseCandidate(candidate).effectiveConceptKey).toBeNull()
+    const { effectiveConceptKey: _omitted, ...withoutField } = candidate
+    // Like every other field the server always sends, a missing key is a malformed response.
+    expect(() => parseCandidate(withoutField)).toThrow(/malformed candidate/i)
+  })
+
   it('parses extraction units and publications', () => {
     expect(parseExtractionUnit(unit).kind).toBe('TABLE')
     const parsed = parsePublication(publication)
     expect(parsed.publicationNumber).toBe(2)
     expect(parsed.items[0].action).toBe('ADD')
     expect(parsed.items[0].supersededCandidateId).toBeNull()
+  })
+
+  it('keeps the record kind the compiler recorded, and null for a unit from old data', () => {
+    expect(parseExtractionUnit({ ...unit, recordKind: 'GUIDANCE' }).recordKind).toBe('GUIDANCE')
+    expect(parseExtractionUnit({ ...unit, recordKind: null }).recordKind).toBeNull()
   })
 })
 
@@ -318,6 +334,14 @@ describe('knowledge list queries', () => {
 
     expect(artifacts).toHaveLength(1)
     expect(artifacts[0].filename).toBe('knowledge-playbook.docx')
+  })
+
+  it('asks for the page size it is given, and keeps the short default for the legacy lists', async () => {
+    const { requests } = stubFetch(() => jsonResponse(envelope([])))
+    await fetchArtifacts(100)
+    await fetchArtifacts()
+    expect(requests[0]?.url).toContain('limit=100')
+    expect(requests[1]?.url).toContain('limit=20')
   })
 
   it('rejects a list response that is not enveloped', async () => {
@@ -364,22 +388,38 @@ describe('uploadKnowledge', () => {
     expect(requests[0].headers.get('content-type')).toContain('multipart/form-data')
   })
 
-  it('surfaces backend upload errors', async () => {
+  it('reports a bounded upload error that names no server text', async () => {
     stubFetch(() =>
       jsonResponse(
         {
           code: '400',
           title: 'Invalid request',
-          detail: 'Only .docx, .xlsx files are supported',
+          detail: 'Rejected at com.rivell.workbench.knowledge.KnowledgeService.require:71',
         },
         400,
       ),
     )
 
     const file = new File(['bad'], 'notes.txt')
-    await expect(
-      uploadKnowledge(file, { artifactType: 'PLAYBOOK', declaredContractTypes: [] }),
-    ).rejects.toThrow(/only .docx, \.xlsx files are supported/i)
+    const error = await uploadKnowledge(file, {
+      artifactType: 'PLAYBOOK',
+      declaredContractTypes: [],
+    }).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(UploadApiError)
+    expect((error as Error).message).toMatch(/file was not accepted/i)
+    expect((error as Error).message).not.toMatch(/com\.rivell|require:71/)
+  })
+
+  it('does not claim that nothing was stored when the server fails, because a failed source may remain', async () => {
+    stubFetch(() => jsonResponse({ status: 500, error: 'Internal Server Error' }, 500))
+    const error = await uploadKnowledge(new File(['x'], 'm4-playbook.docx'), {
+      artifactType: 'PLAYBOOK',
+      declaredContractTypes: [],
+    }).catch((thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(UploadApiError)
+    expect((error as Error).message).toMatch(/appears in Sources as a failed source/)
+    expect((error as Error).message).not.toMatch(/Nothing was changed|not stored/)
   })
 
   it('requires the runtime ApiResult envelope on upload', async () => {

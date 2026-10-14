@@ -1,9 +1,5 @@
-import type { components } from '../api/schema'
-import {
-  CONCEPT_LABELS,
-  VERIFICATION_LABELS,
-  humanizeCode,
-} from './domainLabels'
+import type { EnrichmentFailureReason } from '../api/semantics'
+import { VERIFICATION_LABELS, humanizeCode } from './domainLabels'
 
 export { humanizeCode } from './domainLabels'
 import type {
@@ -13,17 +9,17 @@ import type {
   SemanticFact,
 } from '../api/semantics'
 
-export const TAXONOMY_CONCEPTS = [
-  'CONFIDENTIALITY',
-  'TERM_TERMINATION',
-  'LIMITATION_OF_LIABILITY',
-  'INDEMNIFICATION',
-  'GOVERNING_LAW',
+export const CONTRACT_TYPES = [
+  'MNDA',
+  'ONDA',
+  'NDA',
+  'MSA',
+  'SAAS',
+  'DPA',
+  'SOW',
+  'SWL',
+  'OTHER',
 ] as const satisfies readonly NonNullable<
-  components['schemas']['ConceptView']['concept']
->[]
-
-export const CONTRACT_TYPES = ['NDA', 'MSA', 'OTHER'] as const satisfies readonly NonNullable<
   ReviewProfileInput['contractType']
 >[]
 
@@ -116,8 +112,14 @@ const ANALYSIS_QUALITY_NOTES = new Set([
 ])
 
 export const CONTRACT_TYPE_LABELS: Record<string, string> = {
+  MNDA: 'Mutual NDA',
+  ONDA: 'One-way NDA',
   NDA: 'NDA',
   MSA: 'MSA',
+  SAAS: 'SaaS',
+  DPA: 'DPA',
+  SOW: 'SOW',
+  SWL: 'Software licence',
   OTHER: 'Other',
 }
 
@@ -135,10 +137,6 @@ export const JURISDICTION_LABELS: Record<string, string> = {
 
 function labelFrom(map: Record<string, string>, value: string): string {
   return map[value] ?? humanizeCode(value)
-}
-
-export function conceptLabel(value: string): string {
-  return labelFrom(CONCEPT_LABELS, value)
 }
 
 export function roleLabel(value: string): string {
@@ -489,4 +487,69 @@ export function profileKey(profile: ReviewProfile | null): string {
     profile.paperSource,
     profile.jurisdiction,
   ].join('|')
+}
+
+/**
+ * What the tenant is told about a failed enrichment.
+ *
+ * <p>Only the sentence. There is deliberately no "retryable" or "retry available" flag, because a
+ * re-run control is offered for every reason — the previous implementation had a boolean that gated
+ * nothing but was named as though it withheld the control, and a second claim attached to it that a
+ * retry was worthwhile. Neither was true, and two of the five reasons collapsed into
+ * `SERVICE_UNAVAILABLE` can never succeed on a retry, so the frontend cannot honestly assert
+ * suitability: the diagnosis that would decide it is exactly what DW-041 redacted.
+ *
+ * <p>Whether a retry should be offered at all for this class, and whether the tenant needs a recovery
+ * classification of its own, is an open product decision and is escalated rather than answered here.
+ * What this surface does is state what happened, without a cause, a timeframe or an outcome.
+ */
+export type EnrichmentFailureNote = { summary: string }
+
+/**
+ * Copy for the tenant-facing enrichment failure taxonomy (M10A.1 / DW-041).
+ *
+ * The five provider-level reasons this replaces were disclosed to tenants even though none of them
+ * is actionable by a tenant, and `NO_PROVIDER_CONFIGURED` in particular described the deployment's
+ * credential state. The operator's precise diagnosis stays in server state, where it is queryable
+ * and safe.
+ *
+ * The copy is strictly subtractive: it states what happened and nothing else. `SERVICE_UNAVAILABLE`
+ * and `INTERNAL` deliberately share a sentence, because after the narrowing the tenant cannot
+ * honestly be told which of the two occurred, and the only difference the wire could show was a
+ * claim that no diagnosis had been recorded — which is untrue for both.
+ */
+const ENRICHMENT_FAILURE_NOTES: Record<
+  Exclude<EnrichmentFailureReason, 'UNKNOWN'>,
+  EnrichmentFailureNote
+> = {
+  SERVICE_UNAVAILABLE: {
+    summary: 'Rivell could not complete the semantic analysis of this contract version.',
+  },
+  UNSUPPORTED_SOURCE: {
+    summary: 'This document cannot be analysed for semantics as it is supplied.',
+  },
+  INTERNAL: {
+    summary: 'Rivell could not complete the semantic analysis of this contract version.',
+  },
+}
+
+export function enrichmentFailureNote(
+  reason: EnrichmentFailureReason | null,
+): EnrichmentFailureNote {
+  if (reason === null) {
+    return {
+      summary:
+        'Rivell could not complete the semantic analysis of this contract version and did not record a reason.',
+    }
+  }
+  // The record is keyed by the real reasons so a typo is a compile error, mirroring the backend's
+  // exhaustive switch. 'UNKNOWN' is the parser's sentinel for an unrecognised wire value rather than
+  // a reason, so it is excluded from the key type and falls through to the fallback sentence.
+  const known = ENRICHMENT_FAILURE_NOTES[reason as Exclude<EnrichmentFailureReason, 'UNKNOWN'>];
+  return (
+    known ?? {
+      summary:
+        'Rivell could not complete the semantic analysis of this contract version and recorded a reason Rivell does not recognise.',
+    }
+  )
 }

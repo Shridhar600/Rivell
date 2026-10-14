@@ -67,7 +67,12 @@ class ContractIngestionFailureTest {
 
             @Override
             public void updateVersionParseOutcome(UUID versionId, String parserVersion,
-                    ParseStatus status, List<String> warnings) {
+                    ParseStatus status, List<String> warnings, ParseCoverage coverage) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public java.util.Optional<ParseCoverage> findParseCoverage(UUID versionId) {
                 throw new UnsupportedOperationException();
             }
 
@@ -105,6 +110,13 @@ class ContractIngestionFailureTest {
 
             @Override
             public ContractStructure loadStructure(UUID versionId) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public java.util.List<ContractListEntry> findContracts(
+                    UUID organizationId, java.time.Instant afterCreatedAt, UUID afterId,
+                    int limit) {
                 throw new UnsupportedOperationException();
             }
 

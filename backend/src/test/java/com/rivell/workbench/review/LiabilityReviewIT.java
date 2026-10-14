@@ -3,7 +3,6 @@ package com.rivell.workbench.review;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayInputStream;
-import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +33,7 @@ import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
+import com.rivell.workbench.intelligence.ChoiceQuestion;
 import com.rivell.workbench.intelligence.DecisionExecutionRequest;
 import com.rivell.workbench.intelligence.GenerativeReasoningProvider;
 import com.rivell.workbench.intelligence.GenerationRequest;
@@ -151,18 +151,73 @@ public class LiabilityReviewIT {
 
         private final CorpusScriptedProvider base = new CorpusScriptedProvider();
         private final AtomicInteger totalDecisions = new AtomicInteger();
-        private final AtomicInteger liabilityDecisions = new AtomicInteger();
+        private final AtomicInteger policyComparisonDecisions = new AtomicInteger();
         private final AtomicInteger consistencyDecisions = new AtomicInteger();
+        private final java.util.List<ComparisonCall> comparisonCalls =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
         volatile boolean verificationSatisfies = true;
         volatile boolean verificationIntroducesRisk;
         volatile Double verificationSatisfiesProbability;
         volatile Double verificationRiskProbability;
-        volatile double liabilityTopProbability = 0.9;
-        volatile boolean failLiabilityDecision;
-        volatile String deviationAnswerOverride;
+        volatile double policyComparisonTopProbability = 0.9;
+        volatile boolean failPolicyComparisonDecision;
+        volatile String policyComparisonAnswerOverride;
+        /** Probability the uncovered-clause triage answers for every clause it sees. */
+        volatile double uncoveredProbability = 0.05;
+        final java.util.List<String> uncoveredHeadings =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        volatile Map<String, Double> policyComparisonProbabilities;
+        /** When not empty, {@link #policyComparisonProbabilities} apply only to these headings. */
+        final java.util.Set<String> probabilityHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
+        /** Headings whose primary-topic choice comes back indecisive, so the clause has none. */
+        final java.util.Set<String> indecisivePrimaryHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
+        private final AtomicInteger indecisivePrimaryAnswers = new AtomicInteger();
+        /** Headings the section-topics decision finds no topic in (every topic answers no). */
+        final java.util.Set<String> topiclessHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+        public int indecisivePrimaryAnswers() {
+            return indecisivePrimaryAnswers.get();
+        }
         volatile boolean failConsistencyDecision;
         volatile String consistencyAnswerOverride;
         volatile double consistencyTopProbability = 0.9;
+
+        /** Answer for a position whose text contains the key (wins over {@link #headingAnswers}). */
+        final Map<String, String> positionAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Answer for every position asked about a clause whose heading contains the key. */
+        final Map<String, String> headingAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Comparisons of clauses whose heading contains one of these fail as if the provider were down. */
+        final java.util.Set<String> failComparisonHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
+        /** A comparison call whose heading contains the key and a question the value fails. */
+        final Map<String, String> failComparisonPairs = new java.util.concurrent.ConcurrentHashMap<>();
+
+        /** Probability the presence decision answers per position whose question contains the key. */
+        final Map<String, Double> presenceAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Probability the presence decision answers when no scripted answer matches. */
+        volatile double defaultPresenceProbability = 0.1;
+        /** The presence decision fails as if the provider were down. */
+        volatile boolean failPresence;
+        private final AtomicInteger presenceCalls = new AtomicInteger();
+        /** The question instructions of every presence question asked, in order. */
+        final java.util.List<String> presenceQuestions =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
+        /** Answer for every position when the options arrive reversed (order probe); null = as asked. */
+        volatile String reversedOrderAnswer;
+        /** The reversed-order (probe) call fails as if the provider were down. */
+        volatile boolean failReversedOrder;
+
+        /**
+         * One policy-comparison call: the subject heading, the question keys, the first option offered,
+         * the definitions the state carried and the state itself (serialized by the test's mapper).
+         */
+        public record ComparisonCall(String heading, java.util.List<String> questionKeys,
+                String firstOption, java.util.List<String> definitions, Object state) {
+        }
 
         @Override
         public String id() {
@@ -172,6 +227,29 @@ public class LiabilityReviewIT {
         @Override
         public ProviderExecutionResult execute(DecisionExecutionRequest request) {
             totalDecisions.incrementAndGet();
+            if (request.pack().questions().get("primary_topic")
+                    instanceof com.rivell.workbench.intelligence.ChoiceQuestion primary
+                    && request.state().payload() instanceof Map<?, ?> payload
+                    && payload.get("heading") instanceof String heading
+                    && indecisivePrimaryHeadings.stream().anyMatch(heading::contains)) {
+                indecisivePrimaryAnswers.incrementAndGet();
+                var even = new LinkedHashMap<String, Double>();
+                primary.criteria().keySet().forEach(option -> even.put(option,
+                        1.0 / primary.criteria().size()));
+                var first = primary.criteria().keySet().iterator().next();
+                return new ProviderExecutionResult(new LinkedHashMap<>(Map.of("primary_topic",
+                        new com.rivell.workbench.intelligence.ChoiceAnswer(first, even.get(first), even))),
+                        "fake-review-v1", new TokenUsage(1, 1));
+            }
+            if (request.pack().questions().keySet().stream().anyMatch(name -> name.startsWith("topic_"))
+                    && request.state().payload() instanceof Map<?, ?> topicPayload
+                    && topicPayload.get("heading") instanceof String topicHeading
+                    && topiclessHeadings.stream().anyMatch(topicHeading::contains)) {
+                var none = new LinkedHashMap<String, SemanticAnswer>();
+                request.pack().questions().keySet().forEach(name -> none.put(name,
+                        new com.rivell.workbench.intelligence.YesNoAnswer(0.02)));
+                return new ProviderExecutionResult(none, "fake-review-v1", new TokenUsage(1, 1));
+            }
             if (request.pack().questions().containsKey(M7DecisionSpecs.SATISFIES_POLICY)) {
                 var verificationAnswers = new LinkedHashMap<String, SemanticAnswer>();
                 verificationAnswers.put(M7DecisionSpecs.SATISFIES_POLICY,
@@ -179,11 +257,12 @@ public class LiabilityReviewIT {
                                 verificationSatisfiesProbability != null
                                         ? verificationSatisfiesProbability
                                         : verificationSatisfies ? 0.95 : 0.05));
-                verificationAnswers.put(M7DecisionSpecs.INTRODUCED_NEW_RISK,
-                        new com.rivell.workbench.intelligence.YesNoAnswer(
-                                verificationRiskProbability != null
-                                        ? verificationRiskProbability
-                                        : verificationIntroducesRisk ? 0.95 : 0.05));
+                var risk = new com.rivell.workbench.intelligence.YesNoAnswer(
+                        verificationRiskProbability != null
+                                ? verificationRiskProbability
+                                : verificationIntroducesRisk ? 0.95 : 0.05);
+                verificationAnswers.put(M7DecisionSpecs.REMOVAL_HURTS_US, risk);
+                verificationAnswers.put(M7DecisionSpecs.ADDITION_HURTS_US, risk);
                 return new ProviderExecutionResult(verificationAnswers, "fake-review-v1",
                         new TokenUsage(120, 5));
             }
@@ -241,52 +320,205 @@ public class LiabilityReviewIT {
                 return new ProviderExecutionResult(carveAnswers, "fake-review-v1",
                         new TokenUsage(140, 6));
             }
-            if (!request.pack().questions().containsKey(M7DecisionSpecs.DEVIATION_TYPE)) {
-                return base.execute(request);
+            if (request.pack().questions().containsKey(PolicyComparisonSpecs.NEEDS_REVIEW)) {
+                var state = (PolicyComparisonSpecs.PolicyComparisonState) request.state().payload();
+                uncoveredHeadings.add(state.heading());
+                return new ProviderExecutionResult(new LinkedHashMap<>(Map.of(
+                        PolicyComparisonSpecs.NEEDS_REVIEW,
+                        new com.rivell.workbench.intelligence.YesNoAnswer(uncoveredProbability))),
+                        "fake-review-v1", new TokenUsage(90, 2));
             }
-            liabilityDecisions.incrementAndGet();
-            if (failLiabilityDecision) {
-                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
-                        "liability decision provider unavailable");
+            if (request.pack().questions().keySet().stream()
+                    .anyMatch(name -> name.startsWith("presence_"))) {
+                return presenceDecision(request);
             }
-            var state = (M7DecisionSpecs.LiabilityDeviationState) request.state().payload();
-            var text = state.clauseText() == null ? "" : state.clauseText().toLowerCase();
-            var multiple = state.capMultiple() == null ? "" : state.capMultiple();
-            var preferred = state.preferredPosition() == null
-                    ? "" : state.preferredPosition().toLowerCase();
-            String selected;
-            if (deviationAnswerOverride != null) {
-                selected = deviationAnswerOverride;
-            } else if (text.contains("uncapped") || text.contains("unlimited")) {
-                selected = M7DecisionSpecs.PROHIBITED_STRUCTURE;
-            } else if (preferred.isBlank()
-                    || !(preferred.contains("12 months") || preferred.contains("twelve (12)"))
-                    || multiple.isBlank()) {
-                selected = M7DecisionSpecs.NOT_COMPARABLE;
-            } else if (new BigDecimal(multiple).compareTo(BigDecimal.ONE) > 0) {
-                selected = M7DecisionSpecs.CAP_ABOVE_PREFERRED;
-            } else {
-                selected = M7DecisionSpecs.NO_DEVIATION;
+            var firstQuestion = request.pack().questions().values().iterator().next();
+            if (firstQuestion instanceof ChoiceQuestion firstChoice
+                    && firstChoice.criteria().containsKey(PolicyComparisonSpecs.WALK_AWAY)) {
+                return policyComparison(request);
             }
-            var options = List.of(M7DecisionSpecs.NO_DEVIATION,
-                    M7DecisionSpecs.CAP_ABOVE_PREFERRED,
-                    M7DecisionSpecs.PROHIBITED_STRUCTURE,
-                    M7DecisionSpecs.NOT_COMPARABLE);
-            var residual = (1.0 - liabilityTopProbability) / (options.size() - 1);
-            var probabilities = new LinkedHashMap<String, Double>();
-            for (var option : options) {
-                probabilities.put(option,
-                        option.equals(selected) ? liabilityTopProbability : residual);
-            }
-            var answers = new LinkedHashMap<String, SemanticAnswer>();
-            answers.put(M7DecisionSpecs.DEVIATION_TYPE,
-                    new ChoiceAnswer(selected, liabilityTopProbability, probabilities));
-            return new ProviderExecutionResult(answers, "fake-review-v1",
-                    new TokenUsage(180, 8));
+            return base.execute(request);
         }
 
-        int liabilityDecisions() {
-            return liabilityDecisions.get();
+        private ProviderExecutionResult policyComparison(DecisionExecutionRequest request) {
+            policyComparisonDecisions.incrementAndGet();
+            if (failPolicyComparisonDecision) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "policy comparison provider unavailable");
+            }
+            var firstOption = ((ChoiceQuestion) request.pack().questions().values().iterator().next())
+                    .criteria().keySet().iterator().next();
+            var reversedOrder = PolicyComparisonSpecs.NOT_ADDRESSED.equals(firstOption);
+            if (reversedOrder && failReversedOrder) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "order probe provider unavailable");
+            }
+            var state = (PolicyComparisonSpecs.PolicyComparisonState) request.state().payload();
+            var subjectHeading = state.heading() == null ? "" : state.heading();
+            if (failComparisonHeadings.stream().anyMatch(subjectHeading::contains)) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "policy comparison provider unavailable for " + subjectHeading);
+            }
+            if (failComparisonPairs.entrySet().stream().anyMatch(entry ->
+                    subjectHeading.contains(entry.getKey())
+                            && request.pack().questions().values().stream()
+                                    .anyMatch(question -> question instanceof ChoiceQuestion choice
+                                            && choice.instructions() != null
+                                            && choice.instructions().toLowerCase(java.util.Locale.ROOT)
+                                                    .contains(entry.getValue()
+                                                            .toLowerCase(java.util.Locale.ROOT))))) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "policy comparison pair provider unavailable for " + subjectHeading);
+            }
+            var clause = state.clause() == null ? "" : state.clause().toLowerCase();
+            var initialKeys = new java.util.ArrayList<>(request.pack().questions().keySet());
+            java.util.Collections.sort(initialKeys);
+            comparisonCalls.add(new ComparisonCall(
+                    state.heading() == null ? "" : state.heading(), initialKeys, firstOption,
+                    state.definitions(), state));
+            var answers = new LinkedHashMap<String, SemanticAnswer>();
+            for (var entry : request.pack().questions().entrySet()) {
+                var question = (ChoiceQuestion) entry.getValue();
+                var scriptedAnswer = scriptedAnswer(subjectHeading, question.instructions());
+                var selected = reversedOrder && reversedOrderAnswer != null
+                        ? reversedOrderAnswer
+                        : policyComparisonAnswerOverride != null
+                                ? policyComparisonAnswerOverride
+                                : scriptedAnswer != null
+                                        ? scriptedAnswer
+                                        : policyComparisonSelection(clause, question.instructions());
+                var scripted = policyComparisonProbabilities != null
+                        && (probabilityHeadings.isEmpty() || probabilityHeadings.stream()
+                                .anyMatch(heading -> state.heading() != null
+                                        && state.heading().contains(heading)));
+                var probabilities = scripted
+                        ? new LinkedHashMap<>(policyComparisonProbabilities)
+                        : uniformProbabilities(question, selected);
+                answers.put(entry.getKey(), new ChoiceAnswer(
+                        selected, probabilities.getOrDefault(selected, 0.5), probabilities));
+            }
+            return new ProviderExecutionResult(answers, "fake-review-v1",
+                    new TokenUsage(220, 12));
+        }
+
+        private String scriptedAnswer(String heading, String instructions) {
+            var position = instructions == null ? "" : instructions.toLowerCase();
+            for (var entry : positionAnswers.entrySet()) {
+                if (position.contains(entry.getKey().toLowerCase())) {
+                    return entry.getValue();
+                }
+            }
+            for (var entry : headingAnswers.entrySet()) {
+                if (heading.contains(entry.getKey())) {
+                    return entry.getValue();
+                }
+            }
+            return null;
+        }
+
+        /** Engine v2 omissions lane: one yes/no per candidate position, scripted by its text. */
+        private ProviderExecutionResult presenceDecision(DecisionExecutionRequest request) {
+            presenceCalls.incrementAndGet();
+            if (failPresence) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "presence decision provider unavailable");
+            }
+            var answers = new LinkedHashMap<String, SemanticAnswer>();
+            for (var entry : request.pack().questions().entrySet()) {
+                var question = (com.rivell.workbench.intelligence.YesNoQuestion) entry.getValue();
+                var instructions = question.instructions();
+                presenceQuestions.add(instructions);
+                var probability = defaultPresenceProbability;
+                for (var scripted : presenceAnswers.entrySet()) {
+                    if (instructions.toLowerCase(java.util.Locale.ROOT)
+                            .contains(scripted.getKey().toLowerCase(java.util.Locale.ROOT))) {
+                        probability = scripted.getValue();
+                        break;
+                    }
+                }
+                answers.put(entry.getKey(),
+                        new com.rivell.workbench.intelligence.YesNoAnswer(probability));
+            }
+            return new ProviderExecutionResult(answers, "fake-review-v1", new TokenUsage(80, 2));
+        }
+
+        private LinkedHashMap<String, Double> uniformProbabilities(
+                ChoiceQuestion question, String selected) {
+            var probabilities = new LinkedHashMap<String, Double>();
+            var residual = (1.0 - policyComparisonTopProbability) / 5;
+            for (var option : question.criteria().keySet()) {
+                probabilities.put(option, option.equals(selected)
+                        ? policyComparisonTopProbability : residual);
+            }
+            return probabilities;
+        }
+
+        /**
+         * Answers one position question from the clause and the position text the question
+         * carries: uncapped exposure against a prohibition walks away, an explicit multiple
+         * inside a listed fallback stays within it, and a clause with no comparable number
+         * meets the preferred position.
+         */
+        private static String policyComparisonSelection(String clause, String instructions) {
+            var position = instructions == null ? "" : instructions.toLowerCase();
+            if ((clause.contains("uncapped") || clause.contains("unlimited"))
+                    && (position.contains("uncapped") || position.contains("unlimited")
+                        || position.contains("never accept"))) {
+                return PolicyComparisonSpecs.WALK_AWAY;
+            }
+            var clauseMultiple = multipleOf(clause);
+            if (clauseMultiple != null && clauseMultiple > 1.0) {
+                var fallback = multipleOf(position);
+                var preferred = position.contains("fees paid") ? 1.0 : null;
+                if (preferred != null && clauseMultiple <= preferred) {
+                    return PolicyComparisonSpecs.MEETS_PREFERRED;
+                }
+                if (fallback != null && clauseMultiple <= fallback) {
+                    return PolicyComparisonSpecs.WITHIN_FALLBACK;
+                }
+                if (fallback != null || preferred != null) {
+                    return PolicyComparisonSpecs.BEYOND_FALLBACK;
+                }
+            }
+            return PolicyComparisonSpecs.MEETS_PREFERRED;
+        }
+
+        private static Double multipleOf(String text) {
+            var matcher = java.util.regex.Pattern
+                    .compile("\\b(\\d+(?:\\.\\d+)?)\\s*times").matcher(text);
+            if (matcher.find()) {
+                return Double.valueOf(matcher.group(1));
+            }
+            var word = java.util.regex.Pattern
+                    .compile("\\b(one|two|three|four|five|six)(?:\\s*\\(\\d+\\))?\\s*times")
+                    .matcher(text);
+            if (word.find()) {
+                return switch (word.group(1)) {
+                    case "one" -> 1.0;
+                    case "two" -> 2.0;
+                    case "three" -> 3.0;
+                    case "four" -> 4.0;
+                    case "five" -> 5.0;
+                    default -> 6.0;
+                };
+            }
+            return null;
+        }
+
+        int policyComparisonDecisions() {
+            return policyComparisonDecisions.get();
+        }
+
+        public java.util.List<ComparisonCall> policyComparisonCalls() {
+            return java.util.List.copyOf(comparisonCalls);
+        }
+
+        public int presenceCalls() {
+            return presenceCalls.get();
+        }
+
+        int consistencyDecisions() {
+            return consistencyDecisions.get();
         }
 
         public int totalDecisions() {
@@ -295,15 +527,34 @@ public class LiabilityReviewIT {
 
         public void reset() {
             totalDecisions.set(0);
-            liabilityDecisions.set(0);
+            policyComparisonDecisions.set(0);
+            comparisonCalls.clear();
             consistencyDecisions.set(0);
             verificationSatisfies = true;
             verificationIntroducesRisk = false;
             verificationSatisfiesProbability = null;
             verificationRiskProbability = null;
-            liabilityTopProbability = 0.9;
-            failLiabilityDecision = false;
-            deviationAnswerOverride = null;
+            policyComparisonTopProbability = 0.9;
+            failPolicyComparisonDecision = false;
+            policyComparisonAnswerOverride = null;
+            positionAnswers.clear();
+            headingAnswers.clear();
+            failComparisonHeadings.clear();
+            failComparisonPairs.clear();
+            presenceAnswers.clear();
+            defaultPresenceProbability = 0.1;
+            failPresence = false;
+            presenceCalls.set(0);
+            presenceQuestions.clear();
+            policyComparisonProbabilities = null;
+            probabilityHeadings.clear();
+            reversedOrderAnswer = null;
+            failReversedOrder = false;
+            indecisivePrimaryHeadings.clear();
+            indecisivePrimaryAnswers.set(0);
+            topiclessHeadings.clear();
+            uncoveredProbability = 0.05;
+            uncoveredHeadings.clear();
             failConsistencyDecision = false;
             consistencyAnswerOverride = null;
             consistencyTopProbability = 0.9;
@@ -318,6 +569,20 @@ public class LiabilityReviewIT {
         volatile boolean failOpenEnded;
         volatile String openEndedProposed;
         volatile String openEndedExplanation;
+        /** Headings the whole-contract spotting read names (MEDIUM); every other clause is fine. */
+        final java.util.Set<String> spottedHeadings = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        /** Headings the whole-contract spotting read names as HIGH. */
+        final java.util.Set<String> spottedHighHeadings =
+                java.util.concurrent.ConcurrentHashMap.newKeySet();
+        final AtomicInteger spottingCalls = new AtomicInteger();
+        /** The second opinion's answer (engine v2). Its quote is the clause's first words unless set. */
+        volatile String secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
+        volatile String secondOpinionQuote;
+        volatile boolean failSecondOpinion;
+        final AtomicInteger secondOpinionCalls = new AtomicInteger();
+        /** The definitions each second-opinion call carried, in call order. */
+        final java.util.List<java.util.List<String>> secondOpinionDefinitions =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
 
         @Override
         public String id() {
@@ -337,11 +602,51 @@ public class LiabilityReviewIT {
             failOpenEnded = false;
             openEndedProposed = null;
             openEndedExplanation = null;
+            spottedHeadings.clear();
+            spottedHighHeadings.clear();
+            spottingCalls.set(0);
+            secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
+            secondOpinionQuote = null;
+            failSecondOpinion = false;
+            secondOpinionCalls.set(0);
+            secondOpinionDefinitions.clear();
         }
 
         @Override
         public GenerationResult generate(GenerationRequest request) {
             calls.incrementAndGet();
+            if (request.state() instanceof AdjudicationSpecs.SecondOpinionState opinion) {
+                secondOpinionCalls.incrementAndGet();
+                secondOpinionDefinitions.add(java.util.List.copyOf(opinion.definitions()));
+                if (failSecondOpinion) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "second opinion provider unavailable");
+                }
+                var quote = secondOpinionQuote != null ? secondOpinionQuote
+                        : opinion.clause().substring(0, Math.min(40, opinion.clause().length()));
+                return new GenerationResult(Map.of(
+                        "category", secondOpinionCategory,
+                        "quote", quote,
+                        "reason", "The quoted words decide how the clause meets the position."),
+                        "fake-gen-v1", new TokenUsage(400, 30));
+            }
+            if (request.state() instanceof IssueSpottingSpecs.SpottingState spotting) {
+                spottingCalls.incrementAndGet();
+                var lines = spotting.clauses().stream()
+                        .map(clause -> {
+                            if (spottedHighHeadings.stream().anyMatch(clause.heading()::contains)) {
+                                return clause.number() + " | HIGH | one-sided term against us";
+                            }
+                            if (spottedHeadings.stream().anyMatch(clause.heading()::contains)) {
+                                return clause.number() + " | MEDIUM | one-sided term against us";
+                            }
+                            return null;
+                        })
+                        .filter(java.util.Objects::nonNull)
+                        .collect(java.util.stream.Collectors.joining("\n"));
+                return new GenerationResult(Map.of("issues", lines.isEmpty() ? "NONE" : lines),
+                        "fake-gen-v1", new TokenUsage(900, 30));
+            }
             if (request.spec().fields().containsKey("proposedLanguage")) {
                 if (failOpenEnded) {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
@@ -437,8 +742,11 @@ public class LiabilityReviewIT {
         return reviewService.create(ingested.contractId(), 1, null);
     }
 
+    @Autowired
+    ReviewRepository reviewRepository;
+
     @Test
-    void cleanPreferredClauseProducesNoSignalsAndOneBoundedDecision() throws Exception {
+    void preferredClauseMakesNoFindingAndOnlyMatchedClausesAreCompared() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
@@ -448,20 +756,28 @@ public class LiabilityReviewIT {
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var executions = analysisRepository.findExecutions(organizationId, run.id());
-        assertThat(executions).hasSize(1);
-        assertThat(executions.get(0).status()).isEqualTo(CheckExecutionStatus.COMPLETED);
-        assertThat(executions.get(0).evidenceTraceId()).isNotNull();
-        assertThat(executions.get(0).detail().get("deviationType"))
-                .isEqualTo(M7DecisionSpecs.NO_DEVIATION);
+        // the liability, confidentiality and termination clauses share a topic with a published
+        // position; the governing-law clause pairs with none, so it reaches the text search
+        assertThat(scriptedProvider.policyComparisonDecisions()).isEqualTo(4);
         assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
-        assertThat(scriptedProvider.liabilityDecisions()).isEqualTo(1);
+        var executions = analysisRepository.findExecutions(organizationId, run.id());
+        assertThat(executions).allSatisfy(execution ->
+                assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED));
+        assertThat(executions.stream()
+                .filter(execution -> execution.detail().containsKey("positionCount"))
+                .filter(execution -> !"0".equals(
+                        execution.detail().get("positionCount").toString()))
+                .count()).isEqualTo(3);
+        assertThat(executions.stream()
+                .filter(execution -> execution.detail().containsKey("positions"))
+                .allMatch(execution -> execution.detail().get("positions").toString()
+                        .contains("flagged=false"))).isTrue();
         assertThat(reviewRepository.find(organizationId, review.id())
                 .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
     }
 
     @Test
-    void deviationProducesPolicyDraftingAndEscalationSignals() {
+    void capAbovePreferredProducesBeyondFallbackWithDraftingAndEscalation() {
         var organizationId = organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var review = reviewService.create(corpus.contract().contractId(), 1, null);
@@ -469,11 +785,13 @@ public class LiabilityReviewIT {
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        assertThat(generativeProvider.calls()).isZero();
+        // P6/v2: the whole-contract read runs once and names nothing; no wording is generated
+        assertThat(generativeProvider.spottingCalls).hasValue(1);
+        assertThat(generativeProvider.calls()).isEqualTo(1);
         var signals = analysisRepository.findSignals(organizationId, run.id());
         assertThat(signals).hasSize(3);
         assertThat(signals).allSatisfy(signal -> {
-            assertThat(signal.issueFamily()).isEqualTo(IssueFamily.LIABILITY_CAP_DEVIATION);
+            assertThat(signal.issueFamily()).isEqualTo(IssueFamily.POSITION_NEEDS_FALLBACK);
             assertThat(signal.subjectKind()).isEqualTo(FindingSubjectKind.CLAUSE);
             assertThat(signal.subjectHeadingNodeId()).isNotNull();
             assertThat(signal.evidenceItemIds()).isNotEmpty();
@@ -481,10 +799,11 @@ public class LiabilityReviewIT {
         var deviation = signals.stream()
                 .filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
                 .findFirst().orElseThrow();
-        var payload = (LiabilityDeviationPayload) deviation.payload();
-        assertThat(payload.deviationType()).isEqualTo(M7DecisionSpecs.CAP_ABOVE_PREFERRED);
-        assertThat(payload.capMultiple()).isEqualTo("3");
-        assertThat(deviation.decisionSpecId()).isEqualTo(M7DecisionSpecs.LIABILITY_DEVIATION_SPEC);
+        var payload = (PositionDeviationPayload) deviation.payload();
+        assertThat(payload.category()).isEqualTo(PolicyComparisonSpecs.BEYOND_FALLBACK);
+        assertThat(payload.flagProbability()).isGreaterThanOrEqualTo(0.6);
+        assertThat(deviation.decisionSpecId())
+                .isEqualTo(PolicyComparisonSpecs.POLICY_COMPARISON_SPEC);
         assertThat(deviation.jevExecutionId()).isNotNull();
 
         var drafting = signals.stream()
@@ -501,29 +820,29 @@ public class LiabilityReviewIT {
                 .map(signal -> (EscalationPayload) signal.payload())
                 .findFirst().orElseThrow();
         assertThat(escalation.trigger()).isNotBlank();
-        assertThat(scriptedProvider.liabilityDecisions()).isEqualTo(1);
+        assertThat(scriptedProvider.policyComparisonDecisions()).isGreaterThanOrEqualTo(1);
     }
 
     @Test
-    void policyMissingIsPreservedWithoutInferenceOrDecision() throws Exception {
+    void noPublishedPositionsMakesNoCallAndNoFinding() throws Exception {
         var organizationId = organizationId();
         var review = enrichedReview("m7-msa-preferred.docx");
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var signals = analysisRepository.findSignals(organizationId, run.id());
-        assertThat(signals).hasSize(1);
-        var signal = signals.get(0);
-        assertThat(signal.signalType()).isEqualTo(SignalType.POLICY_UNAVAILABLE);
-        assertThat(signal.issueFamily()).isEqualTo(IssueFamily.POLICY_UNAVAILABLE);
-        assertThat(((PolicyUnavailablePayload) signal.payload()).sufficiency())
-                .isEqualTo("POLICY_MISSING");
-        assertThat(signal.evidenceItemIds()).isNotEmpty();
-        assertThat(scriptedProvider.liabilityDecisions()).isZero();
+        assertThat(scriptedProvider.policyComparisonDecisions()).isZero();
+        assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
+        var executions = analysisRepository.findExecutions(organizationId, run.id());
+        assertThat(executions).isNotEmpty().allSatisfy(execution -> {
+            assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
+            assertThat(execution.detail().get("positionCount")).isEqualTo(0);
+        });
+        assertThat(reviewRepository.find(organizationId, review.id())
+                .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
     }
 
     @Test
-    void ambiguousPolicyIsPreservedWithoutSelection() throws Exception {
+    void twoApplicablePositionsAreJudgedInOneCallNotAsAmbiguity() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
@@ -531,24 +850,23 @@ public class LiabilityReviewIT {
                 M6EvidenceCorpus.policyManifest(java.time.LocalDate.of(2026, 1, 1),
                         java.time.LocalDate.of(2026, 12, 31)),
                 null);
-        var review = enrichedReview("m7-msa-preferred.docx");
+        var review = enrichedReview("m7-msa-uncapped.docx");
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var signals = analysisRepository.findSignals(organizationId, run.id());
+        assertThat(scriptedProvider.policyComparisonCalls())
+                .anySatisfy(call -> assertThat(call.questionKeys())
+                        .containsExactly("position_1", "position_2"));
+        var signals = analysisRepository.findSignals(organizationId, run.id()).stream()
+                .filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
+                .toList();
         assertThat(signals).hasSize(1);
-        assertThat(signals.get(0).signalType()).isEqualTo(SignalType.POLICY_AMBIGUOUS);
-        assertThat(((PolicyAmbiguousPayload) signals.get(0).payload()).applicableRuleCount())
-                .isGreaterThanOrEqualTo(2);
-        assertThat(signals.get(0).evidenceItemIds()).isNotEmpty();
-        assertThat(scriptedProvider.liabilityDecisions()).isZero();
+        assertThat(((PositionDeviationPayload) signals.get(0).payload()).category())
+                .isEqualTo(PolicyComparisonSpecs.WALK_AWAY);
     }
 
-    @Autowired
-    ReviewRepository reviewRepository;
-
     @Test
-    void uncappedClauseIsClassifiedProhibitedEvenWithoutExtractableFacts() throws Exception {
+    void uncappedClauseWalksAwayAndStillProposesApprovedLanguage() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
@@ -563,63 +881,119 @@ public class LiabilityReviewIT {
         var deviation = signals.stream()
                 .filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
                 .findFirst().orElseThrow();
-        assertThat(((LiabilityDeviationPayload) deviation.payload()).deviationType())
-                .isEqualTo(M7DecisionSpecs.PROHIBITED_STRUCTURE);
+        assertThat(((PositionDeviationPayload) deviation.payload()).category())
+                .isEqualTo(PolicyComparisonSpecs.WALK_AWAY);
+        assertThat(deviation.issueFamily()).isEqualTo(IssueFamily.POSITION_WALK_AWAY);
         assertThat(signals).extracting(RawReviewSignal::signalType)
                 .contains(SignalType.APPROVED_DRAFTING_AVAILABLE,
                         SignalType.ESCALATION_REQUIRED);
-        var executions = analysisRepository.findExecutions(organizationId, run.id());
-        assertThat(executions.get(0).status()).isEqualTo(CheckExecutionStatus.COMPLETED);
-        assertThat(executions.get(0).detail().get("factsAvailable")).isEqualTo(false);
+        var loi = analysisRepository.findExecutions(organizationId, run.id()).stream()
+                .filter(execution -> execution.detail().containsKey("positions"))
+                .filter(execution -> execution.detail().get("positions").toString()
+                        .contains("WALK_AWAY"))
+                .findFirst().orElseThrow();
+        assertThat(loi.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
         assertThat(generativeProvider.calls()).isZero();
     }
 
     @Test
-    void boundedProviderFailurePreservesFactsTraceAndUncertainty() {
+    void comparisonProviderFailureIsUncertaintyPerPositionWithTrace() throws Exception {
         var organizationId = organizationId();
-        var corpus = corpusBuilder.buildMainCorpus(organizationId);
-        var review = reviewService.create(corpus.contract().contractId(), 1, null);
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var review = enrichedReview("m7-msa-preferred.docx");
         generativeProvider.reset();
-        scriptedProvider.failLiabilityDecision = true;
+        scriptedProvider.failPolicyComparisonDecision = true;
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var execution = analysisRepository.findExecutions(organizationId, run.id()).get(0);
-        assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
-        assertThat(execution.evidenceTraceId()).isNotNull();
-        assertThat(execution.detail().get("factsAvailable")).isEqualTo(true);
-        assertThat(execution.detail().get("degradedReason").toString())
-                .contains("provider_unavailable");
+        var degraded = analysisRepository.findExecutions(organizationId, run.id()).stream()
+                .filter(execution -> execution.status() == CheckExecutionStatus.DEGRADED)
+                .toList();
+        // three position-bearing clauses degrade on the failed comparison; the clause the text
+        // search found a position for degrades on the failed search judgment
+        assertThat(degraded).hasSize(4);
+        assertThat(degraded).allSatisfy(execution ->
+                assertThat(execution.evidenceTraceId()).isNotNull());
+        var comparisonFailures = degraded.stream()
+                .filter(execution -> !"position_search_comparison_failed"
+                        .equals(execution.detail().get("degradedReason")))
+                .toList();
+        assertThat(comparisonFailures).hasSize(3);
+        assertThat(comparisonFailures).allSatisfy(execution ->
+                assertThat(execution.detail().get("degradedReason").toString())
+                        .contains("provider_unavailable"));
+        var searchFailure = degraded.stream()
+                .filter(execution -> "position_search_comparison_failed"
+                        .equals(execution.detail().get("degradedReason")))
+                .findFirst().orElseThrow();
+        assertThat(searchFailure.signalCount()).isZero();
+        // never an invented "not addressed": nobody judged the found position
+        assertThat(searchFailure.detail()).doesNotContainKey("uncoveredProbability");
         var signals = analysisRepository.findSignals(organizationId, run.id());
-        assertThat(signals).hasSize(1);
-        assertThat(signals.get(0).signalType()).isEqualTo(SignalType.DEVIATION_UNCERTAIN);
-        assertThat(((DeviationUncertainPayload) signals.get(0).payload()).reason())
-                .isEqualTo("bounded_decision_unavailable");
-        assertThat(signals.get(0).evidenceItemIds()).isNotEmpty();
+        assertThat(signals).hasSize(3);
+        assertThat(signals).allSatisfy(signal -> {
+            assertThat(signal.signalType()).isEqualTo(SignalType.DEVIATION_UNCERTAIN);
+            assertThat(signal.issueFamily()).isEqualTo(IssueFamily.POSITION_UNCERTAIN);
+            assertThat(((DeviationUncertainPayload) signal.payload()).reason())
+                    .isEqualTo("bounded_decision_unavailable");
+            assertThat(signal.evidenceItemIds()).isNotEmpty();
+        });
         assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
                 .isEqualTo(ReviewStatus.COMPLETED);
+        // the search-failed check returns before the playbook-silent read: no generative call
+        assertThat(generativeProvider.spottingCalls).hasValue(0);
         assertThat(generativeProvider.calls()).isZero();
     }
 
     @Test
-    void ambiguousClassificationBecomesUncertaintyNotDeviation() {
+    void uniformLowProbabilitiesAcrossFlaggingOptionsDoNotFlag() throws Exception {
         var organizationId = organizationId();
-        var corpus = corpusBuilder.buildMainCorpus(organizationId);
-        var review = reviewService.create(corpus.contract().contractId(), 1, null);
-        generativeProvider.reset();
-        scriptedProvider.liabilityTopProbability = 0.5;
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var review = enrichedReview("m7-msa-uncapped.docx");
+        scriptedProvider.policyComparisonProbabilities = Map.of(
+                PolicyComparisonSpecs.MEETS_PREFERRED, 0.5,
+                PolicyComparisonSpecs.WITHIN_FALLBACK, 0.1,
+                PolicyComparisonSpecs.BEYOND_FALLBACK, 0.1,
+                PolicyComparisonSpecs.WALK_AWAY, 0.1,
+                PolicyComparisonSpecs.UNCLEAR, 0.1,
+                PolicyComparisonSpecs.NOT_ADDRESSED, 0.1);
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var signals = analysisRepository.findSignals(organizationId, run.id());
-        assertThat(signals).hasSize(1);
-        assertThat(signals.get(0).signalType()).isEqualTo(SignalType.DEVIATION_UNCERTAIN);
-        assertThat(((DeviationUncertainPayload) signals.get(0).payload()).reason())
-                .isEqualTo("classification_uncertain");
-        assertThat(signals.get(0).quality()).containsKey("confidence");
-        var execution = analysisRepository.findExecutions(organizationId, run.id()).get(0);
-        assertThat(execution.detail().get("uncertaintyReason"))
-                .isEqualTo("classification_uncertain");
-        assertThat(generativeProvider.calls()).isZero();
+        assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
+        assertThat(scriptedProvider.policyComparisonDecisions()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void flaggingFollowsTheSummedProbabilityAndArgmaxNotTheSelectedOption() throws Exception {
+        var organizationId = organizationId();
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var review = enrichedReview("m7-msa-uncapped.docx");
+        scriptedProvider.policyComparisonAnswerOverride =
+                PolicyComparisonSpecs.MEETS_PREFERRED;
+        scriptedProvider.policyComparisonProbabilities = Map.of(
+                PolicyComparisonSpecs.MEETS_PREFERRED, 0.2,
+                PolicyComparisonSpecs.WITHIN_FALLBACK, 0.1,
+                PolicyComparisonSpecs.BEYOND_FALLBACK, 0.4,
+                PolicyComparisonSpecs.WALK_AWAY, 0.05,
+                PolicyComparisonSpecs.UNCLEAR, 0.2,
+                PolicyComparisonSpecs.NOT_ADDRESSED, 0.05);
+        // flag mass 0.75 sits in the doubt band: the second opinion agrees, so the judgment stands
+        generativeProvider.secondOpinionCategory = PolicyComparisonSpecs.BEYOND_FALLBACK;
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var deviation = analysisRepository.findSignals(organizationId, run.id()).stream()
+                .filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
+                .findFirst().orElseThrow();
+        var payload = (PositionDeviationPayload) deviation.payload();
+        assertThat(payload.category()).isEqualTo(PolicyComparisonSpecs.BEYOND_FALLBACK);
+        assertThat(payload.flagProbability()).isEqualTo(0.75, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(payload.probabilities().get(PolicyComparisonSpecs.BEYOND_FALLBACK))
+                .isEqualTo(0.4);
+        assertThat(deviation.quality().get("confidence")).isEqualTo(0.2);
     }
 }

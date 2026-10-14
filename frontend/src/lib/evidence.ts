@@ -9,11 +9,11 @@ import {
   CONTRACT_TYPE_LABELS,
   JURISDICTION_LABELS,
   PAPER_SOURCE_LABELS,
-  conceptLabel,
   relationshipTypeVerb,
   roleLabel,
 } from './contractSemantics'
 import { humanizeCode } from './domainLabels'
+import type { ConceptLabel } from '../api/taxonomy'
 import { POSITION_LABELS } from './semantics'
 
 type LaneProminence = 'authoritative' | 'subject' | 'historical' | 'optional'
@@ -52,7 +52,7 @@ const EVIDENCE_LANES: readonly EvidenceLane[] = [
     authority: 'PRECEDENT',
     label: 'Precedents',
     description:
-      'Historical comparable agreements — lower authority than published policy or approved drafting.',
+      'Historical comparable agreements, with lower authority than published policy or approved drafting.',
     emptyState: 'No comparable precedent was found for this concept.',
     prominence: 'historical',
   },
@@ -165,8 +165,8 @@ const SUFFICIENCY_PRESENTATIONS: Record<
     description: 'No approved reusable wording exists for this concept.',
   },
   PRECEDENT_WEAK: {
-    label: 'Precedent evidence weak',
-    description: 'No compatible precedent was found for this concept.',
+    label: 'No comparable past agreement found',
+    description: 'No comparable past agreement was found for this concept. Precedent is evidence only and does not set policy.',
   },
   CONTRACT_CONTEXT_INCOMPLETE: {
     label: 'Contract context incomplete',
@@ -292,12 +292,13 @@ export function laneEmptyState(
 export function staleClassificationNote(
   builtConcept: string | null,
   currentConcept: string | null,
+  label: ConceptLabel,
 ): string | null {
   if (builtConcept === null || builtConcept === currentConcept) return null
-  const current = currentConcept === null ? 'not set' : conceptLabel(currentConcept)
-  return `This evidence was built with the classification ${conceptLabel(
+  const current = currentConcept === null ? 'not set' : label(currentConcept)
+  return `This evidence was built with the classification ${label(
     builtConcept,
-  )}. The contract's current classification is ${current} — rebuild to refresh the evidence.`
+  )}. The contract's current classification is ${current}; rebuild to refresh the evidence.`
 }
 
 const DEGRADATION_MESSAGES: Record<string, string> = {
@@ -308,7 +309,8 @@ const DEGRADATION_MESSAGES: Record<string, string> = {
   COMPATIBILITY_UNAVAILABLE: 'Policy compatibility could not be assessed.',
   STRUCTURED_LANE_TRUNCATED:
     'Structured evidence exceeded the bounded retrieval window; results may be incomplete.',
-  INDEX_INCOMPLETE: 'Some precedent index entries are not currently searchable.',
+  INDEX_INCOMPLETE: 'Some index entries are not currently searchable.',
+  VECTOR_INDEX_INCOMPLETE: 'Some index entries can be found by their words only, not by their meaning.',
 }
 
 export function degradationMessage(code: string): string {
@@ -437,10 +439,10 @@ function entryLabel(key: string): string {
   return REQUEST_KEY_LABELS[key] ?? humanizeCode(key)
 }
 
-function displayValue(key: string, value: string): string {
+function displayValue(key: string, value: string, label: ConceptLabel): string {
   switch (key) {
     case 'legalConcept':
-      return conceptLabel(value)
+      return label(value)
     case 'purpose':
       return humanizeCode(value)
     case 'contractType':
@@ -460,19 +462,23 @@ function scalarEntry(
   entryKey: string,
   valueKey: string,
   value: string | number | boolean,
+  label: ConceptLabel,
 ): TraceRequestEntry {
   if (typeof value === 'string') {
     return {
       key: entryKey,
       label: entryLabel(valueKey),
-      value: displayValue(valueKey, value),
+      value: displayValue(valueKey, value, label),
       long: value.length > 200,
     }
   }
   return { key: entryKey, label: entryLabel(valueKey), value: String(value), long: false }
 }
 
-export function traceRequestEntries(request: Record<string, unknown>): TraceRequestEntry[] {
+export function traceRequestEntries(
+  request: Record<string, unknown>,
+  label: ConceptLabel,
+): TraceRequestEntry[] {
   const entries: TraceRequestEntry[] = []
   for (const [key, value] of Object.entries(request)) {
     if (value === null || value === undefined) continue
@@ -484,15 +490,28 @@ export function traceRequestEntries(request: Record<string, unknown>): TraceRequ
             typeof nestedValue === 'number' ||
             typeof nestedValue === 'boolean')
         ) {
-          entries.push(scalarEntry(`reviewProfile.${nestedKey}`, nestedKey, nestedValue))
+          entries.push(scalarEntry(`reviewProfile.${nestedKey}`, nestedKey, nestedValue, label))
         }
       }
       continue
     }
     if (!TRACE_REQUEST_KEYS.has(key)) continue
     if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      entries.push(scalarEntry(key, key, value))
+      entries.push(scalarEntry(key, key, value, label))
     }
   }
   return entries
+}
+
+/**
+ * Where the full knowledge record lives: a playbook position opens on its playbook, any other
+ * published source on its source page. Contract evidence has no knowledge page.
+ */
+export function sourceLink(item: EvidenceItem): { to: string; label: string } | null {
+  if (!item.sourceArtifactId || item.authorityClass === 'CURRENT_CONTRACT') return null
+  const position = item.sourceCandidateId ? `?position=${item.sourceCandidateId}` : ''
+  if (item.authorityClass === 'POLICY' && item.sourceCandidateId) {
+    return { to: `/knowledge/playbooks/${item.sourceArtifactId}${position}`, label: 'Open in Playbooks' }
+  }
+  return { to: `/knowledge/sources/${item.sourceArtifactId}${position}`, label: 'Open the source' }
 }

@@ -54,6 +54,7 @@ public class EmbeddingService {
                 properties.provider(), properties.model(), batch.resolvedModel(),
                 startedAt, Duration.between(startedAt, clock.instant()).toMillis(),
                 DecisionOutcome.COMPLETED, inputs.size(), batch.usage());
+        ExecutionLog.completed("embedding", metadata);
         return new EmbeddingExecution(metadata.executionId(), batch.vectors(),
                 batch.resolvedModel(), metadata);
     }

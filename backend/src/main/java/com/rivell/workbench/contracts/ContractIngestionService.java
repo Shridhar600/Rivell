@@ -104,7 +104,7 @@ public class ContractIngestionService {
             transactionTemplate.executeWithoutResult(status -> {
                 repository.updateVersionParseOutcome(
                         versionId, parseResult.parserVersion(),
-                        parseResult.status(), parseResult.warnings());
+                        parseResult.status(), parseResult.warnings(), parseResult.coverage());
                 repository.insertNodes(versionId, parseResult.nodes());
                 parsedTitle(parseResult.nodes()).ifPresent(title ->
                         repository.updateContractTitle(contractId, title));

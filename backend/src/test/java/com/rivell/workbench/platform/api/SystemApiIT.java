@@ -89,6 +89,7 @@ class SystemApiIT {
                         "/api/contracts",
                         "/api/contracts/{id}",
                         "/api/contracts/{id}/versions/{versionNumber}/structure",
+                        "/api/contracts/{id}/versions/{versionNumber}/coverage",
                         "/api/contracts/{id}/versions/{versionNumber}/original",
                         "/api/contracts/{id}/versions/{versionNumber}/enrichment",
                         "/api/contracts/{id}/versions/{versionNumber}/semantics",
@@ -101,22 +102,27 @@ class SystemApiIT {
                         "/api/reviews/{id}",
                         "/api/reviews/{id}/findings",
                         "/api/reviews/{id}/findings/{findingId}",
+                        "/api/reviews/{id}/clause-marks",
                         "/api/reviews/{id}/findings/{findingId}/decision",
                         "/api/reviews/{id}/findings/{findingId}/decisions",
                         "/api/reviews/{id}/decisions",
                         "/api/reviews/{id}/human-review",
+                        "/api/reviews/{id}/diagnostics",
                         "/api/reviews/{id}/finalize",
                         "/api/reviews/{id}/approved-change-set",
                         "/api/reviews/{id}/redline",
+                        "/api/reviews/{id}/redline/retry",
                         "/api/reviews/{id}/redline/download",
                         "/api/reviews/{id}/progress",
                         "/api/knowledge/artifacts",
                         "/api/knowledge/artifacts/{id}",
                         "/api/knowledge/artifacts/{id}/structure",
+                        "/api/knowledge/artifacts/{id}/coverage",
                         "/api/knowledge/artifacts/{id}/units",
                         "/api/knowledge/artifacts/{id}/candidates",
                         "/api/knowledge/artifacts/{id}/original",
                         "/api/knowledge/artifacts/{artifactId}/units/{unitId}/classification",
+                        "/api/knowledge/artifacts/{artifactId}/units/{unitId}/position",
                         "/api/knowledge/candidates/bulk-approve",
                         "/api/knowledge/candidates/{id}",
                         "/api/knowledge/candidates/{id}/concept",
@@ -126,9 +132,26 @@ class SystemApiIT {
                         "/api/knowledge/publications",
                         "/api/knowledge/publications/{id}",
                         "/api/retrieval/evidence",
-                        "/api/retrieval/traces/{id}");
+                        "/api/retrieval/traces/{id}",
+                        "/api/taxonomy/concepts");
         assertThat(openApi.at("/paths/~1api~1system~1status/get/responses/200/content/application~1json/schema/$ref")
                 .asText()).endsWith("SystemStatusResponse");
+
+        // engine v2 P4: the exposed quality projections and diagnostics numbers are part of the contract
+        for (var field : new String[] {"firstReviewCategory", "positionLabel"}) {
+            assertThat(openApi.at("/components/schemas/FindingSummaryView/properties/" + field)
+                    .isMissingNode()).as("FindingSummaryView." + field).isFalse();
+            assertThat(openApi.at("/components/schemas/FindingDetailView/properties/" + field)
+                    .isMissingNode()).as("FindingDetailView." + field).isFalse();
+        }
+        for (var field : new String[] {"route", "addressed", "searchFound", "searchFailed",
+                "spottedSeverity", "omissionCandidates", "searchedClauses", "presenceProbabilities",
+                "addressedBySearch", "flaggedBySearch"}) {
+            assertThat(openApi.at("/components/schemas/CheckView/properties/" + field)
+                    .isMissingNode()).as("CheckView." + field).isFalse();
+        }
+        assertThat(openApi.at("/components/schemas/JudgedPositionView/properties/foundBy")
+                .isMissingNode()).as("JudgedPositionView.foundBy").isFalse();
 
         var output = Path.of("target/openapi/openapi.json");
         Files.createDirectories(output.getParent());

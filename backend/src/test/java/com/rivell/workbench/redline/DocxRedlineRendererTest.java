@@ -1,5 +1,7 @@
 package com.rivell.workbench.redline;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -22,13 +24,20 @@ import org.docx4j.wml.RunIns;
 import org.docx4j.wml.Text;
 import org.junit.jupiter.api.Test;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.platform.parsing.RedlineFixturePipeline;
 import com.rivell.workbench.platform.docx.DocxRedlineRenderer;
 
 class DocxRedlineRendererTest {
 
-    private final DocxRedlineRenderer renderer = new DocxRedlineRenderer();
+    /**
+     * A deliberately small expansion budget so the bomb test is fast and deterministic. Production
+     * uses the configured 200 MB ceiling; the property is the same one the ingest parser honours.
+     */
+    private static final long MAX_UNCOMPRESSED_BYTES = 64 * 1024;
+
+    private final DocxRedlineRenderer renderer = new DocxRedlineRenderer(
+            new com.rivell.workbench.platform.parsing.DocxParserProperties(
+                    MAX_UNCOMPRESSED_BYTES));
 
     @Test
     void simpleReplaceProducesTrackedDeletionAndInsertionAndKeepsTheHeading() {
@@ -103,13 +112,13 @@ class DocxRedlineRendererTest {
         var versionId = UUID.randomUUID();
         var structure = RedlineFixturePipeline.parse("m9-insert.docx", contractId, versionId);
         var concepts = RedlineFixturePipeline.concepts(structure, Map.of(
-                "2. Indemnification", LegalConcept.INDEMNIFICATION,
-                "3. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "4. Term and Survival", LegalConcept.TERM_TERMINATION,
-                "5. Governing Law", LegalConcept.GOVERNING_LAW));
+                "2. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "3. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "4. Term and Survival", CoreConcepts.TERM,
+                "5. Governing Law", CoreConcepts.GOVERNING_LAW));
         var setId = UUID.randomUUID();
         var change = RedlineTestStructures.insert(setId, 0,
-                LegalConcept.LIMITATION_OF_LIABILITY,
+                CoreConcepts.LIMITATION_OF_LIABILITY,
                 "Aggregate liability shall not exceed the fees paid.");
         var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
                 List.of(change));
@@ -140,17 +149,17 @@ class DocxRedlineRendererTest {
         var structure = RedlineFixturePipeline.parse("m9-multi-change.docx", contractId,
                 versionId);
         var concepts = RedlineFixturePipeline.concepts(structure, Map.of(
-                "1. Limitation of Liability", LegalConcept.LIMITATION_OF_LIABILITY,
-                "3. Indemnification", LegalConcept.INDEMNIFICATION,
-                "4. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "5. Governing Law", LegalConcept.GOVERNING_LAW));
+                "1. Limitation of Liability", CoreConcepts.LIMITATION_OF_LIABILITY,
+                "3. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "4. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "5. Governing Law", CoreConcepts.GOVERNING_LAW));
         var setId = UUID.randomUUID();
         var replace = RedlineTestStructures.replace(setId, 0,
                 RedlineFixturePipeline.headingId(structure, "1. Limitation of Liability"),
                 "Liability is capped at the fees paid in the prior twelve months.");
         var delete = RedlineTestStructures.delete(setId, 1,
                 RedlineFixturePipeline.headingId(structure, "2. Non-Solicitation"));
-        var insert = RedlineTestStructures.insert(setId, 2, LegalConcept.TERM_TERMINATION,
+        var insert = RedlineTestStructures.insert(setId, 2, CoreConcepts.TERM,
                 "Either party may terminate for material breach after thirty days notice.");
         var set = RedlineTestStructures.set(UUID.randomUUID(), contractId, versionId, 1,
                 List.of(replace, delete, insert));
@@ -324,6 +333,53 @@ class DocxRedlineRendererTest {
                 .isInstanceOf(RedlineRenderException.class)
                 .extracting(e -> ((RedlineRenderException) e).code())
                 .isEqualTo(RedlineFailureCode.PREEXISTING_REVISIONS_UNSUPPORTED);
+    }
+
+    /**
+     * M10 / DW-035(3): the redline path loads stored source bytes with no decompression bound, while
+     * the ingest parser has always had one. A package that expands far beyond its stored size must
+     * fail closed at the redline boundary with its own reason, not be handed to docx4j.
+     */
+    @Test
+    void aPackageThatExpandsBeyondThePermittedSizeFailsClosed() {
+        var plan = replacePlan("m9-simple-replace.docx", "2. Limitation of Liability",
+                "Liability is capped at the fees paid.");
+        var bomb = decompressionBomb("m9-simple-replace.docx");
+
+        assertThatThrownBy(() -> renderer.render(bomb, plan))
+                .isInstanceOf(RedlineRenderException.class)
+                .extracting(e -> ((RedlineRenderException) e).code())
+                .isEqualTo(RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED);
+    }
+
+    /**
+     * Builds a package that stores a small file but declares a far larger uncompressed payload: the
+     * shape of a decompression bomb, without needing a large fixture on disk.
+     */
+    private static byte[] decompressionBomb(String fixture) {
+        var original = RedlineFixturePipeline.fixture(fixture);
+        var inflated = new java.io.ByteArrayOutputStream();
+        try (var zip = new java.util.zip.ZipInputStream(
+                new ByteArrayInputStream(original))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                inflated.write(zip.readAllBytes());
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("fixture could not be expanded", e);
+        }
+        var payload = new byte[(int) (MAX_UNCOMPRESSED_BYTES * 4)];
+        java.util.Arrays.fill(payload, (byte) ' ');
+
+        var bomb = new java.io.ByteArrayOutputStream();
+        try (var out = new java.util.zip.ZipOutputStream(bomb)) {
+            out.putNextEntry(new ZipEntry("word/document.xml"));
+            out.write(payload);
+            out.closeEntry();
+        } catch (Exception e) {
+            throw new IllegalStateException("bomb could not be built", e);
+        }
+        return bomb.toByteArray();
     }
 
     @Test

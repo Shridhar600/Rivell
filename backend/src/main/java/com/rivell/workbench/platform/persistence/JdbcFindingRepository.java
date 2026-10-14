@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.review.ClaimKind;
 import com.rivell.workbench.review.Finding;
 import com.rivell.workbench.review.FindingClassification;
@@ -26,6 +26,7 @@ import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.ProposedAction;
 import com.rivell.workbench.review.ProposedLanguageSource;
+import com.rivell.workbench.review.ProposedChangeCounts;
 
 @Repository
 class JdbcFindingRepository implements FindingRepository {
@@ -47,6 +48,13 @@ class JdbcFindingRepository implements FindingRepository {
             insertFinding(finding);
             insertChildren(finding);
         }
+    }
+
+    @Override
+    @Transactional
+    public void addFinding(Finding finding) {
+        insertFinding(finding);
+        insertChildren(finding);
     }
 
     @Override
@@ -91,13 +99,13 @@ class JdbcFindingRepository implements FindingRepository {
                    issue_family, observation_kind, observation_text, severity,
                    review_classification, proposed_action, proposed_language,
                    proposed_language_source, approved_drafting_evidence_id, quality,
-                   created_at)
+                   created_at, added_by)
                 values (:id, :organizationId, :reviewId, :runId, :consolidationKey,
                    :subjectKind, :subjectHeadingNodeId, :absenceConcept, :concept,
                    :secondaryConcept, :issueFamily, :observationKind, :observationText,
                    :severity, :reviewClassification, :proposedAction, :proposedLanguage,
                    :proposedLanguageSource, :approvedDraftingEvidenceId,
-                   cast(:quality as jsonb), :createdAt)
+                   cast(:quality as jsonb), :createdAt, :addedBy)
                 """)
                 .param("id", finding.id())
                 .param("organizationId", finding.organizationId())
@@ -107,10 +115,10 @@ class JdbcFindingRepository implements FindingRepository {
                 .param("subjectKind", finding.subjectKind().name())
                 .param("subjectHeadingNodeId", finding.subjectHeadingNodeId())
                 .param("absenceConcept", finding.absenceConcept() == null
-                        ? null : finding.absenceConcept().name())
-                .param("concept", finding.concept().name())
+                        ? null : finding.absenceConcept().value())
+                .param("concept", finding.concept().value())
                 .param("secondaryConcept", finding.secondaryConcept() == null
-                        ? null : finding.secondaryConcept().name())
+                        ? null : finding.secondaryConcept().value())
                 .param("issueFamily", finding.issueFamily().name())
                 .param("observationKind", finding.observationKind())
                 .param("observationText", finding.observationText())
@@ -122,6 +130,7 @@ class JdbcFindingRepository implements FindingRepository {
                 .param("approvedDraftingEvidenceId", finding.approvedDraftingEvidenceId())
                 .param("quality", json(finding.quality()))
                 .param("createdAt", timestamp(finding.createdAt()))
+                .param("addedBy", finding.addedBy())
                 .update();
     }
 
@@ -137,7 +146,7 @@ class JdbcFindingRepository implements FindingRepository {
                     .param("organizationId", finding.organizationId())
                     .param("findingId", finding.id())
                     .param("ordinal", conceptOrdinal++)
-                    .param("concept", concept.name())
+                    .param("concept", concept.value())
                     .update();
         }
         for (var claim : finding.claims()) {
@@ -187,6 +196,26 @@ class JdbcFindingRepository implements FindingRepository {
     }
 
     @Override
+    public Map<FindingClassification, Long> countFindingsByClassification(
+            UUID organizationId, UUID runId) {
+        return jdbcClient.sql("""
+                select review_classification, count(*) as total
+                from finding
+                where run_id = :runId and organization_id = :organizationId
+                group by review_classification
+                """)
+                .param("runId", runId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> Map.entry(
+                        FindingClassification.valueOf(rs.getString("review_classification")),
+                        rs.getLong("total")))
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    @Override
     public List<Finding> findFindings(UUID organizationId, UUID runId) {
         var rows = jdbcClient.sql("""
                 select id, organization_id, review_id, run_id, consolidation_key,
@@ -194,7 +223,7 @@ class JdbcFindingRepository implements FindingRepository {
                        secondary_concept, issue_family, observation_kind, observation_text,
                        severity, review_classification, proposed_action, proposed_language,
                        proposed_language_source, approved_drafting_evidence_id, quality,
-                       created_at
+                       created_at, added_by
                 from finding
                 where run_id = :runId and organization_id = :organizationId
                 order by consolidation_key
@@ -205,7 +234,7 @@ class JdbcFindingRepository implements FindingRepository {
                 .list();
 
         var concepts = children(organizationId, runId, "concept", (findingId, row) ->
-                new ConceptRow(findingId, LegalConcept.valueOf(row.getString("concept"))));
+                new ConceptRow(findingId, ConceptKey.of(row.getString("concept"))));
         var claims = children(organizationId, runId, "claim", (findingId, row) ->
                 new ClaimRow(findingId, new FindingClaim(
                         row.getObject("id", UUID.class),
@@ -236,7 +265,7 @@ class JdbcFindingRepository implements FindingRepository {
 
     @Override
     public List<Finding> findFindings(
-            UUID organizationId, UUID runId, LegalConcept concept,
+            UUID organizationId, UUID runId, ConceptKey concept,
             FindingClassification classification, FindingSeverity severity, int limit) {
         var conditions = new ArrayList<String>();
         var params = new LinkedHashMap<String, Object>();
@@ -246,7 +275,7 @@ class JdbcFindingRepository implements FindingRepository {
         params.put("runId", runId);
         if (concept != null) {
             conditions.add("(concept = :concept or secondary_concept = :concept)");
-            params.put("concept", concept.name());
+            params.put("concept", concept.value());
         }
         if (classification != null) {
             conditions.add("review_classification = :classification");
@@ -262,7 +291,7 @@ class JdbcFindingRepository implements FindingRepository {
                        secondary_concept, issue_family, observation_kind, observation_text,
                        severity, review_classification, proposed_action, proposed_language,
                        proposed_language_source, approved_drafting_evidence_id, quality,
-                       created_at
+                       created_at, added_by
                 from finding
                 where %s
                 order by case severity when 'HIGH' then 0 when 'MEDIUM' then 1 else 2 end,
@@ -289,7 +318,7 @@ class JdbcFindingRepository implements FindingRepository {
                        secondary_concept, issue_family, observation_kind, observation_text,
                        severity, review_classification, proposed_action, proposed_language,
                        proposed_language_source, approved_drafting_evidence_id, quality,
-                       created_at
+                       created_at, added_by
                 from finding
                 where id = :findingId and review_id = :reviewId and run_id = :runId
                   and organization_id = :organizationId
@@ -333,7 +362,7 @@ class JdbcFindingRepository implements FindingRepository {
                 .optional();
     }
 
-    private List<LegalConcept> findConcepts(UUID organizationId, UUID findingId) {
+    private List<ConceptKey> findConcepts(UUID organizationId, UUID findingId) {
         return jdbcClient.sql("""
                 select concept from finding_concept
                 where finding_id = :findingId and organization_id = :organizationId
@@ -341,7 +370,7 @@ class JdbcFindingRepository implements FindingRepository {
                 """)
                 .param("findingId", findingId)
                 .param("organizationId", organizationId)
-                .query((rs, rowNum) -> LegalConcept.valueOf(rs.getString("concept")))
+                .query((rs, rowNum) -> ConceptKey.of(rs.getString("concept")))
                 .list();
     }
 
@@ -389,7 +418,7 @@ class JdbcFindingRepository implements FindingRepository {
     }
 
     private static Finding toFinding(
-            FindingRow row, List<LegalConcept> concepts, List<FindingClaim> claims,
+            FindingRow row, List<ConceptKey> concepts, List<FindingClaim> claims,
             List<UUID> evidence, List<UUID> signals) {
         return new Finding(row.id(), row.organizationId(), row.reviewId(), row.runId(),
                 row.consolidationKey(), row.subjectKind(), row.subjectHeadingNodeId(),
@@ -397,7 +426,7 @@ class JdbcFindingRepository implements FindingRepository {
                 row.observationKind(), row.observationText(), row.severity(),
                 row.reviewClassification(), row.proposedAction(), row.proposedLanguage(),
                 row.proposedLanguageSource(), row.approvedDraftingEvidenceId(), row.quality(),
-                row.createdAt(), concepts, claims, evidence, signals);
+                row.createdAt(), concepts, claims, evidence, signals, row.addedBy());
     }
 
     private FindingRow mapFindingRow(java.sql.ResultSet rs) throws java.sql.SQLException {
@@ -410,10 +439,10 @@ class JdbcFindingRepository implements FindingRepository {
                 FindingSubjectKind.valueOf(rs.getString("subject_kind")),
                 rs.getObject("subject_heading_node_id", UUID.class),
                 rs.getString("absence_concept") == null ? null
-                        : LegalConcept.valueOf(rs.getString("absence_concept")),
-                LegalConcept.valueOf(rs.getString("concept")),
+                        : ConceptKey.of(rs.getString("absence_concept")),
+                ConceptKey.of(rs.getString("concept")),
                 rs.getString("secondary_concept") == null ? null
-                        : LegalConcept.valueOf(rs.getString("secondary_concept")),
+                        : ConceptKey.of(rs.getString("secondary_concept")),
                 IssueFamily.valueOf(rs.getString("issue_family")),
                 rs.getString("observation_kind"),
                 rs.getString("observation_text"),
@@ -424,7 +453,28 @@ class JdbcFindingRepository implements FindingRepository {
                 ProposedLanguageSource.valueOf(rs.getString("proposed_language_source")),
                 rs.getObject("approved_drafting_evidence_id", UUID.class),
                 map(rs.getString("quality")),
-                rs.getTimestamp("created_at").toInstant());
+                rs.getTimestamp("created_at").toInstant(),
+                rs.getObject("added_by", UUID.class));
+    }
+
+    @Override
+    public ProposedChangeCounts countProposedChanges(UUID organizationId, UUID runId) {
+        return jdbcClient.sql("""
+                select
+                    count(*) filter (where subject_kind = 'CLAUSE'
+                        and proposed_language is not null) as replace_count,
+                    count(*) filter (where subject_kind = 'ABSENCE'
+                        and proposed_action = 'ADD_REQUIRED_PROVISION') as insert_count
+                from finding
+                where run_id = :runId and organization_id = :organizationId
+                """)
+                .param("runId", runId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> new ProposedChangeCounts(
+                        rs.getInt("replace_count"),
+                        rs.getInt("insert_count"),
+                        0))
+                .single();
     }
 
     @Override
@@ -495,15 +545,15 @@ class JdbcFindingRepository implements FindingRepository {
     private record FindingRow(
             UUID id, UUID organizationId, UUID reviewId, UUID runId, String consolidationKey,
             FindingSubjectKind subjectKind, UUID subjectHeadingNodeId,
-            LegalConcept absenceConcept, LegalConcept concept, LegalConcept secondaryConcept,
+            ConceptKey absenceConcept, ConceptKey concept, ConceptKey secondaryConcept,
             IssueFamily issueFamily, String observationKind, String observationText,
             FindingSeverity severity, FindingClassification reviewClassification,
             ProposedAction proposedAction, String proposedLanguage,
             ProposedLanguageSource proposedLanguageSource, UUID approvedDraftingEvidenceId,
-            Map<String, Object> quality, java.time.Instant createdAt) {
+            Map<String, Object> quality, java.time.Instant createdAt, UUID addedBy) {
     }
 
-    private record ConceptRow(UUID findingId, LegalConcept concept) {
+    private record ConceptRow(UUID findingId, ConceptKey concept) {
     }
 
     private record ClaimRow(UUID findingId, FindingClaim claim) {

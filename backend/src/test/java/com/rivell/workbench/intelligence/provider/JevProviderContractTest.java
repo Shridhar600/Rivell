@@ -110,6 +110,18 @@ class JevProviderContractTest {
     }
 
     @Test
+    void anAccountWithNoCreditsIsRejectedNotRetried() throws Exception {
+        try (var server = new MockJevServer(new Response(402,
+                "{\"detail\":{\"error_type\":\"billing_error\",\"message\":\"no available credits\"}}"))) {
+            var provider = new JevProvider(properties(server.port(), Duration.ofSeconds(5)), MAPPER);
+
+            assertThatThrownBy(() -> provider.execute(request(pack())))
+                    .isInstanceOf(ProviderRejectedException.class)
+                    .hasMessage("Provider account has no credits (HTTP 402)");
+        }
+    }
+
+    @Test
     void mapsServerAndRateLimitFailuresAsUnavailable() throws Exception {
         for (int status : new int[] {429, 500, 503}) {
             try (var server = new MockJevServer(new Response(status, "{}"))) {

@@ -28,10 +28,27 @@ class WorkflowConfiguration {
             HumanDecisionRepository decisionRepository,
             ApprovedChangeSetRepository changeSetRepository,
             TransactionTemplate transactionTemplate,
-            Clock clock) {
+            Clock clock,
+            ContractQueryService contractQueryService) {
         return new HumanDecisionService(identityProvider, authorizationService,
                 reviewRepository, analysisRepository, findingRepository,
-                decisionRepository, changeSetRepository, transactionTemplate, clock);
+                decisionRepository, changeSetRepository, transactionTemplate, clock,
+                contractQueryService);
+    }
+
+    @Bean
+    UserFindingService userFindingService(
+            IdentityProvider identityProvider,
+            AuthorizationService authorizationService,
+            ReviewRepository reviewRepository,
+            ReviewAnalysisRepository analysisRepository,
+            FindingRepository findingRepository,
+            ApprovedChangeSetRepository changeSetRepository,
+            TransactionTemplate transactionTemplate,
+            Clock clock) {
+        return new UserFindingService(identityProvider, authorizationService, reviewRepository,
+                analysisRepository, findingRepository, changeSetRepository, transactionTemplate,
+                clock);
     }
 
     @Bean
@@ -64,11 +81,13 @@ class WorkflowConfiguration {
     @Bean
     WorkflowApiService workflowApiService(
             HumanDecisionService humanDecisionService,
+            UserFindingService userFindingService,
             HumanReviewService humanReviewService,
             ReviewFinalizationService reviewFinalizationService,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService) {
-        return new WorkflowApiService(humanDecisionService, humanReviewService,
-                reviewFinalizationService, identityProvider, authorizationService);
+        return new WorkflowApiService(humanDecisionService, userFindingService,
+                humanReviewService, reviewFinalizationService, identityProvider,
+                authorizationService);
     }
 }

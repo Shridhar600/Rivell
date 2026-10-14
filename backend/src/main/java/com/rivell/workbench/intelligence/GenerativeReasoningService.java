@@ -18,11 +18,18 @@ public class GenerativeReasoningService {
     private final ModelPolicy modelPolicy;
     private final GenerativeProviderRegistry providerRegistry;
     private final Clock clock;
+    private final ProviderRetry retry;
 
     public GenerativeReasoningService(ModelPolicy modelPolicy, GenerativeProviderRegistry providerRegistry, Clock clock) {
+        this(modelPolicy, providerRegistry, clock, ProviderRetry.NONE);
+    }
+
+    public GenerativeReasoningService(
+            ModelPolicy modelPolicy, GenerativeProviderRegistry providerRegistry, Clock clock, ProviderRetry retry) {
         this.modelPolicy = modelPolicy;
         this.providerRegistry = providerRegistry;
         this.clock = clock;
+        this.retry = retry;
     }
 
     public GenerativeExecution generate(ReasoningSpec spec, SemanticState state) {
@@ -39,18 +46,25 @@ public class GenerativeReasoningService {
 
         var startedAt = clock.instant();
         try {
-            var result = provider.generate(new GenerationRequest(binding.modelAlias(), state, spec));
+            var request = new GenerationRequest(binding.modelAlias(), state, spec);
+            var result = retry.call(() -> provider.generate(request), failure -> ExecutionLog.retried(
+                    "generation", spec.id(), spec.version(), binding.providerId(), failure));
             validateFields(spec, result.fields());
             var metadata = new DecisionExecutionMetadata(
                     UUID.randomUUID(), spec.id(), spec.version(), spec.stateSchemaVersion(),
                     binding.providerId(), binding.modelAlias(), result.resolvedModel(),
                     startedAt, Duration.between(startedAt, clock.instant()).toMillis(),
                     DecisionOutcome.COMPLETED, spec.fields().size(), result.usage());
+            ExecutionLog.completed("generation", metadata);
             return new GenerativeExecution(
                     metadata.executionId(), result.fields(), metadata);
         } catch (SemanticDecisionException e) {
+            ExecutionLog.failed("generation", spec.id(), spec.version(), binding.providerId(),
+                    Duration.between(startedAt, clock.instant()).toMillis(), e);
             throw e;
         } catch (RuntimeException e) {
+            ExecutionLog.failed("generation", spec.id(), spec.version(), binding.providerId(),
+                    Duration.between(startedAt, clock.instant()).toMillis(), e);
             throw new ProviderProtocolException(
                     "Generative provider " + binding.providerId() + " failed unexpectedly: "
                             + e.getClass().getSimpleName(), e);

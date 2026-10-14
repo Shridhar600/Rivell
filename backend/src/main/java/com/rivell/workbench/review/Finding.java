@@ -6,13 +6,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Human-reviewable machine proposal: the consolidated issue of one analysis run.
  * Deterministically assembled from typed signals; no human resolution state (M8),
  * no ApprovedChange (M8). Subject references use stable canonical heading-node ids,
- * never per-enrichment clause rows.
+ * never per-enrichment clause rows. {@code addedBy} is the person who added a
+ * {@link IssueFamily#USER_ADDED} finding, and null for every finding Rivell assembled.
  */
 public record Finding(
         UUID id,
@@ -22,9 +23,9 @@ public record Finding(
         String consolidationKey,
         FindingSubjectKind subjectKind,
         UUID subjectHeadingNodeId,
-        LegalConcept absenceConcept,
-        LegalConcept concept,
-        LegalConcept secondaryConcept,
+        ConceptKey absenceConcept,
+        ConceptKey concept,
+        ConceptKey secondaryConcept,
         IssueFamily issueFamily,
         String observationKind,
         String observationText,
@@ -36,10 +37,11 @@ public record Finding(
         UUID approvedDraftingEvidenceId,
         Map<String, Object> quality,
         Instant createdAt,
-        List<LegalConcept> concepts,
+        List<ConceptKey> concepts,
         List<FindingClaim> claims,
         List<UUID> evidenceItemIds,
-        List<UUID> signalIds) {
+        List<UUID> signalIds,
+        UUID addedBy) {
 
     public Finding {
         Objects.requireNonNull(id, "id");
@@ -75,6 +77,10 @@ public record Finding(
                 != (proposedLanguage == null)) {
             throw new IllegalArgumentException(
                     "proposed language is set iff its source is not NONE");
+        }
+        if ((issueFamily == IssueFamily.USER_ADDED) != (addedBy != null)) {
+            throw new IllegalArgumentException(
+                    "a person's finding records who added it, and only a person's finding does");
         }
         if (proposedLanguageSource == ProposedLanguageSource.APPROVED_DRAFTING
                 && approvedDraftingEvidenceId == null) {

@@ -1,3 +1,3 @@
 @org.springframework.modulith.ApplicationModule(allowedDependencies = {"foundation",
-        "organization", "contracts"})
+        "organization", "contracts", "taxonomy"})
 package com.rivell.workbench.redline;

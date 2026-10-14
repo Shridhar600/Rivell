@@ -9,6 +9,10 @@ import java.util.UUID;
  * The frozen M8 → M9 boundary artifact: exactly the changes a human authorized for one
  * review, bound to the review's contract version and active analysis run. Immutable
  * once finalized; M9 consumes it without legal or model reasoning.
+ *
+ * <p>{@code semanticsDigest} is the review snapshot's digest of the contract semantics the
+ * review planned against. M9 uses it to prove that the effective concepts feeding INSERT
+ * placement are still the ones the review froze, and fails closed when they are not.
  */
 public record ApprovedChangeSet(
         UUID id,
@@ -19,6 +23,7 @@ public record ApprovedChangeSet(
         UUID contractVersionId,
         int contractVersionNumber,
         int changeSetVersion,
+        String semanticsDigest,
         UUID finalizedBy,
         Instant finalizedAt,
         List<ApprovedChange> changes) {
@@ -32,6 +37,7 @@ public record ApprovedChangeSet(
         Objects.requireNonNull(contractVersionId, "contractVersionId");
         Objects.requireNonNull(finalizedBy, "finalizedBy");
         Objects.requireNonNull(finalizedAt, "finalizedAt");
+        Objects.requireNonNull(semanticsDigest, "semanticsDigest");
         changes = changes == null ? List.of() : List.copyOf(changes);
         if (contractVersionNumber < 1 || changeSetVersion < 1) {
             throw new IllegalArgumentException("version numbers must be >= 1");

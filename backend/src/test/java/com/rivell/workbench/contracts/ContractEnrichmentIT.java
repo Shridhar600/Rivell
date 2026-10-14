@@ -1,5 +1,7 @@
 package com.rivell.workbench.contracts;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -77,7 +79,7 @@ public class ContractEnrichmentIT {
 
         @Bean
         @Primary
-        SemanticDecisionProvider fakeSemanticDecisionProvider() {
+        CueScriptedProvider fakeSemanticDecisionProvider() {
             return new CueScriptedProvider();
         }
 
@@ -106,7 +108,9 @@ public class ContractEnrichmentIT {
                 var matcher = java.util.regex.Pattern.compile("([a-z]+) times the",
                         java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text);
                 if (!matcher.find()) {
-                    throw new ProviderProtocolException("no cap statement");
+                    // spec v2: a clause with no multiple answers NONE instead of a blank field
+                    return new GenerationResult(Map.of("liabilityCapMultiple", "NONE",
+                            "capBasis", "UNSPECIFIED"), "fake-gen-v1", new TokenUsage(50, 4));
                 }
                 var word = matcher.group(1).toLowerCase();
                 var multiple = switch (word) {
@@ -145,6 +149,9 @@ public class ContractEnrichmentIT {
      */
     public static final class CueScriptedProvider implements SemanticDecisionProvider {
 
+        /** When set, the primary-topic choice selects a label that is not a candidate. */
+        volatile boolean corruptPrimaryTopic;
+
         @Override
         public String id() {
             return "fake";
@@ -168,8 +175,14 @@ public class ContractEnrichmentIT {
 
         private ChoiceAnswer choiceAnswer(
                 String name, ChoiceQuestion choice, Object state) {
+            if (corruptPrimaryTopic && name.equals("primary_topic")) {
+                var probabilities = new java.util.LinkedHashMap<String, Double>();
+                probabilities.put("NOT_A_CANDIDATE_TOPIC", 0.92);
+                choice.criteria().keySet().forEach(option -> probabilities.putIfAbsent(option, 0.02));
+                return new ChoiceAnswer("NOT_A_CANDIDATE_TOPIC", 0.92, probabilities);
+            }
             var selected = switch (name) {
-                case "primary_concept" -> primaryConceptCue(choice, state);
+                case "primary_topic" -> primaryConceptCue(choice, state);
                 case "governing_law" -> stateText(state).contains("England") ? "UK" : "US";
                 default -> choice.criteria().keySet().iterator().next();
             };
@@ -179,15 +192,27 @@ public class ContractEnrichmentIT {
             return new ChoiceAnswer(selected, 0.92, probabilities);
         }
 
+        /**
+         * The fixtures predate the 90-topic taxonomy, so the expected main subject of an
+         * ambiguous clause follows the core-concept order the old vocabulary used, not the
+         * registry's arbitrary leaf order.
+         */
+        private static final List<String> CORE_ORDER = List.of(
+                "CONFIDENTIALITY_OBLIGATIONS", "TERM", "LIMITATION_OF_LIABILITY",
+                "INDEMNIFICATION", "GOVERNING_LAW");
+
         private String primaryConceptCue(ChoiceQuestion choice, Object state) {
             var text = stateText(state);
             var heading = stateHeading(state).toLowerCase();
             var body = text.contains("\n")
                     ? text.substring(text.indexOf('\n')).toLowerCase()
                     : "";
+            var ordered = choice.criteria().keySet().stream()
+                    .sorted(java.util.Comparator.comparingInt(CueScriptedProvider::coreRank))
+                    .toList();
             java.util.Optional<String> headingMatch = java.util.Optional.empty();
             java.util.Optional<String> textMatch = java.util.Optional.empty();
-            for (var option : choice.criteria().keySet()) {
+            for (var option : ordered) {
                 var cue = option.toLowerCase().replace('_', ' ');
                 if (headingMatch(heading, cue) && headingMatch.isEmpty()) {
                     headingMatch = java.util.Optional.of(option);
@@ -199,7 +224,12 @@ public class ContractEnrichmentIT {
             if (headingMatch.isPresent()) {
                 return headingMatch.get();
             }
-            return textMatch.orElse(choice.criteria().keySet().iterator().next());
+            return textMatch.orElse(ordered.get(0));
+        }
+
+        private static int coreRank(String key) {
+            var index = CORE_ORDER.indexOf(key);
+            return index < 0 ? CORE_ORDER.size() : index;
         }
 
         private boolean headingMatch(String heading, String cue) {
@@ -208,7 +238,7 @@ public class ContractEnrichmentIT {
         }
 
         private boolean bodyMatch(String body, String cue) {
-            return !body.isBlank() && body.contains(cue);
+            return !body.isBlank() && (body.contains(cue) || body.contains(firstWord(cue)));
         }
 
         private String firstWord(String cue) {
@@ -219,12 +249,12 @@ public class ContractEnrichmentIT {
             var text = stateText(state);
             var lower = text == null ? "" : text.toLowerCase();
             return switch (questionName) {
-                case "concept_confidentiality" -> lower.contains("confidential") ? 0.95 : 0.05;
-                case "concept_term_termination" ->
+                case "topic_confidentiality_obligations" -> lower.contains("confidential") ? 0.95 : 0.05;
+                case "topic_term" ->
                         lower.contains("terminat") || lower.contains("term ") ? 0.95 : 0.05;
-                case "concept_limitation_of_liability" -> lower.contains("liability") ? 0.95 : 0.05;
-                case "concept_indemnification" -> lower.contains("indemnif") ? 0.95 : 0.05;
-                case "concept_governing_law" -> lower.contains("govern") ? 0.95 : 0.05;
+                case "topic_limitation_of_liability" -> lower.contains("liability") ? 0.95 : 0.05;
+                case "topic_indemnification" -> lower.contains("indemnif") ? 0.95 : 0.05;
+                case "topic_governing_law" -> lower.contains("govern") ? 0.95 : 0.05;
                 case "role_disclosing_party" -> lower.contains("disclosing") ? 0.95 : 0.05;
                 case "role_receiving_party" -> lower.contains("receiving") ? 0.95 : 0.05;
                 case "role_customer" -> lower.contains("customer") ? 0.95 : 0.05;
@@ -272,6 +302,9 @@ public class ContractEnrichmentIT {
     ContractIngestionService ingestionService;
 
     @Autowired
+    CueScriptedProvider fakeProvider;
+
+    @Autowired
     MutableIdentity identityService;
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -315,6 +348,9 @@ public class ContractEnrichmentIT {
     @Autowired
     ContractQueryService queryService;
 
+    @Autowired
+    org.springframework.jdbc.core.simple.JdbcClient jdbc;
+
     @Test
     void ndaEnrichesIntoTypedSemanticContract() throws Exception {
         var bytes = fixtureBytes("m5-nda-counterparty.docx");
@@ -356,9 +392,9 @@ public class ContractEnrichmentIT {
                 .filter(clause -> !clause.classification().concepts().isEmpty())
                 .flatMap(clause -> clause.classification().concepts().stream())
                 .collect(java.util.stream.Collectors.toSet());
-        assertThat(conceptLabels).contains(LegalConcept.CONFIDENTIALITY);
-        assertThat(conceptLabels).contains(LegalConcept.GOVERNING_LAW);
-        assertThat(conceptLabels).contains(LegalConcept.TERM_TERMINATION);
+        assertThat(conceptLabels).contains(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS);
+        assertThat(conceptLabels).contains(CoreConcepts.GOVERNING_LAW);
+        assertThat(conceptLabels).contains(CoreConcepts.TERM);
 
         // signature blocks are structural regions now: the NDA's real clauses all
         // classify, so the only remaining quality note (if any) is honest state
@@ -368,6 +404,115 @@ public class ContractEnrichmentIT {
                         ReviewQualityNote.AMBIGUOUS_PARTY_ROLES);
         assertThat(semantics.observations().decisionExecutionCount()).isPositive();
     }
+
+    /**
+     * DW-051: clause order is document order. The clause read had no ORDER BY, so the order a
+     * contract's clauses came back in depended on physical row layout: the semantics API listed
+     * them in an arbitrary order that could change after any update, and the demo's clause picker
+     * chose a different clause from run to run. This asserts the order is the one the document
+     * itself has, which is the only order that means anything for a contract.
+     */
+    @Test
+    void clausesAreReadInDocumentOrder() throws Exception {
+        var bytes = fixtureBytes("m5-msa-services.docx");
+        var ingested = ingestionService.ingest("m5-msa-services.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(bytes));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+
+        var documentOrder = queryService.getStructure(ingested.contractId(), 1).nodes().stream()
+                .map(node -> node.id())
+                .toList();
+        assertThat(documentOrder)
+                .as("the fixture must have enough nodes for the ordering to be meaningful")
+                .hasSizeGreaterThan(3);
+
+        assertThat(clausePositions(semantics, documentOrder))
+                .as("every clause must be anchored to a real document node")
+                .doesNotContain(-1);
+        assertThat(clausePositions(semantics, documentOrder))
+                .as("clauses must be returned in the order their headings appear in the document")
+                .isSorted();
+        assertThat(semantics.clauses())
+                .as("the fixture must actually produce several clauses to order")
+                .hasSizeGreaterThanOrEqualTo(3);
+
+        // Asserting document order on a freshly built contract proves nothing: the read is served
+        // by the unique index on (semantics_id, heading_node_id), so it returns heading-node id
+        // order, which only looks like document order when the ids happen to ascend with the
+        // document. They are random UUIDs in production. Exchange the ids of two heading nodes so
+        // id order provably contradicts document order while the document itself is untouched,
+        // then read again. Only a read that imposes the document order can pass.
+        swapHeadingNodeIds(semantics);
+
+        // The document's own reading order is unchanged by the swap, but its node ids are new,
+        // so the expected order has to be read again rather than reused.
+        var documentOrderAfterSwap = queryService.getStructure(ingested.contractId(), 1).nodes()
+                .stream().map(node -> node.id()).toList();
+        assertThat(documentOrderAfterSwap)
+                .as("exchanging two ids must not disturb the document itself")
+                .containsExactlyInAnyOrderElementsOf(documentOrder);
+
+        var reread = queryService.getSemanticsForOrganization(
+                        identityService.currentIdentity().organizationId(),
+                        ingested.contractId(), 1)
+                .orElseThrow();
+        assertThat(clausePositions(reread, documentOrderAfterSwap))
+                .as("clause order must come from the document, not from heading-node id order")
+                .doesNotContain(-1)
+                .isSorted();
+    }
+
+    private List<Integer> clausePositions(ContractSemantics semantics, List<UUID> documentOrder) {
+        return semantics.clauses().stream()
+                .map(clause -> documentOrder.indexOf(clause.headingNodeId()))
+                .toList();
+    }
+
+    /**
+     * Exchanges the ids of two clause heading nodes, and repoints the clause rows at them, so the
+     * order the (semantics_id, heading_node_id) index yields contradicts the document order. Only
+     * childless nodes are used, so the document tree and its reading order stay intact.
+     */
+    private void swapHeadingNodeIds(ContractSemantics semantics) {
+        var clauses = semantics.clauses();
+        assertThat(clauses).hasSizeGreaterThanOrEqualTo(2);
+        var first = clauses.get(0).headingNodeId();
+        var last = clauses.get(clauses.size() - 1).headingNodeId();
+        assertThat(first).isNotEqualTo(last);
+        for (var nodeId : List.of(first, last)) {
+            assertThat(jdbc.sql("select count(*) from document_node where parent_id = :id")
+                    .param("id", nodeId)
+                    .query(Long.class)
+                    .single())
+                    .as("only childless nodes can trade ids without disturbing the tree")
+                    .isZero();
+        }
+        jdbc.sql(contractClauseSemanticsSwap).param("to", ZERO).param("from", first).update();
+        jdbc.sql(contractClauseSemanticsSwap).param("to", first).param("from", last).update();
+        jdbc.sql(contractClauseSemanticsSwap).param("to", last).param("from", ZERO).update();
+        jdbc.sql("update document_node set id = :to where id = :from")
+                .param("to", ZERO).param("from", first).update();
+        jdbc.sql("update document_node set id = :to where id = :from")
+                .param("to", first).param("from", last).update();
+        jdbc.sql("update document_node set id = :to where id = :from")
+                .param("to", last).param("from", ZERO).update();
+    }
+
+    /**
+     * Three-step swap through a sentinel: (semantics_id, heading_node_id) is unique, so a
+     * two-step exchange would transiently duplicate a key.
+     */
+    private static final String contractClauseSemanticsSwap =
+            "update contract_clause_semantics set heading_node_id = :to where heading_node_id = :from";
+
+    private void swap(String sql, UUID from, UUID to) {
+        jdbc.sql(sql).param("to", to).param("from", from).update();
+    }
+
+    private static final UUID ZERO = new UUID(0L, 0L);
 
     @Test
     void msaExtractsTypedLegalFactsAndRelationships() throws Exception {
@@ -380,7 +525,7 @@ public class ContractEnrichmentIT {
 
         var liability = semantics.clauses().stream()
                 .filter(clause -> clause.primaryConcept()
-                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .map(concept -> concept.equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                         .orElse(false))
                 .findFirst()
                 .orElseThrow();
@@ -395,7 +540,7 @@ public class ContractEnrichmentIT {
 
         var termination = semantics.clauses().stream()
                 .filter(clause -> clause.classification().concepts()
-                        .contains(LegalConcept.TERM_TERMINATION))
+                        .contains(CoreConcepts.TERM))
                 .filter(clause -> clause.facts().stream()
                         .anyMatch(fact -> fact.factSchema().equals("termination-facts")))
                 .findFirst()
@@ -426,8 +571,33 @@ public class ContractEnrichmentIT {
                 .filter(clause -> clause.contentText().contains("aggregate liability"))
                 .findFirst()
                 .orElseThrow();
-        assertThat(lol.primaryConcept()).contains(LegalConcept.LIMITATION_OF_LIABILITY);
-        assertThat(lol.secondaryConcepts()).contains(LegalConcept.INDEMNIFICATION);
+        assertThat(lol.primaryConcept()).contains(CoreConcepts.LIMITATION_OF_LIABILITY);
+        assertThat(lol.secondaryConcepts()).contains(CoreConcepts.INDEMNIFICATION);
+    }
+
+    /**
+     * A provider that names a primary topic which is not one of the candidate topics is a
+     * protocol failure, not a server error: enrichment degrades and reports it, exactly as
+     * the retired concept vocabulary's unknown-label handling did.
+     */
+    @Test
+    void bogusPrimaryTopicDegradesEnrichmentInsteadOfFailing() throws Exception {
+        var bytes = fixtureBytes("m5-dual-concept.docx");
+        var ingested = ingestionService.ingest("m5-dual-concept.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+
+        fakeProvider.corruptPrimaryTopic = true;
+        try {
+            var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                    ReviewProfile.minimal(ContractType.MSA));
+
+            assertThat(semantics.enrichmentStatus()).isEqualTo(EnrichmentStatus.READY);
+            assertThat(semantics.observations().providerDegraded()).isTrue();
+            assertThat(semantics.quality().notes())
+                    .contains(ReviewQualityNote.PROVIDER_DEGRADATION);
+        } finally {
+            fakeProvider.corruptPrimaryTopic = false;
+        }
     }
 
     @Test
@@ -508,6 +678,30 @@ public class ContractEnrichmentIT {
     }
 
     @Test
+    void anUncappedClauseRecordsTheCapAsNotStatedWithoutAFailedCall() throws Exception {
+        var bytes = fixtureBytes("m7-msa-uncapped.docx");
+        var ingested = ingestionService.ingest("m7-msa-uncapped.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+
+        var liability = semantics.clauses().stream()
+                .filter(clause -> clause.contentText().contains("uncapped and unlimited"))
+                .findFirst()
+                .orElseThrow();
+        var interpretation = liability.interpretations().stream()
+                .filter(candidate -> candidate.field().equals("liabilityCapMultiple"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(interpretation.proposedValue()).isEqualTo("NOT_STATED");
+        assertThat(interpretation.executionId()).as("the model call completed").isNotNull();
+        assertThat(liability.facts())
+                .flatExtracting(fact -> fact.values().keySet())
+                .doesNotContain("liabilityCapMultiple");
+    }
+
+    @Test
     void conceptAndFactCorrectionsCompose() throws Exception {
         var bytes = fixtureBytes("m5-msa-services.docx");
         var ingested = ingestionService.ingest("m5-msa-services.docx",
@@ -517,13 +711,13 @@ public class ContractEnrichmentIT {
                 ReviewProfile.minimal(ContractType.MSA));
         var liability = semantics.clauses().stream()
                 .filter(clause -> clause.primaryConcept()
-                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .map(concept -> concept.equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                         .orElse(false))
                 .findFirst()
                 .orElseThrow();
 
         var afterConcept = enrichmentService.correctClause(ingested.contractId(), 1,
-                liability.id(), FactCorrection.ofPrimary(LegalConcept.INDEMNIFICATION));
+                liability.id(), FactCorrection.ofPrimary(CoreConcepts.INDEMNIFICATION));
         var afterFacts = enrichmentService.correctClause(ingested.contractId(), 1,
                 liability.id(), FactCorrection.ofFacts(Map.of("liabilityCapMultiple", "2")));
 
@@ -534,7 +728,7 @@ public class ContractEnrichmentIT {
                 .orElseThrow();
 
         assertThat(corrected.correction().primaryConcept())
-                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+                .isEqualTo(CoreConcepts.INDEMNIFICATION.value());
         assertThat(corrected.correction().factValues())
                 .containsEntry("liabilityCapMultiple", "2");
         assertThat(corrected.conceptCorrected()).isTrue();
@@ -549,7 +743,7 @@ public class ContractEnrichmentIT {
                 .orElseThrow()
                 .correction();
         assertThat(reloadedThird.primaryConcept())
-                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+                .isEqualTo(CoreConcepts.INDEMNIFICATION.value());
         assertThat(reloadedThird.factValues())
                 .containsEntry("liabilityCapMultiple", "2")
                 .containsEntry("capBasis", "ANNUAL_FEES");
@@ -565,7 +759,7 @@ public class ContractEnrichmentIT {
                 .orElseThrow()
                 .correction();
         assertThat(cleared.primaryConcept())
-                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+                .isEqualTo(CoreConcepts.INDEMNIFICATION.value());
         assertThat(cleared.factValues())
                 .containsEntry("liabilityCapMultiple", "2")
                 .doesNotContainKey("capBasis");
@@ -578,7 +772,7 @@ public class ContractEnrichmentIT {
                 .findFirst()
                 .orElseThrow();
         assertThat(machineAgain.correction().primaryConcept())
-                .isEqualTo(LegalConcept.INDEMNIFICATION.name());
+                .isEqualTo(CoreConcepts.INDEMNIFICATION.value());
         assertThat(machineAgain.correction().factValues())
                 .containsEntry("liabilityCapMultiple", "2");
         assertThat(machineAgain.effectiveFacts().stream()
@@ -643,7 +837,7 @@ public class ContractEnrichmentIT {
         // typed fact → supporting source nodes (exact clause region anchors)
         var liability = semantics.clauses().stream()
                 .filter(clause -> clause.primaryConcept()
-                        .map(concept -> concept == LegalConcept.LIMITATION_OF_LIABILITY)
+                        .map(concept -> concept.equals(CoreConcepts.LIMITATION_OF_LIABILITY))
                         .orElse(false))
                 .findFirst()
                 .orElseThrow();
@@ -666,6 +860,87 @@ public class ContractEnrichmentIT {
                     .flatMap(interpretation -> interpretation.sourceNodeIds().stream())
                     .toList());
         }
+    }
+
+    /**
+     * The dev eval read: Word writes defined terms in curly quotes, and one paragraph may
+     * state several definitions. Both must reach the semantics, and a term used by a later
+     * clause must carry that clause as a reference.
+     */
+    @Test
+    void curlyQuotedDefinitionsReachTheSemantics() throws Exception {
+        var pkg = org.docx4j.openpackaging.packages.WordprocessingMLPackage.createPackage();
+        var docPart = pkg.getMainDocumentPart();
+        docPart.addStyledParagraphOfText("Heading1", "Definitions");
+        docPart.addParagraphOfText("“Scheduled Maintenance” means maintenance performed under "
+                + "the then-current Documentation; and “Users” means named users.");
+        docPart.addStyledParagraphOfText("Heading1", "Service Levels");
+        docPart.addParagraphOfText(
+                "Scheduled Maintenance is excluded from the availability measure.");
+        var out = new java.io.ByteArrayOutputStream();
+        pkg.save(out);
+        var ingested = ingestionService.ingest("curly-definitions.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(out.toByteArray()));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.MSA));
+
+        var terms = semantics.definedTerms().stream()
+                .collect(java.util.stream.Collectors.toMap(DefinedTerm::term, term -> term));
+        assertThat(terms).containsKeys("Scheduled Maintenance", "Users");
+        assertThat(terms.get("Scheduled Maintenance").definition())
+                .isEqualTo("maintenance performed under the then-current Documentation");
+        assertThat(terms.get("Users").definition()).isEqualTo("named users.");
+
+        var serviceLevelsParagraph = queryService.getStructure(ingested.contractId(), 1).nodes()
+                .stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.PARAGRAPH)
+                .filter(node -> node.text() != null
+                        && node.text().contains("excluded from the availability measure"))
+                .findFirst().orElseThrow();
+        assertThat(terms.get("Scheduled Maintenance").referenceNodeIds())
+                .contains(serviceLevelsParagraph.id());
+    }
+
+    /**
+     * DW-080: a contract that defines the same term twice (recitals and definitions) must keep
+     * and flag both definitions. The old per-term unique key failed the whole analysis instead.
+     */
+    @Test
+    void everyDefinitionOfATermStatedTwiceIsKept() throws Exception {
+        var pkg = org.docx4j.openpackaging.packages.WordprocessingMLPackage.createPackage();
+        var docPart = pkg.getMainDocumentPart();
+        docPart.addStyledParagraphOfText("Heading1", "Recitals");
+        docPart.addParagraphOfText("“Confidential Information” means information disclosed by "
+                + "either party to the other.");
+        docPart.addStyledParagraphOfText("Heading1", "Definitions");
+        docPart.addParagraphOfText("1.1 “Confidential Information” means all business, technical "
+                + "and financial information exchanged between the parties.");
+        var out = new java.io.ByteArrayOutputStream();
+        pkg.save(out);
+        var ingested = ingestionService.ingest("duplicate-definition.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(out.toByteArray()));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.NDA));
+
+        assertThat(semantics.enrichmentStatus()).isEqualTo(EnrichmentStatus.READY);
+        var definitions = semantics.definedTerms().stream()
+                .filter(term -> term.term().equals("Confidential Information"))
+                .toList();
+        assertThat(definitions).hasSize(2);
+        assertThat(definitions.stream().allMatch(DefinedTerm::duplicate)).isTrue();
+        assertThat(definitions).extracting(DefinedTerm::definition)
+                .containsExactlyInAnyOrder(
+                        "information disclosed by either party to the other.",
+                        "all business, technical and financial information exchanged between "
+                                + "the parties.");
+        assertThat(semantics.quality().notes())
+                .as("both rows are flagged, and identical-term wording that differs is a review note")
+                .contains(ReviewQualityNote.DUPLICATE_DEFINED_TERM,
+                        ReviewQualityNote.AMBIGUOUS_DEFINITIONS);
     }
 
     @Test

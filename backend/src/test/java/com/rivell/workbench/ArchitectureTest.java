@@ -24,6 +24,7 @@ class ArchitectureTest {
             "review",
             "workflow",
             "redline",
+            "taxonomy",
             "audit",
             "platform");
 

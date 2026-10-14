@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.contracts.ReviewProfile;
 
 /**
@@ -16,7 +16,7 @@ import com.rivell.workbench.contracts.ReviewProfile;
 public record EvidenceRequest(
         UUID organizationId,
         RetrievalPurpose purpose,
-        LegalConcept legalConcept,
+        ConceptKey legalConcept,
         UUID contractId,
         int versionNumber,
         UUID clauseId,
@@ -46,7 +46,7 @@ public record EvidenceRequest(
 
     public static EvidenceRequest forClauseReview(
             UUID organizationId,
-            LegalConcept legalConcept,
+            ConceptKey legalConcept,
             UUID contractId,
             int versionNumber,
             UUID clauseId,

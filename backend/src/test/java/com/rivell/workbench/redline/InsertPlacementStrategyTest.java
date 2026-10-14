@@ -1,5 +1,7 @@
 package com.rivell.workbench.redline;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -12,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import com.rivell.workbench.contracts.ContractStructure;
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
-import com.rivell.workbench.contracts.LegalConcept;
 
 import static com.rivell.workbench.redline.RedlineTestStructures.BodyElement;
 import static com.rivell.workbench.redline.RedlineTestStructures.clause;
@@ -33,11 +34,11 @@ class InsertPlacementStrategyTest {
                 clause("2. Indemnification", text("Indemnification body")),
                 clause("3. Term and Survival", text("Term body"))));
         var conceptByHeading = concepts(structure, Map.of(
-                "1. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "2. Indemnification", LegalConcept.INDEMNIFICATION,
-                "3. Term and Survival", LegalConcept.TERM_TERMINATION));
+                "1. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "2. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "3. Term and Survival", CoreConcepts.TERM));
 
-        var placement = strategy.resolve(LegalConcept.LIMITATION_OF_LIABILITY,
+        var placement = strategy.resolve(CoreConcepts.LIMITATION_OF_LIABILITY,
                 structure, conceptByHeading);
 
         assertThat(placement.label()).isEqualTo("AFTER_CLAUSE[INDEMNIFICATION]");
@@ -55,11 +56,11 @@ class InsertPlacementStrategyTest {
                 clause("2. Confidentiality", text("Confidentiality body")),
                 clause("3. Indemnification", text("Second indemnity"))));
         var conceptByHeading = concepts(structure, Map.of(
-                "1. Indemnification", LegalConcept.INDEMNIFICATION,
-                "2. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "3. Indemnification", LegalConcept.INDEMNIFICATION));
+                "1. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "2. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "3. Indemnification", CoreConcepts.INDEMNIFICATION));
 
-        var placement = strategy.resolve(LegalConcept.LIMITATION_OF_LIABILITY,
+        var placement = strategy.resolve(CoreConcepts.LIMITATION_OF_LIABILITY,
                 structure, conceptByHeading);
 
         assertThat(placement.afterBodyIndex())
@@ -74,9 +75,9 @@ class InsertPlacementStrategyTest {
                 clause("1. Services", text("Services body")),
                 clause("2. Acme Corp", text("IN WITNESS WHEREOF the parties execute."))));
         var conceptByHeading = concepts(structure, Map.of(
-                "1. Services", LegalConcept.GOVERNING_LAW));
+                "1. Services", CoreConcepts.GOVERNING_LAW));
 
-        var placement = strategy.resolve(LegalConcept.LIMITATION_OF_LIABILITY,
+        var placement = strategy.resolve(CoreConcepts.LIMITATION_OF_LIABILITY,
                 structure, conceptByHeading);
 
         assertThat(placement.label()).isEqualTo("BEFORE_SIGNATURE_BLOCK");
@@ -93,10 +94,10 @@ class InsertPlacementStrategyTest {
                 clause("1. Services", text("Services body")),
                 clause("2. Fees", text("Fees body"))));
         var conceptByHeading = concepts(structure, Map.of(
-                "1. Services", LegalConcept.GOVERNING_LAW,
-                "2. Fees", LegalConcept.GOVERNING_LAW));
+                "1. Services", CoreConcepts.GOVERNING_LAW,
+                "2. Fees", CoreConcepts.GOVERNING_LAW));
 
-        var placement = strategy.resolve(LegalConcept.LIMITATION_OF_LIABILITY,
+        var placement = strategy.resolve(CoreConcepts.LIMITATION_OF_LIABILITY,
                 structure, conceptByHeading);
 
         assertThat(placement.label()).isEqualTo("END_OF_BODY");
@@ -110,7 +111,7 @@ class InsertPlacementStrategyTest {
         var versionId = UUID.randomUUID();
         var structure = structure(contractId, versionId, List.of());
 
-        assertThatThrownBy(() -> strategy.resolve(LegalConcept.LIMITATION_OF_LIABILITY,
+        assertThatThrownBy(() -> strategy.resolve(CoreConcepts.LIMITATION_OF_LIABILITY,
                 structure, Map.of()))
                 .isInstanceOf(RedlinePlanException.class)
                 .extracting(e -> ((RedlinePlanException) e).code())

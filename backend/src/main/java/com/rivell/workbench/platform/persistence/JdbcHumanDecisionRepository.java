@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -40,6 +41,30 @@ class JdbcHumanDecisionRepository implements HumanDecisionRepository {
                 .param("findingId", findingId)
                 .query(this::map)
                 .optional();
+    }
+
+    @Override
+    public Map<DecisionAction, Long> countCurrentByAction(
+            UUID organizationId, UUID reviewId, UUID runId) {
+        return jdbcClient.sql("""
+                select action, count(*) as total from (
+                    select distinct on (finding_id) action
+                    from human_decision
+                    where organization_id = :organizationId and review_id = :reviewId
+                      and run_id = :runId
+                    order by finding_id, revision desc
+                ) current
+                group by action
+                """)
+                .param("organizationId", organizationId)
+                .param("reviewId", reviewId)
+                .param("runId", runId)
+                .query((rs, rowNum) -> Map.entry(
+                        DecisionAction.valueOf(rs.getString("action")), rs.getLong("total")))
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey, Map.Entry::getValue));
     }
 
     @Override

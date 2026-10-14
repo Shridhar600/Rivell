@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -9,6 +11,7 @@ import java.nio.file.Files;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Objects;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -27,6 +30,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
@@ -34,7 +38,6 @@ import com.rivell.workbench.contracts.ContractVersionNotFoundException;
 import com.rivell.workbench.contracts.EnrichmentFailedException;
 import com.rivell.workbench.contracts.EnrichmentInProgressException;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -237,6 +240,8 @@ class ReviewCreationIT {
         assertThat(snapshot.modelPolicy().decisionModelAlias()).isEqualTo("fake-decision-model");
         assertThat(snapshot.modelPolicy().generativeProviderId()).isEqualTo("fake");
         assertThat(snapshot.modelPolicy().generativeModelAlias()).isEqualTo("fake-gen-model");
+        // P6: engine v1 is removed; every new review is frozen on v2
+        assertThat(snapshot.reviewEngine()).isEqualTo(ReviewEngine.V2);
 
         var checks = reviewRepository.findPlanChecks(organizationId, review.id());
         assertThat(checks).extracting(ReviewPlanCheck::ordinal)
@@ -245,11 +250,11 @@ class ReviewCreationIT {
         assertThat(checks).filteredOn(check -> check.family() == CheckFamily.CONCEPT_PRESENCE)
                 .extracting(ReviewPlanCheck::concept, ReviewPlanCheck::expectation)
                 .containsExactlyInAnyOrder(
-                        tuple(LegalConcept.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED),
-                        tuple(LegalConcept.CONFIDENTIALITY, CheckExpectation.REQUIRED),
-                        tuple(LegalConcept.TERM_TERMINATION, CheckExpectation.EXPECTED),
-                        tuple(LegalConcept.INDEMNIFICATION, CheckExpectation.EXPECTED),
-                        tuple(LegalConcept.GOVERNING_LAW, CheckExpectation.OPTIONAL));
+                        tuple(CoreConcepts.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED),
+                        tuple(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, CheckExpectation.REQUIRED),
+                        tuple(CoreConcepts.TERM, CheckExpectation.EXPECTED),
+                        tuple(CoreConcepts.INDEMNIFICATION, CheckExpectation.EXPECTED),
+                        tuple(CoreConcepts.GOVERNING_LAW, CheckExpectation.OPTIONAL));
 
         var headingNodeIds = corpus.semantics().clauses().stream()
                 .map(ClauseSemantics::headingNodeId).toList();
@@ -258,27 +263,31 @@ class ReviewCreationIT {
                 .toList();
         assertThat(clauseChecks).isNotEmpty();
         assertThat(clauseChecks).allSatisfy(check -> {
-            assertThat(check.mechanism()).isEqualTo(CheckMechanism.LIABILITY_CAP);
-            assertThat(check.concept()).isEqualTo(LegalConcept.LIMITATION_OF_LIABILITY);
+            assertThat(check.mechanism()).isEqualTo(CheckMechanism.POLICY_COMPARISON);
             assertThat(headingNodeIds).contains(check.subjectHeadingNodeId());
         });
 
-        // Substantive clause/cross checks are planned per primary-classified clause only
-        // (documented coverage limit, DW-024): clauses that carry a concept as a
-        // secondary classification satisfy presence but get no substantive check.
+        // Policy comparison is planned for every clause; the check records the effective
+        // primary, else the first topic, else General (a clause with no topic is only triaged).
+        assertThat(clauseChecks).extracting(ReviewPlanCheck::subjectHeadingNodeId)
+                .containsExactlyInAnyOrderElementsOf(headingNodeIds);
+        assertThat(clauseChecks).allSatisfy(check -> {
+            var clause = corpus.semantics().clauses().stream()
+                    .filter(candidate -> candidate.headingNodeId()
+                            .equals(check.subjectHeadingNodeId()))
+                    .findFirst().orElseThrow();
+            var expected = clause.effectivePrimaryConcept()
+                    .orElseGet(() -> clause.secondaryConcepts().isEmpty()
+                            ? ClauseTopics.NO_TOPIC : clause.secondaryConcepts().getFirst());
+            assertThat(check.concept()).isEqualTo(expected);
+        });
+
         var clausesByConcept = corpus.semantics().clauses().stream()
                 .filter(clause -> clause.effectivePrimaryConcept().isPresent())
                 .collect(java.util.stream.Collectors.groupingBy(
                         clause -> clause.effectivePrimaryConcept().orElseThrow(),
                         java.util.stream.Collectors.mapping(
                                 ClauseSemantics::headingNodeId, java.util.stream.Collectors.toList())));
-        var secondaryOnly = corpus.semantics().clauses().stream()
-                .filter(clause -> clause.effectivePrimaryConcept().isEmpty())
-                .filter(clause -> !clause.secondaryConcepts().isEmpty())
-                .map(ClauseSemantics::headingNodeId)
-                .toList();
-        assertThat(clauseChecks).noneSatisfy(check ->
-                assertThat(secondaryOnly).contains(check.subjectHeadingNodeId()));
         var crossChecks = checks.stream()
                 .filter(check -> check.family() == CheckFamily.CROSS_CLAUSE)
                 .toList();
@@ -291,12 +300,12 @@ class ReviewCreationIT {
         assertThat(crossChecks.stream()
                 .filter(check -> check.mechanism() == CheckMechanism.CONFIDENTIALITY_SURVIVAL)
                 .count()).isEqualTo(
-                        clausesByConcept.getOrDefault(LegalConcept.CONFIDENTIALITY,
+                        clausesByConcept.getOrDefault(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
                                 java.util.List.of()).size());
         assertThat(crossChecks.stream()
                 .filter(check -> check.mechanism() == CheckMechanism.CARVE_OUT_CONSISTENCY)
                 .count()).isEqualTo(
-                        clausesByConcept.getOrDefault(LegalConcept.LIMITATION_OF_LIABILITY,
+                        clausesByConcept.getOrDefault(CoreConcepts.LIMITATION_OF_LIABILITY,
                                 java.util.List.of()).size());
 
         var rebuilt = reviewPlanBuilder.build(
@@ -346,6 +355,130 @@ class ReviewCreationIT {
         assertThatThrownBy(() -> reviewService.create(
                 corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK))
                 .isInstanceOf(InvalidReviewConfigurationException.class);
+    }
+
+    /**
+     * M10A integration review: the key identifies one operation, and the pack is part of that
+     * operation. Replaying a key with a different pack used to return the original review, which
+     * handed the caller a review frozen against a playbook it did not select, and skipped pack
+     * validation entirely. The replay must be refused.
+     */
+    @Test
+    void aReplayWithADifferentContractPackIsRefused() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var key = UUID.randomUUID();
+
+        var first = reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key);
+
+        assertThatThrownBy(() -> reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.NDA_PACK, key))
+                .as("a key replayed against a different pack must not return the original review")
+                .isInstanceOf(IdempotencyKeyReusedException.class);
+
+        // The refusal must not have created a second review, and the canonical one must be intact.
+        assertThat(reviewRepository.findByClientRequestId(organizationId, key))
+                .get()
+                .extracting(Review::id)
+                .isEqualTo(first.id());
+        assertThat(reviewRepository.findSnapshot(organizationId, first.id()).orElseThrow()
+                .contractPackKey()).isEqualTo(ReviewPackRegistry.MSA_PACK);
+
+        // Replaying the original pack unchanged still returns the canonical review.
+        assertThat(reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key).id()).isEqualTo(first.id());
+    }
+
+    /**
+     * M10 / DW-020: review creation had no client-supplied key, so a retried creation produced a
+     * second review with a second frozen snapshot and a second full analysis. The retry must return
+     * the original review, and the key must never resolve another organisation's review.
+     */
+    @Test
+    void aRetriedCreationWithTheSameClientRequestIdReturnsTheOriginalReview() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var key = UUID.randomUUID();
+
+        var first = reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key);
+        var second = reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key);
+
+        assertThat(second.id()).as("a retried creation must not produce a second review")
+                .isEqualTo(first.id());
+        assertThat(jdbcClient.sql("""
+                select count(*) from review
+                where organization_id = :organizationId and contract_id = :contractId
+                """)
+                .param("organizationId", organizationId)
+                .param("contractId", corpus.contract().contractId())
+                .query(Integer.class).single())
+                .as("exactly one review row must exist for the contract")
+                .isEqualTo(1);
+
+        // Without a key, two creations are two independent reviews: the key is opt-in.
+        var unkeyed = reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, null);
+        assertThat(unkeyed.id()).isNotEqualTo(first.id());
+
+        // The same key in another organisation must not resolve to this review.
+        identityProvider.use(new UserIdentity(UUID.randomUUID(), UUID.randomUUID(),
+                Set.of("ADMIN")));
+        var foreignCorpus = corpusBuilder.buildMainCorpus(organizationId());
+        var foreign = reviewService.create(foreignCorpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key);
+        assertThat(foreign.id())
+                .as("a key must never resolve another organisation's review")
+                .isNotEqualTo(first.id());
+    }
+
+    /**
+     * M10 review finding: the idempotency pre-check cannot observe a concurrent identical request, so
+     * two simultaneous submits both missed it. The unique index keeps one review, but the loser used
+     * to surface a 500 - the worst possible answer to a client that asked for idempotent creation,
+     * because it has no way to learn that the review it wanted now exists.
+     */
+    @Test
+    void concurrentIdenticalCreationsConvergeOnOneReview() throws Exception {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var key = UUID.randomUUID();
+
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        List<java.util.concurrent.Callable<Review>> tasks = List.of(
+                () -> {
+                    start.await();
+                    return reviewService.create(corpus.contract().contractId(), 1,
+                            ReviewPackRegistry.MSA_PACK, key);
+                },
+                () -> {
+                    start.await();
+                    return reviewService.create(corpus.contract().contractId(), 1,
+                            ReviewPackRegistry.MSA_PACK, key);
+                });
+        var futures = tasks.stream().map(executor::submit).toList();
+        start.countDown();
+        var reviews = new java.util.ArrayList<Review>();
+        for (var future : futures) {
+            reviews.add(future.get());
+        }
+        executor.shutdown();
+
+        assertThat(reviews.get(1).id())
+                .as("a concurrent loser must receive the winner's review, not an error")
+                .isEqualTo(reviews.get(0).id());
+        assertThat(jdbcClient.sql("""
+                select count(*) from review
+                where organization_id = :organizationId and client_request_id = :key
+                """)
+                .param("organizationId", organizationId)
+                .param("key", key)
+                .query(Integer.class).single())
+                .as("exactly one review may carry the key")
+                .isEqualTo(1);
     }
 
     @Test
@@ -400,10 +533,10 @@ class ReviewCreationIT {
 
         var confidentiality = semantics.clauses().stream()
                 .filter(clause -> clause.effectivePrimaryConcept()
-                        .filter(concept -> concept == LegalConcept.CONFIDENTIALITY).isPresent())
+                        .filter(concept -> concept.equals(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS)).isPresent())
                 .findFirst().orElseThrow();
         var bundle = evidenceService.build(EvidenceRequest.forClauseReview(
-                organizationId, LegalConcept.CONFIDENTIALITY, ingested.contractId(), 1,
+                organizationId, CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, ingested.contractId(), 1,
                 confidentiality.id(), confidentiality.contentText(), profile,
                 snapshot.effectiveOn(), KnowledgePin.none()));
         assertThat(bundle.policyItems()).isEmpty();
@@ -460,10 +593,13 @@ class ReviewCreationIT {
 
     private void updateEnrichmentStatus(UUID versionId, UUID organizationId, String status) {
         jdbcClient.sql("""
-                update contract_semantics set enrichment_status = :status
+                update contract_semantics set enrichment_status = :status,
+                    enrichment_failure_reason = :reason
                 where contract_version_id = :versionId and organization_id = :organizationId
                 """)
                 .param("status", status)
+                // M10: FAILED is schema-coupled to a structured reason, exactly as the service does.
+                .param("reason", "FAILED".equals(status) ? "INTERNAL" : null)
                 .param("versionId", versionId)
                 .param("organizationId", organizationId)
                 .update();

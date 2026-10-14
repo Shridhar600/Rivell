@@ -1,39 +1,40 @@
 package com.rivell.workbench.platform.parsing;
 
 import java.io.InputStream;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import org.docx4j.model.listnumbering.Emulator;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.Part;
 import org.docx4j.openpackaging.parts.WordprocessingML.FooterPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.FootnotesPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.HeaderPart;
 import org.docx4j.wml.Body;
-import org.docx4j.wml.Br;
 import org.docx4j.wml.P;
-import org.docx4j.wml.P.Hyperlink;
-import org.docx4j.wml.R;
 import org.docx4j.wml.SdtBlock;
-import org.docx4j.wml.SdtRun;
 import org.docx4j.wml.SectPr;
 import org.docx4j.wml.Tbl;
 import org.docx4j.wml.Tc;
 import org.docx4j.wml.Text;
 import org.docx4j.wml.Tr;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
 import com.rivell.workbench.contracts.DocumentStructureParser;
+import com.rivell.workbench.contracts.ParseCoverage;
 import com.rivell.workbench.contracts.ParseResult;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
+import com.rivell.workbench.platform.docx.DocxPackageRepair;
 import java.io.ByteArrayInputStream;
 
 /**
@@ -50,14 +51,21 @@ import java.io.ByteArrayInputStream;
 @Component
 public class DocxStructuralParser implements DocumentStructureParser {
 
-    public static final String PARSER_VERSION = "rivell-docx-parser-2";
+    public static final String PARSER_VERSION = "rivell-docx-parser-3";
 
     private static final String PART_PATH = "word/document.xml";
 
     private final DocxParserProperties properties;
+    private final HeadingDetector headingDetector;
 
     public DocxStructuralParser(DocxParserProperties properties) {
+        this(properties, new SignalHeadingDetector());
+    }
+
+    @Autowired
+    public DocxStructuralParser(DocxParserProperties properties, HeadingDetector headingDetector) {
         this.properties = properties;
+        this.headingDetector = headingDetector;
     }
 
     @Override
@@ -67,22 +75,43 @@ public class DocxStructuralParser implements DocumentStructureParser {
             var scan = ZipGuard.scan(docxBytes, properties.maxUncompressedBytes());
             var rawTopLevelChildren =
                     ZipGuard.countTopLevelBodyChildren(scan.mainDocumentXml());
+            var repair = DocxPackageRepair.repair(docxBytes);
             var wordPackage = WordprocessingMLPackage.load(
-                    new ByteArrayInputStream(docxBytes));
+                    new ByteArrayInputStream(repair.bytes()));
             var body = wordPackage.getMainDocumentPart().getJaxbElement().getBody();
-            var walk = new BodyWalk(ownerAggregateId, wordPackage);
+            var walk = new BodyWalk(ownerAggregateId, wordPackage,
+                    DocxTextInventory.textBoxes(scan.mainDocumentXml()));
             walk.body(body);
             var warnings = new ArrayList<>(walk.warnings());
+            if (repair.repaired()) {
+                warnings.add("DAMAGED_PACKAGE_REPAIRED");
+            }
             if (rawTopLevelChildren != body.getContent().size()) {
                 warnings.add("SOME_BODY_CONTENT_COULD_NOT_BE_REPRESENTED");
             }
+            if (DocxTextInventory.hasTrackedChanges(scan.mainDocumentXml())) {
+                // Text is read in the accept-all view; the user must know the file was a markup.
+                warnings.add("TRACKED_CHANGES_PRESENT");
+            }
             addDeferredPartWarnings(wordPackage, warnings);
-            return new ParseResult(PARSER_VERSION, ParseStatus.OK, warnings, walk.nodes());
+            var coverage = coverage(docxBytes, walk.nodes(), warnings);
+            return new ParseResult(PARSER_VERSION, ParseStatus.OK, warnings, walk.nodes(), coverage);
         } catch (Exception e) {
             return new ParseResult(
                     PARSER_VERSION, ParseStatus.FAILED,
                     List.of("The document could not be parsed (" + e.getClass().getSimpleName() + ")"),
                     List.of());
+        }
+    }
+
+    /** The coverage check never fails a parse: a check that cannot run is a warning. */
+    private static ParseCoverage coverage(
+            byte[] docxBytes, List<DocumentNode> nodes, List<String> warnings) {
+        try {
+            return TextCoverage.measure(DocxTextInventory.read(docxBytes), nodes);
+        } catch (Exception e) {
+            warnings.add("COVERAGE_CHECK_FAILED");
+            return null;
         }
     }
 
@@ -117,19 +146,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
     }
 
     private static String paragraphText(P paragraph) {
-        var text = new StringBuilder();
-        for (Object rawElement : paragraph.getContent()) {
-            var element = unwrap(rawElement);
-            if (element instanceof R run) {
-                for (Object rawRunChild : run.getContent()) {
-                    var runChild = unwrap(rawRunChild);
-                    if (runChild instanceof Text textElement) {
-                        text.append(textElement.getValue());
-                    }
-                }
-            }
-        }
-        return text.toString();
+        return WordText.paragraphText(paragraph);
     }
 
     private static boolean hasRealFootnotes(FootnotesPart footnotesPart) {
@@ -152,10 +169,16 @@ public class DocxStructuralParser implements DocumentStructureParser {
         private final WordprocessingMLPackage wordPackage;
         private final List<DocumentNode> nodes = new ArrayList<>();
         private final Set<String> warnings = new LinkedHashSet<>();
-        private UUID bodyNodeId;
+        private final Deque<HeadingDecision> decisions = new ArrayDeque<>();
+        private final Deque<Optional<String>> numberingLabels = new ArrayDeque<>();
+        private final Deque<Optional<String>> runInTitles = new ArrayDeque<>();
         private int paragraphSequence;
         private int tableSequence;
-        private BodyWalk(UUID ownerAggregateId, WordprocessingMLPackage wordPackage) {
+        private final Map<Integer, List<String>> textBoxes;
+
+        private BodyWalk(UUID ownerAggregateId, WordprocessingMLPackage wordPackage,
+                Map<Integer, List<String>> textBoxes) {
+            this.textBoxes = textBoxes;
             this.ownerAggregateId = ownerAggregateId;
             this.wordPackage = wordPackage;
         }
@@ -169,11 +192,45 @@ public class DocxStructuralParser implements DocumentStructureParser {
         }
 
         private void body(Body body) {
+            var layout = new ParagraphLayoutReader(wordPackage, this::warning);
+            var features = new ArrayList<ParagraphFeatures>();
+            collect(body.getContent(), layout, features);
+            decisions.addAll(headingDetector.classify(features));
+            for (var paragraph : features) {
+                numberingLabels.add(paragraph.numberingLabel() == null
+                        ? Optional.empty()
+                        : Optional.of(paragraph.numberingLabel()));
+                runInTitles.add(Optional.ofNullable(paragraph.runInTitle()));
+            }
             var bodyNodeId = UUID.randomUUID();
             nodes.add(new DocumentNode(
                     bodyNodeId, ownerAggregateId, null, DocumentNodeType.BODY, 0,
                     null, null, null, SourceSpan.ofBody(PART_PATH), null));
             content(body.getContent(), null, bodyNodeId, 0);
+        }
+
+        /** Pre-pass in exactly the order {@link #content} visits block-level paragraphs. */
+        private void collect(
+                List<Object> elements, ParagraphLayoutReader layout, List<ParagraphFeatures> out) {
+            for (var raw : elements) {
+                var element = unwrap(raw);
+                if (element instanceof P paragraph) {
+                    out.add(layout.read(paragraph, textOf(paragraph)));
+                } else if (element instanceof SdtBlock sdtBlock) {
+                    collect(sdtBlock.getSdtContent().getContent(), layout, out);
+                } else if (element instanceof Tbl) {
+                    markLastTextBeforeTable(out);
+                }
+            }
+        }
+
+        private static void markLastTextBeforeTable(List<ParagraphFeatures> out) {
+            for (int i = out.size() - 1; i >= 0; i--) {
+                if (!out.get(i).isBlank()) {
+                    out.set(i, out.get(i).withFollowedByTable());
+                    return;
+                }
+            }
         }
 
         /**
@@ -207,6 +264,14 @@ public class DocxStructuralParser implements DocumentStructureParser {
                     warning("UNSUPPORTED_BODY_ELEMENT: "
                             + (element == null ? "null" : element.getClass().getSimpleName()));
                 }
+                if (anchorBodyIndex == null) {
+                    for (var box : textBoxes.getOrDefault(i, List.of())) {
+                        nodes.add(new DocumentNode(UUID.randomUUID(), ownerAggregateId, parentId,
+                                DocumentNodeType.TEXT_BOX, siblingOrdinal++, box, null, null,
+                                new SourceSpan(PART_PATH, i, null, null, null, null, null, null),
+                                null));
+                    }
+                }
             }
             return siblingOrdinal;
         }
@@ -214,18 +279,41 @@ public class DocxStructuralParser implements DocumentStructureParser {
         private DocumentNode paragraphNode(
                 P paragraph, int bodyIndex, UUID parentId, int ordinal, int paragraphSequence) {
             var styleId = styleId(paragraph);
-            var nodeType = DocumentNodeType.PARAGRAPH;
-            Integer headingLevel = null;
-            if ("Title".equals(styleId)) {
-                nodeType = DocumentNodeType.TITLE;
-            } else if (styleId != null && styleId.matches("Heading\\d*")) {
-                nodeType = DocumentNodeType.HEADING;
-                headingLevel = headingLevel(styleId);
-            }
+            var decision = decisions.removeFirst();
+            var label = numberingLabels.removeFirst().orElse(null);
+            var runInTitle = runInTitles.removeFirst().orElse(null);
+            var nodeType = switch (decision.kind()) {
+                case TITLE -> DocumentNodeType.TITLE;
+                case HEADING -> DocumentNodeType.HEADING;
+                case BODY -> DocumentNodeType.PARAGRAPH;
+            };
+            var text = textOf(paragraph);
             return new DocumentNode(
                     UUID.randomUUID(), ownerAggregateId, parentId, nodeType, ordinal,
-                    textOf(paragraph), headingLevel, numberingLabel(paragraph, styleId),
-                    SourceSpan.ofParagraph(PART_PATH, bodyIndex, paragraphSequence), styleId);
+                    text, decision.level(), label,
+                    SourceSpan.ofParagraph(PART_PATH, bodyIndex, paragraphSequence), styleId,
+                    nodeType == DocumentNodeType.HEADING ? runInHeading(text, runInTitle) : null,
+                    !com.rivell.workbench.platform.docx.TrackableContent.paragraph(paragraph));
+        }
+
+        /**
+         * The heading part of a heading paragraph that goes on with clause text: everything up to
+         * the end of the run-in title and its closing punctuation. Null when the paragraph is the
+         * heading alone.
+         */
+        static String runInHeading(String text, String runInTitle) {
+            if (text == null || runInTitle == null || runInTitle.isBlank()) {
+                return null;
+            }
+            var start = text.indexOf(runInTitle);
+            if (start < 0) {
+                return null;
+            }
+            var end = start + runInTitle.length();
+            while (end < text.length() && ".:–—-".indexOf(text.charAt(end)) >= 0) {
+                end++;
+            }
+            return text.substring(end).isBlank() ? null : text.substring(0, end);
         }
 
         private void tableNodes(
@@ -263,33 +351,6 @@ public class DocxStructuralParser implements DocumentStructureParser {
             }
         }
 
-        private String numberingLabel(P paragraph, String styleId) {
-            var pPr = paragraph.getPPr();
-            var numPr = pPr == null ? null : pPr.getNumPr();
-            var numId = numPr != null && numPr.getNumId() != null
-                    ? numPr.getNumId().getVal().toString()
-                    : null;
-            var ilvl = numPr != null && numPr.getIlvl() != null
-                    ? numPr.getIlvl().getVal().toString()
-                    : null;
-            if (numId == null && ilvl == null && styleId == null) {
-                return null;
-            }
-            try {
-                var triple = Emulator.getNumber(wordPackage, styleId, numId, ilvl);
-                if (triple == null) {
-                    return null;
-                }
-                var label = triple.getBullet() != null && !triple.getBullet().isBlank()
-                        ? triple.getBullet()
-                        : triple.getNumString();
-                return label == null || label.isBlank() ? null : label.trim();
-            } catch (Exception e) {
-                warning("NUMBERING_UNRESOLVED");
-                return null;
-            }
-        }
-
         private String styleId(P paragraph) {
             if (paragraph.getPPr() == null || paragraph.getPPr().getPStyle() == null) {
                 return null;
@@ -297,39 +358,8 @@ public class DocxStructuralParser implements DocumentStructureParser {
             return paragraph.getPPr().getPStyle().getVal();
         }
 
-        private int headingLevel(String styleId) {
-            var digits = styleId.replaceAll("\\D", "");
-            return digits.isEmpty() ? 1 : Integer.parseInt(digits);
-        }
-
         private String textOf(P paragraph) {
-            var text = new StringBuilder();
-            for (Object rawElement : paragraph.getContent()) {
-                appendText(unwrap(rawElement), text);
-            }
-            return text.toString();
-        }
-
-        private void appendText(Object element, StringBuilder text) {
-            if (element instanceof R run) {
-                for (Object rawRunChild : run.getContent()) {
-                    appendText(unwrap(rawRunChild), text);
-                }
-            } else if (element instanceof Hyperlink hyperlink) {
-                for (Object rawLinkChild : hyperlink.getContent()) {
-                    appendText(unwrap(rawLinkChild), text);
-                }
-            } else if (element instanceof SdtRun sdtRun) {
-                for (Object rawSdtChild : sdtRun.getSdtContent().getContent()) {
-                    appendText(unwrap(rawSdtChild), text);
-                }
-            } else if (element instanceof Text textElement) {
-                text.append(textElement.getValue());
-            } else if (element instanceof Br || element instanceof R.Cr) {
-                text.append('\n');
-            } else if (element instanceof R.Tab) {
-                text.append('\t');
-            }
+            return WordText.paragraphText(paragraph);
         }
 
         private String cellText(Tc cell) {
@@ -348,7 +378,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
             return text.toString();
         }
 
-        private void warning(String message) {
+        void warning(String message) {
             warnings.add(message);
         }
     }

@@ -2,7 +2,7 @@ package com.rivell.workbench.retrieval;
 
 import java.util.UUID;
 
-/** The clause region has no LegalConcept classification, so no lanes can be planned. */
+/** The clause region has no topic classification, so no lanes can be planned. */
 public class ClauseNotClassifiedException extends RuntimeException {
 
     public ClauseNotClassifiedException(UUID clauseId) {

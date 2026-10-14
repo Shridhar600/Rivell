@@ -39,6 +39,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reviews/{id}/redline/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry the frozen approved change set after a FAILED redline execution */
+        post: operations["retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the active run's findings with optional filters (bounded) */
+        get: operations["findings"];
+        put?: never;
+        /** Add a finding Rivell missed on one planned clause of the active run; it is decided like any other finding */
+        post: operations["addFinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reviews/{id}/finalize": {
         parameters: {
             query?: never;
@@ -80,7 +115,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the organization's published knowledge versions */
+        /** List the organization's published knowledge versions. Supply limit to bound the read; omitting it returns every publication. */
         get: operations["listPublications"];
         put?: never;
         /** Publish approved candidates as a new versioned knowledge snapshot */
@@ -134,7 +169,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Correct or clear a candidate's LegalConcept (machine proposal preserved) */
+        /** Correct or clear a candidate's concept (machine proposal preserved) */
         post: operations["correctConcept"];
         delete?: never;
         options?: never;
@@ -183,11 +218,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the organization's knowledge artifacts */
+        /** List the organization's knowledge artifacts, newest first. Supply limit to bound the read; omitting it returns every artifact. */
         get: operations["listArtifacts"];
         put?: never;
         /** Upload a legal knowledge source with its human-declared manifest */
         post: operations["upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/knowledge/artifacts/{artifactId}/units/{unitId}/position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a part Rivell did not take as a position into a position: records the correction beside Rivell's reading and adds the part's candidate for review */
+        post: operations["makePosition"];
         delete?: never;
         options?: never;
         head?: never;
@@ -218,7 +270,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List the organization's contracts newest first (bounded). Supply nextCursor to continue; a new upload always creates a new contract, so this endpoint never lists versions of an existing contract. */
+        get: operations["listContracts"];
         put?: never;
         /** Upload and parse a DOCX contract */
         post: operations["upload_1"];
@@ -313,6 +366,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/taxonomy/concepts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the legal topics clauses and playbook positions are classified against */
+        get: operations["concepts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/system/status": {
         parameters: {
             query?: never;
@@ -336,7 +406,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List a contract's reviews, newest first (bounded) */
+        /** List reviews newest first (bounded), optionally scoped to one contract. Omitting contractId returns the whole organization; supply the nextCursor value to continue. */
         get: operations["list"];
         put?: never;
         post?: never;
@@ -414,23 +484,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/reviews/{id}/findings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the active run's findings with optional filters (bounded) */
-        get: operations["findings"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/reviews/{id}/findings/{findingId}": {
         parameters: {
             query?: never;
@@ -465,6 +518,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reviews/{id}/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Developer diagnostics for one review: run state, check outcomes, counts, decision outcomes, finalization, redline, and anything stalling progress */
+        get: operations["diagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/reviews/{id}/decisions": {
         parameters: {
             query?: never;
@@ -474,6 +544,23 @@ export interface paths {
         };
         /** List the current effective decisions of a review's active run */
         get: operations["currentDecisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reviews/{id}/clause-marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One mark per planned clause of the active run: flagged, checked, not covered by the playbook, or not analysed */
+        get: operations["clauseMarks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -635,6 +722,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/artifacts/{id}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report how much of the uploaded source's text the extracted structure holds */
+        get: operations["coverage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/knowledge/artifacts/{id}/candidates": {
         parameters: {
             query?: never;
@@ -712,6 +816,23 @@ export interface paths {
         };
         /** Download the original uploaded DOCX of a contract version */
         get: operations["downloadOriginal_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contracts/{id}/versions/{versionNumber}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report how much of the uploaded file's text the parsed structure holds */
+        get: operations["getCoverage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -809,6 +930,8 @@ export interface components {
             contractVersionNumber?: number;
             /** Format: int32 */
             changeSetVersion?: number;
+            /** Format: int32 */
+            attempt?: number;
             status?: string;
             outcome?: string;
             failureCode?: string;
@@ -830,6 +953,24 @@ export interface components {
             artifactSha256?: string;
             downloadAvailable?: boolean;
             changes?: components["schemas"]["RedlineExecutionChangeView"][];
+        };
+        AddFindingRequest: {
+            /** Format: uuid */
+            headingNodeId?: string;
+            /** @enum {string} */
+            severity?: "HIGH" | "MEDIUM" | "LOW";
+            note?: string;
+        };
+        AddedFindingView: {
+            /** Format: uuid */
+            findingId?: string;
+        };
+        ApiResultAddedFindingView: {
+            data?: components["schemas"]["AddedFindingView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
         };
         ApiResultApprovedChangeSetView: {
             data?: components["schemas"]["ApprovedChangeSetView"];
@@ -870,8 +1011,7 @@ export interface components {
             targetKind?: string;
             /** Format: uuid */
             targetHeadingNodeId?: string;
-            /** @enum {string} */
-            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            absenceConcept?: string;
             approvedLanguage?: string;
             languageSource?: string;
             /** Format: uuid */
@@ -976,6 +1116,9 @@ export interface components {
             positions?: string[];
             requiresApproval?: boolean;
             escalationTrigger?: string;
+            preferred?: string;
+            fallbacks?: string[];
+            prohibited?: string;
         };
         SemanticAssessmentResponse: {
             judgments?: {
@@ -1047,6 +1190,9 @@ export interface components {
             payloadColumns?: {
                 [key: string]: string;
             };
+            payloadFieldRoles?: {
+                [key: string]: string;
+            };
             legalConceptKey?: string;
             conceptCorrection?: string;
             /** Format: uuid */
@@ -1078,6 +1224,7 @@ export interface components {
             effectiveFrom?: string;
             /** Format: date */
             effectiveTo?: string;
+            sourceContractTypes?: string[];
             conflictSignals?: components["schemas"]["ConflictSignalView"][];
             /** @enum {string} */
             reviewCategory?: "ROUTINE" | "ELEVATED" | "HIGH";
@@ -1202,6 +1349,13 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
+        ApiResultListCandidateView: {
+            data?: components["schemas"]["CandidateView"][];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
         ApiResultUnitConceptClassificationView: {
             data?: components["schemas"]["UnitConceptClassificationView"];
             /** Format: int32 */
@@ -1210,21 +1364,17 @@ export interface components {
             timestamp?: string;
         };
         ConceptView: {
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            concept?: string;
             /** Format: double */
             probability?: number;
         };
-        MetadataView: {
+        ExecutionView: {
             /** Format: uuid */
             executionId?: string;
             specId?: string;
             /** Format: int32 */
             specVersion?: number;
-            /** Format: int32 */
-            stateSchemaVersion?: number;
             providerId?: string;
-            requestedModelAlias?: string;
             resolvedModel?: string;
             /** Format: int64 */
             durationMs?: number;
@@ -1234,6 +1384,11 @@ export interface components {
             inputTokens?: number;
             /** Format: int32 */
             outputTokens?: number;
+        };
+        MetadataView: {
+            /** Format: int32 */
+            taxonomyVersion?: number;
+            executions?: components["schemas"]["ExecutionView"][];
         };
         UnitConceptClassificationView: {
             /** Format: uuid */
@@ -1391,6 +1546,7 @@ export interface components {
             /** Format: int32 */
             versionNumber?: number;
             enrichmentStatus?: string;
+            failureReason?: string;
             pipelineVersion?: string;
             reviewProfile?: components["schemas"]["ReviewProfileView"];
             metadata?: components["schemas"]["MetadataFactView"][];
@@ -1410,7 +1566,7 @@ export interface components {
             };
         };
         ConceptCorrection: {
-            /** @description Corrected primary concept as a LegalConcept name; any known LegalConcept is accepted (unknown names are rejected) and becomes the effective primary even if previously unclassified. null leaves the current correction unchanged; blank clears the concept correction */
+            /** @description Corrected primary concept as a taxonomy key; any known key is accepted (unknown names are rejected) and becomes the effective primary even if previously unclassified. null leaves the current correction unchanged; blank clears the concept correction */
             primary: string;
         };
         ReviewProfileInput: {
@@ -1418,7 +1574,7 @@ export interface components {
              * @description Declared contract type for enrichment
              * @enum {string}
              */
-            contractType: "NDA" | "MSA" | "OTHER";
+            contractType: "NDA" | "MNDA" | "ONDA" | "MSA" | "SAAS" | "DPA" | "SOW" | "SWL" | "OTHER";
             /** @enum {string} */
             ourSideRole?: "CUSTOMER" | "SUPPLIER" | "DISCLOSING_PARTY" | "RECEIVING_PARTY" | "LICENSOR" | "LICENSEE" | "PARTY_A" | "PARTY_B";
             /** @enum {string} */
@@ -1429,6 +1585,8 @@ export interface components {
         };
         CreateReviewRequest: {
             contractPackKey?: string;
+            /** Format: uuid */
+            clientRequestId?: string;
         };
         AnalysisWarningView: {
             checkKey?: string;
@@ -1443,6 +1601,13 @@ export interface components {
             /** Format: date-time */
             timestamp?: string;
         };
+        DocumentView: {
+            contractFilename?: string;
+            /** Format: date-time */
+            uploadedAt?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+        };
         FailureView: {
             code?: string;
             message?: string;
@@ -1454,9 +1619,16 @@ export interface components {
             jurisdiction?: string;
             contractPackKey?: string;
         };
+        ProposedChangeCounts: {
+            /** Format: int32 */
+            replace?: number;
+            /** Format: int32 */
+            insert?: number;
+            /** Format: int32 */
+            delete?: number;
+        };
         ReviewCoverageView: {
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
+            concept?: string;
             /** @enum {string} */
             expectation?: "REQUIRED" | "EXPECTED" | "OPTIONAL";
             /** @enum {string} */
@@ -1498,6 +1670,8 @@ export interface components {
             signals?: number;
             /** Format: int32 */
             findings?: number;
+            proposedChanges?: components["schemas"]["ProposedChangeCounts"];
+            document?: components["schemas"]["DocumentView"];
             snapshot?: components["schemas"]["SnapshotView"];
             coverage?: components["schemas"]["ReviewCoverageView"][];
             analysisWarnings?: components["schemas"]["AnalysisWarningView"][];
@@ -1510,6 +1684,19 @@ export interface components {
             knowledgePinNumber?: number;
             /** Format: date */
             effectiveOn?: string;
+            engine?: string;
+        };
+        TaxonomyConceptView: {
+            key: string;
+            label: string;
+            parentKey: string | null;
+            definition: string | null;
+        };
+        TaxonomyResponse: {
+            /** Format: int32 */
+            version: number;
+            parents: components["schemas"]["TaxonomyConceptView"][];
+            leaves: components["schemas"]["TaxonomyConceptView"][];
         };
         ApiResultSystemStatusResponse: {
             data?: components["schemas"]["SystemStatusResponse"];
@@ -1529,6 +1716,40 @@ export interface components {
             /** Format: date-time */
             timestamp?: string;
         };
+        ContextView: {
+            contractType?: string;
+            ourSideRole?: string;
+            paperSource?: string;
+            jurisdiction?: string;
+        };
+        FinalizationSummaryView: {
+            /** Format: date-time */
+            finalizedAt?: string;
+            /** Format: int32 */
+            approvedChanges?: number;
+        };
+        HumanReviewSummaryView: {
+            status?: string;
+            /** Format: int32 */
+            actionableFindings?: number;
+            /** Format: int32 */
+            resolvedFindings?: number;
+            /** Format: int32 */
+            remainingFindings?: number;
+            /** Format: int32 */
+            escalated?: number;
+            readyToFinalize?: boolean;
+            blockers?: string[];
+        };
+        RedlineSummaryView: {
+            status?: string;
+            outcome?: string;
+            /** Format: int32 */
+            verifiedChangeCount?: number;
+            downloadAvailable?: boolean;
+            /** Format: date-time */
+            completedAt?: string;
+        };
         ReviewListItemView: {
             /** Format: uuid */
             id?: string;
@@ -1536,15 +1757,42 @@ export interface components {
             contractId?: string;
             /** Format: int32 */
             contractVersionNumber?: number;
+            contractFilename?: string;
+            /** Format: date-time */
+            uploadedAt?: string;
             status?: string;
+            failure?: components["schemas"]["FailureView"];
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
             completedAt?: string;
+            /** Format: int32 */
+            activeRunNumber?: number;
+            activeRunStatus?: string;
+            latestRunStatus?: string;
+            /** Format: int32 */
+            plannedChecks?: number;
+            /** Format: int32 */
+            completedChecks?: number;
+            /** Format: int32 */
+            degradedChecks?: number;
+            /** Format: int32 */
+            failedChecks?: number;
+            /** Format: int32 */
+            signals?: number;
+            /** Format: int32 */
+            findings?: number;
+            context?: components["schemas"]["ContextView"];
+            humanReview?: components["schemas"]["HumanReviewSummaryView"];
+            finalization?: components["schemas"]["FinalizationSummaryView"];
+            redline?: components["schemas"]["RedlineSummaryView"];
         };
         ReviewListResponse: {
             items?: components["schemas"]["ReviewListItemView"][];
             truncated?: boolean;
+            nextCursor?: string;
         };
         ApiResultReviewProgressView: {
             data?: components["schemas"]["ReviewProgressView"];
@@ -1640,14 +1888,11 @@ export interface components {
             subjectKind?: "CLAUSE" | "ABSENCE";
             /** Format: uuid */
             subjectHeadingNodeId?: string;
+            absenceConcept?: string;
+            concept?: string;
+            secondaryConcept?: string;
             /** @enum {string} */
-            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            secondaryConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
+            issueFamily?: "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "POSITION_WALK_AWAY" | "POSITION_NEEDS_FALLBACK" | "POSITION_ACCEPTABLE_FALLBACK" | "POSITION_AMBIGUOUS" | "POSITION_UNCERTAIN" | "OPEN_ENDED_POSITION" | "USER_ADDED";
             observationKind?: string;
             /** @enum {string} */
             severity?: "HIGH" | "MEDIUM" | "LOW";
@@ -1657,8 +1902,13 @@ export interface components {
             proposedAction?: "USE_APPROVED_FALLBACK" | "ADD_REQUIRED_PROVISION" | "REVIEW_AMBIGUITY" | "ESCALATE_TO_HUMAN" | "CONSIDER_GENERATED_LANGUAGE" | "NO_ACTION";
             /** @enum {string} */
             proposedLanguageSource?: "APPROVED_DRAFTING" | "GENERATIVE" | "NONE";
+            relatedPosition?: boolean;
+            decidedBy?: string;
             /** Format: date-time */
             createdAt?: string;
+            addedBy?: string;
+            firstReviewCategory?: string;
+            positionLabel?: string;
         };
         AbsenceBasisView: {
             /** Format: uuid */
@@ -1681,6 +1931,21 @@ export interface components {
             absence?: boolean;
             evidenceItemIds?: string[];
         };
+        ContractPositionSlot: {
+            /** Format: uuid */
+            evidenceItemId?: string;
+            authorityClass?: string;
+            legalConcept?: string;
+            facts?: components["schemas"]["LegalFact"][];
+        };
+        EscalationSlot: {
+            /** Format: uuid */
+            evidenceItemId?: string;
+            authorityClass?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
+            trigger?: string;
+        };
         FindingDetailView: {
             /** Format: uuid */
             id?: string;
@@ -1692,15 +1957,12 @@ export interface components {
             subjectKind?: "CLAUSE" | "ABSENCE";
             /** Format: uuid */
             subjectHeadingNodeId?: string;
+            absenceConcept?: string;
+            concept?: string;
+            secondaryConcept?: string;
+            concepts?: string[];
             /** @enum {string} */
-            absenceConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            /** @enum {string} */
-            secondaryConcept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-            concepts?: ("CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW")[];
-            /** @enum {string} */
-            issueFamily?: "LIABILITY_CAP_DEVIATION" | "LIABILITY_CAP_UNCERTAIN" | "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "OPEN_ENDED_LIABILITY";
+            issueFamily?: "MISSING_REQUIRED_PROVISION" | "EXPECTED_PROVISION_ABSENT" | "SURVIVAL_COVERAGE_GAP" | "CARVE_OUT_INCONSISTENCY" | "POLICY_UNAVAILABLE" | "POLICY_AMBIGUOUS" | "POSITION_WALK_AWAY" | "POSITION_NEEDS_FALLBACK" | "POSITION_ACCEPTABLE_FALLBACK" | "POSITION_AMBIGUOUS" | "POSITION_UNCERTAIN" | "OPEN_ENDED_POSITION" | "USER_ADDED";
             observationKind?: string;
             observationText?: string;
             /** @enum {string} */
@@ -1720,10 +1982,30 @@ export interface components {
             claims?: components["schemas"]["ClaimView"][];
             evidenceItemIds?: string[];
             evidenceItems?: components["schemas"]["EvidenceItemResponse"][];
+            positionComparison?: components["schemas"]["FindingPositionComparison"];
             signalIds?: string[];
             absenceBasis?: components["schemas"]["AbsenceBasisView"];
             /** Format: date-time */
             createdAt?: string;
+            addedBy?: string;
+            firstReviewCategory?: string;
+            positionLabel?: string;
+        };
+        FindingPositionComparison: {
+            contract?: components["schemas"]["ContractPositionSlot"][];
+            preferred?: components["schemas"]["PolicyPositionSlot"][];
+            fallback?: components["schemas"]["PolicyPositionSlot"][];
+            walkAway?: components["schemas"]["PolicyPositionSlot"][];
+            escalation?: components["schemas"]["EscalationSlot"][];
+        };
+        PolicyPositionSlot: {
+            /** Format: uuid */
+            evidenceItemId?: string;
+            authorityClass?: string;
+            legalConcept?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
+            text?: string;
         };
         ApiResultDecisionListResponse: {
             data?: components["schemas"]["DecisionListResponse"];
@@ -1735,6 +2017,213 @@ export interface components {
         DecisionListResponse: {
             items?: components["schemas"]["DecisionView"][];
             truncated?: boolean;
+        };
+        /** @description The latest analysis run */
+        AnalysisRunView: {
+            /** Format: uuid */
+            runId?: string;
+            /** Format: int32 */
+            runNumber?: number;
+            status?: string;
+            trigger?: string;
+            pipelineVersion?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: int64 */
+            ageSeconds?: number;
+            failureReason?: string;
+            /** @description Whether the snapshot the review froze still matches the live contract semantics and model configuration */
+            environmentMatchesSnapshot?: boolean;
+            checks?: components["schemas"]["CheckView"][];
+        };
+        ApiResultReviewDiagnosticsView: {
+            data?: components["schemas"]["ReviewDiagnosticsView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        /** @description One planned check and how it ended */
+        CheckView: {
+            key?: string;
+            /**
+             * Format: uuid
+             * @description Clause the check judged, when it has one
+             */
+            subjectHeadingNodeId?: string;
+            status?: string;
+            /** Format: int32 */
+            signalCount?: number;
+            degradedReason?: string;
+            /** @description Exception type of a FAILED check; no message text */
+            failureType?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: int64 */
+            durationMillis?: number;
+            /** @description Policy comparison: every judged position with its option probabilities; ids and numbers, never text */
+            judgedPositions?: components["schemas"]["JudgedPositionView"][];
+            /** @description Measurement probe that re-asked the comparison: REVERSED, REPEAT or UNAVAILABLE; absent when off */
+            probe?: string;
+            /**
+             * Format: double
+             * @description Uncovered-clause triage probability, when the triage ran
+             */
+            uncoveredProbability?: number;
+            /** @description Engine v2 route that judged the clause: SEARCH when the position search route ran; absent otherwise */
+            route?: string;
+            /** @description Whether any judged position addresses the clause */
+            addressed?: boolean;
+            /**
+             * Format: int32
+             * @description Positions the search route retrieved, when it ran
+             */
+            searchFound?: number;
+            /** @description Whether the search route's comparison failed */
+            searchFailed?: boolean;
+            /** @description Severity the whole-contract read recorded on this clause: MEDIUM or HIGH; absent when the read named none */
+            spottedSeverity?: string;
+            /**
+             * Format: int32
+             * @description Applicable positions the omission check judged
+             */
+            omissionCandidates?: number;
+            /**
+             * Format: int32
+             * @description Contract clauses the omission check searched
+             */
+            searchedClauses?: number;
+            /** @description Omission presence probability per candidate position id */
+            presenceProbabilities?: {
+                [key: string]: number;
+            };
+            /**
+             * Format: int32
+             * @description Count of positions the omission search addressed
+             */
+            addressedBySearch?: number;
+            /**
+             * Format: int32
+             * @description Count of positions the omission search flagged
+             */
+            flaggedBySearch?: number;
+            /** @description Engine v2: defined terms whose definitions the judge read for this clause; absent when none */
+            definitionTerms?: string[];
+        };
+        /** @description Finding counts, no finding content */
+        CountsView: {
+            /** Format: int32 */
+            total?: number;
+            /** Format: int32 */
+            blocking?: number;
+            /** Format: int32 */
+            reviewRequired?: number;
+            /** Format: int32 */
+            informational?: number;
+        };
+        /** @description Human decision outcomes, which are the natural evaluation labels */
+        DecisionsView: {
+            /** Format: int32 */
+            accepted?: number;
+            /** Format: int32 */
+            edited?: number;
+            /** Format: int32 */
+            rejected?: number;
+            /** Format: int32 */
+            escalated?: number;
+        };
+        /** @description Finalization state */
+        FinalizationView: {
+            finalized?: boolean;
+            /** Format: uuid */
+            changeSetId?: string;
+            /** Format: date-time */
+            finalizedAt?: string;
+            /** Format: int32 */
+            approvedChanges?: number;
+        };
+        /** @description One judged playbook position: ids, categories and probabilities only */
+        JudgedPositionView: {
+            positionKey?: string;
+            positionCandidateId?: string;
+            category?: string;
+            /** Format: double */
+            flagProbability?: number;
+            flagged?: boolean;
+            probabilities?: {
+                [key: string]: number;
+            };
+            probeCategory?: string;
+            probeFlagged?: boolean;
+            probeProbabilities?: {
+                [key: string]: number;
+            };
+            route?: string;
+            secondOpinionOutcome?: string;
+            secondOpinionCategory?: string;
+            /** @description SEARCH when the text search, not a topic, found this position; absent otherwise */
+            foundBy?: string;
+        };
+        /** @description Deterministic redline state */
+        RedlineView: {
+            status?: string;
+            outcome?: string;
+            failureCode?: string;
+            /** Format: int32 */
+            changeCount?: number;
+            downloadAvailable?: boolean;
+            /** Format: int64 */
+            ageSeconds?: number;
+        };
+        /** @description Developer diagnostics for one review run. Read-only; contains no clause text, no definitions and no model output; defined-term names only. */
+        ReviewDiagnosticsView: {
+            /**
+             * Format: uuid
+             * @description Review the diagnostics describe
+             */
+            reviewId?: string;
+            /**
+             * Format: uuid
+             * @description Contract version under review
+             */
+            contractId?: string;
+            /** Format: int32 */
+            contractVersionNumber?: number;
+            /** @description Current review status */
+            reviewStatus?: string;
+            /** @description Failure reason recorded on the review, if any */
+            reviewFailure?: string;
+            /** @description Whether a background job worker is running. A queued analysis with no worker will never start. */
+            backgroundWorkerEnabled?: boolean;
+            analysis?: components["schemas"]["AnalysisRunView"];
+            findings?: components["schemas"]["CountsView"];
+            decisions?: components["schemas"]["DecisionsView"];
+            finalization?: components["schemas"]["FinalizationView"];
+            redline?: components["schemas"]["RedlineView"];
+            /** @description Operational problems that explain a review making no progress */
+            stalled?: string[];
+        };
+        ApiResultClauseMarksView: {
+            data?: components["schemas"]["ClauseMarksView"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        Clause: {
+            /** Format: uuid */
+            headingNodeId?: string;
+            /** @enum {string} */
+            mark?: "FLAGGED" | "CHECKED" | "NOT_COVERED" | "NOT_ANALYSED";
+        };
+        ClauseMarksView: {
+            /** Format: uuid */
+            runId?: string;
+            clauses?: components["schemas"]["Clause"][];
         };
         ApiResultReviewPackCatalogView: {
             data?: components["schemas"]["ReviewPackCatalogView"];
@@ -1843,6 +2332,14 @@ export interface components {
             title?: string;
             contentText?: string;
             sourceNodeIds?: string[];
+            /** @enum {string} */
+            recordKind?: "POSITION" | "WORDING" | "ESCALATION" | "GUIDANCE" | "DOCUMENT_CONTROL" | "OTHER";
+            /** @enum {string} */
+            recordKindOverride?: "POSITION" | "WORDING" | "ESCALATION" | "GUIDANCE" | "DOCUMENT_CONTROL" | "OTHER";
+            /** Format: uuid */
+            recordKindOverriddenBy?: string;
+            /** Format: date-time */
+            recordKindOverriddenAt?: string;
         };
         ApiResultListKnowledgeStructureNodeView: {
             data?: components["schemas"]["KnowledgeStructureNodeView"][];
@@ -1895,12 +2392,38 @@ export interface components {
             /** Format: int32 */
             lastColumn?: number;
         };
-        ApiResultListCandidateView: {
-            data?: components["schemas"]["CandidateView"][];
+        ApiResultContractListResponse: {
+            data?: components["schemas"]["ContractListResponse"];
             /** Format: int32 */
             status?: number;
             /** Format: date-time */
             timestamp?: string;
+        };
+        /** @description Contract with its latest version state */
+        ContractListItemResponse: {
+            /** Format: uuid */
+            id: string;
+            title: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            latestVersion: components["schemas"]["LatestVersion"];
+        };
+        ContractListResponse: {
+            items?: components["schemas"]["ContractListItemResponse"][];
+            nextCursor?: string;
+        };
+        /** @description Latest version of the contract */
+        LatestVersion: {
+            /** Format: int32 */
+            versionNumber: number;
+            /** @enum {string} */
+            parseStatus: "PARSING" | "OK" | "FAILED";
+            parseWarnings: string[];
+            parserVersion: string | null;
+            sha256: string;
+            filename: string;
+            /** Format: int32 */
+            nodeCount: number;
         };
         ApiResultContractSummaryResponse: {
             data?: components["schemas"]["ContractSummaryResponse"];
@@ -1915,19 +2438,6 @@ export interface components {
             id: string;
             title: string | null;
             latestVersion: components["schemas"]["LatestVersion"];
-        };
-        /** @description Latest version of the contract */
-        LatestVersion: {
-            /** Format: int32 */
-            versionNumber: number;
-            /** @enum {string} */
-            parseStatus: "PARSING" | "OK" | "FAILED";
-            parseWarnings: string[];
-            parserVersion: string | null;
-            sha256: string;
-            filename: string;
-            /** Format: int32 */
-            nodeCount: number;
         };
         ApiResultContractStructureResponse: {
             data?: components["schemas"]["ContractStructureResponse"];
@@ -1957,7 +2467,7 @@ export interface components {
             /** Format: uuid */
             parentId: string | null;
             /** @enum {string} */
-            nodeType: "BODY" | "TITLE" | "HEADING" | "PARAGRAPH" | "TABLE" | "TABLE_ROW" | "TABLE_CELL";
+            nodeType: "BODY" | "TITLE" | "HEADING" | "PARAGRAPH" | "TABLE" | "TABLE_ROW" | "TABLE_CELL" | "TEXT_BOX";
             /** Format: int32 */
             ordinal: number;
             text: string | null;
@@ -1984,6 +2494,46 @@ export interface components {
             runStart: number | null;
             /** Format: int32 */
             runEnd: number | null;
+        };
+        ApiResultParseCoverageResponse: {
+            data?: components["schemas"]["ParseCoverageResponse"];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        GapView: {
+            part: string;
+            /** @description BODY, TABLE, TEXT_BOX, HEADER, FOOTER, FOOTNOTE, ENDNOTE or COMMENT */
+            location: string;
+            /** Format: int32 */
+            words: number;
+            excerpt: string;
+        };
+        LocationTotalView: {
+            location: string;
+            /** Format: int32 */
+            sourceWords: number;
+            /** Format: int32 */
+            capturedWords: number;
+        };
+        /** @description How much of the uploaded file's text the parsed structure holds, from an independent read of the raw file. checked is false for versions parsed before the check existed or when it could not run. */
+        ParseCoverageResponse: {
+            checked: boolean;
+            /** @description False when the check fell back to whole-paragraph matching */
+            exact: boolean;
+            /** Format: int32 */
+            sourceWords: number;
+            /** Format: int32 */
+            capturedWords: number;
+            /**
+             * Format: int32
+             * @description Structure words with no source counterpart
+             */
+            extraWords: number;
+            totals: components["schemas"]["LocationTotalView"][];
+            /** @description Source text the structure does not hold, in source order */
+            gaps: components["schemas"]["GapView"][];
         };
     };
     responses: never;
@@ -2128,6 +2678,144 @@ export interface operations {
             };
         };
     };
+    retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultRedlineExecutionView"];
+                };
+            };
+            /** @description Missing reviews:redline */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No FAILED execution to retry, or the retry failed deterministically (full report via GET) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    findings: {
+        parameters: {
+            query?: {
+                concept?: string;
+                classification?: "BLOCKING" | "REVIEW_REQUIRED" | "INFORMATIONAL";
+                severity?: "HIGH" | "MEDIUM" | "LOW";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultFindingListResponse"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    addFinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddFindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultAddedFindingView"];
+                };
+            };
+            /** @description Missing or too long note, or not a planned clause of this review */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing reviews:decide */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Analysis incomplete or already finalized */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     finalizeReview: {
         parameters: {
             query?: never;
@@ -2230,7 +2918,9 @@ export interface operations {
     };
     listPublications: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2420,7 +3110,7 @@ export interface operations {
                     "*/*": components["schemas"]["ApiResultCandidateView"];
                 };
             };
-            /** @description Unknown LegalConcept or missing primary value */
+            /** @description Unknown concept or missing primary value */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2537,7 +3227,9 @@ export interface operations {
     };
     listArtifacts: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2620,6 +3312,56 @@ export interface operations {
             };
         };
     };
+    makePosition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifactId: string;
+                unitId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultListCandidateView"];
+                };
+            };
+            /** @description Missing knowledge:review */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Artifact or part does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The part already holds a position, has no text, or its artifact type sorts no parts into positions */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     classifyUnit: {
         parameters: {
             query?: never;
@@ -2661,6 +3403,38 @@ export interface operations {
             };
             /** @description Semantic classification is not available */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listContracts: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultContractListResponse"];
+                };
+            };
+            /** @description Missing contracts:read */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2979,6 +3753,26 @@ export interface operations {
             };
         };
     };
+    concepts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyResponse"];
+                };
+            };
+        };
+    };
     status: {
         parameters: {
             query?: never;
@@ -3001,9 +3795,10 @@ export interface operations {
     };
     list: {
         parameters: {
-            query: {
-                contractId: string;
+            query?: {
+                contractId?: string;
                 limit?: number;
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -3166,42 +3961,6 @@ export interface operations {
             };
         };
     };
-    findings: {
-        parameters: {
-            query?: {
-                concept?: "CONFIDENTIALITY" | "TERM_TERMINATION" | "LIMITATION_OF_LIABILITY" | "INDEMNIFICATION" | "GOVERNING_LAW";
-                classification?: "BLOCKING" | "REVIEW_REQUIRED" | "INFORMATIONAL";
-                severity?: "HIGH" | "MEDIUM" | "LOW";
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResultFindingListResponse"];
-                };
-            };
-            /** @description Unknown review */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     finding: {
         parameters: {
             query?: never;
@@ -3268,6 +4027,46 @@ export interface operations {
             };
         };
     };
+    diagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultReviewDiagnosticsView"];
+                };
+            };
+            /** @description Missing reviews:read */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     currentDecisions: {
         parameters: {
             query?: {
@@ -3288,6 +4087,37 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResultDecisionListResponse"];
+                };
+            };
+            /** @description Unknown review */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    clauseMarks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultClauseMarksView"];
                 };
             };
             /** @description Unknown review */
@@ -3580,6 +4410,28 @@ export interface operations {
             };
         };
     };
+    coverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artifact does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     getCandidates: {
         parameters: {
             query?: never;
@@ -3727,6 +4579,38 @@ export interface operations {
                 };
                 content: {
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                };
+            };
+            /** @description Contract or version does not exist in this organization */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getCoverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                versionNumber: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultParseCoverageResponse"];
                 };
             };
             /** @description Contract or version does not exist in this organization */

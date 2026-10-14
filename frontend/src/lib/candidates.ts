@@ -1,53 +1,17 @@
-import type {
-  Candidate,
-  ExtractionUnit,
-  KnowledgeNode,
-  ReviewStatus,
-} from '../api/knowledge'
+import type { Candidate, ExtractionUnit, KnowledgeNode } from '../api/knowledge'
 
-export type ReviewStatusFilter = ReviewStatus | 'ALL'
-
-export interface CandidateFilter {
-  status: ReviewStatusFilter
-  conflictsOnly: boolean
-}
-
-export type ReviewStatusCounts = Record<ReviewStatus, number> & { total: number }
-
-export function countByReviewStatus(candidates: Candidate[]): ReviewStatusCounts {
-  const counts: ReviewStatusCounts = {
-    total: candidates.length,
-    PENDING: 0,
-    APPROVED: 0,
-    EDITED: 0,
-    REJECTED: 0,
-    PUBLISHED: 0,
-  }
-  for (const candidate of candidates) {
-    counts[candidate.reviewStatus] += 1
-  }
-  return counts
-}
-
-export function hasConflicts(candidate: Candidate): boolean {
-  return candidate.conflictSignals.length > 0
-}
-
-export function filterCandidates(
-  candidates: Candidate[],
-  filter: CandidateFilter,
-): Candidate[] {
-  return candidates.filter((candidate) => {
-    if (filter.status !== 'ALL' && candidate.reviewStatus !== filter.status) {
-      return false
-    }
-    if (filter.conflictsOnly && !hasConflicts(candidate)) return false
-    return true
-  })
-}
-
+/**
+ * The single authoritative wording of a candidate, mirroring the backend's effectiveContentText():
+ * explicit human wording, then the wording rendered from the human's corrected columns, then the
+ * machine wording captured at extraction. A layer that is absent or blank is skipped rather than
+ * accepted, so a blank correction can never hide valid machine wording.
+ */
 export function effectiveContentText(candidate: Candidate): string | null {
-  return candidate.editedContentText ?? candidate.contentText
+  return firstReadable(
+    candidate.editedContentText,
+    renderCorrectedColumns(candidate),
+    candidate.contentText,
+  )
 }
 
 export function effectivePayloadColumns(
@@ -58,21 +22,65 @@ export function effectivePayloadColumns(
     : candidate.payloadColumns
 }
 
-export function isEdited(candidate: Candidate): boolean {
-  return (
-    candidate.editedContentText !== null ||
-    Object.keys(candidate.editedPayloadColumns).length > 0
-  )
+/**
+ * The corrected columns rendered the way extraction renders machine wording: the non-blank values
+ * in source order, joined by " | ". A correction replaces the values it names and never reorders
+ * the row, so the order recovered from the machine wording is applied to the corrected values.
+ */
+function renderCorrectedColumns(candidate: Candidate): string | null {
+  const corrected = candidate.editedPayloadColumns
+  const received = Object.keys(corrected)
+  if (received.length === 0) return null
+
+  const machineOrder = recoverSourceOrder(candidate.contentText, candidate.payloadColumns)
+  const ordered = machineOrder
+    ? [
+        ...machineOrder.filter((name) => name in corrected),
+        ...received.filter((name) => !machineOrder.includes(name)),
+      ]
+    : received
+
+  const rendered = ordered
+    .map((name) => corrected[name])
+    .filter((value) => value !== null && value !== undefined && value.trim() !== '')
+  return rendered.length > 0 ? rendered.join(' | ') : null
 }
 
-export function isReviewable(candidate: Candidate): boolean {
-  return (
-    candidate.reviewStatus !== 'PUBLISHED' && candidate.reviewStatus !== 'REJECTED'
+/**
+ * The machine wording is the reliable record of source order, because extraction rendered it left
+ * to right. It is replayed against the machine columns to recover which column came first. The
+ * recovery is applied only when the wording is exactly the rendering of those values; otherwise no
+ * source order is claimed and the columns are read in the order they arrived.
+ */
+function recoverSourceOrder(
+  machineWording: string | null,
+  machineColumns: Record<string, string>,
+): string[] | null {
+  if (machineWording === null || machineWording.trim() === '') return null
+  const readable = machineWording
+    .split('|')
+    .map((value) => value.trim())
+    .filter((value) => value !== '')
+  const remaining = new Map(
+    Object.entries(machineColumns).filter(([, value]) => value !== null && value.trim() !== ''),
   )
+  if (remaining.size !== readable.length) return null
+
+  const order: string[] = []
+  for (const value of readable) {
+    const match = [...remaining].find(([, columnValue]) => columnValue === value)
+    if (!match) return null
+    remaining.delete(match[0])
+    order.push(match[0])
+  }
+  return order
 }
 
-export function approvedCandidates(candidates: Candidate[]): Candidate[] {
-  return candidates.filter((candidate) => candidate.reviewStatus === 'APPROVED')
+function firstReadable(...layers: (string | null)[]): string | null {
+  for (const layer of layers) {
+    if (layer !== null && layer.trim() !== '') return layer
+  }
+  return null
 }
 
 export function resolveCandidateSource(

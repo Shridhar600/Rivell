@@ -17,6 +17,7 @@ public record SemanticContractResponse(
         UUID contractId,
         int versionNumber,
         String enrichmentStatus,
+        String failureReason,
         String pipelineVersion,
         ReviewProfileView reviewProfile,
         List<MetadataFactView> metadata,

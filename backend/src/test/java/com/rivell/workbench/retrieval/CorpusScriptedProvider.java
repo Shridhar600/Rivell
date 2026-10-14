@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.ChoiceQuestion;
 import com.rivell.workbench.intelligence.DecisionExecutionRequest;
@@ -50,7 +49,7 @@ public final class CorpusScriptedProvider implements SemanticDecisionProvider {
         var selected = switch (name) {
             case "artifact_class" -> declaredTypeCue(state, choice);
             case "variant_role" -> variantRoleCue(state, choice);
-            case "primary_concept" -> primaryConceptCue(state, choice);
+            case "primary_topic" -> primaryConceptCue(state, choice);
             case "governing_law" -> stateText(state).contains("England") ? "UK" : "US";
             default -> choice.criteria().keySet().iterator().next();
         };
@@ -80,22 +79,39 @@ public final class CorpusScriptedProvider implements SemanticDecisionProvider {
         return choice.criteria().keySet().iterator().next();
     }
 
+    /**
+     * The fixtures predate the 90-topic taxonomy, so the expected main subject
+     * of an ambiguous clause follows the core-concept order the retired vocabulary
+     * used, not the registry's arbitrary leaf order.
+     */
+    private static final List<String> CORE_ORDER = List.of(
+            "CONFIDENTIALITY_OBLIGATIONS", "TERM", "LIMITATION_OF_LIABILITY",
+            "INDEMNIFICATION", "GOVERNING_LAW");
+
     private String primaryConceptCue(Object state, ChoiceQuestion choice) {
         var heading = headingOf(state).toLowerCase();
         var text = stateText(state).toLowerCase();
-        for (var option : choice.criteria().keySet()) {
+        var ordered = choice.criteria().keySet().stream()
+                .sorted(java.util.Comparator.comparingInt(CorpusScriptedProvider::coreRank))
+                .toList();
+        for (var option : ordered) {
             var cue = option.toLowerCase().replace('_', ' ');
             if (heading.contains(cue) || heading.contains(firstWord(cue))) {
                 return option;
             }
         }
-        for (var option : choice.criteria().keySet()) {
+        for (var option : ordered) {
             var cue = option.toLowerCase().replace('_', ' ');
-            if (text.contains(cue)) {
+            if (text.contains(cue) || text.contains(firstWord(cue))) {
                 return option;
             }
         }
-        return choice.criteria().keySet().iterator().next();
+        return ordered.get(0);
+    }
+
+    private static int coreRank(String key) {
+        var index = CORE_ORDER.indexOf(key);
+        return index < 0 ? CORE_ORDER.size() : index;
     }
 
     private double cueProbability(String questionName, Object state) {
@@ -103,15 +119,15 @@ public final class CorpusScriptedProvider implements SemanticDecisionProvider {
         var heading = headingOf(state);
         var combined = (heading + " " + text).toLowerCase();
         return switch (questionName) {
-            case "concept_limitation_of_liability" ->
+            case "topic_limitation_of_liability" ->
                     combined.contains("overall exposure for damages")
                             || combined.contains("liability") ? 0.95 : 0.05;
-            case "concept_confidentiality" -> combined.contains("confidential") ? 0.95 : 0.05;
-            case "concept_term_termination" ->
+            case "topic_confidentiality_obligations" -> combined.contains("confidential") ? 0.95 : 0.05;
+            case "topic_term" ->
                     combined.contains("terminat") || combined.contains(" term ")
                             ? 0.95 : 0.05;
-            case "concept_indemnification" -> combined.contains("indemnif") ? 0.95 : 0.05;
-            case "concept_governing_law" -> combined.contains("govern") ? 0.95 : 0.05;
+            case "topic_indemnification" -> combined.contains("indemnif") ? 0.95 : 0.05;
+            case "topic_governing_law" -> combined.contains("govern") ? 0.95 : 0.05;
             case "role_preferred" -> combined.contains("preferred") ? 0.9 : 0.02;
             case "role_fallback" -> combined.contains("fallback") ? 0.9 : 0.02;
             case "role_prohibited" -> combined.contains("prohibited") ? 0.9 : 0.02;

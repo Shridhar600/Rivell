@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.rivell.workbench.contracts.ContractNotFoundException;
+import com.rivell.workbench.contracts.ContractNotReadableException;
 import com.rivell.workbench.contracts.ContractVersionNotFoundException;
 import com.rivell.workbench.contracts.EnrichmentFailedException;
 import com.rivell.workbench.contracts.EnrichmentInProgressException;
@@ -31,10 +32,12 @@ import com.rivell.workbench.retrieval.EnrichmentNotReadyException;
 import com.rivell.workbench.retrieval.TraceNotFoundException;
 import com.rivell.workbench.retrieval.UnauthorizedEvidenceAccessException;
 import com.rivell.workbench.redline.ApprovedChangeSetNotFoundException;
+import com.rivell.workbench.redline.RedlineArtifactStoreException;
 import com.rivell.workbench.redline.RedlineArtifactUnavailableException;
 import com.rivell.workbench.redline.RedlineExecutionFailedException;
 import com.rivell.workbench.redline.RedlineExecutionNotFoundException;
 import com.rivell.workbench.redline.RedlineNotAvailableException;
+import com.rivell.workbench.redline.RedlineRetryNotAvailableException;
 import com.rivell.workbench.redline.RedlineSourceUnavailableException;
 import com.rivell.workbench.redline.UnauthorizedRedlineAccessException;
 import com.rivell.workbench.review.FindingNotFoundException;
@@ -45,6 +48,7 @@ import com.rivell.workbench.review.UnauthorizedReviewAccessException;
 import com.rivell.workbench.workflow.AnalysisNotCompleteException;
 import com.rivell.workbench.workflow.DecisionConflictException;
 import com.rivell.workbench.workflow.FindingNotActionableException;
+import com.rivell.workbench.workflow.UntrackableChangeTargetException;
 import com.rivell.workbench.workflow.InvalidDecisionException;
 import com.rivell.workbench.workflow.ReviewAlreadyFinalizedException;
 import com.rivell.workbench.workflow.ReviewNotFinalizableException;
@@ -107,7 +111,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({DecisionConflictException.class, FindingNotActionableException.class,
             AnalysisNotCompleteException.class, ReviewAlreadyFinalizedException.class,
-            ReviewNotFinalizableException.class})
+            ReviewNotFinalizableException.class, UntrackableChangeTargetException.class})
     ResponseEntity<ErrorResponse> decisionConflict(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }
@@ -121,7 +125,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({InvalidCandidateReviewStateException.class, InvalidPublicationException.class,
             EnrichmentInProgressException.class, EnrichmentFailedException.class,
-            EnrichmentNotReadyException.class, ClauseNotClassifiedException.class})
+            EnrichmentNotReadyException.class, ClauseNotClassifiedException.class,
+            com.rivell.workbench.knowledge.UnitNotMarkableException.class})
     ResponseEntity<ErrorResponse> invalidState(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
     }
@@ -130,6 +135,12 @@ public class GlobalExceptionHandler {
             com.rivell.workbench.knowledge.InvalidConceptCorrectionException.class})
     ResponseEntity<ErrorResponse> invalidCorrection(RuntimeException e) {
         return error(HttpStatus.BAD_REQUEST, "400", "Invalid correction", e.getMessage());
+    }
+
+    @ExceptionHandler(ContractNotReadableException.class)
+    ResponseEntity<ErrorResponse> contractNotReadable(ContractNotReadableException e) {
+        return error(HttpStatus.UNPROCESSABLE_ENTITY, "422", "Contract not readable",
+                e.getMessage());
     }
 
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
@@ -158,11 +169,28 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({RedlineNotAvailableException.class,
+            RedlineRetryNotAvailableException.class,
             RedlineArtifactUnavailableException.class,
             RedlineExecutionFailedException.class,
             RedlineSourceUnavailableException.class})
     ResponseEntity<ErrorResponse> redlineConflict(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
+    }
+
+    @ExceptionHandler(com.rivell.workbench.review.IdempotencyKeyReusedException.class)
+    ResponseEntity<ErrorResponse> idempotencyKeyReused(
+            com.rivell.workbench.review.IdempotencyKeyReusedException e) {
+        return error(HttpStatus.CONFLICT, "409", "Invalid state",
+                "The supplied request id was already used for a different contract version or "
+                        + "contract pack. Use a new request id, or repeat the original request "
+                        + "unchanged.");
+    }
+
+    @ExceptionHandler(RedlineArtifactStoreException.class)
+    ResponseEntity<ErrorResponse> redlineStoreUnavailable(RedlineArtifactStoreException e) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "503", "Document storage unavailable",
+                "The verified redline artifact could not be stored. The review is unchanged and "
+                        + "the execution can be retried.");
     }
 
     @ExceptionHandler(ConceptClassificationUnavailableException.class)

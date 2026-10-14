@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
@@ -188,7 +188,7 @@ public class PrecedentLane {
             var candidate = byId.get(hit.candidateId());
             var state = new M6SemanticStates.PrecedentRelevanceState(
                     request.clauseText(),
-                    request.legalConcept().name(),
+                    request.legalConcept().value(),
                     effectiveText(candidate),
                     candidate.effectiveConceptKey());
             try {
@@ -213,6 +213,14 @@ public class PrecedentLane {
     }
 
     private List<RetrievalRepository.CandidateHit> vectorHits(
+            EvidenceRequest request, List<UUID> ids, List<String> degradation) {
+        return vectorHits(embeddingService, repository, properties, request, ids, degradation);
+    }
+
+    /** The vector lane over narrowed ids: the clause text embedded once, nearest first. */
+    static List<RetrievalRepository.CandidateHit> vectorHits(
+            com.rivell.workbench.intelligence.EmbeddingService embeddingService,
+            RetrievalRepository repository, RetrievalProperties properties,
             EvidenceRequest request, List<UUID> ids, List<String> degradation) {
         if (!embeddingService.isConfigured()) {
             degradation.add("VECTOR_LANE_UNCONFIGURED");
@@ -298,18 +306,18 @@ public class PrecedentLane {
         return lexicalRank != null ? "LEXICAL" : "VECTOR";
     }
 
-    private LegalConcept conceptOf(KnowledgeCandidate candidate) {
+    private ConceptKey conceptOf(KnowledgeCandidate candidate) {
         if (candidate.effectiveConceptKey() == null) {
             return null;
         }
-        return LegalConcept.valueOf(candidate.effectiveConceptKey());
+        return ConceptKey.of(candidate.effectiveConceptKey());
     }
 
     private String effectiveText(KnowledgeCandidate candidate) {
         return candidate.effectiveContentText();
     }
 
-    private List<RankFusion.LaneHit> lanesOf(List<RetrievalRepository.CandidateHit> hits) {
+    static List<RankFusion.LaneHit> lanesOf(List<RetrievalRepository.CandidateHit> hits) {
         var lanes = new ArrayList<RankFusion.LaneHit>();
         for (var hit : hits) {
             lanes.add(new RankFusion.LaneHit(hit.candidateId(), hit.rank()));
@@ -321,7 +329,7 @@ public class PrecedentLane {
         return hits.size() <= limit ? hits : hits.subList(0, limit);
     }
 
-    private Integer rankOf(List<RetrievalRepository.CandidateHit> hits, UUID candidateId) {
+    static Integer rankOf(List<RetrievalRepository.CandidateHit> hits, UUID candidateId) {
         for (var hit : hits) {
             if (hit.candidateId().equals(candidateId)) {
                 return hit.rank();
@@ -372,7 +380,7 @@ public class PrecedentLane {
         return ids;
     }
 
-    private RetrievalTrace.StageSummary hitStage(
+    static RetrievalTrace.StageSummary hitStage(
             String name, List<RetrievalRepository.CandidateHit> hits) {
         var ids = new ArrayList<String>();
         var ranks = new ArrayList<Integer>();
@@ -384,7 +392,7 @@ public class PrecedentLane {
                 name, hits.size(), List.copyOf(ids), List.copyOf(ranks), List.of());
     }
 
-    private RetrievalTrace.StageSummary fusionStage(List<RankFusion.FusedHit> fused) {
+    static RetrievalTrace.StageSummary fusionStage(List<RankFusion.FusedHit> fused) {
         var ids = new ArrayList<String>();
         var ranks = new ArrayList<Integer>();
         for (var hit : fused) {

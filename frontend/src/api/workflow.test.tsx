@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import {
@@ -10,6 +10,7 @@ import {
   isWorkflowForbiddenError,
   isWorkflowNotFoundError,
   parseApprovedChangeSet,
+  parseDecision,
   parseDecisionList,
   parseHumanReview,
   submitDecision,
@@ -129,6 +130,32 @@ const changeSetPayload = {
   ],
 }
 
+  it('writes the decision list from the response instead of refetching it', async () => {
+    const requests = stubFetch(() => jsonResponse(envelope(decisionPayload)))
+    const { queryClient, wrapper } = createWrapper()
+    const invalidated: string[][] = []
+    const originalInvalidate = queryClient.invalidateQueries.bind(queryClient)
+    queryClient.invalidateQueries = ((filters: { queryKey?: readonly unknown[] }) => {
+      if (filters?.queryKey) invalidated.push(filters.queryKey.map(String))
+      return originalInvalidate(filters as never)
+    }) as typeof queryClient.invalidateQueries
+
+    const submit = renderHook(() => useSubmitDecision('r-1'), { wrapper })
+    await act(async () => {
+      await submit.result.current.mutateAsync({
+        findingId: 'f-1',
+        expectedVersion: 0,
+        action: 'ACCEPT' as never,
+      })
+    })
+
+    expect(requests).toHaveLength(1)
+    expect(invalidated).toEqual([
+      ['reviews', 'human-review', 'r-1'],
+      ['reviews', 'decision-history', 'r-1'],
+    ])
+  })
+
 describe('workflow parsers', () => {
   it('parses a decision revision with language provenance and revision chain', () => {
     const list = parseDecisionList({ items: [decisionPayload], truncated: false })
@@ -172,6 +199,30 @@ describe('workflow parsers', () => {
       },
     ])
     expect(review.changeSetId).toBeNull()
+  })
+
+  it('fails closed on a decision that omits its actor or timestamp', () => {
+    const complete = {
+      id: 'd-1',
+      findingId: 'f-1',
+      revision: 1,
+      action: 'ACCEPT',
+      approvedAction: null,
+      approvedLanguage: null,
+      languageSource: null,
+      approvedDraftingEvidenceId: null,
+      comment: null,
+      actorId: 'u-1',
+      decidedAt: '2026-09-26T10:00:00Z',
+      clientRequestId: null,
+      supersedesDecisionId: null,
+    }
+
+    expect(parseDecision(complete).actorId).toBe('u-1')
+    expect(parseDecision(complete).decidedAt).toBe('2026-09-26T10:00:00Z')
+    expect(() => parseDecision({ ...complete, actorId: null })).toThrow(/malformed/i)
+    expect(() => parseDecision({ ...complete, actorId: 7 })).toThrow(/malformed/i)
+    expect(() => parseDecision({ ...complete, decidedAt: undefined })).toThrow(/malformed/i)
   })
 
   it('keeps unknown human status and blocker codes readable', () => {

@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Deterministic signal-to-Finding consolidation (spec §6/§7). Pure domain logic: no
@@ -35,8 +35,13 @@ public final class FindingAssembler {
     private static String consolidationKey(RawReviewSignal signal) {
         var subject = signal.subjectKind() == FindingSubjectKind.CLAUSE
                 ? signal.subjectHeadingNodeId().toString()
-                : signal.absenceConcept().name();
-        return signal.subjectKind().name() + ":" + subject + ":" + signal.issueFamily().name();
+                : signal.absenceConcept().value();
+        var key = signal.subjectKind().name() + ":" + subject + ":" + signal.issueFamily().name();
+        // engine v2 omissions lane: two missing positions on one concept stay two findings
+        if (signal.payload() instanceof OmissionPayload omission) {
+            key = key + ":" + omission.candidateId();
+        }
+        return key;
     }
 
     private Finding build(
@@ -55,9 +60,9 @@ public final class FindingAssembler {
                 SignalType.OPEN_ENDED_ANALYSIS_RESULT);
 
         var observation = observation(primary);
-        var action = action(primary, drafting, openEnded);
-        var severity = severity(primary, escalation);
-        var quality = quality(group);
+        var action = action(primary, drafting, openEnded, escalation);
+        var severity = severity(primary);
+        var quality = quality(primary, group);
         var evidence = evidence(group);
         var concepts = concepts(group);
 
@@ -82,9 +87,9 @@ public final class FindingAssembler {
                 primary.subjectKind(), primary.subjectHeadingNodeId(),
                 primary.absenceConcept(), primary.concept(), primary.secondaryConcept(),
                 primary.issueFamily(), observation.kind(), observation.text(),
-                severity, classification(primary, severity), action, proposedLanguage,
+                severity, classification(primary, escalation), action, proposedLanguage,
                 languageSource, draftingEvidenceId, quality, now, concepts, claims,
-                evidence, group.stream().map(RawReviewSignal::id).toList());
+                evidence, group.stream().map(RawReviewSignal::id).toList(), null);
     }
 
     /** The issue-bearing signal of a group; support-only groups yield no finding. */
@@ -94,8 +99,9 @@ public final class FindingAssembler {
                 SignalType.POLICY_UNAVAILABLE, SignalType.POLICY_AMBIGUOUS,
                 SignalType.DEVIATION_UNCERTAIN, SignalType.CROSS_CLAUSE_UNCERTAIN,
                 SignalType.OPEN_ENDED_ANALYSIS_RESULT)) {
+            // a position on the clause's own topic outranks one on a topic it only touches
             var match = group.stream().filter(signal -> signal.signalType() == type)
-                    .findFirst();
+                    .min(java.util.Comparator.comparing(FindingAssembler::secondaryTopic));
             if (match.isPresent()) {
                 return match;
             }
@@ -103,45 +109,62 @@ public final class FindingAssembler {
         return java.util.Optional.empty();
     }
 
+    private static boolean secondaryTopic(RawReviewSignal signal) {
+        return signal.payload() instanceof PositionDeviationPayload deviation
+                && deviation.secondaryTopic();
+    }
+
     private record Observation(String kind, String text) {
     }
 
     private static Observation observation(RawReviewSignal signal) {
+        if (signal.payload() instanceof OmissionPayload omission) {
+            // engine v2 omissions lane: the code-owned text, never model prose
+            return new Observation("MISSING_POSITION",
+                    "Missing: " + omission.label() + ". Searched " + omission.searchedClauses()
+                            + " clauses; none addresses it.");
+        }
         if (signal.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return new Observation("MISSING_REQUIRED_CONCEPT",
-                    "The required provision " + signal.concept().name()
+                    "The required provision " + signal.concept().value()
                             + " is missing from this contract.");
         }
         if (signal.signalType() == SignalType.EXPECTED_CONCEPT_ABSENT) {
             return new Observation("EXPECTED_CONCEPT_ABSENT",
-                    "The expected provision " + signal.concept().name()
+                    "The expected provision " + signal.concept().value()
                             + " was not found in this contract.");
+        }
+        if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
+                && signal.payload() instanceof PolicyUnavailablePayload unavailable
+                && PolicyUnavailablePayload.NOT_COVERED.equals(unavailable.sufficiency())) {
+            return new Observation(PolicyUnavailablePayload.NOT_COVERED,
+                    "No playbook position addresses this clause, and it reads as unusual for "
+                            + "this kind of contract and against our side; a lawyer should "
+                            + "review it.");
+        }
+        if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
+                && signal.payload() instanceof PolicyUnavailablePayload unavailable
+                && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())) {
+            return new Observation(PolicyUnavailablePayload.SPOTTED,
+                    "A whole-contract read named this clause as one our side must act on, and no "
+                            + "playbook position check flagged it; a lawyer should review it.");
         }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE) {
             return new Observation("POLICY_UNAVAILABLE",
-                    "No applicable published policy exists for " + signal.concept().name()
+                    "No applicable published policy exists for " + signal.concept().value()
                             + "; no deviation judgment was made and precedent does not "
                             + "substitute for policy.");
         }
         if (signal.signalType() == SignalType.POLICY_AMBIGUOUS) {
             return new Observation("AMBIGUOUS_POLICY",
                     "Multiple conflicting published policies apply to "
-                            + signal.concept().name()
+                            + signal.concept().value()
                             + "; no rule was chosen and the ambiguity is preserved.");
         }
         if (signal.signalType() == SignalType.POLICY_DEVIATION
-                && signal.payload() instanceof LiabilityDeviationPayload deviation) {
-            if (M7DecisionSpecs.PROHIBITED_STRUCTURE.equals(deviation.deviationType())) {
-                return new Observation("PROHIBITED_STRUCTURE",
-                        "The bounded classification found a structure the policy "
-                                + "prohibits (for example uncapped or unlimited liability).");
-            }
-            var cap = deviation.capMultiple() == null || deviation.capMultiple().isBlank()
-                    ? ""
-                    : " (cap multiple " + deviation.capMultiple() + ")";
-            return new Observation("CAP_ABOVE_PREFERRED",
-                    "The bounded classification found the liability cap above the "
-                            + "organization's preferred position" + cap + ".");
+                && signal.payload() instanceof PositionDeviationPayload deviation) {
+            return new Observation(observationKind(deviation.category()),
+                    observationText(deviation.category()));
         }
         if (signal.signalType() == SignalType.CROSS_CLAUSE_UNCERTAIN
                 && signal.payload() instanceof DeviationUncertainPayload uncertain) {
@@ -182,18 +205,12 @@ public final class FindingAssembler {
 
     private static String uncertaintyText(String reason, RawReviewSignal signal) {
         return switch (reason) {
-            case "policy_not_comparable" -> "The clause's structure cannot be compared "
-                    + "with the published policy position; no compliant or deviating "
-                    + "classification was forced.";
             case "classification_uncertain" -> "The bounded classifier did not reach a "
                     + "clear classification for this clause; the uncertainty is recorded "
                     + "rather than a deviation judgment.";
             case "bounded_decision_unavailable", "cross_clause_decision_unavailable" ->
                     "The bounded semantic decision was unavailable; the clause was not "
                             + "classified and requires human review.";
-            case "open_ended_generation_unavailable" -> "The clause cannot be compared "
-                    + "with policy and no machine candidate could be produced; human "
-                    + "review is required.";
             case "carve_out_context_too_large" -> "The cross-clause context exceeds the "
                     + "bounded prompt; the interaction was not assessed.";
             case "carve_out_not_comparable" -> "The bounded classifier could not determine "
@@ -204,22 +221,66 @@ public final class FindingAssembler {
             case "survival_coverage_partial" -> "Survival coverage could not be established "
                     + "for all confidentiality provisions; the limitation requires human "
                     + "review.";
+            case DeviationUncertainPayload.SECOND_OPINION_DISAGREES -> "Rivell's two reviewers "
+                    + "disagree on this clause against the position: one finds an issue, the "
+                    + "other does not. Rivell does not decide; please take a look.";
+            case DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE -> "Rivell was unsure about "
+                    + "this clause against the position, and a second opinion could not be "
+                    + "obtained; please take a look.";
             default -> "The check recorded unresolved uncertainty for "
-                    + signal.concept().name() + ".";
+                    + signal.concept().value() + ".";
+        };
+    }
+
+    private static String observationKind(String category) {
+        return switch (category) {
+            case PolicyComparisonSpecs.WALK_AWAY -> "POSITION_WALK_AWAY";
+            case PolicyComparisonSpecs.BEYOND_FALLBACK -> "POSITION_BEYOND_FALLBACK";
+            case PolicyComparisonSpecs.WITHIN_FALLBACK -> "POSITION_WITHIN_FALLBACK";
+            default -> "POSITION_UNCLEAR";
+        };
+    }
+
+    private static String observationText(String category) {
+        return switch (category) {
+            case PolicyComparisonSpecs.WALK_AWAY -> "The clause contains or permits what "
+                    + "the position's walk-away says we must never accept.";
+            case PolicyComparisonSpecs.BEYOND_FALLBACK -> "The clause is worse for us than "
+                    + "every fallback the position lists.";
+            case PolicyComparisonSpecs.WITHIN_FALLBACK -> "The clause departs from the "
+                    + "preferred position but stays within a listed fallback; accept and note.";
+            default -> "The clause deals with this subject, but its wording is ambiguous or "
+                    + "depends on something outside the contract, so compliance cannot be "
+                    + "decided.";
         };
     }
 
     private static ProposedAction action(
             RawReviewSignal primary, ApprovedDraftingPayload drafting,
-            OpenEndedAnalysisPayload openEnded) {
+            OpenEndedAnalysisPayload openEnded, EscalationPayload escalation) {
         if (primary.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return ProposedAction.ADD_REQUIRED_PROVISION;
         }
         if (primary.signalType() == SignalType.EXPECTED_CONCEPT_ABSENT) {
             return ProposedAction.NO_ACTION;
         }
-        if (drafting != null && primary.signalType() == SignalType.POLICY_DEVIATION) {
-            return ProposedAction.USE_APPROVED_FALLBACK;
+        if (primary.signalType() == SignalType.POLICY_DEVIATION
+                && primary.payload() instanceof PositionDeviationPayload deviation) {
+            var category = deviation.category();
+            if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(category)) {
+                return escalation != null
+                        ? ProposedAction.ESCALATE_TO_HUMAN : ProposedAction.NO_ACTION;
+            }
+            if (PolicyComparisonSpecs.UNCLEAR.equals(category)) {
+                return ProposedAction.REVIEW_AMBIGUITY;
+            }
+            if (drafting != null) {
+                return ProposedAction.USE_APPROVED_FALLBACK;
+            }
+            if (openEnded != null && "VERIFIED".equals(openEnded.verificationOutcome())) {
+                return ProposedAction.CONSIDER_GENERATED_LANGUAGE;
+            }
+            return ProposedAction.ESCALATE_TO_HUMAN;
         }
         if (primary.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT
                 && openEnded != null && "VERIFIED".equals(openEnded.verificationOutcome())) {
@@ -234,30 +295,62 @@ public final class FindingAssembler {
         return ProposedAction.ESCALATE_TO_HUMAN;
     }
 
-    private static FindingSeverity severity(
-            RawReviewSignal primary, EscalationPayload escalation) {
+    private static FindingSeverity severity(RawReviewSignal primary) {
+        if (primary.payload() instanceof OmissionPayload) {
+            // engine v2 omissions lane: a required absence is an alarm; an unsure one asks for a look
+            return "NEEDS_YOUR_LOOK".equals(primary.quality().get("route"))
+                    ? FindingSeverity.LOW : FindingSeverity.MEDIUM;
+        }
         if (primary.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return FindingSeverity.HIGH;
         }
         if (primary.signalType() == SignalType.EXPECTED_CONCEPT_ABSENT) {
             return FindingSeverity.LOW;
         }
-        if (primary.signalType() == SignalType.POLICY_DEVIATION) {
-            if (primary.payload() instanceof LiabilityDeviationPayload deviation
-                    && M7DecisionSpecs.PROHIBITED_STRUCTURE
-                            .equals(deviation.deviationType())) {
-                return FindingSeverity.HIGH;
+        if (primary.signalType() == SignalType.POLICY_UNAVAILABLE
+                && primary.payload() instanceof PolicyUnavailablePayload unavailable
+                && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())
+                && "NEEDS_YOUR_LOOK".equals(primary.quality().get("route"))) {
+            // engine v2: an advisory pick of the whole-contract read asks for a look, never an alarm
+            return FindingSeverity.LOW;
+        }
+        if (primary.signalType() == SignalType.POLICY_DEVIATION
+                && primary.payload() instanceof PositionDeviationPayload deviation) {
+            // severity follows the category; a named approver changes the action, not the risk;
+            // a position on a topic the clause only touches is a note
+            if (deviation.secondaryTopic()) {
+                return FindingSeverity.LOW;
             }
-            return escalation != null ? FindingSeverity.HIGH : FindingSeverity.MEDIUM;
+            return switch (deviation.category()) {
+                case PolicyComparisonSpecs.WALK_AWAY -> FindingSeverity.HIGH;
+                case PolicyComparisonSpecs.WITHIN_FALLBACK -> FindingSeverity.LOW;
+                default -> FindingSeverity.MEDIUM;
+            };
         }
         if (primary.signalType() == SignalType.CROSS_CLAUSE_CONFLICT) {
             return FindingSeverity.HIGH;
+        }
+        if (primary.payload() instanceof DeviationUncertainPayload uncertain
+                && List.of(DeviationUncertainPayload.SECOND_OPINION_DISAGREES,
+                        DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE)
+                        .contains(uncertain.reason())) {
+            // engine v2: a walk-away or beyond-fallback second opinion raises the look item to MEDIUM
+            var secondOpinionCategory = primary.quality().get("secondOpinionCategory");
+            return DeviationUncertainPayload.SECOND_OPINION_DISAGREES.equals(uncertain.reason())
+                    && (PolicyComparisonSpecs.WALK_AWAY.equals(secondOpinionCategory)
+                            || PolicyComparisonSpecs.BEYOND_FALLBACK
+                                    .equals(secondOpinionCategory))
+                    ? FindingSeverity.MEDIUM : FindingSeverity.LOW;
         }
         return FindingSeverity.MEDIUM;
     }
 
     private static FindingClassification classification(
-            RawReviewSignal primary, FindingSeverity severity) {
+            RawReviewSignal primary, EscalationPayload escalation) {
+        if (primary.payload() instanceof OmissionPayload) {
+            // engine v2 omissions lane: a missing position needs review, it does not block
+            return FindingClassification.REVIEW_REQUIRED;
+        }
         if (primary.signalType() == SignalType.MISSING_REQUIRED_CONCEPT) {
             return FindingClassification.BLOCKING;
         }
@@ -265,10 +358,18 @@ public final class FindingAssembler {
             return FindingClassification.INFORMATIONAL;
         }
         if (primary.signalType() == SignalType.POLICY_DEVIATION
-                && severity == FindingSeverity.HIGH
-                && primary.payload() instanceof LiabilityDeviationPayload deviation
-                && M7DecisionSpecs.PROHIBITED_STRUCTURE.equals(deviation.deviationType())) {
-            return FindingClassification.BLOCKING;
+                && primary.payload() instanceof PositionDeviationPayload deviation) {
+            if (deviation.secondaryTopic()) {
+                return FindingClassification.INFORMATIONAL;
+            }
+            if (PolicyComparisonSpecs.WALK_AWAY.equals(deviation.category())) {
+                return FindingClassification.BLOCKING;
+            }
+            if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())) {
+                return escalation == null
+                        ? FindingClassification.INFORMATIONAL
+                        : FindingClassification.REVIEW_REQUIRED;
+            }
         }
         return FindingClassification.REVIEW_REQUIRED;
     }
@@ -282,10 +383,12 @@ public final class FindingAssembler {
         // absence-subject findings are grounded in the plan-check/absence identity
         var absenceSubject = primary.subjectKind() == FindingSubjectKind.ABSENCE;
         if (absenceSubject) {
-            claims.add(FindingClaim.of(0, ClaimKind.ABSENCE_BASIS,
-                    "No clause in this contract carries " + primary.absenceConcept().name()
-                            + "; the absence is the observation.",
-                    true, List.of()));
+            var basis = primary.payload() instanceof OmissionPayload
+                    ? "No clause in this contract addresses this playbook position; the "
+                            + "absence is the observation."
+                    : "No clause in this contract carries " + primary.absenceConcept().value()
+                            + "; the absence is the observation.";
+            claims.add(FindingClaim.of(0, ClaimKind.ABSENCE_BASIS, basis, true, List.of()));
         } else {
             claims.add(FindingClaim.of(0, ClaimKind.OBSERVATION, observation.text(),
                     false, evidence));
@@ -354,8 +457,22 @@ public final class FindingAssembler {
         };
     }
 
-    private static Map<String, Object> quality(List<RawReviewSignal> group) {
+    /** The deciding signal's own assessment, shown with the finding (model estimates). */
+    private static final List<String> ASSESSMENT_KEYS = List.of("category", "flagProbability",
+            "probabilities", "secondaryTopic", "uncoveredProbability", "route", "jevCategory",
+            "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
+            "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
+            "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
+            "positionLabel");
+
+    private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
+        for (var key : ASSESSMENT_KEYS) {
+            var value = primary.quality().get(key);
+            if (value != null) {
+                quality.put(key, value);
+            }
+        }
         var flags = new LinkedHashSet<String>();
         for (var signal : group) {
             var sufficiency = signal.quality().get("sufficiency");
@@ -391,8 +508,8 @@ public final class FindingAssembler {
         return order.indexOf(left) >= order.indexOf(right) ? left : right;
     }
 
-    private static List<LegalConcept> concepts(List<RawReviewSignal> group) {
-        var concepts = new LinkedHashSet<LegalConcept>();
+    private static List<ConceptKey> concepts(List<RawReviewSignal> group) {
+        var concepts = new LinkedHashSet<ConceptKey>();
         for (var signal : group) {
             concepts.add(signal.concept());
             if (signal.secondaryConcept() != null) {

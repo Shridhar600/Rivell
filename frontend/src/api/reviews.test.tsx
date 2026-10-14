@@ -5,14 +5,16 @@ import type { ReactNode } from 'react'
 import {
   createReview,
   fetchReviewPacks,
-  isReviewConflictError,
   parseFindingDetail,
   parseFindingList,
   parseReviewList,
   parseReviewProgress,
   parseReviewSummary,
+  reviewErrorStatus,
   reviewKeys,
   reviewPollInterval,
+  MAX_POLL_ATTEMPTS,
+  REVIEW_POLL_INTERVAL_MS,
   useCreateReview,
   useFindingsQuery,
   useReviewProgressQuery,
@@ -109,7 +111,7 @@ const completedSummary = {
   findings: 2,
   analysisWarnings: [
     {
-      checkKey: 'LIABILITY_CAP:LIMITATION_OF_LIABILITY',
+      checkKey: 'POLICY_COMPARISON:LIMITATION_OF_LIABILITY',
       status: 'DEGRADED',
       reasonCode: 'PROVIDER_UNAVAILABLE',
       message: 'An external analysis provider was unavailable for this check.',
@@ -149,11 +151,10 @@ const clauseFindingDetail = {
   concept: 'LIMITATION_OF_LIABILITY',
   secondaryConcept: null,
   concepts: ['LIMITATION_OF_LIABILITY'],
-  issueFamily: 'LIABILITY_CAP_DEVIATION',
-  observationKind: 'CAP_ABOVE_PREFERRED',
-  observationText:
-    "The bounded classification found the liability cap above the organization's preferred position (cap multiple 3x).",
-  severity: 'HIGH',
+  issueFamily: 'POSITION_NEEDS_FALLBACK',
+  observationKind: 'POSITION_BEYOND_FALLBACK',
+  observationText: "The clause is worse for us than every fallback the position lists.",
+  severity: 'MEDIUM',
   reviewClassification: 'REVIEW_REQUIRED',
   proposedAction: 'USE_APPROVED_FALLBACK',
   proposedLanguage: 'The total liability of Supplier shall not exceed two times the fees paid.',
@@ -163,12 +164,15 @@ const clauseFindingDetail = {
     sufficiency: 'SUFFICIENT',
     verificationOutcome: 'VERIFIED',
     degradationFlags: [],
+    category: 'BEYOND_FALLBACK',
+    flagProbability: 0.87,
+    probabilities: { BEYOND_FALLBACK: 0.87, WALK_AWAY: 0.05 },
   },
   claims: [
     {
       ordinal: 0,
       claimKind: 'OBSERVATION',
-      text: "The bounded classification found the liability cap above the organization's preferred position.",
+      text: 'The clause is worse for us than every fallback the position lists.',
       absence: false,
       evidenceItemIds: ['e-clause', 'e-policy'],
     },
@@ -234,7 +238,7 @@ describe('review parsers', () => {
     expect(summary.activeRun?.status).toBe('COMPLETED')
     expect(summary.snapshot?.profile?.contractPackKey).toBe('MSA_PACK')
     expect(summary.snapshot?.knowledgePinNumber).toBe(6)
-    expect(summary.analysisWarnings[0].checkKey).toBe('LIABILITY_CAP:LIMITATION_OF_LIABILITY')
+    expect(summary.analysisWarnings[0].checkKey).toBe('POLICY_COMPARISON:LIMITATION_OF_LIABILITY')
     expect(summary.analysisWarnings[0].reasonCode).toBe('PROVIDER_UNAVAILABLE')
     expect(summary.coverage[0].coverage).toBe('PRESENT_PRIMARY')
   })
@@ -249,7 +253,7 @@ describe('review parsers', () => {
 
     const detail = parseFindingDetail({ ...clauseFindingDetail, severity: 'EXTREME' })
     expect(detail.severity).toBe('UNKNOWN')
-    expect(detail.issueFamily).toBe('LIABILITY_CAP_DEVIATION')
+    expect(detail.issueFamily).toBe('POSITION_NEEDS_FALLBACK')
   })
 
   it('parses clause finding detail including untyped quality and claims', () => {
@@ -260,6 +264,22 @@ describe('review parsers', () => {
       sufficiency: 'SUFFICIENT',
       verificationOutcome: 'VERIFIED',
       degradationFlags: [],
+      category: 'BEYOND_FALLBACK',
+      flagProbability: 0.87,
+      probabilities: { BEYOND_FALLBACK: 0.87, WALK_AWAY: 0.05 },
+      secondaryTopic: false,
+      uncoveredProbability: null,
+      route: null,
+      jevCategory: null,
+      secondOpinionOutcome: null,
+      secondOpinionCategory: null,
+      secondOpinionQuote: null,
+      secondOpinionReason: null,
+      uncertaintyReason: null,
+      foundBy: null,
+      spottedSeverity: null,
+      spottedReason: null,
+      presenceProbability: null,
     })
     expect(detail.claims.map((claim) => claim.claimKind)).toEqual([
       'OBSERVATION',
@@ -271,6 +291,80 @@ describe('review parsers', () => {
     expect(detail.evidenceItems[0].authorityClass).toBe('CURRENT_CONTRACT')
   })
 
+  it('reads who decided and both views of a "needs your look" item', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: {
+        ...clauseFindingDetail.quality,
+        route: 'NEEDS_YOUR_LOOK',
+        jevCategory: 'BEYOND_FALLBACK',
+        secondOpinionOutcome: 'DISAGREED',
+        secondOpinionCategory: 'MEETS_PREFERRED',
+        secondOpinionQuote: 'shall not exceed the fees paid',
+        secondOpinionReason: 'The cap matches the preferred basis.',
+      },
+    })
+    expect(detail.quality?.route).toBe('NEEDS_YOUR_LOOK')
+    expect(detail.quality?.jevCategory).toBe('BEYOND_FALLBACK')
+    expect(detail.quality?.secondOpinionCategory).toBe('MEETS_PREFERRED')
+    expect(detail.quality?.secondOpinionQuote).toBe('shall not exceed the fees paid')
+  })
+
+  it('reads what engine v2 P4 adds: search provenance, the read’s pick, an omission’s estimate and label', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      firstReviewCategory: 'WALK_AWAY',
+      positionLabel: 'Cap Exceptions',
+      quality: {
+        ...clauseFindingDetail.quality,
+        uncertaintyReason: 'playbook_silent',
+        foundBy: 'SEARCH',
+        spottedSeverity: 'HIGH',
+        spottedReason: 'Only damages are available to us.',
+        presenceProbability: 0.92,
+      },
+    })
+    expect(detail.firstReviewCategory).toBe('WALK_AWAY')
+    expect(detail.positionLabel).toBe('Cap Exceptions')
+    expect(detail.quality?.uncertaintyReason).toBe('playbook_silent')
+    expect(detail.quality?.foundBy).toBe('SEARCH')
+    expect(detail.quality?.spottedSeverity).toBe('HIGH')
+    expect(detail.quality?.spottedReason).toBe('Only damages are available to us.')
+    expect(detail.quality?.presenceProbability).toBe(0.92)
+    // an estimate off the 0–1 scale is not shown
+    expect(
+      parseFindingDetail({ ...clauseFindingDetail, quality: { ...clauseFindingDetail.quality, presenceProbability: 92 } })
+        .quality?.presenceProbability,
+    ).toBeNull()
+  })
+
+  it('drops a flag probability that is not on the comparison’s 0–1 scale', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: { ...clauseFindingDetail.quality, flagProbability: 87 },
+    })
+    expect(detail.quality?.flagProbability).toBeNull()
+  })
+
+  it('reads the related-position flag and the uncovered probability, dropping one off the scale', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: {
+        ...clauseFindingDetail.quality,
+        secondaryTopic: true,
+        uncoveredProbability: 0.9,
+      },
+    })
+    expect(detail.quality?.secondaryTopic).toBe(true)
+    expect(detail.quality?.uncoveredProbability).toBe(0.9)
+
+    const offScale = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: { ...clauseFindingDetail.quality, uncoveredProbability: 90 },
+    })
+    expect(offScale.quality?.uncoveredProbability).toBeNull()
+  })
+
   it('parses absence finding detail with plan-check basis and no evidence', () => {
     const detail = parseFindingDetail(absenceFindingDetail)
     expect(detail.subjectKind).toBe('ABSENCE')
@@ -278,6 +372,62 @@ describe('review parsers', () => {
     expect(detail.absenceBasis?.checkKey).toBe('PRESENCE:LIMITATION_OF_LIABILITY')
     expect(detail.claims[0].absence).toBe(true)
     expect(detail.evidenceItemIds).toEqual([])
+  })
+
+  describe('position comparison', () => {
+    const contractSlot = {
+      evidenceItemId: 'e-contract',
+      authorityClass: 'CURRENT_CONTRACT',
+      legalConcept: 'LIMITATION_OF_LIABILITY',
+      facts: [{ factSchema: 'liability-facts', schemaVersion: 1, values: { liabilityCapMultiple: '3' } }],
+    }
+    const policySlot = (id: string, publicationNumber: number | null = 2) => ({
+      evidenceItemId: id,
+      authorityClass: 'POLICY',
+      legalConcept: 'LIMITATION_OF_LIABILITY',
+      publicationNumber,
+      text: 'Cap at fees paid.',
+    })
+
+    it('is null when the server sent no comparison', () => {
+      expect(parseFindingDetail(absenceFindingDetail).positionComparison).toBeNull()
+      expect(parseFindingDetail({ ...absenceFindingDetail, positionComparison: null }).positionComparison).toBeNull()
+    })
+
+    it('keeps every slot the server sent, in order', () => {
+      const detail = parseFindingDetail({
+        ...clauseFindingDetail,
+        positionComparison: {
+          contract: [contractSlot],
+          preferred: [policySlot('e-1'), policySlot('e-2')],
+          fallback: [policySlot('e-1')],
+          walkAway: [policySlot('e-2')],
+          escalation: [{ evidenceItemId: 'e-1', authorityClass: 'POLICY', publicationNumber: 2, trigger: 'Uncapped liability' }],
+        },
+      })
+      const comparison = detail.positionComparison
+      expect(comparison?.preferred.map((slot) => slot.evidenceItemId)).toEqual(['e-1', 'e-2'])
+      expect(comparison?.fallback).toHaveLength(1)
+      expect(comparison?.walkAway.map((slot) => slot.evidenceItemId)).toEqual(['e-2'])
+      expect(comparison?.contract[0].facts[0]).toMatchObject({ factSchema: 'liability-facts', values: { liabilityCapMultiple: '3' } })
+      expect(comparison?.escalation[0].trigger).toBe('Uncapped liability')
+    })
+
+    it('reads a slot list the server left out as empty, and never fills it in', () => {
+      const detail = parseFindingDetail({ ...clauseFindingDetail, positionComparison: { preferred: [policySlot('e-1', null)] } })
+      expect(detail.positionComparison).toEqual({
+        contract: [],
+        preferred: [expect.objectContaining({ evidenceItemId: 'e-1', publicationNumber: null })],
+        fallback: [],
+        walkAway: [],
+        escalation: [],
+      })
+    })
+
+    it('rejects a malformed comparison instead of showing part of it', () => {
+      expect(() => parseFindingDetail({ ...clauseFindingDetail, positionComparison: { preferred: 'Cap at fees paid.' } })).toThrow()
+      expect(() => parseFindingDetail({ ...clauseFindingDetail, positionComparison: { preferred: [{ text: 'no id' }] } })).toThrow()
+    })
   })
 
   it('parses bounded lists with truncation', () => {
@@ -296,6 +446,55 @@ describe('review parsers', () => {
     expect(findings.items[1].absenceConcept).toBe('LIMITATION_OF_LIABILITY')
   })
 
+  it('parses the human-review, finalization, redline and context truth carried by a list row', () => {
+    const list = parseReviewList({
+      items: [
+        {
+          ...completedSummary,
+          id: 'r-1',
+          uploadedAt: '2026-10-02T07:30:00Z',
+          context: { contractType: 'NDA', ourSideRole: null, paperSource: 'OUR_PAPER', jurisdiction: 'UNSPECIFIED' },
+          humanReview: {
+            status: 'IN_PROGRESS',
+            actionableFindings: 8,
+            resolvedFindings: 5,
+            remainingFindings: 3,
+            escalated: 1,
+            readyToFinalize: false,
+            blockers: ['ACTIVE_ESCALATION'],
+          },
+          finalization: { finalizedAt: '2026-10-02T10:00:00Z', approvedChanges: 7 },
+          redline: { status: 'COMPLETED', outcome: 'REDLINE_GENERATED', verifiedChangeCount: 7, downloadAvailable: true, completedAt: '2026-10-02T10:05:00Z' },
+        },
+        { ...completedSummary, id: 'r-2', humanReview: { status: 'NOT_STARTED' } },
+      ],
+    })
+    expect(list.items[0]).toMatchObject({
+      uploadedAt: '2026-10-02T07:30:00Z',
+      context: { contractType: 'NDA', ourSideRole: null, paperSource: 'OUR_PAPER', jurisdiction: 'UNSPECIFIED' },
+      humanReview: { status: 'IN_PROGRESS', resolvedFindings: 5, escalated: 1, readyToFinalize: false, blockers: ['ACTIVE_ESCALATION'] },
+      finalization: { approvedChanges: 7 },
+      redline: { status: 'COMPLETED', verifiedChangeCount: 7, downloadAvailable: true },
+    })
+  })
+
+  it('reads an absent list-row fact as absent, and never as ready', () => {
+    const [bare, partial] = parseReviewList({
+      items: [
+        { ...completedSummary, id: 'r-1' },
+        { ...completedSummary, id: 'r-2', humanReview: { status: 'NOT_STARTED' } },
+      ],
+    }).items
+    expect(bare).toMatchObject({ uploadedAt: null, context: null, humanReview: null, finalization: null, redline: null })
+    expect(partial.humanReview).toMatchObject({ readyToFinalize: false, blockers: [] })
+  })
+
+  it('rejects a list-row fact of the wrong shape', () => {
+    expect(() =>
+      parseReviewList({ items: [{ ...completedSummary, id: 'r-1', humanReview: { status: 'X', blockers: 'ACTIVE_ESCALATION' } }] }),
+    ).toThrow()
+  })
+
   it('parses progress counts and status', () => {
     const progress = parseReviewProgress({
       reviewStatus: 'ANALYZING',
@@ -310,12 +509,19 @@ describe('review parsers', () => {
   })
 
   it('polls only while a review is queued or analyzing', () => {
-    expect(reviewPollInterval('ANALYSIS_QUEUED')).toBe(2500)
-    expect(reviewPollInterval('ANALYZING')).toBe(2500)
+    expect(reviewPollInterval('ANALYSIS_QUEUED')).toBe(REVIEW_POLL_INTERVAL_MS)
+    expect(reviewPollInterval('ANALYZING')).toBe(REVIEW_POLL_INTERVAL_MS)
     expect(reviewPollInterval('COMPLETED')).toBe(false)
     expect(reviewPollInterval('FAILED')).toBe(false)
     expect(reviewPollInterval('UNKNOWN')).toBe(false)
     expect(reviewPollInterval(undefined)).toBe(false)
+  })
+
+  it('keeps polling patience at least as long as the reference reproduction waits', () => {
+    // scripts/demo-reproduction.sh waits 90 x 4s = 360s for the same run. A shorter budget let the
+    // UI give up first, and the pending states have no refresh control, so the page then showed a
+    // stale "analysing" view until a full reload.
+    expect(MAX_POLL_ATTEMPTS * REVIEW_POLL_INTERVAL_MS).toBeGreaterThanOrEqual(360_000)
   })
 })
 
@@ -358,11 +564,34 @@ describe('review requests', () => {
     expect(await requests[0].json()).toEqual({})
   })
 
+  it('sends a supplied client request id and omits it when absent', async () => {
+    const withId = stubFetch(() => jsonResponse(envelope(queuedSummary)))
+    await createReview('c-1', 1, 'MSA_PACK', '11111111-1111-4111-8111-111111111111')
+    expect(await withId[0].json()).toEqual({
+      contractPackKey: 'MSA_PACK',
+      clientRequestId: '11111111-1111-4111-8111-111111111111',
+    })
+
+    const withoutId = stubFetch(() => jsonResponse(envelope(queuedSummary)))
+    await createReview('c-1', 1, null, null)
+    expect(await withoutId[0].json()).toEqual({})
+  })
+
+  it('exposes the failing status and classifies a payload ceiling failure', async () => {
+    stubFetch(() => jsonResponse({ code: '413' }, 413))
+    const error = await createReview('c-1', 1).catch((thrown: unknown) => thrown)
+
+    expect(reviewErrorStatus(error)).toBe(413)
+    expect(reviewErrorStatus(new Error('boom'))).toBeNull()
+  })
+
   it('classifies a typed conflict without retrying the request', async () => {
     const requests = stubFetch(() =>
       jsonResponse({ code: 'ENRICHMENT_NOT_READY', detail: 'Semantic analysis not ready' }, 409),
     )
-    await expect(createReview('c-1', 1)).rejects.toSatisfy(isReviewConflictError)
+    const error = await createReview('c-1', 1).catch((thrown: unknown) => thrown)
+
+    expect(reviewErrorStatus(error)).toBe(409)
     expect(requests).toHaveLength(1)
   })
 

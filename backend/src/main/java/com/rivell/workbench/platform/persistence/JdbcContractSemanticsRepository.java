@@ -35,7 +35,7 @@ import com.rivell.workbench.contracts.FactSchema;
 import com.rivell.workbench.contracts.Interpretation;
 import com.rivell.workbench.contracts.InterpretationKind;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.contracts.LegalFact;
 import com.rivell.workbench.contracts.MetadataFact;
 import com.rivell.workbench.contracts.MetadataField;
@@ -82,6 +82,11 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         var claimed = jdbcClient.sql("""
                 update contract_semantics
                 set enrichment_status = 'ENRICHING', review_profile = cast(:profile as jsonb),
+                    -- M10: must clear the reason. V18 couples FAILED to a non-null reason, and this
+                    -- is the only statement that moves a version back to ENRICHING, so a stale reason
+                    -- left here makes every retry of a FAILED enrichment violate the CHECK and
+                    -- permanently brick the version.
+                    enrichment_failure_reason = NULL,
                     updated_at = now()
                 where contract_version_id = :versionId and organization_id = :organizationId
                   and (enrichment_status <> 'ENRICHING'
@@ -110,7 +115,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 com.rivell.workbench.contracts.EnrichmentStatus.ENRICHING,
                 com.rivell.workbench.contracts.ContractSemantics.PIPELINE_VERSION,
                 profile, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                com.rivell.workbench.contracts.QualityReasons.NONE, null, List.of()));
+                com.rivell.workbench.contracts.QualityReasons.NONE, null, List.of(), null));
         return true;
     }
 
@@ -141,7 +146,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     set enrichment_status = :status, pipeline_version = :pipelineVersion,
                         review_profile = cast(:profile as jsonb), quality = cast(:quality as jsonb),
                         warnings = cast(:warnings as jsonb),
-                        observations = cast(:observations as jsonb), updated_at = now()
+                        observations = cast(:observations as jsonb),
+                        enrichment_failure_reason = :failureReason, updated_at = now()
                     where contract_version_id = :versionId and organization_id = :organizationId
                     """)
                     .param("status", semantics.enrichmentStatus().name())
@@ -150,6 +156,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     .param("quality", toJson(quality(semantics.quality())))
                     .param("warnings", toJson(semantics.warnings()))
                     .param("observations", toJson(observations(semantics.observations())))
+                    .param("failureReason", reasonName(semantics.failureReason()))
                     .param("versionId", semantics.contractVersionId())
                     .param("organizationId", semantics.organizationId())
                     .update();
@@ -158,11 +165,11 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     insert into contract_semantics
                       (id, contract_version_id, organization_id, enrichment_status,
                        pipeline_version, review_profile, quality, warnings, observations,
-                       created_at, updated_at)
+                       enrichment_failure_reason, created_at, updated_at)
                     values (:id, :versionId, :organizationId, :status, :pipelineVersion,
                             cast(:profile as jsonb), cast(:quality as jsonb),
                             cast(:warnings as jsonb), cast(:observations as jsonb),
-                            :createdAt, now())
+                            :failureReason, :createdAt, now())
                     """)
                     .param("id", semantics.id())
                     .param("versionId", semantics.contractVersionId())
@@ -173,6 +180,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                     .param("quality", toJson(quality(semantics.quality())))
                     .param("warnings", toJson(semantics.warnings()))
                     .param("observations", toJson(observations(semantics.observations())))
+                    .param("failureReason", reasonName(semantics.failureReason()))
                     .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
                     .update();
         }
@@ -375,7 +383,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
     public Optional<ContractSemantics> find(UUID contractVersionId, UUID organizationId) {
         var header = jdbcClient.sql("""
                 select id, enrichment_status, pipeline_version, review_profile, quality,
-                       observations, warnings
+                       observations, warnings, enrichment_failure_reason
                 from contract_semantics
                 where contract_version_id = :versionId and organization_id = :organizationId
                 """)
@@ -388,7 +396,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                         parseProfile(rs.getString("review_profile")),
                         parseQuality(rs.getString("quality")),
                         parseObservations(rs.getString("observations")),
-                        readStrings(rs.getString("warnings"))))
+                        readStrings(rs.getString("warnings")),
+                        parseReason(rs.getString("enrichment_failure_reason"))))
                 .optional();
         if (header.isEmpty()) {
             return Optional.empty();
@@ -479,12 +488,37 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 .filter(reference -> reference.kind() != null && reference.status() != null)
                 .toList();
 
+        // Clauses are anchored to the heading node they were extracted under, so their meaningful order
+        // is the order those headings appear in the document. Ordering by the same recursive
+        // sort_path the document read uses keys a contract's clauses to reading order on every
+        // read. The previous query had no ORDER BY at all, and the unique index on
+        // (semantics_id, heading_node_id) served it, so it returned heading-node id order: stable,
+        // but meaningless in production, where document node ids are random UUIDs.
+        // SemanticsDigest sorts clauses itself, so the review snapshot pin was never affected.
+        // The heading-node id is only a tie-break for a clause whose node is missing, where no
+        // document position exists; the left join keeps such a clause readable rather than
+        // dropping it.
         var clauses = jdbcClient.sql("""
-                        select id, heading_node_id, region_kind, text_node_ids, content_text,
-                               classification, facts, interpretations, correction, corrected_by
-                        from contract_clause_semantics where semantics_id = :id
+                        with recursive tree as (
+                            select n.id, array[n.ordinal] as sort_path
+                            from document_node n
+                            where n.contract_version_id = :versionId and n.parent_id is null
+                            union all
+                            select n.id, t.sort_path || n.ordinal
+                            from document_node n
+                            join tree t on n.parent_id = t.id
+                            where n.contract_version_id = :versionId
+                        )
+                        select c.id, c.heading_node_id, c.region_kind, c.text_node_ids,
+                               c.content_text, c.classification, c.facts, c.interpretations,
+                               c.correction, c.corrected_by
+                        from contract_clause_semantics c
+                        left join tree on tree.id = c.heading_node_id
+                        where c.semantics_id = :id
+                        order by tree.sort_path nulls last, c.heading_node_id
                         """)
                 .param("id", semanticsId)
+                .param("versionId", versionId)
                 .query((rs, rowNum) -> new ClauseSemantics(
                         UUID.fromString(rs.getString("id")), versionId,
                         UUID.fromString(rs.getString("heading_node_id")),
@@ -536,7 +570,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         return Optional.of(new ContractSemantics(semanticsId, versionId, organizationId,
                 headerValue.status(), headerValue.pipelineVersion(), headerValue.profile(),
                 metadata, parties, definedTerms, references, clauses, relationships,
-                headerValue.quality(), headerValue.observations(), headerValue.warnings()));
+                headerValue.quality(), headerValue.observations(), headerValue.warnings(),
+                headerValue.failureReason()));
     }
 
     @Override
@@ -574,10 +609,22 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 .update() == 1;
     }
 
+    private static String reasonName(
+            com.rivell.workbench.contracts.EnrichmentFailureReason reason) {
+        return reason == null ? null : reason.name();
+    }
+
+    private static com.rivell.workbench.contracts.EnrichmentFailureReason parseReason(
+            String value) {
+        return value == null ? null
+                : com.rivell.workbench.contracts.EnrichmentFailureReason.valueOf(value);
+    }
+
     private record SemanticsHeader(
             UUID id, EnrichmentStatus status, String pipelineVersion,
             ReviewProfile profile, QualityReasons quality, Observations observations,
-            List<String> warnings) {
+            List<String> warnings,
+            com.rivell.workbench.contracts.EnrichmentFailureReason failureReason) {
     }
 
     private record MetadataRow(
@@ -763,11 +810,11 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
 
     private Map<String, Object> classification(ConceptClassification classification) {
         var payload = new LinkedHashMap<String, Object>();
-        payload.put("concepts", names(classification.concepts()));
-        payload.put("secondaryConcepts", names(classification.secondaryConcepts()));
+        payload.put("concepts", conceptNames(classification.concepts()));
+        payload.put("secondaryConcepts", conceptNames(classification.secondaryConcepts()));
         var probabilities = new LinkedHashMap<String, Object>();
         for (var entry : classification.probabilities().entrySet()) {
-            probabilities.put(entry.getKey().name(), entry.getValue());
+            probabilities.put(entry.getKey().value(), entry.getValue());
         }
         payload.put("probabilities", probabilities);
         return payload;
@@ -778,25 +825,25 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         if (node == null) {
             return new ConceptClassification(List.of(), List.of(), Map.of());
         }
-        var concepts = new ArrayList<LegalConcept>();
+        var concepts = new ArrayList<ConceptKey>();
         for (var element : node.path("concepts")) {
-            var concept = parseEnum(LegalConcept.class, element.asText());
+            var concept = conceptOrNull(element.asText());
             if (concept != null) {
                 concepts.add(concept);
             }
         }
-        var secondaries = new ArrayList<LegalConcept>();
+        var secondaries = new ArrayList<ConceptKey>();
         for (var element : node.path("secondaryConcepts")) {
-            var concept = parseEnum(LegalConcept.class, element.asText());
+            var concept = conceptOrNull(element.asText());
             if (concept != null) {
                 secondaries.add(concept);
             }
         }
-        var probabilities = new LinkedHashMap<LegalConcept, Double>();
+        var probabilities = new LinkedHashMap<ConceptKey, Double>();
         var probabilityNode = node.path("probabilities");
         if (probabilityNode.isObject()) {
             probabilityNode.fields().forEachRemaining(entry -> {
-                var concept = parseEnum(LegalConcept.class, entry.getKey());
+                var concept = conceptOrNull(entry.getKey());
                 if (concept != null && entry.getValue().isNumber()) {
                     probabilities.put(concept, entry.getValue().asDouble());
                 }
@@ -914,6 +961,22 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
 
     private List<String> names(List<? extends Enum<?>> values) {
         return values.stream().map(Enum::name).toList();
+    }
+
+    private static List<String> conceptNames(List<ConceptKey> values) {
+        return values.stream().map(ConceptKey::value).toList();
+    }
+
+    /** Tolerant parse: a malformed stored key is skipped, never a read failure. */
+    private static ConceptKey conceptOrNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return ConceptKey.of(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private List<String> uuids(List<UUID> values) {

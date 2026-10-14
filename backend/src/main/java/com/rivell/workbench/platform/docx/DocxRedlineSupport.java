@@ -20,18 +20,15 @@ import org.docx4j.TraversalUtil;
 import org.docx4j.openpackaging.contenttype.ContentTypes;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.PartName;
-import org.docx4j.wml.Br;
 import org.docx4j.wml.Body;
 import org.docx4j.wml.CTMarkup;
 import org.docx4j.wml.CTTrackChange;
 import org.docx4j.wml.P;
 import org.docx4j.wml.R;
 import org.docx4j.wml.SdtBlock;
-import org.docx4j.wml.SdtRun;
 import org.docx4j.wml.SectPr;
 import org.docx4j.wml.Tbl;
 import org.docx4j.wml.Tc;
-import org.docx4j.wml.Text;
 import org.docx4j.wml.Tr;
 
 import jakarta.xml.bind.JAXBElement;
@@ -71,35 +68,9 @@ final class DocxRedlineSupport {
         }
     }
 
-    /** Plain text with the M1 parser's semantics (runs, hyperlinks, inline SDTs, breaks). */
+    /** Plain text with exactly the structural parser's semantics (one shared definition). */
     static String paragraphText(P paragraph) {
-        var text = new StringBuilder();
-        for (var rawElement : paragraph.getContent()) {
-            appendText(unwrap(rawElement), text);
-        }
-        return text.toString();
-    }
-
-    private static void appendText(Object element, StringBuilder text) {
-        if (element instanceof R run) {
-            for (var rawRunChild : run.getContent()) {
-                appendText(unwrap(rawRunChild), text);
-            }
-        } else if (element instanceof P.Hyperlink hyperlink) {
-            for (var rawLinkChild : hyperlink.getContent()) {
-                appendText(unwrap(rawLinkChild), text);
-            }
-        } else if (element instanceof SdtRun sdtRun) {
-            for (var rawSdtChild : sdtRun.getSdtContent().getContent()) {
-                appendText(unwrap(rawSdtChild), text);
-            }
-        } else if (element instanceof Text textElement) {
-            text.append(textElement.getValue());
-        } else if (element instanceof Br || element instanceof R.Cr) {
-            text.append('\n');
-        } else if (element instanceof R.Tab) {
-            text.append('\t');
-        }
+        return com.rivell.workbench.platform.parsing.WordText.paragraphText(paragraph);
     }
 
     /**
@@ -200,6 +171,11 @@ final class DocxRedlineSupport {
      * byte-identical on save: touching another part's JAXB tree would make docx4j
      * re-serialize it. Fails closed when the package cannot be scanned, because an id
      * collision would corrupt revision grouping.
+     *
+     * <p>Reads every XML part in full. This is only safe because the caller has already run
+     * {@code ZipGuard} over the same bytes, which drains each entry and enforces the total
+     * uncompressed ceiling: the sum of everything read here is bounded by that ceiling. Callers must
+     * not invoke this on unguarded bytes.
      */
     static long maxRevisionIdInBytes(byte[] sourceBytes) {
         long max = 0;
@@ -294,6 +270,47 @@ final class DocxRedlineSupport {
             throw new IllegalStateException("The package revision elements could not be scanned",
                     e);
         }
+    }
+
+    /** The bytes of one package entry; fails when the entry is absent. */
+    static byte[] entryBytes(byte[] packageBytes, String entryName) throws java.io.IOException {
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(packageBytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entryName.equals(entry.getName())) {
+                    return zip.readAllBytes();
+                }
+            }
+        }
+        throw new java.io.IOException("Package entry " + entryName + " is missing");
+    }
+
+    /**
+     * The source package with one entry's bytes replaced. Every other entry is copied byte for
+     * byte, in the source order, so parts the caller never edited cannot change.
+     */
+    static byte[] withEntryReplaced(byte[] sourceBytes, String entryName, byte[] replacement)
+            throws java.io.IOException {
+        var output = new java.io.ByteArrayOutputStream();
+        var replaced = false;
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(sourceBytes));
+                var out = new java.util.zip.ZipOutputStream(output)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                out.putNextEntry(new ZipEntry(entry.getName()));
+                if (entryName.equals(entry.getName())) {
+                    out.write(replacement);
+                    replaced = true;
+                } else {
+                    zip.transferTo(out);
+                }
+                out.closeEntry();
+            }
+        }
+        if (!replaced) {
+            throw new java.io.IOException("Package entry " + entryName + " is missing");
+        }
+        return output.toByteArray();
     }
 
     static boolean isDocxMainPart(WordprocessingMLPackage wordPackage) {

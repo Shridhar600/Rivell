@@ -65,6 +65,7 @@ class KnowledgeController {
     private final KnowledgePublicationService publicationService;
     private final ExtractionUnitConceptClassifier conceptClassifier;
     private final com.rivell.workbench.foundation.DocumentStorage documentStorage;
+    private final com.rivell.workbench.knowledge.UserPositionService userPositionService;
 
     KnowledgeController(
             KnowledgeIngestionService ingestionService,
@@ -72,13 +73,15 @@ class KnowledgeController {
             CandidateReviewService reviewService,
             KnowledgePublicationService publicationService,
             ExtractionUnitConceptClassifier conceptClassifier,
-            com.rivell.workbench.foundation.DocumentStorage documentStorage) {
+            com.rivell.workbench.foundation.DocumentStorage documentStorage,
+            com.rivell.workbench.knowledge.UserPositionService userPositionService) {
         this.ingestionService = ingestionService;
         this.queryService = queryService;
         this.reviewService = reviewService;
         this.publicationService = publicationService;
         this.conceptClassifier = conceptClassifier;
         this.documentStorage = documentStorage;
+        this.userPositionService = userPositionService;
     }
 
     @Operation(summary = "Upload a legal knowledge source with its human-declared manifest")
@@ -127,10 +130,12 @@ class KnowledgeController {
         }
     }
 
-    @Operation(summary = "List the organization's knowledge artifacts")
+    @Operation(summary = "List the organization's knowledge artifacts, newest first. "
+            + "Supply limit to bound the read; omitting it returns every artifact.")
     @GetMapping("/artifacts")
-    ApiResult<List<KnowledgeArtifactSummaryResponse>> listArtifacts() {
-        return ApiResult.ok(queryService.listArtifacts().stream()
+    ApiResult<List<KnowledgeArtifactSummaryResponse>> listArtifacts(
+            @RequestParam(required = false) Integer limit) {
+        return ApiResult.ok(queryService.listArtifacts(limit).stream()
                 .map(KnowledgeController::toSummary)
                 .toList());
     }
@@ -162,9 +167,28 @@ class KnowledgeController {
     @GetMapping("/artifacts/{id}/units")
     ApiResult<List<ExtractionUnitView>> getUnits(@PathVariable UUID id) {
         return ApiResult.ok(queryService.getUnits(id).stream()
-                .map(unit -> new ExtractionUnitView(
-                        unit.id(), unit.artifactId(), unit.ordinal(), unit.kind(),
-                        unit.title(), unit.contentText(), unit.sourceNodeIds()))
+                .map(ExtractionUnitView::from)
+                .toList());
+    }
+
+    @Operation(summary = "Make a part Rivell did not take as a position into a position: records "
+            + "the correction beside Rivell's reading and adds the part's candidate for review")
+    @ResponseStatus(HttpStatus.CREATED)
+    @ApiResponses({
+            @ApiResponse(responseCode = "403", description = "Missing knowledge:review",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Artifact or part does not exist in "
+                    + "this organization",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "The part already holds a position, "
+                    + "has no text, or its artifact type sorts no parts into positions",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/artifacts/{artifactId}/units/{unitId}/position")
+    ApiResult<List<CandidateView>> makePosition(
+            @PathVariable UUID artifactId, @PathVariable UUID unitId) {
+        return ApiResult.ok(userPositionService.makePosition(artifactId, unitId).stream()
+                .map(KnowledgeController::toCandidateView)
                 .toList());
     }
 
@@ -188,11 +212,11 @@ class KnowledgeController {
         return ApiResult.ok(toCandidateView(queryService.getCandidate(id)));
     }
 
-    /** Human LegalConcept correction before publication (DW-017): set or clear. */
-    @Operation(summary = "Correct or clear a candidate's LegalConcept (machine proposal preserved)")
+    /** Human concept correction before publication (DW-017): set or clear. */
+    @Operation(summary = "Correct or clear a candidate's concept (machine proposal preserved)")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
-            @ApiResponse(responseCode = "400", description = "Unknown LegalConcept or missing primary value",
+            @ApiResponse(responseCode = "400", description = "Unknown concept or missing primary value",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Resource does not exist in this organization",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -290,10 +314,12 @@ class KnowledgeController {
                 publication.createdAt()));
     }
 
-    @Operation(summary = "List the organization's published knowledge versions")
+    @Operation(summary = "List the organization's published knowledge versions. "
+            + "Supply limit to bound the read; omitting it returns every publication.")
     @GetMapping("/publications")
-    ApiResult<List<PublicationView>> listPublications() {
-        return ApiResult.ok(queryService.listPublications().stream()
+    ApiResult<List<PublicationView>> listPublications(
+            @RequestParam(required = false) Integer limit) {
+        return ApiResult.ok(queryService.listPublications(limit).stream()
                 .map(KnowledgeController::toPublicationView)
                 .toList());
     }
@@ -335,6 +361,16 @@ class KnowledgeController {
     ApiResult<BulkApprovalView> bulkApprove(@RequestBody BulkApproveRequest request) {
         var result = reviewService.bulkApprove(request.candidateIds());
         return ApiResult.ok(new BulkApprovalView(result.approvedIds(), result.skipped()));
+    }
+
+    @Operation(summary = "Report how much of the uploaded source's text the extracted structure holds")
+    @ApiResponse(
+            responseCode = "404", description = "Artifact does not exist in this organization",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @GetMapping("/artifacts/{id}/coverage")
+    ApiResult<com.rivell.workbench.contracts.ParseCoverageView> coverage(@PathVariable UUID id) {
+        return ApiResult.ok(com.rivell.workbench.contracts.ParseCoverageView.of(
+                queryService.getParseCoverage(id)));
     }
 
     @Operation(summary = "Download the original uploaded knowledge source")
@@ -417,12 +453,18 @@ class KnowledgeController {
                 candidate.id(), candidate.artifactId(), candidate.extractionUnitId(),
                 candidate.candidateType(), candidate.reviewStatus(), candidate.rawLabel(),
                 candidate.contentText(), candidate.payload().columns(),
+                candidate.effectiveFieldRoles(),
                 candidate.legalConceptKey(),
                 candidate.conceptCorrection(),
                 candidate.conceptCorrectedBy(),
                 candidate.conceptCorrectedAt(),
                 candidate.effectiveConceptKey(),
-                candidate.semanticFields().conceptProbabilities(),
+                candidate.semanticFields().conceptProbabilities().entrySet().stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                entry -> entry.getKey().value(),
+                                java.util.Map.Entry::getValue,
+                                (left, right) -> left,
+                                java.util.LinkedHashMap::new)),
                 candidate.effectivePositions(),
                 candidate.effectiveVariantRole(),
                 candidate.effectiveEscalationTrigger(),
@@ -445,6 +487,7 @@ class KnowledgeController {
                 candidate.scope().jurisdiction(),
                 candidate.scope().effectiveFrom(),
                 candidate.scope().effectiveTo(),
+                candidate.scope().sourceContractTypes(),
                 candidate.conflictSignals().stream()
                         .map(signal -> new CandidateView.ConflictSignalView(
                                 signal.conflictType(), signal.message(),

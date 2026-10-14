@@ -69,7 +69,7 @@ public class EvidenceApiService {
                 bundle.id(),
                 new RetrievalResponses.EvidenceRequestSummary(
                         bundle.request().purpose().name(),
-                        bundle.request().legalConcept().name(),
+                        bundle.request().legalConcept().value(),
                         bundle.request().contractId(),
                         bundle.request().versionNumber(),
                         bundle.request().clauseId(),

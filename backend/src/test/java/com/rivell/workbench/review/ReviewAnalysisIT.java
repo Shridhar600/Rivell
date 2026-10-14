@@ -1,11 +1,14 @@
 package com.rivell.workbench.review;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -27,7 +30,6 @@ import org.testcontainers.utility.DockerImageName;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -265,10 +267,10 @@ class ReviewAnalysisIT {
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple(SignalType.MISSING_REQUIRED_CONCEPT,
                                 IssueFamily.MISSING_REQUIRED_PROVISION,
-                                LegalConcept.LIMITATION_OF_LIABILITY),
+                                CoreConcepts.LIMITATION_OF_LIABILITY),
                         org.assertj.core.groups.Tuple.tuple(SignalType.EXPECTED_CONCEPT_ABSENT,
                                 IssueFamily.EXPECTED_PROVISION_ABSENT,
-                                LegalConcept.INDEMNIFICATION));
+                                CoreConcepts.INDEMNIFICATION));
         assertThat(signals).allSatisfy(signal -> {
             assertThat(signal.subjectKind()).isEqualTo(FindingSubjectKind.ABSENCE);
             assertThat(signal.subjectHeadingNodeId()).isNull();
@@ -348,11 +350,9 @@ class ReviewAnalysisIT {
 
     private ReviewCheckExecution liabilityExecution(
             UUID organizationId, UUID reviewId, UUID runId) {
-        var planCheck = reviewRepository.findPlanChecks(organizationId, reviewId).stream()
-                .filter(check -> check.mechanism() == CheckMechanism.LIABILITY_CAP)
+        return analysisRepository.findExecutions(organizationId, runId).stream()
+                .filter(execution -> execution.signalCount() > 0)
                 .findFirst().orElseThrow();
-        return analysisRepository.findExecution(organizationId, runId, planCheck.id())
-                .orElseThrow();
     }
 
     private void assertSignalCountParity(UUID organizationId, UUID runId) {
@@ -360,6 +360,155 @@ class ReviewAnalysisIT {
             assertThat(execution.signalCount()).isEqualTo(analysisRepository.countSignals(
                     organizationId, runId, execution.planCheckId()));
         }
+    }
+
+    /**
+     * M10: every evidence id a persisted signal cites must resolve to a frozen evidence item stored
+     * with the same run. A citation that cannot be resolved is not a cosmetic problem: the Finding
+     * read cannot satisfy it and the review reports an unresolvable evidence reference. This asserts
+     * the invariant over a real analysis run rather than over a constructed check outcome, so it
+     * holds for whichever checks the pipeline runs.
+     */
+    /**
+     * M10 final-review finding: the degraded-citation path retained signals but returned no evidence
+     * items for them, which persisted those signals' citations with nothing to resolve them against -
+     * the exact dangling citation the change exists to prevent, surfacing much later as a 500 on the
+     * Finding read. This drives the branch directly and asserts both halves: the offending signal is
+     * gone, and every surviving citation still resolves.
+     */
+    @Test
+    void aCheckCitingUnresolvableEvidenceDropsOnlyThatSignalAndKeepsTheRestResolvable() {
+        var resolvable = UUID.randomUUID();
+        var unresolvable = UUID.randomUUID();
+        var evidence = new java.util.LinkedHashMap<java.util.UUID, com.rivell.workbench.retrieval.EvidenceItem>();
+        evidence.put(resolvable, evidenceItem(resolvable));
+
+        var signals = List.of(
+                signalWithEvidence("DEVIATION_UNCERTAIN",
+                        com.rivell.workbench.review.SignalType.DEVIATION_UNCERTAIN,
+                        List.of(resolvable)),
+                signalWithEvidence("ABSENCE_SIGNAL",
+                        com.rivell.workbench.review.SignalType.MISSING_REQUIRED_CONCEPT,
+                        List.of(unresolvable)));
+        var outcome = com.rivell.workbench.review.check.CheckOutcome
+                .completed(signals, Map.of("checked", 2))
+                .withCitedEvidence(bundles(evidence));
+
+        assertThat(outcome.status())
+                .as("a check that mis-cited must not report itself complete")
+                .isEqualTo(com.rivell.workbench.review.CheckExecutionStatus.DEGRADED);
+        assertThat(outcome.detail())
+                .containsEntry("degradedReason", "unresolvable_cited_evidence")
+                .containsEntry("unresolvedEvidenceCount", 1)
+                .containsEntry("droppedSignalCount", 1);
+        assertThat(outcome.signals())
+                .as("the signal that cited nothing resolvable must not persist")
+                .hasSize(1);
+        assertThat(outcome.evidenceItems())
+                .as("a retained signal's citation must still resolve, or the Finding read 500s")
+                .extracting(com.rivell.workbench.retrieval.EvidenceItem::evidenceId)
+                .containsExactly(resolvable);
+    }
+
+    private List<com.rivell.workbench.retrieval.EvidenceBundle> bundles(
+            Map<java.util.UUID, com.rivell.workbench.retrieval.EvidenceItem> items) {
+        var request = new com.rivell.workbench.retrieval.EvidenceRequest(organizationId(),
+                com.rivell.workbench.retrieval.RetrievalPurpose.CLAUSE_REVIEW,
+                com.rivell.workbench.taxonomy.CoreConcepts.LIMITATION_OF_LIABILITY,
+                UUID.randomUUID(), 1, UUID.randomUUID(), "text",
+                com.rivell.workbench.contracts.ReviewProfile.minimal(
+                        com.rivell.workbench.contracts.ContractType.MSA),
+                java.time.LocalDate.of(2026, 1, 1), null);
+        return List.of(new com.rivell.workbench.retrieval.EvidenceBundle(UUID.randomUUID(),
+                request, List.copyOf(items.values()), List.of(), List.of(), List.of(), List.of(),
+                com.rivell.workbench.retrieval.EvidenceSufficiency.SUFFICIENT, List.of(),
+                UUID.randomUUID()));
+    }
+
+    private com.rivell.workbench.retrieval.EvidenceItem evidenceItem(
+            java.util.UUID evidenceId) {
+        // Exactly the 21 declared components: only text, retrievalReason and the provenance list
+        // carry meaning here; everything else is a structural null.
+        return new com.rivell.workbench.retrieval.EvidenceItem(
+                evidenceId,
+                com.rivell.workbench.retrieval.AuthorityClass.POLICY,
+                "PLAYBOOK_RULE",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "text",
+                null,
+                List.of(),
+                "structured",
+                null,
+                null,
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                null);
+    }
+
+    private RawReviewSignal signalWithEvidence(String key,
+            com.rivell.workbench.review.SignalType type, List<java.util.UUID> evidence) {
+        return new RawReviewSignal(UUID.randomUUID(), organizationId(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), type,
+                com.rivell.workbench.review.FindingSubjectKind.CLAUSE, UUID.randomUUID(), null,
+                com.rivell.workbench.taxonomy.CoreConcepts.LIMITATION_OF_LIABILITY, null,
+                com.rivell.workbench.review.IssueFamily.POSITION_UNCERTAIN,
+                new com.rivell.workbench.review.DeviationUncertainPayload("bounded_decision_unavailable"),
+                evidence, "spec", 1, null, null, "VERIFIED", "fake", null, Map.of(), key,
+                java.time.Instant.parse("2026-09-27T00:00:00Z"));
+    }
+
+    @Test
+    void everyCitedEvidenceIdInACompletedRunResolvesToFrozenEvidence() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var citedIds = jdbcClient.sql("""
+                select jsonb_array_elements_text(evidence_item_ids) as evidence_id
+                from raw_review_signal
+                where run_id = :runId
+                """)
+                .param("runId", run.id())
+                .query(String.class)
+                .list();
+        assertThat(citedIds).as("the main corpus must produce cited evidence").isNotEmpty();
+
+        var unresolvableCount = jdbcClient.sql("""
+                select count(*) from (
+                  select distinct jsonb_array_elements_text(evidence_item_ids) as evidence_id
+                  from raw_review_signal
+                  where run_id = :runId
+                ) cited
+                left join review_evidence_item item
+                  on item.evidence_item_id = cited.evidence_id::uuid
+                 and item.run_id = :runId
+                where item.evidence_item_id is null
+                """)
+                .param("runId", run.id())
+                .query(Integer.class)
+                .single();
+
+        assertThat(unresolvableCount)
+                .as("every cited evidence id must resolve to a frozen item from the same run")
+                .isZero();
+
+        // A real run legitimately degrades a check that honestly reports partial coverage, so the
+        // assertion is specific to the failure this guard exists for: a check citing evidence it
+        // was never given.
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()))
+                .noneSatisfy(execution -> assertThat(execution.detail().get("degradedReason"))
+                        .isEqualTo("unresolvable_cited_evidence"));
     }
 
     @Test
@@ -578,7 +727,7 @@ class ReviewAnalysisIT {
         var review = reviewService.create(
                 corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
         var planCheck = reviewRepository.findPlanChecks(organizationId, review.id()).stream()
-                .filter(check -> check.mechanism() == CheckMechanism.LIABILITY_CAP)
+                .filter(check -> check.mechanism() == CheckMechanism.POLICY_COMPARISON)
                 .findFirst().orElseThrow();
         var run = ReviewAnalysisRun.running(UUID.randomUUID(), organizationId, review.id(), 1,
                 RunTrigger.INITIAL, ReviewPipeline.VERSION, java.time.Instant.now());
@@ -612,7 +761,7 @@ class ReviewAnalysisIT {
     }
 
     @Test
-    void emptyPlanCompletesWithZeroFindings() throws Exception {
+    void classifiedClausesWithoutPublishedPositionsCompleteWithZeroFindings() throws Exception {
         var organizationId = organizationId();
         var bytes = Files.readAllBytes(java.nio.file.Path.of(
                 "src/test/resources/fixtures/m5-nda-counterparty.docx"));
@@ -623,7 +772,9 @@ class ReviewAnalysisIT {
                         PaperSource.COUNTERPARTY_PAPER, Jurisdiction.US));
         var review = reviewService.create(ingested.contractId(), 1, null);
 
-        assertThat(reviewRepository.findPlanChecks(organizationId, review.id())).isEmpty();
+        var plan = reviewRepository.findPlanChecks(organizationId, review.id());
+        assertThat(plan).isNotEmpty().allSatisfy(check -> assertThat(check.mechanism())
+                .isEqualTo(CheckMechanism.POLICY_COMPARISON));
 
         var run = analysisService.analyze(organizationId, review.id());
 
@@ -631,7 +782,7 @@ class ReviewAnalysisIT {
         assertThat(analysisRepository.findSignals(organizationId, run.id())).isEmpty();
         assertThat(findingRepository.findFindings(organizationId, run.id())).isEmpty();
         var progress = analysisService.progress(organizationId, review.id());
-        assertThat(progress.plannedChecks()).isZero();
+        assertThat(progress.plannedChecks()).isEqualTo(plan.size());
         assertThat(progress.reviewStatus()).isEqualTo(ReviewStatus.COMPLETED);
     }
 

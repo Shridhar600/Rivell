@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.contracts.LegalFact;
 import com.rivell.workbench.knowledge.ApplicabilityScope;
 import com.rivell.workbench.knowledge.PositionRole;
@@ -26,7 +26,7 @@ public record EvidenceItem(
         UUID sourceCandidateId,
         UUID sourceContractVersionId,
         UUID sourceClauseId,
-        LegalConcept legalConcept,
+        ConceptKey legalConcept,
         ApplicabilityScope applicabilityScope,
         String text,
         PolicyFacts policyFacts,
@@ -38,7 +38,8 @@ public record EvidenceItem(
         List<String> provenanceNodeIds,
         UUID publicationId,
         Long publicationNumber,
-        PositionRole variantRole) {
+        PositionRole variantRole,
+        List<String> topicKeys) {
 
     public EvidenceItem {
         Objects.requireNonNull(evidenceId, "evidenceId");
@@ -55,9 +56,10 @@ public record EvidenceItem(
         }
         laneInfo = laneInfo == null ? LaneInfo.NONE : laneInfo;
         provenanceNodeIds = provenanceNodeIds == null ? List.of() : List.copyOf(provenanceNodeIds);
+        topicKeys = topicKeys == null ? List.of() : List.copyOf(topicKeys);
     }
 
-    /** Non-drafting authority items carry no clause-library variant role. */
+    /** Non-knowledge items carry no clause-library variant role and no topic set. */
     public EvidenceItem(
             UUID evidenceId,
             AuthorityClass authorityClass,
@@ -66,7 +68,7 @@ public record EvidenceItem(
             UUID sourceCandidateId,
             UUID sourceContractVersionId,
             UUID sourceClauseId,
-            LegalConcept legalConcept,
+            ConceptKey legalConcept,
             ApplicabilityScope applicabilityScope,
             String text,
             PolicyFacts policyFacts,
@@ -82,20 +84,30 @@ public record EvidenceItem(
                 sourceContractVersionId, sourceClauseId, legalConcept, applicabilityScope,
                 text, policyFacts, contractFacts, retrievalReason, laneInfo,
                 semanticAssessment, policyCompatibility, provenanceNodeIds, publicationId,
-                publicationNumber, null);
+                publicationNumber, null, List.of());
     }
 
     /**
      * Typed facts of a published playbook rule: position roles, approval requirement,
-     * escalation trigger. Machine + human-corrected effective values.
+     * escalation trigger, and the role-tagged field values a comparison question asks
+     * from. Machine + human-corrected effective values.
      */
     public record PolicyFacts(
             Set<PositionRole> positions,
             Boolean requiresApproval,
-            String escalationTrigger) {
+            String escalationTrigger,
+            String preferred,
+            List<String> fallbacks,
+            String prohibited) {
 
         public PolicyFacts {
             positions = positions == null ? Set.of() : Set.copyOf(positions);
+            fallbacks = fallbacks == null ? List.of() : List.copyOf(fallbacks);
+        }
+
+        public PolicyFacts(
+                Set<PositionRole> positions, Boolean requiresApproval, String escalationTrigger) {
+            this(positions, requiresApproval, escalationTrigger, null, List.of(), null);
         }
     }
 

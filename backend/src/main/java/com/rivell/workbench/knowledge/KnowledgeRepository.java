@@ -2,6 +2,7 @@ package com.rivell.workbench.knowledge;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.time.Instant;
 
@@ -18,9 +19,19 @@ public interface KnowledgeRepository {
 
     void updateArtifactAssessment(UUID artifactId, ArtifactTypeAssessment assessment);
 
+    void updateParseCoverage(UUID artifactId, com.rivell.workbench.contracts.ParseCoverage coverage);
+
+    /** Empty when the artifact predates the coverage check or the check could not run. */
+    Optional<com.rivell.workbench.contracts.ParseCoverage> findParseCoverage(
+            UUID artifactId, UUID organizationId);
+
     Optional<KnowledgeArtifact> findArtifact(UUID artifactId, UUID organizationId);
 
-    List<KnowledgeArtifact> listArtifacts(UUID organizationId);
+    /**
+     * Newest-first artifact list. {@code limit} bounds the read; null keeps the
+     * unbounded behaviour existing callers rely on.
+     */
+    List<KnowledgeArtifact> listArtifacts(UUID organizationId, Integer limit);
 
     Optional<KnowledgeSource> findSource(UUID artifactId, UUID organizationId);
 
@@ -36,12 +47,19 @@ public interface KnowledgeRepository {
 
     Optional<ExtractionUnit> findUnit(UUID unitId, UUID organizationId);
 
+    /**
+     * Records a person's record-kind correction on one part, once: false when the part already
+     * carries a correction (or is not this organization's), and nothing is written then.
+     */
+    boolean overrideRecordKind(UUID unitId, UUID organizationId, KnowledgeRecordKind kind,
+            UUID by, java.time.Instant at);
+
     List<KnowledgeCandidate> loadCandidates(UUID artifactId, UUID organizationId);
 
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);
 
     /**
-     * Human LegalConcept correction (DW-017); pre-publication only. Persists the
+     * Human concept correction (DW-017); pre-publication only. Persists the
      * correction, the resulting review status (an APPROVED candidate demotes to
      * EDITED for re-approval), and the recomputed analysis outcome. Returns false
      * when the expected status no longer holds (concurrent transition).
@@ -50,7 +68,18 @@ public interface KnowledgeRepository {
             KnowledgeCandidate updated, ReviewStatus expectedStatus,
             UUID correctedBy, java.time.Instant updatedAt);
 
-    void updateReviewState(
+    /**
+     * Persists a pre-publication review transition together with the candidate's derived
+     * conditions. Callers that do not re-derive conditions pass the candidate's current values,
+     * so conditions are only ever changed deliberately (see CandidateReviewService.edit).
+     *
+     * <p>This is a compare-and-set on the review status and the caller's responsibility is to
+     * check the answer: returns false when the expected status no longer held, which means
+     * somebody else moved the candidate first. Reporting success for a transition that wrote
+     * nothing would let a caller believe it holds a state it does not - the publication path
+     * would commit items for a candidate that is still EDITED.
+     */
+    boolean updateReviewState(
             UUID candidateId,
             UUID organizationId,
             ReviewStatus expectedStatus,
@@ -62,7 +91,10 @@ public interface KnowledgeRepository {
             UUID supersedingCandidateId,
             String reviewNote,
             Instant reviewedAt,
-            Instant updatedAt);
+            Instant updatedAt,
+            List<ConflictSignal> conflictSignals,
+            ReviewCategory reviewCategory,
+            Set<ReviewReason> reviewReasons);
 
     List<KnowledgeCandidate> findPublishedCandidates(UUID organizationId);
 
@@ -79,7 +111,11 @@ public interface KnowledgeRepository {
 
     void insertPublication(KnowledgePublication publication);
 
-    List<KnowledgePublication> listPublications(UUID organizationId);
+    /**
+     * Publications newest first. {@code limit} bounds the read; null keeps the unbounded
+     * behaviour existing callers rely on.
+     */
+    List<KnowledgePublication> listPublications(UUID organizationId, Integer limit);
 
     Optional<KnowledgePublication> findPublication(UUID publicationId, UUID organizationId);
 

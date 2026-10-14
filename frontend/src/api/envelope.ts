@@ -84,6 +84,16 @@ export function readOptionalNullableBoolean(
   return value
 }
 
+export function readBoolean(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+): boolean {
+  const value = source[key]
+  if (typeof value !== 'boolean') throw malformed(what)
+  return value
+}
+
 export function readOptionalBoolean(
   source: Record<string, unknown>,
   key: string,
@@ -257,13 +267,24 @@ export function parseApiResult<T>(
   return parseData(envelope.data, what)
 }
 
-export function errorMessage(error: unknown, fallback: string): string {
-  if (typeof error === 'object' && error !== null) {
-    const record = error as Record<string, unknown>
-    for (const key of ['detail', 'title', 'message'] as const) {
-      const value = record[key]
-      if (typeof value === 'string' && value.trim().length > 0) return value
-    }
-  }
-  return fallback
+export function readClosedString<T extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  values: readonly T[],
+): T | 'UNKNOWN' {
+  const value = source[key]
+  if (value === null || value === undefined) return 'UNKNOWN'
+  if (typeof value !== 'string' || !(values as readonly string[]).includes(value)) return 'UNKNOWN'
+  return value as T
+}
+
+export function readNullableClosedString<T extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  values: readonly T[],
+): T | 'UNKNOWN' | null {
+  const value = source[key]
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string' || !(values as readonly string[]).includes(value)) return 'UNKNOWN'
+  return value as T
 }

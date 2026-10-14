@@ -1,5 +1,7 @@
 package com.rivell.workbench.contracts;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -67,7 +69,7 @@ class ContractSemanticsSchemaIT {
         var semantics = new ContractSemantics(UUID.randomUUID(), versionId, UUID.randomUUID(),
                 EnrichmentStatus.ENRICHING, ContractSemantics.PIPELINE_VERSION,
                 ReviewProfile.minimal(ContractType.NDA), List.of(), List.of(), List.of(),
-                List.of(), List.of(), List.of(), QualityReasons.NONE, null, List.of());
+                List.of(), List.of(), List.of(), QualityReasons.NONE, null, List.of(), null);
 
         assertThatThrownBy(() -> semanticsRepository.replaceSemantics(semantics))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
@@ -174,8 +176,8 @@ class ContractSemanticsSchemaIT {
         var clause = new ClauseSemantics(UUID.randomUUID(), versionId, headingId,
                 ContractRegionSegmenter.SemanticRegionKind.CLAUSE,                List.of(textId),
                 "Supplier liability shall not exceed three times the Fees paid in the twelve months immediately preceding the claim.",
-                new ConceptClassification(List.of(LegalConcept.LIMITATION_OF_LIABILITY),
-                        List.of(), Map.of(LegalConcept.LIMITATION_OF_LIABILITY, 0.93)),
+                new ConceptClassification(List.of(CoreConcepts.LIMITATION_OF_LIABILITY),
+                        List.of(), Map.of(CoreConcepts.LIMITATION_OF_LIABILITY, 0.93)),
                 List.of(new LegalFact("liability-facts", 1, Map.of(
                         "liabilityCapMultiple", "3",
                         "capBasis", "PRECEDING_12_MONTH_FEES",
@@ -191,7 +193,7 @@ class ContractSemanticsSchemaIT {
                         Jurisdiction.US),
                 List.of(metadata), List.of(party), List.of(definedTerm), List.of(reference),
                 List.of(clause), List.of(relationship), QualityReasons.NONE,
-                new Observations(3, 2, 10, 0, 2, false, false), List.of());
+                new Observations(3, 2, 10, 0, 2, false, false), List.of(), null);
 
         transactionTemplate.executeWithoutResult(status ->
                 semanticsRepository.replaceSemantics(semantics));
@@ -212,7 +214,7 @@ class ContractSemanticsSchemaIT {
         assertThat(loaded.observations().regionCount()).isEqualTo(3);
         assertThat(loaded.clauses()).hasSize(1);
         assertThat(loaded.clauses().get(0).primaryConcept())
-                .contains(LegalConcept.LIMITATION_OF_LIABILITY);
+                .contains(CoreConcepts.LIMITATION_OF_LIABILITY);
         assertThat(loaded.clauses().get(0).facts()).hasSize(1);
         assertThat(loaded.clauses().get(0).facts().get(0).values())
                 .containsEntry("liabilityCapMultiple", "3");
@@ -227,16 +229,15 @@ class ContractSemanticsSchemaIT {
         var headingId = insertNode(versionId, null, "HEADING", "Confidentiality", "2");
         var clause = new ClauseSemantics(UUID.randomUUID(), versionId, headingId,
                 ContractRegionSegmenter.SemanticRegionKind.CLAUSE,                List.of(), "Confidential information must be protected.",
-                new ConceptClassification(List.of(LegalConcept.CONFIDENTIALITY), List.of(),
-                        Map.of(LegalConcept.CONFIDENTIALITY, 0.9)),
+                new ConceptClassification(List.of(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS), List.of(),
+                        Map.of(CoreConcepts.CONFIDENTIALITY_OBLIGATIONS, 0.9)),
                 List.of(), List.of(), FactCorrection.NONE, null);
         var party = new ContractParty(UUID.randomUUID(), versionId, "Acme Corp", "acme corp",
                 List.of(), List.of(), List.of(PartyRole.PARTY_A), PartyCorrection.NONE, null);
         var semantics = new ContractSemantics(UUID.randomUUID(), versionId, organizationId,
                 EnrichmentStatus.READY, ContractSemantics.PIPELINE_VERSION,
                 ReviewProfile.minimal(ContractType.NDA), List.of(), List.of(party),
-                List.of(), List.of(), List.of(clause), List.of(), QualityReasons.NONE,
-                null, List.of());
+                List.of(), List.of(), List.of(clause), List.of(), QualityReasons.NONE, null, List.of(), null);
 
         transactionTemplate.executeWithoutResult(status ->
                 semanticsRepository.replaceSemantics(semantics));
@@ -265,7 +266,7 @@ class ContractSemanticsSchemaIT {
                         EnrichmentStatus.READY, ContractSemantics.PIPELINE_VERSION,
                         ReviewProfile.minimal(ContractType.NDA),
                         List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                        QualityReasons.NONE, null, List.of())));
+                        QualityReasons.NONE, null, List.of(), null)));
 
         assertThat(semanticsRepository.findStatus(versionId, organizationId))
                 .contains(EnrichmentStatus.READY);
@@ -281,13 +282,13 @@ class ContractSemanticsSchemaIT {
             EnrichmentStatus status, String pipelineVersion, String contentText) {
         var clause = new ClauseSemantics(UUID.randomUUID(), versionId, headingId,
                 ContractRegionSegmenter.SemanticRegionKind.CLAUSE,                List.of(), contentText,
-                new ConceptClassification(List.of(LegalConcept.LIMITATION_OF_LIABILITY),
-                        List.of(), Map.of(LegalConcept.LIMITATION_OF_LIABILITY, 0.9)),
+                new ConceptClassification(List.of(CoreConcepts.LIMITATION_OF_LIABILITY),
+                        List.of(), Map.of(CoreConcepts.LIMITATION_OF_LIABILITY, 0.9)),
                 List.of(), List.of(), FactCorrection.NONE, null);
         return new ContractSemantics(UUID.randomUUID(), versionId, organizationId, status,
                 pipelineVersion, ReviewProfile.minimal(ContractType.MSA),
                 List.of(), List.of(), List.of(), List.of(), List.of(clause), List.of(),
-                QualityReasons.NONE, null, List.of());
+                QualityReasons.NONE, null, List.of(), null);
     }
 
     private UUID stagedVersion(UUID organizationId) {

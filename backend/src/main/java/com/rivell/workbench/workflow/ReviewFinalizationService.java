@@ -1,6 +1,7 @@
 package com.rivell.workbench.workflow;
 
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -72,7 +73,13 @@ public class ReviewFinalizationService {
             if (!progress.readyToFinalize()) {
                 throw new ReviewNotFinalizableException(progress.blockers());
             }
-            var set = buildSet(organizationId, state, finalizedBy);
+            // Freeze the semantics digest the review planned against. M9 derives INSERT
+            // placement from effective concepts and must be able to prove it is still using
+            // the classification the human approved changes against.
+            var snapshot = reviewRepository.findSnapshot(organizationId, reviewId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Review snapshot missing: " + reviewId));
+            var set = buildSet(organizationId, state, snapshot.semanticsDigest(), finalizedBy);
             if (!changeSetRepository.freeze(set)) {
                 return changeSetRepository.findByReview(organizationId, reviewId)
                         .orElseThrow(() -> new IllegalStateException(
@@ -82,8 +89,8 @@ public class ReviewFinalizationService {
         });
     }
 
-    private ApprovedChangeSet buildSet(
-            UUID organizationId, HumanReviewState state, UUID finalizedBy) {
+    private ApprovedChangeSet buildSet(UUID organizationId, HumanReviewState state,
+            String semanticsDigest, UUID finalizedBy) {
         var review = state.review();
         var changeSetId = UUID.randomUUID();
         var severityByFinding = new HashMap<UUID, FindingSeverity>();
@@ -104,9 +111,13 @@ public class ReviewFinalizationService {
                     planned.absenceConcept(), planned.approvedLanguage(),
                     planned.languageSource(), planned.approvedDraftingEvidenceId()));
         }
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so set.finalizedAt() would not match what readers get back.
+        var finalizedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
         return new ApprovedChangeSet(changeSetId, organizationId, review.id(),
                 state.activeRunId(), review.contractId(), review.contractVersionId(),
-                review.contractVersionNumber(), 1, finalizedBy, clock.instant(), changes);
+                review.contractVersionNumber(), 1, semanticsDigest, finalizedBy,
+                finalizedAt, changes);
     }
 
     private static int severityRank(FindingSeverity severity) {

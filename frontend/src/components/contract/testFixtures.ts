@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 import type { SemanticContract } from '../../api/semantics'
 import type { StructureNode } from '../../lib/documentTree'
+import { taxonomyFixture } from '../../test/taxonomyFixtures'
 
 export type RecordedRequest = {
   method: string
@@ -113,6 +114,7 @@ export function fixtureSemantics(
     contractId: 'c1',
     versionNumber: 1,
     enrichmentStatus: 'READY',
+    failureReason: null,
     reviewProfile: {
       contractType: 'MSA',
       ourSideRole: 'CUSTOMER',
@@ -221,7 +223,7 @@ export function fixtureSemantics(
         headingNodeId: 'node-5',
         regionKind: 'CLAUSE',
         heading: '5. Termination',
-        primaryConcept: 'TERM_TERMINATION',
+        primaryConcept: 'TERM',
         secondaryConcepts: [],
         correctedPrimaryConcept: null,
         machineFacts: [
@@ -413,6 +415,8 @@ export const fixtureStructure = {
 
 export type StubOptions = {
   contractSummary?: unknown
+  taxonomy?: unknown
+  taxonomyStatus?: number
   semantics?: SemanticContract | null
   semanticsStatus?: number
   enrichmentResponse?: () => Response
@@ -451,10 +455,13 @@ export type StubOptions = {
   changeSet?: unknown
   changeSetStatus?: number
   decisionResponse?: (body: unknown) => Response | Promise<Response>
+  clauseMarks?: unknown
+  addFindingResponse?: (body: unknown) => Response | Promise<Response>
   finalizeResponse?: () => Response | Promise<Response>
   redline?: unknown
   redlineStatus?: number
   redlineTriggerResponse?: () => Response | Promise<Response>
+  redlineRetryResponse?: () => Response | Promise<Response>
   redlineDownloadResponse?: () => Response | Promise<Response>
 }
 
@@ -497,6 +504,15 @@ export function stubContractApi(options: StubOptions = {}) {
     }
     requests.push({ method, url, body })
 
+    if (method === 'GET' && url.includes('/api/taxonomy/concepts')) {
+      if (options.taxonomyStatus && options.taxonomyStatus !== 200) {
+        return jsonResponse(
+          { code: String(options.taxonomyStatus), title: 'Error', detail: 'x' },
+          options.taxonomyStatus,
+        )
+      }
+      return jsonResponse(options.taxonomy ?? taxonomyFixture)
+    }
     if (method === 'GET' && /\/api\/contracts\/c1$/.test(url)) {
       return jsonResponse(envelope(options.contractSummary ?? fixtureContractSummary))
     }
@@ -686,6 +702,10 @@ export function stubContractApi(options: StubOptions = {}) {
         },
       })
     }
+    if (method === 'POST' && /\/api\/reviews\/[^/?]+\/redline\/retry$/.test(url)) {
+      if (options.redlineRetryResponse) return await options.redlineRetryResponse()
+      return jsonResponse(envelope(redline))
+    }
     if (method === 'POST' && /\/api\/reviews\/[^/?]+\/redline$/.test(url)) {
       if (options.redlineTriggerResponse) return await options.redlineTriggerResponse()
       return jsonResponse(envelope(redline))
@@ -708,6 +728,13 @@ export function stubContractApi(options: StubOptions = {}) {
         )
       }
       return jsonResponse(envelope(redline))
+    }
+    if (method === 'GET' && /\/api\/reviews\/[^/?]+\/clause-marks$/.test(url)) {
+      return jsonResponse(envelope(options.clauseMarks ?? { runId: null, clauses: [] }))
+    }
+    if (method === 'POST' && /\/api\/reviews\/[^/?]+\/findings$/.test(url)) {
+      if (options.addFindingResponse) return await options.addFindingResponse(body)
+      return jsonResponse(envelope({ findingId: 'f-user' }), 201)
     }
     if (method === 'PUT' && /\/api\/reviews\/[^/?]+\/findings\/[^/?]+\/decision$/.test(url)) {
       if (options.decisionResponse) return await options.decisionResponse(body)

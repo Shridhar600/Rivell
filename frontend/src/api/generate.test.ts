@@ -224,7 +224,7 @@ describe('generated OpenAPI client workflow', () => {
           { concept: 'LIMITATION_OF_LIABILITY', probability: 0.91 },
         ],
         evaluatedConcepts: [
-          { concept: 'CONFIDENTIALITY', probability: 0.02 },
+          { concept: 'CONFIDENTIALITY_OBLIGATIONS', probability: 0.02 },
           { concept: 'LIMITATION_OF_LIABILITY', probability: 0.91 },
         ],
         noneMatched: false,
@@ -238,11 +238,11 @@ describe('generated OpenAPI client workflow', () => {
     )
     expect(response.data?.noneMatched).toBe(false)
 
-    // @ts-expect-error the M3 concept set is a closed enum in the contract
-    const unknownConcept: NonNullable<
+    // The concept is a taxonomy key now, not a closed enum, so any key the taxonomy defines fits.
+    const topicKey: NonNullable<
       components['schemas']['ConceptView']['concept']
-    > = 'FORCE_MAJEURE'
-    expect(unknownConcept).toBe('FORCE_MAJEURE')
+    > = 'CONFIDENTIALITY_OBLIGATIONS'
+    expect(topicKey).toBe('CONFIDENTIALITY_OBLIGATIONS')
   })
 
   it('documents the M4 semantic compilation contract', () => {

@@ -67,10 +67,12 @@ class M7GenerativeLiveSmokeTest {
     }
 
     @Test
-    void openEndedLiabilityProducesTypedCandidateOnSyntheticExoticClause() {
-        var spec = M7ReasoningSpecs.openEndedLiability();
-        var state = new M7ReasoningSpecs.OpenEndedLiabilityState(
-                1,
+    void openEndedPositionProducesTypedCandidateOnSyntheticClause() {
+        var spec = M7ReasoningSpecs.openEndedPosition();
+        var state = new M7ReasoningSpecs.OpenEndedPositionState(
+                M7ReasoningSpecs.OPEN_ENDED_STATE_SCHEMA,
+                "We are the customer. The other party supplies the goods, services or software.",
+                "Master services agreement", "Limitation of Liability",
                 "Supplier's aggregate liability shall not exceed the insurance proceeds "
                         + "actually recovered by Supplier in respect of the claim.",
                 "Total liability should not exceed the fees paid in the preceding 12 "

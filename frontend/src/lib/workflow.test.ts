@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { HumanDecision, HumanReview } from '../api/workflow'
+import { humanizeCode } from './domainLabels'
 import {
   acceptEligibility,
   blockerLabel,
@@ -84,6 +85,7 @@ describe('workflow labels', () => {
     expect(blockerLabel('UNRESOLVED_BLOCKING_FINDINGS')).toContain('Blocking findings')
     expect(blockerLabel('ACTIVE_ESCALATION')).toContain('escalated')
     expect(blockerLabel('APPROVED_CHANGE_CONFLICT')).toContain('same contract location')
+    expect(blockerLabel('ANALYSIS_DEGRADED')).toMatch(/produced no trustworthy result/)
     expect(blockerLabel('SOMETHING_NEW')).toBe('The review cannot be finalized yet.')
   })
 
@@ -319,18 +321,21 @@ describe('change set view-model', () => {
       changeTargetLabel(
         { targetKind: 'CLAUSE', targetHeadingNodeId: 'node-6', absenceConcept: null },
         regionLabels,
+        humanizeCode,
       ),
     ).toBe('6. Limitation of Liability')
     expect(
       changeTargetLabel(
-        { targetKind: 'ABSENCE', targetHeadingNodeId: null, absenceConcept: 'CONFIDENTIALITY' },
+        { targetKind: 'ABSENCE', targetHeadingNodeId: null, absenceConcept: 'CONFIDENTIALITY_OBLIGATIONS' },
         regionLabels,
+        humanizeCode,
       ),
-    ).toBe('Missing provision: Confidentiality')
+    ).toBe('Missing provision: Confidentiality obligations')
     expect(
       changeTargetLabel(
         { targetKind: 'CLAUSE', targetHeadingNodeId: null, absenceConcept: null },
         regionLabels,
+        humanizeCode,
       ),
     ).toBe('Clause')
   })

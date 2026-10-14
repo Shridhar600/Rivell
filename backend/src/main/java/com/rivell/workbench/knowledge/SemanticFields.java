@@ -2,10 +2,9 @@ package com.rivell.workbench.knowledge;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Machine-proposed semantic fields of a knowledge candidate (M4). The machine proposal is
@@ -19,7 +18,7 @@ public record SemanticFields(
         Boolean requiresApproval,
         String escalationTrigger,
         PositionRole variantRole,
-        Map<LegalConcept, Double> conceptProbabilities) {
+        Map<ConceptKey, Double> conceptProbabilities) {
 
     public static final SemanticFields EMPTY = new SemanticFields(
             Set.of(), null, null, null, Map.of());
@@ -33,17 +32,5 @@ public record SemanticFields(
 
     public PositionRole effectiveVariantRole() {
         return variantRole == null ? PositionRole.UNSPECIFIED : variantRole;
-    }
-
-    /**
-     * Highest-probability concept meeting the task threshold; empty when none qualifies
-     * (an honest no-match, never fabricated certainty).
-     */
-    public static Optional<LegalConcept> primaryConcept(
-            Map<LegalConcept, Double> probabilities, double threshold) {
-        return probabilities.entrySet().stream()
-                .filter(entry -> entry.getValue() >= threshold)
-                .max(Map.Entry.comparingByValue())
-                .map(Map.Entry::getKey);
     }
 }

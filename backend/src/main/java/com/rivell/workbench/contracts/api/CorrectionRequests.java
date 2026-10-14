@@ -21,8 +21,8 @@ public final class CorrectionRequests {
 
     public record ConceptCorrection(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
-                    description = "Corrected primary concept as a LegalConcept name; any "
-                            + "known LegalConcept is accepted (unknown names are rejected) "
+                    description = "Corrected primary concept as a taxonomy key; any "
+                            + "known key is accepted (unknown names are rejected) "
                             + "and becomes the effective primary even if previously "
                             + "unclassified. null leaves the current correction unchanged; "
                             + "blank clears the concept correction")

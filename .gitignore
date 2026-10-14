@@ -67,3 +67,8 @@ var/
 
 # Local agent scratch (never committed)
 .tmp-*/
+
+# Product Design experiment surface (local only, never committed)
+/experiments/
+
+.agent-scratch/

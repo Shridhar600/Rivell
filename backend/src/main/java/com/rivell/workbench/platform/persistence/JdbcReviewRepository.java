@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.review.CheckExpectation;
@@ -20,6 +20,7 @@ import com.rivell.workbench.review.CheckFamily;
 import com.rivell.workbench.review.CheckMechanism;
 import com.rivell.workbench.review.ModelPolicyIdentity;
 import com.rivell.workbench.review.Review;
+import com.rivell.workbench.review.ReviewEngine;
 import com.rivell.workbench.review.ReviewPlanCheck;
 import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewSnapshot;
@@ -41,10 +42,10 @@ class JdbcReviewRepository implements ReviewRepository {
                 insert into review
                   (id, organization_id, contract_id, contract_version_id,
                    contract_version_number, status, failure_reason, created_by,
-                   created_at, updated_at, started_at, completed_at)
+                   client_request_id, created_at, updated_at, started_at, completed_at)
                 values (:id, :organizationId, :contractId, :contractVersionId,
                    :contractVersionNumber, :status, :failureReason, :createdBy,
-                   :createdAt, :updatedAt, :startedAt, :completedAt)
+                   :clientRequestId, :createdAt, :updatedAt, :startedAt, :completedAt)
                 """)
                 .param("id", review.id())
                 .param("organizationId", review.organizationId())
@@ -54,6 +55,7 @@ class JdbcReviewRepository implements ReviewRepository {
                 .param("status", review.status().name())
                 .param("failureReason", review.failureReason())
                 .param("createdBy", review.createdBy())
+                .param("clientRequestId", review.clientRequestId())
                 .param("createdAt", timestamp(review.createdAt()))
                 .param("updatedAt", timestamp(review.updatedAt()))
                 .param("startedAt", review.startedAt() == null ? null : timestamp(review.startedAt()))
@@ -69,7 +71,7 @@ class JdbcReviewRepository implements ReviewRepository {
                    pack_version, knowledge_pin_number, effective_on,
                    review_pipeline_version, embedding_index_version,
                    embedding_model_identity, decision_provider_id, decision_model_alias,
-                   generative_provider_id, generative_model_alias, created_at)
+                   generative_provider_id, generative_model_alias, review_engine, created_at)
                 values (:reviewId, :organizationId, :contractId, :contractVersionId,
                    :contractVersionNumber, :contractSemanticsId,
                    :semanticsPipelineVersion, :semanticsDigest, :contractType,
@@ -77,7 +79,7 @@ class JdbcReviewRepository implements ReviewRepository {
                    :packVersion, :knowledgePinNumber, :effectiveOn,
                    :reviewPipelineVersion, :embeddingIndexVersion,
                    :embeddingModelIdentity, :decisionProviderId, :decisionModelAlias,
-                   :generativeProviderId, :generativeModelAlias, :createdAt)
+                   :generativeProviderId, :generativeModelAlias, :reviewEngine, :createdAt)
                 """)
                 .param("reviewId", snapshot.reviewId())
                 .param("organizationId", snapshot.organizationId())
@@ -102,6 +104,7 @@ class JdbcReviewRepository implements ReviewRepository {
                 .param("decisionModelAlias", snapshot.modelPolicy().decisionModelAlias())
                 .param("generativeProviderId", snapshot.modelPolicy().generativeProviderId())
                 .param("generativeModelAlias", snapshot.modelPolicy().generativeModelAlias())
+                .param("reviewEngine", snapshot.reviewEngine().name())
                 .param("createdAt", timestamp(snapshot.createdAt()))
                 .update();
 
@@ -123,8 +126,8 @@ class JdbcReviewRepository implements ReviewRepository {
                     .param("family", check.family().name())
                     .param("expectation", check.expectation() == null ? null : check.expectation().name())
                     .param("mechanism", check.mechanism().name())
-                    .param("concept", check.concept().name())
-                    .param("secondaryConcept", check.secondaryConcept() == null ? null : check.secondaryConcept().name())
+                    .param("concept", check.concept().value())
+                    .param("secondaryConcept", check.secondaryConcept() == null ? null : check.secondaryConcept().value())
                     .param("subjectHeadingNodeId", check.subjectHeadingNodeId())
                     .param("createdAt", timestamp(check.createdAt()))
                     .update();
@@ -133,10 +136,42 @@ class JdbcReviewRepository implements ReviewRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<Review> findByClientRequestId(UUID organizationId, UUID clientRequestId) {
+        return jdbcClient.sql("""
+                select id, organization_id, contract_id, contract_version_id,
+                       contract_version_number, status, failure_reason, created_by,
+                       client_request_id,
+                       created_at, updated_at, started_at, completed_at
+                from review
+                where organization_id = :organizationId
+                  and client_request_id = :clientRequestId
+                """)
+                .param("organizationId", organizationId)
+                .param("clientRequestId", clientRequestId)
+.query((rs, rowNum) -> new Review(
+                        rs.getObject("id", UUID.class),
+                        rs.getObject("organization_id", UUID.class),
+                        rs.getObject("contract_id", UUID.class),
+                        rs.getObject("contract_version_id", UUID.class),
+                        rs.getInt("contract_version_number"),
+                        ReviewStatus.valueOf(rs.getString("status")),
+                        rs.getString("failure_reason"),
+                        rs.getObject("created_by", UUID.class),
+                        rs.getTimestamp("created_at").toInstant(),
+                        rs.getTimestamp("updated_at").toInstant(),
+                        rs.getTimestamp("started_at") == null ? null : rs.getTimestamp("started_at").toInstant(),
+                        rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant(),
+                        rs.getObject("client_request_id", UUID.class)))
+                .optional();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<Review> find(UUID organizationId, UUID reviewId) {
         return jdbcClient.sql("""
                 select id, organization_id, contract_id, contract_version_id,
                        contract_version_number, status, failure_reason, created_by,
+                       client_request_id,
                        created_at, updated_at, started_at, completed_at
                 from review
                 where id = :reviewId and organization_id = :organizationId
@@ -155,39 +190,9 @@ class JdbcReviewRepository implements ReviewRepository {
                         rs.getTimestamp("created_at").toInstant(),
                         rs.getTimestamp("updated_at").toInstant(),
                         rs.getTimestamp("started_at") == null ? null : rs.getTimestamp("started_at").toInstant(),
-                        rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant()))
+                        rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant(),
+                        rs.getObject("client_request_id", UUID.class)))
                 .optional();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<Review> findReviews(UUID organizationId, UUID contractId, int limit) {
-        return jdbcClient.sql("""
-                select id, organization_id, contract_id, contract_version_id,
-                       contract_version_number, status, failure_reason, created_by,
-                       created_at, updated_at, started_at, completed_at
-                from review
-                where organization_id = :organizationId and contract_id = :contractId
-                order by created_at desc, id desc
-                limit :limit
-                """)
-                .param("organizationId", organizationId)
-                .param("contractId", contractId)
-                .param("limit", limit + 1)
-                .query((rs, rowNum) -> new Review(
-                        rs.getObject("id", UUID.class),
-                        rs.getObject("organization_id", UUID.class),
-                        rs.getObject("contract_id", UUID.class),
-                        rs.getObject("contract_version_id", UUID.class),
-                        rs.getInt("contract_version_number"),
-                        ReviewStatus.valueOf(rs.getString("status")),
-                        rs.getString("failure_reason"),
-                        rs.getObject("created_by", UUID.class),
-                        rs.getTimestamp("created_at").toInstant(),
-                        rs.getTimestamp("updated_at").toInstant(),
-                        rs.getTimestamp("started_at") == null ? null : rs.getTimestamp("started_at").toInstant(),
-                        rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant()))
-                .list();
     }
 
     @Override
@@ -201,7 +206,7 @@ class JdbcReviewRepository implements ReviewRepository {
                        pack_version, knowledge_pin_number, effective_on,
                        review_pipeline_version, embedding_index_version,
                        embedding_model_identity, decision_provider_id, decision_model_alias,
-                       generative_provider_id, generative_model_alias, created_at
+                       generative_provider_id, generative_model_alias, review_engine, created_at
                 from review_snapshot
                 where review_id = :reviewId and organization_id = :organizationId
                 """)
@@ -232,6 +237,7 @@ class JdbcReviewRepository implements ReviewRepository {
                                 rs.getString("decision_model_alias"),
                                 rs.getString("generative_provider_id"),
                                 rs.getString("generative_model_alias")),
+                        ReviewEngine.valueOf(rs.getString("review_engine")),
                         rs.getTimestamp("created_at").toInstant()))
                 .optional();
     }
@@ -258,8 +264,8 @@ class JdbcReviewRepository implements ReviewRepository {
                         CheckFamily.valueOf(rs.getString("family")),
                         rs.getString("expectation") == null ? null : CheckExpectation.valueOf(rs.getString("expectation")),
                         CheckMechanism.valueOf(rs.getString("mechanism")),
-                        LegalConcept.valueOf(rs.getString("concept")),
-                        rs.getString("secondary_concept") == null ? null : LegalConcept.valueOf(rs.getString("secondary_concept")),
+                        ConceptKey.of(rs.getString("concept")),
+                        rs.getString("secondary_concept") == null ? null : ConceptKey.of(rs.getString("secondary_concept")),
                         rs.getObject("subject_heading_node_id", UUID.class),
                         rs.getTimestamp("created_at").toInstant()))
                 .list();

@@ -48,6 +48,39 @@ import com.rivell.workbench.redline.VerificationReport;
 @Component
 public class DocxRedlineVerifier implements RedlineVerifier {
 
+    private final com.rivell.workbench.platform.parsing.DocxParserProperties properties;
+
+    public DocxRedlineVerifier(
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        this.properties = properties;
+    }
+
+    /**
+     * The verifier reads both the generated and the source package, so it needs the same
+     * decompression bound the renderer applies. A verification pass must not be the cheapest way to
+     * exhaust the heap.
+     */
+    private static WordprocessingMLPackage load(byte[] bytes,
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        try {
+            com.rivell.workbench.platform.parsing.ZipGuard.verify(bytes,
+                    properties.maxUncompressedBytes());
+        } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {
+            // M10 review finding: this used to be caught by the broad handler below and reported as
+            // ROUND_TRIP_FAILED, so a size rejection looked like a verification mismatch. It is a
+            // distinct, deliberate outcome and says so.
+            throw new PackageExpansionRejectedException();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Package could not be scanned", e);
+        }
+        try {
+            var repair = DocxPackageRepair.repair(bytes);
+            return WordprocessingMLPackage.load(new ByteArrayInputStream(repair.bytes()));
+        } catch (Exception e) {
+            throw new IllegalStateException("Package could not be loaded", e);
+        }
+    }
+
     @Override
     public VerificationReport verify(
             byte[] sourceBytes, byte[] generatedBytes, DocumentExecutionPlan plan,
@@ -55,13 +88,21 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         WordprocessingMLPackage generated;
         WordprocessingMLPackage source;
         try {
-            generated = WordprocessingMLPackage.load(new ByteArrayInputStream(generatedBytes));
+            generated = load(generatedBytes, properties);
+        } catch (PackageExpansionRejectedException e) {
+            return VerificationReport.failed(
+                    RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED,
+                    "The package expands beyond the permitted size for verification.", List.of());
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
                     "The generated document could not be reopened.", List.of());
         }
         try {
-            source = WordprocessingMLPackage.load(new ByteArrayInputStream(sourceBytes));
+            source = load(sourceBytes, properties);
+        } catch (PackageExpansionRejectedException e) {
+            return VerificationReport.failed(
+                    RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED,
+                    "The package expands beyond the permitted size for verification.", List.of());
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
                     "The frozen source document could not be reopened.", List.of());
@@ -227,9 +268,17 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         }
 
         var deleted = new HashSet<Integer>();
+        var trimmed = new HashMap<Integer, String>();
         var insertedAfter = new LinkedHashMap<Integer, List<String>>();
         var prepended = new ArrayList<String>();
         for (var operation : plan.operations()) {
+            if (operation.headingTrim() != null) {
+                var trim = operation.headingTrim();
+                var index = anchorToViewIndex.get(trim.bodyIndex() + ":" + trim.paragraphIndex());
+                if (index != null) {
+                    trimmed.put(index, trim.keptHeading());
+                }
+            }
             for (var target : operation.deletionTargets()) {
                 var index = anchorToViewIndex.get(
                         target.bodyIndex() + ":" + target.paragraphIndex());
@@ -258,7 +307,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         expected.addAll(prepended);
         for (var i = 0; i < entries.size(); i++) {
             if (!deleted.contains(i)) {
-                expected.add(entries.get(i));
+                expected.add(trimmed.getOrDefault(i, entries.get(i)));
             }
             var insertions = insertedAfter.get(i);
             if (insertions != null) {
@@ -493,9 +542,41 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 problem[0] = deletedParagraphProblem(paragraph);
             } else if (isInserted(paragraph)) {
                 problem[0] = insertedParagraphProblem(paragraph);
+            } else {
+                problem[0] = keptParagraphProblem(paragraph);
             }
         });
         return problem[0];
+    }
+
+    /**
+     * A paragraph that stays may lose trailing text (clause text after a run-in heading) but
+     * never gains any: its deleted runs carry delText only, and it has no inserted runs.
+     */
+    private String keptParagraphProblem(P paragraph) {
+        var children = new ArrayList<Object>();
+        for (var raw : paragraph.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof P.Hyperlink hyperlink) {
+                hyperlink.getContent().forEach(child -> children.add(DocxRedlineSupport.unwrap(child)));
+            } else {
+                children.add(element);
+            }
+        }
+        for (var element : children) {
+            if (element instanceof RunIns) {
+                return "An existing paragraph carries inserted run content.";
+            }
+            if (element instanceof RunDel del) {
+                for (var wrapped : del.getCustomXmlOrSmartTagOrSdt()) {
+                    var run = DocxRedlineSupport.unwrap(wrapped);
+                    if (run instanceof R inner && runHasNormalText(inner)) {
+                        return "A tracked deletion carries normal text instead of delText.";
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /** M9 never mutates tables: any revision inside a table is unplanned. */

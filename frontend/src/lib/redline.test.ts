@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ApprovedChange } from '../api/workflow'
 import type { RedlineExecution } from '../api/redline'
 import { REDLINE_FAILURE_CODES } from '../api/redline'
+import { humanizeCode } from './domainLabels'
 import {
   buildRedlineChangeRows,
   classifyTriggerError,
@@ -9,6 +10,7 @@ import {
   redlineExecutionTitle,
   redlineFailureTitle,
   redlinePlacementLabel,
+  redlineRetryAvailable,
   redlineTriggerErrorNotice,
   redlineVerificationLabel,
   redlineVerificationOutcome,
@@ -22,6 +24,7 @@ function fixtureExecution(overrides: Partial<RedlineExecution> = {}): RedlineExe
     contractId: 'c-1',
     contractVersionNumber: 1,
     changeSetVersion: 1,
+    attempt: 1,
     status: 'COMPLETED',
     outcome: 'REDLINE_GENERATED',
     failureCode: null,
@@ -78,7 +81,7 @@ const approvedChanges: ApprovedChange[] = [
     actionType: 'INSERT',
     targetKind: 'ABSENCE',
     targetHeadingNodeId: null,
-    absenceConcept: 'CONFIDENTIALITY',
+    absenceConcept: 'CONFIDENTIALITY_OBLIGATIONS',
     approvedLanguage: 'Confidential information shall be protected.',
     languageSource: 'HUMAN_EDIT',
     approvedDraftingEvidenceId: null,
@@ -146,15 +149,15 @@ describe('execution titles and labels', () => {
   })
 
   it('formats backend placement labels without inferring placement', () => {
-    expect(redlinePlacementLabel('AFTER_CLAUSE[CONFIDENTIALITY]')).toBe(
-      'After clause: Confidentiality',
+    expect(redlinePlacementLabel('AFTER_CLAUSE[CONFIDENTIALITY_OBLIGATIONS]', humanizeCode)).toBe(
+      'After clause: Confidentiality obligations',
     )
-    expect(redlinePlacementLabel('BEFORE_SIGNATURE_BLOCK')).toBe(
+    expect(redlinePlacementLabel('BEFORE_SIGNATURE_BLOCK', humanizeCode)).toBe(
       'Before the signature block',
     )
-    expect(redlinePlacementLabel('END_OF_BODY')).toBe('At the end of the document')
-    expect(redlinePlacementLabel(null)).toBeNull()
-    expect(redlinePlacementLabel('SOMEWHERE_ELSE')).toBe('Placement recorded by Rivell')
+    expect(redlinePlacementLabel('END_OF_BODY', humanizeCode)).toBe('At the end of the document')
+    expect(redlinePlacementLabel(null, humanizeCode)).toBeNull()
+    expect(redlinePlacementLabel('SOMEWHERE_ELSE', humanizeCode)).toBe('Placement recorded by Rivell')
   })
 })
 
@@ -202,8 +205,8 @@ describe('change report rows', () => {
           status: 'APPLIED',
           verification: 'VERIFIED',
           failureCode: null,
-          placement: 'AFTER_CLAUSE[CONFIDENTIALITY]',
-          resolvedTarget: 'CONFIDENTIALITY',
+          placement: 'AFTER_CLAUSE[CONFIDENTIALITY_OBLIGATIONS]',
+          resolvedTarget: 'CONFIDENTIALITY_OBLIGATIONS',
           paragraphsDeleted: 0,
           paragraphsInserted: 1,
         },
@@ -225,6 +228,7 @@ describe('change report rows', () => {
     const rows = buildRedlineChangeRows(execution, {
       approvedChanges,
       regionLabels,
+      label: humanizeCode,
     })
     expect(rows).toHaveLength(3)
     expect(rows[0]).toMatchObject({
@@ -239,8 +243,8 @@ describe('change report rows', () => {
     })
     expect(rows[1]).toMatchObject({
       actionLabel: 'Insert provision',
-      targetLabel: 'Missing provision: Confidentiality',
-      placementLabel: 'After clause: Confidentiality',
+      targetLabel: 'Missing provision: Confidentiality obligations',
+      placementLabel: 'After clause: Confidentiality obligations',
       paragraphSummary: '1 paragraph inserted',
       findingId: 'f-2',
     })
@@ -266,8 +270,8 @@ describe('change report rows', () => {
         },
       ],
     })
-    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels })
-    expect(rows[0].targetLabel).toBe('Missing provision: Confidentiality')
+    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels, label: humanizeCode })
+    expect(rows[0].targetLabel).toBe('Missing provision: Confidentiality obligations')
     expect(rows[0].placementLabel).toBe('Before the signature block')
   })
 
@@ -297,7 +301,7 @@ describe('change report rows', () => {
         },
       ],
     })
-    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels })
+    const rows = buildRedlineChangeRows(execution, { approvedChanges, regionLabels, label: humanizeCode })
     expect(rows[0].targetLabel).toBe('8. Limitation of Liability')
     expect(rows[1].targetLabel).toBe('5. Term and Renewal')
   })
@@ -323,6 +327,7 @@ describe('change report rows', () => {
     const rows = buildRedlineChangeRows(execution, {
       approvedChanges: [],
       regionLabels,
+      label: humanizeCode,
     })
     expect(rows[0]).toMatchObject({
       actionLabel: 'Contract change',
@@ -362,10 +367,34 @@ describe('trigger error classification', () => {
     ).toBe('ENGINE_UNAVAILABLE')
     expect(
       classifyTriggerError({ status: 503, execution: null, executionStateKnown: true }),
-    ).toBe('ENGINE_UNAVAILABLE')
+    ).toBe('STORAGE_UNAVAILABLE')
     expect(
       classifyTriggerError({ status: null, execution: null, executionStateKnown: true }),
     ).toBe('TRANSPORT')
+  })
+
+  it('distinguishes artifact storage failure from an engine failure and keeps a retry honest', () => {
+    const storage = redlineTriggerErrorNotice('STORAGE_UNAVAILABLE')
+    const engine = redlineTriggerErrorNotice('ENGINE_UNAVAILABLE')
+
+    expect(storage).not.toBe(engine)
+    expect(storage).toMatch(/unchanged/i)
+    expect(storage).toMatch(/again|retry|later/i)
+    expect(storage).not.toMatch(/engine/i)
+  })
+
+  it('explains the two M10 failure codes without leaking internals or offering recovery', () => {
+    const drift = redlineFailureTitle('APPROVED_SEMANTICS_DRIFT')
+    const expansion = redlineFailureTitle('SOURCE_EXPANSION_LIMIT_EXCEEDED')
+
+    expect(drift).not.toBe(redlineFailureTitle('SOURCE_INTEGRITY_MISMATCH'))
+    expect(drift).toMatch(/semantics changed after/i)
+    expect(drift).toMatch(/unchanged/i)
+    expect(drift).not.toMatch(/recompute|re-run|run again|try again|Exception|com\.rivell/i)
+
+    expect(expansion).not.toBe(drift)
+    expect(expansion).toMatch(/size|expand/i)
+    expect(expansion).not.toMatch(/zip|xml|byte|central directory|Exception|com\.rivell/i)
   })
 
   it('gives distinct safe notices for every trigger error kind', () => {
@@ -376,10 +405,23 @@ describe('trigger error classification', () => {
       'NOT_AVAILABLE',
       'UNCONFIRMED',
       'ENGINE_UNAVAILABLE',
+      'STORAGE_UNAVAILABLE',
       'TRANSPORT',
     ] as const
     const notices = kinds.map((kind) => redlineTriggerErrorNotice(kind))
     expect(new Set(notices).size).toBe(kinds.length)
     for (const notice of notices) expect(notice.length).toBeGreaterThan(10)
+  })
+})
+
+describe('retry eligibility', () => {
+  it('offers a retry only for approved semantics drift, the one failure a later correction can change', () => {
+    expect(
+      redlineRetryAvailable(fixtureExecution({ status: 'FAILED', outcome: null, failureCode: 'APPROVED_SEMANTICS_DRIFT' })),
+    ).toBe(true)
+    expect(
+      redlineRetryAvailable(fixtureExecution({ status: 'FAILED', outcome: null, failureCode: 'TARGET_NOT_FOUND' })),
+    ).toBe(false)
+    expect(redlineRetryAvailable(fixtureExecution())).toBe(false)
   })
 })

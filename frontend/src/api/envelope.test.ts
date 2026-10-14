@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  errorMessage,
   parseApiResult,
+  readClosedString,
   readEnum,
+  readNullableClosedString,
   readNullableNumber,
   readNullableString,
   readNumber,
@@ -111,17 +112,20 @@ describe('guard primitives', () => {
   })
 })
 
-describe('errorMessage', () => {
-  it('prefers detail, then title, then message', () => {
-    expect(
-      errorMessage({ detail: 'The requested resource does not exist.', title: 'Not found' }, 'fallback'),
-    ).toBe('The requested resource does not exist.')
-    expect(errorMessage({ title: 'Not found' }, 'fallback')).toBe('Not found')
-    expect(errorMessage({ message: 'network' }, 'fallback')).toBe('network')
+const CLOSED = ['A', 'B'] as const
+
+describe('closed-string readers', () => {
+  it('degrades an unrecognised, non-string or absent value to UNKNOWN instead of throwing', () => {
+    expect(readClosedString({ k: 'A' }, 'k', CLOSED)).toBe('A')
+    expect(readClosedString({ k: 'C' }, 'k', CLOSED)).toBe('UNKNOWN')
+    expect(readClosedString({ k: 7 }, 'k', CLOSED)).toBe('UNKNOWN')
+    expect(readClosedString({}, 'k', CLOSED)).toBe('UNKNOWN')
   })
 
-  it('falls back for empty or non-object errors', () => {
-    expect(errorMessage(null, 'fallback')).toBe('fallback')
-    expect(errorMessage({ detail: '  ' }, 'fallback')).toBe('fallback')
+  it('treats an absent or null value as no value for the nullable reader', () => {
+    expect(readNullableClosedString({ k: null }, 'k', CLOSED)).toBeNull()
+    expect(readNullableClosedString({}, 'k', CLOSED)).toBeNull()
+    expect(readNullableClosedString({ k: 'C' }, 'k', CLOSED)).toBe('UNKNOWN')
+    expect(readNullableClosedString({ k: 'B' }, 'k', CLOSED)).toBe('B')
   })
 })

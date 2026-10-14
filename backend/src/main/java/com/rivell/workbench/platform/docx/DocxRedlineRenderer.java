@@ -14,19 +14,12 @@ import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.docx4j.XmlUtils;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
-import org.docx4j.wml.Br;
-import org.docx4j.wml.CTBookmark;
-import org.docx4j.wml.CTMarkupRange;
-import org.docx4j.wml.CTPerm;
 import org.docx4j.wml.CTPPrChange;
 import org.docx4j.wml.CTTrackChange;
-import org.docx4j.wml.CommentRangeEnd;
-import org.docx4j.wml.CommentRangeStart;
 import org.docx4j.wml.ObjectFactory;
 import org.docx4j.wml.P;
 import org.docx4j.wml.PPr;
 import org.docx4j.wml.ParaRPr;
-import org.docx4j.wml.ProofErr;
 import org.docx4j.wml.R;
 import org.docx4j.wml.RPr;
 import org.docx4j.wml.RunDel;
@@ -37,6 +30,7 @@ import org.docx4j.wml.Text;
 import org.springframework.stereotype.Component;
 
 import com.rivell.workbench.foundation.Hashes;
+import com.rivell.workbench.platform.parsing.WordText;
 import com.rivell.workbench.redline.AppliedChangeReport;
 import com.rivell.workbench.redline.DocumentExecutionPlan;
 import com.rivell.workbench.redline.PlannedDocumentOperation;
@@ -57,9 +51,19 @@ public class DocxRedlineRenderer implements RedlineRenderer {
 
     private final ObjectFactory factory = new ObjectFactory();
 
+    private static final String MAIN_DOCUMENT_ENTRY = "word/document.xml";
+
+    private final com.rivell.workbench.platform.parsing.DocxParserProperties properties;
+
+    public DocxRedlineRenderer(
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        this.properties = properties;
+    }
+
     @Override
     public RenderedRedline render(byte[] sourceBytes, DocumentExecutionPlan plan) {
-        var wordPackage = load(sourceBytes);
+        var loaded = load(sourceBytes);
+        var wordPackage = loaded.wordPackage();
         if (!DocxRedlineSupport.isDocxMainPart(wordPackage)) {
             throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_FORMAT, null,
                     "Only tracked-change-capable DOCX documents can be executed.");
@@ -75,6 +79,11 @@ public class DocxRedlineRenderer implements RedlineRenderer {
 
         var body = mainBody(wordPackage);
         var content = body.getContent();
+        if (!allBodyContentRepresented(sourceBytes, content)) {
+            // saving would silently drop the elements the package model could not read
+            throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE, null,
+                    "The source document has body content that cannot be carried into a redline.");
+        }
         var paragraphByAnchor = new HashMap<String, P>();
         for (var ref : DocxRedlineSupport.paragraphs(content)) {
             paragraphByAnchor.put(anchorKey(ref.bodyIndex(), ref.paragraphIndex()),
@@ -93,6 +102,10 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         var reports = new ArrayList<AppliedChangeReport>();
         for (var operation : resolved) {
             var start = nextId.get();
+            if (operation.trimmed() != null) {
+                trimHeading(operation.trimmed(), operation.operation(), nextId.getAndIncrement(),
+                        plan.author(), date);
+            }
             for (var target : operation.targets()) {
                 markDeleted(target, nextId, plan.author(), date);
             }
@@ -119,7 +132,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                     start, nextId.get() - 1));
         }
 
-        var bytes = serialize(wordPackage);
+        var bytes = serialize(wordPackage, loaded.packageBytes());
         return new RenderedRedline(bytes, Hashes.sha256Hex(bytes), reports);
     }
 
@@ -148,6 +161,19 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             validateSupportedInline(paragraph, operation.approvedChangeId(),
                     operation.ordinal());
             targets.add(paragraph);
+        }
+
+        P trimmed = null;
+        if (operation.headingTrim() != null) {
+            var trim = operation.headingTrim();
+            trimmed = paragraphByAnchor.get(anchorKey(trim.bodyIndex(), trim.paragraphIndex()));
+            if (trimmed == null
+                    || !DocxRedlineSupport.paragraphText(trimmed).equals(trim.expectedText())) {
+                throw failure(RedlineFailureCode.TARGET_NOT_FOUND, operation.approvedChangeId(),
+                        "Approved change " + operation.ordinal() + " (" + operation.actionType()
+                                + ") cannot be resolved against the frozen document.");
+            }
+            validateSupportedInline(trimmed, operation.approvedChangeId(), operation.ordinal());
         }
 
         Object rawAnchor = null;
@@ -208,10 +234,104 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                         operation.ordinal());
                 paragraphTemplate = templateParagraph.getPPr();
                 runTemplate = firstRunProperties(templateParagraph);
+            } else if (trimmed != null) {
+                // the clause had no body paragraph: new text takes the deleted clause text's
+                // run formatting, not the heading's
+                runTemplate = runPropertiesAfter(trimmed,
+                        operation.headingTrim().keptHeading().length());
             }
         }
-        return new ResolvedOperation(operation, targets, rawAnchor, anchorKey,
+        return new ResolvedOperation(operation, targets, trimmed, rawAnchor, anchorKey,
                 paragraphTemplate, runTemplate);
+    }
+
+    /**
+     * Tracked-deletes the clause text after a run-in heading in the same paragraph. The heading
+     * part stays untouched; a run that spans the boundary is split in two with the same
+     * formatting. A hyperlink that spans it cannot be split deterministically and fails closed.
+     */
+    private void trimHeading(
+            P paragraph, PlannedDocumentOperation operation, long revisionId, String author,
+            XMLGregorianCalendar date) {
+        var keep = operation.headingTrim().keptHeading().length();
+        var rewritten = new ArrayList<Object>(paragraph.getContent().size() + 1);
+        var offset = 0;
+        for (var raw : paragraph.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (!(element instanceof R) && !(element instanceof P.Hyperlink)) {
+                rewritten.add(raw);
+                continue;
+            }
+            var length = WordText.childText(raw).length();
+            if (offset + length <= keep) {
+                rewritten.add(raw);
+            } else if (offset >= keep) {
+                rewritten.add(element instanceof R run
+                        ? deletedRun(run, revisionId, author, date)
+                        : deletedHyperlink((P.Hyperlink) element, revisionId, author, date));
+            } else if (element instanceof R run) {
+                var parts = split(run, keep - offset);
+                rewritten.add(parts[0]);
+                rewritten.add(deletedRun(parts[1], revisionId, author, date));
+            } else {
+                throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
+                        operation.approvedChangeId(),
+                        "Approved change " + operation.ordinal()
+                                + " targets a clause whose heading and text share a hyperlink.");
+            }
+            offset += length;
+        }
+        paragraph.getContent().clear();
+        paragraph.getContent().addAll(rewritten);
+    }
+
+    /** Two runs with the run's formatting: the text before {@code at} and the text after. */
+    private R[] split(R run, int at) {
+        var head = factory.createR();
+        var tail = factory.createR();
+        if (run.getRPr() != null) {
+            head.setRPr(XmlUtils.deepCopy(run.getRPr()));
+            tail.setRPr(XmlUtils.deepCopy(run.getRPr()));
+        }
+        var offset = 0;
+        for (var raw : run.getContent()) {
+            var length = WordText.childText(raw).length();
+            if (offset + length <= at) {
+                head.getContent().add(raw);
+            } else if (offset >= at) {
+                tail.getContent().add(raw);
+            } else {
+                var value = ((Text) DocxRedlineSupport.unwrap(raw)).getValue();
+                head.getContent().add(text(value.substring(0, at - offset)));
+                tail.getContent().add(text(value.substring(at - offset)));
+            }
+            offset += length;
+        }
+        return new R[] {head, tail};
+    }
+
+    private Text text(String value) {
+        var text = factory.createText();
+        text.setValue(value);
+        text.setSpace("preserve");
+        return text;
+    }
+
+    /** Formatting of the first run that carries text after {@code offset}. */
+    private RPr runPropertiesAfter(P paragraph, int offset) {
+        var position = 0;
+        for (var raw : paragraph.getContent()) {
+            var element = DocxRedlineSupport.unwrap(raw);
+            if (element instanceof R run) {
+                position += WordText.childText(raw).length();
+                if (position > offset) {
+                    return run.getRPr();
+                }
+            } else if (element instanceof P.Hyperlink) {
+                position += WordText.childText(raw).length();
+            }
+        }
+        return null;
     }
 
     private void markDeleted(
@@ -368,46 +488,18 @@ public class DocxRedlineRenderer implements RedlineRenderer {
     }
 
     private void validateSupportedInline(P paragraph, UUID approvedChangeId, int ordinal) {
-        for (var raw : paragraph.getContent()) {
-            var element = DocxRedlineSupport.unwrap(raw);
-            if (element instanceof PPr || element instanceof ProofErr
-                    || element instanceof CTBookmark || element instanceof CTMarkupRange
-                    || element instanceof CTPerm || element instanceof CommentRangeStart
-                    || element instanceof CommentRangeEnd) {
-                continue;
-            }
-            if (element instanceof R run) {
-                validateRun(run, approvedChangeId, ordinal);
-            } else if (element instanceof P.Hyperlink hyperlink) {
-                for (var rawLinkChild : hyperlink.getContent()) {
-                    var linkChild = DocxRedlineSupport.unwrap(rawLinkChild);
-                    if (linkChild instanceof R run) {
-                        validateRun(run, approvedChangeId, ordinal);
-                    } else if (!(linkChild instanceof ProofErr
-                            || linkChild instanceof CTBookmark
-                            || linkChild instanceof CTMarkupRange
-                            || linkChild instanceof CommentRangeStart
-                            || linkChild instanceof CommentRangeEnd)) {
-                        throw unsupported(approvedChangeId, ordinal);
-                    }
-                }
-            } else {
-                throw unsupported(approvedChangeId, ordinal);
-            }
+        if (!TrackableContent.paragraph(paragraph)) {
+            throw unsupported(approvedChangeId, ordinal);
         }
     }
 
-    private void validateRun(R run, UUID approvedChangeId, int ordinal) {
-        for (var raw : run.getContent()) {
-            var element = DocxRedlineSupport.unwrap(raw);
-            if (element instanceof Text || element instanceof Br || element instanceof R.Cr
-                    || element instanceof R.Tab || element instanceof R.Sym
-                    || element instanceof R.SoftHyphen || element instanceof R.NoBreakHyphen
-                    || element instanceof R.LastRenderedPageBreak
-                    || element instanceof R.Ptab || element instanceof RPr) {
-                continue;
-            }
-            throw unsupported(approvedChangeId, ordinal);
+    private static boolean allBodyContentRepresented(byte[] sourceBytes, List<Object> content) {
+        try {
+            var mainXml = DocxRedlineSupport.entryBytes(sourceBytes, "word/document.xml");
+            return com.rivell.workbench.platform.parsing.ZipGuard.countTopLevelBodyChildren(mainXml)
+                    == content.size();
+        } catch (java.io.IOException e) {
+            return false;
         }
     }
 
@@ -431,19 +523,43 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         }
     }
 
-    private WordprocessingMLPackage load(byte[] sourceBytes) {
+    /**
+     * Loads the source with the same decompression bound the ingest parser applies, before docx4j
+     * materialises the package. Without it the redline path is the one place in the system where a
+     * crafted package reaches the heap unbounded, and it is reachable with stored bytes that were
+     * never re-checked after ingestion. Repairs the package first (after the bound), so a damaged
+     * source is read and output the way Word would repair it.
+     */
+    private LoadedSource load(byte[] sourceBytes) {
         try {
-            return WordprocessingMLPackage.load(new ByteArrayInputStream(sourceBytes));
+            com.rivell.workbench.platform.parsing.ZipGuard.verify(sourceBytes,
+                    properties.maxUncompressedBytes());
+            var repair = DocxPackageRepair.repair(sourceBytes);
+            return new LoadedSource(
+                    WordprocessingMLPackage.load(new ByteArrayInputStream(repair.bytes())),
+                    repair.bytes());
+        } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {
+            throw failure(RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED, null,
+                    "The source document expands beyond the permitted size for execution.");
         } catch (Exception e) {
             throw failure(RedlineFailureCode.DOCX_LOAD_FAILED, null,
                     "The source document could not be loaded for execution.");
         }
     }
 
-    private byte[] serialize(WordprocessingMLPackage wordPackage) {
+    /**
+     * The package as loaded (repaired when relationships dangled) with only the main document part
+     * replaced. docx4j re-serializes every part whose JAXB tree was read (the settings part is read
+     * for the protection check) and drops markup its schema rejects, so saving the whole package
+     * would change parts the redline never edits. Copying them from the loaded package keeps them
+     * byte-identical, and keeps the produced redline free of the dangling relationships the
+     * repaired read dropped.
+     */
+    private byte[] serialize(WordprocessingMLPackage wordPackage, byte[] sourceBytes) {
         try (var output = new ByteArrayOutputStream()) {
             wordPackage.save(output);
-            return output.toByteArray();
+            var document = DocxRedlineSupport.entryBytes(output.toByteArray(), MAIN_DOCUMENT_ENTRY);
+            return DocxRedlineSupport.withEntryReplaced(sourceBytes, MAIN_DOCUMENT_ENTRY, document);
         } catch (Exception e) {
             throw failure(RedlineFailureCode.DOCX_SERIALIZATION_FAILED, null,
                     "The redline document could not be serialized.");
@@ -462,9 +578,14 @@ public class DocxRedlineRenderer implements RedlineRenderer {
     private record ResolvedOperation(
             PlannedDocumentOperation operation,
             List<P> targets,
+            P trimmed,
             Object rawAnchor,
             Object anchorKey,
             PPr paragraphTemplate,
             RPr runTemplate) {
+    }
+
+    /** The loaded package and the bytes it was loaded from, after any package repair. */
+    private record LoadedSource(WordprocessingMLPackage wordPackage, byte[] packageBytes) {
     }
 }

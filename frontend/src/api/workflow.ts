@@ -178,8 +178,8 @@ export function parseDecision(value: unknown, what = 'decision'): HumanDecision 
       what,
     ),
     comment: readOptionalNullableString(decision, 'comment', what),
-    actorId: readOptionalNullableString(decision, 'actorId', what) ?? '',
-    decidedAt: readOptionalNullableString(decision, 'decidedAt', what) ?? '',
+    actorId: readString(decision, 'actorId', what),
+    decidedAt: readString(decision, 'decidedAt', what),
     clientRequestId: readOptionalNullableString(decision, 'clientRequestId', what),
     supersedesDecisionId: readOptionalNullableString(decision, 'supersedesDecisionId', what),
   }
@@ -389,6 +389,33 @@ export async function submitDecision(
   return parseApiResult(data, parseDecision, 'decision')
 }
 
+export type AddFindingInput = {
+  headingNodeId: string
+  severity: 'HIGH' | 'MEDIUM' | 'LOW'
+  note: string
+}
+
+/** Adds a finding Rivell missed on one planned clause; returns the new finding's id. */
+export async function addFinding(reviewId: string, input: AddFindingInput): Promise<string> {
+  const client = createApiClient()
+  const { data, response } = await client.POST('/api/reviews/{id}/findings', {
+    params: { path: { id: reviewId } },
+    body: input,
+  })
+  if (!data) throw new WorkflowApiError(response.status)
+  return parseApiResult(
+    data,
+    (value, what) => {
+      const record = value as Record<string, unknown> | null
+      if (!record || typeof record.findingId !== 'string') {
+        throw new Error(`${what} has no findingId`)
+      }
+      return record.findingId
+    },
+    'added finding',
+  )
+}
+
 export async function finalizeReview(reviewId: string): Promise<ApprovedChangeSet> {
   const client = createApiClient()
   const { data, response } = await client.POST('/api/reviews/{id}/finalize', {
@@ -470,7 +497,9 @@ export function useSubmitDecision(
               }
             : previous,
       )
-      void queryClient.invalidateQueries({ queryKey: workflowKeys.decisions(reviewId) })
+      // The decisions cache is written above from the server's own response, so it is deliberately
+      // not invalidated: doing both cost a second read on the hottest write path. Human review and
+      // the history are derived server-side and are still refetched.
       void queryClient.invalidateQueries({ queryKey: workflowKeys.humanReview(reviewId) })
       void queryClient.invalidateQueries({
         queryKey: ['reviews', 'decision-history', reviewId],
@@ -482,6 +511,26 @@ export function useSubmitDecision(
       if (isWorkflowConflictError(error)) {
         void queryClient.invalidateQueries({ queryKey: workflowKeys.changeSet(reviewId) })
       }
+    },
+  })
+}
+
+/**
+ * The added finding changes the findings, the clause marks and what still blocks finalizing, so
+ * all three are read again from the server.
+ */
+export function useAddFinding(reviewId: string): UseMutationResult<string, Error, AddFindingInput> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: AddFindingInput) => addFinding(reviewId, input),
+    retry: false,
+    networkMode: 'always',
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['reviews', 'findings', reviewId] }),
+        queryClient.invalidateQueries({ queryKey: ['reviews', 'clause-marks', reviewId] }),
+        queryClient.invalidateQueries({ queryKey: workflowKeys.humanReview(reviewId) }),
+      ])
     },
   })
 }

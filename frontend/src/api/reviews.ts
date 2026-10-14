@@ -1,15 +1,23 @@
-import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
+import { useRef } from 'react'
+import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type {
+  InfiniteData,
+  UseInfiniteQueryResult,
+  UseMutationResult,
+  UseQueryResult,
+} from '@tanstack/react-query'
 import { createApiClient } from './client'
-import { parseEvidenceItem } from './retrieval'
-import type { EvidenceItem } from './retrieval'
-import type { paths } from './schema'
+import { parseContractFact, parseEvidenceItem } from './retrieval'
+import type { EvidenceContractFact, EvidenceItem } from './retrieval'
+import type { components, paths } from './schema'
+import { boundedErrorMessage } from './errorMessage'
 import {
   asRecord,
-  errorMessage,
   malformed,
   parseApiResult,
   readArray,
+  readNumber,
+  readNumberMap,
   readOptionalBoolean,
   readOptionalNullableNumber,
   readOptionalNullableString,
@@ -36,6 +44,13 @@ export type FindingClassification = (typeof CLASSIFICATIONS)[number] | 'UNKNOWN'
 
 export const MAX_PAGE_LIMIT = 100
 
+/**
+ * How many rows Home asks for. Bounded on purpose: Home is a work queue, not an archive, and the
+ * backend rejects anything above its own maximum. Reviews the page does not show are reachable
+ * from Reviews, and Home says so when the response carries a continuation cursor.
+ */
+export const HOME_PAGE_LIMIT = 20
+
 export type AnalysisWarning = {
   checkKey: string
   status: string
@@ -61,6 +76,8 @@ export type ReviewSnapshot = {
   packVersion: string | null
   knowledgePinNumber: number | null
   effectiveOn: string | null
+  /** The review engine the review is frozen on: 'V1' (one review) or 'V2' (a second opinion when the first review is unsure). */
+  engine: string | null
 }
 
 export const COVERAGE_STATES = [
@@ -90,6 +107,24 @@ export type ReviewRun = {
   status: RunStatus
 }
 
+export type ReviewDocument = {
+  contractFilename: string
+  uploadedAt: string
+  sizeBytes: number
+}
+
+/**
+ * Rivell's own proposals for the counted generation. These are orientation before anyone
+ * decides, never a count of approved changes, and the three kinds are not equivalent:
+ * `replace` carries replacement wording, `insert` is a detected gap Rivell proposes no
+ * wording for, and `delete` is always zero because deletion is a human decision only.
+ */
+export type ProposedChangeCounts = {
+  replace: number
+  insert: number
+  delete: number
+}
+
 export type ReviewSummary = {
   id: string
   contractId: string
@@ -107,6 +142,8 @@ export type ReviewSummary = {
   failedChecks: number
   signals: number
   findings: number
+  proposedChanges: ProposedChangeCounts
+  document: ReviewDocument | null
   snapshot: ReviewSnapshot | null
   coverage: ReviewCoverage[]
   analysisWarnings: AnalysisWarning[]
@@ -129,18 +166,71 @@ export type ReviewProgress = {
   analysisWarningsTruncated: boolean
 }
 
+/** The human-declared context this review froze at creation. Never inferred by the client. */
+export type ReviewListContext = {
+  contractType: string | null
+  ourSideRole: string | null
+  paperSource: string | null
+  /** The real `UNSPECIFIED` constant when none was declared. */
+  jurisdiction: string | null
+}
+
+/** Named and counted exactly as the review's own human-review read. Readiness is the server's. */
+export type ReviewListHumanReview = {
+  status: string
+  actionableFindings: number
+  resolvedFindings: number
+  remainingFindings: number
+  escalated: number
+  readyToFinalize: boolean
+  /** Server-owned reason codes. `ANALYSIS_NOT_COMPLETE` is one: it is not human attention. */
+  blockers: string[]
+}
+
+/** Present only once the review is finalized. */
+export type ReviewListFinalization = {
+  finalizedAt: string
+  approvedChanges: number
+}
+
+/** Present only once a redline was requested. A failed execution carries no verified count. */
+export type ReviewListRedline = {
+  status: string
+  outcome: string | null
+  verifiedChangeCount: number | null
+  downloadAvailable: boolean
+  completedAt: string | null
+}
+
 export type ReviewListItem = {
   id: string
   contractId: string
   contractVersionNumber: number | null
+  /** The uploaded file's name. Null only when the server sends no filename. */
+  contractFilename: string | null
+  /** When the pinned contract version was uploaded. Not the review's creation time. */
+  uploadedAt: string | null
   status: ReviewStatus
+  failure: ReviewFailure | null
   createdAt: string
+  startedAt: string | null
   completedAt: string | null
+  plannedChecks: number
+  completedChecks: number
+  degradedChecks: number
+  failedChecks: number
+  findings: number
+  context: ReviewListContext | null
+  humanReview: ReviewListHumanReview | null
+  finalization: ReviewListFinalization | null
+  redline: ReviewListRedline | null
 }
 
 export type ReviewListResponse = {
   items: ReviewListItem[]
   truncated: boolean
+  /** Non-null exactly when more rows exist beyond this page. */
+  nextCursor: string | null
 }
 
 export type FindingSubjectKind = 'CLAUSE' | 'ABSENCE' | 'UNKNOWN'
@@ -158,7 +248,17 @@ export type FindingSummary = {
   reviewClassification: FindingClassification
   proposedAction: string
   proposedLanguageSource: string
+  /** True when the position governs a topic the clause only touches: a LOW note, not a breach. */
+  relatedPosition: boolean
+  /** Who decided: 'JEV' (Rivell's first review), 'SECOND_OPINION' or 'NEEDS_YOUR_LOOK' (the user decides). Null for other findings. */
+  decidedBy: string | null
   createdAt: string
+  /** The user who added this finding because Rivell missed it; null for Rivell's own findings. */
+  addedBy: string | null
+  /** A "needs your look" item's first-review answer (a comparison category); null otherwise. */
+  firstReviewCategory: string | null
+  /** The missing playbook position's own label on an omission finding; null otherwise. */
+  positionLabel: string | null
 }
 
 export type FindingListResponse = {
@@ -178,11 +278,77 @@ export type FindingQuality = {
   sufficiency: string | null
   verificationOutcome: string | null
   degradationFlags: string[]
+  /** The policy comparison's code-owned category. Null for findings from other checks. */
+  category: string | null
+  /** The model's summed flag probability on a 0–1 scale. An estimate, never a certainty. */
+  flagProbability: number | null
+  /** The per-option probabilities the flag probability was summed from. */
+  probabilities: Record<string, number>
+  /** True when the position governs a topic the clause only touches, not its own subject. */
+  secondaryTopic: boolean
+  /** The uncovered-clause triage's probability on the same 0–1 scale. An estimate too. */
+  uncoveredProbability: number | null
+  /** Who decided: 'JEV' (Rivell's first review), 'SECOND_OPINION' or 'NEEDS_YOUR_LOOK'. */
+  route: string | null
+  /** The first review's own answer on a "needs your look" item (a comparison category). */
+  jevCategory: string | null
+  /** AGREED, DISAGREED, UNAVAILABLE, INVALID or OVER_BUDGET. */
+  secondOpinionOutcome: string | null
+  secondOpinionCategory: string | null
+  /** The clause words the second opinion rests on: model output, shown as a quote. */
+  secondOpinionQuote: string | null
+  secondOpinionReason: string | null
+  /** Why Rivell left the item to the user: playbook_silent, omission_unsure, second_opinion_unavailable. */
+  uncertaintyReason: string | null
+  /** 'SEARCH' when the position was found by searching the playbook for the clause's text. */
+  foundBy: string | null
+  /** The whole-contract read's own severity (HIGH or MEDIUM) and reason for a playbook-silent pick. */
+  spottedSeverity: string | null
+  spottedReason: string | null
+  /** Omission check: the estimate that the playbook position requires the provision, 0–1. */
+  presenceProbability: number | null
 }
 
 export type AbsenceBasis = {
   planCheckId: string
   checkKey: string
+}
+
+/**
+ * The finding's own positions, grouped by the server into the slots the Workspace compares. Each
+ * slot lists every cited item that holds the role, in the finding's frozen evidence order, and each
+ * carries the evidence id that opens its source.
+ */
+export type ContractPositionSlot = {
+  evidenceItemId: string
+  authorityClass: string
+  legalConcept: string | null
+  /** Typed facts extracted from the frozen clause. There is no sentence to read instead. */
+  facts: EvidenceContractFact[]
+}
+
+export type PolicyPositionSlot = {
+  evidenceItemId: string
+  authorityClass: string
+  legalConcept: string | null
+  publicationNumber: number | null
+  /** The authored wording, verbatim. */
+  text: string
+}
+
+export type EscalationSlot = {
+  evidenceItemId: string
+  authorityClass: string
+  publicationNumber: number | null
+  trigger: string
+}
+
+export type PositionComparison = {
+  contract: ContractPositionSlot[]
+  preferred: PolicyPositionSlot[]
+  fallback: PolicyPositionSlot[]
+  walkAway: PolicyPositionSlot[]
+  escalation: EscalationSlot[]
 }
 
 export type FindingDetail = FindingSummary & {
@@ -197,6 +363,8 @@ export type FindingDetail = FindingSummary & {
   claims: FindingClaim[]
   evidenceItemIds: string[]
   evidenceItems: EvidenceItem[]
+  /** Null when the server found no position data in the finding's evidence. */
+  positionComparison: PositionComparison | null
   signalIds: string[]
   absenceBasis: AbsenceBasis | null
 }
@@ -285,6 +453,26 @@ function parseSnapshot(value: unknown, what: string): ReviewSnapshot | null {
     packVersion: readOptionalNullableString(snapshot, 'packVersion', what),
     knowledgePinNumber: readOptionalNullableNumber(snapshot, 'knowledgePinNumber', what),
     effectiveOn: readOptionalNullableString(snapshot, 'effectiveOn', what),
+    engine: readOptionalNullableString(snapshot, 'engine', what),
+  }
+}
+
+function parseProposedChangeCounts(value: unknown, what: string): ProposedChangeCounts {
+  const counts = value === null || value === undefined ? {} : asRecord(value, what)
+  return {
+    replace: readOptionalNumber(counts, 'replace', what),
+    insert: readOptionalNumber(counts, 'insert', what),
+    delete: readOptionalNumber(counts, 'delete', what),
+  }
+}
+
+function parseReviewDocument(value: unknown, what: string): ReviewDocument | null {
+  if (value === null || value === undefined) return null
+  const document = asRecord(value, what)
+  return {
+    contractFilename: readString(document, 'contractFilename', what),
+    uploadedAt: readString(document, 'uploadedAt', what),
+    sizeBytes: readNumber(document, 'sizeBytes', what),
   }
 }
 
@@ -343,6 +531,8 @@ export function parseReviewSummary(value: unknown, what = 'review summary'): Rev
     failedChecks: readOptionalNumber(summary, 'failedChecks', what),
     signals: readOptionalNumber(summary, 'signals', what),
     findings: readOptionalNumber(summary, 'findings', what),
+    proposedChanges: parseProposedChangeCounts(summary.proposedChanges, what),
+    document: parseReviewDocument(summary.document, what),
     snapshot: parseSnapshot(summary.snapshot, what),
     coverage: readArray(summary, 'coverage', what, parseCoverage),
     analysisWarnings: readArray(summary, 'analysisWarnings', what, parseAnalysisWarning),
@@ -377,15 +567,75 @@ export function parseReviewProgress(value: unknown, what = 'review progress'): R
   }
 }
 
+function parseListContext(value: unknown, what: string): ReviewListContext | null {
+  if (value === null || value === undefined) return null
+  const context = asRecord(value, what)
+  return {
+    contractType: readOptionalNullableString(context, 'contractType', what),
+    ourSideRole: readOptionalNullableString(context, 'ourSideRole', what),
+    paperSource: readOptionalNullableString(context, 'paperSource', what),
+    jurisdiction: readOptionalNullableString(context, 'jurisdiction', what),
+  }
+}
+
+function parseListHumanReview(value: unknown, what: string): ReviewListHumanReview | null {
+  if (value === null || value === undefined) return null
+  const human = asRecord(value, what)
+  return {
+    status: readString(human, 'status', what),
+    actionableFindings: readOptionalNumber(human, 'actionableFindings', what),
+    resolvedFindings: readOptionalNumber(human, 'resolvedFindings', what),
+    remainingFindings: readOptionalNumber(human, 'remainingFindings', what),
+    escalated: readOptionalNumber(human, 'escalated', what),
+    // A missing flag is never read as ready.
+    readyToFinalize: readOptionalBoolean(human, 'readyToFinalize', what),
+    blockers: human.blockers === undefined || human.blockers === null ? [] : readStringArray(human, 'blockers', what),
+  }
+}
+
+function parseListFinalization(value: unknown, what: string): ReviewListFinalization | null {
+  if (value === null || value === undefined) return null
+  const finalization = asRecord(value, what)
+  return {
+    finalizedAt: readString(finalization, 'finalizedAt', what),
+    approvedChanges: readOptionalNumber(finalization, 'approvedChanges', what),
+  }
+}
+
+function parseListRedline(value: unknown, what: string): ReviewListRedline | null {
+  if (value === null || value === undefined) return null
+  const redline = asRecord(value, what)
+  return {
+    status: readString(redline, 'status', what),
+    outcome: readOptionalNullableString(redline, 'outcome', what),
+    verifiedChangeCount: readOptionalNullableNumber(redline, 'verifiedChangeCount', what),
+    downloadAvailable: readOptionalBoolean(redline, 'downloadAvailable', what),
+    completedAt: readOptionalNullableString(redline, 'completedAt', what),
+  }
+}
+
 function parseReviewListItem(value: unknown, what: string): ReviewListItem {
   const item = asRecord(value, what)
   return {
     id: readString(item, 'id', what),
     contractId: readString(item, 'contractId', what),
     contractVersionNumber: readOptionalNullableNumber(item, 'contractVersionNumber', what),
+    contractFilename: readOptionalNullableString(item, 'contractFilename', what),
+    uploadedAt: readOptionalNullableString(item, 'uploadedAt', what),
     status: readStatus(item, 'status', REVIEW_STATUSES),
+    failure: parseFailure(item.failure, what),
     createdAt: readString(item, 'createdAt', what),
+    startedAt: readOptionalNullableString(item, 'startedAt', what),
     completedAt: readOptionalNullableString(item, 'completedAt', what),
+    plannedChecks: readOptionalNumber(item, 'plannedChecks', what),
+    completedChecks: readOptionalNumber(item, 'completedChecks', what),
+    degradedChecks: readOptionalNumber(item, 'degradedChecks', what),
+    failedChecks: readOptionalNumber(item, 'failedChecks', what),
+    findings: readOptionalNumber(item, 'findings', what),
+    context: parseListContext(item.context, what),
+    humanReview: parseListHumanReview(item.humanReview, what),
+    finalization: parseListFinalization(item.finalization, what),
+    redline: parseListRedline(item.redline, what),
   }
 }
 
@@ -397,6 +647,7 @@ export function parseReviewList(
   return {
     items: readArray(list, 'items', what, parseReviewListItem),
     truncated: readOptionalBoolean(list, 'truncated', what),
+    nextCursor: readOptionalNullableString(list, 'nextCursor', what),
   }
 }
 
@@ -416,7 +667,39 @@ function parseFindingSummary(value: unknown, what: string): FindingSummary {
     proposedAction: readOptionalNullableString(finding, 'proposedAction', what) ?? 'UNKNOWN',
     proposedLanguageSource:
       readOptionalNullableString(finding, 'proposedLanguageSource', what) ?? 'UNKNOWN',
+    relatedPosition: readOptionalBoolean(finding, 'relatedPosition', what),
+    decidedBy: readOptionalNullableString(finding, 'decidedBy', what),
     createdAt: readOptionalNullableString(finding, 'createdAt', what) ?? '',
+    addedBy: readOptionalNullableString(finding, 'addedBy', what),
+    firstReviewCategory: readOptionalNullableString(finding, 'firstReviewCategory', what),
+    positionLabel: readOptionalNullableString(finding, 'positionLabel', what),
+  }
+}
+
+const CLAUSE_MARKS = ['FLAGGED', 'CHECKED', 'NOT_COVERED', 'NOT_ANALYSED'] as const
+
+/** What a review did with one planned clause (spec §9). */
+export type ClauseMark = (typeof CLAUSE_MARKS)[number]
+
+export type ClauseMarksResponse = {
+  /** Null while no analysis has completed: there is nothing to mark yet. */
+  runId: string | null
+  clauses: { headingNodeId: string; mark: ClauseMark }[]
+}
+
+function parseClauseMarks(value: unknown, what: string): ClauseMarksResponse {
+  const record = asRecord(value, what)
+  return {
+    runId: readOptionalNullableString(record, 'runId', what),
+    clauses: readArray(record, 'clauses', what, (entry, entryWhat) => {
+      const clause = asRecord(entry, entryWhat)
+      const mark = readStatus(clause, 'mark', CLAUSE_MARKS)
+      return {
+        headingNodeId: readString(clause, 'headingNodeId', entryWhat),
+        // an unknown mark is shown as not analysed: never as checked
+        mark: mark === 'UNKNOWN' ? 'NOT_ANALYSED' : mark,
+      }
+    }),
   }
 }
 
@@ -451,10 +734,39 @@ function parseClaim(value: unknown, what: string): FindingClaim {
 function parseQuality(value: unknown, what: string): FindingQuality | null {
   if (value === null || value === undefined) return null
   const quality = asRecord(value, what)
+  const flagProbability = readOptionalNullableNumber(quality, 'flagProbability', what)
+  const uncoveredProbability = readOptionalNullableNumber(quality, 'uncoveredProbability', what)
+  const presenceProbability = readOptionalNullableNumber(quality, 'presenceProbability', what)
   return {
     sufficiency: readOptionalNullableString(quality, 'sufficiency', what),
     verificationOutcome: readOptionalNullableString(quality, 'verificationOutcome', what),
     degradationFlags: parseOptionalStringArray(quality, 'degradationFlags', what),
+    category: readOptionalNullableString(quality, 'category', what),
+    // A probability outside 0–1 is not on the scale the comparison uses, so it is not shown.
+    flagProbability:
+      flagProbability !== null && flagProbability >= 0 && flagProbability <= 1
+        ? flagProbability
+        : null,
+    probabilities: readNumberMap(quality, 'probabilities', what),
+    secondaryTopic: readOptionalBoolean(quality, 'secondaryTopic', what),
+    uncoveredProbability:
+      uncoveredProbability !== null && uncoveredProbability >= 0 && uncoveredProbability <= 1
+        ? uncoveredProbability
+        : null,
+    route: readOptionalNullableString(quality, 'route', what),
+    jevCategory: readOptionalNullableString(quality, 'jevCategory', what),
+    secondOpinionOutcome: readOptionalNullableString(quality, 'secondOpinionOutcome', what),
+    secondOpinionCategory: readOptionalNullableString(quality, 'secondOpinionCategory', what),
+    secondOpinionQuote: readOptionalNullableString(quality, 'secondOpinionQuote', what),
+    secondOpinionReason: readOptionalNullableString(quality, 'secondOpinionReason', what),
+    uncertaintyReason: readOptionalNullableString(quality, 'uncertaintyReason', what),
+    foundBy: readOptionalNullableString(quality, 'foundBy', what),
+    spottedSeverity: readOptionalNullableString(quality, 'spottedSeverity', what),
+    spottedReason: readOptionalNullableString(quality, 'spottedReason', what),
+    presenceProbability:
+      presenceProbability !== null && presenceProbability >= 0 && presenceProbability <= 1
+        ? presenceProbability
+        : null,
   }
 }
 
@@ -464,6 +776,55 @@ function parseAbsenceBasis(value: unknown, what: string): AbsenceBasis | null {
   return {
     planCheckId: readOptionalNullableString(basis, 'planCheckId', what) ?? '',
     checkKey: readOptionalNullableString(basis, 'checkKey', what) ?? 'UNKNOWN',
+  }
+}
+
+// A slot list the server leaves out is an empty slot. Nothing is filled in for it.
+function readSlots<T>(
+  source: Record<string, unknown>,
+  key: string,
+  what: string,
+  parseItem: (item: unknown, what: string) => T,
+): T[] {
+  return source[key] === undefined || source[key] === null ? [] : readArray(source, key, what, parseItem)
+}
+
+function parsePositionComparison(value: unknown, what: string): PositionComparison | null {
+  if (value === null || value === undefined) return null
+  const comparison = asRecord(value, what)
+  return {
+    contract: readSlots(comparison, 'contract', what, (item, label) => {
+      const slot = asRecord(item, label)
+      return {
+        evidenceItemId: readString(slot, 'evidenceItemId', label),
+        authorityClass: readOptionalNullableString(slot, 'authorityClass', label) ?? 'UNKNOWN',
+        legalConcept: readOptionalNullableString(slot, 'legalConcept', label),
+        facts: readSlots(slot, 'facts', label, parseContractFact),
+      }
+    }),
+    preferred: readSlots(comparison, 'preferred', what, parsePolicyPositionSlot),
+    fallback: readSlots(comparison, 'fallback', what, parsePolicyPositionSlot),
+    walkAway: readSlots(comparison, 'walkAway', what, parsePolicyPositionSlot),
+    escalation: readSlots(comparison, 'escalation', what, (item, label) => {
+      const slot = asRecord(item, label)
+      return {
+        evidenceItemId: readString(slot, 'evidenceItemId', label),
+        authorityClass: readOptionalNullableString(slot, 'authorityClass', label) ?? 'UNKNOWN',
+        publicationNumber: readOptionalNullableNumber(slot, 'publicationNumber', label),
+        trigger: readOptionalNullableString(slot, 'trigger', label) ?? '',
+      }
+    }),
+  }
+}
+
+function parsePolicyPositionSlot(item: unknown, what: string): PolicyPositionSlot {
+  const slot = asRecord(item, what)
+  return {
+    evidenceItemId: readString(slot, 'evidenceItemId', what),
+    authorityClass: readOptionalNullableString(slot, 'authorityClass', what) ?? 'UNKNOWN',
+    legalConcept: readOptionalNullableString(slot, 'legalConcept', what),
+    publicationNumber: readOptionalNullableNumber(slot, 'publicationNumber', what),
+    text: readOptionalNullableString(slot, 'text', what) ?? '',
   }
 }
 
@@ -487,6 +848,7 @@ export function parseFindingDetail(value: unknown, what = 'finding detail'): Fin
     claims: readArray(finding, 'claims', what, parseClaim),
     evidenceItemIds: parseOptionalStringArray(finding, 'evidenceItemIds', what),
     evidenceItems: readArray(finding, 'evidenceItems', what, parseEvidenceItem),
+    positionComparison: parsePositionComparison(finding.positionComparison, what),
     signalIds: readStringArray(finding, 'signalIds', what),
     absenceBasis: parseAbsenceBasis(finding.absenceBasis, what),
   }
@@ -500,8 +862,33 @@ export function isReviewPending(status: ReviewStatus | undefined | null): boolea
   return status === 'ANALYSIS_QUEUED' || status === 'ANALYZING'
 }
 
+// A review whose background worker is not running stays queued forever, so the poll is bounded
+// rather than running for the life of the page. The review read is the only way to notice a
+// completion, so this is a cap on patience, not a limit on correctness.
+//
+// The budget has to cover the project's own reference happy path: scripts/demo-reproduction.sh
+// waits 90 x 4s = 360s for the same run. A shorter cap let the UI give up while the reference path
+// was still working, and the pending states carry no refresh control, so the page then sat on a
+// stale "analysing" view until a full reload.
+export const REVIEW_POLL_INTERVAL_MS = 2500
+export const POLL_BUDGET_MS = 360_000
+export const MAX_POLL_ATTEMPTS = Math.ceil(POLL_BUDGET_MS / REVIEW_POLL_INTERVAL_MS)
+
 export function reviewPollInterval(status: ReviewStatus | undefined | null): number | false {
-  return isReviewPending(status) ? 2500 : false
+  return isReviewPending(status) ? REVIEW_POLL_INTERVAL_MS : false
+}
+
+const REVIEW_MESSAGES: Partial<Record<number, string>> = {
+  403: 'You do not have permission to read this review.',
+  404: 'That review could not be found.',
+  409: 'That review request does not apply in the current state.',
+  500: 'The review could not be loaded.',
+  503: 'The review service is unavailable right now.',
+}
+
+const REVIEW_PACK_MESSAGES: Partial<Record<number, string>> = {
+  500: 'The review pack catalog could not be loaded.',
+  503: 'The review pack catalog service is unavailable right now.',
 }
 
 class ReviewApiError extends Error {
@@ -514,14 +901,6 @@ class ReviewApiError extends Error {
   }
 }
 
-export function isReviewBadRequestError(error: unknown): boolean {
-  return error instanceof ReviewApiError && error.status === 400
-}
-
-export function isReviewConflictError(error: unknown): boolean {
-  return error instanceof ReviewApiError && error.status === 409
-}
-
 export function isReviewNotFoundError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 404
 }
@@ -530,13 +909,20 @@ export function isReviewForbiddenError(error: unknown): boolean {
   return error instanceof ReviewApiError && error.status === 403
 }
 
+export function reviewErrorStatus(error: unknown): number | null {
+  return error instanceof ReviewApiError ? error.status : null
+}
+
 function reviewRetry(failureCount: number, error: Error): boolean {
-  return failureCount < 1 && !isReviewNotFoundError(error)
+  // A permission denial or a missing resource cannot become true on a second identical request.
+  return failureCount < 1 && !isReviewNotFoundError(error) && !isReviewForbiddenError(error)
 }
 
 export const reviewKeys = {
   packs: () => ['reviews', 'packs'] as const,
   list: (contractId: string) => ['reviews', 'list', contractId] as const,
+  organization: () => ['reviews', 'organization'] as const,
+  history: () => ['reviews', 'history'] as const,
   summary: (reviewId: string) => ['reviews', 'summary', reviewId] as const,
   progress: (reviewId: string) => ['reviews', 'progress', reviewId] as const,
   findings: (reviewId: string, filters: FindingFilters) =>
@@ -550,13 +936,17 @@ export const reviewKeys = {
     ] as const,
   finding: (reviewId: string, findingId: string) =>
     ['reviews', 'finding', reviewId, findingId] as const,
+  clauseMarks: (reviewId: string) => ['reviews', 'clause-marks', reviewId] as const,
 }
 
 export async function fetchReviewPacks(): Promise<ReviewPack[]> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/packs')
+  const { data, response } = await client.GET('/api/reviews/packs')
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review pack catalog unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_PACK_MESSAGES, 'Review pack catalog unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(
     data,
@@ -576,33 +966,105 @@ export function useReviewPacksQuery(): UseQueryResult<ReviewPack[]> {
 
 export async function fetchReviewList(contractId: string): Promise<ReviewListResponse> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews', {
+  const { data, response } = await client.GET('/api/reviews', {
     params: { query: { contractId, limit: MAX_PAGE_LIMIT } },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review list unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review list unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewList, 'review list')
 }
 
+/** One page of the newest reviews across the whole organization. */
+export async function fetchOrganizationReviewList(): Promise<ReviewListResponse> {
+  const client = createApiClient()
+  // contractId is deliberately omitted: Home shows all review work in one read. Enumerating
+  // contracts first and then reading reviews per contract is the N+1 this endpoint removes.
+  const { data, response } = await client.GET('/api/reviews', {
+    params: { query: { limit: HOME_PAGE_LIMIT } },
+  })
+  if (!data) {
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review list unavailable'),
+      response.status,
+    )
+  }
+  return parseApiResult(data, parseReviewList, 'review list')
+}
+
+/**
+ * Page size for the Reviews history. Larger than Home's queue because this page is the archive,
+ * and still well under the backend maximum.
+ */
+export const REVIEW_HISTORY_PAGE_LIMIT = 25
+
+async function fetchReviewHistoryPage(cursor: string | undefined): Promise<ReviewListResponse> {
+  const client = createApiClient()
+  const { data, response } = await client.GET('/api/reviews', {
+    params: { query: { limit: REVIEW_HISTORY_PAGE_LIMIT, ...(cursor ? { cursor } : {}) } },
+  })
+  if (!data) {
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review list unavailable'),
+      response.status,
+    )
+  }
+  return parseApiResult(data, parseReviewList, 'review list')
+}
+
+/**
+ * Every review in the organization, newest first, one cursor page at a time. Nothing is fetched
+ * ahead of the reviewer: more pages load only when they ask for them.
+ */
+export function useReviewHistoryQuery(): UseInfiniteQueryResult<
+  InfiniteData<ReviewListResponse, string | undefined>
+> {
+  return useInfiniteQuery({
+    queryKey: reviewKeys.history(),
+    queryFn: ({ pageParam }) => fetchReviewHistoryPage(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    staleTime: 15_000,
+    retry: reviewRetry,
+  })
+}
+
+export function useOrganizationReviewsQuery(): UseQueryResult<ReviewListResponse> {
+  return useQuery({
+    queryKey: reviewKeys.organization(),
+    queryFn: fetchOrganizationReviewList,
+    staleTime: 15_000,
+    retry: reviewRetry,
+  })
+}
+
 export async function fetchReviewSummary(reviewId: string): Promise<ReviewSummary> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/{id}', {
+  const { data, response } = await client.GET('/api/reviews/{id}', {
     params: { path: { id: reviewId } },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewSummary, 'review summary')
 }
 
 export async function fetchReviewProgress(reviewId: string): Promise<ReviewProgress> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/{id}/progress', {
+  const { data, response } = await client.GET('/api/reviews/{id}/progress', {
     params: { path: { id: reviewId } },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review progress unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Review progress unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseReviewProgress, 'review progress')
 }
@@ -612,7 +1074,7 @@ export async function fetchFindingList(
   filters: FindingFilters,
 ): Promise<FindingListResponse> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET('/api/reviews/{id}/findings', {
+  const { data, response } = await client.GET('/api/reviews/{id}/findings', {
     params: {
       path: { id: reviewId },
       query: {
@@ -624,9 +1086,26 @@ export async function fetchFindingList(
     },
   })
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Findings unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Findings unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseFindingList, 'finding list')
+}
+
+export async function fetchClauseMarks(reviewId: string): Promise<ClauseMarksResponse> {
+  const client = createApiClient()
+  const { data, response } = await client.GET('/api/reviews/{id}/clause-marks', {
+    params: { path: { id: reviewId } },
+  })
+  if (!data) {
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Clause marks unavailable'),
+      response.status,
+    )
+  }
+  return parseApiResult(data, parseClauseMarks, 'clause marks')
 }
 
 export async function fetchFindingDetail(
@@ -634,12 +1113,15 @@ export async function fetchFindingDetail(
   findingId: string,
 ): Promise<FindingDetail> {
   const client = createApiClient()
-  const { data, error, response } = await client.GET(
+  const { data, response } = await client.GET(
     '/api/reviews/{id}/findings/{findingId}',
     { params: { path: { id: reviewId, findingId } } },
   )
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Finding unavailable'), response.status)
+    throw new ReviewApiError(
+      boundedErrorMessage(response.status, REVIEW_MESSAGES, 'Finding unavailable'),
+      response.status,
+    )
   }
   return parseApiResult(data, parseFindingDetail, 'finding detail')
 }
@@ -648,17 +1130,23 @@ export async function createReview(
   contractId: string,
   versionNumber: number,
   contractPackKey?: string | null,
+  clientRequestId?: string | null,
 ): Promise<ReviewSummary> {
   const client = createApiClient()
-  const { data, error, response } = await client.POST(
+  const body: components['schemas']['CreateReviewRequest'] = {}
+  if (contractPackKey) body.contractPackKey = contractPackKey
+  if (clientRequestId) body.clientRequestId = clientRequestId
+  const { data, response } = await client.POST(
     '/api/contracts/{contractId}/versions/{versionNumber}/reviews',
     {
       params: { path: { contractId, versionNumber } },
-      body: contractPackKey ? { contractPackKey } : {},
+      body,
     },
   )
   if (!data) {
-    throw new ReviewApiError(errorMessage(error, 'Review creation failed'), response.status)
+    // The create panel classifies this by status, so this message is never rendered. It exists only
+    // so the thrown error is still readable in a log or a test.
+    throw new ReviewApiError('Review creation failed.', response.status)
   }
   return parseApiResult(data, parseReviewSummary, 'review summary')
 }
@@ -673,12 +1161,21 @@ export function useContractReviewsQuery(contractId: string): UseQueryResult<Revi
 }
 
 export function useReviewSummaryQuery(reviewId: string | undefined): UseQueryResult<ReviewSummary> {
+  const pollAttempts = useRef(0)
   return useQuery({
     queryKey: reviewKeys.summary(reviewId ?? ''),
     queryFn: reviewId ? () => fetchReviewSummary(reviewId) : skipToken,
     enabled: Boolean(reviewId),
     retry: reviewRetry,
-    refetchInterval: (query) => reviewPollInterval(query.state.data?.status),
+    refetchInterval: (query) => {
+      if (query.state.data?.status !== 'ANALYSIS_QUEUED' && query.state.data?.status !== 'ANALYZING') {
+        pollAttempts.current = 0
+        return false
+      }
+      if (pollAttempts.current >= MAX_POLL_ATTEMPTS) return false
+      pollAttempts.current += 1
+      return reviewPollInterval(query.state.data?.status)
+    },
   })
 }
 
@@ -709,6 +1206,19 @@ export function useFindingsQuery(
   })
 }
 
+/** What the active run did with each planned clause; refetched when a finding is added. */
+export function useClauseMarksQuery(
+  reviewId: string | undefined,
+  enabled: boolean,
+): UseQueryResult<ClauseMarksResponse> {
+  return useQuery({
+    queryKey: reviewKeys.clauseMarks(reviewId ?? ''),
+    queryFn: reviewId ? () => fetchClauseMarks(reviewId) : skipToken,
+    enabled: Boolean(reviewId) && enabled,
+    retry: reviewRetry,
+  })
+}
+
 export function useFindingQuery(
   reviewId: string | undefined,
   findingId: string | null,
@@ -724,10 +1234,15 @@ export function useFindingQuery(
 export function useCreateReview(
   contractId: string,
   versionNumber: number,
-): UseMutationResult<ReviewSummary, Error, { contractPackKey?: string | null }> {
+): UseMutationResult<
+  ReviewSummary,
+  Error,
+  { contractPackKey?: string | null; clientRequestId?: string | null }
+> {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ contractPackKey }) => createReview(contractId, versionNumber, contractPackKey),
+    mutationFn: ({ contractPackKey, clientRequestId }) =>
+      createReview(contractId, versionNumber, contractPackKey, clientRequestId),
     retry: false,
     networkMode: 'always',
     onSuccess: (summary) => {

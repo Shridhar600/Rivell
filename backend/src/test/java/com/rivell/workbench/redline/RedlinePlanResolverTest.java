@@ -1,5 +1,7 @@
 package com.rivell.workbench.redline;
 
+import com.rivell.workbench.taxonomy.CoreConcepts;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -10,7 +12,6 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
-import com.rivell.workbench.contracts.LegalConcept;
 
 import static com.rivell.workbench.redline.RedlineTestStructures.Table;
 import static com.rivell.workbench.redline.RedlineTestStructures.clause;
@@ -41,8 +42,8 @@ class RedlinePlanResolverTest {
                         text("Old cap continuation.")),
                 clause("3. Governing Law", text("Delaware law."))));
         var conceptByHeading = concepts(structure, Map.of(
-                "1. Services", LegalConcept.GOVERNING_LAW,
-                "2. Limitation of Liability", LegalConcept.LIMITATION_OF_LIABILITY));
+                "1. Services", CoreConcepts.GOVERNING_LAW,
+                "2. Limitation of Liability", CoreConcepts.LIMITATION_OF_LIABILITY));
         var changeSetId = UUID.randomUUID();
         var change = replace(changeSetId, 0,
                 headingId(structure, "2. Limitation of Liability"), "New cap text.");
@@ -96,10 +97,10 @@ class RedlinePlanResolverTest {
                 clause("1. Indemnification", text("Indemnity body")),
                 clause("2. Confidentiality", text("Confidentiality body"))));
         var conceptByHeading = concepts(structure, Map.of(
-                "1. Indemnification", LegalConcept.INDEMNIFICATION,
-                "2. Confidentiality", LegalConcept.CONFIDENTIALITY));
+                "1. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "2. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS));
         var changeSetId = UUID.randomUUID();
-        var change = insert(changeSetId, 0, LegalConcept.LIMITATION_OF_LIABILITY,
+        var change = insert(changeSetId, 0, CoreConcepts.LIMITATION_OF_LIABILITY,
                 "Approved cap text.");
         var set = set(UUID.randomUUID(), contractId, versionId, 1, List.of(change));
 
@@ -204,12 +205,12 @@ class RedlinePlanResolverTest {
                 clause("1. Confidentiality", text("Confidentiality body")),
                 clause("2. Term and Survival", text("Term body"))));
         var conceptByHeading = concepts(structure, Map.of(
-                "1. Confidentiality", LegalConcept.CONFIDENTIALITY,
-                "2. Term and Survival", LegalConcept.TERM_TERMINATION));
+                "1. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS,
+                "2. Term and Survival", CoreConcepts.TERM));
         var changeSetId = UUID.randomUUID();
         var deleteConfidentiality = delete(changeSetId, 0,
                 headingId(structure, "1. Confidentiality"));
-        var insertLiability = insert(changeSetId, 1, LegalConcept.LIMITATION_OF_LIABILITY,
+        var insertLiability = insert(changeSetId, 1, CoreConcepts.LIMITATION_OF_LIABILITY,
                 "Approved cap text.");
         var set = set(UUID.randomUUID(), contractId, versionId, 1, List.of(deleteConfidentiality, insertLiability));
 
@@ -244,10 +245,10 @@ class RedlinePlanResolverTest {
                 clause("1. Indemnification", text("Indemnity body")),
                 clause("2. Confidentiality", text("Confidentiality body"))));
         var conceptByHeading = concepts(structure, Map.of(
-                "1. Indemnification", LegalConcept.INDEMNIFICATION,
-                "2. Confidentiality", LegalConcept.CONFIDENTIALITY));
+                "1. Indemnification", CoreConcepts.INDEMNIFICATION,
+                "2. Confidentiality", CoreConcepts.CONFIDENTIALITY_OBLIGATIONS));
         var changeSetId = UUID.randomUUID();
-        var change = insert(changeSetId, 0, LegalConcept.LIMITATION_OF_LIABILITY,
+        var change = insert(changeSetId, 0, CoreConcepts.LIMITATION_OF_LIABILITY,
                 "Approved cap text.");
         var set = set(UUID.randomUUID(), contractId, versionId, 1, List.of(change));
 

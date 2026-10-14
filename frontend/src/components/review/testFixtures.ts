@@ -32,6 +32,12 @@ export const fixtureQueuedReviewSummary = {
   failedChecks: 0,
   signals: 0,
   findings: 0,
+  proposedChanges: { replace: 0, insert: 0, delete: 0 },
+  document: {
+    contractFilename: 'msa.docx',
+    uploadedAt: '2026-09-25T08:55:00Z',
+    sizeBytes: 51200,
+  },
   snapshot: {
     profile: {
       contractType: 'MSA',
@@ -46,7 +52,7 @@ export const fixtureQueuedReviewSummary = {
   },
   coverage: [
     { concept: 'LIMITATION_OF_LIABILITY', expectation: 'REQUIRED', coverage: 'PRESENT_PRIMARY' },
-    { concept: 'CONFIDENTIALITY', expectation: 'EXPECTED', coverage: 'PRESENT_PRIMARY' },
+    { concept: 'CONFIDENTIALITY_OBLIGATIONS', expectation: 'EXPECTED', coverage: 'PRESENT_PRIMARY' },
   ],
   analysisWarnings: [],
   analysisWarningsTruncated: false,
@@ -72,9 +78,10 @@ export const fixtureCompletedReviewSummary = {
   degradedChecks: 1,
   signals: 5,
   findings: 2,
+  proposedChanges: { replace: 1, insert: 1, delete: 0 },
   analysisWarnings: [
     {
-      checkKey: 'LIABILITY_CAP:LIMITATION_OF_LIABILITY',
+      checkKey: 'POLICY_COMPARISON:LIMITATION_OF_LIABILITY',
       status: 'DEGRADED',
       reasonCode: 'PROVIDER_UNAVAILABLE',
       message: 'An external analysis provider was unavailable for this check.',
@@ -135,6 +142,41 @@ import {
   fixtureRelatedContractItem,
 } from '../evidence/testFixtures'
 
+const contractPositionSlot = {
+  evidenceItemId: 'e-contract',
+  authorityClass: 'CURRENT_CONTRACT',
+  legalConcept: 'LIMITATION_OF_LIABILITY',
+  facts: fixtureContractItem.contractFacts,
+}
+
+function policyPositionSlot(evidenceItemId: string) {
+  return {
+    evidenceItemId,
+    authorityClass: 'POLICY',
+    legalConcept: 'LIMITATION_OF_LIABILITY',
+    publicationNumber: 2,
+    text: fixturePolicyItem.text,
+  }
+}
+
+function escalationSlot(evidenceItemId: string) {
+  return {
+    evidenceItemId,
+    authorityClass: 'POLICY',
+    publicationNumber: 2,
+    trigger: 'Uncapped liability or consequential damages',
+  }
+}
+
+/** What the server groups from a finding whose one policy item carries every role and an escalation. */
+export const fixtureFullPositionComparison = {
+  contract: [contractPositionSlot],
+  preferred: [policyPositionSlot('e-policy')],
+  fallback: [policyPositionSlot('e-policy')],
+  walkAway: [policyPositionSlot('e-policy')],
+  escalation: [escalationSlot('e-policy')],
+}
+
 export const fixtureClauseFindingSummary = {
   id: 'f-1',
   subjectKind: 'CLAUSE',
@@ -142,12 +184,13 @@ export const fixtureClauseFindingSummary = {
   absenceConcept: null,
   concept: 'LIMITATION_OF_LIABILITY',
   secondaryConcept: null,
-  issueFamily: 'LIABILITY_CAP_DEVIATION',
-  observationKind: 'CAP_ABOVE_PREFERRED',
-  severity: 'HIGH',
+  issueFamily: 'POSITION_NEEDS_FALLBACK',
+  observationKind: 'POSITION_BEYOND_FALLBACK',
+  severity: 'MEDIUM',
   reviewClassification: 'REVIEW_REQUIRED',
   proposedAction: 'USE_APPROVED_FALLBACK',
   proposedLanguageSource: 'APPROVED_DRAFTING',
+  relatedPosition: false,
   createdAt: '2026-09-25T09:01:10Z',
 }
 
@@ -164,7 +207,50 @@ export const fixtureAbsenceFindingSummary = {
   reviewClassification: 'BLOCKING',
   proposedAction: 'ADD_REQUIRED_PROVISION',
   proposedLanguageSource: 'NONE',
+  relatedPosition: false,
   createdAt: '2026-09-25T09:01:10Z',
+}
+
+/** A finding a reviewer added on a clause Rivell passed (P2b): no proposal, decided like any other. */
+export const fixtureUserFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-user',
+  subjectHeadingNodeId: 'node-1',
+  concept: 'DEFINITIONS',
+  issueFamily: 'USER_ADDED',
+  observationKind: 'USER_ADDED',
+  severity: 'HIGH',
+  proposedAction: 'NO_ACTION',
+  proposedLanguageSource: 'NONE',
+  addedBy: 'u-1',
+}
+
+export const fixtureUserFindingDetail = {
+  ...fixtureUserFindingSummary,
+  reviewId: 'r-1',
+  runId: 'run-1',
+  concepts: ['DEFINITIONS'],
+  observationText: 'The definition of Services has no carve-out for third-party software.',
+  proposedLanguage: null,
+  approvedDraftingEvidenceId: null,
+  quality: {},
+  claims: [],
+  evidenceItems: [],
+  evidenceItemIds: [],
+  positionComparison: null,
+  signalIds: [],
+  absenceBasis: null,
+}
+
+/** Every mark once on the fixture contract; "Northwind Customer Group LLC" (node-10) is unplanned. */
+export const fixtureClauseMarks = {
+  runId: 'run-1',
+  clauses: [
+    { headingNodeId: 'node-1', mark: 'CHECKED' },
+    { headingNodeId: 'node-5', mark: 'NOT_COVERED' },
+    { headingNodeId: 'node-6', mark: 'FLAGGED' },
+    { headingNodeId: 'node-9', mark: 'NOT_ANALYSED' },
+  ],
 }
 
 export const fixtureFindingList = {
@@ -176,15 +262,14 @@ const clauseClaims = [
   {
     ordinal: 0,
     claimKind: 'OBSERVATION',
-    text:
-      'The liability cap of three times the fees paid is above the organization’s preferred position.',
+    text: 'The clause is worse for us than every fallback the position lists.',
     absence: false,
     evidenceItemIds: ['e-contract', 'e-policy'],
   },
   {
     ordinal: 1,
     claimKind: 'POLICY_BASIS',
-    text: 'Published policy prefers a cap of two times the fees paid over a twelve-month period.',
+    text: 'Published policy lists a fallback at two times the fees paid over a twelve-month period.',
     absence: false,
     evidenceItemIds: ['e-policy'],
   },
@@ -202,8 +287,7 @@ export const fixtureClauseFindingDetail = {
   reviewId: 'r-1',
   runId: 'run-1',
   concepts: ['LIMITATION_OF_LIABILITY'],
-  observationText:
-    'The bounded classification found the liability cap above the organization’s preferred position (cap multiple 3x).',
+  observationText: 'The clause is worse for us than every fallback the position lists.',
   proposedLanguage:
     'The total liability of Supplier shall not exceed two times the fees paid in the twelve months preceding the claim.',
   approvedDraftingEvidenceId: 'e-drafting',
@@ -211,6 +295,9 @@ export const fixtureClauseFindingDetail = {
     sufficiency: 'SUFFICIENT',
     verificationOutcome: 'VERIFIED',
     degradationFlags: [],
+    category: 'BEYOND_FALLBACK',
+    flagProbability: 0.87,
+    probabilities: { BEYOND_FALLBACK: 0.87, WALK_AWAY: 0.05 },
   },
   claims: clauseClaims,
   evidenceItems: [
@@ -220,8 +307,101 @@ export const fixtureClauseFindingDetail = {
     fixtureCompatiblePrecedent,
   ],
   evidenceItemIds: ['e-contract', 'e-policy', 'e-drafting', 'e-precedent-1'],
+  positionComparison: fixtureFullPositionComparison,
   signalIds: ['s-1', 's-2', 's-3'],
   absenceBasis: null,
+}
+
+const withinFallbackComparison = {
+  contract: [contractPositionSlot],
+  preferred: [policyPositionSlot('e-policy')],
+  fallback: [policyPositionSlot('e-policy')],
+  walkAway: [],
+  escalation: [],
+}
+
+export const fixtureWithinFallbackFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-7',
+  issueFamily: 'POSITION_ACCEPTABLE_FALLBACK',
+  observationKind: 'POSITION_WITHIN_FALLBACK',
+  severity: 'LOW',
+  reviewClassification: 'INFORMATIONAL',
+  proposedAction: 'NO_ACTION',
+  proposedLanguageSource: 'NONE',
+}
+
+/** A LOW informational finding: the clause stays within a fallback, so it reads as a note. */
+export const fixtureWithinFallbackFindingDetail = {
+  ...fixtureClauseFindingDetail,
+  ...fixtureWithinFallbackFindingSummary,
+  observationText:
+    'The clause departs from the preferred position but stays within a listed fallback; accept and note.',
+  proposedLanguage: null,
+  approvedDraftingEvidenceId: null,
+  quality: {
+    sufficiency: 'SUFFICIENT',
+    verificationOutcome: null,
+    degradationFlags: [],
+    category: 'WITHIN_FALLBACK',
+    flagProbability: 0.74,
+    probabilities: { WITHIN_FALLBACK: 0.74 },
+  },
+  claims: [
+    {
+      ordinal: 0,
+      claimKind: 'OBSERVATION',
+      text: 'The clause departs from the preferred position but stays within a listed fallback.',
+      absence: false,
+      evidenceItemIds: ['e-contract', 'e-policy'],
+    },
+  ],
+  positionComparison: withinFallbackComparison,
+}
+
+/**
+ * A LOW informational note whose position governs a topic the clause only touches. It must read as
+ * a related position, never as a breach of the clause itself.
+ */
+export const fixtureRelatedPositionFindingSummary = {
+  ...fixtureWithinFallbackFindingSummary,
+  id: 'f-9',
+  secondaryConcept: 'GOVERNING_LAW',
+  issueFamily: 'POSITION_WALK_AWAY',
+  observationKind: 'POSITION_WALK_AWAY',
+  relatedPosition: true,
+}
+
+export const fixtureRelatedPositionFindingDetail = {
+  ...fixtureWithinFallbackFindingDetail,
+  ...fixtureRelatedPositionFindingSummary,
+  observationText:
+    'The clause contains or permits what the position’s walk-away says we must never accept.',
+  quality: {
+    sufficiency: 'SUFFICIENT',
+    verificationOutcome: null,
+    degradationFlags: [],
+    category: 'WALK_AWAY',
+    flagProbability: 0.9,
+    probabilities: { WALK_AWAY: 0.9 },
+    secondaryTopic: true,
+  },
+  positionComparison: {
+    contract: [contractPositionSlot],
+    preferred: [policyPositionSlot('e-policy')],
+    fallback: [],
+    walkAway: [policyPositionSlot('e-policy')],
+    escalation: [],
+  },
+}
+
+/** The same note, but the position names an approver: approval is needed and the trigger is shown. */
+export const fixtureEscalatedFallbackFindingDetail = {
+  ...fixtureWithinFallbackFindingDetail,
+  id: 'f-8',
+  reviewClassification: 'REVIEW_REQUIRED',
+  proposedAction: 'ESCALATE_TO_HUMAN',
+  positionComparison: { ...withinFallbackComparison, escalation: [escalationSlot('e-policy')] },
 }
 
 export const fixtureAbsenceFindingDetail = {
@@ -244,6 +424,7 @@ export const fixtureAbsenceFindingDetail = {
   ],
   evidenceItems: [],
   evidenceItemIds: [],
+  positionComparison: null,
   signalIds: ['s-4'],
   absenceBasis: { planCheckId: 'pc-1', checkKey: 'PRESENCE:LIMITATION_OF_LIABILITY' },
 }
@@ -293,6 +474,199 @@ export const fixturePolicyMissingFindingDetail = {
     { ...fixtureContractItem, sourceClauseId: 'cl6' },
     fixtureCompatiblePrecedent,
   ],
+  // The contract has typed facts, but no policy position exists to compare them with.
+  positionComparison: { contract: [contractPositionSlot], preferred: [], fallback: [], walkAway: [], escalation: [] },
+}
+
+/** A clause no playbook position addresses, judged unusual and against our side. */
+export const fixtureNotCoveredFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-10',
+  issueFamily: 'POLICY_UNAVAILABLE',
+  observationKind: 'NOT_COVERED_BY_PLAYBOOK',
+  severity: 'MEDIUM',
+  reviewClassification: 'REVIEW_REQUIRED',
+  proposedAction: 'ESCALATE_TO_HUMAN',
+  proposedLanguageSource: 'NONE',
+}
+
+export const fixtureNotCoveredFindingDetail = {
+  ...fixturePolicyMissingFindingDetail,
+  ...fixtureNotCoveredFindingSummary,
+  observationText:
+    'No playbook position addresses this clause, and it reads as unusual for this kind of contract and against our side; a lawyer should review it.',
+  quality: {
+    sufficiency: 'POLICY_MISSING',
+    verificationOutcome: null,
+    degradationFlags: [],
+    uncoveredProbability: 0.9,
+  },
+}
+
+export const fixtureNeedsYourLookFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-11',
+  issueFamily: 'POSITION_UNCERTAIN',
+  observationKind: 'UNCERTAINTY:second_opinion_disagrees',
+  severity: 'LOW',
+  proposedAction: 'ESCALATE_TO_HUMAN',
+  proposedLanguageSource: 'NONE',
+  decidedBy: 'NEEDS_YOUR_LOOK',
+}
+
+export const fixtureNeedsYourLookFindingDetail = {
+  ...fixtureClauseFindingDetail,
+  ...fixtureNeedsYourLookFindingSummary,
+  observationText:
+    "Rivell's two reviewers disagree on this clause against the position: one finds an issue, the other does not. Rivell does not decide; please take a look.",
+  proposedLanguage: null,
+  approvedDraftingEvidenceId: null,
+  quality: {
+    sufficiency: 'SUFFICIENT',
+    verificationOutcome: null,
+    degradationFlags: [],
+    route: 'NEEDS_YOUR_LOOK',
+    jevCategory: 'BEYOND_FALLBACK',
+    flagProbability: 0.68,
+    probabilities: { BEYOND_FALLBACK: 0.62, MEETS_PREFERRED: 0.3 },
+    secondOpinionOutcome: 'DISAGREED',
+    secondOpinionCategory: 'MEETS_PREFERRED',
+    secondOpinionQuote: 'liability shall not exceed the fees paid',
+    secondOpinionReason: 'The cap matches the preferred basis in the position.',
+  },
+}
+
+export const fixtureSecondOpinionFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-12',
+  decidedBy: 'SECOND_OPINION',
+}
+
+export const fixtureSecondOpinionFindingDetail = {
+  ...fixtureClauseFindingDetail,
+  ...fixtureSecondOpinionFindingSummary,
+  quality: {
+    ...fixtureClauseFindingDetail.quality,
+    route: 'SECOND_OPINION',
+    secondOpinionOutcome: 'AGREED',
+    secondOpinionCategory: 'BEYOND_FALLBACK',
+  },
+}
+
+/** A "needs your look" item whose first review called a walk-away breach (engine v2, P4 D9). */
+export const fixtureWalkAwayLookFindingSummary = {
+  ...fixtureNeedsYourLookFindingSummary,
+  id: 'f-13',
+  firstReviewCategory: 'WALK_AWAY',
+}
+
+export const fixtureWalkAwayLookFindingDetail = {
+  ...fixtureNeedsYourLookFindingDetail,
+  ...fixtureWalkAwayLookFindingSummary,
+  quality: { ...fixtureNeedsYourLookFindingDetail.quality, jevCategory: 'WALK_AWAY' },
+}
+
+/** The whole-contract read picked a clause the playbook says nothing about (engine v2, P4 D3). */
+export const fixturePlaybookSilentFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-14',
+  issueFamily: 'POLICY_UNAVAILABLE',
+  observationKind: 'SPOTTED_IN_WHOLE_CONTRACT_READ',
+  severity: 'LOW',
+  proposedAction: 'ESCALATE_TO_HUMAN',
+  proposedLanguageSource: 'NONE',
+  decidedBy: 'NEEDS_YOUR_LOOK',
+}
+
+export const fixturePlaybookSilentFindingDetail = {
+  ...fixtureClauseFindingDetail,
+  ...fixturePlaybookSilentFindingSummary,
+  observationText:
+    'A whole-contract read named this clause as one our side must act on, and no playbook position check flagged it; a lawyer should review it.',
+  proposedLanguage: null,
+  approvedDraftingEvidenceId: null,
+  positionComparison: null,
+  quality: {
+    sufficiency: 'POLICY_MISSING',
+    verificationOutcome: null,
+    degradationFlags: ['playbook_silent'],
+    route: 'NEEDS_YOUR_LOOK',
+    uncertaintyReason: 'playbook_silent',
+    uncoveredProbability: 0.12,
+    spottedSeverity: 'HIGH',
+    spottedReason: 'Only damages are available to us for a breach.',
+  },
+}
+
+/** A playbook position no clause addresses, which the playbook requires (engine v2 omissions lane). */
+export const fixtureOmissionFindingSummary = {
+  ...fixtureAbsenceFindingSummary,
+  id: 'f-15',
+  observationKind: 'MISSING_POSITION',
+  severity: 'MEDIUM',
+  reviewClassification: 'REVIEW_REQUIRED',
+  positionLabel: 'Cap Exceptions',
+  decidedBy: 'JEV',
+}
+
+export const fixtureOmissionFindingDetail = {
+  ...fixtureAbsenceFindingDetail,
+  ...fixtureOmissionFindingSummary,
+  observationText: 'Missing: Cap Exceptions. Searched 5 clauses; none addresses it.',
+  quality: {
+    sufficiency: null,
+    verificationOutcome: null,
+    degradationFlags: [],
+    route: 'JEV',
+    searchedClauses: 5,
+    comparedClauses: 2,
+    presenceProbability: 0.92,
+  },
+  claims: [
+    {
+      ordinal: 0,
+      claimKind: 'ABSENCE_BASIS',
+      text: 'No clause in this contract addresses this playbook position; the absence is the observation.',
+      absence: true,
+      evidenceItemIds: [],
+    },
+  ],
+  absenceBasis: { planCheckId: 'pc-9', checkKey: 'OMISSION' },
+}
+
+/** The same kind of omission, where Rivell is unsure the playbook requires the provision. */
+export const fixtureOmissionUnsureFindingSummary = {
+  ...fixtureOmissionFindingSummary,
+  id: 'f-16',
+  positionLabel: 'Data protection',
+  severity: 'LOW',
+  decidedBy: 'NEEDS_YOUR_LOOK',
+}
+
+export const fixtureOmissionUnsureFindingDetail = {
+  ...fixtureOmissionFindingDetail,
+  ...fixtureOmissionUnsureFindingSummary,
+  observationText: 'Missing: Data protection. Searched 5 clauses; none addresses it.',
+  quality: {
+    ...fixtureOmissionFindingDetail.quality,
+    degradationFlags: ['omission_unsure'],
+    route: 'NEEDS_YOUR_LOOK',
+    uncertaintyReason: 'omission_unsure',
+    presenceProbability: 0.62,
+  },
+}
+
+/** A clause no topic paired with a position, compared with a position a playbook search found. */
+export const fixtureSearchFoundFindingSummary = {
+  ...fixtureClauseFindingSummary,
+  id: 'f-17',
+  decidedBy: 'JEV',
+}
+
+export const fixtureSearchFoundFindingDetail = {
+  ...fixtureClauseFindingDetail,
+  ...fixtureSearchFoundFindingSummary,
+  quality: { ...fixtureClauseFindingDetail.quality, route: 'JEV', foundBy: 'SEARCH' },
 }
 
 export const fixtureAmbiguousPolicyFindingDetail = {
@@ -327,6 +701,14 @@ export const fixtureAmbiguousPolicyFindingDetail = {
     },
   ],
   evidenceItems: [fixturePolicyItem, { ...fixturePolicyItem, evidenceId: 'e-policy-2' }],
+  // Two cited items hold each role. The server keeps both, in evidence order.
+  positionComparison: {
+    contract: [],
+    preferred: [policyPositionSlot('e-policy'), policyPositionSlot('e-policy-2')],
+    fallback: [policyPositionSlot('e-policy'), policyPositionSlot('e-policy-2')],
+    walkAway: [],
+    escalation: [escalationSlot('e-policy'), escalationSlot('e-policy-2')],
+  },
 }
 
 export const fixtureGenerativeFindingDetail = {
@@ -378,8 +760,8 @@ export const fixtureGenerativeFindingDetail = {
 export const fixtureCrossClauseFindingDetail = {
   ...fixtureClauseFindingDetail,
   id: 'f-6',
-  concept: 'CONFIDENTIALITY',
-  concepts: ['CONFIDENTIALITY'],
+  concept: 'CONFIDENTIALITY_OBLIGATIONS',
+  concepts: ['CONFIDENTIALITY_OBLIGATIONS'],
   issueFamily: 'SURVIVAL_COVERAGE_GAP',
   observationKind: 'SURVIVAL_COVERAGE_GAP',
   observationText: 'Confidentiality obligations are not covered by a survival provision.',
@@ -404,4 +786,5 @@ export const fixtureCrossClauseFindingDetail = {
     { ...fixtureRelatedContractItem, sourceClauseId: 'cl5', provenanceNodeIds: ['node-63'] },
   ],
   evidenceItemIds: ['e-contract', 'e-related'],
+  positionComparison: { contract: [contractPositionSlot], preferred: [], fallback: [], walkAway: [], escalation: [] },
 }

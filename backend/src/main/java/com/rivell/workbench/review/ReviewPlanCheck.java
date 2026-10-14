@@ -19,8 +19,8 @@ public record ReviewPlanCheck(
         CheckFamily family,
         CheckExpectation expectation,
         CheckMechanism mechanism,
-        com.rivell.workbench.contracts.LegalConcept concept,
-        com.rivell.workbench.contracts.LegalConcept secondaryConcept,
+        com.rivell.workbench.taxonomy.ConceptKey concept,
+        com.rivell.workbench.taxonomy.ConceptKey secondaryConcept,
         UUID subjectHeadingNodeId,
         Instant createdAt) {
 

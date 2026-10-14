@@ -1,6 +1,7 @@
 package com.rivell.workbench.knowledge;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.rivell.workbench.organization.AuthorizationService;
@@ -13,6 +14,8 @@ import com.rivell.workbench.organization.Permissions;
  * indistinguishable from a missing object (M1 tenant pattern).
  */
 public class KnowledgeQueryService {
+
+    private static final int MAX_LIST_LIMIT = 100;
 
     private final KnowledgeRepository repository;
     private final IdentityProvider identityProvider;
@@ -27,15 +30,26 @@ public class KnowledgeQueryService {
         this.authorizationService = authorizationService;
     }
 
-    public List<KnowledgeArtifact> listArtifacts() {
+    /**
+     * Artifact list for the caller. {@code limit} is optional: absent, the whole corpus is
+     * returned exactly as before this parameter existed.
+     */
+    public List<KnowledgeArtifact> listArtifacts(Integer limit) {
         requireRead();
-        return repository.listArtifacts(organizationId());
+        return repository.listArtifacts(organizationId(), boundedLimit(limit));
     }
 
     public KnowledgeArtifact getArtifact(UUID artifactId) {
         requireRead();
         return repository.findArtifact(artifactId, organizationId())
                 .orElseThrow(() -> new KnowledgeArtifactNotFoundException(artifactId));
+    }
+
+    /** The artifact's coverage report; empty when it predates the check. */
+    public Optional<com.rivell.workbench.contracts.ParseCoverage> getParseCoverage(UUID artifactId) {
+        requireRead();
+        assertArtifactExists(artifactId);
+        return repository.findParseCoverage(artifactId, organizationId());
     }
 
     public List<KnowledgeSourceNode> getStructure(UUID artifactId) {
@@ -82,9 +96,28 @@ public class KnowledgeQueryService {
                 .orElseThrow(() -> new KnowledgeArtifactNotFoundException(artifactId));
     }
 
-    public List<KnowledgePublication> listPublications() {
+    /**
+     * Publication list for the caller. {@code limit} is optional: absent, every
+     * publication is returned exactly as before this parameter existed.
+     */
+    public List<KnowledgePublication> listPublications(Integer limit) {
         requireRead();
-        return repository.listPublications(organizationId());
+        return repository.listPublications(organizationId(), boundedLimit(limit));
+    }
+
+    /**
+     * Validates an optional list bound. Absent means unbounded, which is the behaviour
+     * that predates the parameter and is kept for existing callers; a supplied value must
+     * be positive and is capped so a caller cannot request an arbitrary page.
+     */
+    private static Integer boundedLimit(Integer limit) {
+        if (limit == null) {
+            return null;
+        }
+        if (limit < 1) {
+            throw new IllegalArgumentException("limit must be >= 1");
+        }
+        return Math.min(limit, MAX_LIST_LIMIT);
     }
 
     /** Latest publication number for the caller's organization, 0 when none. */

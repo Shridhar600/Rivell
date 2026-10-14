@@ -302,6 +302,21 @@ class KnowledgeApiIT {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void reportsWorkbookTextTheExtractedStructureDoesNotHold() throws Exception {
+        var artifact = upload("coverage-workbook.xlsx", ArtifactType.PLAYBOOK,
+                null, null, null, null, null);
+
+        mockMvc.perform(get("/api/knowledge/artifacts/{id}/coverage", artifact.get("id").asText()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.checked").value(true))
+                .andExpect(jsonPath("$.data.extraWords").value(0))
+                .andExpect(jsonPath("$.data.gaps.length()").value(2))
+                .andExpect(jsonPath("$.data.gaps[0].location").value("COMMENT"))
+                .andExpect(jsonPath("$.data.gaps[1].excerpt")
+                        .value("Escalate every walk-away to the General Counsel."));
+    }
+
     private JsonNode upload(
             String fixture, ArtifactType artifactType, String contractPackKey,
             String partyPerspective, String paperSource, String jurisdiction,

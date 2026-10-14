@@ -4,7 +4,12 @@ import { RouterProvider } from 'react-router/dom'
 import { AppErrorBoundary } from './app/AppErrorBoundary'
 import { AppProviders } from './app/AppProviders'
 import { router } from './app/router'
-import './styles/tokens.css'
+import './styles/m10b-tokens.css'
+import './styles/m10b.css'
+import './styles/m10b-lifecycle.css'
+import './styles/m10b-knowledge.css'
+import './styles/m10b-dialog.css'
+import './styles/m10b-compile.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Root element #root not found')

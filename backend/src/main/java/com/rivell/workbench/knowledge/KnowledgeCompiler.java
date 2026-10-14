@@ -11,7 +11,7 @@ import java.time.Instant;
  */
 public final class KnowledgeCompiler {
 
-    public static final String COMPILER_VERSION = "rivell-knowledge-compiler-1";
+    public static final String COMPILER_VERSION = "rivell-knowledge-compiler-2";
 
     private KnowledgeCompiler() {
     }

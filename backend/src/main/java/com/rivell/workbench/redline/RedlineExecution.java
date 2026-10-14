@@ -14,6 +14,7 @@ public record RedlineExecution(
         UUID organizationId,
         UUID reviewId,
         UUID changeSetId,
+        int attemptNumber,
         UUID contractId,
         UUID contractVersionId,
         int contractVersionNumber,
@@ -25,6 +26,7 @@ public record RedlineExecution(
         String rendererVersion,
         String placementStrategyVersion,
         String sourceSha256,
+        String semanticsDigest,
         int changeCount,
         UUID requestedBy,
         Instant startedAt,
@@ -48,6 +50,9 @@ public record RedlineExecution(
         changes = changes == null ? List.of() : List.copyOf(changes);
         if (contractVersionNumber < 1 || changeSetVersion < 1) {
             throw new IllegalArgumentException("version numbers must be >= 1");
+        }
+        if (attemptNumber < 1) {
+            throw new IllegalArgumentException("attempt number must be >= 1");
         }
         if (changeCount < 0) {
             throw new IllegalArgumentException("change count must be >= 0");

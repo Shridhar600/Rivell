@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Machine-review observation, not a lawyer-facing issue. One signal per bounded
@@ -21,9 +21,9 @@ public record RawReviewSignal(
         SignalType signalType,
         FindingSubjectKind subjectKind,
         UUID subjectHeadingNodeId,
-        LegalConcept absenceConcept,
-        LegalConcept concept,
-        LegalConcept secondaryConcept,
+        ConceptKey absenceConcept,
+        ConceptKey concept,
+        ConceptKey secondaryConcept,
         IssueFamily issueFamily,
         SignalPayload payload,
         List<UUID> evidenceItemIds,

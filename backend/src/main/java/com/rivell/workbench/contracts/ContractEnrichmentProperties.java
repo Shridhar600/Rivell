@@ -9,23 +9,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties("rivell.contracts.enrichment")
 public record ContractEnrichmentProperties(
-        double conceptThreshold,
-        double primaryConceptThreshold,
         double roleThreshold,
         double verificationThreshold,
         double disputedThreshold,
         double relationshipThreshold,
+        double governingLawThreshold,
         int maxRegions,
         int maxRelationshipPairs,
-        int maxGenerativeExtractions) {
+        int maxGenerativeExtractions,
+        int classificationConcurrency) {
 
     public ContractEnrichmentProperties {
-        if (conceptThreshold <= 0.0) {
-            conceptThreshold = 0.80;
-        }
-        if (primaryConceptThreshold <= 0.0) {
-            primaryConceptThreshold = 0.80;
-        }
         if (roleThreshold <= 0.0) {
             roleThreshold = 0.80;
         }
@@ -38,14 +32,20 @@ public record ContractEnrichmentProperties(
         if (relationshipThreshold <= 0.0) {
             relationshipThreshold = 0.80;
         }
+        if (governingLawThreshold <= 0.0) {
+            governingLawThreshold = 0.80;
+        }
         if (maxRegions <= 0) {
-            maxRegions = 60;
+            maxRegions = 200;
         }
         if (maxRelationshipPairs <= 0) {
             maxRelationshipPairs = 8;
         }
         if (maxGenerativeExtractions <= 0) {
             maxGenerativeExtractions = 4;
+        }
+        if (classificationConcurrency <= 0) {
+            classificationConcurrency = 8;
         }
     }
 }

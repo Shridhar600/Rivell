@@ -28,11 +28,11 @@ import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
- * B22 failure/degradation matrix for rows not proven by the dedicated ITs:
- * DRAFTING_MISSING deviations, malformed generative output, invalid decision
- * enums, cross-clause provider failure, carve-out NOT_COMPARABLE, and DISPUTED
- * verification demotion. Every case must fail closed (no fabricated state) and
- * leave the review COMPLETED.
+ * B22 failure/degradation matrix for rows not proven by the dedicated ITs: missing
+ * approved drafting (machine language is generated instead), malformed generative
+ * output (escalation, never fabrication), cross-clause provider failure, carve-out
+ * NOT_COMPARABLE, and DISPUTED verification demotion. Every case must fail closed
+ * (no fabricated state) and leave the review COMPLETED.
  */
 @SpringBootTest
 @Testcontainers
@@ -102,7 +102,7 @@ class M7DegradationMatrixIT {
     }
 
     @Test
-    void draftingMissingKeepsDeviationWithoutProposedLanguage() throws Exception {
+    void draftingMissingStillProducesVerifiedMachineLanguage() throws Exception {
         var organizationId = organizationId();
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
                 M6EvidenceCorpus.msaManifest2026(), null);
@@ -112,26 +112,30 @@ class M7DegradationMatrixIT {
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        var execution = analysisRepository.findExecutions(organizationId, run.id()).get(0);
-        assertThat(execution.detail()).containsEntry("sufficiency", "DRAFTING_MISSING");
-        assertThat(execution.detail()).containsEntry("draftingItemCount", 0);
         var signals = analysisRepository.findSignals(organizationId, run.id());
         assertThat(signals).extracting(RawReviewSignal::signalType)
-                .contains(SignalType.POLICY_DEVIATION)
+                .contains(SignalType.POLICY_DEVIATION,
+                        SignalType.OPEN_ENDED_ANALYSIS_RESULT)
                 .doesNotContain(SignalType.APPROVED_DRAFTING_AVAILABLE);
-        var finding = findingRepository.findFindings(organizationId, run.id()).get(0);
-        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
-        assertThat(finding.proposedLanguage()).isNull();
-        assertThat(finding.proposedLanguageSource()).isEqualTo(ProposedLanguageSource.NONE);
-        assertThat(generativeProvider.calls()).isZero();
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
+        assertThat(finding.proposedAction())
+                .isEqualTo(ProposedAction.CONSIDER_GENERATED_LANGUAGE);
+        assertThat(finding.proposedLanguage()).isNotBlank();
+        assertThat(finding.proposedLanguageSource())
+                .isEqualTo(ProposedLanguageSource.GENERATIVE);
+        assertThat(generativeProvider.calls()).isEqualTo(1);
         assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
                 .isEqualTo(ReviewStatus.COMPLETED);
     }
 
     @Test
-    void malformedGenerativeOutputDegradesWithoutFabrication() throws Exception {
+    void malformedGenerativeOutputEscalatesWithoutFabrication() throws Exception {
         var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy(organizationId);
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var review = enrichedReview("m7-msa-uncapped.docx", null);
         generativeProvider.openEndedProposed = "";
         generativeProvider.openEndedExplanation = "";
 
@@ -142,29 +146,10 @@ class M7DegradationMatrixIT {
                         signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT);
         assertThat(findingRepository.findFindings(organizationId, run.id()))
                 .noneMatch(finding -> finding.proposedLanguage() != null);
-        var execution = analysisRepository.findExecutions(organizationId, run.id()).get(0);
-        assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
-        assertThat(execution.detail().get("degradedReason").toString())
-                .contains("open_ended_generation_unavailable");
-        assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
-                .isEqualTo(ReviewStatus.COMPLETED);
-    }
-
-    @Test
-    void invalidDecisionEnumDegradesTheCheckWithoutState() throws Exception {
-        var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy(organizationId);
-        scriptedProvider.deviationAnswerOverride = "BOGUS_CLASSIFICATION";
-
-        var run = analysisService.analyze(organizationId, review.id());
-
-        var execution = analysisRepository.findExecutions(organizationId, run.id()).get(0);
-        assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
-        assertThat(execution.detail().get("degradedReason").toString())
-                .contains("unexpected_deviation_type:BOGUS_CLASSIFICATION");
-        assertThat(analysisRepository.findSignals(organizationId, run.id()))
-                .noneMatch(signal -> signal.signalType() == SignalType.POLICY_DEVIATION
-                        || signal.signalType() == SignalType.OPEN_ENDED_ANALYSIS_RESULT);
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
         assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
                 .isEqualTo(ReviewStatus.COMPLETED);
     }
@@ -245,7 +230,9 @@ class M7DegradationMatrixIT {
     @Test
     void disputedVerificationDemotesTheAssembledFinding() throws Exception {
         var organizationId = organizationId();
-        var review = exoticReviewOnlyPolicy(organizationId);
+        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var review = enrichedReview("m7-msa-uncapped.docx", null);
         scriptedProvider.verificationRiskProbability = 0.5;
 
         var run = analysisService.analyze(organizationId, review.id());
@@ -256,19 +243,13 @@ class M7DegradationMatrixIT {
         assertThat(openEnded.verificationOutcome()).isEqualTo("DISPUTED");
         var finding = findingRepository.findFindings(organizationId, run.id()).stream()
                 .filter(candidate -> candidate.issueFamily()
-                        == IssueFamily.OPEN_ENDED_LIABILITY)
+                        == IssueFamily.POSITION_WALK_AWAY)
                 .findFirst().orElseThrow();
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
         assertThat(finding.proposedLanguageSource()).isEqualTo(ProposedLanguageSource.NONE);
         assertThat(finding.claims()).noneMatch(claim ->
                 claim.claimKind() == ClaimKind.GENERATIVE_EXPLANATION);
         assertThat(finding.quality()).containsEntry("verificationOutcome", "DISPUTED");
-    }
-
-    private Review exoticReviewOnlyPolicy(UUID organizationId) throws Exception {
-        corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_MAIN,
-                M6EvidenceCorpus.msaManifest2026(), null);
-        return enrichedReview("m7-msa-exotic.docx", null);
     }
 
     private void publishMainPolicyAndLibrary(UUID organizationId) {

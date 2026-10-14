@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rivell.workbench.contracts.LegalConcept;
+import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.review.CheckExecutionStatus;
 import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.IssueFamily;
@@ -296,9 +296,9 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                     .param("signalType", signal.signalType().name())
                     .param("subjectKind", signal.subjectKind().name())
                     .param("subjectHeadingNodeId", signal.subjectHeadingNodeId())
-                    .param("absenceConcept", signal.absenceConcept() == null ? null : signal.absenceConcept().name())
-                    .param("concept", signal.concept().name())
-                    .param("secondaryConcept", signal.secondaryConcept() == null ? null : signal.secondaryConcept().name())
+                    .param("absenceConcept", signal.absenceConcept() == null ? null : signal.absenceConcept().value())
+                    .param("concept", signal.concept().value())
+                    .param("secondaryConcept", signal.secondaryConcept() == null ? null : signal.secondaryConcept().value())
                     .param("issueFamily", signal.issueFamily().name())
                     .param("payload", json(signal.payload()))
                     .param("evidenceItemIds", json(signal.evidenceItemIds()))
@@ -437,9 +437,9 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                         SignalType.valueOf(rs.getString("signal_type")),
                         FindingSubjectKind.valueOf(rs.getString("subject_kind")),
                         rs.getObject("subject_heading_node_id", UUID.class),
-                        rs.getString("absence_concept") == null ? null : LegalConcept.valueOf(rs.getString("absence_concept")),
-                        LegalConcept.valueOf(rs.getString("concept")),
-                        rs.getString("secondary_concept") == null ? null : LegalConcept.valueOf(rs.getString("secondary_concept")),
+                        rs.getString("absence_concept") == null ? null : ConceptKey.of(rs.getString("absence_concept")),
+                        ConceptKey.of(rs.getString("concept")),
+                        rs.getString("secondary_concept") == null ? null : ConceptKey.of(rs.getString("secondary_concept")),
                         IssueFamily.valueOf(rs.getString("issue_family")),
                         payload(rs.getString("payload"), rs.getString("signal_type")),
                         uuidList(rs.getString("evidence_item_ids")),
@@ -527,9 +527,9 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 return objectMapper.treeToValue(node,
                         com.rivell.workbench.review.PolicyAmbiguousPayload.class);
             }
-            if ("LIABILITY_DEVIATION".equals(kind)) {
+            if ("POSITION_DEVIATION".equals(kind)) {
                 return objectMapper.treeToValue(node,
-                        com.rivell.workbench.review.LiabilityDeviationPayload.class);
+                        com.rivell.workbench.review.PositionDeviationPayload.class);
             }
             if ("APPROVED_DRAFTING".equals(kind)) {
                 return objectMapper.treeToValue(node,
@@ -550,6 +550,10 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
             if ("OPEN_ENDED".equals(kind)) {
                 return objectMapper.treeToValue(node,
                         com.rivell.workbench.review.OpenEndedAnalysisPayload.class);
+            }
+            if ("OMISSION".equals(kind)) {
+                return objectMapper.treeToValue(node,
+                        com.rivell.workbench.review.OmissionPayload.class);
             }
             throw new IllegalStateException(
                     "Unsupported signal payload kind '" + kind + "' for " + signalType);

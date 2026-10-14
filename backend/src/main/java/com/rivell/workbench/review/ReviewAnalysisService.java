@@ -7,7 +7,9 @@ import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
+import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
@@ -30,6 +32,7 @@ public class ReviewAnalysisService {
     private final ReviewAnalysisRepository analysisRepository;
     private final ReviewCheckExecutors executors;
     private final ContractEnrichmentService contractEnrichmentService;
+    private final ContractQueryService contractQueryService;
     private final RetrievalProperties retrievalProperties;
     private final EmbeddingService embeddingService;
     private final EvidenceService evidenceService;
@@ -44,6 +47,7 @@ public class ReviewAnalysisService {
             ReviewAnalysisRepository analysisRepository,
             ReviewCheckExecutors executors,
             ContractEnrichmentService contractEnrichmentService,
+            ContractQueryService contractQueryService,
             RetrievalProperties retrievalProperties,
             EmbeddingService embeddingService,
             EvidenceService evidenceService,
@@ -56,6 +60,7 @@ public class ReviewAnalysisService {
         this.analysisRepository = analysisRepository;
         this.executors = executors;
         this.contractEnrichmentService = contractEnrichmentService;
+        this.contractQueryService = contractQueryService;
         this.retrievalProperties = retrievalProperties;
         this.embeddingService = embeddingService;
         this.evidenceService = evidenceService;
@@ -249,6 +254,7 @@ public class ReviewAnalysisService {
             Review review, ReviewSnapshot snapshot, ReviewAnalysisRun run,
             ContractSemantics semantics, AnalysisEnvironment environment) {
         var evidenceCache = new ReviewEvidenceCache(evidenceService);
+        var structure = structure(snapshot);
         for (var check : reviewRepository.findPlanChecks(review.organizationId(), review.id())) {
             var existing = analysisRepository.findExecution(
                     review.organizationId(), run.id(), check.id());
@@ -268,7 +274,8 @@ public class ReviewAnalysisService {
                 continue;
             }
             var context = new ReviewCheckContext(review, snapshot, check, run.id(),
-                    semantics, environment, evidenceCache, clock.instant());
+                    semantics, environment, evidenceCache, structure.headingTexts(),
+                    structure.runInHeadings(), structure.untrackableHeadings(), clock.instant());
             var outcome = runCheck(check, context, environment);
             var leaseId = lease.get();
             try {
@@ -289,6 +296,41 @@ public class ReviewAnalysisService {
                 // another worker reclaimed this execution; it owns the terminal write
                 continue;
             }
+        }
+    }
+
+    private record StructureFacts(
+            Map<UUID, String> headingTexts, Map<UUID, String> runInHeadings,
+            java.util.Set<UUID> untrackableHeadings) {
+    }
+
+    /**
+     * Structure facts loaded once per run: node text by node id (the comparison state names the
+     * subject clause heading), the heading part of run-in headings, and the clauses a tracked
+     * change cannot replace. A structure read failure leaves them empty rather than failing the
+     * run; the check still judges the clause text.
+     */
+    private StructureFacts structure(ReviewSnapshot snapshot) {
+        try {
+            var nodes = contractQueryService.getStructureForOrganization(
+                            snapshot.organizationId(), snapshot.contractId(),
+                            snapshot.contractVersionNumber())
+                    .nodes();
+            var texts = new java.util.HashMap<UUID, String>();
+            var runIn = new java.util.HashMap<UUID, String>();
+            for (var node : nodes) {
+                if (node.text() != null && !node.text().isBlank()) {
+                    texts.putIfAbsent(node.id(), node.text());
+                }
+                if (node.runInHeading() != null) {
+                    runIn.put(node.id(), node.runInHeading());
+                }
+            }
+            return new StructureFacts(texts, runIn,
+                    new com.rivell.workbench.contracts.ContractRegionSegmenter()
+                            .untrackableHeadings(nodes));
+        } catch (RuntimeException e) {
+            return new StructureFacts(Map.of(), Map.of(), java.util.Set.of());
         }
     }
 

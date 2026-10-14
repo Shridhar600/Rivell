@@ -38,6 +38,7 @@ import com.rivell.workbench.knowledge.KnowledgeArtifact;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.knowledge.KnowledgeNodeType;
 import com.rivell.workbench.knowledge.KnowledgePublication;
+import com.rivell.workbench.knowledge.KnowledgeRecordKind;
 import com.rivell.workbench.knowledge.KnowledgeRepository;
 import com.rivell.workbench.knowledge.KnowledgeSource;
 import com.rivell.workbench.knowledge.KnowledgeSourceNode;
@@ -104,6 +105,64 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .update();
     }
 
+    /** Normalized declared-type keys that match a contract of this type (lower-case, alphanumeric). */
+    private static List<String> applicableTypeKeys(String contractType) {
+        return typeKeys(contractType, com.rivell.workbench.contracts.ContractType::applicableCodes);
+    }
+
+    private static List<String> recordApplicableTypeKeys(String contractType) {
+        return typeKeys(contractType, com.rivell.workbench.contracts.ContractType::recordApplicableCodes);
+    }
+
+    private static List<String> typeKeys(String contractType,
+            java.util.function.Function<com.rivell.workbench.contracts.ContractType, java.util.Set<String>> codesOf) {
+        java.util.Set<String> codes;
+        try {
+            codes = codesOf.apply(com.rivell.workbench.contracts.ContractType.valueOf(contractType.trim()));
+        } catch (IllegalArgumentException e) {
+            codes = java.util.Set.of(contractType);
+        }
+        return codes.stream()
+                .map(code -> code.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]", ""))
+                .sorted()
+                .toList();
+    }
+
+    @Override
+    public void updateParseCoverage(UUID artifactId, com.rivell.workbench.contracts.ParseCoverage coverage) {
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(coverage);
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not serialise parse coverage", e);
+        }
+        jdbcClient.sql("update knowledge_artifact set parse_coverage = cast(:coverage as jsonb) where id = :id")
+                .param("coverage", json)
+                .param("id", artifactId)
+                .update();
+    }
+
+    @Override
+    public Optional<com.rivell.workbench.contracts.ParseCoverage> findParseCoverage(
+            UUID artifactId, UUID organizationId) {
+        return jdbcClient.sql("""
+                        select parse_coverage from knowledge_artifact
+                        where id = :id and organization_id = :organizationId
+                        """)
+                .param("id", artifactId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> Optional.ofNullable(rs.getString("parse_coverage")))
+                .optional()
+                .flatMap(json -> json)
+                .map(json -> {
+                    try {
+                        return objectMapper.readValue(json, com.rivell.workbench.contracts.ParseCoverage.class);
+                    } catch (Exception e) {
+                        throw new IllegalStateException("Unreadable parse coverage for an artifact", e);
+                    }
+                });
+    }
+
     @Override
     @Transactional
     public void updateIngestOutcome(
@@ -147,15 +206,21 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
-    public List<KnowledgeArtifact> listArtifacts(UUID organizationId) {
-        return jdbcClient.sql("""
-                        select * from knowledge_artifact
-                        where organization_id = :organizationId
-                        order by created_at desc
-                        """)
-                .param("organizationId", organizationId)
-                .query(this::mapArtifact)
-                .list();
+    public List<KnowledgeArtifact> listArtifacts(UUID organizationId, Integer limit) {
+        var sql = new StringBuilder("""
+                select * from knowledge_artifact
+                where organization_id = :organizationId
+                """);
+        sql.append(" order by created_at desc, id desc");
+        if (limit != null) {
+            sql.append(" limit :limit");
+        }
+        var client = jdbcClient.sql(sql.toString())
+                .param("organizationId", organizationId);
+        if (limit != null) {
+            client = client.param("limit", limit);
+        }
+        return client.query(this::mapArtifact).list();
     }
 
     @Override
@@ -223,10 +288,11 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             jdbcClient.sql("""
                             insert into knowledge_extraction_unit
                             (id, artifact_id, organization_id, ordinal, kind, title, content_text,
-                             provenance, created_at)
+                             provenance, record_kind, created_at)
                             values (:id, :artifactId,
                                     (select organization_id from knowledge_artifact where id = :artifactId),
-                                    :ordinal, :kind, :title, :contentText, :provenance::jsonb, now())
+                                    :ordinal, :kind, :title, :contentText, :provenance::jsonb,
+                                    :recordKind, now())
                             """)
                     .param("id", unit.id())
                     .param("artifactId", artifactId)
@@ -235,6 +301,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("title", unit.title())
                     .param("contentText", unit.contentText())
                     .param("provenance", writeUuidList(unit.sourceNodeIds()))
+                    .param("recordKind", unit.recordKind() == null ? null : unit.recordKind().name())
                     .update();
         }
     }
@@ -247,22 +314,26 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                             insert into knowledge_candidate
                             (id, artifact_id, organization_id, extraction_unit_id, candidate_type,
                              review_status, raw_label, content_text, payload, legal_concept_key,
+                             topic_keys,
                              semantic_fields, edited_semantic_fields, interpretations,
                              edited_content_text, edited_payload, superseding_candidate_id,
                              contract_pack_key, declared_contract_types, party_perspective,
                              paper_source, jurisdiction, effective_from, effective_to,
+                             source_contract_types,
                              conflict_signals, review_category, review_reasons,
                              review_note, reviewed_at, created_at, updated_at)
                             values (:id, :artifactId,
                                     (select organization_id from knowledge_artifact where id = :artifactId),
                                     :extractionUnitId, :candidateType, :reviewStatus, :rawLabel,
                                     :contentText, :payload::jsonb, :legalConceptKey,
+                                    :topicKeys::text[],
                                     :semanticFields::jsonb, :editedSemanticFields::jsonb,
                                     :interpretations::jsonb,
                                     :editedContentText, :editedPayload::jsonb, :supersedingCandidateId,
                                     :contractPackKey, :declaredContractTypes::jsonb,
                                     :partyPerspective, :paperSource, :jurisdiction, :effectiveFrom,
-                                    :effectiveTo, :conflictSignals::jsonb, :reviewCategory,
+                                    :effectiveTo, :sourceContractTypes::jsonb,
+                                    :conflictSignals::jsonb, :reviewCategory,
                                     :reviewReasons::jsonb, :reviewNote, :reviewedAt,
                                     :createdAt, :updatedAt)
                             """)
@@ -275,6 +346,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("contentText", candidate.contentText())
                     .param("payload", writePayload(candidate.payload()))
                     .param("legalConceptKey", candidate.legalConceptKey())
+                    .param("topicKeys", topicKeysLiteral(candidate.topicKeys()))
                     .param("editedContentText", candidate.editedContentText())
                     .param("editedPayload", writePayload(candidate.editedPayload()))
                     .param("supersedingCandidateId", candidate.supersedingCandidateId())
@@ -285,6 +357,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("jurisdiction", candidate.scope().jurisdiction())
                     .param("effectiveFrom", candidate.scope().effectiveFrom())
                     .param("effectiveTo", candidate.scope().effectiveTo())
+                    .param("sourceContractTypes", writeStringSet(candidate.scope().sourceContractTypes()))
                     .param("conflictSignals", writeConflictSignals(candidate.conflictSignals()))
                     .param("semanticFields", writeSemanticFields(candidate.semanticFields()))
                     .param("editedSemanticFields", candidate.editedSemanticFields() == null
@@ -320,6 +393,29 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .param("organizationId", organizationId)
                 .query(this::mapNode)
                 .list();
+    }
+
+    @Override
+    @Transactional
+    public boolean overrideRecordKind(UUID unitId, UUID organizationId, KnowledgeRecordKind kind,
+            UUID by, java.time.Instant at) {
+        // the guard makes the correction once: a second request for the same part changes nothing
+        return jdbcClient.sql("""
+                        update knowledge_extraction_unit u
+                        set record_kind_override = :kind,
+                            record_kind_overridden_by = :by,
+                            record_kind_overridden_at = :at
+                        from knowledge_artifact a
+                        where u.id = :id and a.id = u.artifact_id
+                          and a.organization_id = :organizationId
+                          and u.record_kind_override is null
+                        """)
+                .param("kind", kind.name())
+                .param("by", by)
+                .param("at", java.sql.Timestamp.from(at))
+                .param("id", unitId)
+                .param("organizationId", organizationId)
+                .update() == 1;
     }
 
     @Override
@@ -383,6 +479,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         return jdbcClient.sql("""
                         update knowledge_candidate
                         set concept_correction = :conceptCorrection,
+                            topic_keys = :topicKeys::text[],
                             concept_corrected_by = :correctedBy,
                             concept_corrected_at = :correctedAt,
                             review_status = :reviewStatus,
@@ -394,6 +491,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                           and review_status = :expectedStatus
                         """)
                 .param("conceptCorrection", updated.conceptCorrection())
+                .param("topicKeys", topicKeysLiteral(updated.topicKeys()))
                 .param("correctedBy", correctedBy)
                 .param("correctedAt", toTimestamp(updatedAt))
                 .param("reviewStatus", updated.reviewStatus().name())
@@ -410,13 +508,15 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
 
     @Override
     @Transactional
-    public void updateReviewState(
+    public boolean updateReviewState(
             UUID candidateId, UUID organizationId, ReviewStatus expectedStatus,
             ReviewStatus reviewStatus, String editedContentText,
             CandidatePayload editedPayload, SemanticFields editedSemanticFields,
             ApplicabilityScope scope, UUID supersedingCandidateId, String reviewNote,
-            Instant reviewedAt, Instant updatedAt) {
-        jdbcClient.sql("""
+            Instant reviewedAt, Instant updatedAt,
+            List<ConflictSignal> conflictSignals, ReviewCategory reviewCategory,
+            Set<ReviewReason> reviewReasons) {
+        var updateCount = jdbcClient.sql("""
                         update knowledge_candidate
                         set review_status = :reviewStatus, edited_content_text = :editedContentText,
                             edited_payload = :editedPayload::jsonb,
@@ -427,6 +527,9 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                             party_perspective = :partyPerspective, paper_source = :paperSource,
                             jurisdiction = :jurisdiction, effective_from = :effectiveFrom,
                             effective_to = :effectiveTo,
+                            conflict_signals = :conflictSignals::jsonb,
+                            review_category = :reviewCategory,
+                            review_reasons = :reviewReasons::jsonb,
                             review_note = :reviewNote,
                             reviewed_at = :reviewedAt, updated_at = :updatedAt
                         where id = :id and organization_id = :organizationId
@@ -447,10 +550,14 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .param("reviewNote", reviewNote)
                 .param("reviewedAt", toTimestamp(reviewedAt))
                 .param("updatedAt", Timestamp.from(updatedAt))
+                .param("conflictSignals", writeConflictSignals(conflictSignals))
+                .param("reviewCategory", reviewCategory == null ? null : reviewCategory.name())
+                .param("reviewReasons", writeReviewReasons(reviewReasons))
                 .param("id", candidateId)
                 .param("organizationId", organizationId)
                 .param("expectedStatus", expectedStatus.name())
                 .update();
+        return updateCount > 0;
     }
 
     @Override
@@ -478,7 +585,11 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             params.put("candidateTypes",
                     query.candidateTypes().stream().map(Enum::name).toArray(String[]::new));
         }
-        if (query.legalConceptKey() != null) {
+        var topicMembership = !query.topicKeys().isEmpty();
+        if (topicMembership) {
+            conditions.add("c.topic_keys && :topicKeys::text[]");
+            params.put("topicKeys", topicKeysLiteral(List.copyOf(query.topicKeys())));
+        } else if (query.legalConceptKey() != null) {
             conditions.add("c.effective_concept_key = :legalConceptKey");
             params.put("legalConceptKey", query.legalConceptKey());
         }
@@ -488,10 +599,19 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             params.put("contractPackKey", query.contractPackKey());
         }
         if (query.contractType() != null) {
+            // a source declared for the contract's type, its family or a family member applies
             conditions.add("(c.declared_contract_types = '[]'::jsonb"
                     + " or exists (select 1 from jsonb_array_elements_text(c.declared_contract_types)"
-                    + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = regexp_replace(lower(:contractType), '[^a-z0-9]', '', 'g')))");
-            params.put("contractType", query.contractType());
+                    + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = any(:contractTypes::text[])))");
+            params.put("contractTypes", topicKeysLiteral(applicableTypeKeys(query.contractType())));
+            // what the record itself says it applies to narrows further; a contract of a type the
+            // product does not model (OTHER) cannot be excluded by it
+            if (!"OTHER".equalsIgnoreCase(query.contractType().trim())) {
+                conditions.add("(c.source_contract_types = '[]'::jsonb"
+                        + " or exists (select 1 from jsonb_array_elements_text(c.source_contract_types)"
+                        + " as st where regexp_replace(lower(st), '[^a-z0-9]', '', 'g') = any(:recordContractTypes::text[])))");
+                params.put("recordContractTypes", topicKeysLiteral(recordApplicableTypeKeys(query.contractType())));
+            }
         }
         if (query.partyPerspective() != null) {
             conditions.add("(c.party_perspective is null or regexp_replace(lower(c.party_perspective), '[^a-z0-9]', '', 'g')"
@@ -537,10 +657,28 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 + " on pp.id = add_item.publication_id"
                 + " and pp.organization_id = c.organization_id"
                 + " and pp.publication_number <= :asOf ";
+        String order;
+        if (topicMembership) {
+            // primary-topic match first (only when the clause has one: PostgreSQL rejects a
+            // constant ORDER BY term), then shared-topic count, then publication order;
+            // source (unit) order breaks publication ties deterministically
+            var primaryMatch = "";
+            if (query.primaryTopicKey() != null) {
+                primaryMatch = " (c.effective_concept_key = :primaryTopicKey) desc,";
+                params.put("primaryTopicKey", query.primaryTopicKey());
+            }
+            from = from + " join knowledge_extraction_unit u on u.id = c.extraction_unit_id ";
+            order = " order by" + primaryMatch
+                    + " cardinality(array(select unnest(c.topic_keys)"
+                    + " intersect select unnest(:topicKeys::text[]))) desc,"
+                    + " pp.publication_number desc, u.ordinal asc, c.id desc limit :limit";
+        } else {
+            order = " order by c.created_at desc, c.id desc limit :limit";
+        }
         var sql = "select c.*, pp.id as publication_id, pp.publication_number as publication_number"
                 + from + " where "
                 + String.join(" and ", conditions)
-                + " order by c.created_at desc, c.id desc limit :limit";
+                + order;
         var statement = jdbcClient.sql(sql);
         for (var entry : params.entrySet()) {
             statement = statement.param(entry.getKey(), entry.getValue());
@@ -626,13 +764,21 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
-    public List<KnowledgePublication> listPublications(UUID organizationId) {
-        var publications = jdbcClient.sql("""
-                        select * from knowledge_publication
-                        where organization_id = :organizationId
-                        order by publication_number desc
-                        """)
-                .param("organizationId", organizationId)
+    public List<KnowledgePublication> listPublications(UUID organizationId, Integer limit) {
+        var sql = new StringBuilder("""
+                select * from knowledge_publication
+                where organization_id = :organizationId
+                """);
+        sql.append(" order by publication_number desc");
+        if (limit != null) {
+            sql.append(" limit :limit");
+        }
+        var publicationClient = jdbcClient.sql(sql.toString())
+                .param("organizationId", organizationId);
+        if (limit != null) {
+            publicationClient = publicationClient.param("limit", limit);
+        }
+        var publications = publicationClient
                 .query((rs, rowNum) -> new PublicationRow(
                         UUID.fromString(rs.getString("id")),
                         rs.getLong("publication_number"),
@@ -756,6 +902,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     private ExtractionUnit mapUnit(ResultSet rs, int rowNum) throws SQLException {
+        var recordKind = rs.getString("record_kind");
         return new ExtractionUnit(
                 uuid(rs, "id"),
                 uuid(rs, "artifact_id"),
@@ -763,7 +910,19 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 ExtractionUnitKind.valueOf(rs.getString("kind")),
                 rs.getString("title"),
                 rs.getString("content_text"),
-                readStringSet(rs.getString("provenance")).stream().map(UUID::fromString).toList());
+                readStringSet(rs.getString("provenance")).stream().map(UUID::fromString).toList(),
+                recordKind == null ? null : KnowledgeRecordKind.valueOf(recordKind),
+                override(rs));
+    }
+
+    private static ExtractionUnit.RecordKindOverride override(ResultSet rs) throws SQLException {
+        var kind = rs.getString("record_kind_override");
+        if (kind == null) {
+            return null;
+        }
+        return new ExtractionUnit.RecordKindOverride(KnowledgeRecordKind.valueOf(kind),
+                rs.getObject("record_kind_overridden_by", UUID.class),
+                rs.getTimestamp("record_kind_overridden_at").toInstant());
     }
 
     private KnowledgeCandidate mapCandidate(ResultSet rs, int rowNum) throws SQLException {
@@ -774,7 +933,10 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("paper_source"),
                 rs.getString("jurisdiction"),
                 readDate(rs, "effective_from"),
-                readDate(rs, "effective_to"));
+                readDate(rs, "effective_to"),
+                readStringSet(rs.getString("source_contract_types")));
+        var machinePayload = readPayload(rs.getString("payload"), rs.getString("content_text"));
+        var recoveredOrder = machinePayload.columnOrder();
         return new KnowledgeCandidate(
                 uuid(rs, "id"),
                 uuid(rs, "artifact_id"),
@@ -784,8 +946,9 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 ReviewStatus.valueOf(rs.getString("review_status")),
                 rs.getString("raw_label"),
                 rs.getString("content_text"),
-                readPayload(rs.getString("payload")),
+                machinePayload,
                 rs.getString("legal_concept_key"),
+                readTopicKeys(rs),
                 rs.getString("concept_correction"),
                 uuid(rs, "concept_corrected_by"),
                 instant(rs, "concept_corrected_at"),
@@ -793,7 +956,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 readSemanticFields(rs.getString("edited_semantic_fields")),
                 readInterpretations(rs.getString("interpretations")),
                 rs.getString("edited_content_text"),
-                readPayload(rs.getString("edited_payload")),
+                readPayload(rs.getString("edited_payload"), rs.getString("content_text"),
+                        recoveredOrder),
                 uuid(rs, "superseding_candidate_id"),
                 scope,
                 readConflictSignals(rs.getString("conflict_signals")),
@@ -831,6 +995,30 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     private static LocalDate readDate(ResultSet rs, String column) throws SQLException {
         var value = rs.getDate(column);
         return value == null ? null : value.toLocalDate();
+    }
+
+    private static List<String> readTopicKeys(ResultSet rs) throws SQLException {
+        var array = rs.getArray("topic_keys");
+        if (array == null) {
+            return List.of();
+        }
+        var values = (Object[]) array.getArray();
+        var keys = new java.util.ArrayList<String>(values.length);
+        for (var value : values) {
+            if (value != null) {
+                keys.add(value.toString());
+            }
+        }
+        return List.copyOf(keys);
+    }
+
+    private static String topicKeysLiteral(List<String> topicKeys) {
+        if (topicKeys == null || topicKeys.isEmpty()) {
+            return "{}";
+        }
+        return "{" + topicKeys.stream()
+                .map(key -> "\"" + key.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
+                .collect(java.util.stream.Collectors.joining(",")) + "}";
     }
 
     private String writeStringSet(Set<String> values) {
@@ -889,7 +1077,17 @@ private String writeUuidList(List<UUID> values) {
         }
     }
 
-    private CandidatePayload readPayload(String json) {
+    private CandidatePayload readPayload(String json, String machineWording) {
+        return readPayload(json, machineWording, java.util.List.of());
+    }
+
+    /**
+     * Reads a persisted payload. A payload written before column order was recorded recovers it
+     * from the machine wording (see {@link CandidatePayload#withRecoveredOrder}), so a legacy row
+     * keeps reading left to right instead of in the order {@code jsonb} returns keys.
+     */
+    private CandidatePayload readPayload(
+            String json, String machineWording, java.util.List<String> verifiedOrder) {
         if (json == null || json.isBlank()) {
             return CandidatePayload.EMPTY;
         }
@@ -906,7 +1104,26 @@ private String writeUuidList(List<UUID> values) {
                     columns.put(field.getKey(), field.getValue().asText());
                 }
             }
-            return new CandidatePayload(columns);
+            var columnOrder = new java.util.ArrayList<String>();
+            var recorded = node.get("columnOrder");
+            if (recorded != null && recorded.isArray()) {
+                for (var element : recorded) {
+                    if (element.isTextual()) {
+                        columnOrder.add(element.asText());
+                    }
+                }
+            }
+            var fieldRoles = new LinkedHashMap<String, String>();
+            var roles = node.get("fieldRoles");
+            if (roles != null && roles.isObject()) {
+                roles.fields().forEachRemaining(role -> {
+                    if (role.getValue().isTextual()) {
+                        fieldRoles.put(role.getKey(), role.getValue().asText());
+                    }
+                });
+            }
+            return new CandidatePayload(columns, columnOrder, fieldRoles)
+                    .withRecoveredOrder(machineWording, verifiedOrder);
         } catch (IOException e) {
             throw new IllegalStateException("Could not read candidate payload", e);
         }
@@ -1034,7 +1251,11 @@ private String writeUuidList(List<UUID> values) {
 
     private String writeReviewReasons(java.util.Set<ReviewReason> reasons) {
         try {
-            return objectMapper.writeValueAsString(reasons.stream().map(Enum::name).toList());
+            // Sorted by name: a Set has no specified iteration order, and an immutable Set's
+            // varies between JVM runs, so persisting the iteration order rewrote an unchanged
+            // row with different bytes after a restart.
+            return objectMapper.writeValueAsString(
+                    reasons.stream().map(Enum::name).sorted().toList());
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Could not serialize review reasons", e);
         }
