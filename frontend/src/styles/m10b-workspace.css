@@ -1517,6 +1517,7 @@ h3.rv-ws-sec-h {
   gap: 4px 12px;
   margin: 4px 0 2px;
   cursor: default;
+  font-family: var(--font);
 }
 .rv-ws-mark {
   color: var(--text-3);
@@ -1539,10 +1540,14 @@ h3.rv-ws-sec-h {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--bg);
+  /* The form sits inside the document text: reset to the UI type, not the document serif. */
+  color: var(--text);
+  font: 400 13px/1.45 var(--font);
 }
 .rv-ws-addf label {
   display: grid;
   gap: 4px;
+  color: var(--text-2);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1550,7 +1555,24 @@ h3.rv-ws-sec-h {
 .rv-ws-addf textarea {
   width: 100%;
   box-sizing: border-box;
-  font: 13px var(--font);
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  box-shadow: var(--sh-xs);
+  color: var(--text);
+  font: 400 13px/1.45 var(--font);
+}
+.rv-ws-addf textarea {
+  padding: 8px 10px;
+  resize: vertical;
+}
+.rv-ws-addf select:focus,
+.rv-ws-addf textarea:focus {
+  outline: none;
+  border-color: var(--text-3);
+  box-shadow: var(--rv-focus);
 }
 .rv-ws-addf-warn {
   margin: 0;
