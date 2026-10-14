@@ -32,10 +32,16 @@ class FindingAssemblerTest {
     private static RawReviewSignal signal(
             SignalType type, IssueFamily family, SignalPayload payload,
             List<UUID> evidence, String verificationOutcome) {
+        return signal(type, family, payload, evidence, verificationOutcome, Map.of());
+    }
+
+    private static RawReviewSignal signal(
+            SignalType type, IssueFamily family, SignalPayload payload,
+            List<UUID> evidence, String verificationOutcome, Map<String, Object> quality) {
         return new RawReviewSignal(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, RUN_ID,
                 UUID.randomUUID(), type, FindingSubjectKind.CLAUSE, HEADING_ID, null,
                 CoreConcepts.LIMITATION_OF_LIABILITY, null, family, payload, evidence,
-                null, null, null, null, verificationOutcome, null, null, Map.of(),
+                null, null, null, null, verificationOutcome, null, null, quality,
                 type.name() + ":" + UUID.randomUUID(), NOW);
     }
 
@@ -126,5 +132,57 @@ class FindingAssemblerTest {
                 .filteredOn(claim -> claim.claimKind() == ClaimKind.POLICY_BASIS)
                 .allSatisfy(claim -> assertThat(claim.text())
                         .contains("No published policy applies"));
+    }
+
+    private static RawReviewSignal disagreement(String secondOpinionCategory) {
+        return signal(SignalType.DEVIATION_UNCERTAIN, IssueFamily.POSITION_UNCERTAIN,
+                new DeviationUncertainPayload(DeviationUncertainPayload.SECOND_OPINION_DISAGREES),
+                List.of(UUID.randomUUID()), null,
+                Map.of("route", "NEEDS_YOUR_LOOK",
+                        "secondOpinionOutcome", "DISAGREED",
+                        "secondOpinionCategory", secondOpinionCategory));
+    }
+
+    @Test
+    void aDisagreementNamingAWalkAwayIsMediumAndStaysNeedsYourLook() {
+        var finding = assembler.assemble(
+                run(), List.of(disagreement(PolicyComparisonSpecs.WALK_AWAY)), NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
+        assertThat(finding.quality()).containsEntry("route", "NEEDS_YOUR_LOOK");
+        assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.REVIEW_REQUIRED);
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+    }
+
+    @Test
+    void aDisagreementNamingBeyondFallbackIsMedium() {
+        var finding = assembler.assemble(
+                run(), List.of(disagreement(PolicyComparisonSpecs.BEYOND_FALLBACK)), NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
+    }
+
+    @Test
+    void aDisagreementOnAnyOtherSecondOpinionCategoryStaysLow() {
+        for (var category : List.of(PolicyComparisonSpecs.WITHIN_FALLBACK,
+                PolicyComparisonSpecs.MEETS_PREFERRED, PolicyComparisonSpecs.NOT_ADDRESSED)) {
+            var finding = assembler.assemble(run(), List.of(disagreement(category)), NOW).get(0);
+            assertThat(finding.severity()).as(category).isEqualTo(FindingSeverity.LOW);
+        }
+    }
+
+    @Test
+    void anUnavailableSecondOpinionStaysLow() {
+        var unavailable = signal(SignalType.DEVIATION_UNCERTAIN, IssueFamily.POSITION_UNCERTAIN,
+                new DeviationUncertainPayload(
+                        DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE),
+                List.of(UUID.randomUUID()), null,
+                Map.of("route", "NEEDS_YOUR_LOOK",
+                        "secondOpinionOutcome", "UNAVAILABLE",
+                        "uncertaintyReason", DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE));
+
+        var finding = assembler.assemble(run(), List.of(unavailable), NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
     }
 }

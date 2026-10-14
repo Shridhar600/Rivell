@@ -334,8 +334,13 @@ public final class FindingAssembler {
                 && List.of(DeviationUncertainPayload.SECOND_OPINION_DISAGREES,
                         DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE)
                         .contains(uncertain.reason())) {
-            // engine v2: a "needs your look" item asks for a look; it is never an alarm
-            return FindingSeverity.LOW;
+            // engine v2: a walk-away or beyond-fallback second opinion raises the look item to MEDIUM
+            var secondOpinionCategory = primary.quality().get("secondOpinionCategory");
+            return DeviationUncertainPayload.SECOND_OPINION_DISAGREES.equals(uncertain.reason())
+                    && (PolicyComparisonSpecs.WALK_AWAY.equals(secondOpinionCategory)
+                            || PolicyComparisonSpecs.BEYOND_FALLBACK
+                                    .equals(secondOpinionCategory))
+                    ? FindingSeverity.MEDIUM : FindingSeverity.LOW;
         }
         return FindingSeverity.MEDIUM;
     }

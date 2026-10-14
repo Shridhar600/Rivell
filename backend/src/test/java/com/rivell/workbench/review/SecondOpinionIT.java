@@ -51,7 +51,8 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 /**
  * Engine v2 P2: a review frozen on engine v2 sends a judged position Jev is unsure about to a
  * second opinion. Agreement keeps Jev's finding and says who decided; a disagreement, a failure,
- * an invalid answer or an exhausted budget becomes a LOW "needs your look" finding with both views.
+ * an invalid answer or an exhausted budget becomes a "needs your look" finding with both views;
+ * a disagreement naming a walk-away or beyond-fallback is MEDIUM, every other one LOW.
  * The engine frozen in the snapshot decides, never the live setting.
  */
 @SpringBootTest
@@ -292,7 +293,7 @@ class SecondOpinionIT {
         var run = analysisService.analyze(organizationId(), reviewId);
 
         var look = only(findings(run.id()), IssueFamily.POSITION_UNCERTAIN);
-        assertThat(look.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(look.severity()).isEqualTo(FindingSeverity.MEDIUM);
         assertThat(look.quality())
                 .containsEntry("jevCategory", PolicyComparisonSpecs.MEETS_PREFERRED)
                 .containsEntry("secondOpinionCategory", PolicyComparisonSpecs.BEYOND_FALLBACK);

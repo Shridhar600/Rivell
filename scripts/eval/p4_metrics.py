@@ -11,12 +11,14 @@ SEARCH = "SEARCH"
 SPOTTED = "SPOTTED_IN_WHOLE_CONTRACT_READ"
 MISSING_POSITION = "MISSING_POSITION"
 MEETS_PREFERRED = "MEETS_PREFERRED"
+WALK_AWAY = "WALK_AWAY"
+BEYOND_FALLBACK = "BEYOND_FALLBACK"
 ADDRESSED = 0.5
 TRIAGE_FLAGGED = 0.5
 
 QUALITY_KEYS = ("route", "foundBy", "uncertaintyReason", "spottedSeverity",
                 "presenceProbability", "searchedClauses", "comparedClauses",
-                "positionLabel", "jevCategory")
+                "positionLabel", "jevCategory", "secondOpinionCategory")
 
 LEVER_KEYS = ("issues", "issuesDetected", "falseAlarmSections",
               "seriousFalseAlarmSections", "findings")
@@ -185,3 +187,26 @@ def lever_score(score_contract, answer, nodes, clauses, findings, drop):
     scored = score_contract(answer, nodes, clauses,
                             [finding for finding in findings if not drop(finding)])
     return {key: scored[key] for key in LEVER_KEYS}
+
+
+def severity_raised(finding):
+    """R1: a "needs your look" item the second opinion called a walk-away or beyond-fallback."""
+    return (finding.get("severity") == "MEDIUM"
+            and quality(finding).get("route") == NEEDS_LOOK
+            and quality(finding).get("secondOpinionCategory") in (WALK_AWAY, BEYOND_FALLBACK))
+
+
+def serious_caught(issues):
+    """HIGH/MEDIUM planted issues caught by a MEDIUM+ finding (the totals line's strict count)."""
+    return sum(1 for issue in issues
+               if issue.get("severity") in ("HIGH", "MEDIUM") and issue.get("detectedSerious"))
+
+
+def severity_raise_score(score_contract, answer, nodes, clauses, findings):
+    """R1: the same run re-scored with the raised items at LOW; the report line's without side."""
+    without = score_contract(answer, nodes, clauses,
+                             [dict(finding, severity="LOW") if severity_raised(finding) else finding
+                              for finding in findings])
+    return {"raised": sum(1 for finding in findings if severity_raised(finding)),
+            "seriousCaught": serious_caught(without["issues"]),
+            "seriousFalseAlarmSections": without["seriousFalseAlarmSections"]}

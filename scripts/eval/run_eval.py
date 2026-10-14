@@ -246,6 +246,9 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
                         ("withoutOmissions", p4_metrics.drop_omissions)):
         score[lever] = p4_metrics.lever_score(
             score_contract, answer, nodes, clauses, findings, drop)
+    # engine v2 P6 R1: the same run re-scored with the second-opinion-raised items at LOW
+    score["withoutSeverityRaise"] = p4_metrics.severity_raise_score(
+        score_contract, answer, nodes, clauses, findings)
     score["coverage"] = coverage
     score["checkStatus"] = {}
     for c in checks:
@@ -638,6 +641,15 @@ def p4_lines(results):
         without_alarms = sum((c.get(lever) or {}).get("falseAlarmSections", 0) for c in contracts)
         lines.append(f"- Without {label}: issues detected {with_issues} -> {without_issues}; "
                      f"false-alarm sections {with_alarms} -> {without_alarms}")
+    severity_raise = [c.get("withoutSeverityRaise") or {} for c in contracts]
+    raised = sum(s.get("raised", 0) for s in severity_raise)
+    with_caught = sum(p4_metrics.serious_caught(c.get("issues") or []) for c in contracts)
+    without_caught = sum(s.get("seriousCaught", 0) for s in severity_raise)
+    with_alarms = sum(c.get("seriousFalseAlarmSections", 0) for c in contracts)
+    without_alarms = sum(s.get("seriousFalseAlarmSections", 0) for s in severity_raise)
+    lines.append(f"- Severity R1: {raised} items raised to MEDIUM; serious caught at M+ "
+                 f"{with_caught} -> {without_caught} and M+ false-alarm sections "
+                 f"{with_alarms} -> {without_alarms} without the raise")
     return lines
 
 
