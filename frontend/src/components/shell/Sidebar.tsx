@@ -1,4 +1,6 @@
 import { Link, NavLink, useLocation } from 'react-router'
+import rivellIcon from '../../assets/brand/rivell-icon.svg'
+import rivellLogo from '../../assets/brand/rivell-logo.svg'
 import { IconButton } from '../ui/Button'
 import { PanelLeftIcon } from '../ui/Icon'
 import { openSections, TOP_LEVEL_NAVIGATION, type NavDestination } from './navigation'
@@ -16,11 +18,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     <aside className="rv-side" id={SIDEBAR_ID} aria-label="Sidebar">
       {/* No organisation name, user menu or greeting: identity is deferred and must not be faked. */}
       <div className="rv-side__head">
-        <Link to="/" className="rv-side__brand" title={collapsed ? 'Rivell' : undefined}>
-          <span className="rv-logo" aria-hidden="true">
-            R
-          </span>
-          <span className="rv-side__brand-text">Rivell</span>
+        <Link to="/" className="rv-side__brand" aria-label="Rivell" title={collapsed ? 'Rivell' : undefined}>
+          {/* The wordmark needs 72 px; the collapsed sidebar shows the square icon instead. */}
+          <img className="rv-side__wordmark" src={rivellLogo} alt="" width={76} height={27} />
+          <img className="rv-side__icon" src={rivellIcon} alt="" width={22} height={22} />
         </Link>
         {/*
           The sidebar owns its own collapse control, so it sits in the sidebar's header and moves
