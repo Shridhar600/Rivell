@@ -3,6 +3,7 @@ package com.rivell.workbench.knowledge;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -76,7 +77,9 @@ public class KnowledgePublicationService {
             candidates.add(candidate);
         }
 
-        var now = Instant.now();
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned publication would not match a later read of it.
+        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var publicationId = UUID.randomUUID();
         var items = new ArrayList<PublicationItem>();
         for (var candidate : candidates) {

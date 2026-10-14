@@ -1,6 +1,7 @@
 package com.rivell.workbench.workflow;
 
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -110,10 +111,13 @@ public class ReviewFinalizationService {
                     planned.absenceConcept(), planned.approvedLanguage(),
                     planned.languageSource(), planned.approvedDraftingEvidenceId()));
         }
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so set.finalizedAt() would not match what readers get back.
+        var finalizedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
         return new ApprovedChangeSet(changeSetId, organizationId, review.id(),
                 state.activeRunId(), review.contractId(), review.contractVersionId(),
                 review.contractVersionNumber(), 1, semanticsDigest, finalizedBy,
-                clock.instant(), changes);
+                finalizedAt, changes);
     }
 
     private static int severityRank(FindingSeverity severity) {
