@@ -396,7 +396,7 @@ class EnrichmentTenantDisclosureIT {
                 .param("contractId", contractId)
                 .update();
         assertThatThrownBy(() -> enrichmentService.enrich(contractId, 1, profile))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(ContractNotReadableException.class);
         return contractId;
     }
 

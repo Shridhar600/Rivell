@@ -756,9 +756,9 @@ public class LiabilityReviewIT {
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        // the liability, confidentiality and termination clauses share a topic with a
-        // published position; the governing-law clause makes no call
-        assertThat(scriptedProvider.policyComparisonDecisions()).isEqualTo(3);
+        // the liability, confidentiality and termination clauses share a topic with a published
+        // position; the governing-law clause pairs with none, so it reaches the text search
+        assertThat(scriptedProvider.policyComparisonDecisions()).isEqualTo(4);
         assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
         var executions = analysisRepository.findExecutions(organizationId, run.id());
         assertThat(executions).allSatisfy(execution ->
@@ -785,7 +785,9 @@ public class LiabilityReviewIT {
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        assertThat(generativeProvider.calls()).isZero();
+        // P6/v2: the whole-contract read runs once and names nothing; no wording is generated
+        assertThat(generativeProvider.spottingCalls).hasValue(1);
+        assertThat(generativeProvider.calls()).isEqualTo(1);
         var signals = analysisRepository.findSignals(organizationId, run.id());
         assertThat(signals).hasSize(3);
         assertThat(signals).allSatisfy(signal -> {
@@ -908,12 +910,26 @@ public class LiabilityReviewIT {
         var degraded = analysisRepository.findExecutions(organizationId, run.id()).stream()
                 .filter(execution -> execution.status() == CheckExecutionStatus.DEGRADED)
                 .toList();
-        assertThat(degraded).hasSize(3);
-        assertThat(degraded).allSatisfy(execution -> {
-            assertThat(execution.evidenceTraceId()).isNotNull();
-            assertThat(execution.detail().get("degradedReason").toString())
-                    .contains("provider_unavailable");
-        });
+        // three position-bearing clauses degrade on the failed comparison; the clause the text
+        // search found a position for degrades on the failed search judgment
+        assertThat(degraded).hasSize(4);
+        assertThat(degraded).allSatisfy(execution ->
+                assertThat(execution.evidenceTraceId()).isNotNull());
+        var comparisonFailures = degraded.stream()
+                .filter(execution -> !"position_search_comparison_failed"
+                        .equals(execution.detail().get("degradedReason")))
+                .toList();
+        assertThat(comparisonFailures).hasSize(3);
+        assertThat(comparisonFailures).allSatisfy(execution ->
+                assertThat(execution.detail().get("degradedReason").toString())
+                        .contains("provider_unavailable"));
+        var searchFailure = degraded.stream()
+                .filter(execution -> "position_search_comparison_failed"
+                        .equals(execution.detail().get("degradedReason")))
+                .findFirst().orElseThrow();
+        assertThat(searchFailure.signalCount()).isZero();
+        // never an invented "not addressed": nobody judged the found position
+        assertThat(searchFailure.detail()).doesNotContainKey("uncoveredProbability");
         var signals = analysisRepository.findSignals(organizationId, run.id());
         assertThat(signals).hasSize(3);
         assertThat(signals).allSatisfy(signal -> {
@@ -925,6 +941,8 @@ public class LiabilityReviewIT {
         });
         assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
                 .isEqualTo(ReviewStatus.COMPLETED);
+        // the search-failed check returns before the playbook-silent read: no generative call
+        assertThat(generativeProvider.spottingCalls).hasValue(0);
         assertThat(generativeProvider.calls()).isZero();
     }
 
@@ -963,6 +981,8 @@ public class LiabilityReviewIT {
                 PolicyComparisonSpecs.WALK_AWAY, 0.05,
                 PolicyComparisonSpecs.UNCLEAR, 0.2,
                 PolicyComparisonSpecs.NOT_ADDRESSED, 0.05);
+        // flag mass 0.75 sits in the doubt band: the second opinion agrees, so the judgment stands
+        generativeProvider.secondOpinionCategory = PolicyComparisonSpecs.BEYOND_FALLBACK;
 
         var run = analysisService.analyze(organizationId, review.id());
 

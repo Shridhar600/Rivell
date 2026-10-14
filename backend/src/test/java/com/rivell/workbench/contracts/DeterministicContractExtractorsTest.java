@@ -132,6 +132,27 @@ class DeterministicContractExtractorsTest {
         assertThat(terms.stream().allMatch(DefinedTerm::duplicate)).isTrue();
     }
 
+    /**
+     * DW-080: the same term stated twice in one node is one definition (the persistence key is
+     * per defining node), and the first wording is the one kept.
+     */
+    @Test
+    void aTermDefinedTwiceInOneParagraphIsKeptOnce() {
+        var nodes = List.of(
+                bodyNode(),
+                heading("Definitions", "1", 1),
+                paragraph("“Fees” means the fees set out in Schedule A; "
+                        + "“Fees” means the fees payable under an Order.", 2));
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var terms = new DeterministicContractExtractors().definedTerms(VERSION_ID, regions, nodes);
+
+        assertThat(terms).hasSize(1);
+        assertThat(terms.get(0).term()).isEqualTo("Fees");
+        assertThat(terms.get(0).definition()).isEqualTo("the fees set out in Schedule A");
+        assertThat(terms.get(0).duplicate()).isFalse();
+    }
+
     @Test
     void severalCurlyQuotedDefinitionsInOneParagraphEachKeepTheirOwnText() {
         var definitions = paragraph("In this Agreement: “Downtime” means any period during which "

@@ -34,6 +34,7 @@ import com.rivell.workbench.contracts.ParseCoverage;
 import com.rivell.workbench.contracts.ParseResult;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
+import com.rivell.workbench.platform.docx.DocxPackageRepair;
 import java.io.ByteArrayInputStream;
 
 /**
@@ -74,13 +75,17 @@ public class DocxStructuralParser implements DocumentStructureParser {
             var scan = ZipGuard.scan(docxBytes, properties.maxUncompressedBytes());
             var rawTopLevelChildren =
                     ZipGuard.countTopLevelBodyChildren(scan.mainDocumentXml());
+            var repair = DocxPackageRepair.repair(docxBytes);
             var wordPackage = WordprocessingMLPackage.load(
-                    new ByteArrayInputStream(docxBytes));
+                    new ByteArrayInputStream(repair.bytes()));
             var body = wordPackage.getMainDocumentPart().getJaxbElement().getBody();
             var walk = new BodyWalk(ownerAggregateId, wordPackage,
                     DocxTextInventory.textBoxes(scan.mainDocumentXml()));
             walk.body(body);
             var warnings = new ArrayList<>(walk.warnings());
+            if (repair.repaired()) {
+                warnings.add("DAMAGED_PACKAGE_REPAIRED");
+            }
             if (rawTopLevelChildren != body.getContent().size()) {
                 warnings.add("SOME_BODY_CONTENT_COULD_NOT_BE_REPRESENTED");
             }

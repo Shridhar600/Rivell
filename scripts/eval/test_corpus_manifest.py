@@ -45,5 +45,20 @@ class KnowledgeAnswerLayoutTest(unittest.TestCase):
         self.assertEqual(answer, {"positions": positions})
 
 
+class SelectOrgsTest(unittest.TestCase):
+    ORGS = [{"id": "M", "playbook": "p/m.xlsx", "contracts": ["contracts/m01-a.docx", "contracts/m02-b.docx"]},
+            {"id": "N", "playbook": "p/n.docx", "contracts": ["contracts/n01-c.docx"]}]
+
+    def test_no_filter_keeps_everything(self):
+        self.assertEqual(run_eval.select_orgs(self.ORGS, None, None), self.ORGS)
+
+    def test_a_contract_filter_keeps_only_those_contracts_and_their_orgs(self):
+        orgs = run_eval.select_orgs(self.ORGS, None, ["m02-b"])
+        self.assertEqual(orgs, [{"id": "M", "playbook": "p/m.xlsx", "contracts": ["contracts/m02-b.docx"]}])
+
+    def test_an_org_filter_still_works(self):
+        self.assertEqual([o["id"] for o in run_eval.select_orgs(self.ORGS, ["N"], None)], ["N"])
+
+
 if __name__ == "__main__":
     unittest.main()

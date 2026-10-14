@@ -18,7 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -47,7 +46,7 @@ import com.rivell.workbench.taxonomy.CoreConcepts;
  * checks' judgments, searches the contract for every applicable position no clause addressed,
  * and asks whether the position requires a provision. Required -> MEDIUM missing-provision
  * finding; unsure -> LOW needs-your-look item; not required -> nothing. A provider failure or
- * an incomplete run never invents an omission, and a v1 plan has no OMISSION check.
+ * an incomplete run never invents an omission; the lane only exists when it is switched on.
  */
 @SpringBootTest(properties = "rivell.review.omissions=true")
 @AutoConfigureMockMvc
@@ -82,7 +81,6 @@ class OmissionLaneIT {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("rivell.review.engine", () -> "v2");
         registry.add("rivell.storage.local.root",
                 () -> "target/test-documents/" + UUID.randomUUID());
     }
@@ -122,9 +120,6 @@ class OmissionLaneIT {
 
     @Autowired
     ContractEnrichmentService enrichmentService;
-
-    @Autowired
-    JdbcClient jdbcClient;
 
     @Autowired
     MockMvc mockMvc;
@@ -551,7 +546,7 @@ class OmissionLaneIT {
     }
 
     @Test
-    void theOmissionCheckRunsLastAndOnlyInV2() throws Exception {
+    void theOmissionCheckRunsLastWhenTheLaneIsOn() throws Exception {
         var reviewId = reviewedContract();
 
         var plan = reviewRepository.findPlanChecks(organizationId(), reviewId);
@@ -566,7 +561,7 @@ class OmissionLaneIT {
         assertThat(plan.stream().filter(check -> check.mechanism() == CheckMechanism.OMISSION))
                 .hasSize(1);
 
-        // the plan is frozen at create time: a v1 plan is asserted through the builder itself
+        // P6: the plan no longer reads the frozen engine; a v1 snapshot gets the lane when it is on
         var snapshot = reviewRepository.findSnapshot(organizationId(), reviewId).orElseThrow();
         var semantics = enrichmentService.getSemantics(snapshot.contractId(),
                 snapshot.contractVersionNumber());
@@ -581,31 +576,11 @@ class OmissionLaneIT {
                 snapshot.embeddingModelIdentity(), snapshot.modelPolicy(), ReviewEngine.V1,
                 snapshot.createdAt());
         var v1Plan = planBuilder.build(reviewId, organizationId(), v1Snapshot, semantics);
-        assertThat(v1Plan).noneMatch(check -> check.mechanism() == CheckMechanism.OMISSION);
-
-        // a review running on v1 asks no presence question and adds no omission, even when a
-        // required position is missing: the executor reads the frozen engine, not only the plan
-        scriptedProvider.positionAnswers.put(CAP_EXCEPTIONS_POSITION,
-                PolicyComparisonSpecs.NOT_ADDRESSED);
-        scriptedProvider.presenceAnswers.put(CAP_EXCEPTIONS_POSITION, 0.92);
-        jdbcClient.sql("update review_snapshot set review_engine = 'V1' where review_id = :id")
-                .param("id", reviewId).update();
-        var callsBefore = scriptedProvider.policyComparisonCalls().size();
-        var run = analysisService.analyze(organizationId(), reviewId);
-        assertThat(scriptedProvider.presenceCalls()).isZero();
-        assertThat(omissionFindings(run.id())).isEmpty();
-        assertThat(omissionExecution(reviewId, run.id()).detail())
-                .containsEntry("omissionCandidates", 0);
-        // only the clause checks compared: one call per clause that has positions
-        var clauseCheckCalls = analysisRepository.findExecutions(organizationId(), run.id()).stream()
-                .filter(execution -> execution.detail().containsKey("positions"))
-                .count();
-        assertThat(scriptedProvider.policyComparisonCalls().size() - callsBefore)
-                .isEqualTo((int) clauseCheckCalls);
+        assertThat(v1Plan.getLast().mechanism()).isEqualTo(CheckMechanism.OMISSION);
     }
 
     @Test
-    void aV2PlanHasNoOmissionCheckWhenTheLaneIsOff() throws Exception {
+    void aPlanHasNoOmissionCheckWhenTheLaneIsOff() throws Exception {
         var reviewId = reviewedContract();
 
         var snapshot = reviewRepository.findSnapshot(organizationId(), reviewId).orElseThrow();

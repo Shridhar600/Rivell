@@ -62,7 +62,7 @@ public final class ReviewPlanBuilder {
                 }
             }
         }
-        if (snapshot.reviewEngine() == ReviewEngine.V2 && omissions) {
+        if (omissions) {
             // engine v2 omissions lane (spec §4): one check, last, once every clause was judged
             checks.add(omissionCheck(reviewId, organizationId, snapshot.createdAt(), ordinal[0]++));
         }

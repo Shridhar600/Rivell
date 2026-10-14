@@ -38,7 +38,6 @@ import com.rivell.workbench.review.PolicyComparisonSpecs;
 import com.rivell.workbench.review.PolicyUnavailablePayload;
 import com.rivell.workbench.review.PositionDeviationPayload;
 import com.rivell.workbench.review.RawReviewSignal;
-import com.rivell.workbench.review.ReviewEngine;
 import com.rivell.workbench.review.ReviewEngineProperties;
 import com.rivell.workbench.review.SignalType;
 import com.rivell.workbench.taxonomy.ConceptKey;
@@ -134,10 +133,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         detail.put("positionsTruncated",
                 bundle.degradationWarnings().contains("POLICY_POSITIONS_TRUNCATED"));
         var state = comparisonState(context, clause);
-        var v2 = context.snapshot().reviewEngine() == ReviewEngine.V2;
-        // engine v2 P3: the judge reads the definitions of the terms the clause uses; v1 and the
-        // property off keep the state exactly as before, and the triage and probe keep it always
-        var definitions = v2 && definitionsEnabled
+        // engine v2 P3: the judge reads the definitions of the terms the clause uses; with the
+        // property off the state stays as before, and the triage and probe keep it always
+        var definitions = definitionsEnabled
                 ? ClauseDefinitions.of(bundle) : ClauseDefinitions.empty();
         var judgeState = comparisonState(context, clause, definitions.texts());
         var definitionsUsed = new boolean[1];
@@ -166,7 +164,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         // playbook is searched by the clause's text once; Jev judges what is found the same way
         EvidenceBundle searchBundle = null;
         var searchFailed = false;
-        if (v2 && judgedPositions.stream().noneMatch(PolicyComparisonCheckExecutor::addresses)) {
+        if (judgedPositions.stream().noneMatch(PolicyComparisonCheckExecutor::addresses)) {
             searchBundle = evidenceService.buildForPositionSearch(bundle.request(),
                     judgedPositions.stream().map(judged -> judged.position().sourceCandidateId())
                             .collect(java.util.stream.Collectors.toSet()),
@@ -207,7 +205,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         if (!judgedPositions.isEmpty()) {
             var probeAnswers = probe;
             detail.put("positions", judgedPositions.stream()
-                    .map(judged -> detailEntry(judged, probeAnswers.get(judged.key()), v2,
+                    .map(judged -> detailEntry(judged, probeAnswers.get(judged.key()),
                             opinions.get(judged.key())))
                     .toList());
         }
@@ -259,16 +257,14 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
 
     /**
      * The whole-contract read named this clause, no position addresses it and no other signal
-     * exists for it: engine v2 (always) a LOW advisory "needs your look" item, v1 (opt-in) the
-     * needs-review finding as before. Where a position judged the clause, that judgment stands
-     * (dev eval: letting the read override it put MEDIUM+ false alarms at 35%). Never a verdict
-     * on a position, never wording.
+     * exists for it: a LOW advisory "needs your look" item. Where a position judged the clause,
+     * that judgment stands (dev eval: letting the read override it put MEDIUM+ false alarms at
+     * 35%). Never a verdict on a position, never wording.
      */
     private List<RawReviewSignal> spotted(
             ReviewCheckContext context, ClauseSemantics clause, EvidenceBundle bundle,
             List<RawReviewSignal> signals, Map<String, Object> detail) {
-        var v2 = context.snapshot().reviewEngine() == ReviewEngine.V2;
-        if (!(v2 || properties.issueSpotting()) || !signals.isEmpty()) {
+        if (!signals.isEmpty()) {
             return List.of();
         }
         var spot = spotter.spots(context, bundle.request()).get(clause.headingNodeId());
@@ -277,7 +273,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             return List.of();
         }
         detail.put("spotted", spot.severity());
-        if (v2 && properties.advisorySpots() == PolicyComparisonProperties.AdvisorySpots.HIGH
+        if (properties.advisorySpots() == PolicyComparisonProperties.AdvisorySpots.HIGH
                 && !"HIGH".equals(spot.severity())) {
             // the deployment wants only the read's own HIGH picks; the detail keeps the pick
             return List.of();
@@ -285,12 +281,10 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var quality = new LinkedHashMap<String, Object>();
         quality.put("spottedSeverity", spot.severity());
         quality.put("spottedReason", spot.reason());
-        if (v2) {
-            quality.put("route", NEEDS_YOUR_LOOK);
-            quality.put("uncertaintyReason", PLAYBOOK_SILENT);
-            if (detail.get("uncoveredProbability") instanceof Double probability) {
-                quality.put("uncoveredProbability", probability);
-            }
+        quality.put("route", NEEDS_YOUR_LOOK);
+        quality.put("uncertaintyReason", PLAYBOOK_SILENT);
+        if (detail.get("uncoveredProbability") instanceof Double probability) {
+            quality.put("uncoveredProbability", probability);
         }
         return List.of(signal(context, b -> b
                 .signalType(SignalType.POLICY_UNAVAILABLE).issueFamily(IssueFamily.POLICY_UNAVAILABLE)
@@ -303,16 +297,13 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
 
     /**
      * Engine v2 (spec §6): every position Jev was unsure about gets one second opinion, within the
-     * run's budget; over budget it goes to the user without a call. A review frozen on v1 asks none.
-     * The definitions the judging state carried go to every call made.
+     * run's budget; over budget it goes to the user without a call. The definitions the judging
+     * state carried go to every call made.
      */
     private Map<String, LlmAdjudicator.SecondOpinion> secondOpinions(
             ReviewCheckContext context, ClauseSemantics clause,
             PolicyComparisonSpecs.PolicyComparisonState state, List<JudgedPosition> judgedPositions,
             List<String> definitions, boolean[] definitionsUsed) {
-        if (context.snapshot().reviewEngine() != ReviewEngine.V2) {
-            return Map.of();
-        }
         var opinions = new LinkedHashMap<String, LlmAdjudicator.SecondOpinion>();
         for (var judged : judgedPositions) {
             if (DecisionRouter.route(judged.judgement(), addresses(judged), routing)
@@ -651,7 +642,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     }
 
     private static Map<String, Object> detailEntry(
-            JudgedPosition judged, PolicyComparisonOutcome.Judgement probe, boolean v2,
+            JudgedPosition judged, PolicyComparisonOutcome.Judgement probe,
             LlmAdjudicator.SecondOpinion opinion) {
         var entry = new LinkedHashMap<String, Object>();
         entry.put("positionKey", judged.key());
@@ -667,9 +658,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             entry.put("probeFlagged", probe.flagged());
             entry.put("probeProbabilities", probe.probabilities());
         }
-        if (v2) {
-            entry.put("route", opinion == null ? "ACCEPT" : "ADJUDICATE");
-        }
+        entry.put("route", opinion == null ? "ACCEPT" : "ADJUDICATE");
         if (judged.searched()) {
             var laneInfo = judged.position().laneInfo();
             // a lane that did not find the position has no rank; it is left out, never 0

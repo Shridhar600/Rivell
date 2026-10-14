@@ -3,6 +3,7 @@ import unittest
 
 import p4_metrics
 import run_eval
+import scoring
 
 
 def check(subject="n1", route=None, addressed=None, search_found=None, search_failed=None,
@@ -234,11 +235,62 @@ class LeverTest(unittest.TestCase):
                                     "seriousFalseAlarmSections", "findings"})
 
 
+class SeverityRaiseTest(unittest.TestCase):
+
+    def test_the_predicate_is_medium_needs_your_look_and_walk_away_or_beyond_fallback_only(self):
+        def raised(severity="MEDIUM", route="NEEDS_YOUR_LOOK", category="WALK_AWAY"):
+            quality = {"route": route}
+            if category is not None:
+                quality["secondOpinionCategory"] = category
+            return finding("UNCERTAINTY:second_opinion_disagrees", "NEEDS_YOUR_LOOK",
+                           severity=severity, quality=quality)
+
+        self.assertTrue(p4_metrics.severity_raised(raised()))
+        self.assertTrue(p4_metrics.severity_raised(raised(category="BEYOND_FALLBACK")))
+        self.assertFalse(p4_metrics.severity_raised(raised(category="WITHIN_FALLBACK")))
+        self.assertFalse(p4_metrics.severity_raised(raised(category="MEETS_PREFERRED")))
+        # an unavailable second opinion carries no category at all
+        self.assertFalse(p4_metrics.severity_raised(raised(category=None)))
+        self.assertFalse(p4_metrics.severity_raised(raised(severity="LOW")))
+        self.assertFalse(p4_metrics.severity_raised(raised(route="JEV")))
+
+    def test_lowering_the_raised_items_drops_one_serious_catch_and_one_serious_alarm(self):
+        findings = [
+            # the raise catches planted issue i1 in section s1
+            finding("UNCERTAINTY:second_opinion_disagrees", "NEEDS_YOUR_LOOK", "n1",
+                    severity="MEDIUM",
+                    quality={"route": "NEEDS_YOUR_LOOK", "secondOpinionCategory": "WALK_AWAY"}),
+            # the raise sits on compliant section s2: a MEDIUM/HIGH false alarm there
+            finding("UNCERTAINTY:second_opinion_disagrees", "NEEDS_YOUR_LOOK", "n2",
+                    severity="MEDIUM",
+                    quality={"route": "NEEDS_YOUR_LOOK",
+                             "secondOpinionCategory": "BEYOND_FALLBACK"}),
+            # not raised: stays LOW in both scorings
+            finding("UNCERTAINTY:second_opinion_disagrees", "NEEDS_YOUR_LOOK", "n2",
+                    severity="LOW",
+                    quality={"route": "NEEDS_YOUR_LOOK",
+                             "secondOpinionCategory": "WITHIN_FALLBACK"}),
+        ]
+        current = scoring.score_contract(ANSWER, NODES, [], findings)
+        self.assertEqual(p4_metrics.serious_caught(current["issues"]), 1)
+        self.assertEqual(current["seriousFalseAlarmSections"], 1)
+
+        without = p4_metrics.severity_raise_score(
+            scoring.score_contract, ANSWER, NODES, [], findings)
+        self.assertEqual(without, {"raised": 2, "seriousCaught": 0,
+                                   "seriousFalseAlarmSections": 0})
+
+
 class P4LinesTest(unittest.TestCase):
 
     def v2_contract(self):
         return {
             "file": "msa.docx", "issuesDetected": 5, "falseAlarmSections": 2,
+            "issues": [{"severity": "MEDIUM", "detectedSerious": True},
+                       {"severity": "MEDIUM", "detectedSerious": False}],
+            "seriousFalseAlarmSections": 1,
+            "withoutSeverityRaise": {"raised": 2, "seriousCaught": 0,
+                                     "seriousFalseAlarmSections": 0},
             "search": {"route": 2, "found": 3, "addressing": 2, "top1Confirmed": 1,
                        "top1Checks": 2, "addressedOnlyBySearchMeets": 1},
             "advisory": {"picks": 3, "high": 1, "hits": 2, "highHits": 1},
@@ -277,6 +329,8 @@ class P4LinesTest(unittest.TestCase):
         self.assertIn("Without search-found: issues detected 5 -> 4; false-alarm sections 2 -> 1", text)
         self.assertIn("Without advisory picks: issues detected 5 -> 4; false-alarm sections 2 -> 1", text)
         self.assertIn("Without omissions: issues detected 5 -> 4; false-alarm sections 2 -> 2", text)
+        self.assertIn("Severity R1: 2 items raised to MEDIUM; serious caught at M+ 1 -> 0 and "
+                      "M+ false-alarm sections 1 -> 0 without the raise", text)
 
     def test_a_v1_run_adds_no_line(self):
         v1 = {"file": "old.docx", "issuesDetected": 3, "falseAlarmSections": 0,

@@ -246,6 +246,9 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
                         ("withoutOmissions", p4_metrics.drop_omissions)):
         score[lever] = p4_metrics.lever_score(
             score_contract, answer, nodes, clauses, findings, drop)
+    # engine v2 P6 R1: the same run re-scored with the second-opinion-raised items at LOW
+    score["withoutSeverityRaise"] = p4_metrics.severity_raise_score(
+        score_contract, answer, nodes, clauses, findings)
     score["coverage"] = coverage
     score["checkStatus"] = {}
     for c in checks:
@@ -293,6 +296,21 @@ def load_orgs(corpus):
                 org[kind] = [path(e) for e in org[kind]]
         orgs.append(org)
     return orgs
+
+
+def select_orgs(orgs, org_ids, stems):
+    """Organisations to run: those named (all when none), each with only the named contracts
+    (by file stem; all when none). An organisation left with no contract is dropped."""
+    selected = []
+    for org in orgs:
+        if org_ids and org["id"] not in org_ids:
+            continue
+        if stems:
+            org = dict(org, contracts=[c for c in org["contracts"] if pathlib.Path(c).stem in stems])
+            if not org["contracts"]:
+                continue
+        selected.append(org)
+    return selected
 
 
 def run_org(api, corpus, org, raw_dir, redline=True):
@@ -623,6 +641,15 @@ def p4_lines(results):
         without_alarms = sum((c.get(lever) or {}).get("falseAlarmSections", 0) for c in contracts)
         lines.append(f"- Without {label}: issues detected {with_issues} -> {without_issues}; "
                      f"false-alarm sections {with_alarms} -> {without_alarms}")
+    severity_raise = [c.get("withoutSeverityRaise") or {} for c in contracts]
+    raised = sum(s.get("raised", 0) for s in severity_raise)
+    with_caught = sum(p4_metrics.serious_caught(c.get("issues") or []) for c in contracts)
+    without_caught = sum(s.get("seriousCaught", 0) for s in severity_raise)
+    with_alarms = sum(c.get("seriousFalseAlarmSections", 0) for c in contracts)
+    without_alarms = sum(s.get("seriousFalseAlarmSections", 0) for s in severity_raise)
+    lines.append(f"- Severity R1: {raised} items raised to MEDIUM; serious caught at M+ "
+                 f"{with_caught} -> {without_caught} and M+ false-alarm sections "
+                 f"{with_alarms} -> {without_alarms} without the raise")
     return lines
 
 
@@ -744,6 +771,7 @@ def main():
     ap.add_argument("--corpus", required=True, type=pathlib.Path)
     ap.add_argument("--out", required=True, type=pathlib.Path)
     ap.add_argument("--org", action="append", help="limit to these org ids")
+    ap.add_argument("--contract", action="append", help="limit to these contract file stems")
     ap.add_argument("--no-build", action="store_true")
     ap.add_argument("--no-redline", action="store_true", help="skip the redline round trip")
     args = ap.parse_args()
@@ -756,7 +784,7 @@ def main():
     if problems:
         sys.exit("preflight failed, nothing run:\n  " + "\n  ".join(problems))
     all_orgs = load_orgs(args.corpus)
-    orgs = [o for o in all_orgs if not args.org or o["id"] in args.org]
+    orgs = select_orgs(all_orgs, args.org, args.contract)
 
     run_id = time.strftime("%Y%m%d-%H%M%S")
     out = args.out / run_id

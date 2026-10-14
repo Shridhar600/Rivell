@@ -17,7 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -44,7 +43,7 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
  * Engine v2 SEARCH route (spec §6): a clause no topic paired with a position is compared with
  * the positions a text search over the playbook finds, one round, judged by the same comparison.
  * Nothing relevant found falls back to the uncovered-clause triage; a failed search comparison
- * degrades the check and invents nothing. A review frozen on v1 never searches.
+ * degrades the check and invents nothing.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -74,7 +73,6 @@ class PositionSearchRouteIT {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("rivell.review.engine", () -> "v2");
         registry.add("rivell.storage.local.root",
                 () -> "target/test-documents/" + UUID.randomUUID());
     }
@@ -105,9 +103,6 @@ class PositionSearchRouteIT {
 
     @Autowired
     ContractEnrichmentService enrichmentService;
-
-    @Autowired
-    JdbcClient jdbcClient;
 
     @Autowired
     com.rivell.workbench.retrieval.RetrievalRepository retrievalRepository;
@@ -340,26 +335,5 @@ class PositionSearchRouteIT {
         // never an invented "not addressed": the triage did not run on a clause nobody judged
         assertThat(degraded.getFirst().detail()).doesNotContainKey("uncoveredProbability");
         assertThat(signalsCiting(run.id(), terminationPositionId())).isEmpty();
-    }
-
-    @Test
-    void aV1ReviewNeverSearches() throws Exception {
-        var reviewId = reviewedContract();
-        // a review frozen on v1: the live setting (v2) must not change how it runs
-        jdbcClient.sql("update review_snapshot set review_engine = 'V1' where review_id = :id")
-                .param("id", reviewId).update();
-        scriptedProvider.positionAnswers.put(TERMINATION_POSITION,
-                PolicyComparisonSpecs.BEYOND_FALLBACK);
-
-        var run = analysisService.analyze(organizationId(), reviewId);
-
-        var executions = analysisRepository.findExecutions(organizationId(), run.id());
-        assertThat(executions).allSatisfy(execution -> assertThat(execution.detail())
-                .doesNotContainKeys("search", "route"));
-        assertThat(signalsCiting(run.id(), terminationPositionId())).isEmpty();
-        // the topicless termination clause is only triaged, as before engine v2
-        assertThat(scriptedProvider.uncoveredHeadings).anyMatch(heading -> heading.contains(TERMINATION));
-        assertThat(scriptedProvider.policyComparisonCalls())
-                .noneMatch(call -> call.heading().contains(TERMINATION));
     }
 }

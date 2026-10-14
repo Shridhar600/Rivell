@@ -35,7 +35,6 @@ import com.rivell.workbench.review.PresenceSpecs;
 import com.rivell.workbench.review.RawReviewSignal;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
 import com.rivell.workbench.review.ReviewCheckExecution;
-import com.rivell.workbench.review.ReviewEngine;
 import com.rivell.workbench.review.ReviewPlanCheck;
 import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.SignalType;
@@ -97,10 +96,6 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
     public CheckOutcome execute(ReviewCheckContext context) {
         if (!context.environment().fullyMatches()) {
             return CheckOutcome.degraded(context.environment().mismatchReason());
-        }
-        if (context.snapshot().reviewEngine() != ReviewEngine.V2) {
-            // the engine frozen on the review decides, as for the clause checks
-            return CheckOutcome.completed(List.of(), emptyDetail(0));
         }
         var organizationId = context.check().organizationId();
         var planChecks = reviewRepository.findPlanChecks(organizationId, context.check().reviewId());

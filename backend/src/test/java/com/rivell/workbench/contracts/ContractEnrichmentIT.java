@@ -903,6 +903,46 @@ public class ContractEnrichmentIT {
                 .contains(serviceLevelsParagraph.id());
     }
 
+    /**
+     * DW-080: a contract that defines the same term twice (recitals and definitions) must keep
+     * and flag both definitions. The old per-term unique key failed the whole analysis instead.
+     */
+    @Test
+    void everyDefinitionOfATermStatedTwiceIsKept() throws Exception {
+        var pkg = org.docx4j.openpackaging.packages.WordprocessingMLPackage.createPackage();
+        var docPart = pkg.getMainDocumentPart();
+        docPart.addStyledParagraphOfText("Heading1", "Recitals");
+        docPart.addParagraphOfText("“Confidential Information” means information disclosed by "
+                + "either party to the other.");
+        docPart.addStyledParagraphOfText("Heading1", "Definitions");
+        docPart.addParagraphOfText("1.1 “Confidential Information” means all business, technical "
+                + "and financial information exchanged between the parties.");
+        var out = new java.io.ByteArrayOutputStream();
+        pkg.save(out);
+        var ingested = ingestionService.ingest("duplicate-definition.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(out.toByteArray()));
+
+        var semantics = enrichmentService.enrich(ingested.contractId(), 1,
+                ReviewProfile.minimal(ContractType.NDA));
+
+        assertThat(semantics.enrichmentStatus()).isEqualTo(EnrichmentStatus.READY);
+        var definitions = semantics.definedTerms().stream()
+                .filter(term -> term.term().equals("Confidential Information"))
+                .toList();
+        assertThat(definitions).hasSize(2);
+        assertThat(definitions.stream().allMatch(DefinedTerm::duplicate)).isTrue();
+        assertThat(definitions).extracting(DefinedTerm::definition)
+                .containsExactlyInAnyOrder(
+                        "information disclosed by either party to the other.",
+                        "all business, technical and financial information exchanged between "
+                                + "the parties.");
+        assertThat(semantics.quality().notes())
+                .as("both rows are flagged, and identical-term wording that differs is a review note")
+                .contains(ReviewQualityNote.DUPLICATE_DEFINED_TERM,
+                        ReviewQualityNote.AMBIGUOUS_DEFINITIONS);
+    }
+
     @Test
     void crossOrganizationSemanticStateIsInvisible() throws Exception {
         var bytes = fixtureBytes("m5-nda-counterparty.docx");

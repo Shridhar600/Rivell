@@ -8,10 +8,9 @@ import org.junit.jupiter.api.Test;
 class ReviewEnginePropertiesTest {
 
     @Test
-    void unsetPropertiesDefaultToEngineTwoAndTheBandMeasuredInP0() {
-        var properties = new ReviewEngineProperties(null, null, null, null);
+    void unsetPropertiesDefaultToTheBandMeasuredInP0() {
+        var properties = new ReviewEngineProperties(null, null, null);
 
-        assertThat(properties.engine()).isEqualTo(ReviewEngine.V2);
         assertThat(properties.routing().adjudicateFrom()).isEqualTo(0.4);
         assertThat(properties.routing().adjudicateBelow()).isEqualTo(0.8);
         assertThat(properties.routing().maxAdjudications()).isEqualTo(40);

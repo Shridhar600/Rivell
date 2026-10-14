@@ -2,6 +2,7 @@ package com.rivell.workbench.platform.parsing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.UUID;
 
@@ -11,6 +12,7 @@ import com.rivell.workbench.contracts.DocumentNode;
 import com.rivell.workbench.contracts.DocumentNodeType;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
+import com.rivell.workbench.platform.docx.DocxTestPackages;
 
 class DocxStructuralParserTest {
 
@@ -373,6 +375,27 @@ class DocxStructuralParserTest {
         assertThat(result.nodes()).isEmpty();
         assertThat(result.warnings()).isNotEmpty();
         assertThat(result.warnings().get(0)).startsWith("The document could not be parsed");
+    }
+
+    /**
+     * DW-079: a relationship to a missing part makes docx4j refuse the whole package. Word opens
+     * such a file after offering to repair it, and Rivell's analysis must not 500 over it.
+     */
+    @Test
+    void repairsADamagedPackageAndSaysSoInsteadOfFailing() {
+        var damaged = DocxTestPackages.withEntry(
+                DocxTestPackages.fixture("m9-simple-replace.docx"),
+                DocxTestPackages.RELS_ENTRY,
+                DocxTestPackages.relsDocument(DocxTestPackages.STYLES_RELATIONSHIP,
+                        DocxTestPackages.FOOTNOTES_RELATIONSHIP));
+
+        var result = parser.parse(new ByteArrayInputStream(damaged), VERSION_ID);
+
+        assertThat(result.status())
+                .as("parse warnings: %s", result.warnings())
+                .isEqualTo(ParseStatus.OK);
+        assertThat(result.nodes()).isNotEmpty();
+        assertThat(result.warnings()).contains("DAMAGED_PACKAGE_REPAIRED");
     }
 
     private com.rivell.workbench.contracts.ParseResult parse(String fixture) {

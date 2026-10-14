@@ -126,7 +126,7 @@ class EnrichmentFailureIT {
 
         assertThatThrownBy(() -> enrichmentService.enrich(contractId, 1, profile))
                 .as("enrichment must still surface the failure to the caller")
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(ContractNotReadableException.class);
 
         var semantics = enrichmentService.getSemantics(contractId, 1);
 
@@ -149,6 +149,33 @@ class EnrichmentFailureIT {
                 .get("data").get("failureReason").asText();
         assertThat(TenantEnrichmentFailureReason.valueOf(reason))
                 .isEqualTo(TenantEnrichmentFailureReason.of(semantics.failureReason()));
+    }
+
+    /**
+     * DW-079: analysis of a version whose stored file could not be read must answer a definite
+     * 422 and still record the FAILED state, instead of surfacing as an unhandled 500.
+     */
+    @Test
+    void enrichmentOfAVersionWithoutParsedStructureAnswers422AndRecordsTheFailure()
+            throws Exception {
+        var contractId = ingest();
+        jdbcClient.sql("delete from document_node where contract_version_id = "
+                        + "(select id from contract_version where contract_id = :contractId"
+                        + " and version_number = 1)")
+                .param("contractId", contractId)
+                .update();
+
+        mockMvc.perform(post("/api/contracts/{id}/versions/{n}/enrichment", contractId, 1)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"contractType\":\"MSA\",\"ourSideRole\":\"CUSTOMER\","
+                                + "\"paperSource\":\"THIRD_PARTY\",\"jurisdiction\":\"US\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.detail").value(
+                        "The contract file could not be read, so it cannot be analysed."));
+
+        var semantics = enrichmentService.getSemantics(contractId, 1);
+        assertThat(semantics.enrichmentStatus()).isEqualTo(EnrichmentStatus.FAILED);
+        assertThat(semantics.failureReason()).isEqualTo(EnrichmentFailureReason.INTERNAL);
     }
 
     /**
@@ -220,7 +247,7 @@ class EnrichmentFailureIT {
                 .param("contractId", contractId)
                 .update();
         assertThatThrownBy(() -> enrichmentService.enrich(contractId, 1, profile))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(ContractNotReadableException.class);
         var failed = enrichmentService.getSemantics(contractId, 1);
         assertThat(failed.enrichmentStatus()).isEqualTo(EnrichmentStatus.FAILED);
         assertThat(failed.failureReason()).isNotNull();
@@ -233,7 +260,7 @@ class EnrichmentFailureIT {
         // statement rather than a copy of the fix.
         assertThatThrownBy(() -> enrichmentService.enrich(contractId, 1, profile))
                 .as("retrying a failed enrichment must re-claim, not violate the schema")
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(ContractNotReadableException.class)
                 .isNotInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
 
         var afterRetry = enrichmentService.getSemantics(contractId, 1);

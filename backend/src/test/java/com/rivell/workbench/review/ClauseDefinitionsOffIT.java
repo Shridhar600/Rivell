@@ -55,7 +55,6 @@ class ClauseDefinitionsOffIT {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("rivell.review.engine", () -> "v2");
         registry.add("rivell.storage.local.root",
                 () -> "target/test-documents/" + UUID.randomUUID());
     }

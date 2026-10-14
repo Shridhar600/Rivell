@@ -68,7 +68,7 @@ public class ContractEnrichmentService {
         try {
             var structure = contractRepository.loadStructure(versionId);
             if (structure.nodes().isEmpty()) {
-                throw new IllegalStateException("Contract version has no parsed structure");
+                throw new ContractNotReadableException();
             }
             var result = enricher.enrich(structure.nodes(), profile, structure.parseWarnings());
             var merged = mergeCorrections(prior, result);
