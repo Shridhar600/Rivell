@@ -158,6 +158,9 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
     expect(screen.getByText('Ready for review', { selector: '.rv-stb' })).toBeInTheDocument()
     const link = screen.getAllByRole('link', { name: 'Open review' })[0]
     expect(link).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
+    // The next step sits in the top bar, where every page keeps its actions.
+    const topbar = document.querySelector('.rv-topbar') as HTMLElement
+    expect(within(topbar).getByRole('link', { name: 'Open review' })).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
     expect(screen.getByLabelText('By classification')).toBeInTheDocument()
     // Rivell's own proposals are orientation only, and the kinds are not interchangeable.
     const proposals = screen.getByLabelText('What Rivell proposes')
@@ -635,5 +638,8 @@ describe('identity and errors', () => {
     await screen.findByRole('heading', { name: 'Waiting for analysis to start' })
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(crumbs).getByRole('link', { name: 'Reviews' })).toHaveAttribute('href', '/reviews')
+    // A review page offers its own next step, never a new review.
+    const topbar = document.querySelector('.rv-topbar') as HTMLElement
+    expect(within(topbar).queryByRole('link', { name: 'Start review' })).not.toBeInTheDocument()
   })
 })

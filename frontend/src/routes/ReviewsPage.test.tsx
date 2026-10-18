@@ -110,7 +110,7 @@ describe('Reviews page', () => {
   it('lists real reviews as a flat table in one organization-wide request', async () => {
     const urls = stubApi({ first: { items: SEEDED } })
     renderReviews()
-    expect(await screen.findByRole('heading', { name: 'Contract reviews' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Reviews', level: 1 })).toBeInTheDocument()
     const rows = await screen.findAllByRole('link', { name: /\.docx/ })
     expect(rows).toHaveLength(3)
     expect(within(rows[0]).getByText('Atlas Mutual NDA.docx')).toBeInTheDocument()
@@ -262,7 +262,7 @@ describe('Reviews page', () => {
     stubApi({}, 'first')
     renderReviews()
     expect(await screen.findByRole('heading', { name: 'Reviews could not be loaded' })).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: 'Start review' })[0]).toHaveAttribute('href', '/reviews/new')
+    expect(screen.getByRole('link', { name: 'Start review' })).toHaveAttribute('href', '/reviews/new')
   })
 
   it('discloses truncation and loads the next page on request, without repeating rows', async () => {
@@ -290,7 +290,7 @@ describe('Reviews page', () => {
     stubApi({ first: { items: SEEDED } })
     renderReviews()
     await screen.findAllByRole('link', { name: /\.docx/ })
-    await userEvent.click(screen.getAllByRole('link', { name: 'Start review' })[0])
+    await userEvent.click(screen.getByRole('link', { name: 'Start review' }))
     expect(await screen.findByRole('heading', { name: 'Start a contract review' })).toBeInTheDocument()
   })
 })

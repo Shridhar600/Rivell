@@ -42,17 +42,16 @@ export function ReviewsPage() {
 
   return (
     <div className="rv-main rv-main--wide">
-      <TopBar title="Contract reviews" actions={startButton} />
+      <TopBar title="Reviews" actions={startButton} />
       <div className="rv-scroll">
         <div className="rv-page">
           <div className="rv-page__head">
             <div>
-              <h1 className="rv-page__title">Contract reviews</h1>
+              <h1 className="rv-page__title">Reviews</h1>
               <p className="rv-page__lede">
                 Each review keeps the contract version it started with.
               </p>
             </div>
-            {startButton}
           </div>
 
           {history.isPending ? <LoadingState label="Loading reviews" /> : null}

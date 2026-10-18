@@ -40,7 +40,6 @@ import { clauseBodyText, sideChip, typeChip } from '../lib/lifecycleView'
 import { classifyTriggerError, redlineTriggerErrorNotice } from '../lib/redline'
 import {
   REVIEWS_PATH,
-  START_REVIEW_PATH,
   activityEvents,
   isPostFinalize,
   journey,
@@ -126,17 +125,11 @@ export function ReviewLifecyclePage() {
 
   const crumbs = <Breadcrumbs crumbs={[{ label: 'Reviews', to: REVIEWS_PATH }, { label: summary ? title : 'Review' }]} />
 
-  const shell = (content: ReactNode, rail?: ReactNode) => (
+  // The top bar carries this review's next step, not a new review: Start review is on Reviews and Home.
+  const shell = (content: ReactNode, rail?: ReactNode, actions?: ReactNode) => (
     <>
       <div className="rv-main">
-        <TopBar
-          title={crumbs}
-          actions={
-            <LinkButton to={START_REVIEW_PATH} variant="primary" compact>
-              Start review
-            </LinkButton>
-          }
-        />
+        <TopBar title={crumbs} actions={actions} />
         <div className="rv-scroll">
           <div className="rv-lc">{content}</div>
         </div>
@@ -326,16 +319,16 @@ export function ReviewLifecyclePage() {
             </span>
           </div>
         </div>
-        {key && opensWorkspace(key) ? (
-          <div className="rv-lc-head__actions">
-            <LinkButton to={workspaceTo}>Open review</LinkButton>
-          </div>
-        ) : null}
       </header>
       {key ? <Journey steps={journey(key, humanReview)} /> : null}
       {body}
     </>,
     <LifecycleRail summary={summary} document={summary.document} packLabel={packLabel} events={activityEvents(facts)} />,
+    key && opensWorkspace(key) ? (
+      <LinkButton to={workspaceTo} variant="primary" compact>
+        Open review
+      </LinkButton>
+    ) : null,
   )
 }
 
