@@ -41,14 +41,21 @@ final class PositionSearch {
             List<RetrievalTrace.StageSummary> stages, List<String> degradation) {
     }
 
-    Found search(EvidenceRequest request, long asOfPublication, Set<UUID> exclude, int limit) {
+    Found search(EvidenceRequest request, long asOfPublication, Set<UUID> exclude,
+            Set<String> excludedTopics, int limit) {
         var narrowed = resolver.resolveAll(request, Set.of(CandidateType.PLAYBOOK_RULE),
                 asOfPublication, NARROWING_CAP);
         var byId = new LinkedHashMap<UUID, PublishedCandidate>();
         for (var match : narrowed.published()) {
-            if (!exclude.contains(match.candidate().id())) {
-                byId.put(match.candidate().id(), match);
+            var candidate = match.candidate();
+            if (exclude.contains(candidate.id())) {
+                continue;
             }
+            // DW-085: a topic the person removed from the clause is not a way back to its positions
+            if (candidate.topicKeys().stream().anyMatch(excludedTopics::contains)) {
+                continue;
+            }
+            byId.put(candidate.id(), match);
         }
         var ids = List.copyOf(byId.keySet());
         var degradation = new ArrayList<String>();

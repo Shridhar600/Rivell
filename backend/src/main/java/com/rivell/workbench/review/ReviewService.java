@@ -2,6 +2,7 @@ package com.rivell.workbench.review;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -136,7 +137,9 @@ public class ReviewService {
                         "Unknown contract pack: " + packKey));
 
         var organizationId = identity.organizationId();
-        var now = clock.instant();
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned review would not match a later read of it.
+        var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         var reviewId = UUID.randomUUID();
         var bindings = modelBindingCatalog.current();
         var snapshot = new ReviewSnapshot(

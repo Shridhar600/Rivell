@@ -1,6 +1,7 @@
 package com.rivell.workbench.knowledge;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -62,6 +63,8 @@ public class CandidateReviewService {
                     && candidate.reviewStatus() != ReviewStatus.EDITED) {
                 throw new InvalidCandidateReviewStateException(candidate, "approved");
             }
+            // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would
+            // be stored rounded, so the returned candidate would not match a later read of it.
             return new KnowledgeCandidate(
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.APPROVED,
@@ -73,8 +76,8 @@ public class CandidateReviewService {
                     candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
-                    Texts.normalize(note), Instant.now(),
-                    candidate.createdAt(), Instant.now());
+                    Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS));
         });
     }
 
@@ -118,6 +121,8 @@ public class CandidateReviewService {
             var explicitWording = contentText != null && !contentText.isBlank()
                     ? contentText
                     : candidate.editedContentText();
+            // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would
+            // be stored rounded, so the returned candidate would not match a later read of it.
             var edited = new KnowledgeCandidate(
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,
@@ -134,8 +139,8 @@ public class CandidateReviewService {
                             ? scope.withSourceContractTypes(candidate.scope().sourceContractTypes())
                             : candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
-                    Texts.normalize(note), Instant.now(),
-                    candidate.createdAt(), Instant.now());
+                    Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS));
             return recomputeConditions(edited, candidate.artifactId());
         });
     }
@@ -172,8 +177,8 @@ public class CandidateReviewService {
                     candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
-                    Texts.normalize(note), Instant.now(),
-                    candidate.createdAt(), Instant.now());
+                    Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS));
         });
     }
 

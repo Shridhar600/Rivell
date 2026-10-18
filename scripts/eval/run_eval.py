@@ -264,7 +264,8 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
         score["redline"] = raw["redline"]
     (raw_dir / f"{pathlib.Path(entry).stem}.json").write_text(json.dumps(raw, indent=1))
     score.update(file=entry, parseStatus=upload.get("parseStatus"), profile=profile, timings=timings,
-                 enrichmentStatus=enrichment.get("enrichmentStatus"), reviewStatus=review["status"])
+                 enrichmentStatus=enrichment.get("enrichmentStatus"), reviewStatus=review["status"],
+                 reviewEngine=review_engine(review))
     return score
 
 
@@ -688,9 +689,23 @@ def p3_lines(results):
             f"ambiguous {counts['ambiguous']}, external {counts['external']}"]
 
 
+def review_engine(review):
+    """The engine a review froze on, read from its stored snapshot: the backend no longer reads an
+    engine switch, so a report must not label a run from the environment."""
+    return ((review.get("snapshot") or {}).get("engine") or "v2").lower()
+
+
+def frozen_engine(results):
+    """The engine the scored reviews actually froze on; v2 when the run reviewed nothing."""
+    engines = sorted({c.get("reviewEngine") for r in results for c in r.get("contracts", [])
+                      if c.get("reviewEngine")})
+    return ",".join(engines) if engines else "v2"
+
+
 def engine_meta():
-    """The engine settings the backend starts with, as an eval run reports them."""
-    return {"engine": os.environ.get("RIVELL_REVIEW_ENGINE", "v2").lower(),
+    """The engine settings the backend starts with, as an eval run reports them. The engine label
+    itself is read back from each review's stored snapshot once the run has reviews."""
+    return {"engine": "v2",
             "omissions": os.environ.get("RIVELL_REVIEW_OMISSIONS", "false").lower(),
             "definitions": os.environ.get("RIVELL_REVIEW_DEFINITIONS", "false").lower()}
 
@@ -699,7 +714,6 @@ def header_lines(meta):
     return [f"# Eval run {meta['runId']}", "",
             f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
             + (f" · decisions `{meta['decisions']}`" if meta.get("decisions") else "")
-            + (" · issue spotting on" if meta.get("issueSpotting") else "")
             + (f" · order probe `{meta['orderProbe']}` (measurement only)"
                if meta.get("orderProbe", "off") != "off" else "")
             + (f" · engine `{meta['engine']}`" if meta.get("engine", "v2") != "v2" else "")
@@ -794,7 +808,6 @@ def main():
                          capture_output=True, text=True).stdout.strip()
     meta = {"runId": run_id, "corpus": str(args.corpus), "git": git,
             "started": time.strftime("%Y-%m-%d %H:%M"), "decisions": decisions,
-            "issueSpotting": os.environ.get("RIVELL_ISSUE_SPOTTING", "false").lower() == "true",
             "orderProbe": os.environ.get("RIVELL_ORDER_PROBE", "off").lower(),
             **engine_meta()}
     started = time.monotonic()
@@ -826,6 +839,7 @@ def main():
         if meta.get("aborted"):
             break
     meta["wallS"] = round(time.monotonic() - started)
+    meta["engine"] = frozen_engine(results)
     (out / "results.json").write_text(json.dumps({"meta": meta, "results": results}, indent=1))
     write_report(out, results, meta)
     print(f"report: {out / 'summary.md'}")

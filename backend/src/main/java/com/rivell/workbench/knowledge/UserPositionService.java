@@ -1,6 +1,7 @@
 package com.rivell.workbench.knowledge;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -71,7 +72,9 @@ public class UserPositionService {
                 .findFirst()
                 .orElseThrow(() -> new UnitNotMarkableException(
                         "the source no longer matches this part"));
-        var now = Instant.now();
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned candidate would not match a later read of it.
+        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var raw = region.toCandidates(artifact, unit,
                 ApplicabilityScope.fromManifest(artifact.manifest()), now);
         if (raw.isEmpty()) {

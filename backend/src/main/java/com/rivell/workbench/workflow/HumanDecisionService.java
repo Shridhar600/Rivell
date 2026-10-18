@@ -1,6 +1,7 @@
 package com.rivell.workbench.workflow;
 
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
@@ -118,11 +119,14 @@ public class HumanDecisionService {
                 throw new DecisionConflictException(findingId, command.expectedVersion(),
                         currentRevision);
             }
+            // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would
+            // be stored rounded, so the returned decision would not match a later read of it.
             var decision = new HumanDecision(decisionId, organizationId, reviewId, findingId,
                     activeRun.id(), currentRevision + 1, command.action(),
                     planned == null ? null : planned.actionType(),
                     language(planned), source(planned), draftingEvidence(planned),
-                    command.comment(), identity.userId(), clock.instant(),
+                    command.comment(), identity.userId(),
+                    clock.instant().truncatedTo(ChronoUnit.MICROS),
                     command.clientRequestId(), current.map(HumanDecision::id).orElse(null));
             if (!decisionRepository.insert(decision)) {
                 throw new DecisionConflictException(findingId, command.expectedVersion(),

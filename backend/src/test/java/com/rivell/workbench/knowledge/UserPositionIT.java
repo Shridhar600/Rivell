@@ -76,6 +76,9 @@ class UserPositionIT {
     KnowledgePublicationService publicationService;
 
     @Autowired
+    UserPositionService positionService;
+
+    @Autowired
     KnowledgeRecordShapingIT.CorpusDecisionProvider provider;
 
     @Autowired
@@ -168,6 +171,24 @@ class UserPositionIT {
         publicationService.publish(List.of(candidateId), Map.of(), "Adds a missed position.");
         assertThat(queryService.getCandidate(candidateId).reviewStatus())
                 .isEqualTo(ReviewStatus.PUBLISHED);
+    }
+
+    /**
+     * DW-088: PostgreSQL timestamptz keeps microseconds. The candidates "make this a position"
+     * returns are the ones it wrote, so their timestamps must match a later read of them.
+     */
+    @Test
+    void aMadePositionCarriesTheTimestampPrecisionTheDatabaseKeeps() throws Exception {
+        var artifact = ingest(ArtifactType.PLAYBOOK);
+        var guidance = guidancePart(artifact);
+
+        var created = positionService.makePosition(artifact.id(), guidance.id());
+
+        assertThat(created).hasSize(1);
+        var candidate = created.getFirst();
+        assertThat(candidate.createdAt().getNano() % 1000).isZero();
+        var readBack = queryService.getCandidate(candidate.id());
+        assertThat(readBack.createdAt()).isEqualTo(candidate.createdAt());
     }
 
     @Test

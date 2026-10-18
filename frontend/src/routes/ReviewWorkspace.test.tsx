@@ -5,7 +5,7 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { AppProviders } from '../app/AppProviders'
 import { appRoutes } from '../app/router'
-import { fixtureContractSummary, fixtureSemantics, stubContractApi, type StubOptions } from '../components/contract/testFixtures'
+import { fixtureContractSummary, fixtureSemantics, fixtureStructure, stubContractApi, type StubOptions } from '../components/contract/testFixtures'
 import {
   fixtureAbsenceFindingSummary,
   fixtureClauseFindingDetail,
@@ -50,6 +50,18 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('review identity', () => {
+  it('says when the contract file was repaired or not fully read', async () => {
+    renderWorkspace(
+      stubContractApi(
+        options({
+          structure: { ...fixtureStructure, parseWarnings: ['DAMAGED_PACKAGE_REPAIRED', 'FOOTNOTES_NOT_REPRESENTED'] },
+        }),
+      ),
+    )
+    expect(await screen.findByText(/The file was damaged. Rivell repaired it/)).toBeInTheDocument()
+    expect(screen.getByText('Footnotes contain content that is not represented.')).toBeInTheDocument()
+  })
+
   it('treats a review from another contract as not found', async () => {
     renderWorkspace(
       stubContractApi(options({ reviewSummary: { ...fixtureCompletedReviewSummary, id: 'r-9', contractId: 'c2' } })),

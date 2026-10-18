@@ -30,6 +30,22 @@ public final class ClauseTopics {
         return List.copyOf(topics);
     }
 
+    /**
+     * The topics a human correction took off a clause: the machine primary an active correction
+     * replaced, so the effective topic set no longer carries it. Empty without a correction (and
+     * when the correction keeps the same concept), so an uncorrected clause searches unchanged.
+     */
+    public static List<ConceptKey> removedTopics(ClauseSemantics clause) {
+        if (!clause.correction().corrected()) {
+            return List.of();
+        }
+        var machine = clause.primaryConcept().orElse(null);
+        if (machine == null || effectiveTopics(clause).contains(machine)) {
+            return List.of();
+        }
+        return List.of(machine);
+    }
+
     /** The concept a plan check records: the effective primary, else the first topic. */
     public static ConceptKey subjectConcept(List<ConceptKey> effectiveTopics) {
         return effectiveTopics.isEmpty() ? NO_TOPIC : effectiveTopics.getFirst();

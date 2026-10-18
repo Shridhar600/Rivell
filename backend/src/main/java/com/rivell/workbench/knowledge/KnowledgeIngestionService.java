@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -79,7 +80,9 @@ public class KnowledgeIngestionService {
                 filename, Set.of(DOCX_EXTENSION, XLSX_EXTENSION));
         var bytes = readBounded(source, maxFileSize.toBytes());
         var sha256 = sha256Hex(bytes);
-        var now = Instant.now();
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned artifact would not match a later read of it.
+        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var artifactId = UUID.randomUUID();
         var storageKey = new StorageKey(
                 identity.organizationId() + "/knowledge/" + artifactId + extensionOf(safeFilename));
