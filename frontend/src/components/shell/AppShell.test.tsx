@@ -126,7 +126,7 @@ describe('sidebar owns its own collapse control', () => {
     stubApi([LIFECYCLE_ROWS.unresolved])
     renderAt('/')
     await userEvent.click(await screen.findByRole('option', { name: /Unresolved MSA\.docx/i }))
-    const details = screen.getByRole('complementary', { name: 'Details' })
+    expect(screen.getByRole('complementary', { name: 'Details' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
@@ -421,7 +421,7 @@ describe('responsive shell structure', () => {
     stubApi()
     const { container } = renderAt('/reviews/new')
     expect(container.querySelector('.rv-insp')).toBeInTheDocument()
-    const details = screen.getByRole('complementary', { name: 'Details' })
+    expect(screen.getByRole('complementary', { name: 'Details' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
@@ -433,7 +433,7 @@ describe('responsive shell structure', () => {
   it('keeps the collapsed panel handle operable', async () => {
     stubApi()
     renderAt('/reviews/new')
-    const details = screen.getByRole('complementary', { name: 'Details' })
+    expect(screen.getByRole('complementary', { name: 'Details' })).toBeInTheDocument()
     const handle = screen.getByRole('button', { name: 'Details panel' })
     await userEvent.click(handle)
     await waitFor(() =>
