@@ -135,12 +135,13 @@ describe('Knowledge navigation', () => {
     expect(within(nav).getByRole('link', { name: 'Overview' })).not.toHaveAttribute('aria-current')
   })
 
-  it('keeps the three primary destinations and shows the sections only inside Knowledge', async () => {
+  it('lists the Knowledge areas outside Knowledge too, so the sidebar never changes shape', async () => {
     stubKnowledgeApi(buildWorld())
     renderKnowledge('/reviews')
     const primary = screen.getByRole('navigation', { name: 'Primary' })
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent?.trim())).toEqual(['Home', 'Reviews', 'Knowledge'])
-    expect(screen.queryByRole('navigation', { name: 'Knowledge' })).not.toBeInTheDocument()
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent?.trim())).toEqual(['Home', 'Reviews'])
+    const knowledge = screen.getByRole('navigation', { name: 'Knowledge' })
+    expect(within(knowledge).queryByRole('link', { current: 'page' })).not.toBeInTheDocument()
   })
 
   it('marks Overview current on exactly the overview route', async () => {

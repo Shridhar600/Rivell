@@ -51,7 +51,7 @@ interface LayoutProps {
  */
 export function CompileLayout({ top, rail, railOpen = true, children }: LayoutProps) {
   return (
-    <div className="rv-kc">
+    <div className="rv-kc" data-panel-keys="own">
       {top}
       <div className="rv-kc-work" data-rail={rail && railOpen ? 'open' : 'closed'}>
         {rail && railOpen ? rail : null}

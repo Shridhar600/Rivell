@@ -32,7 +32,7 @@ describe('M0 top-level routes', () => {
   it('exposes navigation links to both workspaces', () => {
     renderRoute('/reviews')
     expect(
-      screen.getByRole('link', { name: /knowledge/i }),
+      screen.getByRole('link', { name: /playbooks/i }),
     ).toBeInTheDocument()
   })
 })

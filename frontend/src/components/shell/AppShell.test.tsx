@@ -56,12 +56,14 @@ describe('M10B shell', () => {
     expect(screen.queryByRole('heading', { name: /^reviews$/i })).not.toBeInTheDocument()
   })
 
-  it('exposes exactly the three M10B destinations', () => {
+  it('exposes Home and Reviews at the top level and the four Knowledge areas below', () => {
     stubApi()
     renderAt('/')
     const nav = screen.getByRole('navigation', { name: 'Primary' })
     const links = within(nav).getAllByRole('link').map((l) => l.textContent?.trim())
-    expect(links).toEqual(['Home', 'Reviews', 'Knowledge'])
+    expect(links).toEqual(['Home', 'Reviews'])
+    const knowledge = screen.getByRole('navigation', { name: 'Knowledge' })
+    expect(within(knowledge).getAllByRole('link').map((l) => l.textContent?.trim())).toEqual(['Overview', 'Playbooks', 'Clause library', 'Sources'])
   })
 
   it('has no Contracts, Inbox, Tasks or Admin destination', () => {
@@ -187,9 +189,9 @@ describe('sidebar owns its own collapse control', () => {
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-sidebar', 'collapsed'),
     )
-    const nav = screen.getByRole('navigation', { name: 'Primary' })
-    for (const name of ['Home', 'Reviews', 'Knowledge']) {
-      expect(within(nav).getByRole('link', { name })).toHaveAttribute('title', name)
+    const side = screen.getByRole('complementary', { name: 'Sidebar' })
+    for (const name of ['Home', 'Reviews', 'Overview', 'Playbooks', 'Clause library', 'Sources']) {
+      expect(within(side).getByRole('link', { name })).toHaveAttribute('title', name)
     }
   })
 
@@ -200,6 +202,42 @@ describe('sidebar owns its own collapse control', () => {
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-sidebar', 'collapsed'),
     )
+  })
+})
+
+describe('sidebar width', () => {
+  const handle = () => screen.getByRole('separator', { name: 'Resize sidebar' })
+  const width = (container: HTMLElement) => (container.querySelector('.rv-shell') as HTMLElement).style.getPropertyValue('--rv-sidebar-open')
+
+  it('steps with the arrow keys, stays within its limits and is remembered', async () => {
+    stubApi()
+    const { container } = renderAt('/')
+    expect(handle()).toHaveAttribute('aria-valuenow', '220')
+    handle().focus()
+    await userEvent.keyboard('{ArrowRight}')
+    expect(handle()).toHaveAttribute('aria-valuenow', '236')
+    expect(width(container)).toBe('236px')
+    expect(globalThis.localStorage?.getItem('rv-sidebar-width')).toBe('236')
+    await userEvent.keyboard('{End}{ArrowRight}')
+    expect(handle()).toHaveAttribute('aria-valuenow', '320')
+    await userEvent.keyboard('{Home}{ArrowLeft}')
+    expect(handle()).toHaveAttribute('aria-valuenow', '184')
+  })
+
+  it('opens at the saved width, clamped, and resets on double-click', async () => {
+    globalThis.localStorage?.setItem('rv-sidebar-width', '900')
+    stubApi()
+    renderAt('/')
+    expect(handle()).toHaveAttribute('aria-valuenow', '320')
+    await userEvent.dblClick(handle())
+    expect(handle()).toHaveAttribute('aria-valuenow', '220')
+  })
+
+  it('has no resize handle while the sidebar is the icon rail', () => {
+    globalThis.localStorage?.setItem('rv-sidebar', 'c')
+    stubApi()
+    renderAt('/')
+    expect(screen.queryByRole('separator', { name: 'Resize sidebar' })).not.toBeInTheDocument()
   })
 })
 

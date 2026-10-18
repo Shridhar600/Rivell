@@ -73,14 +73,14 @@ describe('review identity', () => {
 })
 
 describe('workspace layout', () => {
-  it('draws the three canonical regions, with no sidebar around them', async () => {
+  it('draws the three canonical regions inside the app sidebar', async () => {
     renderWorkspace(stubContractApi(options()))
     await waitFor(() =>
       expect(within(screen.getByRole('complementary', { name: 'Findings' })).getByRole('option', { name: /6\. Limitation of Liability/ })).toBeInTheDocument(),
     )
     expect(screen.getByRole('main', { name: 'Contract' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })).toBeInTheDocument()
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument()
     expect(within(await topBar()).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/')
   })
 

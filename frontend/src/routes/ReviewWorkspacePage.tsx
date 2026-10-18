@@ -559,7 +559,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const context = [profileLine(summary.snapshot), pin ? `Knowledge publication ${pin}` : null].filter(Boolean).join('. ') || null
 
   return (
-    <div className="rv-ws">
+    <div className="rv-ws" data-panel-keys="own">
       <WorkspaceTopBar
         title={contract.title ?? 'Untitled contract'}
         chips={[

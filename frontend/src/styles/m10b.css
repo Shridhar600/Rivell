@@ -60,12 +60,19 @@ a {
  */
 .rv-shell {
   display: grid;
-  grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr) var(--rv-inspector, var(--rv-w-inspector));
+  grid-template-columns: var(--rv-sidebar, var(--rv-sidebar-open, var(--rv-w-sidebar))) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
   transition: grid-template-columns var(--t-panel) var(--ease);
+}
+/* While the reader drags the sidebar edge the width follows the pointer, with no easing. */
+.rv-shell[data-resizing],
+.rv-shell[data-resizing] .rv-stage {
+  transition: none;
+  cursor: col-resize;
+  user-select: none;
 }
 .rv-shell[data-sidebar='collapsed'] {
   --rv-sidebar: var(--rv-w-sidebar-collapsed);
@@ -74,8 +81,30 @@ a {
   --rv-inspector: 0px;
 }
 
+/*
+ * Every page renders inside the stage: the page's own column, plus the details panel when the
+ * page has one. Full-width surfaces (lists, the review workspace, a compilation) span both.
+ */
+.rv-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rv-inspector, var(--rv-w-inspector));
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns var(--t-panel) var(--ease);
+}
+.rv-stage > .rv-ws,
+.rv-stage > .rv-ws-gate,
+.rv-stage .rv-kc {
+  grid-column: 1 / -1;
+  height: auto;
+  min-height: 0;
+}
+
 /* ---------- sidebar ---------- */
 .rv-side {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -126,6 +155,40 @@ a {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+.rv-nav + .rv-nav {
+  margin-top: 10px;
+}
+.rv-nav__heading {
+  padding: 4px 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+.rv-shell[data-sidebar='collapsed'] .rv-nav__heading {
+  display: none;
+}
+
+/* The sidebar's right edge. Drag to resize, arrow keys to step, double-click to reset. */
+.rv-side__resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--t-fast) var(--ease);
+}
+.rv-side__resize:hover,
+.rv-side__resize:focus-visible,
+.rv-shell[data-resizing] .rv-side__resize {
+  outline: none;
+  background: var(--line-2);
+}
+.rv-shell[data-sidebar='collapsed'] .rv-side__resize {
+  display: none;
 }
 .rv-nav__link {
   position: relative;
@@ -888,7 +951,7 @@ a {
 /* ---------- Reviews index (ported from rivell-reviews-v1.html: .kp, .ftabs, .klist, .rtab, .krow) ---------- */
 /* No inspector on this page, as in the canonical list view, so the page takes its column too. */
 .rv-main--wide {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
 }
 .rv-page {
   display: flex;
@@ -1355,8 +1418,8 @@ a {
 
 /* ---------- responsive ---------- */
 @media (max-width: 1180px) {
-  .rv-shell {
-    grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr);
+  .rv-stage {
+    grid-template-columns: minmax(0, 1fr);
   }
   /* Hidden with its panel, so the control never promises an effect it cannot have. */
   .rv-insp {
@@ -1425,6 +1488,7 @@ a {
 
 @media (prefers-reduced-motion: reduce) {
   .rv-shell,
+  .rv-stage,
   .rv-btn,
   .rv-chev,
   .rv-glyph--spin {
