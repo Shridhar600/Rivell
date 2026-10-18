@@ -145,10 +145,10 @@ function ConceptEditor({ clause, contractId, versionNumber, onRefresh }: { claus
             </optgroup>
           ))}
         </select>
-        {taxonomy.isPending ? <p role="status" className="rv-ws-caption">Loading legal topics…</p> : null}
+        {taxonomy.isPending ? <p role="status" className="rv-ws-caption">Loading topics…</p> : null}
         {taxonomy.isError ? (
           <p role="status" className="rv-ws-caption">
-            The legal topic list could not be loaded. The topic cannot be changed right now.
+            The topic list could not be loaded. The topic cannot be changed right now.
           </p>
         ) : null}
         <p className="rv-ws-caption">
@@ -398,7 +398,7 @@ export function ClauseDetails({ clause, semantics, nodes, contractId, versionNum
       </div>
 
       {clause.effectiveFacts.length === 0 && otherInterpretations.length === 0 ? (
-        <p className="rv-ws-caption">No details were extracted for this clause.</p>
+        <p className="rv-ws-caption">No details were found for this clause.</p>
       ) : null}
       {clause.effectiveFacts.map((fact) => (
         <FactSection

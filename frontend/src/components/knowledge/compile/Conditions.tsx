@@ -12,7 +12,7 @@ const SIGNAL_LABELS: Partial<Record<ConflictType, string>> = {
   SUPERSEDES_EXISTING: 'Possible supersession',
   OVERLAPPING_EFFECTIVE_PERIOD: 'Overlapping effective period',
   JURISDICTION_MISMATCH: 'Jurisdiction differs',
-  AUTHORITY_CONFLICT: 'Authority conflict',
+  AUTHORITY_CONFLICT: 'Conflict with other published knowledge',
 }
 
 function PublishedPeer({ candidateId }: { candidateId: string }) {

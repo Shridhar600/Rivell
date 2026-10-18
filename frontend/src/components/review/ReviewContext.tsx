@@ -27,10 +27,10 @@ export function ReviewContext({
     : null
 
   return (
-      <dl className="rv-ws-props" aria-label="Frozen review context">
+      <dl className="rv-ws-props" aria-label="Review details">
         <div>
           <dt>Review state</dt>
-          <dd>Frozen when this review was created</dd>
+          <dd>Fixed when this review was created</dd>
         </div>
         {profile ? (
           <>
@@ -66,7 +66,7 @@ export function ReviewContext({
         ) : (
           <div>
             <dt>Review profile</dt>
-            <dd>Frozen profile unavailable</dd>
+            <dd>Review details unavailable</dd>
           </div>
         )}
         <div>
@@ -80,11 +80,11 @@ export function ReviewContext({
           </dd>
         </div>
         <div>
-          <dt>Contract pack</dt>
+          <dt>Review pack</dt>
           <dd>
             {snapshot === null
-              ? 'Pack context unavailable'
-              : (packLabel ?? 'No pack (reduced checks)')}
+              ? 'Review pack unavailable'
+              : (packLabel ?? 'No review pack (reduced checks)')}
           </dd>
         </div>
         <div>

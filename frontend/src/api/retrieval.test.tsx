@@ -274,14 +274,14 @@ describe('parseEvidenceBundle', () => {
 
   it('rejects malformed bundles', () => {
     expect(() => parseEvidenceBundle({ ...hybridBundle, bundleId: undefined })).toThrow(
-      /Malformed/,
+      /could not read this response/,
     )
     expect(() => parseEvidenceBundle({ ...hybridBundle, items: 'none' })).toThrow(
-      /Malformed/,
+      /could not read this response/,
     )
     expect(() =>
       parseEvidenceBundle({ ...hybridBundle, items: [{ ...policyItem, evidenceId: null }] }),
-    ).toThrow(/Malformed/)
+    ).toThrow(/could not read this response/)
   })
 })
 

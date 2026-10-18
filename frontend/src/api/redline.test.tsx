@@ -252,7 +252,7 @@ describe('redline parsers', () => {
 
   it('rejects a malformed execution envelope payload', () => {
     expect(() => parseRedlineExecution({ status: 'COMPLETED' })).toThrow(
-      /Malformed redline execution/,
+      /could not read this response/,
     )
   })
 })

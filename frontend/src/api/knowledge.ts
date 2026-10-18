@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import { createApiClient } from './client'
 import {
+  MALFORMED_RESPONSE_MESSAGE,
   asRecord,
   parseApiResult,
   readArray,
@@ -585,10 +586,10 @@ const KNOWLEDGE_UPLOAD_MESSAGES: Partial<Record<number, string>> = {
 }
 
 const CONCEPT_MESSAGES: Partial<Record<number, string>> = {
-  400: 'That legal concept is not one Rivell knows.',
+  400: 'That topic is not one Rivell knows.',
   404: 'That entry could not be found.',
   409: 'A published or rejected entry cannot be corrected.',
-  500: 'The legal concept could not be corrected.',
+  500: 'The topic could not be corrected.',
   503: 'The knowledge service is unavailable right now.',
 }
 
@@ -797,7 +798,7 @@ async function makePosition(artifactId: string, unitId: string): Promise<Candida
     throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'The part could not be made a position'))
   }
   return parseApiResult(data, (value, what) => {
-    if (!Array.isArray(value)) throw new Error(`${what} is not a list`)
+    if (!Array.isArray(value)) throw new Error(MALFORMED_RESPONSE_MESSAGE)
     return value.map((entry, index) => parseCandidate(entry, `${what}[${index}]`))
   }, 'made position')
 }
@@ -886,7 +887,7 @@ async function correctConcept(candidateId: string, primary: string): Promise<Can
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, CONCEPT_MESSAGES, 'The legal concept could not be corrected.'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, CONCEPT_MESSAGES, 'The topic could not be corrected.'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -1007,7 +1008,7 @@ export function useCandidateQuery(
     retry: knowledgeRetry,
     queryKey: knowledgeKeys.candidate(candidateId ?? ''),
     queryFn: () => {
-      if (!candidateId) throw new Error('Candidate id is required')
+      if (!candidateId) throw new Error('An entry is required')
       return fetchCandidate(candidateId)
     },
     enabled: Boolean(candidateId),

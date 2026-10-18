@@ -58,7 +58,7 @@ export function CompilationPage() {
     if (isKnowledgeForbiddenError(error)) {
       return (
         <Frame>
-          <ErrorState tone="neutral" title="Knowledge is not available to you" message="Your account does not have permission to review Knowledge. Ask an administrator for access." />
+          <ErrorState tone="neutral" title="Knowledge is not available to you" message="Your account does not have permission to review knowledge. Ask an administrator for access." />
         </Frame>
       )
     }

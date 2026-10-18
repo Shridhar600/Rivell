@@ -132,11 +132,11 @@ function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'summar
       <div className="rv-ws-phase-head">
         <LockIcon />
         <div>
-          <b>Approved changes frozen</b>
+          <b>Approved changes are final</b>
           <p>
             {props.frozenChanges === null
-              ? 'The approved change set is immutable.'
-              : `${plural(props.frozenChanges, 'approved change', 'approved changes')} in the immutable approved change set.`}
+              ? 'The approved changes cannot be changed.'
+              : `${plural(props.frozenChanges, 'approved change', 'approved changes')} fixed for this review.`}
           </p>
         </div>
       </div>
@@ -451,7 +451,7 @@ export function FindingPanel(props: Props) {
           <div className="rv-ws-lock">
             <LockIcon />
             <div>
-              <b>Decision frozen: {decision ? state.label : 'None'}</b>
+              <b>Decision final: {decision ? state.label : 'None'}</b>
               <div>This review is finalized. Approved changes cannot be changed.</div>
             </div>
           </div>

@@ -110,7 +110,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
           <Chip>{artifactFormat(artifact)}</Chip>
           <Chip>
             <LockIcon className="rv-icon" />
-            Immutable original
+            Original cannot be changed
           </Chip>
         </>
       }
@@ -137,7 +137,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
           <Link to={`/knowledge/compilations/${artifact.id}`} className="rv-k-lc rv-k-lc--attention">
             <span className="rv-k-lc__k">Published knowledge</span>
             <b>{source.publications.length > 0 ? publicationsTitle(source.publications) : 'None yet'}</b>
-            <small>Continue review →</small>
+            <small>Continue draft</small>
           </Link>
         ) : source.publications.length > 0 && target ? (
           <Link to={target} className="rv-k-lc">

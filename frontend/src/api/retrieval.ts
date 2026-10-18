@@ -3,6 +3,7 @@ import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/reac
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import { createApiClient } from './client'
 import {
+  MALFORMED_RESPONSE_MESSAGE,
   asRecord,
   malformed,
   parseApiResult,
@@ -398,7 +399,7 @@ export function isMalformedError(error: unknown): boolean {
   return (
     error instanceof Error &&
     !(error instanceof RetrievalApiError) &&
-    error.message.startsWith('Malformed')
+    error.message === MALFORMED_RESPONSE_MESSAGE
   )
 }
 

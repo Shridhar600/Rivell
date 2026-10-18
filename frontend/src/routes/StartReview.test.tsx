@@ -84,7 +84,7 @@ const form = () => screen.getByRole('form', { name: 'Start a contract review' })
 const startButton = () => within(form()).getByRole('button', { name: 'Start analysis' })
 
 async function fill({ type = 'NDA', file = docx() }: { type?: string; file?: File } = {}) {
-  await userEvent.upload(screen.getByLabelText('Contract file (.docx)'), file)
+  await userEvent.upload(screen.getByLabelText('Contract file (Word)'), file)
   await userEvent.selectOptions(screen.getByLabelText('Contract type'), type)
 }
 
@@ -114,7 +114,7 @@ describe('Start Review: the canonical page', () => {
     expect(screen.getByLabelText('Jurisdiction')).toHaveValue('UNSPECIFIED')
     expect(screen.queryAllByRole('button', { pressed: true })).toHaveLength(0)
     expect(startButton()).toBeDisabled()
-    await userEvent.upload(screen.getByLabelText('Contract file (.docx)'), docx())
+    await userEvent.upload(screen.getByLabelText('Contract file (Word)'), docx())
     expect(startButton()).toBeDisabled()
     await userEvent.selectOptions(screen.getByLabelText('Contract type'), 'MSA')
     expect(startButton()).toBeEnabled()
@@ -124,7 +124,7 @@ describe('Start Review: the canonical page', () => {
   it('shows the chosen file, and Replace puts the picker back', async () => {
     stub()
     renderPage()
-    await userEvent.upload(await screen.findByLabelText('Contract file (.docx)'), docx('Acme MSA.docx'))
+    await userEvent.upload(await screen.findByLabelText('Contract file (Word)'), docx('Acme MSA.docx'))
     expect(screen.getByText('Acme MSA.docx')).toBeInTheDocument()
     expect(screen.getByText(/Word file, .*Kept unchanged/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Replace' }))
@@ -135,8 +135,8 @@ describe('Start Review: the canonical page', () => {
     const calls = stub()
     renderPage()
     const user = userEvent.setup({ applyAccept: false })
-    await user.upload(await screen.findByLabelText('Contract file (.docx)'), new File(['x'], 'scan.pdf', { type: 'application/pdf' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a Word document (.docx).')
+    await user.upload(await screen.findByLabelText('Contract file (Word)'), new File(['x'], 'scan.pdf', { type: 'application/pdf' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Choose a Word document.')
     expect(screen.getByText('Choose a Word file')).toBeInTheDocument()
     expect(calls).toHaveLength(0)
   })
@@ -212,10 +212,10 @@ describe('Start Review: the three requests', () => {
   })
 
   it.each([
-    ['ENRICHING', 'not ready (ENRICHING)'],
-    ['FAILED', 'not ready (FAILED)'],
-    ['NOT_ENRICHED', 'not ready (NOT_ENRICHED)'],
-    ['SOMETHING_ELSE', 'in a state Rivell does not recognise'],
+    ['ENRICHING', 'analysis is not ready yet'],
+    ['FAILED', 'analysis is not ready yet'],
+    ['NOT_ENRICHED', 'analysis is not ready yet'],
+    ['SOMETHING_ELSE', 'analysis is not ready yet'],
   ])('never creates a review when the semantic analysis comes back %s', async (status, wording) => {
     const calls = stub({ enrich: () => ok({ ...fixtureSemantics({ contractId: 'c9' }), enrichmentStatus: status }) })
     renderPage()
@@ -308,7 +308,7 @@ describe('Start Review: the three requests', () => {
     await userEvent.click(startButton())
     await screen.findByRole('alert')
     await userEvent.click(screen.getByRole('button', { name: 'Replace' }))
-    await userEvent.upload(screen.getByLabelText('Contract file (.docx)'), docx('Other NDA.docx'))
+    await userEvent.upload(screen.getByLabelText('Contract file (Word)'), docx('Other NDA.docx'))
     await userEvent.click(startButton())
     await waitFor(() => expect(calls.filter((call) => call.step === 'upload')).toHaveLength(2))
   })

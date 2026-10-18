@@ -15,12 +15,12 @@ export type CreateOutcome = {
 const OUTCOMES: Record<CreateOutcomeKind, Omit<CreateOutcome, 'kind'>> = {
   CONFLICT: {
     message:
-      'Rivell could not start a review for this contract version. The analysis may not be ready, or this request was already used for a different contract version or contract pack. Check the review history before trying again.',
+      'Rivell could not start a review for this contract version. The analysis may not be ready, or this request was already used for a different contract version or review pack. Check the review history before trying again.',
     uncertain: false,
   },
   INVALID_PACK: {
     message:
-      'The review could not be started with the selected contract pack. Choose a different pack, or run the review without a pack.',
+      'The review could not be started with the selected review pack. Choose a different pack, or run the review without a pack.',
     uncertain: false,
   },
   NOT_FOUND: {

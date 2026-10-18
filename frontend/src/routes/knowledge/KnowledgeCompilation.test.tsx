@@ -276,7 +276,7 @@ describe('conflict', () => {
     const { world } = await open()
     await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
     const form = await screen.findByRole('form', { name: 'Edit this entry' })
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), 'GOVERNING_LAW')
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), 'GOVERNING_LAW')
     // Nothing is cleared by choosing a value.
     expect(screen.getByRole('group', { name: 'Conflicts with published knowledge' })).toBeInTheDocument()
     await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Save correction' }))
@@ -406,7 +406,7 @@ describe('provenance and states', () => {
     await waitFor(() => expect(router.state.location.search).toBe('?candidate=conflict'))
     await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
     const form = await screen.findByRole('form', { name: 'Edit this entry' })
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), 'GOVERNING_LAW')
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), 'GOVERNING_LAW')
     await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Save correction' }))
     await screen.findByText('Corrected by you')
     expect(heading()).toHaveTextContent('Assignment')

@@ -274,12 +274,12 @@ describe('parseReviewDiagnostics', () => {
 
   it('fails closed when the stall list is not a list', () => {
     expect(() => parseReviewDiagnostics({ ...completedPayload, stalled: 'none' })).toThrow(
-      /malformed/i,
+      /could not read this response/i,
     )
-    expect(() => parseReviewDiagnostics({ ...completedPayload, stalled: null })).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics({ ...completedPayload, stalled: null })).toThrow(/could not read this response/i)
     const { stalled, ...withoutStalled } = completedPayload
     void stalled
-    expect(() => parseReviewDiagnostics(withoutStalled)).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics(withoutStalled)).toThrow(/could not read this response/i)
   })
 
   it('marks a truncated stall line instead of cutting it mid-word', () => {
@@ -303,7 +303,7 @@ describe('parseReviewDiagnostics', () => {
   })
 
   it('rejects a payload with no review identity', () => {
-    expect(() => parseReviewDiagnostics({ contractId: 'c-1' })).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics({ contractId: 'c-1' })).toThrow(/could not read this response/i)
   })
 
   it('fails closed rather than reporting a missing count block as zero', () => {
@@ -312,23 +312,23 @@ describe('parseReviewDiagnostics', () => {
     void decisions
     void finalization
 
-    expect(() => parseReviewDiagnostics(withoutCounts)).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics(withoutCounts)).toThrow(/could not read this response/i)
     expect(() =>
       parseReviewDiagnostics({ ...completedPayload, findings: null }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
     expect(() =>
       parseReviewDiagnostics({ ...completedPayload, finalization: null }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
     expect(() =>
       parseReviewDiagnostics({ ...completedPayload, decisions: undefined }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
   })
 
   it('fails closed when the worker flag is missing rather than claiming it is off', () => {
     const { backgroundWorkerEnabled, ...withoutWorker } = completedPayload
     void backgroundWorkerEnabled
 
-    expect(() => parseReviewDiagnostics(withoutWorker)).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics(withoutWorker)).toThrow(/could not read this response/i)
   })
 })
 

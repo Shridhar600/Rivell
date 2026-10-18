@@ -129,7 +129,7 @@ export function ReviewLifecyclePanel({
 
       {summary.status === 'ANALYSIS_QUEUED' ? (
         <p role="status">
-          The review is queued. Analysis starts when the review worker picks it up.
+          The review is waiting to start. Analysis has not started yet and begins on its own.
         </p>
       ) : null}
 

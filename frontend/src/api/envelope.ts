@@ -1,5 +1,8 @@
+export const MALFORMED_RESPONSE_MESSAGE = 'Rivell could not read this response.'
+
+/** The reader sees one plain message; which response was malformed stays on the error for debugging. */
 export function malformed(what: string): Error {
-  return new Error(`Malformed ${what} response from the server`)
+  return new Error(MALFORMED_RESPONSE_MESSAGE, { cause: `Malformed ${what} response` })
 }
 
 export function asRecord(value: unknown, what: string): Record<string, unknown> {

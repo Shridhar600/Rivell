@@ -44,13 +44,13 @@ export function humanStatusLabel(status: HumanReviewStatus): string {
     case 'NOT_STARTED':
       return 'Review not started'
     case 'IN_PROGRESS':
-      return 'Human review in progress'
+      return 'Review in progress'
     case 'READY_FOR_COMPLETION':
       return 'Ready to finalize'
     case 'COMPLETED':
-      return 'Human review completed'
+      return 'Review completed'
     default:
-      return 'Human review state unknown'
+      return 'Review state unknown'
   }
 }
 
@@ -98,7 +98,7 @@ export function changeLanguageProvenanceLabel(
     case 'GENERATIVE':
       return 'Proposed by Rivell, approved by you'
     case 'HUMAN_EDIT':
-      return 'Human-authored'
+      return 'Written by you'
     case 'NONE':
       return 'No replacement text'
     default:
@@ -128,7 +128,7 @@ export function acceptEligibility(finding: {
     return {
       eligible: false,
       reason:
-        'This recommendation carries no executable language. Use Edit to author the change, or Reject or Escalate it.',
+        'This recommendation has no wording to apply. Use Edit to author the change, or Reject or Escalate it.',
     }
   }
   return { eligible: true }
@@ -263,7 +263,7 @@ export function humanReviewCountRows(
   review: HumanReview,
 ): { label: string; value: number }[] {
   return [
-    { label: 'Findings needing a decision', value: review.actionableFindings },
+    { label: 'Needing a decision', value: review.actionableFindings },
     { label: 'Decided', value: review.resolvedFindings },
     { label: 'Still open', value: review.remainingFindings },
     { label: 'Accepted', value: review.accepted },

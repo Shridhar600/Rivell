@@ -421,7 +421,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         ] as const)
           .filter(([kind]) => kind !== 'ACCEPT' || flow.acceptEligibility.eligible)
           .map(([kind, label, key, icon]) => ({
-            group: 'This Finding',
+            group: 'This finding',
             label: `${label} finding`,
             key,
             icon,
@@ -466,8 +466,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const finalizeError = finalizeMutation.isError
     ? isWorkflowConflictError(finalizeMutation.error)
       ? humanReview?.readyToFinalize
-        ? 'The server did not finalize the review. Its state changed; check the summary and try again.'
-        : 'The review cannot be finalized yet. The server’s current blockers are shown above.'
+        ? 'Rivell did not finalize the review. Its state changed; check the summary and try again.'
+        : 'The review cannot be finalized yet. Rivell’s current blockers are shown above.'
       : workflowErrorMessage(finalizeMutation.error, 'The review could not be finalized. Check your connection and try again.')
     : null
 

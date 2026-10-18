@@ -44,7 +44,7 @@ export function WorkspaceTopBar({
   const blockers = humanReview?.blockers ?? []
   const label = isFinalized ? 'Finalized' : 'Finalize review'
   const status = isFinalized
-    ? 'Approved changes frozen'
+    ? 'Approved changes are final'
     : !humanReview
       ? ''
       : ready
@@ -105,7 +105,7 @@ export function WorkspaceTopBar({
             <PanelRightIcon className="rv-icon" />
           </button>
           {/* A disabled button shows no tooltip, so the reason it cannot be used sits on its wrapper. */}
-          <span className="rv-ws-fin" title={isFinalized ? undefined : ready ? 'Freeze your decisions so the redline can be created' : blockers.map((blocker) => blocker.message).join(' ') || 'Decide every open finding first'}>
+          <span className="rv-ws-fin" title={isFinalized ? undefined : ready ? 'Make your decisions final so the redline can be created' : blockers.map((blocker) => blocker.message).join(' ') || 'Decide every open finding first'}>
             <Button variant="primary" disabled={!ready || isFinalized} onClick={onFinalize}>
               <LockIcon />
               {label}

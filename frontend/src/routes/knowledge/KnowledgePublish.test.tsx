@@ -74,7 +74,7 @@ describe('grouped safe review', () => {
     expect(requests(world, 'POST', /bulk-approve/)[0]?.body).toEqual({ candidateIds: ['r1', 'r2', 'r3'] })
     // Nothing was approved one by one.
     expect(requests(world, 'POST', /\/approve$/)).toHaveLength(0)
-    expect(await screen.findByText(/entries approved by the server/)).toBeInTheDocument()
+    expect(await screen.findByText(/entries approved/)).toBeInTheDocument()
     // Re-read from the server: the three now sit under Reviewed, and the group is gone.
     await waitFor(() => expect(within(rail()).queryByRole('button', { name: /straightforward/ })).not.toBeInTheDocument())
     expect(within(rail()).getByRole('heading', { name: /Reviewed/ })).toHaveTextContent('3')
@@ -87,7 +87,7 @@ describe('grouped safe review', () => {
     // The server's answer changes after the screen last read it: one is no longer routine.
     same.candidates[SRC] = (same.candidates[SRC] ?? []).map((entry) => (entry.id === 'r2' ? { ...entry, reviewCategory: 'ELEVATED' as const } : entry))
     await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Approve all 3' }))
-    expect(await screen.findByText('The server did not approve 1:')).toBeInTheDocument()
+    expect(await screen.findByText('Rivell did not approve 1:')).toBeInTheDocument()
     expect(screen.getByText(/Counterparts: review-risk category ELEVATED/)).toBeInTheDocument()
     // Counterparts was not approved, and is shown as the server holds it.
     await waitFor(() => expect(within(rail()).getAllByText('Approved', { selector: '.rv-kc-row__sub' })).toHaveLength(2))
@@ -157,7 +157,7 @@ describe('publish readiness and confirmation', () => {
     expect(dialog).toHaveTextContent(/You cannot edit it later/)
     expect(within(dialog).getByText('6 reviewed entries enter the new version')).toBeInTheDocument()
     expect(within(dialog).getByText('1 rejected entry stays out of published knowledge')).toBeInTheDocument()
-    expect(within(dialog).getByText('Earlier versions remain reproducible')).toBeInTheDocument()
+    expect(within(dialog).getByText('Earlier versions stay as they were')).toBeInTheDocument()
     expect(within(dialog).getByText('The uploaded original stays unchanged')).toBeInTheDocument()
     // Opening the dialog publishes nothing.
     expect(requests(world, 'POST', /publications/)).toHaveLength(0)
@@ -253,7 +253,7 @@ describe('after publishing', () => {
     const notice = (await screen.findByText('Published as knowledge version 2.')).closest('p') as HTMLElement
     expect(notice).toHaveAttribute('role', 'status')
     expect(notice).toHaveTextContent('6 positions published, 1 rejected and left out')
-    expect(notice).toHaveTextContent(/original source is unchanged and earlier versions remain reproducible/)
+    expect(notice).toHaveTextContent(/original source is unchanged and earlier versions stay as they were/)
     // The read model shows the new publication at once, from the server's own records.
     expect(await screen.findByText('Knowledge version 2')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Positions (6)' })).toBeInTheDocument()

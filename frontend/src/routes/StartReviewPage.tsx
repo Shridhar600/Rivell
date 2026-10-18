@@ -55,7 +55,7 @@ export function StartReviewPage() {
   function choose(candidate: File | undefined) {
     if (!candidate) return
     if (!isDocx(candidate)) {
-      setFileError('Choose a Word document (.docx).')
+      setFileError('Choose a Word document.')
       return
     }
     setFileError(null)
@@ -107,7 +107,7 @@ export function StartReviewPage() {
                     ref={input}
                     type="file"
                     accept={ACCEPT}
-                    aria-label="Contract file (.docx)"
+                    aria-label="Contract file (Word)"
                     hidden
                     onChange={(event) => choose(event.target.files?.[0])}
                   />
@@ -240,7 +240,7 @@ export function StartReviewPage() {
                     </select>
                     <div className="rv-hint" id={packHintId}>
                       Choose a pack to apply its rules to this review. Packs are optional.
-                      {pack ? ` ${pack.summary} (catalog version ${pack.version}).` : ''}
+                      {pack ? ` ${pack.summary} (version ${pack.version}).` : ''}
                       {packs.isError ? ' The pack catalog could not be loaded, so only a pack-less review is available.' : ''}
                     </div>
                   </div>
@@ -283,7 +283,7 @@ export function StartReviewPage() {
             <h3>Review details</h3>
             <div className="rv-chk">
               <Kept>The contract version stays the same</Kept>
-              <Kept>Your declared review context is frozen</Kept>
+              <Kept>These details are fixed for this review</Kept>
               <Kept>The review uses the knowledge published at the time</Kept>
             </div>
           </div>
@@ -291,7 +291,7 @@ export function StartReviewPage() {
             <h3>What happens next</h3>
             <div className="rv-chk">
               <Kept>Analysis runs in the background</Kept>
-              <Kept>Findings appear for human decision</Kept>
+              <Kept>Findings appear for your decision</Kept>
               <Kept>Nothing changes in the contract until you finalize your decisions</Kept>
             </div>
           </div>

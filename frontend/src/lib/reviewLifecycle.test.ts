@@ -205,7 +205,7 @@ describe('labels, tabs and workspace actions', () => {
       ),
     )
     expect(labels).toEqual({
-      queued: 'Queued',
+      queued: 'Waiting to start',
       analyzing: 'Analyzing',
       failed: 'Analysis failed',
       completed: 'Ready for review',
@@ -258,7 +258,7 @@ describe('journey', () => {
   it('walks the four steps for queued, failed, finalized and verified', () => {
     expect(journey('queued', null).map((step) => step.tone)).toEqual(['a', 'i', 'i', 'i'])
     expect(journey('failed', null)[0]).toMatchObject({ tone: 'x', detail: 'Failed' })
-    expect(journey('finalized', null).map((step) => step.detail)).toEqual(['Completed', 'Resolved', 'Frozen', 'Not generated'])
+    expect(journey('finalized', null).map((step) => step.detail)).toEqual(['Completed', 'Resolved', 'Final', 'Not generated'])
     expect(journey('finalized_zero', null)[3]).toMatchObject({ tone: 'd', detail: 'No changes required' })
     expect(journey('rl_verified', null).map((step) => step.tone)).toEqual(['d', 'd', 'd', 'd'])
     expect(journey('rl_failed', null)[3]).toMatchObject({ tone: 'x', detail: 'Failed' })
@@ -280,8 +280,8 @@ describe('activityEvents', () => {
       'Review created',
       'Analysis started',
       'Analysis completed',
-      'Review finalized; approved changes frozen',
-      'Redline execution started',
+      'Review finalized; approved changes are final',
+      'Redline generation started',
       'Redline completed',
     ])
     expect(events).not.toContain('Human review opened')

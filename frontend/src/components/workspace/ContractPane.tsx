@@ -406,10 +406,10 @@ function AbsenceCards({ ctx, findings }: { ctx: Ctx; findings: FindingSummary[] 
             </b>
             <span>
               {ctx.mode === 'final'
-                ? `${change?.language ?? ''}\nPlacement will be resolved by deterministic redline execution.`
+                ? `${change?.language ?? ''}\nRivell places this when it builds the redline.`
                 : change
                   ? 'Rivell will place this provision when it builds the redline.'
-                  : 'This clause does not exist in the contract, so there is no source location. The proposed insertion is shown in the Finding panel.'}
+                  : 'This clause does not exist in the contract, so there is no source location. The proposed insertion is shown in the finding detail panel.'}
             </span>
           </div>
         )

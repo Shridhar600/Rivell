@@ -267,7 +267,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
           <ErrorState
             tone={forbidden ? 'neutral' : 'danger'}
             title={forbidden ? 'Knowledge is not available to you' : 'The entries could not be loaded'}
-            message={forbidden ? 'Your account does not have permission to review Knowledge. Ask an administrator for access.' : candidatesQuery.error.message}
+            message={forbidden ? 'Your account does not have permission to review knowledge. Ask an administrator for access.' : candidatesQuery.error.message}
             onRetry={forbidden ? undefined : () => void candidatesQuery.refetch()}
           />
         </div>
@@ -314,14 +314,14 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
         {bulkResult ? (
           <div className="rv-kc-result" role="status">
             <p>
-              <b>{bulkResult.approved.length}</b> {bulkResult.approved.length === 1 ? 'entry' : 'entries'} approved by the server.
+              <b>{bulkResult.approved.length}</b> {bulkResult.approved.length === 1 ? 'entry' : 'entries'} approved.
               <button type="button" className="rv-lnk rv-kc-result__x" onClick={() => setBulkResult(null)}>
                 Dismiss
               </button>
             </p>
             {bulkResult.skipped.length > 0 ? (
               <>
-                <p>The server did not approve {bulkResult.skipped.length}:</p>
+                <p>Rivell did not approve {bulkResult.skipped.length}:</p>
                 <ul>
                   {bulkResult.skipped.map((entry) => (
                     <li key={entry.label}>

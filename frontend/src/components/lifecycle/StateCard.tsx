@@ -44,7 +44,7 @@ export function StateCard(props: Props) {
   switch (state) {
     case 'queued':
       return (
-        <LcCard label="Analysis queued">
+        <LcCard label="Analysis waiting to start">
           <LcBody>
             <BigGlyph>
               <QueuedIcon className="rv-icon" />
@@ -102,7 +102,7 @@ export function StateCard(props: Props) {
               <NeedsHumanIcon className="rv-icon" />
             </BigGlyph>
             <h2>The analysis did not produce a usable result</h2>
-            <p>{blockerLabel('ANALYSIS_DEGRADED')} No Findings are offered for your review.</p>
+            <p>{blockerLabel('ANALYSIS_DEGRADED')} No findings are offered for your review.</p>
             <CheckCounts summary={summary} />
           </LcBody>
           <LcFoot>
@@ -124,7 +124,7 @@ export function StateCard(props: Props) {
             <h2>Analysis results are not final yet</h2>
             <p
               role="status"
-              title="The analysis is not finished yet, so you cannot decide on findings. This page shows the state the server reports."
+              title="The analysis is not finished yet, so you cannot decide on findings. This page shows the current state."
             >
               Analysis is still running.
             </p>
@@ -146,7 +146,7 @@ export function StateCard(props: Props) {
             <BigGlyph tone="amber">
               <EscalateIcon className="rv-icon" />
             </BigGlyph>
-            <h2>An escalated Finding is still unresolved</h2>
+            <h2>An escalated finding is still unresolved</h2>
             <p>
               Open the review and accept, edit, or reject the finding before you finalize.
             </p>
@@ -182,7 +182,7 @@ export function StateCard(props: Props) {
               No blockers remain. Finalize the review when you are ready.
             </p>
             <Stat3
-              label="Human decisions"
+              label="Your decisions"
               stats={[
                 { figure: humanReview.accepted, label: 'Accepted' },
                 { figure: humanReview.edited, label: 'Edited' },
@@ -191,9 +191,9 @@ export function StateCard(props: Props) {
             />
             <Checks
               items={[
-                { text: 'Finalizing freezes the approved changes' },
-                { text: 'Human decisions become read-only' },
-                { text: 'Redline execution remains a separate action after Finalize' },
+                { text: 'Finalizing makes the approved changes final' },
+                { text: 'Your decisions become read-only' },
+                { text: 'Generating the redline is a separate step after Finalize' },
               ]}
             />
           </LcBody>
@@ -213,7 +213,7 @@ export function StateCard(props: Props) {
               <QueuedIcon className="rv-icon" />
             </BigGlyph>
             <h2>This review is in a state this version does not recognise</h2>
-            <p role="status">It may still be running. Check again to read the latest state from the server.</p>
+            <p role="status">It may still be running. Check again to read the latest state.</p>
           </LcBody>
           <LcFoot>
             <Spacer />
@@ -280,15 +280,15 @@ function ReadyForReview({ summary, findings, findingsComplete, semantics, worksp
   const rows = semanticsRows(semantics)
   return (
     <>
-      <LcCard label="Ready for human review">
+      <LcCard label="Ready for review">
         <LcBody>
           <BigGlyph tone="amber">
             <NeedsHumanIcon className="rv-icon" />
           </BigGlyph>
           <h2>
             {summary.findings === 1
-              ? '1 Finding is ready for your review'
-              : `${summary.findings} Findings are ready for your review`}
+              ? '1 finding is ready for your review'
+              : `${summary.findings} findings are ready for your review`}
           </h2>
           <p>
             Analysis is complete. The contract does not change until you resolve the findings and
@@ -296,7 +296,7 @@ function ReadyForReview({ summary, findings, findingsComplete, semantics, worksp
           </p>
           {findingsComplete && findings.length > 0 ? (
             <Stat3
-              label="Findings by classification"
+              label="By classification"
               stats={classificationCounts(findings).map((entry) => ({ figure: entry.count, label: entry.label }))}
             />
           ) : null}
@@ -377,7 +377,7 @@ function InProgress({
       <LcFoot>
         <Spacer />
         <LinkButton to={workspaceTo} variant="primary">
-          Continue in Review Workspace
+          Continue review
         </LinkButton>
       </LcFoot>
     </LcCard>

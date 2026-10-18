@@ -61,7 +61,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
   return (
     <form id={id} className="rv-kc-edit" onSubmit={submit} aria-label="Edit this entry">
       <Field
-        label="Legal concept"
+        label="Topic"
         hint={
           <>
             Changing the topic asks Rivell to compare this entry with published knowledge again.
@@ -77,7 +77,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
                 <option value={draft.concept}>
                   {humanizeCode(draft.concept)}
                   {!taxonomy.isPending && !taxonomy.isError && !selectedKnown
-                    ? ' (not in the current taxonomy)'
+                    ? ' (not in the current topic list)'
                     : ''}
                 </option>
               )}
@@ -91,10 +91,10 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
                 </optgroup>
               ))}
             </select>
-            {taxonomy.isPending ? <small role="status">Loading legal topics…</small> : null}
+            {taxonomy.isPending ? <small role="status">Loading topics…</small> : null}
             {taxonomy.isError ? (
               <small role="status">
-                The legal topic list could not be loaded. The concept cannot be changed right now.
+                The topic list could not be loaded. The topic cannot be changed right now.
               </small>
             ) : null}
           </>
@@ -182,7 +182,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
             <input value={draft.scope.declaredContractTypes} onChange={scope('declaredContractTypes')} placeholder="MSA, NDA" />
           </label>
           <label>
-            Contract pack
+            Review pack
             <input value={draft.scope.contractPackKey} onChange={scope('contractPackKey')} />
           </label>
           <label>

@@ -22,7 +22,7 @@ const conceptCalls = (world: Fake) => requests(world, 'POST', /\/concept$/)
 describe('candidate correction', () => {
   it('offers only the fields the backend lets a reviewer change', async () => {
     const { form } = await openEdit('uncertain')
-    for (const label of ['Legal concept', 'Escalate', 'Counsel approval', 'Wording', 'Contract types', 'Jurisdiction', 'Effective from', 'Review note, optional']) {
+    for (const label of ['Topic', 'Escalate', 'Counsel approval', 'Wording', 'Contract types', 'Jurisdiction', 'Effective from', 'Review note, optional']) {
       expect(within(form).getByLabelText(label)).toBeInTheDocument()
     }
     expect(within(form).getByRole('group', { name: 'Position' })).toBeInTheDocument()
@@ -98,7 +98,7 @@ describe('candidate correction', () => {
     const { world, form } = await openEdit('uncertain')
     const group = await within(form).findByRole('group', { name: 'Liability and indemnity' })
     expect(within(group).getByRole('option', { name: 'Indemnification' })).toBeInTheDocument()
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), 'INDEMNIFICATION')
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), 'INDEMNIFICATION')
     await save()
     await waitFor(() => expect(conceptCalls(world)).toHaveLength(1))
     expect(conceptCalls(world)[0]?.body).toEqual({ primary: 'INDEMNIFICATION' })
@@ -112,7 +112,7 @@ describe('candidate correction', () => {
       entry.id === 'uncertain' ? { ...entry, legalConceptKey: 'GOVERNING_LAW', effectiveConceptKey: 'GOVERNING_LAW' } : entry,
     )
     const { form } = await openEdit('uncertain', world)
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), '')
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), '')
     await save()
     await waitFor(() => expect(conceptCalls(world)).toHaveLength(1))
     expect(conceptCalls(world)[0]?.body).toEqual({ primary: '' })
@@ -124,10 +124,10 @@ describe('candidate correction', () => {
     world.fail['POST concept uncertain'] = 400
     const { form } = await openEdit('uncertain', world)
     await userEvent.type(within(form).getByLabelText('Wording'), ' Edited.')
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), 'INDEMNIFICATION')
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), 'INDEMNIFICATION')
     await save()
     const alert = await within(form).findByRole('alert')
-    expect(alert).toHaveTextContent(/Your other corrections were saved, but the legal concept was not/)
+    expect(alert).toHaveTextContent(/Your other corrections were saved, but the topic was not/)
     expect(alert).toHaveTextContent(/not one Rivell knows/)
     expect(editCalls(world)).toHaveLength(1)
     expect(conceptCalls(world)).toHaveLength(1)

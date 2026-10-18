@@ -57,7 +57,7 @@ export function WorkspaceSheet({ open, title, onClose, children, actions }: Prop
       >
         <div className="rv-ws-sheet-h">
           <span>{title}</span>
-          <button type="button" ref={closeRef} className="rv-iconbtn" aria-label="Close" onClick={onClose}>
+          <button type="button" ref={closeRef} className="rv-iconbtn" aria-label="Close" title="Close panel" onClick={onClose}>
             <CloseIcon />
           </button>
         </div>

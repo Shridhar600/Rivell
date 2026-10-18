@@ -62,7 +62,7 @@ function UnitRow({ unit, onMakePosition }: { unit: ExtractionUnit; onMakePositio
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const text = unit.contentText?.replace(/\s+/g, ' ').trim()
-  const title = unit.title?.trim() || (text ? text.slice(0, 90) : `Unit ${unit.ordinal + 1}`)
+  const title = unit.title?.trim() || (text ? text.slice(0, 90) : `Source part ${unit.ordinal + 1}`)
   async function make() {
     if (!onMakePosition || pending) return
     setPending(true)
@@ -234,7 +234,7 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
           {readiness.attention > 0 ? <CautionIcon className="rv-icon" /> : <CheckIcon className="rv-icon" />}
           {readiness.attention > 0 ? `${readiness.attention} need closer review` : 'No flagged entries remain'}
         </p>
-        <p className="rv-kc-ready__hint">{done ? 'Published knowledge is immutable.' : 'Nothing is published until you publish it.'}</p>
+        <p className="rv-kc-ready__hint">{done ? 'Published knowledge cannot be changed.' : 'Nothing is published until you publish it.'}</p>
       </div>
     </aside>
   )

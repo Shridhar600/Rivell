@@ -58,7 +58,7 @@ describe('review lifecycle states', () => {
       },
     })
 
-    expect(await screen.findByText(/The review is queued/)).toBeInTheDocument()
+    expect(await screen.findByText(/The review is waiting to start/)).toBeInTheDocument()
     expect(screen.getByText('0 of 3 checks completed (0%)')).toBeInTheDocument()
     expect(progressRequests(api)).toHaveLength(0)
 

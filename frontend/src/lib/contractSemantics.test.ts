@@ -39,7 +39,7 @@ describe('label maps', () => {
       'Taken directly from the contract text',
     )
     expect(interpretationKindDescription('GENERATIVE_EXTRACTION')).toBe(
-      'Extracted from the clause text',
+      'Read from the clause text',
     )
   })
 

@@ -321,7 +321,7 @@ describe('finding detail', () => {
     expect(proposed).toHaveTextContent(/two times the fees paid in the twelve months/)
     expect(proposed).toHaveTextContent('Approved organizational drafting')
     expect(proposed).toHaveTextContent('Knowledge version 2')
-    expect(within(detailPane()).queryByText('Machine-proposed')).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByText('Proposed by Rivell')).not.toBeInTheDocument()
 
     // The policy position is shown on its own, apart from what Rivell concluded, under the
     // truthful heading: the frozen policy evidence, not a single authored "your position".
@@ -451,7 +451,7 @@ describe('finding detail', () => {
     await findDetailText('Proposed language')
     const proposed = section('Proposed language')
     expect(proposed).toHaveTextContent(/Neither party’s aggregate liability/)
-    expect(proposed).toHaveTextContent('Machine-proposed')
+    expect(proposed).toHaveTextContent('Proposed by Rivell')
     expect(proposed).toHaveTextContent(/not approved organizational language/)
     expect(within(detailPane()).queryByText('Approved organizational drafting')).not.toBeInTheDocument()
     expect(section('Rivell found')).toHaveTextContent("Rivell's explanation:")
@@ -673,6 +673,9 @@ describe('finding evidence amendment', () => {
     // The full card carries what a one-line row cannot: positions, approval and escalation.
     expect(card).toHaveTextContent('Approval required')
     expect(card).toHaveTextContent('Uncapped liability or consequential damages')
+    // The evidence card labels how it matched, not "Found by".
+    expect(card).toHaveTextContent('Matched by')
+    expect(card).not.toHaveTextContent('Found by')
   })
 
   it('links a cited source to its published knowledge page, never to the old publication record', async () => {
@@ -860,9 +863,9 @@ describe('finding evidence amendment', () => {
     // The frozen context lives in the Review notes sheet.
     await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
     const sheet = screen.getByRole('dialog', { name: 'Review notes' })
-    const heading = within(sheet).getByText('Contract pack')
+    const heading = within(sheet).getByText('Review pack')
     const row = heading.parentElement as HTMLElement
-    expect(within(row).getByText('Pack context unavailable')).toBeInTheDocument()
+    expect(within(row).getByText('Review pack unavailable')).toBeInTheDocument()
   })
 
   it('uses only resolved evidence and never rebuilds retrieval', async () => {
@@ -969,7 +972,7 @@ describe('review workspace authority and network guards', () => {
 
     await findDetailText('Proposed language')
     const text = document.body.textContent ?? ''
-    expect(text).toMatch(/Machine-proposed/)
+    expect(text).toMatch(/Proposed by Rivell/)
     expect(text).not.toMatch(/Approved organizational drafting/)
     expect(text).not.toMatch(/\bJev\b|OpenAI|OpenRouter|embedding|rerank/i)
   })

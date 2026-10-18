@@ -123,7 +123,7 @@ export function languageAuthority(
     }
   }
   if (finding.proposedLanguageSource === 'GENERATIVE') {
-    return { strong: 'Machine-proposed', rest: 'Produced by a model; not approved organizational language' }
+    return { strong: 'Proposed by Rivell', rest: 'Rivell wrote this; it is not approved organizational language' }
   }
   return null
 }
@@ -245,7 +245,7 @@ export function finalizeSummary(
       : ''
   return [
     `${approved} approved ${approved === 1 ? 'change' : 'changes'} (${review.accepted} accepted, ${review.edited} edited)${split}`,
-    `${review.rejected} rejected ${review.rejected === 1 ? 'Finding' : 'Findings'}; no approved change created`,
+    `${review.rejected} rejected ${review.rejected === 1 ? 'finding' : 'findings'}; no approved change created`,
   ]
 }
 

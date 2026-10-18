@@ -31,14 +31,14 @@ const EVIDENCE_LANES: readonly EvidenceLane[] = [
     authority: 'POLICY',
     label: 'Policy',
     description: 'Your published policy for this topic and contract type.',
-    emptyState: 'No published policy applies to this concept and profile.',
+    emptyState: 'No published policy applies to this topic and profile.',
     prominence: 'authoritative',
   },
   {
     authority: 'APPROVED_DRAFTING',
     label: 'Approved drafting',
     description: 'Approved reusable wording from the published clause library.',
-    emptyState: 'No approved reusable wording exists for this concept.',
+    emptyState: 'No approved reusable wording exists for this topic.',
     prominence: 'authoritative',
   },
   {
@@ -52,8 +52,8 @@ const EVIDENCE_LANES: readonly EvidenceLane[] = [
     authority: 'PRECEDENT',
     label: 'Precedents',
     description:
-      'Historical comparable agreements, with lower authority than published policy or approved drafting.',
-    emptyState: 'No comparable precedent was found for this concept.',
+      'Comparable past agreements, with less weight than published policy or approved drafting.',
+    emptyState: 'No comparable precedent was found for this topic.',
     prominence: 'historical',
   },
   {
@@ -81,7 +81,7 @@ export function authorityLabel(authority: AuthorityClass): string {
 const OTHER_LANE: EvidenceLane = {
   authority: 'UNKNOWN',
   label: 'Other evidence',
-  description: 'Evidence with an unrecognised authority class.',
+  description: 'Evidence Rivell could not classify.',
   emptyState: 'No other evidence was returned.',
   prominence: 'optional',
 }
@@ -154,7 +154,7 @@ const SUFFICIENCY_PRESENTATIONS: Record<
   },
   POLICY_MISSING: {
     label: 'Policy evidence missing',
-    description: 'No published policy applies to this concept and profile.',
+    description: 'No published policy applies to this topic and profile.',
   },
   AMBIGUOUS_POLICY: {
     label: 'Policy evidence ambiguous',
@@ -162,11 +162,11 @@ const SUFFICIENCY_PRESENTATIONS: Record<
   },
   DRAFTING_MISSING: {
     label: 'Approved drafting missing',
-    description: 'No approved reusable wording exists for this concept.',
+    description: 'No approved reusable wording exists for this topic.',
   },
   PRECEDENT_WEAK: {
     label: 'No comparable past agreement found',
-    description: 'No comparable past agreement was found for this concept. Precedent is evidence only and does not set policy.',
+    description: 'No comparable past agreement was found for this topic. Precedent is evidence only and does not set policy.',
   },
   CONTRACT_CONTEXT_INCOMPLETE: {
     label: 'Contract context incomplete',
@@ -219,7 +219,7 @@ export function applicabilityDimensions(
   if (scope.contractPackKey) {
     dimensions.push({
       key: 'pack',
-      label: 'Contract pack',
+      label: 'Review pack',
       value: contractPackLabel(scope.contractPackKey),
     })
   }
@@ -278,13 +278,13 @@ export function laneEmptyState(
 ): string {
   if (lane.authority === 'POLICY') {
     return sufficiency === 'POLICY_MISSING'
-      ? 'No published policy applies to this concept and profile.'
+      ? 'No published policy applies to this topic and profile.'
       : 'Policy evidence was not resolved for this retrieval.'
   }
   if (lane.authority === 'PRECEDENT') {
     return sufficiency === 'PARTIAL'
       ? 'Precedent retrieval was incomplete; no comparable precedent was returned.'
-      : 'No comparable precedent was found for this concept.'
+      : 'No comparable precedent was found for this topic.'
   }
   return lane.emptyState
 }
@@ -350,7 +350,7 @@ const RETRIEVAL_REASON_LABELS: Record<string, string> = {
   FUSION: 'Lexical + similarity match',
   DEFINED_TERM: 'Referenced defined term',
   RESOLVED_REFERENCE: 'Resolved cross-reference',
-  SIBLING_CONCEPT: 'Related clause (same concept)',
+  SIBLING_CONCEPT: 'Related clause (same topic)',
 }
 
 export function retrievalReasonLabel(code: string): string {
@@ -365,10 +365,10 @@ const TRACE_STAGE_LABELS: Record<string, string> = {
   policy: 'Policy lookup',
   drafting: 'Approved drafting lookup',
   structured: 'Structured lookup',
-  lexical: 'Lexical candidates',
-  vector: 'Vector candidates',
+  lexical: 'Keyword matches',
+  vector: 'Similar wording matches',
   fusion: 'Rank fusion',
-  rerank: 'Semantic reranking',
+  rerank: 'Similarity ranking',
   compatibility: 'Policy compatibility',
   currentContract: 'Current contract',
 }
@@ -421,10 +421,10 @@ const TRACE_PROFILE_KEYS = new Set([
 
 const REQUEST_KEY_LABELS: Record<string, string> = {
   purpose: 'Purpose',
-  legalConcept: 'Legal concept',
+  legalConcept: 'Topic',
   effectiveOn: 'Effective on',
-  knowledgePin: 'Knowledge pin',
-  resolvedAsOfPublication: 'Resolved publication',
+  knowledgePin: 'Knowledge version',
+  resolvedAsOfPublication: 'Knowledge version used',
   contractId: 'Contract',
   versionNumber: 'Version',
   clauseId: 'Clause',

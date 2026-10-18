@@ -249,7 +249,7 @@ describe('presentation helpers', () => {
     expect(countNoun('PLAYBOOK', 1)).toBe('1 position')
     expect(countNoun('PLAYBOOK', 5)).toBe('5 positions')
     expect(countNoun('CLAUSE_LIBRARY', 3)).toBe('3 clause variants')
-    expect(countNoun('TEMPLATE', 2)).toBe('2 items')
+    expect(countNoun('TEMPLATE', 2)).toBe('2 entries')
   })
 
   it('describes a source from real counts only', () => {

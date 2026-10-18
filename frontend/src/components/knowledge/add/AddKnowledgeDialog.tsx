@@ -200,7 +200,7 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
               <input value={details.declaredContractTypes} onChange={set('declaredContractTypes')} placeholder="MSA, NDA" disabled={busy} />
             </label>
             <label>
-              Contract pack
+              Review pack
               <input value={details.contractPackKey} onChange={set('contractPackKey')} disabled={busy} />
             </label>
             <label>

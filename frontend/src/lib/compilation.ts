@@ -92,12 +92,12 @@ const KIND_COPY: Record<Exclude<ConditionKind, 'other'>, { label: string; detail
   conflict: {
     label: 'Conflicts with published knowledge',
     detail:
-      'This may contradict published knowledge on the same legal concept and scope. Compare the two. Then correct it, reject it, or approve it knowingly.',
+      'This may contradict published knowledge on the same topic and scope. Compare the two. Then correct it, reject it, or approve it knowingly.',
   },
   supersession: {
     label: 'Supersession proposed',
     detail:
-      'This candidate appears to replace published knowledge. Nothing is replaced unless you choose it when you publish, and earlier publications stay reproducible.',
+      'This entry appears to replace published knowledge. Nothing is replaced unless you choose it when you publish, and earlier versions stay as they were.',
   },
   duplicate: {
     label: 'Possible duplicate',

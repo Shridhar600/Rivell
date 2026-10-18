@@ -35,7 +35,7 @@ function publishedMessage(notice: PublishedNotice): string {
   const parts = [`${notice.published} ${notice.published === 1 ? one : many} published`]
   if (notice.corrected > 0) parts.push(`${notice.corrected} corrected by you`)
   if (notice.rejected > 0) parts.push(`${notice.rejected} rejected and left out`)
-  return `${parts.join(', ')}. The original source is unchanged and earlier versions remain reproducible.`
+  return `${parts.join(', ')}. The original source is unchanged and earlier versions stay as they were.`
 }
 
 interface KnowledgeFrameProps {
@@ -72,7 +72,7 @@ export function KnowledgeFrame({ crumbs, title, lede, meta, actions, addPreset, 
               <span>
                 <b>Published as knowledge version {notice.publicationNumber}.</b> {publishedMessage(notice)}
               </span>
-              <IconButton label="Dismiss" onClick={dismiss}>
+              <IconButton label="Dismiss" title="Dismiss" onClick={dismiss}>
                 <CloseIcon className="rv-icon" />
               </IconButton>
             </p>

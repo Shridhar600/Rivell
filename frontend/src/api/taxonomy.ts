@@ -63,7 +63,7 @@ export async function fetchTaxonomy(): Promise<Taxonomy> {
   const client = createApiClient()
   const { data, response } = await client.GET('/api/taxonomy/concepts')
   if (!data) {
-    throw new Error(`The legal topic list could not be loaded (${response.status}).`)
+    throw new Error(`The topic list could not be loaded (${response.status}).`)
   }
   return parseTaxonomy(data)
 }
@@ -90,7 +90,7 @@ export function taxonomyGroups(taxonomy: Taxonomy | undefined): TaxonomyGroup[] 
     (leaf) => leaf.parentKey === null || !knownParents.has(leaf.parentKey),
   )
   if (ungrouped.length > 0) {
-    groups.push({ parentKey: null, label: 'Other legal topics', leaves: ungrouped })
+    groups.push({ parentKey: null, label: 'Other topics', leaves: ungrouped })
   }
   return groups
 }

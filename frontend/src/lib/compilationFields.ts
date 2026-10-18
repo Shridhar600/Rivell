@@ -87,10 +87,10 @@ export function interpretationRows(candidate: Candidate, label: ConceptLabel): F
   const classified = machine ? label(machine) : null
   rows.push({
     key: 'concept',
-    label: 'Legal concept',
+    label: 'Topic',
     value: concept ?? 'Not classified',
     machine: conceptCorrected(candidate) && classified !== concept ? `Rivell classified: ${classified ?? 'not classified'}` : null,
-    support: concept ? null : 'Rivell could not place this under a legal concept',
+    support: concept ? null : 'Rivell could not place this under a topic',
     corrected: conceptCorrected(candidate),
   })
 

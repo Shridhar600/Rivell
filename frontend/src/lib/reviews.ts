@@ -13,7 +13,7 @@ import { humanizeCode } from './domainLabels'
 import type { ConceptLabel } from '../api/taxonomy'
 
 const REVIEW_STATUS_LABELS: Record<string, string> = {
-  ANALYSIS_QUEUED: 'Analysis queued',
+  ANALYSIS_QUEUED: 'Waiting to start',
   ANALYZING: 'Analyzing',
   COMPLETED: 'Completed',
   FAILED: 'Failed',

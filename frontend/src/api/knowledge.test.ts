@@ -230,7 +230,7 @@ describe('knowledge parsers', () => {
 
   it('rejects candidates with an unknown review status', () => {
     expect(() => parseCandidate({ ...candidate, reviewStatus: 'ARCHIVED' })).toThrow(
-      /malformed candidate response/i,
+      /could not read this response/i,
     )
   })
 
@@ -265,7 +265,7 @@ describe('knowledge parsers', () => {
   it('rejects unknown review categories at the boundary', () => {
     expect(() =>
       parseCandidate({ ...candidate, reviewCategory: 'CRITICAL' }),
-    ).toThrow(/malformed candidate response/i)
+    ).toThrow(/could not read this response/i)
   })
 
   it('parses an artifact assessment and tolerates its absence', () => {
@@ -309,7 +309,7 @@ describe('knowledge parsers', () => {
     expect(parseCandidate(candidate).effectiveConceptKey).toBeNull()
     const { effectiveConceptKey: _omitted, ...withoutField } = candidate
     // Like every other field the server always sends, a missing key is a malformed response.
-    expect(() => parseCandidate(withoutField)).toThrow(/malformed candidate/i)
+    expect(() => parseCandidate(withoutField)).toThrow(/could not read this response/i)
   })
 
   it('parses extraction units and publications', () => {
@@ -347,7 +347,7 @@ describe('knowledge list queries', () => {
   it('rejects a list response that is not enveloped', async () => {
     stubFetch(() => jsonResponse([artifactDetail]))
 
-    await expect(fetchArtifacts()).rejects.toThrow(/malformed knowledge sources response/i)
+    await expect(fetchArtifacts()).rejects.toThrow(/could not read this response/i)
   })
 
   it('unwraps the envelope for candidates', async () => {
@@ -428,6 +428,6 @@ describe('uploadKnowledge', () => {
     const file = new File(['bytes'], 'knowledge-playbook.docx')
     await expect(
       uploadKnowledge(file, { artifactType: 'PLAYBOOK', declaredContractTypes: [] }),
-    ).rejects.toThrow(/malformed knowledge source response/i)
+    ).rejects.toThrow(/could not read this response/i)
   })
 })

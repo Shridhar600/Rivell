@@ -119,7 +119,7 @@ export function ChangesPanel({
                 <p className="rv-lc-prv">
                   {decision ? (
                     <span>
-                      Decision revision <b>{decision.revision}</b>
+                      Decision version <b>{decision.revision}</b>
                     </span>
                   ) : null}
                   <span>
@@ -132,7 +132,7 @@ export function ChangesPanel({
                     className="rv-lc-lnk"
                     to={`${workspacePath(contractId, reviewId)}?finding=${encodeURIComponent(change.findingId)}`}
                   >
-                    Open Review Workspace <ArrowIcon className="rv-icon" />
+                    Open review <ArrowIcon className="rv-icon" />
                   </Link>
                 </p>
               </div>
@@ -142,7 +142,7 @@ export function ChangesPanel({
       </ol>
       {humanReview.rejected > 0 ? (
         <p className="rv-lc-quiet">
-          Also reviewed: {pluralise(humanReview.rejected, 'Finding')} rejected; no approved change was created for{' '}
+          Also reviewed: {pluralise(humanReview.rejected, 'finding')} rejected; no approved change was created for{' '}
           {humanReview.rejected === 1 ? 'it' : 'them'}.
         </p>
       ) : null}

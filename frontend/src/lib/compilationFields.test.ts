@@ -21,7 +21,7 @@ describe('structured interpretation', () => {
         declaredContractTypes: ['MSA'],
       }),
     )
-    expect(rows.map((entry) => entry.label)).toEqual(['Legal concept', 'Position', 'Escalate', 'Counsel approval', 'Wording', 'Applies to'])
+    expect(rows.map((entry) => entry.label)).toEqual(['Topic', 'Position', 'Escalate', 'Counsel approval', 'Wording', 'Applies to'])
     expect(row(rows, 'positions')?.value).toBe('Preferred, Fallback')
     expect(row(rows, 'escalation')?.value).toBe('Below six months')
     expect(row(rows, 'approval')?.value).toBe('Required')
@@ -40,7 +40,7 @@ describe('structured interpretation', () => {
 
   it('shows a clause with its role and approved wording', () => {
     const rows = interpretationRows(make({ candidateType: 'CLAUSE_VARIANT', variantRole: 'FALLBACK', positions: [], contentText: 'Liability is capped.' }))
-    expect(rows.map((entry) => entry.label)).toEqual(['Legal concept', 'Role', 'Approved wording', 'Applies to'])
+    expect(rows.map((entry) => entry.label)).toEqual(['Topic', 'Role', 'Approved wording', 'Applies to'])
     expect(row(rows, 'variantRole')?.value).toBe('Fallback')
   })
 

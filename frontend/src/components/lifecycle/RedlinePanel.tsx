@@ -48,7 +48,7 @@ export function RedlinePanel(props: Props) {
               Review finalized with no approved changes
             </h2>
             <p>The approved change set is empty. No tracked-change file is needed for this review.</p>
-            <Checks items={[{ text: 'Human decisions are read-only' }, { text: 'Original contract remains unchanged' }]} />
+            <Checks items={[{ text: 'Your decisions are read-only' }, { text: 'Original contract remains unchanged' }]} />
           </LcBody>
         </LcCard>
       )
@@ -101,8 +101,8 @@ export function RedlinePanel(props: Props) {
               Generating and verifying the redline
             </h2>
             <p role="status">
-              Rivell is executing the frozen approved changes and verifying the result. This page shows the
-              outcome as soon as the server records it.
+              Rivell is applying the approved changes and checking the result. This page shows the
+              outcome as soon as it is ready.
             </p>
           </LcBody>
         </LcCard>
@@ -140,8 +140,8 @@ function Verified({
               Verified redline
             </h2>
             <p className="rv-lc-prv">
-              <span>All approved changes executed</span>
-              <span>Round-trip verification passed</span>
+              <span>All approved changes applied</span>
+              <span>Checked against your changes</span>
             </p>
           </div>
         </div>
@@ -197,16 +197,15 @@ function Failed({ execution, headingRef, onOpenReport, onRetry }: Props & { exec
           </div>
         </div>
         <p>
-          Rivell could not deterministically execute and verify the complete frozen approved change set. No
-          verified document is available.
+          Rivell could not apply and check all the approved changes. No checked document is available.
         </p>
         {execution.failureCode ? <p className="rv-lc-quiet">{redlineFailureTitle(execution.failureCode)}</p> : null}
         {execution.attempt > 1 ? (
-          <p className="rv-lc-quiet">Attempt {execution.attempt} on the same frozen approved change set also failed.</p>
+          <p className="rv-lc-quiet">Attempt {execution.attempt} with the same approved changes also failed.</p>
         ) : null}
         <Checks
           items={[
-            { text: 'Approved changes remain frozen and intact' },
+            { text: 'Approved changes cannot be changed' },
             { text: 'No verified Word file is available to download', failed: true },
           ]}
         />
@@ -217,7 +216,7 @@ function Failed({ execution, headingRef, onOpenReport, onRetry }: Props & { exec
           note={
             retryable
               ? undefined
-              : 'This failure is determined by the frozen inputs; running the same change set again would produce the same result.'
+              : 'Running the same changes again would give the same result.'
           }
         />
         {retryable ? (
@@ -253,12 +252,12 @@ function NotVerified({ execution, headingRef, onOpenReport }: Props & { executio
           </div>
         </div>
         <p>
-          The server recorded an execution, but not every approved change is applied and verified, so no
-          document is offered.
+          Rivell applied the approved changes, but not all of them could be checked, so no document is
+          offered.
         </p>
         <Checks
           items={[
-            { text: 'Approved changes remain frozen and intact' },
+            { text: 'Approved changes cannot be changed' },
             { text: 'No verified Word file is available to download', failed: true },
           ]}
         />

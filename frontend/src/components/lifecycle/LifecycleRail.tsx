@@ -43,7 +43,7 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
           ) : null}
           <div>
             <dt>Version</dt>
-            <dd>{version !== null ? `v${version}, immutable` : 'Not recorded'}</dd>
+            <dd>{version !== null ? `v${version}, cannot be changed` : 'Not recorded'}</dd>
           </div>
           {document ? (
             <div>
@@ -71,7 +71,7 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
             ))}
           </dl>
         ) : (
-          <p className="rv-lc-quiet">The frozen review context is not available for this review.</p>
+          <p className="rv-lc-quiet">The review details are not available for this review.</p>
         )}
       </div>
       <div>
@@ -84,7 +84,7 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
           </div>
           {snapshot?.packVersion ? (
             <div>
-              <dt>Pack version</dt>
+              <dt>Review pack version</dt>
               <dd>{snapshot.packVersion}</dd>
             </div>
           ) : null}

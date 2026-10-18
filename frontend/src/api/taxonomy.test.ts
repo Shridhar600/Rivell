@@ -48,7 +48,7 @@ describe('parseTaxonomy', () => {
   it('refuses a concept without a key rather than showing it unlabelled', () => {
     expect(() =>
       parseTaxonomy({ ...payload, leaves: [{ label: 'Missing key' }] }),
-    ).toThrow(/taxonomy/)
+    ).toThrow(/could not read this response/)
   })
 })
 
@@ -86,7 +86,7 @@ describe('taxonomy groups', () => {
       leaves: [...payload.leaves, { key: 'ORPHAN', label: 'Orphan', parentKey: 'GONE', definition: null }],
     })
     const groups = taxonomyGroups(taxonomy)
-    expect(groups.at(-1)?.label).toBe('Other legal topics')
+    expect(groups.at(-1)?.label).toBe('Other topics')
     expect(groups.at(-1)?.leaves.map((leaf) => leaf.key)).toEqual(['ORPHAN'])
   })
 })

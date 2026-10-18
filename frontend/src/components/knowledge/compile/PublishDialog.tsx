@@ -88,7 +88,7 @@ export function PublishDialog({ artifact, candidates, supersede, onClose, onPubl
             </li>
           ) : null}
           <li>The uploaded original stays unchanged</li>
-          <li>Earlier versions remain reproducible</li>
+          <li>Earlier versions stay as they were</li>
         </ul>
         {notReplacing.length > 0 ? (
           <p className="rv-dlg__note" role="status">

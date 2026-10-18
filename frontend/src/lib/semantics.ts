@@ -27,17 +27,17 @@ export const REVIEW_CATEGORY_LABELS: Record<ReviewCategory, string> = {
 }
 
 export const REVIEW_CATEGORY_EXPLANATION =
-  'Review attention describes how much human scrutiny Rivell suggests before publication. It is not a legal-risk rating.'
+  'Review attention describes how closely Rivell suggests you check an entry before publication. It is not a legal-risk rating.'
 
 export const REVIEW_CATEGORY_DESCRIPTIONS: Record<ReviewCategory, string> = {
   ROUTINE: 'No review concerns detected.',
-  ELEVATED: 'Some extracted values need a closer look.',
-  HIGH: 'Conflicts, supersession, or disputed extraction need a decision.',
+  ELEVATED: 'Some values need a closer look.',
+  HIGH: 'Conflicts, supersession, or a disputed reading need a decision.',
 }
 
 export const REVIEW_REASON_LABELS: Record<ReviewReason, string> = {
   DUPLICATE_DETECTED: 'Possible duplicate of published knowledge.',
-  CONFLICT_DETECTED: 'May contradict published knowledge of the same concept and scope.',
+  CONFLICT_DETECTED: 'May contradict published knowledge of the same topic and scope.',
   SUPERSESSION_PROPOSED:
     'Rivell suggests this entry may replace published knowledge.',
   ARTIFACT_TYPE_MISMATCH:
@@ -47,7 +47,7 @@ export const REVIEW_REASON_LABELS: Record<ReviewReason, string> = {
   UNVERIFIED_GENERATIVE_FIELD:
     'A field Rivell read could not be independently verified.',
   LOW_CLASSIFICATION_CONFIDENCE:
-    'Rivell could not classify this unit against a legal concept confidently.',
+    'Rivell could not confidently place this entry under a topic.',
   NEW_PROHIBITED_OR_ESCALATION_POSITION:
     'Proposes a prohibited or escalation position.',
   SCOPE_NARROWING_PROPOSED:
@@ -170,7 +170,7 @@ export function scopeDifferences(
     }
   }
 
-  compare('Contract pack', candidate.contractPackKey, artifact.contractPackKey)
+  compare('Review pack', candidate.contractPackKey, artifact.contractPackKey)
   compare(
     'Declared contract types',
     candidate.declaredContractTypes.join(', ') || null,

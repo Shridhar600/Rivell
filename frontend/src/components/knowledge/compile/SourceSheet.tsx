@@ -39,7 +39,7 @@ export function SourceSheet({ artifact, candidate, unit, location, blocks, onClo
     <Dialog variant="sheet" labelledBy={titleId} onClose={onClose}>
       <div className="rv-kc-sheet-h">
         <span>Source</span>
-        <IconButton label="Close source context" onClick={onClose}>
+        <IconButton label="Close source context" title="Close source context" onClick={onClose}>
           <CloseIcon className="rv-icon" />
         </IconButton>
       </div>

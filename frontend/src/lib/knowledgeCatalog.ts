@@ -354,7 +354,7 @@ const TYPE_NOUN: Partial<Record<ArtifactType, [string, string]>> = {
 
 /** "1 position", "5 positions", "3 clause variants". Other source types hold generic items. */
 export function countNoun(type: ArtifactType, count: number): string {
-  const [one, many] = TYPE_NOUN[type] ?? ['item', 'items']
+  const [one, many] = TYPE_NOUN[type] ?? ['entry', 'entries']
   return `${count} ${count === 1 ? one : many}`
 }
 

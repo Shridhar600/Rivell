@@ -184,7 +184,7 @@ describe('finalize is the server’s decision', () => {
     await userEvent.click(finalize)
     const dialog = await screen.findByRole('dialog', { name: 'Finalize this review?' })
     expect(dialog).toHaveTextContent('1 approved change (1 accepted, 0 edited)')
-    expect(dialog).toHaveTextContent('1 rejected Finding; no approved change created')
+    expect(dialog).toHaveTextContent('1 rejected finding; no approved change created')
     expect(dialog).toHaveTextContent('After you finalize, you generate the redline separately.')
     expect(api.requests.filter((r) => r.method === 'POST' && r.url.endsWith('/finalize'))).toHaveLength(0)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Finalize review' }))
@@ -203,7 +203,7 @@ describe('finalize is the server’s decision', () => {
       ),
     )
     expect(await within(await detail()).findByText('This finding could not be loaded.')).toBeInTheDocument()
-    expect(within(await detail()).getByText('Approved changes frozen')).toBeInTheDocument()
+    expect(within(await detail()).getByText('Approved changes are final')).toBeInTheDocument()
     expect(within(await detail()).getByRole('link', { name: 'View review summary' })).toBeInTheDocument()
     expect(within(await topBar()).getByRole('button', { name: 'Finalized' })).toBeDisabled()
   })
@@ -237,9 +237,9 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
 
     const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
     expect(link).toHaveAttribute('href', '/reviews/c1/overview/r-1')
-    expect(within(await detail()).getByText('Approved changes frozen')).toBeInTheDocument()
-    expect(within(await detail()).getByText(/1 approved change in the immutable approved change set/)).toBeInTheDocument()
-    expect(await topBar()).toHaveTextContent('Approved changes frozen')
+    expect(within(await detail()).getByText('Approved changes are final')).toBeInTheDocument()
+    expect(within(await detail()).getByText(/1 approved change fixed for this review/)).toBeInTheDocument()
+    expect(await topBar()).toHaveTextContent('Approved changes are final')
 
     // Redline is not run, offered, or even read from here.
     expect(screen.queryByRole('button', { name: /redline/i })).not.toBeInTheDocument()
@@ -261,7 +261,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
     await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
     await userEvent.click(within(await topBar()).getByRole('button', { name: 'Toggle detail panel' }))
     await finalizeFromDialog()
-    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Approved changes frozen')).toHaveFocus())
+    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Approved changes are final')).toHaveFocus())
     expect(document.body).not.toHaveFocus()
   })
 
@@ -617,7 +617,7 @@ describe('clause details in place', () => {
     await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
 
     await waitFor(() => expect(within(sheet).getByLabelText('Topic')).toBeDisabled())
-    expect(await within(sheet).findByText(/legal topic list could not be loaded/i, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(await within(sheet).findByText(/topic list could not be loaded/i, {}, { timeout: 3000 })).toBeInTheDocument()
     expect(within(sheet).getByRole('button', { name: 'Save topic' })).toBeDisabled()
   })
 

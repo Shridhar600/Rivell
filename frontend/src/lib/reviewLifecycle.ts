@@ -40,7 +40,7 @@ export interface LifecycleStatus {
 
 /** The canonical `ST` table, plus the three states the canonical file has no word for. */
 const STATUS: Record<LifecycleKey, LifecycleStatus> = {
-  queued: { label: 'Queued', variant: 'neutral', glyph: 'none' },
+  queued: { label: 'Waiting to start', variant: 'neutral', glyph: 'none' },
   analyzing: { label: 'Analyzing', variant: 'neutral', glyph: 'spin' },
   failed: { label: 'Analysis failed', variant: 'red', glyph: 'none' },
   incomplete: { label: 'Analysis complete', variant: 'neutral', glyph: 'none' },
@@ -188,7 +188,7 @@ export interface JourneyStep {
  */
 export function journey(key: LifecycleKey, humanReview: HumanReview | null): JourneyStep[] {
   const steps: JourneyStep[] = [
-    { title: 'Analysis', detail: 'Queued', tone: 'i' },
+    { title: 'Analysis', detail: 'Waiting to start', tone: 'i' },
     { title: 'Review', detail: '', tone: 'i' },
     { title: 'Finalize', detail: '', tone: 'i' },
     { title: 'Redline', detail: '', tone: 'i' },
@@ -197,7 +197,7 @@ export function journey(key: LifecycleKey, humanReview: HumanReview | null): Jou
     steps[index] = { ...steps[index], tone, detail: detail ?? steps[index].detail }
   }
 
-  if (key === 'queued') set(0, 'a', 'Queued')
+  if (key === 'queued') set(0, 'a', 'Waiting to start')
   else if (key === 'analyzing') set(0, 'a', 'Analyzing')
   else if (key === 'failed') set(0, 'x', 'Failed')
   else if (key === 'unknown') set(0, 'i', 'Unknown')
@@ -213,10 +213,10 @@ export function journey(key: LifecycleKey, humanReview: HumanReview | null): Jou
       set(2, 'a', 'Ready to finalize')
     } else if (isPostFinalize(key)) {
       set(1, 'd', 'Resolved')
-      set(2, 'd', 'Frozen')
+      set(2, 'd', 'Final')
       if (key === 'finalized') set(3, 'a', 'Not generated')
       else if (key === 'finalized_zero') set(3, 'd', 'No changes required')
-      else if (key === 'rl_running') set(3, 'a', 'Executing')
+      else if (key === 'rl_running') set(3, 'a', 'Generating')
       else if (key === 'rl_verified') set(3, 'd', 'Verified')
       else if (key === 'rl_unverified') set(3, 'x', 'Not verified')
       else set(3, 'x', 'Failed')
@@ -227,7 +227,7 @@ export function journey(key: LifecycleKey, humanReview: HumanReview | null): Jou
 
 /** What the reviewer sees as the headline of the human-review card. */
 export function decidedLine(humanReview: HumanReview): string {
-  return `${humanReview.resolvedFindings} of ${humanReview.actionableFindings} Findings decided`
+  return `${humanReview.resolvedFindings} of ${humanReview.actionableFindings} findings decided`
 }
 
 export interface ActivityEvent {
@@ -254,10 +254,10 @@ export function activityEvents(facts: LifecycleFacts): ActivityEvent[] {
   }
   const finalizedAt = changeSet?.finalizedAt ?? humanReview?.finalizedAt ?? null
   if (humanReview?.status === 'COMPLETED' && finalizedAt) {
-    events.push({ label: 'Review finalized; approved changes frozen', time: finalizedAt, failed: false })
+    events.push({ label: 'Review finalized; approved changes are final', time: finalizedAt, failed: false })
   }
   if (redline) {
-    if (redline.startedAt) events.push({ label: 'Redline execution started', time: redline.startedAt, failed: false })
+    if (redline.startedAt) events.push({ label: 'Redline generation started', time: redline.startedAt, failed: false })
     if (redline.completedAt) {
       events.push(
         redline.status === 'FAILED'

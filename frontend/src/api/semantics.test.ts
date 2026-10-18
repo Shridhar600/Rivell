@@ -343,14 +343,14 @@ describe('parseSemanticContract', () => {
 
   it('rejects malformed payloads', () => {
     expect(() => parseSemanticContract({ contractId: 'c1' })).toThrow(
-      /malformed/i,
+      /could not read this response/i,
     )
     expect(() =>
       parseSemanticContract({ ...readyContract, parties: [{ id: 'p1' }] }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
     expect(() =>
       parseSemanticContract({ ...readyContract, enrichmentStatus: 7 }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
   })
 })
 
