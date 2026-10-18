@@ -1425,6 +1425,37 @@ a {
   border: 0;
 }
 
+/* ---------- motion ---------- */
+/* A page fades in when the reader arrives on it. Opacity only, so nothing shifts under the pointer. */
+@keyframes rv-enter {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes rv-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+@keyframes rv-fade {
+  from {
+    opacity: 0;
+  }
+}
+.rv-stage > .rv-main,
+.rv-stage > .rv-ws,
+.rv-stage .rv-kc,
+.rv-stage > .rv-insp {
+  animation: rv-enter var(--t-panel) var(--ease);
+}
+.rv-cmd[open] {
+  animation: rv-pop var(--t-base) var(--ease);
+}
+.rv-cmd[open]::backdrop {
+  animation: rv-fade var(--t-base) var(--ease);
+}
+
 /* ---------- tooltip (one for the whole app, see useTooltips) ---------- */
 .rv-tip {
   position: fixed;
@@ -1586,6 +1617,12 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .rv-stage > .rv-insp,
+  .rv-stage > .rv-main,
+  .rv-stage > .rv-ws,
+  .rv-stage .rv-kc,
+  .rv-cmd[open],
+  .rv-cmd[open]::backdrop,
   .rv-tip,
   .rv-shell,
   .rv-stage,
