@@ -1456,6 +1456,52 @@ a {
   border: 0;
 }
 
+/* ---------- tooltip (one for the whole app, see useTooltips) ---------- */
+.rv-tip {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  background: var(--text);
+  color: var(--bg);
+  font: 500 12px/1.35 var(--font);
+  letter-spacing: 0;
+  box-shadow: var(--sh-sm);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  visibility: hidden;
+  transition:
+    opacity var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease),
+    visibility 0s linear var(--t-fast);
+}
+.rv-tip[data-side='above'] {
+  transform: translateY(2px);
+}
+.rv-tip[data-open] {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition:
+    opacity var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+.rv-tip kbd {
+  flex: none;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg) 18%, transparent);
+  color: var(--bg);
+  font: 500 11px/16px var(--font);
+  text-align: center;
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 1180px) {
   .rv-stage {
@@ -1570,6 +1616,7 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .rv-tip,
   .rv-shell,
   .rv-stage,
   .rv-side,

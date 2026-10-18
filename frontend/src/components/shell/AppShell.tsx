@@ -16,6 +16,7 @@ import {
 import { GlobalSearch } from './GlobalSearch'
 import { readWidth, writeWidth } from '../../lib/panelWidth'
 import { Sidebar, SidebarToggle } from './Sidebar'
+import { useTooltips } from './useTooltips'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 
 /**
@@ -59,6 +60,7 @@ export function AppShell() {
   // A function in state must be stored through an updater, or React would call it.
   const setPageCommands = useCallback((read: (() => PageCommands) | null) => setReadPageCommands(() => read), [])
   useSearchShortcut(setSearchOpen)
+  useTooltips()
 
   const [sidebarWidth, setSidebarWidth] = useState(() => readWidth(SIDEBAR_WIDTH_KEY, SIDEBAR_WIDTH))
   const resizeSidebar = useCallback((width: number) => {
