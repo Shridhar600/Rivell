@@ -68,7 +68,7 @@ a {
   transition: grid-template-columns var(--t-panel) var(--ease);
 }
 .rv-shell[data-sidebar='collapsed'] {
-  --rv-sidebar: var(--rv-w-sidebar-collapsed);
+  --rv-sidebar: 0px;
 }
 .rv-shell[data-inspector='collapsed'] {
   --rv-inspector: 0px;
@@ -79,6 +79,8 @@ a {
  * page has one. Full-width surfaces (lists, the review workspace, a compilation) span both.
  */
 .rv-stage {
+  /* Placed explicitly: on a phone the sidebar leaves the grid, and the stage must not slide into its column. */
+  grid-column: 2;
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--rv-inspector, var(--rv-w-inspector));
   grid-template-rows: minmax(0, 1fr);
@@ -96,38 +98,57 @@ a {
 }
 
 /* ---------- sidebar ---------- */
+/*
+ * The sidebar's column animates between its width and 0. The contents keep their full width and
+ * the column clips them, so the sidebar slides away instead of reflowing its text.
+ */
 .rv-side {
   position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--side);
+  border-right: 1px solid var(--line);
+  transition: border-color var(--t-panel) var(--ease);
+}
+.rv-side__inner {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 0;
-  min-height: 0;
+  width: var(--rv-sidebar-open, var(--rv-w-sidebar));
+  height: 100%;
   padding: 0 8px 10px;
   overflow-x: hidden;
   overflow-y: auto;
-  background: var(--side);
-  border-right: 1px solid var(--line);
+  transition:
+    opacity var(--t-panel) var(--ease),
+    transform var(--t-panel) var(--ease);
+}
+.rv-shell[data-sidebar='collapsed'] .rv-side {
+  border-right-color: transparent;
+}
+.rv-shell[data-sidebar='collapsed'] .rv-side__inner {
+  opacity: 0;
+  transform: translateX(-12px);
 }
 .rv-side__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 4px;
   flex: none;
   height: var(--rv-h-topbar);
+  /* Room for the sidebar toggle, which is fixed above this corner. */
+  padding-left: 34px;
 }
 .rv-side__brand {
   display: flex;
   align-items: center;
-  gap: 8px;
   min-width: 0;
   height: 30px;
-  padding: 0 8px;
+  padding: 0 6px;
   border-radius: var(--r-md);
   color: var(--text);
   text-decoration: none;
-  font-weight: 600;
 }
 .rv-side__brand:hover {
   background: var(--hover);
@@ -136,14 +157,25 @@ a {
   display: block;
   flex: none;
 }
-.rv-side__icon {
-  display: none;
-  flex: none;
-  border-radius: 6px;
-}
-.rv-side__toggle {
+
+/*
+ * The one sidebar toggle. It never moves: it sits in the top left corner, over the sidebar header
+ * while the sidebar is open and at the start of the top bar while it is closed.
+ */
+.rv-iconbtn.rv-side-toggle {
+  position: fixed;
+  top: calc((var(--rv-h-topbar) - 30px) / 2);
+  left: 8px;
+  z-index: 30;
   color: var(--text-3);
 }
+.rv-topbar {
+  transition: padding-left var(--t-panel) var(--ease);
+}
+.rv-shell[data-sidebar='collapsed'] .rv-topbar {
+  padding-left: 46px;
+}
+
 .rv-nav {
   display: flex;
   flex-direction: column;
@@ -157,9 +189,6 @@ a {
   color: var(--text-3);
   font-size: 12px;
   font-weight: 500;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-nav__heading {
-  display: none;
 }
 
 /* Panel edges. Drag to resize, arrow keys to step, double-click to reset. */
@@ -190,9 +219,6 @@ a {
   cursor: col-resize !important;
   user-select: none;
   transition: none !important;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-side__resize {
-  display: none;
 }
 .rv-nav__link {
   position: relative;
@@ -237,47 +263,6 @@ a {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/*
- * Collapsed rail. Labels are visually hidden rather than removed, so each link keeps its
- * accessible name; the `title` tooltip is added by the component while collapsed.
- */
-.rv-shell[data-sidebar='collapsed'] .rv-side__head {
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 2px;
-  height: auto;
-  padding: 7px 0 4px;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-side__brand,
-.rv-shell[data-sidebar='collapsed'] .rv-nav__link {
-  justify-content: center;
-  width: 100%;
-  padding: 0;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-side__wordmark {
-  display: none;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-side__icon {
-  display: block;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-nav__text {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-nav {
-  padding-top: 6px;
-  border-top: 1px solid var(--line);
-}
-.rv-shell[data-sidebar='collapsed'] .rv-nav__link[aria-current='page']::before {
-  left: -8px;
 }
 
 /* ---------- centre column ---------- */
@@ -1482,9 +1467,39 @@ a {
   }
 }
 @media (max-width: 760px) {
-  /* The sidebar stays as the icon rail (the shell forces it), so navigation never disappears. */
-  .rv-side__toggle {
+  /* On a phone the sidebar slides over the page instead of taking a column. */
+  .rv-shell,
+  .rv-shell[data-sidebar='collapsed'] {
+    grid-template-columns: 0px minmax(0, 1fr);
+  }
+  .rv-side {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 25;
+    width: min(var(--rv-sidebar-open, var(--rv-w-sidebar)), 85vw);
+    box-shadow: var(--sh-overlay);
+    transition: transform var(--t-panel) var(--ease);
+  }
+  .rv-shell[data-sidebar='collapsed'] .rv-side {
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+  .rv-side__inner {
+    width: 100%;
+  }
+  .rv-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 24;
+    background: color-mix(in srgb, var(--text) 24%, transparent);
+  }
+  .rv-side__resize {
     display: none;
+  }
+  .rv-shell .rv-topbar {
+    padding-left: 46px;
   }
   .rv-wrap,
   .rv-page {
@@ -1557,6 +1572,9 @@ a {
 @media (prefers-reduced-motion: reduce) {
   .rv-shell,
   .rv-stage,
+  .rv-side,
+  .rv-side__inner,
+  .rv-topbar,
   .rv-btn,
   .rv-chev,
   .rv-glyph--spin {

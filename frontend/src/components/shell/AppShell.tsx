@@ -15,26 +15,34 @@ import {
 } from './ShellContext'
 import { GlobalSearch } from './GlobalSearch'
 import { readWidth, writeWidth } from '../../lib/panelWidth'
-import { Sidebar } from './Sidebar'
+import { Sidebar, SidebarToggle } from './Sidebar'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 
 /**
- * Work surfaces with a list panel of their own. The app sidebar starts as the icon rail there, so
- * two full sidebars never stand side by side. Expanding it lasts until the reader leaves.
+ * Work surfaces with a list panel of their own. The app sidebar starts closed there, so two
+ * sidebars never stand side by side. Opening it lasts until the reader leaves the page.
  */
 const WORK_SURFACES = ['/reviews/:contractId/analysis/:reviewId', '/knowledge/compilations/:artifactId']
 
 export function AppShell() {
   const { pathname } = useLocation()
   const onWorkSurface = WORK_SURFACES.some((pattern) => matchPath(pattern, pathname) !== null)
-  // The page the reader expanded the sidebar on. Leaving it brings the rail back.
+  // The page the reader opened the sidebar on. Leaving it closes the sidebar again.
   const [expandedOn, setExpandedOn] = useState<string | null>(null)
   const workSurfaceExpanded = onWorkSurface && expandedOn === pathname
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readPanelFlag(SIDEBAR_KEY, true))
   const [inspectorCollapsed, setInspectorCollapsed] = useState(() => readPanelFlag(INSPECTOR_KEY, true))
 
+  // On a phone the sidebar slides over the page; it closes again when the reader moves on.
+  const narrow = useMediaQuery('(max-width: 760px)')
+  const [overlayOn, setOverlayOn] = useState<string | null>(null)
+
   const toggleSidebar = useCallback(() => {
+    if (narrow) {
+      setOverlayOn((page) => (page === pathname ? null : pathname))
+      return
+    }
     if (onWorkSurface) {
       setExpandedOn((page) => (page === pathname ? null : pathname))
       return
@@ -43,7 +51,7 @@ export function AppShell() {
       writePanelFlag(SIDEBAR_KEY, !value)
       return !value
     })
-  }, [onWorkSurface, pathname])
+  }, [narrow, onWorkSurface, pathname])
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [readPageCommands, setReadPageCommands] = useState<(() => PageCommands) | null>(null)
@@ -70,12 +78,10 @@ export function AppShell() {
     })
   }, [])
 
-  // Below this width the sidebar is the icon rail and cannot be expanded, so navigation stays
-  // reachable. The saved preference is left alone, and returns when the window widens again.
-  const narrow = useMediaQuery('(max-width: 760px)')
-  const railed = narrow || (onWorkSurface ? !workSurfaceExpanded : sidebarCollapsed)
+  // The saved preference is left alone on a phone and on work surfaces, and applies again elsewhere.
+  const railed = narrow ? overlayOn !== pathname : onWorkSurface ? !workSurfaceExpanded : sidebarCollapsed
 
-  usePanelShortcut(narrow ? () => {} : toggleSidebar, toggleInspector)
+  usePanelShortcut(toggleSidebar, toggleInspector)
 
   const state = useMemo<ShellState>(
     () => ({ sidebarCollapsed: railed, toggleSidebar, inspectorCollapsed, toggleInspector, inspectorWidth, resizeInspector, searchOpen, openSearch, setPageCommands }),
@@ -90,7 +96,10 @@ export function AppShell() {
         data-sidebar={railed ? 'collapsed' : undefined}
         data-inspector={inspectorCollapsed ? 'collapsed' : undefined}
       >
-        <Sidebar collapsed={railed} onToggle={toggleSidebar} width={sidebarWidth} onResize={resizeSidebar} />
+        <SidebarToggle collapsed={railed} onToggle={toggleSidebar} />
+        <Sidebar collapsed={railed} width={sidebarWidth} onResize={resizeSidebar} />
+        {/* On a phone the open sidebar covers the page; a tap beside it closes it. */}
+        {narrow && !railed ? <div className="rv-scrim" aria-hidden="true" onClick={toggleSidebar} /> : null}
         <div className="rv-stage">
           <Outlet />
         </div>

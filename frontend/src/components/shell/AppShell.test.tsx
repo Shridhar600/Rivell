@@ -97,16 +97,19 @@ describe('M10B shell', () => {
 })
 
 describe('sidebar owns its own collapse control', () => {
-  it('puts the control in the sidebar header, not in the top bar', () => {
+  it('keeps one toggle in a fixed place, outside both the sidebar and the top bar', async () => {
     stubApi()
     renderAt('/')
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
     const topbar = document.querySelector('.rv-topbar') as HTMLElement
-    const toggle = within(sidebar).getByRole('button', { name: 'Sidebar' })
-    expect(toggle).toHaveClass('rv-side__toggle')
-    expect(toggle.closest('.rv-side__head')).not.toBeNull()
-    expect(toggle).toHaveAttribute('title', expect.stringContaining('Collapse sidebar'))
-    expect(within(topbar).queryByRole('button', { name: 'Sidebar' })).not.toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: 'Sidebar' })
+    expect(toggle).toHaveClass('rv-side-toggle')
+    expect(sidebar).not.toContainElement(toggle)
+    expect(topbar).not.toContainElement(toggle)
+    expect(toggle).toHaveAttribute('title', expect.stringContaining('Hide sidebar'))
+    await userEvent.click(toggle)
+    // The same control stays where it was, so the reader finds it again to reopen the sidebar.
+    expect(screen.getByRole('button', { name: 'Sidebar' })).toBe(toggle)
     expect(within(topbar).getByRole('button', { name: 'Search' })).toBeInTheDocument()
   })
 
@@ -185,8 +188,8 @@ describe('sidebar owns its own collapse control', () => {
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
     const nav = within(sidebar).getByRole('navigation', { name: 'Primary' })
     const expected = [
+      screen.getByRole('button', { name: 'Sidebar' }),
       within(sidebar).getByRole('link', { name: 'Rivell' }),
-      within(sidebar).getByRole('button', { name: 'Sidebar' }),
       ...within(nav).getAllByRole('link'),
     ]
 
@@ -209,17 +212,16 @@ describe('sidebar owns its own collapse control', () => {
     )
   })
 
-  it('keeps a tooltip on collapsed navigation items', async () => {
+  it('takes a closed sidebar out of the tab order and the accessibility tree', async () => {
     stubApi()
     const { container } = renderAt('/')
+    const side = container.querySelector('#rv-sidebar') as HTMLElement
+    expect(side).not.toHaveAttribute('inert')
     await userEvent.keyboard('[[')
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-sidebar', 'collapsed'),
     )
-    const side = screen.getByRole('complementary', { name: 'Sidebar' })
-    for (const name of ['Home', 'Reviews', 'Overview', 'Playbooks', 'Clause library', 'Sources']) {
-      expect(within(side).getByRole('link', { name })).toHaveAttribute('title', name)
-    }
+    expect(side).toHaveAttribute('inert')
   })
 
   it('remembers the collapsed state per browser', async () => {
@@ -461,9 +463,10 @@ describe('stylesheet contract (documentation only)', () => {
     // The inspector's own handle lives inside the panel, so hiding the panel hides the handle.
     const wide = css.slice(css.indexOf('max-width: 1180px'), css.indexOf('max-width: 760px'))
     expect(wide).toContain('.rv-insp')
-    // The sidebar stays as the icon rail at this width, so only its expand control goes.
+    // On a phone the sidebar slides over the page and leaves the screen when closed.
     const narrow = css.slice(css.indexOf('max-width: 760px'))
-    expect(narrow).toContain('.rv-side__toggle')
+    expect(narrow).toContain('.rv-side {')
+    expect(narrow).toContain('translateX(-100%)')
   })
 
   it('honours prefers-reduced-motion for every animated property', () => {
@@ -495,7 +498,7 @@ describe('panel toggles', () => {
     )
     const after = screen.getByRole('button', { name: 'Sidebar' })
     expect(after).toHaveAttribute('aria-expanded', 'false')
-    expect(after).toHaveAttribute('title', expect.stringContaining('Expand sidebar'))
+    expect(after).toHaveAttribute('title', expect.stringContaining('Show sidebar'))
   })
 
   it('styles the inspector handle once, so no stale duplicate rule can win on order', () => {

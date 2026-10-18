@@ -139,13 +139,11 @@ describe('sidebar', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('keeps a tooltip on every destination when the sidebar is collapsed', () => {
+  it('keeps a closed sidebar out of reach until it is opened again', () => {
     globalThis.localStorage?.setItem('rv-sidebar', 'c')
     stubApi()
-    renderAt('/knowledge')
-    for (const link of within(sidebar()).getAllByRole('link').filter((entry) => entry.className.includes('rv-nav__link'))) {
-      expect(link).toHaveAttribute('title', link.textContent?.trim())
-    }
+    const { container } = renderAt('/knowledge')
+    expect(container.querySelector('#rv-sidebar')).toHaveAttribute('inert')
   })
 
   it('links the brand to Home', () => {
