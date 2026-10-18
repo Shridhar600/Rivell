@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { HumanReview } from '../../api/workflow'
 import { Breadcrumbs } from '../shell/Breadcrumbs'
 import { TopBar } from '../shell/TopBar'
@@ -40,6 +41,16 @@ export function WorkspaceTopBar({
   onToggleRight,
   onFinalize,
 }: Props) {
+  // The blocker list closes on a click anywhere else, like any popover.
+  const whyRef = useRef<HTMLDetailsElement>(null)
+  useEffect(() => {
+    function onPointerDown(event: PointerEvent) {
+      const why = whyRef.current
+      if (why?.open && !why.contains(event.target as Node)) why.open = false
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [])
   const ready = humanReview?.readyToFinalize === true
   const blockers = humanReview?.blockers ?? []
   const label = isFinalized ? 'Finalized' : 'Finalize review'
@@ -106,7 +117,7 @@ export function WorkspaceTopBar({
           </button>
           {humanReview && !ready && !isFinalized ? (
             // What still blocks Finalize, one click (or Enter) away, for keyboard and screen reader users too.
-            <details className="rv-ws-blk">
+            <details className="rv-ws-blk" ref={whyRef}>
               <summary className="rv-iconbtn" aria-label="Why the review cannot be finalized yet" title="Why Finalize is not available yet">
                 <InfoIcon className="rv-icon" />
               </summary>
