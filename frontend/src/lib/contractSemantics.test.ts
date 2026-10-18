@@ -27,8 +27,8 @@ describe('label maps', () => {
     expect(metadataFieldLabel('COMMENCEMENT_DATE')).toBe('Commencement date')
     expect(referenceKindLabel('SECTION')).toBe('Section')
     expect(referenceStatusLabel('RESOLVED')).toBe('Resolved')
-    expect(verificationLabel('VERIFIED')).toBe('Supported by source')
-    expect(verificationLabel('NOT_VERIFIED')).toBe('Not independently verified')
+    expect(verificationLabel('VERIFIED')).toBe('Matches the source')
+    expect(verificationLabel('NOT_VERIFIED')).toBe('Not checked against a second source')
   })
 
   it('describes relationship verbs and interpretation sources', () => {

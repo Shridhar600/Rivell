@@ -49,7 +49,7 @@ export function ReviewsPage() {
             <div>
               <h1 className="rv-page__title">Contract reviews</h1>
               <p className="rv-page__lede">
-                Every review is tied to one immutable contract version and frozen review context.
+                Each review keeps the contract version it started with.
               </p>
             </div>
             {startButton}
@@ -110,7 +110,7 @@ export function ReviewsPage() {
           ) : null}
           {history.hasNextPage && !history.isFetchNextPageError ? (
             <div className="rv-more">
-              <p className="rv-note">Showing the newest {rows.length} reviews. Counts cover these only.</p>
+              <p className="rv-note">Showing the newest {rows.length} reviews. Counts include these reviews only.</p>
               <Button compact disabled={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>
                 {history.isFetchingNextPage ? 'Loading…' : 'Load more reviews'}
               </Button>

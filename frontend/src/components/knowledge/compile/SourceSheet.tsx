@@ -38,7 +38,7 @@ export function SourceSheet({ artifact, candidate, unit, location, blocks, onClo
   return (
     <Dialog variant="sheet" labelledBy={titleId} onClose={onClose}>
       <div className="rv-kc-sheet-h">
-        <span>Source and provenance</span>
+        <span>Source</span>
         <IconButton label="Close source context" onClick={onClose}>
           <CloseIcon className="rv-icon" />
         </IconButton>
@@ -50,18 +50,18 @@ export function SourceSheet({ artifact, candidate, unit, location, blocks, onClo
           <dt>Source</dt>
           <dd>{artifact.filename}</dd>
           <dt>Location</dt>
-          <dd>{location ?? 'Not recorded by the extraction'}</dd>
+          <dd>{location ?? 'Not recorded when the file was read'}</dd>
           {unit ? (
             <>
-              <dt>Extraction unit</dt>
+              <dt>Source part</dt>
               <dd>
-                {unit.ordinal + 1}, {UNIT_KIND_LABELS[unit.kind]}, {unit.sourceNodeIds.length} source {unit.sourceNodeIds.length === 1 ? 'node' : 'nodes'}
+                {unit.ordinal + 1}, {UNIT_KIND_LABELS[unit.kind]}, {unit.sourceNodeIds.length} {unit.sourceNodeIds.length === 1 ? 'passage' : 'passages'}
               </dd>
             </>
           ) : null}
           <dt>Source state</dt>
           <dd>Original retained unchanged</dd>
-          <dt>Candidate</dt>
+          <dt>Entry</dt>
           <dd>
             {OUTCOME_LABELS[outcomeOf(candidate)]}
             {condition ? `, ${condition.label.toLowerCase()}` : ''}
@@ -71,7 +71,7 @@ export function SourceSheet({ artifact, candidate, unit, location, blocks, onClo
         <div className="rv-kc-xcard">
           <div className="rv-kc-xb">
             {blocks === null ? <p className="rv-kc-muted">Loading the source…</p> : null}
-            {blocks !== null && !window ? <p className="rv-kc-muted">The source region for this candidate is not available in the extracted structure.</p> : null}
+            {blocks !== null && !window ? <p className="rv-kc-muted">The source passage for this entry is not available.</p> : null}
             {window ? (
               <>
                 {window.moreBefore ? <p className="rv-kc-muted">… earlier source …</p> : null}
@@ -89,12 +89,9 @@ export function SourceSheet({ artifact, candidate, unit, location, blocks, onClo
             ) : null}
           </div>
         </div>
-        <p className="rv-kc-note">
-          Highlighted passages are the exact source nodes this candidate was extracted from. The extraction does not record page numbers or sub-paragraph spans, so none are shown. The source is immutable: corrections change the structured interpretation, not the uploaded file.
-        </p>
       </div>
       <div className="rv-kc-sheet-f">
-        <Button onClick={onClose}>Back to the candidate</Button>
+        <Button onClick={onClose}>Back to the entry</Button>
       </div>
     </Dialog>
   )

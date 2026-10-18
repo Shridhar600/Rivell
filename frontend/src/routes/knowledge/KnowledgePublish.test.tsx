@@ -7,8 +7,8 @@ import { SRC, publishedWorld, renderApp, requests, reviewWorld, startFakeServer,
 afterEach(() => vi.unstubAllGlobals())
 
 const decisionBar = () => document.querySelector('.rv-kc-decide') as HTMLElement
-const rail = () => screen.getByRole('navigation', { name: 'Candidate list' })
-const panel = () => screen.getByRole('complementary', { name: 'Candidates' })
+const rail = () => screen.getByRole('navigation', { name: 'Entry list' })
+const panel = () => screen.getByRole('complementary', { name: 'Entries' })
 const topbar = () => document.querySelector('.rv-topbar') as HTMLElement
 const publishButton = () => within(topbar()).getByRole('button', { name: /Publish|Published|Nothing to publish/ })
 
@@ -31,7 +31,7 @@ function decided(world: Fake, reject: string[] = ['duplicate']): Fake {
 describe('grouped safe review', () => {
   it('holds exactly the candidates the server accepts for group approval', async () => {
     await open(reviewWorld(), '?view=group')
-    expect(screen.getByRole('heading', { level: 1, name: '3 routine candidates' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: '3 routine entries' })).toBeInTheDocument()
     const main = within(screen.getByRole('main'))
     for (const label of ['Notices', 'Counterparts', 'Survival']) expect(main.getByRole('button', { name: new RegExp(label) })).toBeInTheDocument()
     // Candidates with a condition are never in the group.
@@ -44,12 +44,12 @@ describe('grouped safe review', () => {
     const { world } = await open(reviewWorld(), '?view=group')
     const approveAll = within(decisionBar()).getByRole('button', { name: 'Approve all 3' })
     expect(approveAll).toBeDisabled()
-    expect(within(decisionBar()).getByText('Reviewed 0 of 3 routine candidates')).toBeInTheDocument()
+    expect(within(decisionBar()).getByText('Reviewed 0 of 3 routine entries')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /Notices/ }))
     await userEvent.click(screen.getByRole('button', { name: /Counterparts/ }))
     // Two of three: still not available, and a click does nothing.
-    expect(within(decisionBar()).getByText('Reviewed 2 of 3 routine candidates')).toBeInTheDocument()
+    expect(within(decisionBar()).getByText('Reviewed 2 of 3 routine entries')).toBeInTheDocument()
     expect(approveAll).toBeDisabled()
     await userEvent.click(approveAll)
     expect(requests(world, 'POST', /bulk-approve/)).toHaveLength(0)
@@ -74,7 +74,7 @@ describe('grouped safe review', () => {
     expect(requests(world, 'POST', /bulk-approve/)[0]?.body).toEqual({ candidateIds: ['r1', 'r2', 'r3'] })
     // Nothing was approved one by one.
     expect(requests(world, 'POST', /\/approve$/)).toHaveLength(0)
-    expect(await screen.findByText(/candidates approved by the server/)).toBeInTheDocument()
+    expect(await screen.findByText(/entries approved by the server/)).toBeInTheDocument()
     // Re-read from the server: the three now sit under Reviewed, and the group is gone.
     await waitFor(() => expect(within(rail()).queryByRole('button', { name: /straightforward/ })).not.toBeInTheDocument())
     expect(within(rail()).getByRole('heading', { name: /Reviewed/ })).toHaveTextContent('3')
@@ -106,7 +106,7 @@ describe('grouped safe review', () => {
     await userEvent.click(screen.getByRole('button', { name: /Counterparts/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Review individually instead' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Counterparts' })).toBeInTheDocument()
-    expect(within(rail()).getByRole('button', { name: /2 straightforward candidates/ })).toBeInTheDocument()
+    expect(within(rail()).getByRole('button', { name: /2 routine entries/ })).toBeInTheDocument()
     expect(within(rail()).getByRole('button', { name: /Counterparts/ })).toBeInTheDocument()
     expect(requests(world, 'POST', /bulk-approve/)).toHaveLength(0)
   })
@@ -126,7 +126,7 @@ describe('publish readiness and confirmation', () => {
     expect(publishButton()).toBeDisabled()
     expect(publishButton()).toHaveTextContent('Publish (7 to review)')
     expect(screen.getByText('0 of 7 reviewed')).toBeInTheDocument()
-    expect(within(panel()).getByText('Compilation review')).toBeInTheDocument()
+    expect(within(panel()).getByText('Draft review')).toBeInTheDocument()
     await userEvent.click(publishButton())
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(requests(world, 'POST', /publications/)).toHaveLength(0)
@@ -136,7 +136,7 @@ describe('publish readiness and confirmation', () => {
     await open(decided(reviewWorld()))
     expect(publishButton()).toBeEnabled()
     expect(publishButton()).toHaveTextContent('Publish playbook')
-    expect(await screen.findByText('Compilation review complete')).toBeInTheDocument()
+    expect(await screen.findByText('Draft review complete')).toBeInTheDocument()
     expect(screen.getByText('7 of 7 reviewed')).toBeInTheDocument()
     expect(within(panel()).getByText('Ready to publish')).toBeInTheDocument()
   })
@@ -146,18 +146,18 @@ describe('publish readiness and confirmation', () => {
     await open(world)
     expect(publishButton()).toBeDisabled()
     expect(publishButton()).toHaveTextContent('Nothing to publish')
-    expect(publishButton()).toHaveAttribute('title', 'Every candidate was rejected, so there is nothing to publish.')
+    expect(publishButton()).toHaveAttribute('title', 'Every entry was rejected, so there is nothing to publish.')
   })
 
   it('asks for explicit confirmation and explains what publishing does', async () => {
     const { world } = await open(decided(reviewWorld()))
     await userEvent.click(publishButton())
     const dialog = await screen.findByRole('dialog', { name: 'Publish this playbook?' })
-    expect(dialog).toHaveTextContent(/new, numbered, immutable organizational publication/)
-    expect(dialog).toHaveTextContent(/cannot be edited/)
-    expect(within(dialog).getByText('6 reviewed candidates enter the new publication')).toBeInTheDocument()
-    expect(within(dialog).getByText('1 rejected candidate stays out of published knowledge')).toBeInTheDocument()
-    expect(within(dialog).getByText('Earlier publications remain reproducible')).toBeInTheDocument()
+    expect(dialog).toHaveTextContent(/Publishing makes these reviewed entries the approved knowledge for future reviews\./)
+    expect(dialog).toHaveTextContent(/You cannot edit it later/)
+    expect(within(dialog).getByText('6 reviewed entries enter the new version')).toBeInTheDocument()
+    expect(within(dialog).getByText('1 rejected entry stays out of published knowledge')).toBeInTheDocument()
+    expect(within(dialog).getByText('Earlier versions remain reproducible')).toBeInTheDocument()
     expect(within(dialog).getByText('The uploaded original stays unchanged')).toBeInTheDocument()
     // Opening the dialog publishes nothing.
     expect(requests(world, 'POST', /publications/)).toHaveLength(0)
@@ -170,7 +170,7 @@ describe('publish readiness and confirmation', () => {
     const { world } = await open(decided(reviewWorld()))
     await userEvent.click(publishButton())
     const dialog = await screen.findByRole('dialog')
-    await userEvent.type(within(dialog).getByLabelText('Publication note, optional'), 'Q4 playbook')
+    await userEvent.type(within(dialog).getByLabelText('Version note (optional)'), 'Q4 playbook')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Publish' }))
     await waitFor(() => expect(requests(world, 'POST', /publications/)).toHaveLength(1))
     const body = requests(world, 'POST', /publications/)[0]?.body as { candidateIds: string[]; note: string; supersededCandidates?: unknown }
@@ -192,7 +192,7 @@ describe('publish readiness and confirmation', () => {
     // Someone else sends a candidate back between the screen's last read and the click.
     world.candidates[SRC] = (world.candidates[SRC] ?? []).map((entry) => (entry.id === 'r1' ? { ...entry, reviewStatus: 'EDITED' as const } : entry))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Publish' }))
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/This compilation changed\. 1 candidate is still to review\./)
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/This draft changed\. 1 entry is still to review\./)
     expect(requests(world, 'POST', /publications/)).toHaveLength(0)
     // The screen reads the server again and now says so itself.
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Publish' })).toBeDisabled())
@@ -205,7 +205,7 @@ describe('publish readiness and confirmation', () => {
     await userEvent.click(publishButton())
     const dialog = await screen.findByRole('dialog')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Publish' }))
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/Only candidates that have been approved can be published/)
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/Only entries that have been approved can be published/)
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(world.publications).toHaveLength(1)
   })
@@ -250,12 +250,12 @@ describe('after publishing', () => {
     const { router } = await publish(decided(reviewWorld()))
     await screen.findByRole('heading', { level: 1, name: 'Commercial MSA Playbook v4' })
     expect(router.state.location.pathname).toBe(`/knowledge/playbooks/${SRC}`)
-    const notice = (await screen.findByText('Published as publication 2.')).closest('p') as HTMLElement
+    const notice = (await screen.findByText('Published as knowledge version 2.')).closest('p') as HTMLElement
     expect(notice).toHaveAttribute('role', 'status')
     expect(notice).toHaveTextContent('6 positions published, 1 rejected and left out')
-    expect(notice).toHaveTextContent(/original source is unchanged and earlier publications remain reproducible/)
+    expect(notice).toHaveTextContent(/original source is unchanged and earlier versions remain reproducible/)
     // The read model shows the new publication at once, from the server's own records.
-    expect(await screen.findByText('Publication 2')).toBeInTheDocument()
+    expect(await screen.findByText('Knowledge version 2')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Positions (6)' })).toBeInTheDocument()
   })
 
@@ -268,14 +268,14 @@ describe('after publishing', () => {
     expect(router.state.location.pathname).toBe('/knowledge/clauses')
     // The page frame is replaced once the published read model arrives, so wait for its content first.
     await screen.findByRole('tab', { name: /Clauses \(/ })
-    expect(screen.getByText(/Published as publication 2\./)).toBeInTheDocument()
+    expect(screen.getByText(/Published as knowledge version 2\./)).toBeInTheDocument()
   })
 
   it('does not show the notice again once it is dismissed', async () => {
     await publish(decided(reviewWorld()))
     await screen.findByRole('tab', { name: /Positions \(/ })
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    expect(screen.queryByText(/Published as publication/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Published as knowledge version/)).not.toBeInTheDocument()
   })
 })
 
@@ -284,23 +284,23 @@ describe('a published compilation', () => {
     await open(publishedWorld())
     const record = await screen.findByRole('heading', { level: 1, name: 'Commercial MSA Playbook v4' })
     expect(record).toBeInTheDocument()
-    expect(screen.getByText('Published, publication 2')).toBeInTheDocument()
-    expect(screen.getByText('Published candidates').nextSibling).toHaveTextContent('6')
-    expect(screen.getByText('Rejected candidates').nextSibling).toHaveTextContent('1')
+    expect(screen.getByText('Published, knowledge version 2')).toBeInTheDocument()
+    expect(screen.getByText('Published entries').nextSibling).toHaveTextContent('6')
+    expect(screen.getByText('Rejected entries').nextSibling).toHaveTextContent('1')
     expect(screen.getByRole('link', { name: 'Open published playbook' })).toHaveAttribute('href', `/knowledge/playbooks/${SRC}`)
     expect(screen.getByRole('link', { name: 'View retained source' })).toHaveAttribute('href', `/knowledge/sources/${SRC}`)
     // The prototype's "Back to compilation" would have reopened a published snapshot as editable.
     expect(screen.queryByRole('button', { name: /Back to compilation|Reopen|Edit/ })).not.toBeInTheDocument()
     expect(publishButton()).toBeDisabled()
     expect(publishButton()).toHaveTextContent('Published')
-    expect(within(panel()).getByText('Published, immutable')).toBeInTheDocument()
+    expect(within(panel()).getByText('Published, cannot be changed')).toBeInTheDocument()
   })
 
   it('shows a published candidate read-only, and offers no decision', async () => {
     const world = publishedWorld()
     const target = world.candidates[SRC]?.[1]?.id ?? ''
     await open(world, `?candidate=${target}`)
-    expect(screen.getByText(/Published in publication 2\. Published knowledge is immutable\./)).toBeInTheDocument()
+    expect(screen.getByText(/Published in knowledge version 2\. Published knowledge cannot be changed\./)).toBeInTheDocument()
     expect(within(decisionBar()).queryByRole('button', { name: /Approve|Reject|Edit/ })).not.toBeInTheDocument()
     expect(within(decisionBar()).getByRole('link', { name: 'Open in the source' })).toHaveAttribute('href', expect.stringContaining(`/knowledge/sources/${SRC}?position=`))
   })
@@ -309,11 +309,11 @@ describe('a published compilation', () => {
     const world = reviewWorld()
     const { world: same, client } = await open(world, '?candidate=uncertain')
     await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
-    expect(await screen.findByRole('form', { name: 'Correct the structured candidate' })).toBeInTheDocument()
+    expect(await screen.findByRole('form', { name: 'Edit this entry' })).toBeInTheDocument()
     same.candidates[SRC] = (same.candidates[SRC] ?? []).map((entry) => (entry.id === 'uncertain' ? { ...entry, reviewStatus: 'PUBLISHED' as const } : entry))
     await client.invalidateQueries()
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Correct the structured candidate' })).not.toBeInTheDocument())
-    expect(screen.getByText(/Published knowledge is immutable/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Edit this entry' })).not.toBeInTheDocument())
+    expect(screen.getByText(/Published knowledge cannot be changed/)).toBeInTheDocument()
     expect(within(decisionBar()).queryByRole('button', { name: /Save correction|Approve|Reject/ })).not.toBeInTheDocument()
   })
 })

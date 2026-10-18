@@ -74,7 +74,7 @@ describe('workflow labels', () => {
   })
 
   it('names human review statuses distinctly from machine analysis', () => {
-    expect(humanStatusLabel('NOT_STARTED')).toBe('Human review not started')
+    expect(humanStatusLabel('NOT_STARTED')).toBe('Review not started')
     expect(humanStatusLabel('IN_PROGRESS')).toBe('Human review in progress')
     expect(humanStatusLabel('READY_FOR_COMPLETION')).toBe('Ready to finalize')
     expect(humanStatusLabel('COMPLETED')).toBe('Human review completed')
@@ -97,7 +97,7 @@ describe('workflow labels', () => {
       'Approved organizational language',
     )
     expect(changeLanguageProvenanceLabel('GENERATIVE')).toBe(
-      'AI-proposed, human-approved for this contract',
+      'Proposed by Rivell, approved by you',
     )
     expect(changeLanguageProvenanceLabel('HUMAN_EDIT')).toBe('Human-authored')
     expect(changeLanguageProvenanceLabel('NONE')).toBe('No replacement text')

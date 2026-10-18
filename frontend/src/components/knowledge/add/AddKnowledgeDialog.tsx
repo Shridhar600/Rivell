@@ -136,12 +136,12 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
               </label>
             ))}
           </div>
-          <p className="rv-dlg__note">You choose the type. Rivell will not reinterpret it as something else.</p>
+          <p className="rv-dlg__note">Rivell uses the type you choose.</p>
         </fieldset>
 
         <div>
           <div className="rv-dlg__lb" id={`${ids}-file-label`}>
-            File, DOCX or XLSX
+            File (Word or Excel)
           </div>
           {file ? (
             <div className="rv-k-add__file">
@@ -190,9 +190,9 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
         </div>
 
         <details className="rv-k-add__more">
-          <summary>Applicability, optional</summary>
+          <summary>Where this applies (optional)</summary>
           <p className="rv-dlg__note">
-            Where this knowledge applies. It becomes each candidate&apos;s starting scope, and you can correct it per candidate.
+            Where this knowledge applies. You can change it for each entry later.
           </p>
           <div className="rv-k-add__grid">
             <label>
@@ -239,11 +239,11 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
           </label>
         </details>
 
-        <p className="rv-dlg__note">Nothing is published until you review the compiled candidates and publish them. The original is kept unchanged.</p>
+        <p className="rv-dlg__note">Nothing is published until you review the entries. The original is kept unchanged.</p>
 
         {busy ? (
           <p role="status" className="rv-k-add__busy">
-            Storing the original and extracting it. This can take a moment.
+            Saving and reading the file. This can take a moment.
           </p>
         ) : null}
         {upload.isError ? <ErrorState title="The file was not added" message={upload.error.message} /> : null}
@@ -253,7 +253,7 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
             Cancel
           </Button>
           <Button variant="primary" type="submit" disabled={!type || !file || busy}>
-            {busy ? 'Compiling…' : upload.isError ? 'Try again' : 'Start compilation'}
+            {busy ? 'Reading…' : upload.isError ? 'Try again' : 'Continue to draft'}
           </Button>
         </div>
       </form>

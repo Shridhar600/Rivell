@@ -8,7 +8,7 @@ import { warningLabel } from '../../lib/warnings'
 
 function Frame({ artifact, children }: { artifact?: ArtifactDetail; children: React.ReactNode }) {
   return (
-    <CompileLayout top={<CompileTopBar type={artifact?.artifactType ?? null} filename={artifact?.filename ?? 'Knowledge compilation'} />}>
+    <CompileLayout top={<CompileTopBar type={artifact?.artifactType ?? null} filename={artifact?.filename ?? 'Knowledge draft'} />}>
       <div className="rv-kc-center">{children}</div>
     </CompileLayout>
   )
@@ -18,9 +18,9 @@ function FailedExtraction({ artifact }: { artifact: ArtifactDetail }) {
   return (
     <Frame artifact={artifact}>
       <div role="alert" className="rv-state rv-state--error">
-        <h2 className="rv-state__title">Rivell could not extract this file</h2>
+        <h2 className="rv-state__title">Rivell could not read this file</h2>
         <p className="rv-state__body">
-          Nothing was compiled and nothing was published. The original is stored unchanged. Add a corrected file as new knowledge.
+          Nothing was published. The original is unchanged. Add a corrected file.
         </p>
         {artifact.parseWarnings.length > 0 ? (
           <ul className="rv-kc-warnings">
@@ -82,8 +82,8 @@ export function CompilationPage() {
     return (
       <Frame artifact={artifact}>
         <div className="rv-state" role="status">
-          <h2 className="rv-state__title">Rivell is extracting this file</h2>
-          <p className="rv-state__body">Candidates appear here when extraction finishes. This page checks again by itself.</p>
+          <h2 className="rv-state__title">Rivell is reading this file</h2>
+          <p className="rv-state__body">Entries appear when Rivell finishes reading the file. This page updates itself.</p>
         </div>
       </Frame>
     )

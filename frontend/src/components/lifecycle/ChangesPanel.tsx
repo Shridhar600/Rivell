@@ -54,7 +54,7 @@ export function ChangesPanel({
       <div className="rv-lc-frozen">
         <PadlockIcon className="rv-icon" />
         <span>
-          <b>Approved change set is frozen.</b> 0 executable changes.
+          <b>Approved changes are final:</b> 0 changes.
         </span>
       </div>
     )
@@ -65,8 +65,8 @@ export function ChangesPanel({
       <div className="rv-lc-frozen">
         <PadlockIcon className="rv-icon" />
         <span>
-          <b>Approved change set is frozen.</b> {pluralise(changeSet.changes.length, 'executable change')}. This cannot
-          be edited.
+          <b>Approved changes are final:</b> {pluralise(changeSet.changes.length, 'change')}. This cannot be
+          edited.
         </span>
       </div>
       <ol className="rv-lc-klist" aria-label="Approved changes">
@@ -114,10 +114,7 @@ export function ChangesPanel({
                   ) : null}
                 </div>
                 {change.actionType === 'INSERT' ? (
-                  <p className="rv-lc-quiet">
-                    Physical DOCX placement was not chosen by the reviewer. Rivell resolves it deterministically
-                    during redline execution.
-                  </p>
+                  <p className="rv-lc-quiet">Rivell will place this provision when it builds the redline.</p>
                 ) : null}
                 <p className="rv-lc-prv">
                   {decision ? (

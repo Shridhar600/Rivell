@@ -59,12 +59,12 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
   }
 
   return (
-    <form id={id} className="rv-kc-edit" onSubmit={submit} aria-label="Correct the structured candidate">
+    <form id={id} className="rv-kc-edit" onSubmit={submit} aria-label="Edit this entry">
       <Field
         label="Legal concept"
         hint={
           <>
-            Changing it asks Rivell to compare this candidate with published knowledge again.
+            Changing the topic asks Rivell to compare this entry with published knowledge again.
             {candidate.legalConceptKey ? ` Rivell classified it as ${taxonomy.labelFor(candidate.legalConceptKey)}.` : ' Rivell did not classify it.'}
           </>
         }
@@ -166,8 +166,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
             </Field>
           ))}
           <small>
-            Column values are recorded with the candidate and are published as the corrected wording. Wording you
-            set above takes precedence over them.
+            Column values are saved with this entry and published as its wording. Wording set above takes precedence.
           </small>
         </fieldset>
       ) : null}

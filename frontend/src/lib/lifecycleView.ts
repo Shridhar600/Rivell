@@ -141,7 +141,7 @@ export function reportResult(execution: RedlineExecution, change: RedlineExecuti
 }
 
 export interface OverallResult {
-  word: 'VERIFIED' | 'FAILED' | 'NOT VERIFIED'
+  word: 'Verified' | 'Failed' | 'Not verified'
   sentence: string
   tone: 'ok' | 'red'
 }
@@ -149,17 +149,17 @@ export interface OverallResult {
 export function overallResult(execution: RedlineExecution): OverallResult {
   if (execution.status === 'FAILED') {
     return {
-      word: 'FAILED',
-      sentence: 'Per-change statuses are diagnostic only; no partial-success artifact is offered.',
+      word: 'Failed',
+      sentence: 'Not every change could be applied. No file is offered.',
       tone: 'red',
     }
   }
   if (redlineVerificationOutcome(execution) === 'PASSED') {
-    return { word: 'VERIFIED', sentence: 'All approved changes executed and verified.', tone: 'ok' }
+    return { word: 'Verified', sentence: 'All approved changes executed and verified.', tone: 'ok' }
   }
   return {
-    word: 'NOT VERIFIED',
-    sentence: 'Not every approved change was applied and verified; no artifact is offered.',
+    word: 'Not verified',
+    sentence: 'Not every approved change was applied and verified. No file is offered.',
     tone: 'red',
   }
 }

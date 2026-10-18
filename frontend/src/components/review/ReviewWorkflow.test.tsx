@@ -119,8 +119,8 @@ describe('human review progress in the workspace', () => {
     const { router } = renderRouter('/reviews/c1/analysis/r-1', api)
     await workspaceReady()
 
-    expect(await topBar().findByText('1 of 2 resolved')).toBeInTheDocument()
-    const progress = topBar().getByText('1 of 2 resolved').closest('.rv-ws-prog') as HTMLElement
+    expect(await topBar().findByText('1 of 2 decided')).toBeInTheDocument()
+    const progress = topBar().getByText('1 of 2 decided').closest('.rv-ws-prog') as HTMLElement
     expect(progress).toHaveAttribute('title', 'Not ready to finalize')
     expect(finalizeButton().closest('.rv-ws-fin')).toHaveAttribute(
       'title',
@@ -129,7 +129,7 @@ describe('human review progress in the workspace', () => {
     expect(finalizeButton()).toHaveTextContent('Finalize review')
     expect(finalizeButton()).toBeDisabled()
     expect(
-      within(screen.getByRole('complementary', { name: 'Findings' })).getByText('1 unresolved'),
+      within(screen.getByRole('complementary', { name: 'Findings' })).getByText('1 open'),
     ).toBeInTheDocument()
 
     const list = findingsNav().getByRole('listbox', { name: 'Findings list' })
@@ -142,7 +142,7 @@ describe('human review progress in the workspace', () => {
     renderRouter('/reviews/c1/analysis/r-1', api)
 
     await findSelectedFindingDetail()
-    expect(topBar().getByText('0 of 1 resolved')).toBeInTheDocument()
+    expect(topBar().getByText('0 of 1 decided')).toBeInTheDocument()
     expect(finalizeButton()).toHaveTextContent('Finalize review')
     expect(finalizeButton()).toBeDisabled()
     expect(topBar().queryByText('Approved changes frozen')).not.toBeInTheDocument()
@@ -199,8 +199,8 @@ describe('recording a decision in the workspace', () => {
     })
 
     // The server's refreshed human-review state drives the top bar.
-    await topBar().findByText('1 of 1 resolved')
-    const progress = topBar().getByText('1 of 1 resolved').closest('.rv-ws-prog') as HTMLElement
+    await topBar().findByText('1 of 1 decided')
+    const progress = topBar().getByText('1 of 1 decided').closest('.rv-ws-prog') as HTMLElement
     expect(progress).toHaveAttribute('title', 'Ready to finalize')
     expect(finalizeButton()).toBeEnabled()
 
@@ -209,7 +209,7 @@ describe('recording a decision in the workspace', () => {
     expect(row).toHaveTextContent('Accepted')
     await userEvent.click(row)
     const detail = findingDetail()
-    expect(await detail.findByText('Revision 1', { exact: false })).toBeInTheDocument()
+    expect(await detail.findByText('Version 1', { exact: false })).toBeInTheDocument()
     expect(detail.getByRole('button', { name: 'Accept' })).toHaveAttribute('aria-pressed', 'true')
 
     expect(
@@ -240,13 +240,13 @@ describe('workflow state availability and conflict truth', () => {
     renderRouter('/reviews/c1/analysis/r-1', api)
 
     expect(
-      await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
+      await screen.findByText(/Could not load decisions/, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
     // A readable change set is proof of finalization, so the frozen card is still reachable.
     const card = (await findingDetail().findByText('Approved changes frozen', {}, { timeout: 3000 })).closest(
       '.rv-ws-phase',
     ) as HTMLElement
-    expect(card).toHaveTextContent('1 executable change in the immutable approved change set.')
+    expect(card).toHaveTextContent('1 approved change in the immutable approved change set.')
     // Redline belongs to the review summary. The Workspace only points there.
     expect(findingDetail().getByRole('link', { name: 'View review summary' })).toHaveAttribute(
       'href',
@@ -290,7 +290,7 @@ describe('workflow state availability and conflict truth', () => {
       await screen.findByText(/Decisions could not be loaded/, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
     await findSelectedFindingDetail()
-    expect(findingDetail().getByText(/Decision controls are unavailable/)).toBeInTheDocument()
+    expect(findingDetail().getByText(/Decisions are unavailable right now/)).toBeInTheDocument()
     expect(findingDetail().queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
     expect(findingDetail().queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
@@ -313,8 +313,8 @@ describe('workflow state availability and conflict truth', () => {
     )
     renderRouter('/reviews/c1/analysis/r-1', api)
 
-    const banner = await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 })
-    expect(banner).toHaveTextContent(/decisions and finalization cannot be confirmed/i)
+    const banner = await screen.findByText(/Could not load decisions/, {}, { timeout: 3000 })
+    expect(banner).toHaveTextContent(/finalization cannot be confirmed/i)
     await findSelectedFindingDetail()
     await waitFor(() =>
       expect(api.requests.filter((r) => r.url.includes('/approved-change-set')).length).toBe(1),
@@ -339,7 +339,7 @@ describe('workflow state availability and conflict truth', () => {
     renderRouter('/reviews/c1/analysis/r-1', api)
 
     await workspaceReady()
-    await topBar().findByText('0 of 1 resolved')
+    await topBar().findByText('0 of 1 decided')
     await findSelectedFindingDetail()
     expect(api.requests.filter((r) => r.url.includes('/approved-change-set'))).toHaveLength(0)
   })
@@ -360,7 +360,7 @@ describe('workflow state availability and conflict truth', () => {
       '.rv-ws-phase',
     ) as HTMLElement
     expect(card).toHaveTextContent('The approved change set is immutable.')
-    expect(card).not.toHaveTextContent(/executable change/)
+    expect(card).not.toHaveTextContent(/\d+ approved changes? in the immutable approved change set/)
     expect(findingDetail().getByText(/Decision frozen/)).toBeInTheDocument()
     await waitFor(() =>
       expect(api.requests.filter((r) => r.url.includes('/approved-change-set')).length).toBeGreaterThan(0),
@@ -378,11 +378,11 @@ describe('workflow state availability and conflict truth', () => {
     const api = stubContractApi(baseOptions({ humanReviewStatus: 500 }))
     renderRouter('/reviews/c1/analysis/r-1', api)
     expect(
-      await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 3000 }),
+      await screen.findByText(/Could not load decisions/, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
     await findSelectedFindingDetail()
     const detail = findingDetail()
-    expect(detail.getByText(/Decision controls are unavailable/)).toBeInTheDocument()
+    expect(detail.getByText(/Decisions are unavailable right now/)).toBeInTheDocument()
     expect(detail.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
     expect(detail.queryByRole('button', { name: 'Change decision' })).not.toBeInTheDocument()
   })
@@ -396,7 +396,7 @@ describe('workflow state availability and conflict truth', () => {
     await findSelectedFindingDetail()
     const detail = findingDetail()
     expect(detail.queryByText(/No human decision recorded yet/)).not.toBeInTheDocument()
-    expect(detail.getByText(/Decision controls are unavailable/)).toBeInTheDocument()
+    expect(detail.getByText(/Decisions are unavailable right now/)).toBeInTheDocument()
     expect(detail.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
     // No row claims a decision state (not even "Needs decision") while decisions are unknown.
     const list = findingsNav().getByRole('listbox', { name: 'Findings list' })
@@ -434,7 +434,7 @@ describe('workflow state availability and conflict truth', () => {
     await findSelectedFindingDetail()
     await user.click(await findingDetail().findByRole('button', { name: 'Change decision' }))
     await user.click(findingDetail().getByRole('button', { name: 'Reject' }))
-    const form = screen.getByRole('form', { name: 'Reject Finding' })
+    const form = screen.getByRole('form', { name: 'Reject finding' })
     await user.type(within(form).getByLabelText('Reason'), 'Second opinion.')
     await user.click(within(form).getByRole('button', { name: 'Reject' }))
 
@@ -472,8 +472,8 @@ describe('finalization', () => {
     const api = stubContractApi(baseOptions())
     renderRouter('/reviews/c1/analysis/r-1', api)
     await workspaceReady()
-    await topBar().findByText('0 of 1 resolved')
-    expect(topBar().getByText('0 of 1 resolved').closest('.rv-ws-prog')).toHaveAttribute(
+    await topBar().findByText('0 of 1 decided')
+    expect(topBar().getByText('0 of 1 decided').closest('.rv-ws-prog')).toHaveAttribute(
       'title',
       'Not ready to finalize',
     )
@@ -508,7 +508,7 @@ describe('finalization', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Finalize review' }))
     const dialog = openFinalizeDialog()
-    expect(dialog).toHaveTextContent('frozen')
+    expect(dialog).toHaveTextContent('edit them after this')
     expect(dialog).toHaveTextContent('1 approved change (1 accepted, 0 edited)')
     expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(0)
     await user.click(within(dialog).getByRole('button', { name: 'Keep reviewing' }))
@@ -716,7 +716,7 @@ describe('approved change set', () => {
       '.rv-ws-phase',
     ) as HTMLElement
     await waitFor(() =>
-      expect(card).toHaveTextContent('3 executable changes in the immutable approved change set.'),
+      expect(card).toHaveTextContent('3 approved changes in the immutable approved change set.'),
     )
     expect(finalizeButton()).toHaveTextContent('Finalized')
 
@@ -753,7 +753,7 @@ describe('approved change set', () => {
       '.rv-ws-phase',
     ) as HTMLElement
     await waitFor(() =>
-      expect(card).toHaveTextContent('3 executable changes in the immutable approved change set.'),
+      expect(card).toHaveTextContent('3 approved changes in the immutable approved change set.'),
     )
     expect(
       await screen.findByText(/Decisions could not be loaded/, {}, { timeout: 3000 }),
@@ -779,7 +779,7 @@ describe('approved change set', () => {
     const card = (await findingDetail().findByText('Approved changes frozen')).closest(
       '.rv-ws-phase',
     ) as HTMLElement
-    expect(card).toHaveTextContent('3 executable changes in the immutable approved change set.')
+    expect(card).toHaveTextContent('3 approved changes in the immutable approved change set.')
     expect(
       stub.requests.filter((request) => request.url.includes('/approved-change-set')),
     ).toHaveLength(0)

@@ -14,7 +14,7 @@ export function unitMark(unit: ExtractionUnit, candidates: readonly Candidate[])
 }
 
 export const UNIT_MARK_LABELS: Record<Exclude<UnitMark, 'ABSORBED'>, string> = {
-  NOT_A_POSITION: 'Not a position (Rivell’s reading)',
+  NOT_A_POSITION: 'Not treated as a position',
   MISSED: 'Missed',
 }
 

@@ -408,7 +408,7 @@ function AbsenceCards({ ctx, findings }: { ctx: Ctx; findings: FindingSummary[] 
               {ctx.mode === 'final'
                 ? `${change?.language ?? ''}\nPlacement will be resolved by deterministic redline execution.`
                 : change
-                  ? 'Insertion language is approved. Physical placement is not shown here; Rivell resolves placement deterministically during redline execution.'
+                  ? 'Rivell will place this provision when it builds the redline.'
                   : 'This clause does not exist in the contract, so there is no source location. The proposed insertion is shown in the Finding panel.'}
             </span>
           </div>

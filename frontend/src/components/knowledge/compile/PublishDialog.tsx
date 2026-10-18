@@ -63,16 +63,16 @@ export function PublishDialog({ artifact, candidates, supersede, onClose, onPubl
       >
         <h2 id={titleId}>Publish this {kind}?</h2>
         <p>
-          Publishing turns the reviewed structured candidates into a new, numbered, immutable organizational publication that Rivell can use authoritatively in future reviews. Once published it cannot be edited, and it does not rewrite earlier publications.
+          Publishing makes these reviewed entries the approved knowledge for future reviews. You cannot edit it later, and it does not change earlier versions.
         </p>
         <ul className="rv-dlg__list">
           <li>
-            {approved.length} reviewed {approved.length === 1 ? 'candidate enters' : 'candidates enter'} the new publication
+            {approved.length} reviewed {approved.length === 1 ? 'entry enters' : 'entries enter'} the new version
             {corrected > 0 ? `, including ${corrected} corrected by you` : ''}
           </li>
           {state.rejected > 0 ? (
             <li>
-              {state.rejected} rejected {state.rejected === 1 ? 'candidate stays' : 'candidates stay'} out of published knowledge
+              {state.rejected} rejected {state.rejected === 1 ? 'entry stays' : 'entries stay'} out of published knowledge
             </li>
           ) : null}
           {replacing.length > 0 ? (
@@ -84,15 +84,15 @@ export function PublishDialog({ artifact, candidates, supersede, onClose, onPubl
                   <PeerLabel candidateId={old} />
                 </span>
               ))}
-              . It stays visible in earlier publications.
+              . It stays visible in earlier versions.
             </li>
           ) : null}
           <li>The uploaded original stays unchanged</li>
-          <li>Earlier publications remain reproducible</li>
+          <li>Earlier versions remain reproducible</li>
         </ul>
         {notReplacing.length > 0 ? (
           <p className="rv-dlg__note" role="status">
-            {notReplacing.length} {notReplacing.length === 1 ? 'candidate' : 'candidates'} may replace published knowledge, and you did not choose that. The earlier knowledge stays in use alongside {notReplacing.length === 1 ? 'it' : 'them'}.
+            {notReplacing.length} {notReplacing.length === 1 ? 'entry' : 'entries'} may replace published knowledge, and you did not choose that. The earlier knowledge stays in use alongside {notReplacing.length === 1 ? 'it' : 'them'}.
           </p>
         ) : null}
         {flagged > 0 ? (
@@ -101,13 +101,13 @@ export function PublishDialog({ artifact, candidates, supersede, onClose, onPubl
           </p>
         ) : null}
         <label className="rv-dlg__field">
-          <span className="rv-dlg__lb">Publication note, optional</span>
+          <span className="rv-dlg__lb">Version note (optional)</span>
           <textarea rows={2} value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} />
         </label>
         {publish.isError ? (
           <p className="rv-kc-error" role="alert">
             {notReady
-              ? `This compilation changed. ${(publish.error as PublicationNotReadyError).readiness.blocker ?? ''} Review it, then publish again.`
+              ? `This draft changed. ${(publish.error as PublicationNotReadyError).readiness.blocker ?? ''} Review it, then publish again.`
               : publish.error.message}
           </p>
         ) : null}

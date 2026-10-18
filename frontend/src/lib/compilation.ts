@@ -110,7 +110,7 @@ const KIND_COPY: Record<Exclude<ConditionKind, 'other'>, { label: string; detail
   },
   type: {
     label: 'Source type may not match',
-    detail: 'The source may not be the type you chose. Rivell still compiles it as you chose.',
+    detail: 'The source may not be the type you chose. Rivell still treats it as the type you chose.',
   },
   position: {
     label: 'New prohibited or escalation position',
@@ -121,8 +121,8 @@ const KIND_COPY: Record<Exclude<ConditionKind, 'other'>, { label: string; detail
     detail: 'The source narrows where this applies, beyond what you declared for the file.',
   },
   unavailable: {
-    label: 'Semantic analysis unavailable',
-    detail: 'Only deterministic checks ran for this candidate. Read it closely.',
+    label: 'Some checks could not run',
+    detail: 'Only basic reading was done for this entry. Read it closely.',
   },
 }
 
@@ -251,10 +251,10 @@ export function readiness(candidates: Candidate[]): Readiness {
   }
   const total = candidates.length
   let blocker: string | null = null
-  if (total === 0) blocker = 'No candidates were compiled from this source.'
-  else if (awaiting > 0) blocker = `${awaiting} ${awaiting === 1 ? 'candidate is' : 'candidates are'} still to review.`
+  if (total === 0) blocker = 'No entries were produced from this source.'
+  else if (awaiting > 0) blocker = `${awaiting} ${awaiting === 1 ? 'entry is' : 'entries are'} still to review.`
   else if (approved === 0 && published > 0) blocker = 'Everything approved here is already published.'
-  else if (approved === 0) blocker = 'Every candidate was rejected, so there is nothing to publish.'
+  else if (approved === 0) blocker = 'Every entry was rejected, so there is nothing to publish.'
   return { total, awaiting, approved, rejected, published, attention, canPublish: blocker === null, blocker }
 }
 

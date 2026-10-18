@@ -56,7 +56,7 @@ const FAILURE_TITLES: Record<string, string> = {
   SOURCE_EXPANSION_LIMIT_EXCEEDED:
     'This document expands beyond the size Rivell will process, so it was not redlined.',
   UNSUPPORTED_CHANGESET_VERSION:
-    'This approved change set version is not supported by the redline engine.',
+    'This approved change set version is not supported by Rivell.',
   PROTECTED_DOCUMENT_UNSUPPORTED:
     'The document is protected and cannot be safely redlined automatically.',
   PREEXISTING_REVISIONS_UNSUPPORTED:
@@ -74,7 +74,7 @@ const FAILURE_TITLES: Record<string, string> = {
   INSERT_PLACEMENT_UNRESOLVED:
     'Rivell could not determine a safe insertion location for a missing provision.',
   APPROVED_SEMANTICS_DRIFT:
-    'The contract semantics changed after this review was approved, so Rivell placed none of the approved changes. The approved change set is unchanged.',
+    'The contract changed after this review was approved, so Rivell placed none of the approved changes. The approved change set is unchanged.',
   DOCX_LOAD_FAILED: 'The frozen document could not be opened for redlining.',
   DOCX_SERIALIZATION_FAILED: 'The redlined document could not be written.',
   ROUND_TRIP_FAILED: 'The generated document could not be reopened for verification.',
@@ -133,7 +133,7 @@ export function redlineVerificationOutcome(
 export function redlineVerificationSentence(outcome: RedlineVerificationOutcome): string {
   switch (outcome) {
     case 'PASSED':
-      return 'Rivell regenerated and reopened the DOCX and verified the tracked changes against the approved change set.'
+      return 'Rivell regenerated and reopened the Word file and verified the tracked changes against the approved change set.'
     case 'INCOMPLETE':
       return 'Not every approved change was verified. Review the per-change report before using this document.'
     case 'NOT_APPLICABLE':

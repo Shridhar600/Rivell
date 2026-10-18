@@ -35,7 +35,7 @@ import { useSemanticsQuery } from '../api/semantics'
 import { useTaxonomy } from '../api/taxonomy'
 import { buildRegionLabelMap, CONTRACT_TYPE_LABELS } from '../lib/contractSemantics'
 import { clearResumeFor, writeResume } from '../lib/resume'
-import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun, runStatusLabel } from '../lib/reviews'
+import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun } from '../lib/reviews'
 import {
   defaultFinding,
   executableChange,
@@ -128,7 +128,7 @@ export function ReviewWorkspacePage() {
   }, [reviewMissing, reviewId])
 
   if (!contractId || !reviewId) {
-    return <Gate><ErrorState message="Missing contract or review id." /></Gate>
+    return <Gate><ErrorState message="This review link is incomplete." /></Gate>
   }
   if (contractQuery.isPending || summaryQuery.isPending) {
     return <Gate><LoadingState label="Loading review…" /></Gate>
@@ -473,7 +473,9 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
 
   const noteLines: string[] = []
   if (pinnedVersion !== undefined && pinnedVersion !== latestVersion) {
-    noteLines.push(`This review is pinned to v${pinnedVersion}; the contract’s current version is v${latestVersion}.`)
+    noteLines.push(
+      `This review uses contract version ${pinnedVersion}. The contract is now at version ${latestVersion}.`,
+    )
   }
   const coverageNote = coverageLimitationSummary(summary.coverage, labelFor)
   if (coverageNote) noteLines.push(coverageNote)
@@ -484,14 +486,14 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   }
   if (analysisCompleted && hasNewerRun(summary)) {
     noteLines.push(
-      `A newer analysis attempt exists (${runStatusLabel(summary.latestRunStatus ?? 'UNKNOWN')}). This page shows the latest completed analysis.`,
+      'A newer analysis has run. This page shows the latest completed one.',
     )
   }
   if (summary.analysisWarnings.length > 0) {
     noteLines.push(`${summary.analysisWarnings.length} analysis ${summary.analysisWarnings.length === 1 ? 'warning' : 'warnings'}.`)
   }
   const retryNotes: [boolean, string, () => void][] = [
-    [humanReviewUnavailable, 'Human review state could not be loaded, so decisions and finalization cannot be confirmed.', () => void humanReviewQuery.refetch()],
+    [humanReviewUnavailable, 'Could not load decisions, so finalization cannot be confirmed.', () => void humanReviewQuery.refetch()],
     [analysisCompleted && humanReview !== null && decisionsQuery.isError, 'Decisions could not be loaded.', () => void decisionsQuery.refetch()],
     [changeSetReadFailed, 'The approved change set could not be loaded.', () => void changeSetQuery.refetch()],
   ]
@@ -556,7 +558,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       : undefined
   const contractType = summary.snapshot?.profile?.contractType
   const pin = summary.snapshot?.knowledgePinNumber
-  const context = [profileLine(summary.snapshot), pin ? `Knowledge publication ${pin}` : null].filter(Boolean).join('. ') || null
+  const context = [profileLine(summary.snapshot), pin ? `Knowledge version ${pin}` : null].filter(Boolean).join('. ') || null
 
   // The search menu lists this review's findings and commands first, and can find text in the contract.
   usePageCommands(() => ({

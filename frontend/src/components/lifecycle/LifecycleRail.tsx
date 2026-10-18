@@ -28,7 +28,7 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
     snapshot?.knowledgePinNumber == null
       ? 'Not recorded'
       : snapshot.knowledgePinNumber > 0
-        ? `Publication ${snapshot.knowledgePinNumber}`
+        ? `Knowledge version ${snapshot.knowledgePinNumber}`
         : 'None published at creation'
   return (
     <div className="rv-lc-rail">
@@ -75,8 +75,8 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
         )}
       </div>
       <div>
-        <h3>Frozen review snapshot</h3>
-        <p className="rv-lc-quiet">Knowledge and review context are pinned to this review.</p>
+        <h3>Knowledge used</h3>
+        <p className="rv-lc-quiet">The knowledge and review details are fixed for this review.</p>
         <dl className="rv-lc-fdl rv-lc-fdl--rail">
           <div>
             <dt>Knowledge</dt>
@@ -100,8 +100,8 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
         </Link>
       </div>
       <div>
-        <h3>Lifecycle activity</h3>
-        <ol className="rv-lc-ev" aria-label={`Lifecycle activity, ${pluralise(events.length, 'event')}`}>
+        <h3>Activity</h3>
+        <ol className="rv-lc-ev" aria-label={`Activity, ${pluralise(events.length, 'event')}`}>
           {events.map((event) => (
             <li key={`${event.label}-${event.time}`}>
               <i className={event.failed ? 'rv-lc-ev__x' : undefined} aria-hidden="true" />

@@ -53,7 +53,7 @@ export function PositionInspector({ candidate, artifact, publication }: Position
         ) : null}
         {concept ? (
           <>
-            <dt>Legal concept</dt>
+            <dt>Topic</dt>
             <dd>{concept}</dd>
           </>
         ) : null}
@@ -65,12 +65,12 @@ export function PositionInspector({ candidate, artifact, publication }: Position
         ))}
         <dt>Published</dt>
         <dd>
-          Publication {publication.number}, {longDate(publication.createdAt)}
+          Knowledge version {publication.number}, {longDate(publication.createdAt)}
         </dd>
       </dl>
 
       <div className="rv-k-prov">
-        <span className="rv-k-loc">Provenance{location ? `, ${location}` : ''}</span>
+        <span className="rv-k-loc">Source{location ? `, ${location}` : ''}</span>
         {text ? (
           <q>
             <span className="rv-k-hl">{text}</span>

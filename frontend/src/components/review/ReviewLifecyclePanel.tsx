@@ -24,7 +24,7 @@ export function AnalysisWarnings({
     <div className="rv-ws-sec rv-ws-life-warn">
       <h3 className="rv-ws-sec-h">Analysis warnings</h3>
       <p className="rv-ws-caption">
-        These checks ran with reduced certainty. Their results may be incomplete.
+        Some checks were incomplete.
       </p>
       <ul>
         {summary.analysisWarnings.map((warning, index) => (
@@ -184,7 +184,7 @@ export function ReviewLifecyclePanel({
       {summary.status === 'FAILED' ? (
         <div className="rv-ws-life-alert" role="alert">
           <p>{reviewFailureMessage(summary.failure)}</p>
-          <p>A new review creates a fresh frozen snapshot of the current policy state.</p>
+          <p>A new review uses the knowledge published at the time.</p>
           <Link className="rv-ws-link" to="/reviews">
             Back to reviews
           </Link>
@@ -205,9 +205,9 @@ export function ReviewLifecyclePanel({
 
       {hasNewerRun(summary) ? (
         <p className="rv-ws-warn">
-          A newer analysis attempt exists (
+          A newer analysis has run (
           {runStatusLabel(summary.latestRunStatus ?? 'UNKNOWN')}). This page shows the latest
-          completed analysis.
+          completed one.
         </p>
       ) : null}
 

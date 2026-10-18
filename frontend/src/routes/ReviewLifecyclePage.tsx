@@ -146,7 +146,7 @@ export function ReviewLifecyclePage() {
   )
 
   if (!contractId || !reviewId) {
-    return shell(<Notice tone="error" message="Missing contract or review id." />)
+    return shell(<Notice tone="error" message="This review link is incomplete." />)
   }
   if (summaryQuery.isPending) return shell(<Notice message="Loading review…" />)
 
@@ -205,7 +205,7 @@ export function ReviewLifecyclePage() {
     body = (
       <Notice
         tone="error"
-        message="Human review state could not be loaded, so this review cannot be placed in its lifecycle."
+        message="Could not load this review's progress."
         onRetry={() => void humanReviewQuery.refetch()}
       />
     )
@@ -223,12 +223,12 @@ export function ReviewLifecyclePage() {
     ) : (
       <Notice
         tone="error"
-        message="The redline execution could not be loaded."
+        message="The redline could not be loaded."
         onRetry={() => void redlineQuery.refetch()}
       />
     )
   } else if (!key) {
-    body = <Notice message="Loading review state…" />
+    body = <Notice message="Loading review…" />
   } else if (!isPostFinalize(key)) {
     body = (
       <>
@@ -328,7 +328,7 @@ export function ReviewLifecyclePage() {
         </div>
         {key && opensWorkspace(key) ? (
           <div className="rv-lc-head__actions">
-            <LinkButton to={workspaceTo}>Open Review Workspace</LinkButton>
+            <LinkButton to={workspaceTo}>Open review</LinkButton>
           </div>
         ) : null}
       </header>

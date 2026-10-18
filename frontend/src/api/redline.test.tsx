@@ -237,11 +237,11 @@ describe('redline parsers', () => {
     ).toBe('UNKNOWN')
   })
 
-  it('names document storage, not the engine, for a storage failure', () => {
+  it('names the redline service, not document storage, for a server failure', () => {
     const storage = new RedlineApiError(503).message
     expect(storage).toMatch(/storage/i)
-    expect(storage).not.toMatch(/engine/i)
-    expect(new RedlineApiError(500).message).toMatch(/engine/i)
+    expect(storage).not.toMatch(/redlining is unavailable/i)
+    expect(new RedlineApiError(500).message).toMatch(/redlining is unavailable/i)
   })
 
   it('defaults a missing downloadAvailable flag to false', () => {

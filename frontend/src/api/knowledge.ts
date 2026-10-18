@@ -550,7 +550,7 @@ export function parsePublication(value: unknown, what = 'publication'): Publicat
 
 const PUBLISH_MESSAGES: Partial<Record<number, string>> = {
   404: 'That knowledge source could not be found.',
-  409: 'Only candidates that have been approved can be published. Review the candidate states, then try again.',
+  409: 'Only entries that have been approved can be published. Check the entry states, then try again.',
   500: 'The knowledge version could not be published.',
   503: 'The knowledge service is unavailable right now.',
 }
@@ -580,22 +580,22 @@ export function isKnowledgeForbiddenError(error: unknown): boolean {
  * have left one behind. These do not claim that nothing was changed.
  */
 const KNOWLEDGE_UPLOAD_MESSAGES: Partial<Record<number, string>> = {
-  400: 'The file was not accepted. Use a .docx or .xlsx file.',
+  400: 'The file was not accepted. Use a Word or Excel file.',
   500: 'Rivell could not process this file. If it was stored, it appears in Sources as a failed source. Nothing was published.',
 }
 
 const CONCEPT_MESSAGES: Partial<Record<number, string>> = {
   400: 'That legal concept is not one Rivell knows.',
-  404: 'That candidate could not be found.',
-  409: 'A published or rejected candidate cannot be corrected.',
+  404: 'That entry could not be found.',
+  409: 'A published or rejected entry cannot be corrected.',
   500: 'The legal concept could not be corrected.',
   503: 'The knowledge service is unavailable right now.',
 }
 
 const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
-  404: 'That knowledge source or candidate could not be found.',
+  404: 'That knowledge source or entry could not be found.',
   409: 'That knowledge request does not apply in the current state.',
-  413: 'The submitted content is larger than this Rivell deployment accepts.',
+  413: 'The submitted content is larger than Rivell accepts.',
   500: 'The knowledge request could not be completed.',
   503: 'The knowledge service is unavailable right now.',
 }
@@ -680,7 +680,7 @@ export async function fetchExtractionUnits(
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Extraction units unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Source parts unavailable'))
   }
   return parseApiResult(
     data,
@@ -696,7 +696,7 @@ export async function fetchCandidates(artifactId: string): Promise<Candidate[]> 
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge candidates unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge entries unavailable'))
   }
   return parseApiResult(
     data,
@@ -712,7 +712,7 @@ export async function fetchCandidate(candidateId: string): Promise<Candidate> {
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Candidate unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Entry unavailable'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -724,7 +724,7 @@ export async function fetchPublications(limit = KNOWLEDGE_PAGE_LIMIT): Promise<P
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publications unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge versions unavailable'))
   }
   return parseApiResult(
     data,
@@ -740,7 +740,7 @@ export async function fetchPublication(publicationId: string): Promise<Publicati
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publication unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge version unavailable'))
   }
   return parseApiResult(data, parsePublication, 'publication')
 }

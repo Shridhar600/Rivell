@@ -177,7 +177,7 @@ describe('applicability scope presentation', () => {
       { key: 'pack', label: 'Contract pack', value: 'MSA pack' },
     ])
     expect(applicabilityNote(scope)).toBe(
-      'Unlisted dimensions are not constrained by this source.',
+      'Fields not listed do not limit this source.',
     )
 
     const empty = { ...scope, contractPackKey: null }
@@ -263,9 +263,9 @@ describe('sufficiencyPresentation', () => {
     expect(staleClassificationNote(null, 'TERM', humanizeCode)).toBeNull()
     expect(staleClassificationNote('TERM', 'TERM', humanizeCode)).toBeNull()
     expect(staleClassificationNote('TERM', 'CONFIDENTIALITY_OBLIGATIONS', humanizeCode)).toBe(
-      "This evidence was built with the classification Term. The contract's current classification is Confidentiality obligations; rebuild to refresh the evidence.",
+      'This source was compared as Term. The contract is now classified as Confidentiality obligations. Rebuild to update.',
     )
-    expect(staleClassificationNote('TERM', null, humanizeCode)).toMatch(/is not set/)
+    expect(staleClassificationNote('TERM', null, humanizeCode)).toMatch(/classified as not set/)
   })
 })
 
@@ -296,16 +296,16 @@ describe('labels', () => {
   it('labels source types and retrieval reasons, including relationship reasons', () => {
     expect(sourceTypeLabel('PUBLISHED_PLAYBOOK_RULE')).toBe('Playbook rule')
     expect(sourceTypeLabel('PUBLISHED_CLAUSE_VARIANT')).toBe('Clause library variant')
-    expect(sourceTypeLabel('PUBLISHED_PRECEDENT')).toBe('Executed precedent')
+    expect(sourceTypeLabel('PUBLISHED_PRECEDENT')).toBe('Signed precedent')
     expect(sourceTypeLabel('CURRENT_CONTRACT_DEFINED_TERM')).toBe('Defined term')
     expect(sourceTypeLabel('FUTURE_SOURCE')).toBe('Future source')
 
     expect(retrievalReasonLabel('CANONICAL_STRUCTURE')).toBe('Contract structure')
-    expect(retrievalReasonLabel('FUSION')).toBe('Lexical + semantic match')
+    expect(retrievalReasonLabel('FUSION')).toBe('Lexical + similarity match')
     expect(retrievalReasonLabel('RESOLVED_REFERENCE')).toMatch(/cross-reference/i)
     expect(retrievalReasonLabel('SIBLING_CONCEPT')).toMatch(/related clause/i)
     expect(retrievalReasonLabel('SEMANTIC_RELATIONSHIP:DEPENDS_ON')).toBe(
-      'Semantic relationship: depends on',
+      'Related clause: depends on',
     )
     expect(retrievalReasonLabel('FUTURE_REASON')).toBe('Future reason')
   })
@@ -316,7 +316,7 @@ describe('labels', () => {
     expect(traceStageLabel('policy')).toBe('Policy lookup')
     expect(traceStageLabel('currentContract')).toBe('Current contract')
     expect(traceStageLabel('futureStage')).toBe('Future stage')
-    expect(traceTimingLabel('pinResolution')).toBe('Knowledge pin resolution')
+    expect(traceTimingLabel('pinResolution')).toBe('Knowledge version lookup')
     expect(traceTimingLabel('currentContract')).toBe('Current contract')
     expect(traceTimingLabel('totalMs')).toBe('Total')
     expect(traceTimingLabel('futureTiming')).toBe('Future timing')

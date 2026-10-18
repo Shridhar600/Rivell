@@ -126,7 +126,7 @@ describe('grouping', () => {
 describe('readiness', () => {
   it('is not ready while anything awaits a decision, and says how many', () => {
     const state = readiness([make('a', { reviewStatus: 'APPROVED' }), make('b'), make('c', { reviewStatus: 'EDITED' })])
-    expect(state).toMatchObject({ awaiting: 2, approved: 1, canPublish: false, blocker: '2 candidates are still to review.' })
+    expect(state).toMatchObject({ awaiting: 2, approved: 1, canPublish: false, blocker: '2 entries are still to review.' })
   })
 
   it('is ready when every candidate is approved or rejected and something is approved', () => {
@@ -137,9 +137,9 @@ describe('readiness', () => {
   it('never offers to publish an empty set', () => {
     expect(readiness([make('a', { reviewStatus: 'REJECTED' }), make('b', { reviewStatus: 'REJECTED' })])).toMatchObject({
       canPublish: false,
-      blocker: 'Every candidate was rejected, so there is nothing to publish.',
+      blocker: 'Every entry was rejected, so there is nothing to publish.',
     })
-    expect(readiness([])).toMatchObject({ canPublish: false, blocker: 'No candidates were compiled from this source.' })
+    expect(readiness([])).toMatchObject({ canPublish: false, blocker: 'No entries were produced from this source.' })
   })
 
   it('does not republish what is already published', () => {

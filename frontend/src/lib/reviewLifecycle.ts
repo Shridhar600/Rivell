@@ -210,7 +210,7 @@ export function journey(key: LifecycleKey, humanReview: HumanReview | null): Jou
     } else if (key === 'blocked') set(1, 'w', 'Escalation unresolved')
     else if (key === 'ready') {
       set(1, 'd', 'Resolved')
-      set(2, 'a', 'Ready in workspace')
+      set(2, 'a', 'Ready to finalize')
     } else if (isPostFinalize(key)) {
       set(1, 'd', 'Resolved')
       set(2, 'd', 'Frozen')

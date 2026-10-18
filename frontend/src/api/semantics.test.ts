@@ -436,7 +436,7 @@ describe('fetchSemantics', () => {
 
     expect(error).toBeInstanceOf(SemanticApiError)
     expect((error as SemanticApiError).status).toBe(500)
-    expect((error as Error).message).toBe('The semantic analysis could not be loaded.')
+    expect((error as Error).message).toBe('The analysis could not be loaded.')
     expect((error as Error).message).not.toMatch(/com\.rivell|Controller\.read/)
   })
 })

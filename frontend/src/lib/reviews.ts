@@ -111,7 +111,7 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
   EXPECTED_CONCEPT_ABSENT: 'Expected provision absent',
   POLICY_UNAVAILABLE: 'Policy unavailable',
   NOT_COVERED_BY_PLAYBOOK: 'Unusual clause, not covered by your playbook',
-  SPOTTED_IN_WHOLE_CONTRACT_READ: 'Picked by the whole-contract read',
+  SPOTTED_IN_WHOLE_CONTRACT_READ: 'Picked by the full-contract read',
   MISSING_POSITION: 'Missing from the contract',
   AMBIGUOUS_POLICY: 'Policy ambiguous',
   SURVIVAL_COVERAGE_GAP: 'Survival coverage gap',
@@ -161,11 +161,11 @@ export function assessmentSummary(quality: FindingQuality | null): string | null
   if (quality?.category) parts.push(comparisonCategoryLabel(quality.category))
   const probability = quality?.flagProbability ?? quality?.uncoveredProbability ?? null
   if (probability !== null) {
-    parts.push(`Model confidence ${Math.round(probability * 100)}% (an estimate, not a certainty)`)
+    parts.push(`Rivell's estimate: ${Math.round(probability * 100)}% (not a certainty)`)
   } else if (quality?.presenceProbability != null) {
     // an omission: how likely the playbook position requires the provision at all
     parts.push(
-      `Required by your playbook: estimate ${Math.round(quality.presenceProbability * 100)}% (an estimate, not a certainty)`,
+      `Your playbook requires this (estimate ${Math.round(quality.presenceProbability * 100)}%).`,
     )
   }
   return parts.length > 0 ? parts.join(' · ') : null
@@ -177,7 +177,7 @@ const CLAIM_KIND_LABELS: Record<string, string> = {
   EVIDENCE_BASIS: 'Evidence basis',
   ABSENCE_BASIS: 'Absence basis',
   RECOMMENDATION: 'Recommended action',
-  GENERATIVE_EXPLANATION: 'AI-proposed explanation',
+  GENERATIVE_EXPLANATION: "Rivell's explanation",
 }
 
 export function claimKindLabel(kind: string): string {
@@ -187,9 +187,9 @@ export function claimKindLabel(kind: string): string {
 const PROPOSED_ACTION_LABELS: Record<string, string> = {
   USE_APPROVED_FALLBACK: 'Use the approved fallback wording',
   ADD_REQUIRED_PROVISION: 'Add the required provision',
-  REVIEW_AMBIGUITY: 'Policy ambiguity needs human review',
-  ESCALATE_TO_HUMAN: 'Human review needed',
-  CONSIDER_GENERATED_LANGUAGE: 'Consider the AI-proposed wording',
+  REVIEW_AMBIGUITY: 'Policy ambiguity needs your review',
+  ESCALATE_TO_HUMAN: 'Your review needed',
+  CONSIDER_GENERATED_LANGUAGE: "Consider Rivell's proposed wording",
   NO_ACTION: 'No action proposed',
   UNKNOWN: 'Recommended action',
 }
@@ -252,7 +252,7 @@ const LOOK_REASONS = new Set([
 
 function degradationFlagLabel(flag: string): string {
   if (flag.includes('provider_unavailable') || flag.includes('unavailable')) {
-    return 'A supporting semantic decision was unavailable'
+    return 'A supporting check was unavailable'
   }
   if (flag.includes('not_comparable')) return 'The assessment was not comparable'
   if (flag.includes('uncertain')) return 'An uncertain classification is recorded'
@@ -276,7 +276,7 @@ export function analysisWarningMessage(warning: AnalysisWarning): string {
       : 'This check ran in a degraded mode; its result may be incomplete.'
   const base = message || fallback
   if (warning.reasonCode === 'SURVIVAL_COVERAGE_PARTIAL') {
-    return `${base} Human review is required before treating the provision as covered or uncovered.`
+    return `${base} Your review is required before treating the provision as covered or uncovered.`
   }
   return base
 }
@@ -398,7 +398,7 @@ export function policyNoteText(
       : 'No organizational policy covers this clause. Historical precedent is evidence only and does not establish policy.'
   }
   if (finding.issueFamily === 'POLICY_AMBIGUOUS') {
-    return 'More than one published policy applies. Rivell did not choose between them; the ambiguity is preserved for human review.'
+    return 'More than one published policy applies. Rivell did not choose between them; the ambiguity is preserved for your review.'
   }
   return null
 }
@@ -484,8 +484,8 @@ export function clauseMarksLegend(marks: readonly ShownClauseMark[]): string {
 }
 
 export function engineLabel(engine: string | null): string {
-  if (engine === 'V2') return 'v2: a second opinion when the first review is unsure'
-  if (engine === 'V1') return 'v1: one review only'
+  if (engine === 'V2') return 'A second opinion when the first check is unsure'
+  if (engine === 'V1') return 'One check only'
   return 'Not recorded'
 }
 

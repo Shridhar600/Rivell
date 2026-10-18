@@ -59,7 +59,7 @@ export function WorkspaceTopBar({
           className="rv-iconbtn"
           aria-label="Toggle Findings list"
           aria-pressed={leftOpen}
-          title="Findings list ["
+          title="Show findings ["
           onClick={onToggleLeft}
         >
           <PanelLeftIcon className="rv-icon" />
@@ -83,7 +83,7 @@ export function WorkspaceTopBar({
                 ))}
               </div>
               <span>
-                {humanReview.resolvedFindings} of {humanReview.actionableFindings} resolved
+                {humanReview.resolvedFindings} of {humanReview.actionableFindings} decided
               </span>
             </div>
           ) : null}
@@ -99,7 +99,7 @@ export function WorkspaceTopBar({
             className="rv-iconbtn"
             aria-label="Toggle detail panel"
             aria-pressed={rightOpen}
-            title="Detail panel ]"
+            title="Show details ]"
             onClick={onToggleRight}
           >
             <PanelRightIcon className="rv-icon" />

@@ -388,7 +388,7 @@ describe('trigger error classification', () => {
     const expansion = redlineFailureTitle('SOURCE_EXPANSION_LIMIT_EXCEEDED')
 
     expect(drift).not.toBe(redlineFailureTitle('SOURCE_INTEGRITY_MISMATCH'))
-    expect(drift).toMatch(/semantics changed after/i)
+    expect(drift).toMatch(/contract changed after/i)
     expect(drift).toMatch(/unchanged/i)
     expect(drift).not.toMatch(/recompute|re-run|run again|try again|Exception|com\.rivell/i)
 

@@ -10,8 +10,8 @@ import type {
 export const ARTIFACT_TYPE_LABELS: Record<ArtifactType, string> = {
   PLAYBOOK: 'Contract playbook',
   CLAUSE_LIBRARY: 'Clause library',
-  TEMPLATE: 'Template / house paper',
-  EXECUTED_PRECEDENT: 'Executed precedent',
+  TEMPLATE: 'Standard template',
+  EXECUTED_PRECEDENT: 'Signed precedent',
   NEGOTIATION_HISTORY: 'Negotiation history',
   EXTERNAL_REFERENCE: 'External reference',
 }
@@ -30,8 +30,8 @@ export const ARTIFACT_TYPE_DESCRIPTIONS: Record<ArtifactType, string> = {
 
 export const INGEST_STATUS_LABELS: Record<IngestStatus, string> = {
   RECEIVED: 'Received',
-  EXTRACTING: 'Extracting',
-  EXTRACTED: 'Extracted',
+  EXTRACTING: 'Reading',
+  EXTRACTED: 'Read',
   FAILED: 'Failed',
 }
 
@@ -52,7 +52,7 @@ export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
 }
 
 export const UNIT_KIND_LABELS: Record<UnitKind, string> = {
-  HEADING_SECTION: 'Heading section',
+  HEADING_SECTION: 'Section',
   TABLE: 'Table',
   SPREADSHEET_ROW: 'Spreadsheet row',
 }

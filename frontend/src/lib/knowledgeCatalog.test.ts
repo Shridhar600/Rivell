@@ -242,7 +242,7 @@ describe('publication history isolation', () => {
 describe('presentation helpers', () => {
   it('names a source by its filename without the extension and nothing else', () => {
     expect(artifactName(pb)).toBe('Commercial MSA Playbook')
-    expect(artifactFormat(cl)).toBe('XLSX')
+    expect(artifactFormat(cl)).toBe('Excel file')
   })
 
   it('counts with the right noun and number', () => {
@@ -258,6 +258,6 @@ describe('presentation helpers', () => {
       publications: [publication(1, [{ candidateId: 'p1' }])],
       candidates: new Map([['pb', [candidate({ id: 'p1', artifactId: 'pb' })]]]),
     })
-    expect(sourceNote(view.sources[0]!)).toBe('1 position published in publication 1')
+    expect(sourceNote(view.sources[0]!)).toBe('1 position published in knowledge version 1')
   })
 })

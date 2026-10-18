@@ -19,7 +19,7 @@ function SourceLink({ evidenceId, label, openable, onOpenSource }: { evidenceId:
 }
 
 function entryLabel(entry: PositionEntry): string {
-  return entry.publication === null ? entry.authority : `${entry.authority}, publication ${entry.publication}`
+  return entry.publication === null ? entry.authority : `${entry.authority}, knowledge version ${entry.publication}`
 }
 
 /**
@@ -63,7 +63,7 @@ export function PolicyPosition({ view, openable, onOpenSource, caption = null }:
                     </div>
                   ))}
                   <span className="rv-ws-pos-src">
-                    {entry.publication !== null ? `Publication ${entry.publication}` : null}
+                    {entry.publication !== null ? `Knowledge version ${entry.publication}` : null}
                     <SourceLink evidenceId={entry.evidenceId} label={entryLabel(entry)} openable={openable} onOpenSource={onOpenSource} />
                   </span>
                 </div>
@@ -77,7 +77,7 @@ export function PolicyPosition({ view, openable, onOpenSource, caption = null }:
           Escalate: {escalation.trigger}
           <SourceLink
             evidenceId={escalation.evidenceId}
-            label={escalation.publication === null ? 'escalation condition' : `escalation condition, publication ${escalation.publication}`}
+            label={escalation.publication === null ? 'escalation condition' : `escalation condition, knowledge version ${escalation.publication}`}
             openable={openable}
             onOpenSource={onOpenSource}
           />

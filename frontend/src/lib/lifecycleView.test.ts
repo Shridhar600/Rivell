@@ -127,13 +127,13 @@ describe('redline report: no partial success is ever shown as success', () => {
   })
 
   it('states the overall result from the execution record', () => {
-    expect(overallResult(fixtureRedlineExecution())).toMatchObject({ word: 'VERIFIED', tone: 'ok' })
-    expect(overallResult(fixtureFailedRedlineExecution())).toMatchObject({ word: 'FAILED', tone: 'red' })
+    expect(overallResult(fixtureRedlineExecution())).toMatchObject({ word: 'Verified', tone: 'ok' })
+    expect(overallResult(fixtureFailedRedlineExecution())).toMatchObject({ word: 'Failed', tone: 'red' })
     expect(overallResult(fixtureRedlineExecution({ downloadAvailable: true, changes: [fixtureRedlineChange({ verification: 'FAILED' })] }))).toMatchObject({
-      word: 'NOT VERIFIED',
+      word: 'Not verified',
       tone: 'red',
     })
-    expect(overallResult(fixtureFailedRedlineExecution()).sentence).toContain('no partial-success artifact')
+    expect(overallResult(fixtureFailedRedlineExecution()).sentence).toContain('No file is offered')
   })
 
   it('names where an insertion landed, or says it was not resolved', () => {

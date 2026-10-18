@@ -117,18 +117,18 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
     >
       <CatalogNotices state={state} catalog={catalog} />
 
-      <div className="rv-k-lin" aria-label="Lineage: source, compilation, published knowledge">
+      <div className="rv-k-lin" aria-label="Lineage: source, draft, published knowledge">
         <div className="rv-k-lc">
           <span className="rv-k-lc__k">Source</span>
           <b>{artifact.filename}</b>
           <small>
             {formatBytes(artifact.sizeBytes)}, uploaded {longDate(artifact.createdAt)}
           </small>
-          <small>sha256 {shortSha(artifact.sha256)}</small>
+          <small title={artifact.sha256}>File fingerprint {shortSha(artifact.sha256)}</small>
         </div>
         <ArrowRightIcon className="rv-icon" />
         <div className="rv-k-lc">
-          <span className="rv-k-lc__k">Compilation</span>
+          <span className="rv-k-lc__k">Draft</span>
           <b>{compilationTitle(source)}</b>
           <small>{compilationDetail(source)}</small>
         </div>
@@ -159,14 +159,14 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
           <div className="rv-k-lc">
             <span className="rv-k-lc__k">Published knowledge</span>
             <b>None yet</b>
-            <small>{source.state === 'compiling' ? 'Waiting for compilation' : source.state === 'failed' ? 'Extraction failed' : 'Nothing was published'}</small>
+            <small>{source.state === 'compiling' ? 'Waiting to be read' : source.state === 'failed' ? 'Could not read file' : 'Nothing was published'}</small>
           </div>
         )}
       </div>
 
       {detail.data && detail.data.parseWarnings.length > 0 ? (
         <p className="rv-note">
-          The parser reported {detail.data.parseWarnings.length} {detail.data.parseWarnings.length === 1 ? 'warning' : 'warnings'} for this file.
+          Rivell could not read {detail.data.parseWarnings.length} {detail.data.parseWarnings.length === 1 ? 'part' : 'parts'} of this file.
         </p>
       ) : null}
 
@@ -201,26 +201,26 @@ function openTarget(source: SourceView, candidate: Candidate): { to: string; lab
 
 function compilationTitle(source: SourceView): string {
   const counts = source.counts
-  if (source.state === 'compiling') return 'Compiling'
-  if (source.state === 'failed') return 'Extraction failed'
+  if (source.state === 'compiling') return 'Reading'
+  if (source.state === 'failed') return 'Could not read file'
   if (source.state === 'unreadable' || !counts) return 'Status unavailable'
-  if (source.state === 'review') return `${counts.total} candidates, ${counts.total - counts.pending} reviewed`
-  return counts.total === 0 ? 'No candidates produced' : 'Compiled and reviewed'
+  if (source.state === 'review') return `${counts.total} entries, ${counts.total - counts.pending} reviewed`
+  return counts.total === 0 ? 'No entries produced' : 'Drafted and reviewed'
 }
 
 function compilationDetail(source: SourceView): string {
   const counts = source.counts
-  if (!counts) return source.state === 'compiling' ? 'Candidates appear when it finishes' : 'No candidates are available'
+  if (!counts) return source.state === 'compiling' ? 'Entries appear when reading finishes' : 'No entries are available'
   if (source.state === 'review') return `${source.unresolved} still to decide or publish`
   return `${counts.published} published, ${counts.rejected} rejected`
 }
 
 function plainNote(source: SourceView, loading: boolean, produced: number): string {
   if (loading && source.candidates.length > 0) return 'Loading the original content…'
-  if (source.state === 'failed') return 'The original is stored and cannot be changed. Its content could not be extracted.'
-  if (source.state === 'compiling') return 'The original is stored and cannot be changed. Candidates appear here once compilation finishes.'
-  if (source.candidates.length === 0) return 'The original is stored and cannot be changed. No candidates were produced from it.'
+  if (source.state === 'failed') return 'The original cannot be changed. Its content could not be read.'
+  if (source.state === 'compiling') return 'The original cannot be changed. Entries appear when Rivell finishes reading it.'
+  if (source.candidates.length === 0) return 'The original cannot be changed. No entries were produced from it.'
   if (produced === 0) return 'Nothing from this source is published yet, so no passage is linked to published knowledge.'
-  return 'The extracted content could not be shown, but the original is stored unchanged.'
+  return 'The content Rivell read could not be shown, but the original is stored unchanged.'
 }
 

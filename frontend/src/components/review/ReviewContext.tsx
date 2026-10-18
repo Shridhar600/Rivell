@@ -70,12 +70,12 @@ export function ReviewContext({
           </div>
         )}
         <div>
-          <dt>Knowledge publication</dt>
+          <dt>Knowledge version</dt>
           <dd>
             {snapshot?.knowledgePinNumber == null
-              ? 'Knowledge pin unavailable'
+              ? 'Knowledge version unavailable'
               : snapshot.knowledgePinNumber > 0
-                ? `Publication ${snapshot.knowledgePinNumber}`
+                ? `Knowledge version ${snapshot.knowledgePinNumber}`
                 : 'No published knowledge at creation'}
           </dd>
         </div>
@@ -88,7 +88,7 @@ export function ReviewContext({
           </dd>
         </div>
         <div>
-          <dt>Review engine</dt>
+          <dt>Review method</dt>
           <dd>
             {[engineLabel(snapshot?.engine ?? null), routeCountsLabel(findings)].filter(Boolean).join(' · ')}
           </dd>

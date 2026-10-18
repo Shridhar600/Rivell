@@ -166,7 +166,7 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
   const ready = readiness.canPublish
   const done = readiness.published > 0 && readiness.awaiting === 0 && readiness.approved === 0
   return (
-    <aside className="rv-kc-fl" id={id} aria-label="Candidates">
+    <aside className="rv-kc-fl" id={id} aria-label="Entries">
       <div className="rv-kc-src">
         <b>{artifact.filename}</b>
         <small>
@@ -174,7 +174,7 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         </small>
         <small>Original retained unchanged</small>
       </div>
-      <nav className="rv-kc-list" aria-label="Candidate list">
+      <nav className="rv-kc-list" aria-label="Entry list">
         <Group title="Needs attention" count={groups.attention.length}>
           {rows(groups.attention)}
         </Group>
@@ -184,7 +184,7 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         {groups.bulk.length > 0 ? (
           <section className="rv-kc-grp">
             <h3 className="rv-kc-fgrp">
-              <span>Grouped review</span>
+              <span>Review together</span>
             </h3>
             <ul className="rv-kc-rows">
               <li>
@@ -192,7 +192,7 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
                   <ClauseIcon className="rv-icon rv-kc-g" />
                   <span>
                     <b>
-                      {groups.bulk.length} straightforward {groups.bulk.length === 1 ? 'candidate' : 'candidates'}
+                      {groups.bulk.length} routine {groups.bulk.length === 1 ? 'entry' : 'entries'}
                     </b>
                     <span className="rv-kc-row__sub">Inspect, then approve together</span>
                   </span>
@@ -204,14 +204,14 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         <Group title="Reviewed" count={groups.reviewed.length}>
           {rows(groups.reviewed)}
         </Group>
-        <Group title="Published, immutable" count={groups.published.length}>
+        <Group title="Published, cannot be changed" count={groups.published.length}>
           {rows(groups.published)}
         </Group>
         <UnitGroup title="Missed" units={missed} onMakePosition={onMakePosition} />
-        <UnitGroup title="Not a position (Rivell’s reading)" units={notPosition} onMakePosition={onMakePosition} />
+        <UnitGroup title="Not treated as a position" units={notPosition} onMakePosition={onMakePosition} />
       </nav>
       <div className="rv-kc-ready" aria-live="polite">
-        <b>{ready ? 'Ready to publish' : done ? 'Published' : 'Compilation review'}</b>
+        <b>{ready ? 'Ready to publish' : done ? 'Published' : 'Draft review'}</b>
         <div className="rv-kc-ready__m">
           <span>Awaiting review</span>
           <span>{readiness.awaiting}</span>
@@ -232,9 +232,9 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         ) : null}
         <p className={readiness.attention > 0 ? 'rv-kc-ready__no' : 'rv-kc-ready__ok'}>
           {readiness.attention > 0 ? <CautionIcon className="rv-icon" /> : <CheckIcon className="rv-icon" />}
-          {readiness.attention > 0 ? `${readiness.attention} need closer review` : 'No flagged candidates remain'}
+          {readiness.attention > 0 ? `${readiness.attention} need closer review` : 'No flagged entries remain'}
         </p>
-        <p className="rv-kc-ready__hint">{done ? 'Published knowledge is immutable.' : ready ? 'Publishing is explicit. Nothing is published until you do.' : 'Nothing is published until you publish it.'}</p>
+        <p className="rv-kc-ready__hint">{done ? 'Published knowledge is immutable.' : 'Nothing is published until you publish it.'}</p>
       </div>
     </aside>
   )

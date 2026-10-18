@@ -16,7 +16,7 @@ import { hasHumanCorrection } from '../lib/compilationFields'
 export class PublicationNotReadyError extends Error {
   readonly readiness: Readiness
   constructor(state: Readiness) {
-    super(state.blocker ?? 'This compilation is not ready to publish.')
+    super(state.blocker ?? 'This draft is not ready to publish.')
     this.name = 'PublicationNotReadyError'
     this.readiness = state
   }

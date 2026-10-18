@@ -47,7 +47,7 @@ export function RedlinePanel(props: Props) {
             <h2 tabIndex={-1} ref={headingRef}>
               Review finalized with no approved changes
             </h2>
-            <p>The frozen approved change set is empty. No tracked-change artifact is needed for this review.</p>
+            <p>The approved change set is empty. No tracked-change file is needed for this review.</p>
             <Checks items={[{ text: 'Human decisions are read-only' }, { text: 'Original contract remains unchanged' }]} />
           </LcBody>
         </LcCard>
@@ -64,8 +64,8 @@ export function RedlinePanel(props: Props) {
               Generate the redline
             </h2>
             <p>
-              Rivell will execute the frozen approved changes against the original DOCX using deterministic
-              targeting and tracked changes. No new legal reasoning occurs here.
+              Rivell applies the approved changes to the original Word file as tracked changes. No new
+              legal analysis.
             </p>
             <Stat3
               label="Approved changes"
@@ -82,7 +82,7 @@ export function RedlinePanel(props: Props) {
             ) : null}
           </LcBody>
           <LcFoot>
-            <Spacer note="A verified artifact is offered only if the complete approved change set executes and verifies." />
+            <Spacer note="A file is available only if every approved change is applied and checked." />
             <Button variant="primary" disabled={props.generating} onClick={props.onGenerate}>
               Generate redline
             </Button>
@@ -150,7 +150,7 @@ function Verified({
             { text: pluralise(execution.changeCount, 'approved change') },
             { text: `${applied} applied` },
             { text: `${verified} verified` },
-            { text: 'One verified tracked-DOCX artifact is available' },
+            { text: 'A checked Word file with tracked changes is ready' },
           ]}
         />
         <div className="rv-lc-art">
@@ -158,17 +158,16 @@ function Verified({
             <PageIcon className="rv-icon" />
           </span>
           <div className="rv-lc-art__text">
-            <b>{execution.artifactFilename ?? 'Tracked-changes DOCX'}</b>
+            <b>{execution.artifactFilename ?? 'Tracked-changes Word file'}</b>
             <div className="rv-lc-quiet">
-              Tracked-changes DOCX produced from {sourceFilename ? `${sourceFilename} ` : 'the contract '}
+              Tracked-changes Word file produced from {sourceFilename ? `${sourceFilename} ` : 'the contract '}
               {contractVersion !== null ? `v${contractVersion}` : ''}
             </div>
           </div>
           <DownloadTrackedDocx reviewId={reviewId} execution={execution} />
         </div>
         <p className="rv-lc-quiet">
-          Verification is scoped to execution against the frozen approved change set. It is not a claim of
-          universal legal correctness or Microsoft Word certification.
+          This checks the file against your approved changes. It is not a legal review.
         </p>
       </LcBody>
       <LcFoot>
@@ -193,7 +192,7 @@ function Failed({ execution, headingRef, onOpenReport, onRetry }: Props & { exec
               Redline failed
             </h2>
             <p className="rv-lc-prv">
-              <span>Top-level execution result: FAILED</span>
+              <span>Result: failed</span>
             </p>
           </div>
         </div>
@@ -208,7 +207,7 @@ function Failed({ execution, headingRef, onOpenReport, onRetry }: Props & { exec
         <Checks
           items={[
             { text: 'Approved changes remain frozen and intact' },
-            { text: 'No verified DOCX is available to download', failed: true },
+            { text: 'No verified Word file is available to download', failed: true },
           ]}
         />
       </LcBody>
@@ -217,12 +216,16 @@ function Failed({ execution, headingRef, onOpenReport, onRetry }: Props & { exec
         <Spacer
           note={
             retryable
-              ? 'This failure came from a contract semantics change after approval. If that change has since been reverted, Retry executes the same frozen change set again; otherwise it fails the same way.'
+              ? undefined
               : 'This failure is determined by the frozen inputs; running the same change set again would produce the same result.'
           }
         />
         {retryable ? (
-          <Button variant="primary" onClick={onRetry}>
+          <Button
+            variant="primary"
+            onClick={onRetry}
+            title="The contract changed after these changes were approved. Retry uses the same approved changes, so it fails again unless that change was undone."
+          >
             Retry redline
           </Button>
         ) : null}
@@ -256,7 +259,7 @@ function NotVerified({ execution, headingRef, onOpenReport }: Props & { executio
         <Checks
           items={[
             { text: 'Approved changes remain frozen and intact' },
-            { text: 'No verified DOCX is available to download', failed: true },
+            { text: 'No verified Word file is available to download', failed: true },
           ]}
         />
       </LcBody>
@@ -299,7 +302,7 @@ function DownloadTrackedDocx({ reviewId, execution }: { reviewId: string; execut
     <div className="rv-lc-art__action">
       <Button variant="primary" disabled={busy} onClick={() => void download()}>
         <DownloadIcon className="rv-icon" />
-        Download tracked DOCX
+        Download Word file
       </Button>
       {busy ? <span role="status" className="rv-visually-hidden">Preparing download…</span> : null}
       {error ? (

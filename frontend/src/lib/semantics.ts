@@ -39,13 +39,13 @@ export const REVIEW_REASON_LABELS: Record<ReviewReason, string> = {
   DUPLICATE_DETECTED: 'Possible duplicate of published knowledge.',
   CONFLICT_DETECTED: 'May contradict published knowledge of the same concept and scope.',
   SUPERSESSION_PROPOSED:
-    'Rivell suggests this candidate may replace published knowledge.',
+    'Rivell suggests this entry may replace published knowledge.',
   ARTIFACT_TYPE_MISMATCH:
-    'The source may not match the declared artifact type.',
+    'The source may not match the file type you chose.',
   VERIFICATION_DISPUTED:
-    'An extracted value is not sufficiently supported by the source.',
+    'A value Rivell read is not sufficiently supported by the source.',
   UNVERIFIED_GENERATIVE_FIELD:
-    'An extracted field could not be independently verified.',
+    'A field Rivell read could not be independently verified.',
   LOW_CLASSIFICATION_CONFIDENCE:
     'Rivell could not classify this unit against a legal concept confidently.',
   NEW_PROHIBITED_OR_ESCALATION_POSITION:
@@ -53,9 +53,9 @@ export const REVIEW_REASON_LABELS: Record<ReviewReason, string> = {
   SCOPE_NARROWING_PROPOSED:
     'The source narrows the applicability scope beyond the manifest.',
   SEMANTIC_ANALYSIS_UNAVAILABLE:
-    'Semantic conflict analysis was unavailable; deterministic checks still ran.',
+    'Conflict analysis was unavailable. Other checks still ran.',
   SEMANTIC_COMPILATION_UNAVAILABLE:
-    'Semantic compilation was unavailable; this candidate is deterministic extraction only.',
+    'Some checks could not run. Only basic reading was used for this entry.',
 }
 
 export const ASSESSMENT_STATE_LABELS: Record<AssessmentState, string> = {

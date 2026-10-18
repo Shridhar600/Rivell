@@ -119,7 +119,7 @@ export function languageAuthority(
   if (finding.proposedLanguageSource === 'APPROVED_DRAFTING') {
     return {
       strong: 'Approved organizational drafting',
-      rest: publicationNumber === null ? 'Quoted from published wording' : `Publication ${publicationNumber} · Source: Clause library`,
+      rest: publicationNumber === null ? 'Quoted from published wording' : `Knowledge version ${publicationNumber} · Source: Clause library`,
     }
   }
   if (finding.proposedLanguageSource === 'GENERATIVE') {

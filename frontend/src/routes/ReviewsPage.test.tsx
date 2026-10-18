@@ -177,7 +177,7 @@ describe('Reviews page', () => {
     expect(inReview).toHaveTextContent('In review')
     expect(inReview).toHaveTextContent('5 of 8 decided')
     const queued = screen.getByRole('link', { name: /Beacon Data Processing/ })
-    expect(queued).toHaveTextContent('Queued')
+    expect(queued).toHaveTextContent('Waiting to start')
     expect(queued).not.toHaveTextContent(/decided|Finding/)
     const finalized = screen.getByRole('link', { name: /Northstar Vendor MSA\.docx/ })
     expect(finalized).toHaveTextContent('Finalized')

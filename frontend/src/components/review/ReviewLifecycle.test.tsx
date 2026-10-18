@@ -181,7 +181,7 @@ describe('review lifecycle states', () => {
     const findings = await screen.findByRole('complementary', { name: 'Findings' })
     expect(
       await within(findings).findByText(
-        'No findings. The automated review recorded none for this contract version.',
+        'No findings for this contract version.',
       ),
     ).toBeInTheDocument()
     // Nothing is claimed beyond what the server said, and nothing is flagged as an error.
@@ -198,7 +198,7 @@ describe('review lifecycle states', () => {
       activeRun: { id: 'run-1', runNumber: 1, status: 'COMPLETED' },
     })
 
-    expect(await screen.findByText(/A newer analysis attempt exists/)).toBeInTheDocument()
+    expect(await screen.findByText(/A newer analysis has run/)).toBeInTheDocument()
     expect(screen.getByText(/Run failed/)).toBeInTheDocument()
   })
 })

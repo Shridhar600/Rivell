@@ -15,7 +15,7 @@ import { artifactName, clauseGroups, reviewedText, type Catalog } from '../../li
 
 type Tab = 'clauses' | 'history'
 const CRUMBS: Crumb[] = [{ label: 'Knowledge', to: '/knowledge' }, { label: 'Clause library' }]
-const LEDE = 'Approved reusable wording with publication and source provenance.'
+const LEDE = 'Approved clause wording, with the version and source it came from.'
 
 export function ClausesPage() {
   const state = useKnowledgeCatalog()
@@ -68,7 +68,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
         viewing ? (
           <>
             <span className={`rv-stb${isCurrent ? ' rv-stb--ok' : ''}`}>{isCurrent ? 'Current' : 'Superseded'}</span>
-            <Chip>Publication {viewing.publication.number}</Chip>
+            <Chip>Knowledge version {viewing.publication.number}</Chip>
             <span className="rv-k-meta__text">Published {longDate(viewing.publication.createdAt)}</span>
           </>
         ) : null
@@ -77,7 +77,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
       <CatalogNotices state={state} catalog={catalog} />
 
       {compiling.length > 0 ? (
-        <ul className="rv-k-list" aria-label="Clause libraries in compilation">
+        <ul className="rv-k-list" aria-label="Clause library drafts">
           {compiling.map((source) => (
             <KnowledgeLinkRow
               key={source.artifact.id}
@@ -103,7 +103,6 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
             <VersionBanner
               viewing={viewing.publication.number}
               current={current.publication.number}
-              what="This is the clause library"
               onBack={() => view(null)}
             />
           )}
@@ -130,8 +129,8 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
               />
             ) : groups.length === 0 ? (
               <EmptyState
-                title="No clauses in this publication"
-                message="Every clause variant was superseded by a later publication. Choose another publication in Version history."
+                title="No clauses in this version"
+                message="This version was replaced. Choose another version in Version history."
               />
             ) : (
               <ul className="rv-k-list" aria-label="Clauses">

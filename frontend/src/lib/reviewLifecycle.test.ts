@@ -267,7 +267,7 @@ describe('journey', () => {
 
   it('marks escalation and readiness as the canonical amber and active steps', () => {
     expect(journey('blocked', null)[1]).toMatchObject({ tone: 'w', detail: 'Escalation unresolved' })
-    expect(journey('ready', null)[2]).toMatchObject({ tone: 'a', detail: 'Ready in workspace' })
+    expect(journey('ready', null)[2]).toMatchObject({ tone: 'a', detail: 'Ready to finalize' })
   })
 })
 

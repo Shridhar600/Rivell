@@ -26,7 +26,7 @@ export function CompileTopBar({ type, filename, rail, children }: TopBarProps) {
     <TopBar
       leading={
         rail ? (
-          <IconButton label="Candidate list" expanded={rail.open} controls={rail.id} title={rail.open ? 'Hide list [' : 'Show list ['} onClick={rail.onToggle}>
+          <IconButton label="Entry list" expanded={rail.open} controls={rail.id} title={rail.open ? 'Hide list [' : 'Show list ['} onClick={rail.onToggle}>
             <PanelLeftIcon className="rv-icon" />
           </IconButton>
         ) : null
@@ -59,7 +59,7 @@ export function CompileLayout({ top, rail, railOpen = true, children }: LayoutPr
       {top}
       <div className="rv-kc-work" data-rail={rail && railOpen ? 'open' : 'closed'}>
         {rail && railOpen ? rail : null}
-        <main className="rv-kc-main" aria-label="Candidate review">
+        <main className="rv-kc-main" aria-label="Entry review">
           {children}
         </main>
       </div>

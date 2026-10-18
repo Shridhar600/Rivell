@@ -42,7 +42,7 @@ export function decisionStateLabel(decision: HumanDecision | null | undefined): 
 export function humanStatusLabel(status: HumanReviewStatus): string {
   switch (status) {
     case 'NOT_STARTED':
-      return 'Human review not started'
+      return 'Review not started'
     case 'IN_PROGRESS':
       return 'Human review in progress'
     case 'READY_FOR_COMPLETION':
@@ -96,7 +96,7 @@ export function changeLanguageProvenanceLabel(
     case 'APPROVED_DRAFTING':
       return 'Approved organizational language'
     case 'GENERATIVE':
-      return 'AI-proposed, human-approved for this contract'
+      return 'Proposed by Rivell, approved by you'
     case 'HUMAN_EDIT':
       return 'Human-authored'
     case 'NONE':

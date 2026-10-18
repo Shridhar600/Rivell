@@ -158,7 +158,7 @@ describe('finalize is the server’s decision', () => {
       'title',
       '1 finding that requires review still needs a decision.',
     )
-    expect(await topBar()).toHaveTextContent('0 of 2 resolved')
+    expect(await topBar()).toHaveTextContent('0 of 2 decided')
     // The unresolved count is not repeated on the button, and the blocker is not a clipped line.
     expect(await topBar()).not.toHaveTextContent(/unresolved/)
     const progress = (await topBar()).querySelector('.rv-ws-prog') as HTMLElement
@@ -185,7 +185,7 @@ describe('finalize is the server’s decision', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Finalize this review?' })
     expect(dialog).toHaveTextContent('1 approved change (1 accepted, 0 edited)')
     expect(dialog).toHaveTextContent('1 rejected Finding; no approved change created')
-    expect(dialog).toHaveTextContent('Redline generation is a separate downstream step.')
+    expect(dialog).toHaveTextContent('After you finalize, you generate the redline separately.')
     expect(api.requests.filter((r) => r.method === 'POST' && r.url.endsWith('/finalize'))).toHaveLength(0)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Finalize review' }))
     await waitFor(() => expect(api.requests.filter((r) => r.method === 'POST' && r.url.endsWith('/finalize'))).toHaveLength(1))
@@ -238,7 +238,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
     const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
     expect(link).toHaveAttribute('href', '/reviews/c1/overview/r-1')
     expect(within(await detail()).getByText('Approved changes frozen')).toBeInTheDocument()
-    expect(within(await detail()).getByText(/1 executable change in the immutable approved change set/)).toBeInTheDocument()
+    expect(within(await detail()).getByText(/1 approved change in the immutable approved change set/)).toBeInTheDocument()
     expect(await topBar()).toHaveTextContent('Approved changes frozen')
 
     // Redline is not run, offered, or even read from here.
@@ -495,7 +495,7 @@ describe('clause details in place', () => {
     expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
     expect(within(sheet).getByRole('heading', { name: '6. Limitation of Liability' })).toBeInTheDocument()
     expect(sheet).toHaveTextContent('Limitation of liability')
-    expect(sheet).toHaveTextContent('A correction is used by the next review of this contract')
+    expect(sheet).toHaveTextContent('Corrections apply to the next review')
   })
 
   it('corrects the topic and keeps Rivell’s own reading beside it', async () => {
