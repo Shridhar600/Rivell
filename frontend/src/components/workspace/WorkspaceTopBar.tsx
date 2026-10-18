@@ -4,7 +4,7 @@ import { TopBar } from '../shell/TopBar'
 import { Button } from '../ui/Button'
 import { Chip } from '../ui/Status'
 import { LockIcon } from './WorkspaceIcons'
-import { PanelLeftIcon, PanelRightIcon } from '../ui/Icon'
+import { InfoIcon, PanelLeftIcon, PanelRightIcon } from '../ui/Icon'
 
 export const FROZEN_NOTE_ID = 'rv-ws-frozen-note'
 
@@ -104,6 +104,21 @@ export function WorkspaceTopBar({
           >
             <PanelRightIcon className="rv-icon" />
           </button>
+          {humanReview && !ready && !isFinalized ? (
+            // What still blocks Finalize, one click (or Enter) away, for keyboard and screen reader users too.
+            <details className="rv-ws-blk">
+              <summary className="rv-iconbtn" aria-label="Why the review cannot be finalized yet" title="Why Finalize is not available yet">
+                <InfoIcon className="rv-icon" />
+              </summary>
+              <div className="rv-ws-blk__pop" role="group" aria-label="What is left before you can finalize">
+                {blockers.length > 0 ? (
+                  blockers.map((blocker, index) => <p key={`${index}-${blocker.message}`}>{blocker.message}</p>)
+                ) : (
+                  <p>Decide every open finding first.</p>
+                )}
+              </div>
+            </details>
+          ) : null}
           {/* A disabled button shows no tooltip, so the reason it cannot be used sits on its wrapper. */}
           <span className="rv-ws-fin" title={isFinalized ? undefined : ready ? 'Make your decisions final so the redline can be created' : blockers.map((blocker) => blocker.message).join(' ') || 'Decide every open finding first'}>
             <Button variant="primary" disabled={!ready || isFinalized} onClick={onFinalize}>

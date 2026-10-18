@@ -29,11 +29,12 @@ export function HomePage() {
   // One effective id drives both the row highlight and the inspector, so they cannot disagree.
   // Nothing is auto-selected, and a selection that disappears after a refetch is dropped.
   const selected = placed.find((item) => item.id === selectedId) ?? null
-  const { inspectorCollapsed, toggleInspector } = useShell()
-  // Choosing a row is asking to see it, so a closed details panel opens.
+  const { inspectorCollapsed, inspectorOverlay, toggleInspector } = useShell()
+  // Choosing a row is asking to see it, so a closed details panel opens. On a narrow window the
+  // details show inline under the row instead, so the panel stays closed.
   const select = (id: string) => {
     setSelectedId(id)
-    if (inspectorCollapsed) toggleInspector()
+    if (inspectorCollapsed && !inspectorOverlay) toggleInspector()
   }
 
   // Only the reviewer's own choices are stored. Everything else follows `defaultOpen`, so a list

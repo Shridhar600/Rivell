@@ -32,13 +32,14 @@ export function useTooltips(): void {
       timer = undefined
       tip.removeAttribute('data-open')
       if (target?.dataset.rvTitle !== undefined) {
-        target.setAttribute('title', target.dataset.rvTitle)
+        // React may have written a new title while ours showed; that one wins.
+        if (target.getAttribute('title') === null) target.setAttribute('title', target.dataset.rvTitle)
         delete target.dataset.rvTitle
       }
       target = null
     }
 
-    function show(element: HTMLElement) {
+    function show(element: HTMLElement, holdTitle: boolean) {
       const title = element.getAttribute('title')
       if (!title || !element.isConnected) return
       const [text, hint] = splitHint(title)
@@ -48,8 +49,12 @@ export function useTooltips(): void {
         key.textContent = hint
         tip.append(key)
       }
-      element.dataset.rvTitle = title
-      element.removeAttribute('title')
+      // Only a mouse hover would also raise the browser's tooltip. On keyboard focus the title stays,
+      // as it may be the element's only description.
+      if (holdTitle) {
+        element.dataset.rvTitle = title
+        element.removeAttribute('title')
+      }
 
       const box = element.getBoundingClientRect()
       tip.style.left = '0px'
@@ -64,14 +69,19 @@ export function useTooltips(): void {
       tip.dataset.side = below ? 'below' : 'above'
     }
 
-    function arm(element: HTMLElement) {
+    function arm(element: HTMLElement, holdTitle: boolean) {
       if (element === target) return
       hide()
       target = element
       timer = window.setTimeout(() => {
-        if (target === element) show(element)
+        if (target === element) show(element, holdTitle)
       }, SHOW_DELAY)
     }
+
+    // An element can leave the page while its tip shows (a route change, a closed panel).
+    const watcher = window.setInterval(() => {
+      if (target && !target.isConnected) hide()
+    }, 300)
 
     function titled(node: EventTarget | null): HTMLElement | null {
       return node instanceof Element ? (node.closest('[title]') as HTMLElement | null) : null
@@ -80,7 +90,7 @@ export function useTooltips(): void {
     function onPointerOver(event: PointerEvent) {
       if (event.pointerType !== 'mouse') return
       const element = titled(event.target)
-      if (element) arm(element)
+      if (element) arm(element, true)
       else if (target && !target.contains(event.target as Node)) hide()
     }
     function onPointerOut(event: PointerEvent) {
@@ -88,7 +98,7 @@ export function useTooltips(): void {
     }
     function onFocusIn(event: FocusEvent) {
       const element = titled(event.target)
-      if (element && element === event.target && element.matches(':focus-visible')) arm(element)
+      if (element && element === event.target && element.matches(':focus-visible')) arm(element, false)
     }
 
     document.addEventListener('pointerover', onPointerOver)
@@ -100,6 +110,7 @@ export function useTooltips(): void {
     window.addEventListener('scroll', hide, true)
     window.addEventListener('blur', hide)
     return () => {
+      window.clearInterval(watcher)
       hide()
       tip.remove()
       document.removeEventListener('pointerover', onPointerOver)

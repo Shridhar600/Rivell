@@ -365,6 +365,9 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     function onKeyDown(event: KeyboardEvent) {
       const typing = (event.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable="true"]')
       if (typing || event.metaKey || event.ctrlKey || event.altKey || searchOpen || finalizeOpen || sheet) return
+      // Single keys act only on the workspace: never while focus is on the sidebar or the top bar.
+      const active = document.activeElement
+      if (active && active !== document.body && !active.closest('.rv-ws-work')) return
       const key = event.key.toLowerCase()
       const step = (by: number) => {
         event.preventDefault()
@@ -467,7 +470,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     ? isWorkflowConflictError(finalizeMutation.error)
       ? humanReview?.readyToFinalize
         ? 'Rivell did not finalize the review. Its state changed; check the summary and try again.'
-        : 'The review cannot be finalized yet. Rivell’s current blockers are shown above.'
+        : 'The review cannot be finalized yet. Use the info button next to Finalize to see what is left.'
       : workflowErrorMessage(finalizeMutation.error, 'The review could not be finalized. Check your connection and try again.')
     : null
 

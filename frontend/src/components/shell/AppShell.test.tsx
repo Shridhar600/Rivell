@@ -212,6 +212,15 @@ describe('sidebar owns its own collapse control', () => {
     )
   })
 
+  it('gives focus to the toggle when the sidebar closes around it', async () => {
+    stubApi()
+    renderAt('/')
+    const home = within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Home' })
+    home.focus()
+    await userEvent.keyboard('[[')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sidebar' })).toHaveFocus())
+  })
+
   it('takes a closed sidebar out of the tab order and the accessibility tree', async () => {
     stubApi()
     const { container } = renderAt('/')
@@ -499,6 +508,29 @@ describe('panel toggles', () => {
     const after = screen.getByRole('button', { name: 'Sidebar' })
     expect(after).toHaveAttribute('aria-expanded', 'false')
     expect(after).toHaveAttribute('title', expect.stringContaining('Show sidebar'))
+  })
+})
+
+describe('narrow layouts (stylesheet contract)', () => {
+  const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
+  const workspace = readFileSync(resolve(process.cwd(), 'src/styles/m10b-workspace.css'), 'utf8')
+
+  it('lets the stacked workspace and draft scroll inside the stage', () => {
+    const narrow = css.slice(css.indexOf('@media (max-width: 980px)'))
+    expect(narrow.slice(0, 400)).toContain('.rv-stage:has(> .rv-ws)')
+    expect(narrow.slice(0, 400)).toContain('overflow-y: auto')
+  })
+
+  it('keeps a dragged workspace panel width at medium widths', () => {
+    const medium = workspace.slice(workspace.indexOf('@media (max-width: 1240px)'))
+    expect(medium.slice(0, 300)).toContain('var(--lw-open, 240px)')
+    expect(medium.slice(0, 300)).toContain('var(--rw-open, 340px)')
+  })
+
+  it('opens the details panel over the page below 1180px instead of hiding it', () => {
+    const medium = css.slice(css.indexOf('@media (max-width: 1180px)'))
+    expect(medium.slice(0, 900)).toContain('position: absolute')
+    expect(medium.slice(0, 900)).not.toMatch(/\.rv-topbar__insp\s*\{\s*display: none/)
   })
 })
 

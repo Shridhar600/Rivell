@@ -31,7 +31,7 @@ const EVIDENCE_LANES: readonly EvidenceLane[] = [
     authority: 'POLICY',
     label: 'Policy',
     description: 'Your published policy for this topic and contract type.',
-    emptyState: 'No published policy applies to this topic and profile.',
+    emptyState: 'No published policy applies to this topic and contract type.',
     prominence: 'authoritative',
   },
   {
@@ -154,7 +154,7 @@ const SUFFICIENCY_PRESENTATIONS: Record<
   },
   POLICY_MISSING: {
     label: 'Policy evidence missing',
-    description: 'No published policy applies to this topic and profile.',
+    description: 'No published policy applies to this topic and contract type.',
   },
   AMBIGUOUS_POLICY: {
     label: 'Policy evidence ambiguous',
@@ -278,7 +278,7 @@ export function laneEmptyState(
 ): string {
   if (lane.authority === 'POLICY') {
     return sufficiency === 'POLICY_MISSING'
-      ? 'No published policy applies to this topic and profile.'
+      ? 'No published policy applies to this topic and contract type.'
       : 'Policy evidence was not resolved for this retrieval.'
   }
   if (lane.authority === 'PRECEDENT') {

@@ -63,7 +63,7 @@ export async function fetchTaxonomy(): Promise<Taxonomy> {
   const client = createApiClient()
   const { data, response } = await client.GET('/api/taxonomy/concepts')
   if (!data) {
-    throw new Error(`The topic list could not be loaded (${response.status}).`)
+    throw new Error('The topic list could not be loaded.', { cause: `HTTP ${response.status}` })
   }
   return parseTaxonomy(data)
 }

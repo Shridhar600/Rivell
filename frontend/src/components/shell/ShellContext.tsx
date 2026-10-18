@@ -11,6 +11,8 @@ export interface ShellState {
   sidebarCollapsed: boolean
   toggleSidebar: () => void
   inspectorCollapsed: boolean
+  /** The details panel opens over the page (narrow windows) rather than in its own column. */
+  inspectorOverlay: boolean
   toggleInspector: () => void
   /** Whether the open page shows a details panel. */
   inspectorMounted: boolean

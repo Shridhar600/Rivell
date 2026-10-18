@@ -1507,9 +1507,23 @@ a {
   .rv-stage {
     grid-template-columns: minmax(0, 1fr);
   }
-  /* Hidden with its panel, so the control never promises an effect it cannot have. */
-  .rv-insp,
-  .rv-topbar__insp {
+  /* The details panel opens over the page here, from the same top bar toggle. */
+  .rv-stage {
+    position: relative;
+  }
+  .rv-insp {
+    position: absolute;
+    top: var(--rv-h-topbar);
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(var(--rv-w-inspector), 92vw);
+    box-shadow: var(--sh-overlay);
+  }
+  .rv-shell[data-inspector='collapsed'] .rv-insp {
+    display: none;
+  }
+  .rv-insp__resize {
     display: none;
   }
 }
@@ -1571,6 +1585,15 @@ a {
   .rv-row__time,
   .rv-row .rv-chip {
     display: none;
+  }
+}
+@media (max-width: 980px) {
+  /* The review workspace and a knowledge draft stack their panes and grow taller than the window
+     here, so the stage scrolls them. */
+  .rv-stage:has(> .rv-ws),
+  .rv-stage:has(.rv-kc) {
+    grid-template-rows: auto;
+    overflow-y: auto;
   }
 }
 @media (max-width: 900px) {

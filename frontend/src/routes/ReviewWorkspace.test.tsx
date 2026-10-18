@@ -101,6 +101,17 @@ describe('workspace layout', () => {
     expect(globalThis.localStorage?.getItem('rv-ws-detail-width')).toBe('396')
   })
 
+  it('ignores its single-key shortcuts while focus is outside the workspace, on the top bar', async () => {
+    const router = renderWorkspace(stubContractApi(options()))
+    await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
+    await waitFor(() => expect(router.state.location.search).toBe('?finding=f-1'))
+    within(await topBar()).getByRole('button', { name: 'Search' }).focus()
+    await userEvent.keyboard('j')
+    expect(router.state.location.search).toBe('?finding=f-1')
+    await userEvent.keyboard('r')
+    expect(screen.queryByRole('dialog', { name: /reject/i })).not.toBeInTheDocument()
+  })
+
   it('opens on the first finding that needs a decision and names it in the URL', async () => {
     const router = renderWorkspace(stubContractApi(options()))
     await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
@@ -163,9 +174,12 @@ describe('finalize is the server’s decision', () => {
     expect(await topBar()).not.toHaveTextContent(/unresolved/)
     const progress = (await topBar()).querySelector('.rv-ws-prog') as HTMLElement
     expect(progress).toHaveAttribute('title', 'Not ready to finalize')
-    // The old disclosure is gone; the reason lives on the finalize control instead.
-    expect(document.querySelector('details.rv-ws-why')).not.toBeInTheDocument()
-    expect(await topBar()).not.toHaveTextContent('1 finding that requires review still needs a decision.')
+    // The reason is also one click or Enter away, for keyboard and screen reader users.
+    const why = within(await topBar()).getByText('', { selector: 'summary[aria-label="Why the review cannot be finalized yet"]' })
+    await userEvent.click(why)
+    expect(screen.getByRole('group', { name: 'What is left before you can finalize' })).toHaveTextContent(
+      '1 finding that requires review still needs a decision.',
+    )
   })
 
   it('is enabled only when the server says ready, and finalizes after one confirmation', async () => {

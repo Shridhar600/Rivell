@@ -1361,9 +1361,10 @@ h3.rv-ws-sec-h {
 
 /* ---------- responsive ---------- */
 @media (max-width: 1240px) {
+  /* Narrower defaults, but a width the reader dragged to still wins. */
   .rv-ws-work {
-    --lw: 240px;
-    --rw: 340px;
+    --lw: var(--lw-open, 240px);
+    --rw: var(--rw-open, 340px);
   }
   .rv-ws-work[data-l='c'] {
     --lw: 0px;
@@ -1379,6 +1380,10 @@ h3.rv-ws-sec-h {
   .rv-ws {
     height: auto;
     overflow: visible;
+  }
+  /* The panes stack into one column here, so there is nothing to resize. */
+  .rv-ws-resize {
+    display: none;
   }
   .rv-ws-work {
     grid-template-columns: 1fr;
@@ -1536,4 +1541,36 @@ h3.rv-ws-sec-h {
 }
 .rv-ws-resize--r {
   right: calc(var(--rw) - 3px);
+}
+
+/* What still blocks Finalize: a small popover under an info button. */
+.rv-ws-blk {
+  position: relative;
+}
+.rv-ws-blk > summary {
+  list-style: none;
+  color: var(--amber);
+}
+.rv-ws-blk > summary::-webkit-details-marker {
+  display: none;
+}
+.rv-ws-blk__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 6px;
+  width: 300px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  box-shadow: var(--sh-overlay);
+  color: var(--text-2);
+  font-size: 12.5px;
+  animation: rv-pop var(--t-base) var(--ease);
+}
+.rv-ws-blk__pop p {
+  margin: 0;
 }

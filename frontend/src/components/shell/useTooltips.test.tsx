@@ -40,6 +40,17 @@ describe('app tooltip', () => {
     expect(button).toHaveAttribute('title', 'Hide sidebar [')
   })
 
+  it('keeps a title React wrote while the tip showed, instead of restoring the old one', () => {
+    vi.useFakeTimers()
+    render(<Harness />)
+    const button = screen.getByRole('button')
+    pointer('pointerover', button)
+    act(() => vi.advanceTimersByTime(500))
+    button.setAttribute('title', 'Show sidebar [')
+    pointer('pointerout', button, document.body)
+    expect(button).toHaveAttribute('title', 'Show sidebar [')
+  })
+
   it('never shows for a touch, and hides on a click', () => {
     vi.useFakeTimers()
     render(<Harness />)
