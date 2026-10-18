@@ -168,6 +168,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             searchBundle = evidenceService.buildForPositionSearch(bundle.request(),
                     judgedPositions.stream().map(judged -> judged.position().sourceCandidateId())
                             .collect(java.util.stream.Collectors.toSet()),
+                    removedTopicKeys(clause),
                     properties.searchLimit());
             var found = searchBundle.policyItems();
             var search = new LinkedHashMap<String, Object>();
@@ -608,6 +609,15 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var primary = clause.effectivePrimaryConcept();
         return primary.isPresent() && !position.topicKeys().isEmpty()
                 && !position.topicKeys().contains(primary.get().value());
+    }
+
+    /**
+     * DW-085: a topic the person removed from this clause must not come back through the text
+     * search, so positions carrying it are excluded from this clause's search candidates.
+     */
+    private static java.util.Set<String> removedTopicKeys(ClauseSemantics clause) {
+        return ClauseTopics.removedTopics(clause).stream()
+                .map(ConceptKey::value).collect(java.util.stream.Collectors.toSet());
     }
 
     private static boolean wantsLanguage(String category) {

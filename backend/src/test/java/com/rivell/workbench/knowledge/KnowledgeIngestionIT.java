@@ -140,6 +140,22 @@ class KnowledgeIngestionIT {
         assertThat(dataRow.rawLabel()).isEqualTo("Liability cap");
     }
 
+    /**
+     * DW-088: PostgreSQL timestamptz keeps microseconds. The returned artifact must already carry
+     * microsecond precision, or it differs from the same artifact read back later.
+     */
+    @Test
+    void theReturnedArtifactCarriesTheTimestampPrecisionTheDatabaseKeeps() throws Exception {
+        var manifest = new ArtifactManifest(
+                Set.of("MSA"), "MSA_PACK", "Customer", "Third-Party", "US", "en", null, null, null);
+        var artifact = ingest("fixtures/knowledge-playbook.docx", "playbook.docx",
+                ArtifactType.PLAYBOOK, manifest);
+
+        assertThat(artifact.createdAt().getNano() % 1000).isZero();
+        var readBack = queryService.getArtifact(artifact.id());
+        assertThat(readBack.createdAt()).isEqualTo(artifact.createdAt());
+    }
+
     @Test
     void compilesClauseLibraryCandidatesWithExactText() throws Exception {
         var artifact = ingest("fixtures/clause-library.docx", "library.docx",

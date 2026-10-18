@@ -63,6 +63,7 @@ import { ClauseDetails } from '../components/workspace/ClauseDetails'
 import { ContractAnalysis } from '../components/workspace/ContractAnalysis'
 import { LinkButton } from '../components/ui/Button'
 import { sourceLink } from '../lib/evidence'
+import { warningLabel } from '../lib/warnings'
 import { useDecisionFlow } from '../components/workspace/useDecisionFlow'
 import { WorkspaceSheet } from '../components/workspace/WorkspaceSheet'
 import { FROZEN_NOTE_ID, WorkspaceTopBar } from '../components/workspace/WorkspaceTopBar'
@@ -476,6 +477,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   }
   const coverageNote = coverageLimitationSummary(summary.coverage, labelFor)
   if (coverageNote) noteLines.push(coverageNote)
+  // What the parser could not read or had to repair, so a miss there is not read as Rivell's judgement.
+  for (const warning of structureQuery.data?.parseWarnings ?? []) noteLines.push(warningLabel(warning))
   if (analysisCompleted && summary.failedChecks > 0) {
     noteLines.push('Some checks did not complete. Review the analysis warnings.')
   }

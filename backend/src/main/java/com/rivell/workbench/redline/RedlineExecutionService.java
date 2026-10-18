@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -81,8 +82,11 @@ public class RedlineExecutionService {
         if (existing.isPresent()) {
             return requireSuccessful(existing.get());
         }
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned execution would not match a later read of it.
         return requireSuccessful(
-                attempt(changeSet, organizationId, identity.userId(), 1, clock.instant()));
+                attempt(changeSet, organizationId, identity.userId(), 1,
+                        clock.instant().truncatedTo(ChronoUnit.MICROS)));
     }
 
     /**
@@ -117,7 +121,7 @@ public class RedlineExecutionService {
                     "Only a FAILED redline execution can be retried.");
         }
         return requireSuccessful(attempt(changeSet, organizationId, identity.userId(),
-                latest.attemptNumber() + 1, clock.instant()));
+                latest.attemptNumber() + 1, clock.instant().truncatedTo(ChronoUnit.MICROS)));
     }
 
     /**
@@ -314,9 +318,12 @@ public class RedlineExecutionService {
                     report.paragraphsDeleted(), report.paragraphsInserted(),
                     report.revisionIdStart(), report.revisionIdEnd()));
         }
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned execution would not match a later read of it.
+        var completedAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
         var artifact = new RedlineArtifact(artifactId, organizationId, executionId,
                 filename(organizationId, changeSet), RedlineArtifact.DOCX_CONTENT_TYPE,
-                rendered.bytes().length, rendered.sha256(), storageKey, clock.instant());
+                rendered.bytes().length, rendered.sha256(), storageKey, completedAt);
         return new RedlineExecution(executionId, organizationId, changeSet.reviewId(),
                 changeSet.id(), attemptNumber, changeSet.contractId(),
                 changeSet.contractVersionId(),
@@ -325,12 +332,14 @@ public class RedlineExecutionService {
                 null, null, RedlinePlanResolver.RENDERER_VERSION,
                 InsertPlacementStrategy.VERSION, sourceSha, changeSet.semanticsDigest(),
                 changeSet.changes().size(),
-                requestedBy, startedAt, clock.instant(), changes, artifact);
+                requestedBy, startedAt, completedAt, changes, artifact);
     }
 
     private RedlineExecution completedNoChanges(
             ApprovedChangeSet changeSet, UUID organizationId, UUID requestedBy,
             int attemptNumber, java.time.Instant startedAt) {
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned execution would not match a later read of it.
         return new RedlineExecution(UUID.randomUUID(), organizationId, changeSet.reviewId(),
                 changeSet.id(), attemptNumber, changeSet.contractId(),
                 changeSet.contractVersionId(),
@@ -338,7 +347,8 @@ public class RedlineExecutionService {
                 RedlineExecutionStatus.COMPLETED, RedlineOutcome.NO_CHANGES, null, null,
                 RedlinePlanResolver.RENDERER_VERSION, InsertPlacementStrategy.VERSION,
                 null, changeSet.semanticsDigest(), 0,
-                requestedBy, startedAt, clock.instant(), List.of(), null);
+                requestedBy, startedAt, clock.instant().truncatedTo(ChronoUnit.MICROS),
+                List.of(), null);
     }
 
     private RedlineExecution fail(
@@ -377,6 +387,8 @@ public class RedlineExecutionService {
                     change.targetKind(), status, verificationStatus, changeFailure, null,
                     null, null, null, null, null));
         }
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned execution would not match a later read of it.
         var execution = new RedlineExecution(executionId, organizationId, changeSet.reviewId(),
                 changeSet.id(), attemptNumber, changeSet.contractId(),
                 changeSet.contractVersionId(),
@@ -384,7 +396,8 @@ public class RedlineExecutionService {
                 RedlineExecutionStatus.FAILED, null, code, sanitized(detail),
                 RedlinePlanResolver.RENDERER_VERSION, InsertPlacementStrategy.VERSION,
                 sourceSha, changeSet.semanticsDigest(), changeSet.changes().size(),
-                requestedBy, startedAt, clock.instant(), changes, null);
+                requestedBy, startedAt, clock.instant().truncatedTo(ChronoUnit.MICROS),
+                changes, null);
         return persist(execution);
     }
 

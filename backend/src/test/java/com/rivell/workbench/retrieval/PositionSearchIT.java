@@ -50,6 +50,10 @@ class PositionSearchIT {
     private static final String NOTICE_CLAUSE = "Either party may end this agreement for "
             + "convenience by giving sixty days written notice to the other party.";
 
+    /** A clause about the liability cap in the liability position's own words. */
+    private static final String LIABILITY_CLAUSE = "The total liability of Supplier under this "
+            + "agreement is uncapped and unlimited, however arising.";
+
     @Container
     static final PostgreSQLContainer postgres = new PostgreSQLContainer(POSTGRES_IMAGE)
             .withDatabaseName("rivell")
@@ -194,7 +198,7 @@ class PositionSearchIT {
         var positions = publishPlaybook(organizationId, M6EvidenceCorpus.msaManifest2026());
 
         var bundle = evidenceService.buildForPositionSearch(
-                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), 3);
+                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), Set.of(), 3);
 
         assertThat(foundIds(bundle)).isNotEmpty().hasSizeLessThanOrEqualTo(3);
         assertThat(foundIds(bundle).getFirst()).isEqualTo(positionId(positions, "Termination"));
@@ -213,10 +217,27 @@ class PositionSearchIT {
         var termination = positionId(positions, "Termination");
 
         var bundle = evidenceService.buildForPositionSearch(
-                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(termination), 3);
+                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(termination), Set.of(), 3);
 
         // excluded before ranking: the other three positions still fill the limit
         assertThat(foundIds(bundle)).hasSize(3).doesNotContain(termination);
+    }
+
+    @Test
+    void positionsCarryingATopicTheCallerExcludedAreNotReturned() {
+        var organizationId = organizationId();
+        var positions = publishPlaybook(organizationId, M6EvidenceCorpus.msaManifest2026());
+        var liability = positions.stream()
+                .filter(position -> "Limitation of Liability".equals(position.rawLabel()))
+                .findFirst().orElseThrow();
+        assertThat(liability.topicKeys()).as("the fixture position must carry a topic").isNotEmpty();
+
+        var bundle = evidenceService.buildForPositionSearch(
+                noTopicRequest(organizationId, LIABILITY_CLAUSE), Set.of(),
+                Set.copyOf(liability.topicKeys()), 10);
+
+        // DW-085: excluding the topic a person removed takes its positions out of the candidates
+        assertThat(foundIds(bundle)).isNotEmpty().doesNotContain(liability.id());
     }
 
     @Test
@@ -226,7 +247,7 @@ class PositionSearchIT {
         embeddings.down = true;
 
         var bundle = evidenceService.buildForPositionSearch(
-                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), 3);
+                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), Set.of(), 3);
 
         assertThat(foundIds(bundle).getFirst()).isEqualTo(positionId(positions, "Termination"));
         assertThat(bundle.degradationWarnings()).contains("VECTOR_LANE_UNAVAILABLE");
@@ -247,7 +268,7 @@ class PositionSearchIT {
                 .param(organizationId).update();
 
         var bundle = evidenceService.buildForPositionSearch(
-                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), 3);
+                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), Set.of(), 3);
 
         assertThat(bundle.degradationWarnings()).contains("VECTOR_INDEX_INCOMPLETE");
         assertThat(bundle.policyItems()).isNotEmpty().allSatisfy(item ->
@@ -262,7 +283,7 @@ class PositionSearchIT {
         var ndaPositions = publishPlaybook(organizationId, M6EvidenceCorpus.ndaManifest());
 
         var bundle = evidenceService.buildForPositionSearch(
-                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), 10);
+                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), Set.of(), 10);
 
         assertThat(foundIds(bundle)).contains(positionId(msaPositions, "Termination"))
                 .doesNotContainAnyElementsOf(
@@ -279,7 +300,7 @@ class PositionSearchIT {
         identityProvider.use(new UserIdentity(UUID.randomUUID(), organizationA, Set.of("ADMIN")));
 
         var bundle = evidenceService.buildForPositionSearch(
-                noTopicRequest(organizationA, NOTICE_CLAUSE), Set.of(), 10);
+                noTopicRequest(organizationA, NOTICE_CLAUSE), Set.of(), Set.of(), 10);
 
         assertThat(foundIds(bundle)).isNotEmpty()
                 .allMatch(id -> positionsA.stream().anyMatch(position -> position.id().equals(id)))
@@ -293,7 +314,7 @@ class PositionSearchIT {
         publishPlaybook(organizationId, M6EvidenceCorpus.msaManifest2026());
 
         var bundle = evidenceService.buildForPositionSearch(
-                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), 3);
+                noTopicRequest(organizationId, NOTICE_CLAUSE), Set.of(), Set.of(), 3);
 
         var first = bundle.policyItems().getFirst();
         assertThat(first.retrievalReason()).isEqualTo("SEARCH");

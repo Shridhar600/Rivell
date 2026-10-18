@@ -166,6 +166,33 @@ class KnowledgeReviewPublicationIT {
                         "[\"CONFLICT_DETECTED\",\"DUPLICATE_DETECTED\",\"SUPERSESSION_PROPOSED\"]"));
     }
 
+    /**
+     * DW-088: PostgreSQL timestamptz keeps microseconds. Every transition returns the candidate it
+     * wrote, so the returned timestamps must already carry the precision the database keeps. Each
+     * step is read back before the next one, because the next transition rewrites the row.
+     */
+    @Test
+    void returnedReviewTimestampsCarryTheTimestampPrecisionTheDatabaseKeeps() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var candidate = firstVariant(ingestClauseLibrary());
+
+        var edited = reviewService.edit(candidate.id(), "Human edited liability language.",
+                null, null, null, null);
+        assertReturnedMatchesStored(edited, organizationId);
+        var approved = reviewService.approve(edited.id(), "Looks right");
+        assertReturnedMatchesStored(approved, organizationId);
+        var rejected = reviewService.reject(approved.id(), "Changed my mind");
+        assertReturnedMatchesStored(rejected, organizationId);
+    }
+
+    private void assertReturnedMatchesStored(KnowledgeCandidate returned, UUID organizationId) {
+        assertThat(returned.reviewedAt().getNano() % 1000).isZero();
+        assertThat(returned.updatedAt().getNano() % 1000).isZero();
+        var readBack = rawRepository.findCandidate(returned.id(), organizationId).orElseThrow();
+        assertThat(readBack.reviewedAt()).isEqualTo(returned.reviewedAt());
+        assertThat(readBack.updatedAt()).isEqualTo(returned.updatedAt());
+    }
+
     @Test
     void approveEditRejectLifecyclePreservesOriginalContent() throws Exception {
         var artifact = ingestClauseLibrary();

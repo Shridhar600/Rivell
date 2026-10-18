@@ -1,6 +1,7 @@
 package com.rivell.workbench.workflow;
 
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -104,11 +105,14 @@ public class UserFindingService {
                 throw new ReviewAlreadyFinalizedException(reviewId);
             }
             var id = UUID.randomUUID();
+            // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would
+            // be stored rounded, so the returned finding would not match a later read of it.
             var finding = new Finding(id, organizationId, reviewId, activeRun.id(), "user:" + id,
                     FindingSubjectKind.CLAUSE, command.headingNodeId(), null, planned.concept(),
                     null, IssueFamily.USER_ADDED, IssueFamily.USER_ADDED.name(), note, severity,
                     FindingClassification.REVIEW_REQUIRED, ProposedAction.NO_ACTION, null,
-                    ProposedLanguageSource.NONE, null, Map.of(), clock.instant(),
+                    ProposedLanguageSource.NONE, null, Map.of(),
+                    clock.instant().truncatedTo(ChronoUnit.MICROS),
                     List.of(planned.concept()), List.of(), List.of(), List.of(),
                     identity.userId());
             findingRepository.addFinding(finding);

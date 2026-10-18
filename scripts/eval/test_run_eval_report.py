@@ -44,11 +44,30 @@ class EngineMetaTest(unittest.TestCase):
             self.assertEqual(run_eval.engine_meta()["definitions"], "false")
 
     def test_the_environment_overrides_all_three_and_is_lower_cased(self):
+        # the engine switch is retired: the backend always freezes v2, so only the live switches
+        # (omissions, definitions) still come from the environment
         with mock.patch.dict(os.environ,
                              {"RIVELL_REVIEW_ENGINE": "V1", "RIVELL_REVIEW_OMISSIONS": "TRUE",
                               "RIVELL_REVIEW_DEFINITIONS": "FALSE"}):
             self.assertEqual(run_eval.engine_meta(),
-                             {"engine": "v1", "omissions": "true", "definitions": "false"})
+                             {"engine": "v2", "omissions": "true", "definitions": "false"})
+
+
+class StoredEngineTest(unittest.TestCase):
+
+    def test_the_run_label_comes_from_the_stored_review_snapshot(self):
+        self.assertEqual(run_eval.review_engine({"snapshot": {"engine": "V2"}}), "v2")
+        results = [{"contracts": [{"reviewEngine": "v2"}, {"reviewEngine": "v2"}]}]
+        self.assertEqual(run_eval.frozen_engine(results), "v2")
+
+    def test_a_review_that_froze_on_another_engine_names_it(self):
+        results = [{"contracts": [{"reviewEngine": "v1"}]}]
+        self.assertEqual(run_eval.frozen_engine(results), "v1")
+
+    def test_a_review_without_a_snapshot_defers_to_v2(self):
+        self.assertEqual(run_eval.review_engine({}), "v2")
+        self.assertEqual(run_eval.frozen_engine([]), "v2")
+        self.assertEqual(run_eval.frozen_engine([{"contracts": [{}]}]), "v2")
 
 
 class ReportHeaderTest(unittest.TestCase):
@@ -61,6 +80,10 @@ class ReportHeaderTest(unittest.TestCase):
         text = "\n".join(run_eval.header_lines(self.meta(engine="v2", omissions="false")))
         self.assertNotIn("engine", text)
         self.assertNotIn("omissions", text)
+
+    def test_issue_spotting_is_not_claimed_from_a_retired_switch(self):
+        text = "\n".join(run_eval.header_lines(self.meta(engine="v2")))
+        self.assertNotIn("issue spotting", text)
 
     def test_a_v1_run_names_the_engine_and_the_lane_only_when_on(self):
         text = "\n".join(run_eval.header_lines(self.meta(engine="v1", omissions="true")))
