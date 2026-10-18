@@ -1,6 +1,6 @@
-import { use, type ReactNode } from 'react'
+import { use, useEffect, type ReactNode } from 'react'
 import { IconButton } from '../ui/Button'
-import { EdgeChevron } from '../ui/Icon'
+import { PanelRightIcon } from '../ui/Icon'
 import { SearchIcon } from '../workspace/WorkspaceIcons'
 import { PanelResizeHandle } from './PanelResizeHandle'
 import { INSPECTOR_WIDTH, ShellContext, useShell } from './ShellContext'
@@ -32,8 +32,30 @@ export function TopBar({ title, leading, actions }: TopBarProps) {
         )}
       </div>
       <SearchButton />
-      <div className="rv-topbar__actions">{actions}</div>
+      <div className="rv-topbar__actions">
+        {actions}
+        <InspectorToggle />
+      </div>
     </header>
+  )
+}
+
+/** The details panel's toggle, in the same place as the review workspace's detail toggle. */
+function InspectorToggle() {
+  const shell = use(ShellContext)
+  if (!shell?.inspectorMounted) return null
+  const { inspectorCollapsed, toggleInspector } = shell
+  return (
+    <IconButton
+      className="rv-topbar__insp"
+      label="Details panel"
+      expanded={!inspectorCollapsed}
+      controls={INSPECTOR_ID}
+      title={inspectorCollapsed ? 'Show details ]' : 'Hide details ]'}
+      onClick={toggleInspector}
+    >
+      <PanelRightIcon className="rv-icon" />
+    </IconButton>
   )
 }
 
@@ -58,7 +80,12 @@ interface InspectorProps {
 }
 
 export function Inspector({ status, children }: InspectorProps) {
-  const { inspectorCollapsed, toggleInspector, inspectorWidth, resizeInspector } = useShell()
+  const { inspectorCollapsed, inspectorWidth, resizeInspector, setInspectorMounted } = useShell()
+  // The top bar offers the panel's toggle only while a page has a panel to show.
+  useEffect(() => {
+    setInspectorMounted(true)
+    return () => setInspectorMounted(false)
+  }, [setInspectorMounted])
   return (
     <aside className="rv-insp" id={INSPECTOR_ID} aria-label="Details">
       {/*
@@ -74,16 +101,6 @@ export function Inspector({ status, children }: InspectorProps) {
       {inspectorCollapsed ? null : (
         <PanelResizeHandle className="rv-insp__resize" label="Resize details panel" edge="left" width={inspectorWidth} limits={INSPECTOR_WIDTH} onResize={resizeInspector} />
       )}
-      <IconButton
-        className={`rv-edge rv-edge--inspector${inspectorCollapsed ? ' rv-edge--open' : ''}`}
-        label="Details panel"
-        expanded={!inspectorCollapsed}
-        controls={INSPECTOR_ID}
-        title={inspectorCollapsed ? 'Show details ]' : 'Hide details ]'}
-        onClick={toggleInspector}
-      >
-        <EdgeChevron className="rv-icon" />
-      </IconButton>
     </aside>
   )
 }

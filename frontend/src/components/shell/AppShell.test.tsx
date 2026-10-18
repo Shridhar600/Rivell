@@ -127,7 +127,7 @@ describe('sidebar owns its own collapse control', () => {
     renderAt('/')
     await userEvent.click(await screen.findByRole('option', { name: /Unresolved MSA\.docx/i }))
     const details = screen.getByRole('complementary', { name: 'Details' })
-    await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
@@ -271,12 +271,12 @@ describe('sidebar width', () => {
 })
 
 describe('inspector panel', () => {
-  it('toggles from its own panel edge and keeps its grid column', async () => {
+  it('toggles from the end of the top bar and keeps its grid column', async () => {
     stubApi()
     const { container } = renderAt('/reviews/new')
-    const details = screen.getByRole('complementary', { name: 'Details' })
-    const toggle = within(details).getByRole('button', { name: 'Details panel' })
-    expect(toggle).toHaveClass('rv-edge--inspector')
+    const topbar = document.querySelector('.rv-topbar') as HTMLElement
+    const toggle = screen.getByRole('button', { name: 'Details panel' })
+    expect(topbar).toContainElement(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(toggle).toHaveAttribute('aria-controls', 'rv-inspector')
     expect(toggle).not.toHaveAttribute('aria-pressed')
@@ -286,10 +286,10 @@ describe('inspector panel', () => {
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
     // Still reachable, otherwise the panel could never be reopened.
-    expect(within(details).getByRole('button', { name: 'Details panel' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Details panel' })).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('is not in the top bar', () => {
+  it('offers no details toggle on a page without a details panel', () => {
     stubApi()
     renderAt('/')
     const topbar = document.querySelector('.rv-topbar') as HTMLElement
@@ -422,7 +422,7 @@ describe('responsive shell structure', () => {
     const { container } = renderAt('/reviews/new')
     expect(container.querySelector('.rv-insp')).toBeInTheDocument()
     const details = screen.getByRole('complementary', { name: 'Details' })
-    await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
@@ -434,13 +434,13 @@ describe('responsive shell structure', () => {
     stubApi()
     renderAt('/reviews/new')
     const details = screen.getByRole('complementary', { name: 'Details' })
-    const handle = within(details).getByRole('button', { name: 'Details panel' })
+    const handle = screen.getByRole('button', { name: 'Details panel' })
     await userEvent.click(handle)
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
     // Still operable after collapsing, so the panel can always be reopened.
-    await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).not.toHaveAttribute('data-inspector', 'collapsed'),
     )
@@ -499,19 +499,6 @@ describe('panel toggles', () => {
     const after = screen.getByRole('button', { name: 'Sidebar' })
     expect(after).toHaveAttribute('aria-expanded', 'false')
     expect(after).toHaveAttribute('title', expect.stringContaining('Show sidebar'))
-  })
-
-  it('styles the inspector handle once, so no stale duplicate rule can win on order', () => {
-    const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
-    expect(css.match(/^\.rv-iconbtn\.rv-edge \{/gm) ?? []).toHaveLength(1)
-  })
-
-  it('derives the handle offset from its own width, never a percentage', () => {
-    const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
-    const handle = css.slice(css.indexOf('.rv-iconbtn.rv-edge {'))
-    expect(handle.slice(0, 400)).toContain('calc(var(--rv-edge-w) / -2 - 1px)')
-    // A percentage here resolves against the 340px panel, not the 20px handle.
-    expect(handle.slice(0, 400)).not.toMatch(/-1 \* \(50%/)
   })
 })
 

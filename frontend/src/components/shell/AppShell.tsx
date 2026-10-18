@@ -54,6 +54,7 @@ export function AppShell() {
     })
   }, [narrow, onWorkSurface, pathname])
 
+  const [inspectorMounted, setInspectorMounted] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [readPageCommands, setReadPageCommands] = useState<(() => PageCommands) | null>(null)
   const openSearch = useCallback(() => setSearchOpen(true), [])
@@ -86,8 +87,8 @@ export function AppShell() {
   usePanelShortcut(toggleSidebar, toggleInspector)
 
   const state = useMemo<ShellState>(
-    () => ({ sidebarCollapsed: railed, toggleSidebar, inspectorCollapsed, toggleInspector, inspectorWidth, resizeInspector, searchOpen, openSearch, setPageCommands }),
-    [railed, toggleSidebar, inspectorCollapsed, toggleInspector, inspectorWidth, resizeInspector, searchOpen, openSearch, setPageCommands],
+    () => ({ sidebarCollapsed: railed, toggleSidebar, inspectorCollapsed, toggleInspector, inspectorMounted, setInspectorMounted, inspectorWidth, resizeInspector, searchOpen, openSearch, setPageCommands }),
+    [railed, toggleSidebar, inspectorCollapsed, toggleInspector, inspectorMounted, setInspectorMounted, inspectorWidth, resizeInspector, searchOpen, openSearch, setPageCommands],
   )
 
   return (

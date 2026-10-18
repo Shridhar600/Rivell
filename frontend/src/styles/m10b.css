@@ -11,7 +11,6 @@
   --rv-w-sidebar-collapsed: var(--w-sidebar-collapsed);
   --rv-w-inspector: var(--w-inspector);
   --rv-h-topbar: var(--h-topbar);
-  --rv-edge-w: 20px;
 }
 
 *,
@@ -440,36 +439,7 @@ a {
  * it stays reachable. It is a small divider handle, not a floating card, and its chevron points
  * the way the panel will move.
  */
-.rv-iconbtn.rv-edge {
-  position: absolute;
-  z-index: 3;
-  top: calc(var(--rv-h-topbar) + 15px);
-  left: calc(var(--rv-edge-w) / -2 - 1px);
-  width: 20px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
-  background: var(--bg);
-  box-shadow: var(--sh-xs);
-  color: var(--text-2);
-}
-.rv-iconbtn.rv-edge:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--text-3);
-  background: var(--hover);
-}
-.rv-iconbtn.rv-edge:focus-visible {
-  outline: none;
-  box-shadow: var(--rv-focus);
-}
 /* The base chevron points left; rotation states which way the panel will move. */
-.rv-edge--inspector .rv-icon {
-  transform: rotate(180deg);
-}
-.rv-edge--inspector.rv-edge--open .rv-icon {
-  transform: rotate(0deg);
-}
 
 /* ---------- chip / badge / glyph ---------- */
 .rv-chip {
@@ -867,7 +837,6 @@ a {
 .rv-shell[data-inspector='collapsed'] .rv-insp > * {
   visibility: hidden;
 }
-.rv-shell[data-inspector='collapsed'] .rv-insp > .rv-edge--inspector,
 .rv-shell[data-inspector='collapsed'] .rv-insp > [role='status'] {
   visibility: visible;
 }
@@ -1508,7 +1477,8 @@ a {
     grid-template-columns: minmax(0, 1fr);
   }
   /* Hidden with its panel, so the control never promises an effect it cannot have. */
-  .rv-insp {
+  .rv-insp,
+  .rv-topbar__insp {
     display: none;
   }
 }

@@ -12,6 +12,9 @@ export interface ShellState {
   toggleSidebar: () => void
   inspectorCollapsed: boolean
   toggleInspector: () => void
+  /** Whether the open page shows a details panel. */
+  inspectorMounted: boolean
+  setInspectorMounted: (mounted: boolean) => void
   inspectorWidth: number
   resizeInspector: (width: number) => void
   searchOpen: boolean
