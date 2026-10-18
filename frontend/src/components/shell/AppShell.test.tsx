@@ -8,6 +8,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { appRoutes } from '../../app/router'
+import { stubContractApi } from '../contract/testFixtures'
+import { fixtureCompletedReviewSummary, fixtureFindingList } from '../review/testFixtures'
+import { fixtureHumanReview } from '../review/workflowFixtures'
 import { LIFECYCLE_ROWS, reviewWire } from '../../test/reviewListFixtures'
 
 function envelope(data: unknown) {
@@ -31,11 +34,12 @@ function stubApi(reviews: unknown[] = []) {
 function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   )
+  return { ...view, router }
 }
 
 afterEach(() => {
@@ -102,7 +106,8 @@ describe('sidebar owns its own collapse control', () => {
     expect(toggle).toHaveClass('rv-side__toggle')
     expect(toggle.closest('.rv-side__head')).not.toBeNull()
     expect(toggle).toHaveAttribute('title', expect.stringContaining('Collapse sidebar'))
-    expect(within(topbar).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(topbar).queryByRole('button', { name: 'Sidebar' })).not.toBeInTheDocument()
+    expect(within(topbar).getByRole('button', { name: 'Search' })).toBeInTheDocument()
   })
 
   it('keeps a stable accessible name and uses aria-expanded, not aria-pressed', () => {
@@ -264,7 +269,63 @@ describe('inspector panel', () => {
     stubApi()
     renderAt('/')
     const topbar = document.querySelector('.rv-topbar') as HTMLElement
-    expect(within(topbar).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(topbar).queryByRole('button', { name: 'Details panel' })).not.toBeInTheDocument()
+    expect(within(topbar).getByRole('button', { name: 'Search' })).toBeInTheDocument()
+  })
+})
+
+describe('one search menu for the whole app', () => {
+  it.each(['/', '/knowledge'])('%s opens the Search dialog with ⌘K', async (path) => {
+    stubApi()
+    renderAt(path)
+    expect(await screen.findByRole('banner')).toBeInTheDocument()
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    const dialog = await screen.findByRole('dialog', { name: 'Search' })
+    expect(within(dialog).getByRole('textbox', { name: 'Search' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('listbox', { name: 'Results' })).toBeInTheDocument()
+  })
+
+  it('opens the Search dialog from the top bar button', async () => {
+    stubApi()
+    renderAt('/')
+    await userEvent.click(await screen.findByRole('button', { name: 'Search' }))
+    expect(await screen.findByRole('dialog', { name: 'Search' })).toBeInTheDocument()
+  })
+
+  it('lists a review by filename under Reviews and opens its overview', async () => {
+    stubApi([reviewWire('r-1', 'COMPLETED', 'Acme MSA.docx', { contractId: 'c9' })])
+    const { router } = renderAt('/')
+    await screen.findByRole('heading', { name: 'Rivell' })
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    const dialog = await screen.findByRole('dialog', { name: 'Search' })
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Search' }), 'Acme')
+    const heading = await within(dialog).findByText('Reviews', { selector: '.rv-ws-pal-h' })
+    const group = heading.parentElement as HTMLElement
+    await userEvent.click(within(group).getByRole('option', { name: /Acme MSA/ }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/overview/r-1'))
+  })
+})
+
+describe('the workspace starts from the icon rail', () => {
+  it('rails the app sidebar without changing the saved preference, and expands it on this page only', async () => {
+    globalThis.localStorage?.setItem('rv-sidebar', '')
+    stubContractApi({
+      reviewSummary: fixtureCompletedReviewSummary,
+      findings: fixtureFindingList,
+      humanReview: fixtureHumanReview(),
+    })
+    const { container } = renderAt('/reviews/c1/analysis/r-1')
+    await screen.findByRole('banner')
+
+    const shell = container.querySelector('.rv-shell') as HTMLElement
+    expect(shell).toHaveAttribute('data-sidebar', 'collapsed')
+    expect(globalThis.localStorage?.getItem('rv-sidebar')).toBe('')
+    const toggle = screen.getByRole('button', { name: 'Sidebar' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(toggle)
+    await waitFor(() => expect(shell).not.toHaveAttribute('data-sidebar', 'collapsed'))
+    expect(globalThis.localStorage?.getItem('rv-sidebar')).toBe('')
   })
 })
 

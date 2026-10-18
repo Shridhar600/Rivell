@@ -30,6 +30,7 @@ import { Journey, StatusPill } from '../components/lifecycle/parts'
 import { RedlinePanel } from '../components/lifecycle/RedlinePanel'
 import { ReportPanel } from '../components/lifecycle/ReportPanel'
 import { StateCard } from '../components/lifecycle/StateCard'
+import { Breadcrumbs } from '../components/shell/Breadcrumbs'
 import { Inspector, TopBar } from '../components/shell/TopBar'
 import { LinkButton } from '../components/ui/Button'
 import { buildRegionLabelMap } from '../lib/contractSemantics'
@@ -123,15 +124,7 @@ export function ReviewLifecyclePage() {
   const title = pinnedFilename ?? contractQuery.data?.title ?? 'Contract review'
   const workspaceTo = workspacePath(contractId, reviewId)
 
-  const crumbs = (
-    <nav className="rv-crumbs" aria-label="Breadcrumb">
-      <Link to={REVIEWS_PATH}>Contract reviews</Link>
-      <span className="rv-crumbs__sep" aria-hidden="true">
-        /
-      </span>
-      <b aria-current="page">{summary ? title : 'Review'}</b>
-    </nav>
-  )
+  const crumbs = <Breadcrumbs crumbs={[{ label: 'Reviews', to: REVIEWS_PATH }, { label: summary ? title : 'Review' }]} />
 
   const shell = (content: ReactNode, rail?: ReactNode) => (
     <>

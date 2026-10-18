@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   isContractForbiddenError,
@@ -52,7 +52,8 @@ import { ReviewContext } from '../components/review/ReviewContext'
 import { ReviewCoveragePanel } from '../components/review/ReviewCoveragePanel'
 import { readPanelFlag, writePanelFlag } from '../components/shell/ShellContext'
 import { ErrorState, LoadingState } from '../components/ui/State'
-import { CommandPalette, type PaletteItem } from '../components/workspace/CommandPalette'
+import type { PaletteItem } from '../components/ui/CommandPalette'
+import { usePageCommands, useShell } from '../components/shell/ShellContext'
 import { ContractPane, type DocMode } from '../components/workspace/ContractPane'
 import { DecisionHistorySheet } from '../components/workspace/DecisionHistorySheet'
 import { FindingNavigator } from '../components/workspace/FindingNavigator'
@@ -75,7 +76,7 @@ import {
   CloseIcon,
   LockIcon,
 } from '../components/workspace/WorkspaceIcons'
-import { BookIcon, DocumentIcon, HomeIcon } from '../components/ui/Icon'
+import { BookIcon, DocumentIcon } from '../components/ui/Icon'
 import '../styles/m10b-workspace.css'
 
 const LEFT_KEY = 'rv-l'
@@ -177,7 +178,6 @@ interface WorkspaceProps {
 
 function Workspace({ contractId, reviewId, contract, summary, onRefresh }: WorkspaceProps) {
   const { labelFor } = useTaxonomy()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -186,7 +186,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const [mode, setMode] = useState<DocMode>('changes')
   const [term, setTerm] = useState('')
   const [sheet, setSheet] = useState<Sheet | null>(null)
-  const [paletteOpen, setPaletteOpen] = useState(false)
+  const { searchOpen, openSearch } = useShell()
   const [finalizeOpen, setFinalizeOpen] = useState(false)
   // An evidence jump target in this workspace's own document, so "View in document" never leaves it.
   const [docFocus, setDocFocus] = useState<{ nodeId: string } | null>(null)
@@ -356,12 +356,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const typing = (event.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable="true"]')
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        setPaletteOpen((open) => !open)
-        return
-      }
-      if (typing || event.metaKey || event.ctrlKey || event.altKey || paletteOpen || finalizeOpen || sheet) return
+      if (typing || event.metaKey || event.ctrlKey || event.altKey || searchOpen || finalizeOpen || sheet) return
       const key = event.key.toLowerCase()
       const step = (by: number) => {
         event.preventDefault()
@@ -387,7 +382,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       else if (event.key === ']') togglePanel('r')
       else if (event.key === '/') {
         event.preventDefault()
-        setPaletteOpen(true)
+        openSearch()
       }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -450,9 +445,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       : []),
     { group: 'Review', label: 'Review context, coverage and notes', icon: <ClauseIcon />, run: () => setSheet({ kind: 'notes' }) },
     { group: 'Review', label: 'Contract analysis: parties, defined terms, references', icon: <ClauseIcon />, run: () => setSheet({ kind: 'contract' }) },
-    { group: 'Go to', label: 'Home', icon: <HomeIcon className="rv-icon" />, run: () => void navigate('/') },
-    { group: 'Go to', label: 'Contract reviews', icon: <DocumentIcon className="rv-icon" />, run: () => void navigate('/reviews') },
-    { group: 'Go to', label: 'Knowledge', icon: <BookIcon className="rv-icon" />, run: () => void navigate('/knowledge') },
   ]
 
   const finalizeLines = humanReview
@@ -558,6 +550,15 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const pin = summary.snapshot?.knowledgePinNumber
   const context = [profileLine(summary.snapshot), pin ? `Knowledge publication ${pin}` : null].filter(Boolean).join('. ') || null
 
+  // The search menu lists this review's findings and commands first, and can find text in the contract.
+  usePageCommands(() => ({
+    items: paletteItems,
+    onSearch: (value) => {
+      setTerm(value)
+      setMode('orig')
+    },
+  }))
+
   return (
     <div className="rv-ws" data-panel-keys="own">
       <WorkspaceTopBar
@@ -573,7 +574,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         rightOpen={rightOpen}
         onToggleLeft={() => togglePanel('l')}
         onToggleRight={() => togglePanel('r')}
-        onOpenPalette={() => setPaletteOpen(true)}
         onFinalize={startFinalize}
       />
       <div className="rv-ws-work" data-l={leftOpen ? undefined : 'c'} data-r={rightOpen ? undefined : 'c'}>
@@ -612,7 +612,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           selected={finding}
           onSelect={chooseFinding}
           isFinalized={isFinalized}
-          remaining={humanReview ? humanReview.remainingFindings : null}
           notes={notes}
           focusTarget={docFocus}
           marks={clauseMarks}
@@ -711,15 +710,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         ) : null}
       </WorkspaceSheet>
 
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        items={paletteItems}
-        onSearch={(value) => {
-          setTerm(value)
-          setMode('orig')
-        }}
-      />
       <FinalizeDialog
         open={finalizeOpen}
         onClose={() => setFinalizeOpen(false)}

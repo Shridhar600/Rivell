@@ -9,7 +9,7 @@ afterEach(() => vi.unstubAllGlobals())
 const decisionBar = () => document.querySelector('.rv-kc-decide') as HTMLElement
 const rail = () => screen.getByRole('navigation', { name: 'Candidate list' })
 const panel = () => screen.getByRole('complementary', { name: 'Candidates' })
-const topbar = () => document.querySelector('.rv-kc-top') as HTMLElement
+const topbar = () => document.querySelector('.rv-topbar') as HTMLElement
 const publishButton = () => within(topbar()).getByRole('button', { name: /Publish|Published|Nothing to publish/ })
 
 async function open(world: Fake, query = '') {

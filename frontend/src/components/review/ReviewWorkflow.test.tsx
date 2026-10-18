@@ -120,8 +120,12 @@ describe('human review progress in the workspace', () => {
     await workspaceReady()
 
     expect(await topBar().findByText('1 of 2 resolved')).toBeInTheDocument()
-    expect(topBar().getByText('Not ready to finalize')).toBeInTheDocument()
-    expect(topBar().getByText('1 finding that requires review still needs a decision.')).toBeInTheDocument()
+    const progress = topBar().getByText('1 of 2 resolved').closest('.rv-ws-prog') as HTMLElement
+    expect(progress).toHaveAttribute('title', 'Not ready to finalize')
+    expect(finalizeButton().closest('.rv-ws-fin')).toHaveAttribute(
+      'title',
+      '1 finding that requires review still needs a decision.',
+    )
     expect(finalizeButton()).toHaveTextContent('Finalize review')
     expect(finalizeButton()).toBeDisabled()
     expect(
@@ -145,7 +149,8 @@ describe('human review progress in the workspace', () => {
     expect(topBar().queryByText('Ready to finalize')).not.toBeInTheDocument()
     expect(screen.queryByText('Human review completed')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Approved preview' })).not.toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Decision preview' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Decision preview' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Preview' })).toBeInTheDocument()
   })
 })
 
@@ -194,8 +199,9 @@ describe('recording a decision in the workspace', () => {
     })
 
     // The server's refreshed human-review state drives the top bar.
-    expect(await topBar().findByText('Ready to finalize')).toBeInTheDocument()
-    expect(topBar().getByText('1 of 1 resolved')).toBeInTheDocument()
+    await topBar().findByText('1 of 1 resolved')
+    const progress = topBar().getByText('1 of 1 resolved').closest('.rv-ws-prog') as HTMLElement
+    expect(progress).toHaveAttribute('title', 'Ready to finalize')
     expect(finalizeButton()).toBeEnabled()
 
     // The saved decision is shown as current in the list and in the detail.
@@ -466,8 +472,15 @@ describe('finalization', () => {
     const api = stubContractApi(baseOptions())
     renderRouter('/reviews/c1/analysis/r-1', api)
     await workspaceReady()
-    await topBar().findByText('1 finding that requires review still needs a decision.')
-    expect(topBar().getByText('Not ready to finalize')).toBeInTheDocument()
+    await topBar().findByText('0 of 1 resolved')
+    expect(topBar().getByText('0 of 1 resolved').closest('.rv-ws-prog')).toHaveAttribute(
+      'title',
+      'Not ready to finalize',
+    )
+    expect(finalizeButton().closest('.rv-ws-fin')).toHaveAttribute(
+      'title',
+      '1 finding that requires review still needs a decision.',
+    )
     expect(finalizeButton()).toBeDisabled()
     expect(finalizeButton()).toHaveTextContent('Finalize review')
 
@@ -536,8 +549,12 @@ describe('finalization', () => {
     renderRouter('/reviews/c1/analysis/r-1', api)
 
     await workspaceReady()
-    const blocker = await topBar().findByText(/No planned check completed a trustworthy analysis/)
-    expect(blocker).toHaveTextContent(/new review/i)
+    const reason = finalizeButton().closest('.rv-ws-fin') as HTMLElement
+    expect(reason).toHaveAttribute(
+      'title',
+      expect.stringContaining('No planned check completed a trustworthy analysis'),
+    )
+    expect(reason).toHaveAttribute('title', expect.stringContaining('new review'))
     expect(finalizeButton()).toBeDisabled()
     expect(
       screen.queryByText('Every planned check completed without findings.'),
@@ -583,7 +600,12 @@ describe('finalization', () => {
     expect(await within(openFinalizeDialog()).findByRole('alert')).toHaveTextContent(
       'cannot be finalized yet',
     )
-    expect(await topBar().findByText(/same contract location/)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(finalizeButton().closest('.rv-ws-fin')).toHaveAttribute(
+        'title',
+        expect.stringContaining('same contract location'),
+      ),
+    )
     expect(stub.requests.filter((request) => request.url.includes('/finalize'))).toHaveLength(1)
   })
 
@@ -698,11 +720,13 @@ describe('approved change set', () => {
     )
     expect(finalizeButton()).toHaveTextContent('Finalized')
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Approved preview' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Preview' }))
+    // What the view contains is now the tab's tooltip, not a line beside the tabs.
+    expect(screen.getByRole('tab', { name: 'Preview' })).toHaveAttribute(
+      'title',
+      'The contract with the 3 approved changes that go into the redline',
+    )
     const contract = within(screen.getByRole('main', { name: 'Contract' }))
-    expect(
-      contract.getByText(/3 frozen executable changes shown; INSERT placement remains unresolved until execution/),
-    ).toBeInTheDocument()
     // Replace: the approved language stands in for the clause.
     expect(contract.getByText('Liability is capped at two times the fees paid.')).toBeInTheDocument()
     // Insert: the language is shown, but no location is claimed for it.

@@ -23,7 +23,7 @@ export type DocMode = 'changes' | 'orig' | 'final'
 const MODES: { mode: DocMode; label: (final: boolean) => string }[] = [
   { mode: 'changes', label: () => 'Changes' },
   { mode: 'orig', label: () => 'Original' },
-  { mode: 'final', label: (final) => (final ? 'Approved preview' : 'Decision preview') },
+  { mode: 'final', label: () => 'Preview' },
 ]
 
 interface Props {
@@ -44,8 +44,6 @@ interface Props {
   selected: FindingDetail | undefined
   onSelect: (findingId: string) => void
   isFinalized: boolean
-  /** The server's count of findings still needing a decision. */
-  remaining: number | null
   /** Notes above the page: a pinned older version, limited coverage, analysis warnings. */
   notes: ReactNode
   /** An evidence jump target. A new object re-reveals the same node, so repeated jumps work. */
@@ -421,7 +419,7 @@ function AbsenceCards({ ctx, findings }: { ctx: Ctx; findings: FindingSummary[] 
 }
 
 export function ContractPane(props: Props) {
-  const { nodes, findings, mode, term, isFinalized, remaining, selectedId, onSelect } = props
+  const { nodes, findings, mode, term, isFinalized, selectedId, onSelect } = props
   const page = useRef<HTMLElement>(null)
   const focusNodeId = props.focusTarget?.nodeId ?? null
 
@@ -476,6 +474,15 @@ export function ContractPane(props: Props) {
     ? clauseMarksLegend(top.filter((node) => node.nodeType === 'HEADING').map((node) => markOf(ctx, node.id)))
     : ''
 
+  // What each view shows is a tooltip on its tab, so the toolbar holds only the tabs.
+  const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
+  const modeHelp: Record<DocMode, string> = {
+    changes: 'The contract with Rivell’s suggestion for the selected finding and the changes you decided',
+    orig: 'The contract as received, shown as plain text',
+    final: isFinalized
+      ? `The contract with the ${plural(executable, 'approved change')} that go into the redline`
+      : `The contract with your ${plural(executable, 'decided change')}. Open findings keep the original text.`,
+  }
   const note = term ? (
     <>
       Matches for “{term}”{' '}
@@ -483,15 +490,7 @@ export function ContractPane(props: Props) {
         Clear
       </button>
     </>
-  ) : mode === 'changes' ? (
-    'Selected open Finding previews Rivell’s proposal; decided changes reflect current human decisions.'
-  ) : mode === 'orig' ? (
-    'As received. Extracted structural text, not native DOCX rendering.'
-  ) : isFinalized ? (
-    `${executable} frozen executable ${executable === 1 ? 'change' : 'changes'} shown; INSERT placement remains unresolved until execution.`
-  ) : (
-    `${executable} current executable ${executable === 1 ? 'decision' : 'decisions'} shown; ${remaining ?? 'the remaining'} unresolved ${remaining === 1 ? 'Finding remains' : 'Findings remain'} as received.`
-  )
+  ) : null
 
   return (
     <main className="rv-ws-pane rv-ws-doc" aria-label="Contract">
@@ -503,13 +502,14 @@ export function ContractPane(props: Props) {
               type="button"
               role="tab"
               aria-selected={mode === entry.mode}
+              title={modeHelp[entry.mode]}
               onClick={() => props.onMode(entry.mode)}
             >
               {entry.label(isFinalized)}
             </button>
           ))}
         </div>
-        <span className="rv-ws-dnote">{note}</span>
+        {note ? <span className="rv-ws-dnote">{note}</span> : null}
       </div>
       {legend || props.onContractAnalysis ? (
         <div className="rv-ws-legend">

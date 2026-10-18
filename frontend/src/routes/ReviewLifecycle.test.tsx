@@ -607,6 +607,6 @@ describe('identity and errors', () => {
     renderAt(PATH)
     await screen.findByRole('heading', { name: 'Waiting for analysis to start' })
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
-    expect(within(crumbs).getByRole('link', { name: 'Contract reviews' })).toHaveAttribute('href', '/reviews')
+    expect(within(crumbs).getByRole('link', { name: 'Reviews' })).toHaveAttribute('href', '/reviews')
   })
 })

@@ -1,6 +1,6 @@
 import { useId, useRef, useState, type DragEvent, type FormEvent } from 'react'
-import { Link } from 'react-router'
 import { useReviewPacksQuery } from '../api/reviews'
+import { Breadcrumbs } from '../components/shell/Breadcrumbs'
 import { Inspector, TopBar } from '../components/shell/TopBar'
 import { Button, LinkButton } from '../components/ui/Button'
 import { CautionIcon, CheckIcon, FileIcon, UploadIcon } from '../components/ui/Icon'
@@ -88,15 +88,7 @@ export function StartReviewPage() {
     <>
       <div className="rv-main">
         <TopBar
-          title={
-            <nav className="rv-crumbs" aria-label="Breadcrumb">
-              <Link to="/reviews">Contract reviews</Link>
-              <span className="rv-crumbs__sep" aria-hidden="true">
-                /
-              </span>
-              <b aria-current="page">Start review</b>
-            </nav>
-          }
+          title={<Breadcrumbs crumbs={[{ label: 'Reviews', to: '/reviews' }, { label: 'Start review' }]} />}
         />
         <div className="rv-scroll">
           <div className="rv-page rv-page--form">

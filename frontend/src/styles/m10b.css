@@ -284,8 +284,10 @@ a {
   min-height: 0;
   overflow: hidden;
 }
+/* Three columns, so search sits in the same place on every page whatever the title's length. */
 .rv-topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 300px) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   flex: none;
@@ -294,14 +296,63 @@ a {
   border-bottom: 1px solid var(--line);
   background: var(--bg);
 }
+.rv-topbar__lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .rv-topbar__title {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 500;
   letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rv-topbar__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
+}
+.rv-topbar__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  box-shadow: var(--sh-xs);
+  color: var(--text-3);
+  font: inherit;
+  cursor: pointer;
+}
+.rv-topbar__search:hover {
+  border-color: var(--text-3);
+}
+.rv-topbar__search:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+}
+.rv-topbar__search kbd,
+.rv-cmd kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--side);
+  color: var(--text-3);
+  font: 500 11px var(--font);
+  text-align: center;
+}
+.rv-topbar__search kbd {
   margin-left: auto;
 }
 /* The one scroll container for Home. It owns the vertical scroll; nothing inside it scrolls. */
@@ -1457,6 +1508,19 @@ a {
   }
 }
 @media (max-width: 900px) {
+  /* Search shrinks to its icon, so the title and the page's actions keep their room. */
+  .rv-topbar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .rv-topbar__search {
+    width: 30px;
+    justify-content: center;
+    padding: 0;
+  }
+  .rv-topbar__search span,
+  .rv-topbar__search kbd {
+    display: none;
+  }
   .rv-g2 {
     grid-template-columns: 1fr;
   }

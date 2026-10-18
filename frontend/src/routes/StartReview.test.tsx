@@ -103,7 +103,7 @@ describe('Start Review: the canonical page', () => {
     expect(screen.getByRole('heading', { name: 'Frozen review context' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'What happens next' })).toBeInTheDocument()
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
-    expect(within(crumbs).getByRole('link', { name: 'Contract reviews' })).toHaveAttribute('href', '/reviews')
+    expect(within(crumbs).getByRole('link', { name: 'Reviews' })).toHaveAttribute('href', '/reviews')
     expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/reviews')
   })
 

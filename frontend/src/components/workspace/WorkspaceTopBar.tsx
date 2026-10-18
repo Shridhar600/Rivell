@@ -1,8 +1,9 @@
-import { Link } from 'react-router'
 import type { HumanReview } from '../../api/workflow'
+import { Breadcrumbs } from '../shell/Breadcrumbs'
+import { TopBar } from '../shell/TopBar'
 import { Button } from '../ui/Button'
 import { Chip } from '../ui/Status'
-import { BackIcon, LockIcon, SearchIcon } from './WorkspaceIcons'
+import { LockIcon } from './WorkspaceIcons'
 import { PanelLeftIcon, PanelRightIcon } from '../ui/Icon'
 
 export const FROZEN_NOTE_ID = 'rv-ws-frozen-note'
@@ -18,7 +19,6 @@ interface Props {
   rightOpen: boolean
   onToggleLeft: () => void
   onToggleRight: () => void
-  onOpenPalette: () => void
   onFinalize: () => void
 }
 
@@ -38,7 +38,6 @@ export function WorkspaceTopBar({
   rightOpen,
   onToggleLeft,
   onToggleRight,
-  onOpenPalette,
   onFinalize,
 }: Props) {
   const ready = humanReview?.readyToFinalize === true
@@ -53,81 +52,67 @@ export function WorkspaceTopBar({
         : 'Not ready to finalize'
 
   return (
-    <header className="rv-ws-top">
-      <button
-        type="button"
-        className="rv-iconbtn"
-        aria-label="Toggle Findings list"
-        aria-pressed={leftOpen}
-        title="Toggle Findings ["
-        onClick={onToggleLeft}
-      >
-        <PanelLeftIcon className="rv-icon" />
-      </button>
-      <Link className="rv-ws-back" to="/">
-        <BackIcon />
-        Home
-      </Link>
-      <span className="rv-ws-sep">/</span>
-      <span className="rv-ws-title">{title}</span>
-      {chips.map((chip) => (
-        <Chip key={chip}>{chip}</Chip>
-      ))}
-      <span className="rv-ws-sp" />
-      <button type="button" className="rv-ws-search" aria-label="Open command menu" onClick={onOpenPalette}>
-        <SearchIcon />
-        <span>Jump to or run</span>
-        <kbd>⌘K</kbd>
-      </button>
-      {humanReview ? (
-        <div className="rv-ws-prog">
-          <div className="rv-ws-seg" aria-hidden="true">
-            {segments.map((state, index) => (
-              <i key={index} className={state} />
-            ))}
-          </div>
-          <span>
-            {humanReview.resolvedFindings} of {humanReview.actionableFindings} resolved
-          </span>
+    <TopBar
+      leading={
+        <button
+          type="button"
+          className="rv-iconbtn"
+          aria-label="Toggle Findings list"
+          aria-pressed={leftOpen}
+          title="Findings list ["
+          onClick={onToggleLeft}
+        >
+          <PanelLeftIcon className="rv-icon" />
+        </button>
+      }
+      title={
+        <div className="rv-ws-crumbs">
+          <Breadcrumbs crumbs={[{ label: 'Reviews', to: '/reviews' }, { label: title }]} />
+          {chips.map((chip) => (
+            <Chip key={chip}>{chip}</Chip>
+          ))}
         </div>
-      ) : null}
-      <button
-        type="button"
-        className="rv-iconbtn"
-        aria-label="Toggle detail panel"
-        aria-pressed={rightOpen}
-        title="Toggle detail ]"
-        onClick={onToggleRight}
-      >
-        <PanelRightIcon className="rv-icon" />
-      </button>
-      {status && !isFinalized && !ready ? (
-        <details className="rv-ws-why">
-          <summary className="rv-ws-blocker">{status}</summary>
-          <div className="rv-ws-why-b" role="group" aria-label="Why finalization is blocked">
-            {blockers.length > 0 ? (
-              blockers.map((blocker, index) => <div key={`${index}-${blocker.message}`}>{blocker.message}</div>)
-            ) : (
-              <div>The server has not marked this review ready to finalize.</div>
-            )}
-          </div>
-        </details>
-      ) : status ? (
-        // After Finalize this is the one status that is always on screen, so it is the focus fallback
-        // when the detail panel is closed.
-        <span className="rv-ws-blocker" id={FROZEN_NOTE_ID} tabIndex={isFinalized ? -1 : undefined}>
-          {status}
-        </span>
-      ) : null}
-      <Button
-        variant="primary"
-        disabled={!ready || isFinalized}
-        title={blockers.map((blocker) => blocker.message).join('. ') || undefined}
-        onClick={onFinalize}
-      >
-        <LockIcon />
-        {label}
-      </Button>
-    </header>
+      }
+      actions={
+        <>
+          {humanReview ? (
+            <div className="rv-ws-prog" title={status || undefined}>
+              <div className="rv-ws-seg" aria-hidden="true">
+                {segments.map((state, index) => (
+                  <i key={index} className={state} />
+                ))}
+              </div>
+              <span>
+                {humanReview.resolvedFindings} of {humanReview.actionableFindings} resolved
+              </span>
+            </div>
+          ) : null}
+          {isFinalized ? (
+            // After Finalize this is the one status that is always on screen, so it is the focus fallback
+            // when the detail panel is closed.
+            <span className="rv-ws-blocker" id={FROZEN_NOTE_ID} tabIndex={-1}>
+              {status}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="rv-iconbtn"
+            aria-label="Toggle detail panel"
+            aria-pressed={rightOpen}
+            title="Detail panel ]"
+            onClick={onToggleRight}
+          >
+            <PanelRightIcon className="rv-icon" />
+          </button>
+          {/* A disabled button shows no tooltip, so the reason it cannot be used sits on its wrapper. */}
+          <span className="rv-ws-fin" title={isFinalized ? undefined : ready ? 'Freeze your decisions so the redline can be created' : blockers.map((blocker) => blocker.message).join(' ') || 'Decide every open finding first'}>
+            <Button variant="primary" disabled={!ready || isFinalized} onClick={onFinalize}>
+              <LockIcon />
+              {label}
+            </Button>
+          </span>
+        </>
+      }
+    />
   )
 }

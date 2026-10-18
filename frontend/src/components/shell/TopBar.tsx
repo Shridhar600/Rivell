@@ -1,31 +1,52 @@
-import type { ReactNode } from 'react'
+import { use, type ReactNode } from 'react'
 import { IconButton } from '../ui/Button'
 import { EdgeChevron } from '../ui/Icon'
-import { useShell } from './ShellContext'
+import { SearchIcon } from '../workspace/WorkspaceIcons'
+import { ShellContext, useShell } from './ShellContext'
 
 export const INSPECTOR_ID = 'rv-inspector'
 
 interface TopBarProps {
   /** A page name, or a breadcrumb trail for a page one level down. */
   title: ReactNode
-  /** Real, working controls for this surface. Nothing decorative: no search, no identity. */
+  /** A control that sits before the title, such as the toggle for the page's own list panel. */
+  leading?: ReactNode
+  /** Real, working controls for this surface. */
   actions?: ReactNode
 }
 
 /**
- * Holds only what belongs to the current surface: its title and its own actions. Neither panel
- * toggle lives here: each sits with its own panel.
+ * The same bar on every page: where you are on the left, search in the middle, this page's own
+ * actions on the right. Neither shell panel toggle lives here: each sits with its own panel.
  */
-export function TopBar({ title, actions }: TopBarProps) {
+export function TopBar({ title, leading, actions }: TopBarProps) {
   return (
     <header className="rv-topbar">
-      {typeof title === 'string' ? (
-        <span className="rv-topbar__title">{title}</span>
-      ) : (
-        <div className="rv-topbar__title">{title}</div>
-      )}
-      {actions ? <div className="rv-topbar__actions">{actions}</div> : null}
+      <div className="rv-topbar__lead">
+        {leading}
+        {typeof title === 'string' ? (
+          <span className="rv-topbar__title">{title}</span>
+        ) : (
+          <div className="rv-topbar__title">{title}</div>
+        )}
+      </div>
+      <SearchButton />
+      <div className="rv-topbar__actions">{actions}</div>
     </header>
+  )
+}
+
+export function SearchButton() {
+  // Outside the shell (a component rendered on its own) there is no search menu to open.
+  const shell = use(ShellContext)
+  if (!shell) return <span />
+  const { openSearch } = shell
+  return (
+    <button type="button" className="rv-topbar__search" aria-label="Search" aria-keyshortcuts="Meta+K" onClick={openSearch}>
+      <SearchIcon />
+      <span>Search</span>
+      <kbd>⌘K</kbd>
+    </button>
   )
 }
 

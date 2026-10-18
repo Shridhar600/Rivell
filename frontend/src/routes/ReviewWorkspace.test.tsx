@@ -81,7 +81,10 @@ describe('workspace layout', () => {
     expect(screen.getByRole('main', { name: 'Contract' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument()
-    expect(within(await topBar()).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/')
+    const crumbs = within(await topBar()).getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumbs).getByRole('link', { name: 'Reviews' })).toHaveAttribute('href', '/reviews')
+    expect(crumbs).toHaveTextContent('Master Services Agreement')
+    expect(crumbs).not.toHaveTextContent('Home')
   })
 
   it('opens on the first finding that needs a decision and names it in the URL', async () => {
@@ -100,7 +103,7 @@ describe('workspace layout', () => {
     expect(page.querySelector('del')).toBeNull()
   })
 
-  it('shows an edited decision as the reviewer’s wording in the decision preview, not as a verified file', async () => {
+  it('shows an edited decision as the reviewer’s wording in the preview, not as a verified file', async () => {
     renderWorkspace(
       stubContractApi(
         options({
@@ -112,12 +115,14 @@ describe('workspace layout', () => {
         }),
       ),
     )
-    await userEvent.click(await screen.findByRole('tab', { name: 'Decision preview' }))
+    await userEvent.click(await screen.findByRole('tab', { name: 'Preview' }))
+    // What the view contains is the tab's tooltip, not a line beside the tabs.
+    expect(screen.getByRole('tab', { name: 'Preview' })).toHaveAttribute(
+      'title',
+      'The contract with your 1 decided change. Open findings keep the original text.',
+    )
     const page = screen.getByRole('article')
     await waitFor(() => expect(within(page).getByText('Cap is two times fees.')).toBeInTheDocument())
-    expect(screen.getByRole('main', { name: 'Contract' })).toHaveTextContent(
-      '1 current executable decision shown; 1 unresolved Finding remains as received.',
-    )
     expect(screen.queryByText(/verified (redline|document|file)|tracked DOCX/i)).not.toBeInTheDocument()
   })
 
@@ -131,17 +136,22 @@ describe('workspace layout', () => {
 })
 
 describe('finalize is the server’s decision', () => {
-  it('is disabled with one compact status while the server reports blockers, and the exact reason is in a disclosure', async () => {
+  it('is disabled with one compact status while the server reports blockers, and the exact reason is on the finalize control', async () => {
     renderWorkspace(stubContractApi(options()))
     const finalize = await within(await topBar()).findByRole('button', { name: 'Finalize review' })
     expect(finalize).toBeDisabled()
-    expect(finalize).toHaveAttribute('title', '1 finding that requires review still needs a decision.')
+    expect(finalize.closest('.rv-ws-fin')).toHaveAttribute(
+      'title',
+      '1 finding that requires review still needs a decision.',
+    )
     expect(await topBar()).toHaveTextContent('0 of 2 resolved')
     // The unresolved count is not repeated on the button, and the blocker is not a clipped line.
     expect(await topBar()).not.toHaveTextContent(/unresolved/)
-    expect(await topBar()).toHaveTextContent('Not ready to finalize')
-    await userEvent.click(within(await topBar()).getByText('Not ready to finalize'))
-    expect(await topBar()).toHaveTextContent('1 finding that requires review still needs a decision.')
+    const progress = (await topBar()).querySelector('.rv-ws-prog') as HTMLElement
+    expect(progress).toHaveAttribute('title', 'Not ready to finalize')
+    // The old disclosure is gone; the reason lives on the finalize control instead.
+    expect(document.querySelector('details.rv-ws-why')).not.toBeInTheDocument()
+    expect(await topBar()).not.toHaveTextContent('1 finding that requires review still needs a decision.')
   })
 
   it('is enabled only when the server says ready, and finalizes after one confirmation', async () => {
@@ -155,7 +165,8 @@ describe('finalize is the server’s decision', () => {
     renderWorkspace(api)
     const finalize = await within(await topBar()).findByRole('button', { name: 'Finalize review' })
     await waitFor(() => expect(finalize).toBeEnabled())
-    expect(await topBar()).toHaveTextContent('Ready to finalize')
+    const progress = (await topBar()).querySelector('.rv-ws-prog') as HTMLElement
+    expect(progress).toHaveAttribute('title', 'Ready to finalize')
     await userEvent.click(finalize)
     const dialog = await screen.findByRole('dialog', { name: 'Finalize this review?' })
     expect(dialog).toHaveTextContent('1 approved change (1 accepted, 0 edited)')
@@ -277,18 +288,43 @@ describe('keyboard and command menu', () => {
     await waitFor(() => expect(router.state.location.search).toBe('?finding=f-1'))
   })
 
-  it('lists only commands that can run, and no global entity search', async () => {
+  it('lists the page’s own commands first, then the global places, and can find text in the contract', async () => {
     renderWorkspace(stubContractApi(options()))
+    // The shell's one search menu reads the global lists when it opens.
+    const inner = globalThis.fetch
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(String(input), init)
+        const url = new URL(request.url)
+        if (request.method === 'GET' && url.pathname === '/api/reviews') {
+          return new Response(JSON.stringify({ data: { items: [], truncated: false }, status: 200, timestamp: '2026-10-02T09:00:00Z' }))
+        }
+        if (
+          request.method === 'GET' &&
+          (url.pathname === '/api/knowledge/artifacts' || url.pathname === '/api/knowledge/publications')
+        ) {
+          return new Response(JSON.stringify({ data: [], status: 200, timestamp: '2026-10-02T09:00:00Z' }))
+        }
+        return inner(request)
+      }),
+    )
     await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
-    await userEvent.click(within(await topBar()).getByRole('button', { name: 'Open command menu' }))
-    const menu = await screen.findByRole('dialog', { name: 'Command menu' })
+    await userEvent.keyboard('/')
+    const menu = await screen.findByRole('dialog', { name: 'Search' })
     const labels = within(menu).getAllByRole('option').map((option) => option.textContent)
     expect(labels.join('|')).toMatch(/Edit finding/)
     expect(labels.join('|')).toMatch(/Show original document/)
     expect(labels.join('|')).not.toMatch(/Finalize review/)
-    expect(labels.join('|')).not.toMatch(/Generate redline|Start a contract review|Add legal knowledge/)
-    await userEvent.type(within(menu).getByRole('textbox'), 'exclusions')
-    await userEvent.click(within(menu).getByRole('option', { name: /Find “exclusions” in contract/ }))
+    // The page's own commands come first; the global places follow.
+    const groups = Array.from(menu.querySelectorAll('.rv-ws-pal-h')).map((heading) => heading.textContent)
+    expect(groups[0]).toBe('Findings')
+    expect(groups).toContain('Create')
+    expect(groups).toContain('Go to')
+    // The old workspace "Go to" entries are gone: the global group replaces them.
+    expect(labels.join('|')).not.toMatch(/Contract reviews/)
+    await userEvent.type(within(menu).getByRole('textbox', { name: 'Search' }), 'exclusions')
+    await userEvent.click(within(menu).getByRole('option', { name: /Find “exclusions” in this contract/ }))
     await waitFor(() => expect(screen.getByRole('main', { name: 'Contract' })).toHaveTextContent('Matches for “exclusions”'))
     expect(screen.getByRole('tab', { name: 'Original' })).toHaveAttribute('aria-selected', 'true')
   })

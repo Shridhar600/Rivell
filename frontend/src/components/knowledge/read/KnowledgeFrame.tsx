@@ -1,36 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
+import { Breadcrumbs, type Crumb } from '../../shell/Breadcrumbs'
 import { TopBar } from '../../shell/TopBar'
 import { CheckIcon, CloseIcon, PlusIcon } from '../../ui/Icon'
 import { IconButton } from '../../ui/Button'
 import { useHeadingFocus } from '../../../lib/useHeadingFocus'
 import { readPublishedNotice, type PublishedNotice } from '../../../lib/publishedNotice'
 
-export interface Crumb {
-  label: string
-  to?: string
-}
-
-function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
-  return (
-    <nav className="rv-crumbs" aria-label="Breadcrumb">
-      {crumbs.map((crumb, position) =>
-        position === crumbs.length - 1 || !crumb.to ? (
-          <b key={crumb.label} aria-current={position === crumbs.length - 1 ? 'page' : undefined}>
-            {crumb.label}
-          </b>
-        ) : (
-          <span key={crumb.label} className="rv-crumbs__item">
-            <Link to={crumb.to}>{crumb.label}</Link>
-            <span className="rv-crumbs__sep" aria-hidden="true">
-              {' / '}
-            </span>
-          </span>
-        ),
-      )}
-    </nav>
-  )
-}
+export type { Crumb } from '../../shell/Breadcrumbs'
 
 /** Which document the reviewer is adding. A page can offer one type, and the dialog still lets them change it. */
 export type AddPreset = 'playbook' | 'clause-library'
