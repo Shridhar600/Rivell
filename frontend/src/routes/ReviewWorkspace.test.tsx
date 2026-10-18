@@ -87,6 +87,20 @@ describe('workspace layout', () => {
     expect(crumbs).not.toHaveTextContent('Home')
   })
 
+  it('lets the reader resize the findings list and the detail panel, and remembers both widths', async () => {
+    renderWorkspace(stubContractApi(options()))
+    const findings = await screen.findByRole('separator', { name: 'Resize findings list' })
+    const detail = screen.getByRole('separator', { name: 'Resize detail panel' })
+    findings.focus()
+    await userEvent.keyboard('{ArrowRight}')
+    expect(findings).toHaveAttribute('aria-valuenow', '288')
+    detail.focus()
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(detail).toHaveAttribute('aria-valuenow', '396')
+    expect(globalThis.localStorage?.getItem('rv-ws-findings-width')).toBe('288')
+    expect(globalThis.localStorage?.getItem('rv-ws-detail-width')).toBe('396')
+  })
+
   it('opens on the first finding that needs a decision and names it in the URL', async () => {
     const router = renderWorkspace(stubContractApi(options()))
     await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })

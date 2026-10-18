@@ -2,7 +2,8 @@ import { use, type ReactNode } from 'react'
 import { IconButton } from '../ui/Button'
 import { EdgeChevron } from '../ui/Icon'
 import { SearchIcon } from '../workspace/WorkspaceIcons'
-import { ShellContext, useShell } from './ShellContext'
+import { PanelResizeHandle } from './PanelResizeHandle'
+import { INSPECTOR_WIDTH, ShellContext, useShell } from './ShellContext'
 
 export const INSPECTOR_ID = 'rv-inspector'
 
@@ -57,7 +58,7 @@ interface InspectorProps {
 }
 
 export function Inspector({ status, children }: InspectorProps) {
-  const { inspectorCollapsed, toggleInspector } = useShell()
+  const { inspectorCollapsed, toggleInspector, inspectorWidth, resizeInspector } = useShell()
   return (
     <aside className="rv-insp" id={INSPECTOR_ID} aria-label="Details">
       {/*
@@ -70,6 +71,9 @@ export function Inspector({ status, children }: InspectorProps) {
         </p>
       ) : null}
       <div className="rv-insp__inner">{children}</div>
+      {inspectorCollapsed ? null : (
+        <PanelResizeHandle className="rv-insp__resize" label="Resize details panel" edge="left" width={inspectorWidth} limits={INSPECTOR_WIDTH} onResize={resizeInspector} />
+      )}
       <IconButton
         className={`rv-edge rv-edge--inspector${inspectorCollapsed ? ' rv-edge--open' : ''}`}
         label="Details panel"

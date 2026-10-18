@@ -122,14 +122,36 @@ describe('sidebar owns its own collapse control', () => {
   it('keeps the selection status line in the tree when the inspector is collapsed', async () => {
     stubApi([LIFECYCLE_ROWS.unresolved])
     renderAt('/')
+    await userEvent.click(await screen.findByRole('option', { name: /Unresolved MSA\.docx/i }))
     const details = screen.getByRole('complementary', { name: 'Details' })
     await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
-    await userEvent.click(await screen.findByRole('option', { name: /Unresolved MSA\.docx/i }))
     const status = screen.getByRole('status')
     expect(status).toHaveTextContent(/Unresolved MSA\.docx/)
+  })
+
+  it('shows no details panel on Home until a row is chosen, and opens a closed panel on choice', async () => {
+    globalThis.localStorage?.setItem('rv-inspector', 'c')
+    stubApi([LIFECYCLE_ROWS.unresolved])
+    renderAt('/')
+    const row = await screen.findByRole('option', { name: /Unresolved MSA\.docx/i })
+    expect(screen.queryByRole('complementary', { name: 'Details' })).not.toBeInTheDocument()
+    await userEvent.click(row)
+    expect(screen.getByRole('complementary', { name: 'Details' })).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('.rv-shell')).not.toHaveAttribute('data-inspector', 'collapsed'))
+  })
+
+  it('resizes the details panel from its left edge and remembers the width', async () => {
+    stubApi()
+    renderAt('/reviews/new')
+    const handle = screen.getByRole('separator', { name: 'Resize details panel' })
+    expect(handle).toHaveAttribute('aria-valuenow', '340')
+    handle.focus()
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(handle).toHaveAttribute('aria-valuenow', '356')
+    expect(globalThis.localStorage?.getItem('rv-inspector-width')).toBe('356')
   })
 
   it('is reachable by Tab and operable from the keyboard', async () => {
@@ -248,8 +270,8 @@ describe('sidebar width', () => {
 
 describe('inspector panel', () => {
   it('toggles from its own panel edge and keeps its grid column', async () => {
-    stubApi([LIFECYCLE_ROWS.unresolved])
-    const { container } = renderAt('/')
+    stubApi()
+    const { container } = renderAt('/reviews/new')
     const details = screen.getByRole('complementary', { name: 'Details' })
     const toggle = within(details).getByRole('button', { name: 'Details panel' })
     expect(toggle).toHaveClass('rv-edge--inspector')
@@ -395,7 +417,7 @@ describe('the retired contract page address', () => {
 describe('responsive shell structure', () => {
   it('keeps the collapsed inspector in the grid rather than removing the column', async () => {
     stubApi()
-    const { container } = renderAt('/')
+    const { container } = renderAt('/reviews/new')
     expect(container.querySelector('.rv-insp')).toBeInTheDocument()
     const details = screen.getByRole('complementary', { name: 'Details' })
     await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
@@ -408,7 +430,7 @@ describe('responsive shell structure', () => {
 
   it('keeps the collapsed panel handle operable', async () => {
     stubApi()
-    renderAt('/')
+    renderAt('/reviews/new')
     const details = screen.getByRole('complementary', { name: 'Details' })
     const handle = within(details).getByRole('button', { name: 'Details panel' })
     await userEvent.click(handle)

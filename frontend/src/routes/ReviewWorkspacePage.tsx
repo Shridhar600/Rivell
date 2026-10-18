@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -53,7 +53,9 @@ import { ReviewCoveragePanel } from '../components/review/ReviewCoveragePanel'
 import { readPanelFlag, writePanelFlag } from '../components/shell/ShellContext'
 import { ErrorState, LoadingState } from '../components/ui/State'
 import type { PaletteItem } from '../components/ui/CommandPalette'
+import { PanelResizeHandle } from '../components/shell/PanelResizeHandle'
 import { usePageCommands, useShell } from '../components/shell/ShellContext'
+import { readWidth, writeWidth } from '../lib/panelWidth'
 import { ContractPane, type DocMode } from '../components/workspace/ContractPane'
 import { DecisionHistorySheet } from '../components/workspace/DecisionHistorySheet'
 import { FindingNavigator } from '../components/workspace/FindingNavigator'
@@ -81,6 +83,10 @@ import '../styles/m10b-workspace.css'
 
 const LEFT_KEY = 'rv-l'
 const RIGHT_KEY = 'rv-r'
+const FINDINGS_WIDTH_KEY = 'rv-ws-findings-width'
+const FINDINGS_WIDTH = { min: 220, max: 420, initial: 272 } as const
+const DETAIL_WIDTH_KEY = 'rv-ws-detail-width'
+const DETAIL_WIDTH = { min: 320, max: 640, initial: 380 } as const
 const MODE_CYCLE: Record<DocMode, DocMode> = { changes: 'orig', orig: 'final', final: 'changes' }
 
 type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'clause'; headingNodeId: string } | { kind: 'contract' }
@@ -183,6 +189,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
 
   const [leftOpen, setLeftOpen] = useState(() => !readPanelFlag(LEFT_KEY, true))
   const [rightOpen, setRightOpen] = useState(() => !readPanelFlag(RIGHT_KEY, true))
+  const [findingsWidth, setFindingsWidth] = useState(() => readWidth(FINDINGS_WIDTH_KEY, FINDINGS_WIDTH))
+  const [detailWidth, setDetailWidth] = useState(() => readWidth(DETAIL_WIDTH_KEY, DETAIL_WIDTH))
   const [mode, setMode] = useState<DocMode>('changes')
   const [term, setTerm] = useState('')
   const [sheet, setSheet] = useState<Sheet | null>(null)
@@ -576,7 +584,38 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         onToggleRight={() => togglePanel('r')}
         onFinalize={startFinalize}
       />
-      <div className="rv-ws-work" data-l={leftOpen ? undefined : 'c'} data-r={rightOpen ? undefined : 'c'}>
+      <div
+        className="rv-ws-work"
+        style={{ '--lw-open': `${findingsWidth}px`, '--rw-open': `${detailWidth}px` } as CSSProperties}
+        data-l={leftOpen ? undefined : 'c'}
+        data-r={rightOpen ? undefined : 'c'}
+      >
+        {leftOpen ? (
+          <PanelResizeHandle
+            className="rv-ws-resize rv-ws-resize--l"
+            label="Resize findings list"
+            edge="right"
+            width={findingsWidth}
+            limits={FINDINGS_WIDTH}
+            onResize={(width) => {
+              setFindingsWidth(width)
+              writeWidth(FINDINGS_WIDTH_KEY, width)
+            }}
+          />
+        ) : null}
+        {rightOpen ? (
+          <PanelResizeHandle
+            className="rv-ws-resize rv-ws-resize--r"
+            label="Resize detail panel"
+            edge="left"
+            width={detailWidth}
+            limits={DETAIL_WIDTH}
+            onResize={(width) => {
+              setDetailWidth(width)
+              writeWidth(DETAIL_WIDTH_KEY, width)
+            }}
+          />
+        ) : null}
         <FindingNavigator
           findings={findings}
           truncated={findingsQuery.data?.truncated ?? false}

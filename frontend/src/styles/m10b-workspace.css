@@ -79,8 +79,9 @@
 }
 /* ---------- three regions ---------- */
 .rv-ws-work {
-  --lw: var(--w-findings);
-  --rw: var(--w-detail);
+  --lw: var(--lw-open, var(--w-findings));
+  --rw: var(--rw-open, var(--w-detail));
+  position: relative;
   display: grid;
   grid-template-columns: var(--lw) minmax(0, 1fr) var(--rw);
   min-height: 0;
@@ -1519,4 +1520,13 @@ h3.rv-ws-sec-h {
 }
 .rv-ws-fin {
   display: inline-flex;
+}
+
+/* The edges of the findings list and the detail panel. They sit on the grid, not in the panes, so
+   they do not scroll with the panes' content. */
+.rv-ws-resize--l {
+  left: calc(var(--lw) - 3px);
+}
+.rv-ws-resize--r {
+  right: calc(var(--rw) - 3px);
 }

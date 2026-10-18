@@ -5,13 +5,16 @@ import {
   SIDEBAR_KEY,
   ShellContext,
   readPanelFlag,
-  readSidebarWidth,
+  INSPECTOR_WIDTH,
+  INSPECTOR_WIDTH_KEY,
+  SIDEBAR_WIDTH,
+  SIDEBAR_WIDTH_KEY,
   writePanelFlag,
-  writeSidebarWidth,
   type PageCommands,
   type ShellState,
 } from './ShellContext'
 import { GlobalSearch } from './GlobalSearch'
+import { readWidth, writeWidth } from '../../lib/panelWidth'
 import { Sidebar } from './Sidebar'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 
@@ -49,11 +52,15 @@ export function AppShell() {
   const setPageCommands = useCallback((read: (() => PageCommands) | null) => setReadPageCommands(() => read), [])
   useSearchShortcut(setSearchOpen)
 
-  const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth)
-  const [resizing, setResizing] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(() => readWidth(SIDEBAR_WIDTH_KEY, SIDEBAR_WIDTH))
   const resizeSidebar = useCallback((width: number) => {
     setSidebarWidth(width)
-    writeSidebarWidth(width)
+    writeWidth(SIDEBAR_WIDTH_KEY, width)
+  }, [])
+  const [inspectorWidth, setInspectorWidth] = useState(() => readWidth(INSPECTOR_WIDTH_KEY, INSPECTOR_WIDTH))
+  const resizeInspector = useCallback((width: number) => {
+    setInspectorWidth(width)
+    writeWidth(INSPECTOR_WIDTH_KEY, width)
   }, [])
 
   const toggleInspector = useCallback(() => {
@@ -71,20 +78,19 @@ export function AppShell() {
   usePanelShortcut(narrow ? () => {} : toggleSidebar, toggleInspector)
 
   const state = useMemo<ShellState>(
-    () => ({ sidebarCollapsed: railed, toggleSidebar, inspectorCollapsed, toggleInspector, searchOpen, openSearch, setPageCommands }),
-    [railed, toggleSidebar, inspectorCollapsed, toggleInspector, searchOpen, openSearch, setPageCommands],
+    () => ({ sidebarCollapsed: railed, toggleSidebar, inspectorCollapsed, toggleInspector, inspectorWidth, resizeInspector, searchOpen, openSearch, setPageCommands }),
+    [railed, toggleSidebar, inspectorCollapsed, toggleInspector, inspectorWidth, resizeInspector, searchOpen, openSearch, setPageCommands],
   )
 
   return (
     <ShellContext value={state}>
       <div
         className="rv-shell"
-        style={{ '--rv-sidebar-open': `${sidebarWidth}px` } as CSSProperties}
+        style={{ '--rv-sidebar-open': `${sidebarWidth}px`, '--rv-w-inspector': `${inspectorWidth}px` } as CSSProperties}
         data-sidebar={railed ? 'collapsed' : undefined}
         data-inspector={inspectorCollapsed ? 'collapsed' : undefined}
-        data-resizing={resizing ? '' : undefined}
       >
-        <Sidebar collapsed={railed} onToggle={toggleSidebar} width={sidebarWidth} onResize={resizeSidebar} onResizing={setResizing} />
+        <Sidebar collapsed={railed} onToggle={toggleSidebar} width={sidebarWidth} onResize={resizeSidebar} />
         <div className="rv-stage">
           <Outlet />
         </div>

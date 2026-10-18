@@ -3,6 +3,7 @@ import { useOrganizationReviewsQuery } from '../api/reviews'
 import { buildHomeSections, homeReview, type HomeSectionKey, type HomeSections } from '../lib/home'
 import { useHomeResume } from '../lib/useHomeResume'
 import { CREATE_ACTIONS } from '../components/shell/navigation'
+import { useShell } from '../components/shell/ShellContext'
 import { Inspector, TopBar } from '../components/shell/TopBar'
 import { LinkButton } from '../components/ui/Button'
 import { DocumentIcon, PlusIcon } from '../components/ui/Icon'
@@ -11,7 +12,7 @@ import { ContinueCard } from '../components/home/ContinueCard'
 import { HomeCoverageNote, ReviewReadProblem } from '../components/home/HomeNotices'
 import { HomeHero } from '../components/home/HomeHero'
 import { HomeSection } from '../components/home/HomeSection'
-import { WorkDetails, WorkDetailsHint } from '../components/home/WorkDetails'
+import { WorkDetails } from '../components/home/WorkDetails'
 
 const SECTION_ORDER: readonly HomeSectionKey[] = ['needs', 'running', 'done']
 
@@ -28,6 +29,12 @@ export function HomePage() {
   // One effective id drives both the row highlight and the inspector, so they cannot disagree.
   // Nothing is auto-selected, and a selection that disappears after a refetch is dropped.
   const selected = placed.find((item) => item.id === selectedId) ?? null
+  const { inspectorCollapsed, toggleInspector } = useShell()
+  // Choosing a row is asking to see it, so a closed details panel opens.
+  const select = (id: string) => {
+    setSelectedId(id)
+    if (inspectorCollapsed) toggleInspector()
+  }
 
   // Only the reviewer's own choices are stored. Everything else follows `defaultOpen`, so a list
   // that fills in after the first render still opens or stays closed by the same rule.
@@ -49,7 +56,8 @@ export function HomePage() {
 
   return (
     <>
-      <div className="rv-main">
+      {/* The details panel opens only once a row is chosen, so Home never shows an empty panel. */}
+      <div className={selected ? 'rv-main' : 'rv-main rv-main--wide'}>
         <TopBar
           title="Home"
           actions={
@@ -104,7 +112,7 @@ export function HomePage() {
                 open={isOpen(key)}
                 onToggle={() => setOpen(key, !isOpen(key))}
                 selectedId={selected?.id ?? null}
-                onSelect={setSelectedId}
+                onSelect={select}
                 footer={key === 'done' ? resultsFooter(sections) : undefined}
               />
             ))}
@@ -113,9 +121,11 @@ export function HomePage() {
           </div>
         </div>
       </div>
-      <Inspector status={selected ? `${selected.title}. ${selected.stateLabel}.` : ''}>
-        {selected ? <WorkDetails item={selected} /> : <WorkDetailsHint />}
-      </Inspector>
+      {selected ? (
+        <Inspector status={`${selected.title}. ${selected.stateLabel}.`}>
+          <WorkDetails item={selected} />
+        </Inspector>
+      ) : null}
     </>
   )
 }

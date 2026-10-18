@@ -12,6 +12,8 @@ export interface ShellState {
   toggleSidebar: () => void
   inspectorCollapsed: boolean
   toggleInspector: () => void
+  inspectorWidth: number
+  resizeInspector: (width: number) => void
   searchOpen: boolean
   openSearch: () => void
   /** The open page registers a reader for its commands; the menu reads it when it opens. */
@@ -62,26 +64,7 @@ export function writePanelFlag(key: string, collapsed: boolean): void {
   }
 }
 
-const SIDEBAR_WIDTH_KEY = 'rv-sidebar-width'
+export const SIDEBAR_WIDTH_KEY = 'rv-sidebar-width'
 export const SIDEBAR_WIDTH = { min: 184, max: 320, initial: 220 } as const
-
-export function clampSidebarWidth(width: number): number {
-  return Math.round(Math.min(SIDEBAR_WIDTH.max, Math.max(SIDEBAR_WIDTH.min, width)))
-}
-
-export function readSidebarWidth(): number {
-  try {
-    const saved = Number(globalThis.localStorage?.getItem(SIDEBAR_WIDTH_KEY))
-    return saved ? clampSidebarWidth(saved) : SIDEBAR_WIDTH.initial
-  } catch {
-    return SIDEBAR_WIDTH.initial
-  }
-}
-
-export function writeSidebarWidth(width: number): void {
-  try {
-    globalThis.localStorage?.setItem(SIDEBAR_WIDTH_KEY, String(width))
-  } catch {
-    // Ignored on purpose, as for the panel flags.
-  }
-}
+export const INSPECTOR_WIDTH_KEY = 'rv-inspector-width'
+export const INSPECTOR_WIDTH = { min: 280, max: 560, initial: 340 } as const

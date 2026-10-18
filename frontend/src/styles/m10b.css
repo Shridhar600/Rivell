@@ -67,13 +67,6 @@ a {
   overflow: hidden;
   transition: grid-template-columns var(--t-panel) var(--ease);
 }
-/* While the reader drags the sidebar edge the width follows the pointer, with no easing. */
-.rv-shell[data-resizing],
-.rv-shell[data-resizing] .rv-stage {
-  transition: none;
-  cursor: col-resize;
-  user-select: none;
-}
 .rv-shell[data-sidebar='collapsed'] {
   --rv-sidebar: var(--rv-w-sidebar-collapsed);
 }
@@ -169,11 +162,10 @@ a {
   display: none;
 }
 
-/* The sidebar's right edge. Drag to resize, arrow keys to step, double-click to reset. */
-.rv-side__resize {
+/* Panel edges. Drag to resize, arrow keys to step, double-click to reset. */
+.rv-resize {
   position: absolute;
   top: 0;
-  right: 0;
   bottom: 0;
   z-index: 2;
   width: 6px;
@@ -181,11 +173,23 @@ a {
   background: transparent;
   transition: background var(--t-fast) var(--ease);
 }
-.rv-side__resize:hover,
-.rv-side__resize:focus-visible,
-.rv-shell[data-resizing] .rv-side__resize {
+.rv-resize:hover,
+.rv-resize:focus-visible {
   outline: none;
   background: var(--line-2);
+}
+.rv-side__resize {
+  right: 0;
+}
+.rv-insp__resize {
+  left: 0;
+}
+/* While any panel edge is dragged, widths follow the pointer with no easing and text is not selected. */
+:root[data-resizing],
+:root[data-resizing] * {
+  cursor: col-resize !important;
+  user-select: none;
+  transition: none !important;
 }
 .rv-shell[data-sidebar='collapsed'] .rv-side__resize {
   display: none;
