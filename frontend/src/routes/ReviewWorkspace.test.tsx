@@ -689,8 +689,8 @@ describe('clause details in place', () => {
 
 describe('contract analysis in place', () => {
   async function openContractAnalysis() {
-    await userEvent.click(await screen.findByRole('button', { name: 'Contract analysis' }))
-    return screen.getByRole('dialog', { name: 'Contract analysis' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Contract details' }))
+    return screen.getByRole('dialog', { name: 'Contract details' })
   }
 
   async function openGroup(sheet: HTMLElement, name: string) {
@@ -709,7 +709,7 @@ describe('contract analysis in place', () => {
     expect(within(terms).getByText('Defined more than once')).toBeInTheDocument()
     await userEvent.click(within(terms).getByRole('button', { name: 'Services' }))
     expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Contract analysis' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Contract details' })).not.toBeInTheDocument())
   })
 
   it('shows each cross-reference’s state, broken ones first, and never invents a target', async () => {

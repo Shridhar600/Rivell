@@ -255,10 +255,17 @@
   color: var(--text);
 }
 .rv-ws-dnote {
+  flex: 1;
   min-width: 0;
+  overflow: hidden;
   color: var(--text-3);
   font-size: 12px;
   text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-ws-details {
+  flex: none;
 }
 .rv-ws-banner {
   max-width: 720px;

@@ -167,7 +167,7 @@ export function ContractAnalysis({ semantics, contractId, editable, latestVersio
   return (
     <div className="rv-ws-srcd">
       <div className="rv-ws-kicker">
-        <span>Contract analysis</span>
+        <span>Contract details</span>
         <span className="rv-ws-chip">Version {semantics.versionNumber}</span>
       </div>
       <p className="rv-ws-caption">

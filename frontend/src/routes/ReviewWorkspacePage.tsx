@@ -452,7 +452,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       ? [{ group: 'Review', label: 'Finalize review', icon: <LockIcon />, run: startFinalize }]
       : []),
     { group: 'Review', label: 'Review context, coverage and notes', icon: <ClauseIcon />, run: () => setSheet({ kind: 'notes' }) },
-    { group: 'Review', label: 'Contract analysis: parties, defined terms, references', icon: <ClauseIcon />, run: () => setSheet({ kind: 'contract' }) },
+    { group: 'Review', label: 'Contract details: parties, defined terms, references', icon: <ClauseIcon />, run: () => setSheet({ kind: 'contract' }) },
   ]
 
   const finalizeLines = humanReview
@@ -688,7 +688,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
 
       <WorkspaceSheet
         open={sheet !== null}
-        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : sheet?.kind === 'contract' ? 'Contract analysis' : 'Source'}
+        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : sheet?.kind === 'contract' ? 'Contract details' : 'Source'}
         onClose={() => setSheet(null)}
         actions={sourceRecord ? <LinkButton to={sourceRecord.to}>{sourceRecord.label}</LinkButton> : null}
       >

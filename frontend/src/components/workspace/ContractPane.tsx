@@ -16,6 +16,7 @@ import {
   topLevelNodes,
 } from '../../lib/workspace'
 import { Button } from '../ui/Button'
+import { ClauseIcon } from '../ui/Icon'
 import { ErrorState, LoadingState } from '../ui/State'
 
 export type DocMode = 'changes' | 'orig' | 'final'
@@ -509,18 +510,21 @@ export function ContractPane(props: Props) {
             </button>
           ))}
         </div>
-        {note ? <span className="rv-ws-dnote">{note}</span> : null}
+        {/* A search match note wins; otherwise the one-line clause summary. */}
+        {note ? (
+          <span className="rv-ws-dnote">{note}</span>
+        ) : legend ? (
+          <span className="rv-ws-dnote" title="What Rivell did with each clause">
+            Clauses: {legend}
+          </span>
+        ) : null}
+        {props.onContractAnalysis ? (
+          <Button compact className="rv-ws-details" title="Parties, defined terms and cross-references Rivell read in this contract" onClick={props.onContractAnalysis}>
+            <ClauseIcon className="rv-icon" />
+            Contract details
+          </Button>
+        ) : null}
       </div>
-      {legend || props.onContractAnalysis ? (
-        <div className="rv-ws-legend">
-          {legend ? <span aria-label="What Rivell did with each clause">Clauses: {legend}</span> : null}
-          {props.onContractAnalysis ? (
-            <button type="button" className="rv-ws-link" onClick={props.onContractAnalysis}>
-              Contract analysis
-            </button>
-          ) : null}
-        </div>
-      ) : null}
       {props.notes}
       {props.isPending ? <LoadingState label="Loading contract…" /> : null}
       {props.isError ? <ErrorState message="The contract could not be loaded." onRetry={props.onRetry} /> : null}
