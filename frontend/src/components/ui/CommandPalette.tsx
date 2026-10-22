@@ -21,13 +21,15 @@ interface Props {
   onSearch?: (term: string) => void
   /** Shown while the lists behind the menu are still loading. */
   loading?: boolean
+  /** Lists that failed to load, named as the reader knows them ("Reviews"). */
+  unavailable?: string[]
 }
 
 /**
  * The one search menu (⌘K). Every page lists the same places to go: reviews, playbooks, clauses
  * and sources by name. The page that is open adds its own commands on top.
  */
-export function CommandPalette({ open, onClose, items, onSearch, loading = false }: Props) {
+export function CommandPalette({ open, onClose, items, onSearch, loading = false, unavailable = [] }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const [query, setQuery] = useState('')
   const [index, setIndex] = useState(0)
@@ -51,16 +53,19 @@ export function CommandPalette({ open, onClose, items, onSearch, loading = false
   }, [onClose])
 
   const term = query.trim()
-  const shown = useMemo(() => {
+  const { shown, hidden } = useMemo(() => {
     const needle = term.toLowerCase()
+    const limit = needle ? GROUP_LIMIT_SEARCHING : GROUP_LIMIT
     // A long list would bury the page's own commands, so each group shows its first few entries.
     const perGroup = new Map<string, number>()
     const matches = items.filter((item) => {
       if (needle && !`${item.label} ${item.hint ?? ''} ${item.group}`.toLowerCase().includes(needle)) return false
       const count = (perGroup.get(item.group) ?? 0) + 1
       perGroup.set(item.group, count)
-      return count <= (needle ? GROUP_LIMIT_SEARCHING : GROUP_LIMIT)
+      return count <= limit
     })
+    const held = new Map<string, number>()
+    for (const [group, count] of perGroup) if (count > limit) held.set(group, count - limit)
     if (onSearch && term.length > 2) {
       matches.push({
         group: 'Search',
@@ -69,7 +74,7 @@ export function CommandPalette({ open, onClose, items, onSearch, loading = false
         run: () => onSearch(term),
       })
     }
-    return matches
+    return { shown: matches, hidden: held }
   }, [items, term, onSearch])
   const active = Math.min(index, Math.max(0, shown.length - 1))
 
@@ -117,7 +122,14 @@ export function CommandPalette({ open, onClose, items, onSearch, loading = false
       <div className="rv-ws-pal-l" role="listbox" aria-label="Results">
         {shown.length === 0 ? <div className="rv-ws-pal-e">{loading ? 'Loading…' : 'No results'}</div> : null}
         {shown.map((item, n) => {
-          const heading = n === 0 || shown[n - 1].group !== item.group ? <div className="rv-ws-pal-h">{item.group}</div> : null
+          const more = hidden.get(item.group)
+          const heading =
+            n === 0 || shown[n - 1].group !== item.group ? (
+              <div className="rv-ws-pal-h">
+                {item.group}
+                {more ? <small>{more} more, type to narrow</small> : null}
+              </div>
+            ) : null
           return (
             <div key={`${item.group}-${item.label}-${n}`}>
               {heading}
@@ -138,6 +150,11 @@ export function CommandPalette({ open, onClose, items, onSearch, loading = false
           )
         })}
       </div>
+      {unavailable.length > 0 ? (
+        <p role="status" className="rv-ws-pal-x">
+          {unavailable.join(' and ')} could not be loaded. Try again later.
+        </p>
+      ) : null}
       <div className="rv-ws-pal-f">
         <span>
           <kbd>↑</kbd>
