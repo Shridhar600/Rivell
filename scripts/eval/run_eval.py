@@ -249,6 +249,11 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
     # engine v2 P6 R1: the same run re-scored with the second-opinion-raised items at LOW
     score["withoutSeverityRaise"] = p4_metrics.severity_raise_score(
         score_contract, answer, nodes, clauses, findings)
+    # severity R3 (P7): the same run re-scored without each lever, and without all three
+    for lever, levers in (("withoutP1", ("P1",)), ("withoutP2", ("P2",)), ("withoutP3", ("P3",)),
+                          ("withoutR3", p4_metrics.R3_LEVERS)):
+        score[lever] = p4_metrics.lever_severity_score(
+            score_contract, answer, nodes, clauses, findings, levers)
     score["coverage"] = coverage
     score["checkStatus"] = {}
     for c in checks:
@@ -651,6 +656,16 @@ def p4_lines(results):
     lines.append(f"- Severity R1: {raised} items raised to MEDIUM; serious caught at M+ "
                  f"{with_caught} -> {without_caught} and M+ false-alarm sections "
                  f"{with_alarms} -> {without_alarms} without the raise")
+    if any("withoutR3" in c for c in contracts):
+        for lever, label, noun in (("withoutP1", "P1", "it"), ("withoutP2", "P2", "it"),
+                                   ("withoutP3", "P3", "it"), ("withoutR3", "R3 (P1+P2+P3)", "them")):
+            counted = [c.get(lever) or {} for c in contracts]
+            lines.append(
+                f"- Severity {label}: {sum(s.get('tagged', 0) for s in counted)} findings tagged, "
+                f"{sum(s.get('raised', 0) for s in counted)} raised; serious caught at M+ "
+                f"{with_caught} -> {sum(s.get('seriousCaught', 0) for s in counted)} and M+ false-alarm "
+                f"sections {with_alarms} -> {sum(s.get('seriousFalseAlarmSections', 0) for s in counted)} "
+                f"without {noun}")
     return lines
 
 
@@ -707,7 +722,10 @@ def engine_meta():
     itself is read back from each review's stored snapshot once the run has reviews."""
     return {"engine": "v2",
             "omissions": os.environ.get("RIVELL_REVIEW_OMISSIONS", "false").lower(),
-            "definitions": os.environ.get("RIVELL_REVIEW_DEFINITIONS", "false").lower()}
+            "definitions": os.environ.get("RIVELL_REVIEW_DEFINITIONS", "false").lower(),
+            "agreedWorseCategory": os.environ.get("RIVELL_REVIEW_AGREED_WORSE_CATEGORY", "true").lower(),
+            "withinSplitMargin": os.environ.get("RIVELL_REVIEW_WITHIN_SPLIT_MARGIN", "0.45").lower(),
+            "fallbackConditions": os.environ.get("RIVELL_REVIEW_FALLBACK_CONDITIONS", "true").lower()}
 
 
 def header_lines(meta):
@@ -718,7 +736,12 @@ def header_lines(meta):
                if meta.get("orderProbe", "off") != "off" else "")
             + (f" · engine `{meta['engine']}`" if meta.get("engine", "v2") != "v2" else "")
             + (" · omissions on" if meta.get("omissions") == "true" else "")
-            + (" · definitions on" if meta.get("definitions") == "true" else ""), ""]
+            + (" · definitions on" if meta.get("definitions") == "true" else "")
+            + (" · P1 off" if meta.get("agreedWorseCategory", "true") == "false" else "")
+            + (" · P2 off" if meta.get("withinSplitMargin", "0.45").startswith("-")
+               else f" · P2 margin {meta['withinSplitMargin']}"
+               if meta.get("withinSplitMargin", "0.45") != "0.45" else "")
+            + (" · P3 off" if meta.get("fallbackConditions", "true") == "false" else ""), ""]
 
 
 def write_report(out, results, meta):

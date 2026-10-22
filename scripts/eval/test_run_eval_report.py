@@ -37,7 +37,9 @@ class EngineMetaTest(unittest.TestCase):
     def test_the_defaults_describe_the_engine_the_backend_now_uses(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(run_eval.engine_meta(),
-                             {"engine": "v2", "omissions": "false", "definitions": "false"})
+                             {"engine": "v2", "omissions": "false", "definitions": "false",
+                              "agreedWorseCategory": "true", "withinSplitMargin": "0.45",
+                              "fallbackConditions": "true"})
 
     def test_the_default_definitions_read_is_off(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -50,7 +52,17 @@ class EngineMetaTest(unittest.TestCase):
                              {"RIVELL_REVIEW_ENGINE": "V1", "RIVELL_REVIEW_OMISSIONS": "TRUE",
                               "RIVELL_REVIEW_DEFINITIONS": "FALSE"}):
             self.assertEqual(run_eval.engine_meta(),
-                             {"engine": "v2", "omissions": "true", "definitions": "false"})
+                             {"engine": "v2", "omissions": "true", "definitions": "false",
+                              "agreedWorseCategory": "true", "withinSplitMargin": "0.45",
+                              "fallbackConditions": "true"})
+
+    def test_the_severity_r3_switches_come_from_the_environment(self):
+        with mock.patch.dict(os.environ, {"RIVELL_REVIEW_AGREED_WORSE_CATEGORY": "FALSE",
+                                          "RIVELL_REVIEW_WITHIN_SPLIT_MARGIN": "-1",
+                                          "RIVELL_REVIEW_FALLBACK_CONDITIONS": "False"}, clear=True):
+            meta = run_eval.engine_meta()
+        self.assertEqual((meta["agreedWorseCategory"], meta["withinSplitMargin"], meta["fallbackConditions"]),
+                         ("false", "-1", "false"))
 
 
 class StoredEngineTest(unittest.TestCase):
@@ -80,6 +92,18 @@ class ReportHeaderTest(unittest.TestCase):
         text = "\n".join(run_eval.header_lines(self.meta(engine="v2", omissions="false")))
         self.assertNotIn("engine", text)
         self.assertNotIn("omissions", text)
+
+    def test_a_severity_r3_lever_that_is_off_is_named_and_the_defaults_add_nothing(self):
+        on = "\n".join(run_eval.header_lines(self.meta(
+            agreedWorseCategory="true", withinSplitMargin="0.45", fallbackConditions="true")))
+        self.assertNotIn("P1", on)
+        off = "\n".join(run_eval.header_lines(self.meta(
+            agreedWorseCategory="false", withinSplitMargin="-1", fallbackConditions="false")))
+        self.assertIn("P1 off", off)
+        self.assertIn("P2 off", off)
+        self.assertIn("P3 off", off)
+        tuned = "\n".join(run_eval.header_lines(self.meta(withinSplitMargin="0.3")))
+        self.assertIn("P2 margin 0.3", tuned)
 
     def test_issue_spotting_is_not_claimed_from_a_retired_switch(self):
         text = "\n".join(run_eval.header_lines(self.meta(engine="v2")))

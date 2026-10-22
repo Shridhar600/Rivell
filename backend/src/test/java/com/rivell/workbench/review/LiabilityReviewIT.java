@@ -583,6 +583,16 @@ public class LiabilityReviewIT {
         /** The definitions each second-opinion call carried, in call order. */
         final java.util.List<java.util.List<String>> secondOpinionDefinitions =
                 new java.util.concurrent.CopyOnWriteArrayList<>();
+        /**
+         * The fallback-condition check (severity R3 P3): the condition lines it answers, where
+         * {@code {CLAUSE}} stands for the clause's first words (a quote the clause holds). Null: one MET line.
+         */
+        volatile String fallbackConditionLines;
+        volatile String fallbackListed = "YES";
+        volatile boolean failFallbackConditions;
+        final AtomicInteger fallbackConditionCalls = new AtomicInteger();
+        final java.util.List<FallbackConditionSpecs.FallbackConditionState> fallbackConditionStates =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
 
         @Override
         public String id() {
@@ -610,6 +620,11 @@ public class LiabilityReviewIT {
             failSecondOpinion = false;
             secondOpinionCalls.set(0);
             secondOpinionDefinitions.clear();
+            fallbackConditionLines = null;
+            fallbackListed = "YES";
+            failFallbackConditions = false;
+            fallbackConditionCalls.set(0);
+            fallbackConditionStates.clear();
         }
 
         @Override
@@ -629,6 +644,21 @@ public class LiabilityReviewIT {
                         "quote", quote,
                         "reason", "The quoted words decide how the clause meets the position."),
                         "fake-gen-v1", new TokenUsage(400, 30));
+            }
+            if (request.state() instanceof FallbackConditionSpecs.FallbackConditionState conditions) {
+                fallbackConditionCalls.incrementAndGet();
+                fallbackConditionStates.add(conditions);
+                if (failFallbackConditions) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "fallback condition provider unavailable");
+                }
+                var words = conditions.clause().substring(0, Math.min(40, conditions.clause().length()))
+                        .replaceAll("\\s+", " ").strip();
+                var lines = fallbackConditionLines != null
+                        ? fallbackConditionLines.replace("{CLAUSE}", words)
+                        : "1 | MET | " + words + " | the clause meets the listed fallback";
+                return new GenerationResult(Map.of("fallbackListed", fallbackListed, "conditions", lines),
+                        "fake-gen-v1", new TokenUsage(300, 40));
             }
             if (request.state() instanceof IssueSpottingSpecs.SpottingState spotting) {
                 spottingCalls.incrementAndGet();
