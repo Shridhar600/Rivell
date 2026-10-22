@@ -275,7 +275,8 @@ a {
 /* Three columns, so search sits in the same place on every page whatever the title's length. */
 .rv-topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 300px) minmax(0, 1fr);
+  /* Search stays centred while it fits; wide actions push it left rather than overlap it. */
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 300px) minmax(max-content, 1fr);
   align-items: center;
   gap: 12px;
   flex: none;

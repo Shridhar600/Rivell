@@ -1387,6 +1387,21 @@ h3.rv-ws-sec-h {
     padding: 36px;
   }
 }
+/* A laptop-width top bar keeps the title readable: the progress bar and the finalized note step
+   back (the count stays; the note stays readable by screen readers and as the focus fallback). */
+@media (max-width: 1240px) {
+  .rv-ws-prog .rv-ws-seg {
+    display: none;
+  }
+  .rv-ws-blocker {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 @media (max-width: 980px) {
   .rv-ws {
     height: auto;
@@ -1547,11 +1562,12 @@ h3.rv-ws-sec-h {
 
 /* The edges of the findings list and the detail panel. They sit on the grid, not in the panes, so
    they do not scroll with the panes' content. */
+/* Each handle sits just inside the middle pane, clear of the side panes' scrollbars. */
 .rv-ws-resize--l {
-  left: calc(var(--lw) - 3px);
+  left: var(--lw);
 }
 .rv-ws-resize--r {
-  right: calc(var(--rw) - 3px);
+  right: calc(var(--rw) - 6px);
 }
 
 /* What still blocks Finalize: a small popover under an info button. */
