@@ -218,7 +218,7 @@ describe('finalize is the server’s decision', () => {
     )
     expect(await within(await detail()).findByText('This finding could not be loaded.')).toBeInTheDocument()
     expect(within(await detail()).getByText('Approved changes are final')).toBeInTheDocument()
-    expect(within(await detail()).getByRole('link', { name: 'View review summary' })).toBeInTheDocument()
+    expect(within(await detail()).getByRole('link', { name: 'Go to the redline' })).toBeInTheDocument()
     expect(within(await topBar()).getByRole('button', { name: 'Finalized' })).toBeDisabled()
   })
 })
@@ -249,7 +249,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
     renderWorkspace(api)
     await finalizeFromDialog()
 
-    const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
+    const link = await within(await detail()).findByRole('link', { name: 'Go to the redline' })
     expect(link).toHaveAttribute('href', '/reviews/c1/overview/r-1')
     expect(within(await detail()).getByText('Approved changes are final')).toBeInTheDocument()
     expect(within(await detail()).getByText(/1 approved change fixed for this review/)).toBeInTheDocument()
@@ -265,7 +265,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
   it('moves keyboard focus to the review summary link once the review is finalized', async () => {
     renderWorkspace(stubContractApi(readyToFinalize()))
     await finalizeFromDialog()
-    const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
+    const link = await within(await detail()).findByRole('link', { name: 'Go to the redline' })
     await waitFor(() => expect(link).toHaveFocus())
     expect(screen.queryByRole('dialog', { name: 'Finalize this review?' })).not.toBeInTheDocument()
   })
@@ -289,7 +289,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
         }),
       ),
     )
-    const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
+    const link = await within(await detail()).findByRole('link', { name: 'Go to the redline' })
     expect(link).not.toHaveFocus()
   })
 
@@ -302,7 +302,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
     )
     await finalizeFromDialog()
     expect(await screen.findByRole('alert')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'View review summary' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Go to the redline' })).not.toBeInTheDocument()
   })
 })
 
