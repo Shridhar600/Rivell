@@ -209,7 +209,7 @@ describe('recording a decision in the workspace', () => {
     expect(row).toHaveTextContent('Accepted')
     await userEvent.click(row)
     const detail = findingDetail()
-    expect(await detail.findByText('Version 1', { exact: false })).toBeInTheDocument()
+    expect(await detail.findByText('Decision 1', { exact: false })).toBeInTheDocument()
     expect(detail.getByRole('button', { name: 'Accept' })).toHaveAttribute('aria-pressed', 'true')
 
     expect(

@@ -418,6 +418,12 @@ describe('the retired contract page address', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c7/overview/r-new'))
   })
 
+  it('matches the contract id whatever its letter case', async () => {
+    stubApi([reviewWire('r-new', 'COMPLETED', 'a.docx', { contractId: '9f2a1c44-ab', createdAt: '2026-10-03T08:00:00Z' })])
+    const router = routerAt('/reviews/9F2A1C44-AB')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/9f2a1c44-ab/overview/r-new'))
+  })
+
   it('opens the Reviews list when the contract has no review', async () => {
     stubApi([])
     const router = routerAt('/reviews/c7')

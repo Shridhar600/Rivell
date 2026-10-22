@@ -533,6 +533,46 @@ describe('clause details in place', () => {
     expect(within(sheet).getAllByText('Corrected by you').length).toBeGreaterThan(0)
   })
 
+  it('keeps Tab inside the open panel', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+    const [headerClose, footerClose] = within(sheet).getAllByRole('button', { name: /^Close/ })
+
+    footerClose!.focus()
+    await userEvent.tab()
+    expect(document.activeElement).toBe(headerClose)
+
+    await userEvent.tab({ shift: true })
+    expect(document.activeElement).toBe(footerClose)
+  })
+
+  it('does not save a topic that has not changed', async () => {
+    const api = stubContractApi(options({ clauseMarks: fixtureClauseMarks }))
+    renderWorkspace(api)
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+    await within(sheet).findByRole('option', { name: 'Indemnification' })
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save topic' }))
+
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent('This is already the topic. Choose a different one to correct it.')
+    expect(api.requests.some((request) => request.method === 'POST' && request.url.endsWith('/concepts'))).toBe(false)
+  })
+
+  it('clears the saved note once a different topic is chosen', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+    await within(sheet).findByRole('option', { name: 'Indemnification' })
+    await userEvent.selectOptions(within(sheet).getByLabelText('Topic'), 'INDEMNIFICATION')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save topic' }))
+    expect(await within(sheet).findByText(/Topic updated/)).toBeInTheDocument()
+
+    await userEvent.selectOptions(within(sheet).getByLabelText('Topic'), 'CONFIDENTIALITY_OBLIGATIONS')
+
+    expect(within(sheet).queryByText(/Topic updated/)).not.toBeInTheDocument()
+  })
+
   it('keeps keyboard focus where it is when the workspace updates behind the sheet', async () => {
     renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
     const sheet = await openClauseDetails('6. Limitation of Liability')

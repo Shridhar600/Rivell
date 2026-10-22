@@ -119,6 +119,11 @@ function ConceptEditor({ clause, contractId, versionNumber, onRefresh }: { claus
       setError('Choose the topic this clause is about.')
       return
     }
+    if (selected === effective) {
+      // A no-op save would still mark the clause "Corrected by you".
+      setError('This is already the topic. Choose a different one to correct it.')
+      return
+    }
     setError(null)
     correct.mutate({ clauseId: clause.id, primary: selected })
   }
@@ -166,7 +171,7 @@ function ConceptEditor({ clause, contractId, versionNumber, onRefresh }: { claus
         </div>
       </form>
       {correct.isError ? <CorrectionFailure error={correct.error} onRefresh={onRefresh} /> : null}
-      {correct.isSuccess && !correct.isPending ? (
+      {correct.isSuccess && !correct.isPending && selected === correct.variables?.primary ? (
         <p role="status" className="rv-ws-caption">
           Topic updated. Rivell&apos;s own reading is kept.
         </p>

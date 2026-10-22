@@ -399,7 +399,7 @@ export function FindingPanel(props: Props) {
             <div className="rv-ws-meta-top">
               <strong>{state.label}</strong>
               <small>
-                Version {decision.revision} · {dateTime(decision.decidedAt) || 'Saved'}
+                Decision {decision.revision} · {dateTime(decision.decidedAt) || 'Saved'}
               </small>
             </div>
             {decision.comment ? <p>{decision.comment}</p> : null}

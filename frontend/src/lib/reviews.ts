@@ -24,20 +24,6 @@ export function reviewStatusLabel(status: string): string {
   return REVIEW_STATUS_LABELS[status] ?? humanizeCode(status)
 }
 
-export function reviewStatusModifier(status: string): string {
-  switch (status) {
-    case 'COMPLETED':
-      return 'badge--status-complete'
-    case 'FAILED':
-      return 'badge--status-failed'
-    case 'ANALYZING':
-    case 'ANALYSIS_QUEUED':
-      return 'badge--status-active'
-    default:
-      return 'badge--muted'
-  }
-}
-
 export function runStatusLabel(status: string): string {
   switch (status) {
     case 'RUNNING':
@@ -60,19 +46,6 @@ const SEVERITY_LABELS: Record<string, string> = {
 
 export function severityLabel(severity: string): string {
   return SEVERITY_LABELS[severity] ?? humanizeCode(severity)
-}
-
-export function severityModifier(severity: string): string {
-  switch (severity) {
-    case 'HIGH':
-      return 'badge--attention-high'
-    case 'MEDIUM':
-      return 'badge--attention-elevated'
-    case 'LOW':
-      return 'badge--attention-routine'
-    default:
-      return 'badge--muted'
-  }
 }
 
 const CLASSIFICATION_LABELS: Record<string, string> = {
