@@ -174,8 +174,8 @@ describe('finalize is the server’s decision', () => {
     expect(await topBar()).not.toHaveTextContent(/unresolved/)
     const progress = (await topBar()).querySelector('.rv-ws-prog') as HTMLElement
     expect(progress).toHaveAttribute('title', 'Not ready to finalize')
-    // The reason is also one click or Enter away, for keyboard and screen reader users.
-    const why = within(await topBar()).getByText('', { selector: 'summary[aria-label="Why the review cannot be finalized yet"]' })
+    // The reason is in plain sight, one click or Enter away, for every reader.
+    const why = within(await topBar()).getByText('What is left', { selector: 'summary' })
     await userEvent.click(why)
     expect(screen.getByRole('group', { name: 'What is left before you can finalize' })).toHaveTextContent(
       '1 finding that requires review still needs a decision.',

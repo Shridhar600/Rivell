@@ -1578,6 +1578,25 @@ h3.rv-ws-sec-h {
   list-style: none;
   color: var(--amber);
 }
+.rv-ws-blk__sum {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-md);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.rv-ws-blk__sum:hover {
+  background: var(--hover);
+}
+.rv-ws-blk__sum:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+}
 .rv-ws-blk > summary::-webkit-details-marker {
   display: none;
 }

@@ -119,8 +119,9 @@ export function WorkspaceTopBar({
           {humanReview && !ready && !isFinalized ? (
             // What still blocks Finalize, one click (or Enter) away, for keyboard and screen reader users too.
             <details className="rv-ws-blk" ref={whyRef}>
-              <summary className="rv-iconbtn" aria-label="Why the review cannot be finalized yet" title="Why Finalize is not available yet">
+              <summary className="rv-ws-blk__sum">
                 <InfoIcon className="rv-icon" />
+                What is left
               </summary>
               <div className="rv-ws-blk__pop" role="group" aria-label="What is left before you can finalize">
                 {blockers.length > 0 ? (
