@@ -59,7 +59,7 @@ describe('review identity', () => {
       ),
     )
     expect(await screen.findByText(/The file was damaged. Rivell repaired it/)).toBeInTheDocument()
-    expect(screen.getByText('Footnotes contain content that is not represented.')).toBeInTheDocument()
+    expect(screen.getByText('Footnotes hold text that Rivell did not read.')).toBeInTheDocument()
   })
 
   it('treats a review from another contract as not found', async () => {
