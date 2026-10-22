@@ -102,16 +102,17 @@ public record KnowledgeCandidate(
         return conceptCorrection.isBlank() ? null : conceptCorrection;
     }
 
-    public KnowledgeCandidate withConceptCorrection(String correction) {
+    public KnowledgeCandidate withConceptCorrection(
+            String correction, UUID correctedBy, Instant correctedAt) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
                 correctionTopicKeys(correction),
                 correction,
-                conceptCorrectedBy, conceptCorrectedAt,
+                correctedBy, correctedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons, reviewNote, reviewedAt,
-                createdAt, Instant.now());
+                createdAt, correctedAt);
     }
 
     /**
