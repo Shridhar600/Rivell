@@ -53,23 +53,38 @@ public class DocxStructuralParser implements DocumentStructureParser {
 
     public static final String PARSER_VERSION = "rivell-docx-parser-3";
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(DocxStructuralParser.class);
+
     private static final String PART_PATH = "word/document.xml";
 
     private final DocxParserProperties properties;
     private final HeadingDetector headingDetector;
+    private final DocumentWorkLimiter limiter;
 
     public DocxStructuralParser(DocxParserProperties properties) {
         this(properties, new SignalHeadingDetector());
     }
 
-    @Autowired
     public DocxStructuralParser(DocxParserProperties properties, HeadingDetector headingDetector) {
+        this(properties, headingDetector,
+                new DocumentWorkLimiter(DocumentWorkLimiter.DEFAULT_MAX_CONCURRENT));
+    }
+
+    @Autowired
+    public DocxStructuralParser(DocxParserProperties properties, HeadingDetector headingDetector,
+            DocumentWorkLimiter limiter) {
         this.properties = properties;
         this.headingDetector = headingDetector;
+        this.limiter = limiter;
     }
 
     @Override
     public ParseResult parse(InputStream source, UUID ownerAggregateId) {
+        return limiter.run(() -> parseWithinLimit(source, ownerAggregateId));
+    }
+
+    private ParseResult parseWithinLimit(InputStream source, UUID ownerAggregateId) {
         try {
             var docxBytes = source.readAllBytes();
             var scan = ZipGuard.scan(docxBytes, properties.maxUncompressedBytes());
@@ -97,9 +112,10 @@ public class DocxStructuralParser implements DocumentStructureParser {
             var coverage = coverage(docxBytes, walk.nodes(), warnings);
             return new ParseResult(PARSER_VERSION, ParseStatus.OK, warnings, walk.nodes(), coverage);
         } catch (Exception e) {
+            log.warn("Word file could not be parsed ({}: {})", e.getClass().getSimpleName(), e.getMessage());
             return new ParseResult(
                     PARSER_VERSION, ParseStatus.FAILED,
-                    List.of("The document could not be parsed (" + e.getClass().getSimpleName() + ")"),
+                    List.of("Rivell could not read this Word file. Check that it opens in Word, then upload it again."),
                     List.of());
         }
     }

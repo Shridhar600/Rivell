@@ -27,8 +27,10 @@ import org.docx4j.wml.Tbl;
 import org.docx4j.wml.Tc;
 import org.docx4j.wml.Text;
 import org.docx4j.wml.Tr;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.rivell.workbench.platform.parsing.DocumentWorkLimiter;
 import com.rivell.workbench.redline.AppliedChangeReport;
 import com.rivell.workbench.redline.ChangeVerification;
 import com.rivell.workbench.redline.DocumentExecutionPlan;
@@ -49,10 +51,19 @@ import com.rivell.workbench.redline.VerificationReport;
 public class DocxRedlineVerifier implements RedlineVerifier {
 
     private final com.rivell.workbench.platform.parsing.DocxParserProperties properties;
+    private final DocumentWorkLimiter limiter;
 
     public DocxRedlineVerifier(
             com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        this(properties, new DocumentWorkLimiter(DocumentWorkLimiter.DEFAULT_MAX_CONCURRENT));
+    }
+
+    @Autowired
+    public DocxRedlineVerifier(
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties,
+            DocumentWorkLimiter limiter) {
         this.properties = properties;
+        this.limiter = limiter;
     }
 
     /**
@@ -85,6 +96,13 @@ public class DocxRedlineVerifier implements RedlineVerifier {
     public VerificationReport verify(
             byte[] sourceBytes, byte[] generatedBytes, DocumentExecutionPlan plan,
             List<AppliedChangeReport> appliedReports) {
+        return limiter.run(() -> verifyWithinLimit(
+                sourceBytes, generatedBytes, plan, appliedReports));
+    }
+
+    private VerificationReport verifyWithinLimit(
+            byte[] sourceBytes, byte[] generatedBytes, DocumentExecutionPlan plan,
+            List<AppliedChangeReport> appliedReports) {
         WordprocessingMLPackage generated;
         WordprocessingMLPackage source;
         try {
@@ -92,24 +110,24 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         } catch (PackageExpansionRejectedException e) {
             return VerificationReport.failed(
                     RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED,
-                    "The package expands beyond the permitted size for verification.", List.of());
+                    "This contract is too large once unpacked, so Rivell could not check the redline.", List.of());
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
-                    "The generated document could not be reopened.", List.of());
+                    "Rivell could not reopen the redline it built, so it did not release the file.", List.of());
         }
         try {
             source = load(sourceBytes, properties);
         } catch (PackageExpansionRejectedException e) {
             return VerificationReport.failed(
                     RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED,
-                    "The package expands beyond the permitted size for verification.", List.of());
+                    "This contract is too large once unpacked, so Rivell could not check the redline.", List.of());
         } catch (Exception e) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
-                    "The frozen source document could not be reopened.", List.of());
+                    "Rivell could not reopen the original contract to check the redline.", List.of());
         }
         if (!DocxRedlineSupport.isDocxMainPart(generated)) {
             return VerificationReport.failed(RedlineFailureCode.ROUND_TRIP_FAILED,
-                    "The generated package is no longer a standard DOCX document.", List.of());
+                    "The redline is no longer a standard Word file, so Rivell did not release it.", List.of());
         }
 
         var partProblem = partProblem(source, generated, sourceBytes, generatedBytes);
@@ -124,12 +142,12 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         var expectedAcceptView = expectedAcceptView(source, plan);
         if (!rejectView.equals(sourceView)) {
             return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
-                    "Rejecting all tracked changes does not reproduce the frozen source.",
+                    "Rejecting every tracked change would not give back the original contract, so Rivell did not release the redline.",
                     List.of());
         }
         if (!acceptView.equals(expectedAcceptView)) {
             return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
-                    "Accepting all tracked changes does not reproduce the approved changes.",
+                    "Accepting every tracked change would not give the approved wording, so Rivell did not release the redline.",
                     List.of());
         }
 
@@ -169,11 +187,11 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         }
         if (!sameMultiset(deletedParagraphs, expectedDeleted)) {
             return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
-                    "Tracked deletions do not match the approved changes exactly.", List.of());
+                    "The tracked deletions do not match the approved changes, so Rivell did not release the redline.", List.of());
         }
         if (!sameMultiset(insertedParagraphs, expectedInserted)) {
             return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
-                    "Tracked insertions do not match the approved changes exactly.", List.of());
+                    "The tracked insertions do not match the approved changes, so Rivell did not release the redline.", List.of());
         }
 
         var rangeProblem = rangeProblem(generated, plan, appliedReports);
@@ -189,7 +207,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         if (changeResults.stream()
                 .anyMatch(result -> result.status() == RedlineVerificationStatus.FAILED)) {
             return VerificationReport.failed(RedlineFailureCode.VERIFICATION_FAILED,
-                    "At least one approved change is not represented by its tracked change.",
+                    "At least one approved change did not make it into the redline as a tracked change.",
                     changeResults);
         }
         return VerificationReport.verified(changeResults);
@@ -205,16 +223,14 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         if (!containsOrderedSubsequence(deletedParagraphs, expectedDeleted)) {
             return new ChangeVerification(operation.approvedChangeId(),
                     RedlineVerificationStatus.FAILED,
-                    "The tracked deletion for change " + operation.ordinal()
-                            + " is missing or out of order.");
+                    "The tracked deletion for this change is missing or out of order.");
         }
         var expectedInserted = operation.insertion() == null
                 ? List.<String>of() : operation.insertion().paragraphs();
         if (!containsContiguousRun(insertedParagraphs, expectedInserted)) {
             return new ChangeVerification(operation.approvedChangeId(),
                     RedlineVerificationStatus.FAILED,
-                    "The tracked insertion for change " + operation.ordinal()
-                            + " is missing or not contiguous.");
+                    "The tracked insertion for this change is missing or broken up.");
         }
         return new ChangeVerification(operation.approvedChangeId(),
                 RedlineVerificationStatus.VERIFIED, null);
@@ -565,13 +581,13 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         }
         for (var element : children) {
             if (element instanceof RunIns) {
-                return "An existing paragraph carries inserted run content.";
+                return "Text was inserted into a paragraph that should not have changed.";
             }
             if (element instanceof RunDel del) {
                 for (var wrapped : del.getCustomXmlOrSmartTagOrSdt()) {
                     var run = DocxRedlineSupport.unwrap(wrapped);
                     if (run instanceof R inner && runHasNormalText(inner)) {
-                        return "A tracked deletion carries normal text instead of delText.";
+                        return "A tracked deletion still shows its text as normal text.";
                     }
                 }
             }
@@ -589,7 +605,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             }
             if (tr.getTrPr() != null && (tr.getTrPr().getIns() != null
                     || tr.getTrPr().getDel() != null)) {
-                return "The generated document contains an unplanned revision inside a table.";
+                return "The redline has a tracked change inside a table that Rivell did not plan.";
             }
             for (var rawCell : tr.getContent()) {
                 var cell = DocxRedlineSupport.unwrap(rawCell);
@@ -598,15 +614,13 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 }
                 if (tc.getTcPr() != null && (tc.getTcPr().getCellIns() != null
                         || tc.getTcPr().getCellDel() != null)) {
-                    return "The generated document contains an unplanned revision inside "
-                            + "a table.";
+                    return "The redline has a tracked change inside a table that Rivell did not plan.";
                 }
                 for (var rawCellChild : tc.getContent()) {
                     var cellChild = DocxRedlineSupport.unwrap(rawCellChild);
                     if (cellChild instanceof P cellParagraph
                             && (isDeleted(cellParagraph) || isInserted(cellParagraph))) {
-                        return "The generated document contains an unplanned revision inside "
-                                + "a table.";
+                        return "The redline has a tracked change inside a table that Rivell did not plan.";
                     }
                 }
             }
@@ -619,37 +633,36 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             var element = DocxRedlineSupport.unwrap(raw);
             if (element instanceof R run) {
                 if (runHasText(run)) {
-                    return "A tracked deletion contains text outside a w:del wrapper.";
+                    return "A tracked deletion contains text that is not marked as deleted.";
                 }
             } else if (element instanceof RunIns) {
-                return "A tracked deletion contains inserted run content.";
+                return "A tracked deletion contains inserted text.";
             } else if (element instanceof RunDel del) {
                 for (var wrapped : del.getCustomXmlOrSmartTagOrSdt()) {
                     var run = DocxRedlineSupport.unwrap(wrapped);
                     if (run instanceof R inner && runHasNormalText(inner)) {
-                        return "A tracked deletion carries normal text instead of delText.";
+                        return "A tracked deletion still shows its text as normal text.";
                     }
                     if (run instanceof RunIns) {
-                        return "A tracked deletion contains inserted run content.";
+                        return "A tracked deletion contains inserted text.";
                     }
                 }
             } else if (element instanceof P.Hyperlink hyperlink) {
                 for (var rawLinkChild : hyperlink.getContent()) {
                     var linkChild = DocxRedlineSupport.unwrap(rawLinkChild);
                     if (linkChild instanceof R run && runHasText(run)) {
-                        return "A tracked deletion contains text outside a w:del wrapper.";
+                        return "A tracked deletion contains text that is not marked as deleted.";
                     }
                     if (linkChild instanceof RunDel del) {
                         for (var wrapped : del.getCustomXmlOrSmartTagOrSdt()) {
                             var run = DocxRedlineSupport.unwrap(wrapped);
                             if (run instanceof R inner && runHasNormalText(inner)) {
-                                return "A tracked deletion carries normal text instead "
-                                        + "of delText.";
+                                return "A tracked deletion still shows its text as normal text.";
                             }
                         }
                     }
                     if (linkChild instanceof RunIns) {
-                        return "A tracked deletion contains inserted run content.";
+                        return "A tracked deletion contains inserted text.";
                     }
                 }
             }
@@ -661,10 +674,10 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         for (var raw : paragraph.getContent()) {
             var element = DocxRedlineSupport.unwrap(raw);
             if (element instanceof R run && runHasText(run)) {
-                return "A tracked insertion contains text outside a w:ins wrapper.";
+                return "A tracked insertion contains text that is not marked as inserted.";
             }
             if (element instanceof RunDel) {
-                return "A tracked insertion contains deleted run content.";
+                return "A tracked insertion contains deleted text.";
             }
             if (element instanceof RunIns ins) {
                 var problem = insertedWrapperProblem(ins.getCustomXmlOrSmartTagOrSdt());
@@ -676,10 +689,10 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 for (var rawLinkChild : hyperlink.getContent()) {
                     var linkChild = DocxRedlineSupport.unwrap(rawLinkChild);
                     if (linkChild instanceof R run && runHasText(run)) {
-                        return "A tracked insertion contains text outside a w:ins wrapper.";
+                        return "A tracked insertion contains text that is not marked as inserted.";
                     }
                     if (linkChild instanceof RunDel) {
-                        return "A tracked insertion contains deleted run content.";
+                        return "A tracked insertion contains deleted text.";
                     }
                     if (linkChild instanceof RunIns ins) {
                         var problem = insertedWrapperProblem(
@@ -698,10 +711,10 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         for (var raw : wrapped) {
             var element = DocxRedlineSupport.unwrap(raw);
             if (element instanceof R run && runHasDeletedText(run)) {
-                return "A tracked insertion carries deleted text inside w:ins.";
+                return "A tracked insertion contains deleted text.";
             }
             if (element instanceof RunDel) {
-                return "A tracked insertion contains deleted run content.";
+                return "A tracked insertion contains deleted text.";
             }
         }
         return null;
@@ -751,7 +764,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         }
         for (var operation : plan.operations()) {
             if (!reportByChange.containsKey(operation.approvedChangeId())) {
-                return "The renderer did not report an applied change.";
+                return "Rivell has no record that one of the approved changes was applied.";
             }
         }
         var reports = new ArrayList<>(reportByChange.values());
@@ -761,7 +774,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                 var second = reports.get(j);
                 if (first.revisionIdStart() <= second.revisionIdEnd()
                         && second.revisionIdStart() <= first.revisionIdEnd()) {
-                    return "Per-change revision id ranges are not disjoint.";
+                    return "Two approved changes share the same tracked change numbers.";
                 }
             }
         }
@@ -774,14 +787,14 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             var covered = reports.stream().anyMatch(report ->
                     id >= report.revisionIdStart() && id <= report.revisionIdEnd());
             if (!covered) {
-                return "The document contains a revision id outside the planned ranges.";
+                return "The redline contains a tracked change that Rivell did not plan.";
             }
         }
         for (var report : reports) {
             var planned = plan.operations().stream().anyMatch(operation ->
                     operation.approvedChangeId().equals(report.approvedChangeId()));
             if (!planned) {
-                return "The renderer reported a change that is not part of the plan.";
+                return "Rivell applied a change that was not in the approved set.";
             }
         }
         return null;
@@ -801,13 +814,12 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             var ids = new HashSet<Long>();
             collectParagraphRevisionIds(paragraph, ids);
             if (ids.size() > 1) {
-                problem[0] = "A paragraph carries more than one revision id.";
+                problem[0] = "One paragraph carries more than one tracked change number.";
                 return;
             }
             for (var id : ids) {
                 if (!seen.add(id)) {
-                    problem[0] = "The generated document contains duplicate revision "
-                            + "identifiers.";
+                    problem[0] = "The redline reuses a tracked change number, so Rivell did not release it.";
                 }
             }
         });
@@ -875,7 +887,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         var sourceZip = zipEntries(sourceBytes);
         var generatedZip = zipEntries(generatedBytes);
         if (sourceZip == null || generatedZip == null) {
-            return "The document packages could not be compared.";
+            return "Rivell could not compare the redline with the original contract.";
         }
         for (var part : source.getParts().getParts().keySet()) {
             var name = part.getName().startsWith("/")
@@ -885,21 +897,21 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             }
             var generatedPart = generatedZip.get(name);
             if (generatedPart == null) {
-                return "A frozen source document part is missing from the generated redline.";
+                return "Part of the original contract file is missing from the redline.";
             }
             var sourcePart = sourceZip.get(name);
             if (sourcePart != null && !Arrays.equals(sourcePart, generatedPart)) {
-                return "A frozen source document part changed during redline execution.";
+                return "Part of the original contract file changed while the redline was built.";
             }
             var sourceContentType = contentType(source, name);
             var generatedContentType = contentType(generated, name);
             if (sourceContentType != null && !sourceContentType.equals(generatedContentType)) {
-                return "A preserved document part changed its content type.";
+                return "Part of the original contract file changed type in the redline.";
             }
         }
         for (var name : generatedZip.keySet()) {
             if (!sourceZip.containsKey(name)) {
-                return "The generated redline contains unexpected package content.";
+                return "The redline file contains content that was not in the original contract.";
             }
         }
         return relationshipProblem(source, generated);
@@ -919,7 +931,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             var generatedPart = generated.getParts().getParts().get(entry.getKey());
             if (!(generatedPart instanceof org.docx4j.openpackaging.parts.relationships
                     .RelationshipsPart generatedRelationships)) {
-                return "A frozen source relationship part is missing from the generated redline.";
+                return "A link inside the original contract file is missing from the redline.";
             }
             var sourceList = sourceRelationships.getJaxbElement() == null
                     ? List.<org.docx4j.relationships.Relationship>of()
@@ -935,8 +947,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
                                 && Objects.equals(candidate.getTargetMode(),
                                         relationship.getTargetMode()));
                 if (!present) {
-                    return "A frozen source document relationship is missing from the "
-                            + "generated redline.";
+                    return "A link inside the original contract file is missing from the redline.";
                 }
             }
         }
