@@ -98,8 +98,8 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
 
 const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
   bounded_decision_unavailable: 'Could not be assessed',
-  second_opinion_disagrees: 'Needs your look: two reviewers disagree',
-  second_opinion_unavailable: 'Needs your look: no second opinion',
+  second_opinion_disagrees: 'Needs your look: Rivell is unsure',
+  second_opinion_unavailable: 'Needs your look: no second check',
 }
 
 export function observationKindLabel(kind: string): string {
@@ -124,17 +124,23 @@ export function comparisonCategoryLabel(category: string): string {
 }
 
 /**
- * The comparison's own assessment in one line: the code-owned category, then the model's flag
- * probability as a percentage. The uncovered-clause triage's probability stands in the same place
- * when no comparison category exists. The probability is the model's estimate, never a certainty,
- * and a finding whose quality lacks every part shows no line.
+ * The comparison's own assessment in one line: the code-owned category, then how sure Rivell is,
+ * in words. A percentage read as false precision to lawyers, so the model's flag probability (or
+ * the uncovered-clause triage's) is shown as high, medium or low. A finding whose quality lacks
+ * every part shows no line.
  */
+export function confidenceWord(probability: number): 'high' | 'medium' | 'low' {
+  if (probability >= 0.8) return 'high'
+  if (probability >= 0.6) return 'medium'
+  return 'low'
+}
+
 export function assessmentSummary(quality: FindingQuality | null): string | null {
   const parts: string[] = []
   if (quality?.category) parts.push(comparisonCategoryLabel(quality.category))
   const probability = quality?.flagProbability ?? quality?.uncoveredProbability ?? null
   if (probability !== null) {
-    parts.push(`Rivell's estimate: ${Math.round(probability * 100)}% (not a certainty)`)
+    parts.push(`Confidence: ${confidenceWord(probability)}`)
   } else if (quality?.presenceProbability != null) {
     // an omission: how likely the playbook position requires the provision at all
     parts.push(
@@ -367,8 +373,8 @@ export function policyNoteText(
 ): string | null {
   if (finding.issueFamily === 'POLICY_UNAVAILABLE') {
     return finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK'
-      ? 'This is a gap in the playbook, not a breach of one. Precedent is evidence only and does not establish a position.'
-      : 'No organizational policy covers this clause. Historical precedent is evidence only and does not establish policy.'
+      ? 'This is a gap in the playbook, not a breach of one. Past contracts are examples only, not your position.'
+      : 'Your playbook has no position on this clause. Past contracts are examples only, not your position.'
   }
   if (finding.issueFamily === 'POLICY_AMBIGUOUS') {
     return 'More than one published policy applies. Rivell did not choose between them; the ambiguity is preserved for your review.'
