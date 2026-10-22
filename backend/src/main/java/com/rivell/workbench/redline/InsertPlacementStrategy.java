@@ -99,7 +99,7 @@ public final class InsertPlacementStrategy {
         }
         if (lastTopLevel < 0) {
             throw new RedlinePlanException(RedlineFailureCode.INSERT_PLACEMENT_UNRESOLVED, null,
-                    "No deterministic insertion placement exists for this document.");
+                    "Rivell cannot tell where to insert the new clause in this contract.");
         }
         return new Placement("END_OF_BODY", lastTopLevel,
                 lastParagraph == null ? null : lastParagraph.sourceSpan().bodyIndex(),
@@ -149,7 +149,7 @@ public final class InsertPlacementStrategy {
         var node = byId.get(region.headingNodeId());
         if (node == null) {
             throw new RedlinePlanException(RedlineFailureCode.TARGET_NOT_FOUND, null,
-                    "A clause region is missing its heading node.");
+                    "Rivell cannot find the heading of a clause in this contract.");
         }
         return node;
     }
@@ -161,6 +161,6 @@ public final class InsertPlacementStrategy {
                 .findFirst()
                 .orElseThrow(() -> new RedlinePlanException(
                         RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE, null,
-                        "The document has no canonical body node."));
+                        "Rivell cannot find the body of this contract."));
     }
 }

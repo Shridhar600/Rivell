@@ -3,8 +3,8 @@ package com.rivell.workbench.knowledge;
 public class InvalidCandidateReviewStateException extends RuntimeException {
 
     public InvalidCandidateReviewStateException(KnowledgeCandidate candidate, String operation) {
-        super("Candidate " + candidate.id() + " in state " + candidate.reviewStatus()
-                + " cannot be " + operation);
+        super("This entry is " + describe(candidate.reviewStatus()) + ", so it cannot be "
+                + operation + ".");
     }
 
     /**
@@ -15,12 +15,22 @@ public class InvalidCandidateReviewStateException extends RuntimeException {
      */
     public static InvalidCandidateReviewStateException lostConcurrentTransition(
             KnowledgeCandidate candidate, String operation) {
-        return new InvalidCandidateReviewStateException("Candidate " + candidate.id()
-                + " changed state while it was being " + operation
-                + " and was no longer in state " + candidate.reviewStatus());
+        return new InvalidCandidateReviewStateException("Someone else changed this entry while it "
+                + "was being " + operation + ". Reload it and try again.");
     }
 
     private InvalidCandidateReviewStateException(String message) {
         super(message);
+    }
+
+    /** The state as a reviewer reads it, not as the enum is named. */
+    static String describe(ReviewStatus status) {
+        return switch (status) {
+            case PENDING -> "waiting for review";
+            case APPROVED -> "approved";
+            case EDITED -> "edited";
+            case REJECTED -> "rejected";
+            case PUBLISHED -> "published";
+        };
     }
 }

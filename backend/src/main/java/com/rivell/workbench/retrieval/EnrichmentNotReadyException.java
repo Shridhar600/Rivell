@@ -6,7 +6,7 @@ import java.util.UUID;
 public class EnrichmentNotReadyException extends RuntimeException {
 
     public EnrichmentNotReadyException(UUID contractId, int versionNumber) {
-        super("Contract " + contractId + " v" + versionNumber
-                + " is not enriched READY; evidence cannot be built");
+        super("Rivell has not finished analyzing this contract, so it cannot gather evidence "
+                + "yet.");
     }
 }

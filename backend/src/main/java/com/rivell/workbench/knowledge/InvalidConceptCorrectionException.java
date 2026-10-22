@@ -6,6 +6,6 @@ import java.util.UUID;
 public class InvalidConceptCorrectionException extends RuntimeException {
 
     public InvalidConceptCorrectionException(UUID candidateId) {
-        super("Unknown concept key in candidate concept correction: " + candidateId);
+        super("That topic is not recognized. Choose a topic from the list.");
     }
 }

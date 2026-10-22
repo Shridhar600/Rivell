@@ -34,13 +34,13 @@ public final class RedlinePlanResolver {
             String sourceSha256) {
         if (set.changeSetVersion() != 1) {
             throw new RedlinePlanException(RedlineFailureCode.UNSUPPORTED_CHANGESET_VERSION, null,
-                    "Change set version " + set.changeSetVersion()
-                            + " is not supported by this renderer.");
+                    "Rivell cannot build a redline from these approved changes. A different "
+                            + "version of Rivell created them.");
         }
         if (!structure.contractId().equals(set.contractId())
                 || structure.versionNumber() != set.contractVersionNumber()) {
             throw new RedlinePlanException(RedlineFailureCode.SOURCE_VERSION_MISMATCH, null,
-                    "The frozen structure does not match the approved change set source version.");
+                    "The contract version no longer matches the version these changes were approved on.");
         }
 
         var nodes = structure.nodes();
@@ -166,20 +166,19 @@ public final class RedlinePlanResolver {
         var headingNode = byId.get(change.targetHeadingNodeId());
         if (headingNode == null || headingNode.nodeType() != DocumentNodeType.HEADING) {
             throw new RedlinePlanException(RedlineFailureCode.TARGET_NOT_FOUND, change.id(),
-                    "Approved change " + change.ordinal() + " (" + change.actionType()
-                            + ") targets a clause that is not present in the frozen structure.");
+                    "An approved change targets a clause that is not in the contract version "
+                            + "that was reviewed.");
         }
         var region = regionByHeading.get(headingNode.id());
         if (region == null) {
             throw new RedlinePlanException(RedlineFailureCode.TARGET_NOT_FOUND, change.id(),
-                    "Approved change " + change.ordinal() + " (" + change.actionType()
-                            + ") targets a clause that is not present in the frozen structure.");
+                    "An approved change targets a clause that is not in the contract version "
+                            + "that was reviewed.");
         }
         if (region.kind() != ContractRegionSegmenter.SemanticRegionKind.CLAUSE) {
             throw new RedlinePlanException(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
                     change.id(),
-                    "Approved change " + change.ordinal()
-                            + " targets a region that is not a supported clause.");
+                    "An approved change targets text that is not a clause Rivell can redline.");
         }
         return region;
     }
@@ -193,15 +192,14 @@ public final class RedlinePlanResolver {
             var node = byId.get(textNodeId);
             if (node == null) {
                 throw new RedlinePlanException(RedlineFailureCode.TARGET_NOT_FOUND, change.id(),
-                        "Approved change " + change.ordinal()
-                                + " targets a clause whose content is not present in the "
-                                + "frozen structure.");
+                        "An approved change targets a clause whose text is missing from the "
+                                + "reviewed contract.");
             }
             if (node.nodeType() != DocumentNodeType.PARAGRAPH) {
                 throw new RedlinePlanException(
                         RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE, change.id(),
-                        "Approved change " + change.ordinal()
-                                + " targets a clause that contains unsupported content.");
+                        "An approved change targets a clause that contains content Rivell "
+                                + "cannot redline.");
             }
             targets.add(paragraph(change, node));
         }
@@ -222,9 +220,8 @@ public final class RedlinePlanResolver {
         var node = byId.get(region.headingNodeId());
         if (node == null) {
             throw new RedlinePlanException(RedlineFailureCode.TARGET_NOT_FOUND, change.id(),
-                    "Approved change " + change.ordinal()
-                            + " targets a clause whose heading is not present in the frozen "
-                            + "structure.");
+                    "An approved change targets a clause whose heading is missing from the "
+                            + "reviewed contract.");
         }
         return node;
     }
@@ -250,7 +247,7 @@ public final class RedlinePlanResolver {
                 if (previous != null) {
                     throw new RedlinePlanException(RedlineFailureCode.CHANGE_OVERLAP,
                             operation.approvedChangeId(),
-                            "Approved changes target overlapping document content.");
+                            "Two approved changes cover the same text, so Rivell cannot apply both.");
                 }
             }
         }
@@ -277,9 +274,8 @@ public final class RedlinePlanResolver {
                     throw new RedlinePlanException(
                             RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
                             operation.approvedChangeId(),
-                            "Approved change " + operation.ordinal()
-                                    + " would delete the document's final paragraph, "
-                                    + "which cannot be represented as a tracked change.");
+                            "An approved change would delete the last paragraph of the contract. "
+                                    + "Word cannot show that as a tracked change.");
                 }
             }
         }
@@ -298,7 +294,7 @@ public final class RedlinePlanResolver {
         if (language == null || language.isBlank()) {
             throw new RedlinePlanException(RedlineFailureCode.MISSING_APPROVED_LANGUAGE,
                     change == null ? null : change.id(),
-                    "An approved change carries no approved language.");
+                    "An approved change has no final wording.");
         }
         var normalized = language.replace("\r\n", "\n").replace('\r', '\n');
         var parts = new ArrayList<>(List.of(normalized.split("\n", -1)));
@@ -308,7 +304,7 @@ public final class RedlinePlanResolver {
         if (parts.stream().allMatch(String::isEmpty)) {
             throw new RedlinePlanException(RedlineFailureCode.MISSING_APPROVED_LANGUAGE,
                     change == null ? null : change.id(),
-                    "An approved change carries no approved language.");
+                    "An approved change has no final wording.");
         }
         return List.copyOf(parts);
     }

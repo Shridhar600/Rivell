@@ -134,7 +134,7 @@ public class ReviewService {
         requireEnrichmentReady(semantics.enrichmentStatus(), contractId, versionNumber);
         var pack = packKey == null ? null : packs.find(packKey)
                 .orElseThrow(() -> new InvalidReviewConfigurationException(
-                        "Unknown contract pack: " + packKey));
+                        "That review pack is not available."));
 
         var organizationId = identity.organizationId();
         // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
@@ -205,8 +205,8 @@ public class ReviewService {
         var requested = normalize(requestedPackKey);
         if (declared != null && requested != null && !declared.equals(requested)) {
             throw new InvalidReviewConfigurationException(
-                    "Review profile declares contract pack " + declared
-                            + " but the review requested " + requested);
+                    "This contract is set up for a different review pack than the one you "
+                            + "chose.");
         }
         return requested != null ? requested : declared;
     }

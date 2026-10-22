@@ -312,7 +312,7 @@ class FinalizationIT {
                 .andExpect(jsonPath("$.data.backgroundWorkerEnabled").value(false))
                 .andExpect(jsonPath("$.data.analysis").doesNotExist())
                 .andExpect(jsonPath("$.data.stalled[0]")
-                        .value("No analysis run has been created for this review."))
+                        .value("The analysis has not started for this review."))
                 .andReturn();
 
         var body = result.getResponse().getContentAsString();

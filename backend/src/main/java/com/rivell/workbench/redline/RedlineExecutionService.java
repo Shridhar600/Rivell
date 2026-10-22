@@ -115,10 +115,10 @@ public class RedlineExecutionService {
                 .orElseThrow(RedlineNotAvailableException::new);
         var latest = executionRepository.findByChangeSet(organizationId, changeSet.id())
                 .orElseThrow(() -> new RedlineRetryNotAvailableException(
-                        "No redline execution exists to retry; generate the redline first."));
+                        "There is no redline attempt to retry. Generate the redline first."));
         if (latest.status() != RedlineExecutionStatus.FAILED) {
             throw new RedlineRetryNotAvailableException(
-                    "Only a FAILED redline execution can be retried.");
+                    "Only a redline that failed can be retried.");
         }
         return requireSuccessful(attempt(changeSet, organizationId, identity.userId(),
                 latest.attemptNumber() + 1, clock.instant().truncatedTo(ChronoUnit.MICROS)));
@@ -135,7 +135,7 @@ public class RedlineExecutionService {
         var execution = semanticallyDrifted(changeSet, organizationId)
                 ? fail(changeSet, organizationId, requestedBy, attemptNumber, startedAt,
                         RedlineFailureCode.APPROVED_SEMANTICS_DRIFT, null,
-                        "The contract semantics changed after this review was approved.",
+                        "The contract analysis changed after this review was approved.",
                         List.of(), null)
                 : run(changeSet, organizationId, requestedBy, attemptNumber, startedAt);
         if (execution.status() == RedlineExecutionStatus.FAILED) {
@@ -194,14 +194,13 @@ public class RedlineExecutionService {
         if (version == null) {
             throw new RedlineSourceUnavailableException(
                     RedlineFailureCode.SOURCE_DOCUMENT_UNAVAILABLE,
-                    "The frozen source document is unavailable "
-                            + "(SOURCE_DOCUMENT_UNAVAILABLE).");
+                    "Rivell can no longer open the contract file this review used.");
         }
         if (!version.versionId().equals(changeSet.contractVersionId())) {
             throw new RedlineSourceUnavailableException(
                     RedlineFailureCode.SOURCE_VERSION_MISMATCH,
-                    "The frozen source version no longer matches the approved change set "
-                            + "(SOURCE_VERSION_MISMATCH).");
+                    "The contract version no longer matches the version these changes were "
+                            + "approved on.");
         }
 
         byte[] sourceBytes;
@@ -214,14 +213,12 @@ public class RedlineExecutionService {
         } catch (ContractVersionNotFoundException e) {
             throw new RedlineSourceUnavailableException(
                     RedlineFailureCode.SOURCE_DOCUMENT_UNAVAILABLE,
-                    "The frozen source document is unavailable "
-                            + "(SOURCE_DOCUMENT_UNAVAILABLE).");
+                    "Rivell can no longer open the contract file this review used.");
         }
         if (!Hashes.sha256Hex(sourceBytes).equals(sourceSha)) {
             throw new RedlineSourceUnavailableException(
                     RedlineFailureCode.SOURCE_INTEGRITY_MISMATCH,
-                    "The frozen source document failed its integrity check "
-                            + "(SOURCE_INTEGRITY_MISMATCH).");
+                    "The stored contract file no longer matches the file that was reviewed.");
         }
 
         DocumentExecutionPlan plan;

@@ -28,14 +28,13 @@ public final class DecisionRules {
             DecisionAction action, ChangeActionType approvedAction,
             String approvedLanguage, String comment) {
         if (action == null) {
-            throw new InvalidDecisionException("action is required");
+            throw new InvalidDecisionException("Choose a decision.");
         }
         switch (action) {
             case ACCEPT -> {
                 if (approvedAction != null || approvedLanguage != null) {
                     throw new InvalidDecisionException(
-                            "ACCEPT approves the machine recommendation as-is and carries "
-                                    + "no action or language");
+                            "Accept keeps Rivell's suggestion as it is. To change it, choose edit.");
                 }
             }
             case EDIT -> {
@@ -46,17 +45,19 @@ public final class DecisionRules {
             case REJECT, ESCALATE -> {
                 if (approvedAction != null || approvedLanguage != null) {
                     throw new InvalidDecisionException(
-                            action + " carries no action or language");
+                            "A " + decisionWord(action) + " decision cannot include new wording.");
                 }
                 if (comment == null || comment.isBlank()) {
                     throw new InvalidDecisionException(
-                            action + " requires a comment explaining the decision");
+                            "Add a comment that explains why you chose to "
+                                    + decisionWord(action) + ".");
                 }
             }
         }
         if (comment != null && comment.length() > MAX_COMMENT_LENGTH) {
             throw new InvalidDecisionException(
-                    "comment exceeds " + MAX_COMMENT_LENGTH + " characters");
+                    "The comment is too long. Keep it to " + MAX_COMMENT_LENGTH
+                            + " characters or fewer.");
         }
     }
 
@@ -110,21 +111,22 @@ public final class DecisionRules {
         if (targetKind == ChangeTargetKind.CLAUSE
                 && actionType == ChangeActionType.INSERT) {
             throw new InvalidDecisionException(
-                    "a clause finding is edited as REPLACE or DELETE, not INSERT");
+                    "A finding about an existing clause is edited as a replacement or a "
+                            + "deletion, not an insertion.");
         }
         if (targetKind == ChangeTargetKind.ABSENCE
                 && actionType != ChangeActionType.INSERT) {
             throw new InvalidDecisionException(
-                    "an absence finding is edited as INSERT");
+                    "A finding about a missing clause can only be edited as an insertion.");
         }
         if (actionType == ChangeActionType.DELETE) {
             if (language != null) {
-                throw new InvalidDecisionException("a deletion carries no language");
+                throw new InvalidDecisionException("A deletion cannot include new wording.");
             }
         } else {
             if (language == null || language.isBlank()) {
                 throw new InvalidDecisionException(
-                        "the edited language is required for " + actionType);
+                        "Add the new wording for this change.");
             }
             requireLanguage(language);
         }
@@ -149,6 +151,10 @@ public final class DecisionRules {
                 decision.approvedLanguage(), source, decision.approvedDraftingEvidenceId());
     }
 
+    private static String decisionWord(DecisionAction action) {
+        return action.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
     private static ChangeTargetKind targetKind(Finding finding) {
         return finding.subjectKind() == FindingSubjectKind.ABSENCE
                 ? ChangeTargetKind.ABSENCE : ChangeTargetKind.CLAUSE;
@@ -156,11 +162,12 @@ public final class DecisionRules {
 
     private static void requireLanguage(String language) {
         if (language.isBlank()) {
-            throw new InvalidDecisionException("approved language must not be blank");
+            throw new InvalidDecisionException("The new wording cannot be blank.");
         }
         if (language.length() > MAX_LANGUAGE_LENGTH) {
             throw new InvalidDecisionException(
-                    "approved language exceeds " + MAX_LANGUAGE_LENGTH + " characters");
+                    "The new wording is too long. Keep it to " + MAX_LANGUAGE_LENGTH
+                            + " characters or fewer.");
         }
     }
 }

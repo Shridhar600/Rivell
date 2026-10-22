@@ -5,7 +5,10 @@ public class RedlineArtifactUnavailableException extends RuntimeException {
 
     public RedlineArtifactUnavailableException(RedlineExecutionStatus status,
             RedlineOutcome outcome) {
-        super("No verified redline artifact is available for this execution (status="
-                + status + (outcome == null ? "" : ", outcome=" + outcome) + ")");
+        super(outcome == RedlineOutcome.NO_CHANGES
+                ? "This review has no changes, so there is no redline file to download."
+                : status == RedlineExecutionStatus.FAILED
+                        ? "The redline failed, so there is no file to download. Generate it again."
+                        : "There is no redline file to download for this review.");
     }
 }

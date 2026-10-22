@@ -9,8 +9,7 @@ public class EnrichmentFailedException extends RuntimeException {
     private final int versionNumber;
 
     public EnrichmentFailedException(UUID contractId, int versionNumber) {
-        super("Enrichment failed for contract " + contractId + " version " + versionNumber
-                + "; re-run enrichment first");
+        super("Rivell could not finish analyzing this contract. Run the analysis again first.");
         this.contractId = contractId;
         this.versionNumber = versionNumber;
     }

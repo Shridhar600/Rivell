@@ -63,11 +63,11 @@ import com.rivell.workbench.foundation.ErrorResponse;
 public class GlobalExceptionHandler {
 
     private static final ErrorResponse PAYLOAD_TOO_LARGE = new ErrorResponse(
-            "413", "Payload too large", "The uploaded file exceeds the maximum allowed size.");
+            "413", "File too large", "This file is larger than Rivell accepts. Upload a smaller file.");
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ErrorResponse> badRequest(IllegalArgumentException e) {
-        return error(HttpStatus.BAD_REQUEST, "400", "Invalid request", e.getMessage());
+        return error(HttpStatus.BAD_REQUEST, "400", "Request not accepted", e.getMessage());
     }
 
     @ExceptionHandler({ContractNotFoundException.class, ContractVersionNotFoundException.class,
@@ -79,7 +79,7 @@ public class GlobalExceptionHandler {
             NoSuchElementException.class})
     ResponseEntity<ErrorResponse> notFound(RuntimeException e) {
         return error(HttpStatus.NOT_FOUND, "404", "Not found",
-                "The requested resource does not exist in this organization.");
+                "Rivell could not find that item. It may have been removed.");
     }
 
     @ExceptionHandler({UploadLimitExceededException.class,
@@ -94,32 +94,34 @@ public class GlobalExceptionHandler {
             UnauthorizedReviewAccessException.class,
             UnauthorizedWorkflowAccessException.class})
     ResponseEntity<ErrorResponse> forbidden(RuntimeException e) {
-        return error(HttpStatus.FORBIDDEN, "403", "Forbidden", "Not authorized for this operation.");
+        return error(HttpStatus.FORBIDDEN, "403", "Not allowed",
+                "You do not have permission to do this.");
     }
 
     @ExceptionHandler(ReviewEvidenceIntegrityException.class)
     ResponseEntity<ErrorResponse> evidenceIntegrity(ReviewEvidenceIntegrityException e) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "500",
                 "Finding evidence unavailable",
-                "The finding evidence could not be resolved; internal diagnostics were recorded.");
+                "Rivell could not load the evidence for this finding. Try again. If it keeps "
+                        + "happening, contact your administrator.");
     }
 
     @ExceptionHandler(InvalidDecisionException.class)
     ResponseEntity<ErrorResponse> invalidDecision(InvalidDecisionException e) {
-        return error(HttpStatus.BAD_REQUEST, "400", "Invalid decision", e.getMessage());
+        return error(HttpStatus.BAD_REQUEST, "400", "Decision not accepted", e.getMessage());
     }
 
     @ExceptionHandler({DecisionConflictException.class, FindingNotActionableException.class,
             AnalysisNotCompleteException.class, ReviewAlreadyFinalizedException.class,
             ReviewNotFinalizableException.class, UntrackableChangeTargetException.class})
     ResponseEntity<ErrorResponse> decisionConflict(RuntimeException e) {
-        return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
+        return error(HttpStatus.CONFLICT, "409", "Action not available", e.getMessage());
     }
 
     @ExceptionHandler(InvalidReviewConfigurationException.class)
     ResponseEntity<ErrorResponse> invalidReviewConfiguration(
             InvalidReviewConfigurationException e) {
-        return error(HttpStatus.BAD_REQUEST, "400", "Invalid review configuration",
+        return error(HttpStatus.BAD_REQUEST, "400", "Review setup not accepted",
                 e.getMessage());
     }
 
@@ -128,13 +130,13 @@ public class GlobalExceptionHandler {
             EnrichmentNotReadyException.class, ClauseNotClassifiedException.class,
             com.rivell.workbench.knowledge.UnitNotMarkableException.class})
     ResponseEntity<ErrorResponse> invalidState(RuntimeException e) {
-        return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
+        return error(HttpStatus.CONFLICT, "409", "Action not available", e.getMessage());
     }
 
     @ExceptionHandler({InvalidCorrectionException.class,
             com.rivell.workbench.knowledge.InvalidConceptCorrectionException.class})
     ResponseEntity<ErrorResponse> invalidCorrection(RuntimeException e) {
-        return error(HttpStatus.BAD_REQUEST, "400", "Invalid correction", e.getMessage());
+        return error(HttpStatus.BAD_REQUEST, "400", "Correction not accepted", e.getMessage());
     }
 
     @ExceptionHandler(ContractNotReadableException.class)
@@ -146,26 +148,26 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     ResponseEntity<ErrorResponse> unreadableBody(
             org.springframework.http.converter.HttpMessageNotReadableException e) {
-        return error(HttpStatus.BAD_REQUEST, "400", "Invalid request",
-                "The request body could not be parsed.");
+        return error(HttpStatus.BAD_REQUEST, "400", "Request not accepted",
+                "Rivell could not read this request.");
     }
 
     @ExceptionHandler(IOException.class)
     ResponseEntity<ErrorResponse> storageUnavailable(IOException e) {
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "500", "Document storage unavailable",
-                "The original document could not be stored or read.");
+                "Rivell could not save or open the original file. Try again.");
     }
 
     @ExceptionHandler({UnauthorizedRedlineAccessException.class})
     ResponseEntity<ErrorResponse> redlineForbidden(RuntimeException e) {
-        return error(HttpStatus.FORBIDDEN, "403", "Forbidden",
-                "Not authorized for this operation.");
+        return error(HttpStatus.FORBIDDEN, "403", "Not allowed",
+                "You do not have permission to do this.");
     }
 
     @ExceptionHandler(RedlineExecutionNotFoundException.class)
     ResponseEntity<ErrorResponse> redlineNotFound(RuntimeException e) {
         return error(HttpStatus.NOT_FOUND, "404", "Not found",
-                "No redline execution exists for this review.");
+                "No redline has been generated for this review yet.");
     }
 
     @ExceptionHandler({RedlineNotAvailableException.class,
@@ -174,29 +176,29 @@ public class GlobalExceptionHandler {
             RedlineExecutionFailedException.class,
             RedlineSourceUnavailableException.class})
     ResponseEntity<ErrorResponse> redlineConflict(RuntimeException e) {
-        return error(HttpStatus.CONFLICT, "409", "Invalid state", e.getMessage());
+        return error(HttpStatus.CONFLICT, "409", "Action not available", e.getMessage());
     }
 
     @ExceptionHandler(com.rivell.workbench.review.IdempotencyKeyReusedException.class)
     ResponseEntity<ErrorResponse> idempotencyKeyReused(
             com.rivell.workbench.review.IdempotencyKeyReusedException e) {
-        return error(HttpStatus.CONFLICT, "409", "Invalid state",
-                "The supplied request id was already used for a different contract version or "
-                        + "contract pack. Use a new request id, or repeat the original request "
+        return error(HttpStatus.CONFLICT, "409", "Action not available",
+                "This review request was already used for a different contract version or "
+                        + "review pack. Start a new review, or repeat the original request "
                         + "unchanged.");
     }
 
     @ExceptionHandler(RedlineArtifactStoreException.class)
     ResponseEntity<ErrorResponse> redlineStoreUnavailable(RedlineArtifactStoreException e) {
         return error(HttpStatus.SERVICE_UNAVAILABLE, "503", "Document storage unavailable",
-                "The verified redline artifact could not be stored. The review is unchanged and "
-                        + "the execution can be retried.");
+                "Rivell could not save the redline file. Your review is unchanged. Generate the "
+                        + "redline again.");
     }
 
     @ExceptionHandler(ConceptClassificationUnavailableException.class)
     ResponseEntity<ErrorResponse> semanticServiceUnavailable(RuntimeException e) {
-        return error(HttpStatus.SERVICE_UNAVAILABLE, "503", "Semantic service unavailable",
-                "The semantic classification is not available right now.");
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "503", "Service unavailable",
+                "Rivell cannot sort entries by topic right now. Try again later.");
     }
 
     private ResponseEntity<ErrorResponse> error(HttpStatus status, String code, String title, String detail) {

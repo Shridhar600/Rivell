@@ -205,22 +205,20 @@ public final class FindingAssembler {
 
     private static String uncertaintyText(String reason, RawReviewSignal signal) {
         return switch (reason) {
-            case "classification_uncertain" -> "The bounded classifier did not reach a "
-                    + "clear classification for this clause; the uncertainty is recorded "
-                    + "rather than a deviation judgment.";
+            case "classification_uncertain" -> "Rivell was not confident enough about "
+                    + "this clause to judge it against the position. Please take a look.";
             case "bounded_decision_unavailable", "cross_clause_decision_unavailable" ->
-                    "The bounded semantic decision was unavailable; the clause was not "
-                            + "classified and requires human review.";
-            case "carve_out_context_too_large" -> "The cross-clause context exceeds the "
-                    + "bounded prompt; the interaction was not assessed.";
-            case "carve_out_not_comparable" -> "The bounded classifier could not determine "
-                    + "how the liability carve-out and the indemnification clause interact; "
-                    + "no conflict or consistency was asserted.";
-            case "cross_clause_classification_uncertain" -> "The cross-clause classification "
-                    + "did not reach a clear verdict; the interaction requires human review.";
-            case "survival_coverage_partial" -> "Survival coverage could not be established "
-                    + "for all confidentiality provisions; the limitation requires human "
-                    + "review.";
+                    "Rivell could not check this clause because the analysis "
+                            + "service was unavailable. Please take a look.";
+            case "carve_out_context_too_large" -> "The clauses were too long for Rivell to "
+                    + "compare, so it did not check how they interact. Please take a look.";
+            case "carve_out_not_comparable" -> "Rivell could not tell how the liability "
+                    + "carve-out and the indemnification clause interact, so it reports no "
+                    + "conflict either way. Please take a look.";
+            case "cross_clause_classification_uncertain" -> "Rivell could not reach a clear view of "
+                    + "how these clauses interact. Please take a look.";
+            case "survival_coverage_partial" -> "Rivell could not check whether every "
+                    + "confidentiality obligation survives termination. Please take a look.";
             case DeviationUncertainPayload.SECOND_OPINION_DISAGREES -> "Rivell's two reviewers "
                     + "disagree on this clause against the position: one finds an issue, the "
                     + "other does not. Rivell does not decide; please take a look.";
