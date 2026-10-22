@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 
 const SHOW_DELAY = 450
+const TIP_ID = 'rv-tip'
 const GAP = 6
 const EDGE = 8
 
@@ -20,8 +21,8 @@ export function useTooltips(): void {
   useEffect(() => {
     const tip = document.createElement('div')
     tip.className = 'rv-tip'
-    tip.setAttribute('role', 'presentation')
-    tip.setAttribute('aria-hidden', 'true')
+    tip.id = TIP_ID
+    tip.setAttribute('role', 'tooltip')
     document.body.append(tip)
 
     let target: HTMLElement | null = null
@@ -31,12 +32,21 @@ export function useTooltips(): void {
       window.clearTimeout(timer)
       timer = undefined
       tip.removeAttribute('data-open')
+      if (target) describe(target, false)
       if (target?.dataset.rvTitle !== undefined) {
         // React may have written a new title while ours showed; that one wins.
         if (target.getAttribute('title') === null) target.setAttribute('title', target.dataset.rvTitle)
         delete target.dataset.rvTitle
       }
       target = null
+    }
+
+    // While the tip shows it describes its element, next to any description the element already has.
+    function describe(element: HTMLElement, on: boolean) {
+      const ids = (element.getAttribute('aria-describedby') ?? '').split(' ').filter((id) => id && id !== TIP_ID)
+      if (on) ids.push(TIP_ID)
+      if (ids.length) element.setAttribute('aria-describedby', ids.join(' '))
+      else element.removeAttribute('aria-describedby')
     }
 
     function show(element: HTMLElement, holdTitle: boolean) {
@@ -60,6 +70,7 @@ export function useTooltips(): void {
       tip.style.left = '0px'
       tip.style.top = '0px'
       tip.setAttribute('data-open', '')
+      describe(element, true)
       const size = tip.getBoundingClientRect()
       const below = box.bottom + GAP + size.height <= window.innerHeight - EDGE
       const top = below ? box.bottom + GAP : box.top - GAP - size.height
