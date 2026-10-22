@@ -591,6 +591,7 @@
   display: grid;
   place-items: center;
   color: var(--text-3);
+  pointer-events: none;
 }
 .rv-kc-xb {
   display: flex;
@@ -1038,8 +1039,12 @@
   .rv-kc-xform {
     grid-template-columns: 1fr;
   }
+  /* Stacked, the arrow points down. Only the icon turns: turning the full-width box would lay
+     an invisible strip across the form that swallows clicks. */
   .rv-kc-xarrow {
     height: 28px;
+  }
+  .rv-kc-xarrow .rv-icon {
     transform: rotate(90deg);
   }
   .rv-kc-brow__body .rv-kc-xform {
