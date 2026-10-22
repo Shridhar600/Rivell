@@ -307,6 +307,19 @@ describe('inspector panel', () => {
   })
 })
 
+describe('the browser tab', () => {
+  it.each([
+    ['/', 'Home · Rivell'],
+    ['/reviews', 'Reviews · Rivell'],
+    ['/reviews/new', 'Start review · Rivell'],
+  ])('%s is named after the page', async (path, name) => {
+    stubApi()
+    renderAt(path)
+    await screen.findByRole('banner')
+    await waitFor(() => expect(document.title).toBe(name))
+  })
+})
+
 describe('one search menu for the whole app', () => {
   it.each(['/', '/knowledge'])('%s opens the Search dialog with ⌘K', async (path) => {
     stubApi()

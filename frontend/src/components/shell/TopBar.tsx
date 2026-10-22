@@ -14,13 +14,19 @@ interface TopBarProps {
   leading?: ReactNode
   /** Real, working controls for this surface. */
   actions?: ReactNode
+  /** The browser tab's name for this page. A plain-text title is used when this is not given. */
+  pageTitle?: string
 }
 
 /**
  * The same bar on every page: where you are on the left, search in the middle, this page's own
  * actions on the right. Neither shell panel toggle lives here: each sits with its own panel.
  */
-export function TopBar({ title, leading, actions }: TopBarProps) {
+export function TopBar({ title, leading, actions, pageTitle }: TopBarProps) {
+  const tabName = pageTitle ?? (typeof title === 'string' ? title : undefined)
+  useEffect(() => {
+    document.title = tabName ? `${tabName} · Rivell` : 'Rivell'
+  }, [tabName])
   return (
     <header className="rv-topbar">
       <div className="rv-topbar__lead">

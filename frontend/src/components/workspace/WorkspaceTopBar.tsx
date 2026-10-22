@@ -64,6 +64,7 @@ export function WorkspaceTopBar({
 
   return (
     <TopBar
+      pageTitle={title}
       leading={
         <button
           type="button"

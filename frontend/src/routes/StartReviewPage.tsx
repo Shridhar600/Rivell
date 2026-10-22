@@ -79,6 +79,7 @@ export function StartReviewPage() {
     <>
       <div className="rv-main">
         <TopBar
+          pageTitle="Start review"
           title={<Breadcrumbs crumbs={[{ label: 'Reviews', to: '/reviews' }, { label: 'Start review' }]} />}
         />
         <div className="rv-scroll">

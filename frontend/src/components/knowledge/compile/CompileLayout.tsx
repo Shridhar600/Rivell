@@ -24,6 +24,7 @@ export function CompileTopBar({ type, filename, rail, children }: TopBarProps) {
   const listCrumb = type ? LIST_CRUMB[type] : undefined
   return (
     <TopBar
+      pageTitle={filename}
       leading={
         rail ? (
           <IconButton label="Entry list" expanded={rail.open} controls={rail.id} title={rail.open ? 'Hide list [' : 'Show list ['} onClick={rail.onToggle}>
