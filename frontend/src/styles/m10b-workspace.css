@@ -5,6 +5,8 @@
 
 .rv-ws {
   display: grid;
+  /* One column that never grows past the window, whatever its content asks for. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--h-topbar) minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;

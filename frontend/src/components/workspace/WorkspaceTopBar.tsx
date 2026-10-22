@@ -121,7 +121,7 @@ export function WorkspaceTopBar({
             <details className="rv-ws-blk" ref={whyRef}>
               <summary className="rv-ws-blk__sum">
                 <InfoIcon className="rv-icon" />
-                What is left
+                <span className="rv-ws-blk__txt">What is left</span>
               </summary>
               <div className="rv-ws-blk__pop" role="group" aria-label="What is left before you can finalize">
                 {blockers.length > 0 ? (
