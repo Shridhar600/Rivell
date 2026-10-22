@@ -1622,3 +1622,29 @@ h3.rv-ws-sec-h {
 .rv-ws-blk__pop p {
   margin: 0;
 }
+
+/* The keyboard shortcut list (press ?). */
+.rv-ws-keys {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.rv-ws-keys > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.rv-ws-keys dd {
+  margin: 0;
+}
+.rv-ws-keys kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--side);
+  color: var(--text-2);
+  font: 500 12px var(--font);
+}

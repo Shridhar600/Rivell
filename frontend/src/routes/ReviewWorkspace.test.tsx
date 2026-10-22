@@ -112,6 +112,16 @@ describe('workspace layout', () => {
     expect(screen.queryByRole('dialog', { name: /reject/i })).not.toBeInTheDocument()
   })
 
+  it('lists its keyboard shortcuts when the reader presses ?', async () => {
+    renderWorkspace(stubContractApi(options()))
+    await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    await userEvent.keyboard('?')
+    const sheet = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })
+    expect(sheet).toHaveTextContent('Accept the finding')
+    expect(sheet).toHaveTextContent('Escalate the finding')
+  })
+
   it('opens on the first finding that needs a decision and names it in the URL', async () => {
     const router = renderWorkspace(stubContractApi(options()))
     await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
