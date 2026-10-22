@@ -14,16 +14,7 @@ import {
   PARTY_ROLES,
   roleLabel,
 } from '../lib/contractSemantics'
-import {
-  EMPTY_CONTEXT,
-  STAGE_LABELS,
-  canStart,
-  contextSummary,
-  filenameSuggestsOtherType,
-  fileSizeLabel,
-  isDocx,
-  type StartContext,
-} from '../lib/startReview'
+import { EMPTY_CONTEXT, STAGE_LABELS, canStart, contextSummary, filenameSuggestedType, fileSizeLabel, isDocx, type StartContext, startNeeds } from '../lib/startReview'
 import { useStartReview } from '../lib/useStartReview'
 
 const ACCEPT = '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -81,7 +72,7 @@ export function StartReviewPage() {
   }
 
   const pack = (packs.data ?? []).find((candidate) => candidate.key === context.packKey)
-  const mismatch = file !== null && filenameSuggestsOtherType(file.name, context.contractType)
+  const suggested = file === null ? null : filenameSuggestedType(file.name, context.contractType)
   const failure = status.phase === 'failed' ? status.failure : null
 
   return (
@@ -240,18 +231,20 @@ export function StartReviewPage() {
                     </select>
                     <div className="rv-hint" id={packHintId}>
                       Choose a pack to apply its rules to this review. Packs are optional.
-                      {pack ? ` ${pack.summary} (version ${pack.version}).` : ''}
+                      {pack ? ` ${pack.summary}` : ''}
                       {packs.isError ? ' The pack catalog could not be loaded, so only a pack-less review is available.' : ''}
                     </div>
                   </div>
 
-                  {mismatch ? (
+                  {suggested ? (
                     <div className="rv-mm" role="note">
                       <CautionIcon className="rv-icon" />
                       <div>
-                        <b>The file name suggests a different contract type.</b> Rivell will review it as{' '}
-                        {CONTRACT_TYPE_LABELS[context.contractType] ?? context.contractType}. Change the type if that is
-                        wrong.
+                        <b>
+                          The file name looks like {suggested}, but you chose{' '}
+                          {CONTRACT_TYPE_LABELS[context.contractType] ?? context.contractType}.
+                        </b>{' '}
+                        Rivell will review it as you chose. Change the type if that is wrong.
                       </div>
                     </div>
                   ) : null}
@@ -265,7 +258,7 @@ export function StartReviewPage() {
                 </div>
                 <div className="rv-ft">
                   <span className="rv-ft__sum" role={running ? 'status' : undefined}>
-                    {running ? STAGE_LABELS[status.stage] : contextSummary(context)}
+                    {running ? STAGE_LABELS[status.stage] : (startNeeds(file, context) ?? contextSummary(context))}
                   </span>
                   <LinkButton to="/reviews">Cancel</LinkButton>
                   <Button type="submit" variant="primary" disabled={running || !canStart(file, context)}>

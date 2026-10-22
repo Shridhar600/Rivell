@@ -169,10 +169,36 @@ describe('Start Review: the canonical page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Supplier' }))
     await userEvent.click(screen.getByRole('button', { name: 'Counterparty paper' }))
     expect(screen.getByText('MSA, Supplier side, counterparty paper')).toBeInTheDocument()
-    expect(screen.getByRole('note')).toHaveTextContent('The file name suggests a different contract type.')
+    expect(screen.getByRole('note')).toHaveTextContent('The file name looks like an NDA, but you chose MSA.')
     expect(startButton()).toBeEnabled()
     await userEvent.selectOptions(screen.getByLabelText('Contract type'), 'NDA')
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+})
+
+describe('Start Review: what the form says', () => {
+  it.each(['MNDA', 'ONDA'])('does not warn when an NDA file is reviewed as %s', async (type) => {
+    stub()
+    renderPage()
+    await fill({ type, file: docx('incoming-counterparty-nda.docx') })
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('says what is still needed before the review can start', async () => {
+    stub()
+    renderPage()
+    expect(await screen.findByText('Choose a Word file and a contract type to start')).toBeInTheDocument()
+    await userEvent.upload(screen.getByLabelText('Contract file (Word)'), docx())
+    expect(screen.getByText('Choose a contract type to start')).toBeInTheDocument()
+  })
+
+  it('does not show the pack’s internal version', async () => {
+    stub()
+    renderPage()
+    await screen.findByRole('option', { name: 'MSA pack' })
+    await userEvent.selectOptions(screen.getByLabelText(/Review pack/), 'MSA_PACK')
+    expect(screen.getByText(/Liability, confidentiality and termination checks/)).toBeInTheDocument()
+    expect(screen.queryByText(/rivell-review-pack-1/)).not.toBeInTheDocument()
   })
 })
 
