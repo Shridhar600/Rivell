@@ -140,7 +140,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
                     to={`/knowledge/clauses/${encodeURIComponent(group.key)}${isCurrent ? '' : `?publication=${viewing.publication.number}`}`}
                     type="CLAUSE_LIBRARY"
                     title={group.title}
-                    detail={group.variants.map((variant) => variant.candidate.rawLabel).join(', ')}
+                    detail={group.variants.map((variant) => variant.candidate.title).join(', ')}
                     right={`${group.variants.length} ${group.variants.length === 1 ? 'variant' : 'variants'}`}
                   />
                 ))}

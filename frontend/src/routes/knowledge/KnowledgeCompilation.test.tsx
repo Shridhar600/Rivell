@@ -27,6 +27,40 @@ describe('compilation workspace', () => {
     expect(screen.getByText('Entry 1 of 7')).toBeInTheDocument()
   })
 
+  it('names an entry by the title a reviewer sees, not the machine label', async () => {
+    const world = reviewWorld()
+    world.candidates[SRC] = (world.candidates[SRC] ?? []).map((entry) =>
+      entry.id === 'conflict' ? { ...entry, rawLabel: 'Assignment | MSA | one-sided', editedTitle: 'Assignment', title: 'Assignment' } : entry,
+    )
+    await open(world, '?candidate=conflict')
+    expect(heading()).toHaveTextContent('Assignment')
+    expect(heading()).not.toHaveTextContent('MSA')
+    expect(within(rail()).getByRole('button', { name: /Assignment/ })).toHaveTextContent('Assignment')
+  })
+
+  it('names the source sheet by the title a reviewer sees', async () => {
+    const world = reviewWorld()
+    world.candidates[SRC] = (world.candidates[SRC] ?? []).map((entry) =>
+      entry.id === 'conflict' ? { ...entry, rawLabel: 'Assignment | MSA', editedTitle: 'Assignment and novation', title: 'Assignment and novation' } : entry,
+    )
+    await open(world, '?candidate=conflict')
+    await userEvent.click(screen.getByRole('button', { name: 'View source context' }))
+    expect(await screen.findByRole('dialog', { name: 'Assignment and novation' })).toBeInTheDocument()
+  })
+
+  it('names the draft by its document title in the header and breadcrumb, while the source keeps its file name', async () => {
+    const world = reviewWorld()
+    world.artifacts = world.artifacts.map((entry) =>
+      entry.id === SRC ? { ...entry, documentTitle: 'Mutual NDA Negotiation Guide' } : entry,
+    )
+    await open(world, '?candidate=conflict')
+    expect(document.title).toBe('Mutual NDA Negotiation Guide · Rivell')
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumbs).getByText('Mutual NDA Negotiation Guide')).toBeInTheDocument()
+    const source = screen.getByRole('region', { name: 'Source passage' })
+    expect(within(source).getByText('Commercial MSA Playbook v4.docx')).toBeInTheDocument()
+  })
+
   it('groups the list the way a reviewer works', async () => {
     await open()
     const list = rail()

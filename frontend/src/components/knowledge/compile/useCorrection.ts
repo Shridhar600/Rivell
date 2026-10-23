@@ -13,6 +13,7 @@ import {
 } from '../../../lib/semantics'
 
 export interface CorrectionDraft {
+  title: string
   contentText: string
   columns: Record<string, string>
   scope: ScopeDraft
@@ -24,6 +25,7 @@ export interface CorrectionDraft {
 
 export function draftFrom(candidate: Candidate): CorrectionDraft {
   return {
+    title: candidate.title,
     contentText: effectiveContentText(candidate) ?? '',
     columns: { ...effectivePayloadColumns(candidate) },
     scope: scopeDraftFrom(candidate),
@@ -37,13 +39,17 @@ export function draftFrom(candidate: Candidate): CorrectionDraft {
 export function correctionChanges(candidate: Candidate, draft: CorrectionDraft) {
   const initialColumns = effectivePayloadColumns(candidate)
   const hasColumns = Object.keys(initialColumns).length > 0
+  const trimmedTitle = draft.title.trim()
+  // A blank title clears an existing correction. With no correction to clear it changes nothing,
+  // and the backend refuses a title-only save that changes nothing.
+  const titleChanged = trimmedTitle === '' ? candidate.editedTitle !== null : trimmedTitle !== candidate.title
   const contentChanged = draft.contentText !== (effectiveContentText(candidate) ?? '') && draft.contentText.trim().length > 0
   const columnsChanged = hasColumns && !sameStringMap(draft.columns, initialColumns)
   const scopeChanged = scopeDraftChanged(draft.scope, candidate)
   const semantic = semanticInputFrom(draft.semantic, candidate)
   const conceptChanged = draft.concept !== (candidate.effectiveConceptKey ?? '')
-  const edit = contentChanged || columnsChanged || scopeChanged || semantic !== undefined
-  return { contentChanged, columnsChanged, scopeChanged, semantic, conceptChanged, edit, any: edit || conceptChanged }
+  const edit = titleChanged || contentChanged || columnsChanged || scopeChanged || semantic !== undefined
+  return { titleChanged, contentChanged, columnsChanged, scopeChanged, semantic, conceptChanged, edit, any: edit || conceptChanged }
 }
 
 /**
@@ -70,17 +76,22 @@ export function useCorrection(candidate: Candidate, onSaved: () => void) {
     let savedEdit = false
     try {
       if (changes.edit) {
-        await edit.mutateAsync({
+        const saved = await edit.mutateAsync({
           candidateId: candidate.id,
+          title: changes.titleChanged ? draft.title : undefined,
           contentText: changes.contentChanged ? draft.contentText : undefined,
           payloadColumns: changes.columnsChanged ? draft.columns : undefined,
           scope: changes.scopeChanged ? scopeInputFrom(draft.scope) : undefined,
           semanticFields: changes.semantic,
           note: draft.note,
         })
+        setDraft(draftFrom(saved))
         savedEdit = true
       }
-      if (changes.conceptChanged) await concept.mutateAsync({ candidateId: candidate.id, primary: draft.concept })
+      if (changes.conceptChanged) {
+        const saved = await concept.mutateAsync({ candidateId: candidate.id, primary: draft.concept })
+        setDraft(draftFrom(saved))
+      }
       onSaved()
     } catch (failure) {
       const message = failure instanceof Error && failure.message ? failure.message : 'The correction could not be saved.'

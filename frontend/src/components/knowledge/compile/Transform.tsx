@@ -63,7 +63,7 @@ function SourceCard({ artifact, source, onContext }: { artifact: ArtifactDetail;
 function InterpretationCard({ candidate, artifact, editing }: { candidate: Candidate; artifact: ArtifactDetail; editing: ReactNode | null }) {
   const { labelFor } = useTaxonomy()
   const corrected = hasHumanCorrection(candidate, artifact)
-  const rows = interpretationRows(candidate, labelFor)
+  const rows = interpretationRows(candidate, labelFor, artifact)
   return (
     <section className="rv-kc-xcard" aria-label="What Rivell read">
       <div className="rv-kc-xh">

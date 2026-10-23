@@ -44,6 +44,7 @@ const artifactDetail = {
   id: '666c50a4-b4d0-435d-97ee-eec8822cc9f9',
   artifactType: 'PLAYBOOK',
   filename: 'knowledge-playbook.docx',
+  documentTitle: 'Mutual NDA Negotiation Guide',
   contentType: 'application/octet-stream',
   sizeBytes: 1487,
   sha256: '3eaad38b59dba45ea79754850eb04fd71eaac95c865d7a8a0be01683b9581f04',
@@ -70,7 +71,9 @@ const candidate = {
   extractionUnitId: 'c4847c0c-8ac0-465d-842f-90b218a9286d',
   candidateType: 'PLAYBOOK_RULE',
   reviewStatus: 'PENDING',
-  rawLabel: 'Liability cap',
+  rawLabel: 'Liability cap | 1x annual fees | 2x annual fees',
+  editedTitle: null,
+  title: 'Liability cap',
   contentText: 'Liability cap | 1x annual fees | 2x annual fees',
   payloadColumns: {
     Clause: 'Liability cap',
@@ -101,6 +104,7 @@ const candidate = {
   supersedingCandidateId: null,
   contractPackKey: null,
   declaredContractTypes: [],
+  sourceContractTypes: ['MSA'],
   partyPerspective: null,
   paperSource: null,
   jurisdiction: null,
@@ -334,6 +338,18 @@ describe('knowledge list queries', () => {
 
     expect(artifacts).toHaveLength(1)
     expect(artifacts[0].filename).toBe('knowledge-playbook.docx')
+    expect(artifacts[0].documentTitle).toBe('Mutual NDA Negotiation Guide')
+  })
+
+  it('reads the title a reviewer sees and the machine title beside it', async () => {
+    stubFetch(() => jsonResponse(envelope([{ ...candidate, editedTitle: 'Liability cap', title: 'Liability cap' }])))
+
+    const candidates = await fetchCandidates('a1')
+
+    expect(candidates[0].title).toBe('Liability cap')
+    expect(candidates[0].editedTitle).toBe('Liability cap')
+    expect(candidates[0].rawLabel).toBe('Liability cap | 1x annual fees | 2x annual fees')
+    expect(candidates[0].sourceContractTypes).toEqual(['MSA'])
   })
 
   it('asks for the page size it is given, and keeps the short default for the legacy lists', async () => {
@@ -355,7 +371,8 @@ describe('knowledge list queries', () => {
 
     const candidates = await fetchCandidates('a1')
 
-    expect(candidates[0].rawLabel).toBe('Liability cap')
+    expect(candidates[0].title).toBe('Liability cap')
+    expect(candidates[0].rawLabel).toBe('Liability cap | 1x annual fees | 2x annual fees')
   })
 })
 

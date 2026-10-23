@@ -37,7 +37,7 @@ export function PositionInspector({ candidate, artifact, publication }: Position
   return (
     <div className="rv-k-ins">
       <p className="rv-k-kicker">Position</p>
-      <h2>{candidate.rawLabel}</h2>
+      <h2>{candidate.title}</h2>
       <dl className="rv-k-fdl">
         {roles.length > 0 ? (
           <>

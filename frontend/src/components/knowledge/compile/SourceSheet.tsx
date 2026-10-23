@@ -45,7 +45,7 @@ export function SourceSheet({ artifact, candidate, unit, location, blocks, onClo
       </div>
       <div className="rv-kc-sheet-b">
         <div className="rv-kc-kicker">{kindLabel(artifact.artifactType)} source</div>
-        <h2 id={titleId}>{candidate.rawLabel}</h2>
+        <h2 id={titleId}>{candidate.title}</h2>
         <dl className="rv-kc-props">
           <dt>Source</dt>
           <dd>{artifact.filename}</dd>

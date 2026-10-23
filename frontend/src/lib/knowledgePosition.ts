@@ -52,7 +52,7 @@ export function positionRow(candidate: Candidate): PositionRow {
   const fallback = roles.has('FALLBACK')
   const layout: CellLayout = preferred && fallback ? 'both' : preferred ? 'preferred' : fallback ? 'fallback' : 'passage'
   return {
-    title: candidate.rawLabel,
+    title: candidate.title,
     layout,
     text: positionText(candidate),
     escalation: candidate.escalationTrigger?.trim() || null,
@@ -73,13 +73,25 @@ function labelled(map: Record<string, string>, value: string): string {
   return map[value] ?? humanizeCode(value)
 }
 
+/** Contract type codes as a reader sees them, e.g. "NDA, MSA". Null when there are none. */
+export function contractTypesText(types: string[]): string | null {
+  const labels = types.map((type) => labelled(CONTRACT_TYPE_LABELS, type))
+  return labels.length > 0 ? labels.join(', ') : null
+}
+
 /**
  * The applicability the source declared for this passage. Only what was actually declared is
- * listed: an unset field is absent, never "Any".
+ * listed: an unset field is absent, never "Any". `contractTypes` lets a caller show the record's
+ * own types instead of the effective ones it inherits from the file.
  */
-export function scopeRows(candidate: Candidate): ScopeRow[] {
+export function scopeRows(
+  candidate: Candidate,
+  contractTypes: string[] = candidate.sourceContractTypes.length > 0
+    ? candidate.sourceContractTypes
+    : candidate.declaredContractTypes,
+): ScopeRow[] {
   const rows: ScopeRow[] = []
-  const types = candidate.declaredContractTypes.map((type) => labelled(CONTRACT_TYPE_LABELS, type))
+  const types = contractTypes.map((type) => labelled(CONTRACT_TYPE_LABELS, type))
   if (candidate.contractPackKey) types.push(`${humanizeCode(candidate.contractPackKey)} pack`)
   if (types.length > 0) rows.push({ label: 'Applies to', value: types.join(', ') })
   if (candidate.paperSource) rows.push({ label: 'Paper', value: labelled(PAPER_SOURCE_LABELS, candidate.paperSource) })

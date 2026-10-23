@@ -22,12 +22,94 @@ const conceptCalls = (world: Fake) => requests(world, 'POST', /\/concept$/)
 describe('candidate correction', () => {
   it('offers only the fields the backend lets a reviewer change', async () => {
     const { form } = await openEdit('uncertain')
-    for (const label of ['Topic', 'Escalate', 'Counsel approval', 'Wording', 'Contract types', 'Jurisdiction', 'Effective from', 'Review note, optional']) {
+    for (const label of ['Title', 'Topic', 'Escalate', 'Counsel approval', 'Wording', 'Contract types', 'Jurisdiction', 'Effective from', 'Review note, optional']) {
       expect(within(form).getByLabelText(label)).toBeInTheDocument()
     }
     expect(within(form).getByRole('group', { name: 'Position' })).toBeInTheDocument()
     // There is no control for anything the backend would ignore.
-    expect(within(form).queryByLabelText(/^(Title|Label|Concept key|Candidate type)$/i)).not.toBeInTheDocument()
+    expect(within(form).queryByLabelText(/^(Label|Concept key|Candidate type)$/i)).not.toBeInTheDocument()
+  })
+
+  it('prefills the title a reviewer sees and sends a changed title alone', async () => {
+    const { world, form } = await openEdit('conflict')
+    const title = within(form).getByLabelText('Title')
+    expect(title).toHaveValue('Assignment')
+    expect(title).toHaveAttribute('maxlength', '200')
+
+    await userEvent.clear(title)
+    await userEvent.type(title, 'Assignment and novation')
+    await save()
+
+    await waitFor(() => expect(editCalls(world)).toHaveLength(1))
+    expect(editCalls(world)[0]?.body).toEqual({ title: 'Assignment and novation' })
+  })
+
+  it('clears a title correction by sending an empty title, and shows the machine title again', async () => {
+    const world = reviewWorld()
+    world.candidates[SRC] = (world.candidates[SRC] ?? []).map((entry) =>
+      entry.id === 'conflict' ? { ...entry, rawLabel: 'Assignment | MSA', editedTitle: 'Assignment', title: 'Assignment' } : entry,
+    )
+    const { form } = await openEdit('conflict', world)
+    const title = within(form).getByLabelText('Title')
+    expect(title).toHaveValue('Assignment')
+
+    await userEvent.clear(title)
+    await save()
+
+    await waitFor(() => expect(editCalls(world)).toHaveLength(1))
+    expect(editCalls(world)[0]?.body).toEqual({ title: '' })
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
+    const reopened = await screen.findByRole('form', { name: 'Edit this entry' })
+    expect(within(reopened).getByLabelText('Title')).toHaveValue('Assignment | MSA')
+  })
+
+  it('does not send a blank title when there is no correction to clear', async () => {
+    const { world, form } = await openEdit('uncertain')
+    expect(within(form).getByLabelText('Title')).toHaveValue('Indemnification')
+
+    await userEvent.clear(within(form).getByLabelText('Title'))
+    await save()
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('Change at least one value before saving.')
+    expect(editCalls(world)).toHaveLength(0)
+  })
+
+  it('shows the server refusal for a title the server will not accept', async () => {
+    const world = reviewWorld()
+    world.fail['POST edit conflict'] = 400
+    const { form } = await openEdit('conflict', world)
+    const title = within(form).getByLabelText('Title')
+    await userEvent.clear(title)
+    await userEvent.type(title, 'x'.repeat(201))
+    await save()
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('The request was not valid.')
+  })
+
+  it('sets counsel approval back to not specified with an explicit null', async () => {
+    const world = reviewWorld()
+    world.candidates[SRC] = (world.candidates[SRC] ?? []).map((entry) =>
+      entry.id === 'uncertain'
+        ? {
+            ...entry,
+            requiresApproval: true,
+            interpretations: [
+              { field: 'requiresApproval', proposedValue: 'true', kind: 'BOUNDED_CLASSIFICATION', specId: 's', specVersion: 1, supportingSourceNodes: 1, verification: 'NOT_VERIFIED' },
+            ],
+          }
+        : entry,
+    )
+    const { form } = await openEdit('uncertain', world)
+    expect(within(form).getByLabelText('Counsel approval')).toHaveValue('true')
+
+    await userEvent.selectOptions(within(form).getByLabelText('Counsel approval'), 'unset')
+    await save()
+
+    await waitFor(() => expect(editCalls(world)).toHaveLength(1))
+    const body = (editCalls(world)[0]?.body ?? {}) as { semanticFields?: Record<string, unknown> }
+    const semantic = body.semanticFields
+    expect(semantic).toMatchObject({ requiresApproval: null })
+    expect(await screen.findByText('Not specified')).toBeInTheDocument()
   })
 
   it('sends wording to the edit endpoint and leaves the legal concept endpoint alone', async () => {
@@ -191,10 +273,30 @@ describe('candidate correction', () => {
     const { form } = await openEdit('v1', world)
     expect(within(form).getByLabelText('Role')).toHaveValue('PREFERRED')
     expect(within(form).getByLabelText('Variant')).toHaveValue('Mutual, standard')
+    expect(within(form).getByRole('group', { name: 'Spreadsheet columns' })).toBeInTheDocument()
     expect(within(form).getByText(/published as its wording/)).toBeInTheDocument()
     await userEvent.selectOptions(within(form).getByLabelText('Role'), 'FALLBACK')
     await save()
     await waitFor(() => expect(editCalls(world)).toHaveLength(1))
     expect(editCalls(world)[0]?.body).toEqual({ semanticFields: { variantRole: 'FALLBACK' } })
+  })
+
+  it('calls a Word table cell a table cell and never shows a placeholder column name', async () => {
+    const world = reviewWorld()
+    world.candidates[SRC] = (world.candidates[SRC] ?? []).map((entry) =>
+      entry.id === 'uncertain'
+        ? { ...entry, payloadColumns: { 'Column 1': 'Cap at 12 months', 'Field 2': 'Above 2x' }, editedPayloadColumns: {} }
+        : entry,
+    )
+    const { form } = await openEdit('uncertain', world)
+    expect(within(form).getByRole('group', { name: 'Table cells' })).toBeInTheDocument()
+    expect(within(form).queryByRole('group', { name: 'Spreadsheet columns' })).not.toBeInTheDocument()
+    const values = within(form).getAllByLabelText('Value')
+    expect(values).toHaveLength(2)
+    expect(values[0]).toHaveValue('Cap at 12 months')
+    expect(values[1]).toHaveValue('Above 2x')
+    expect(within(form).getByText(/Cell values are saved/)).toBeInTheDocument()
+    expect(within(form).queryByLabelText('Column 1')).not.toBeInTheDocument()
+    expect(within(form).queryByLabelText('Field 2')).not.toBeInTheDocument()
   })
 })

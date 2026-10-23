@@ -102,7 +102,7 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
                 )
               }
             >
-              {entry.candidate.rawLabel}
+              {entry.candidate.title}
             </button>
           ))}
         </div>

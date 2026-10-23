@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { candidatePassages, contextWindow, highlightMap, sourceBlocks, sourceLocation } from './knowledgeSource'
+import { candidateLocations, candidatePassages, contextWindow, highlightMap, sourceBlocks, sourceLocation } from './knowledgeSource'
 import { candidate, node, unit } from '../test/knowledgeFixtures'
 
 const docNodes = [
@@ -92,6 +92,41 @@ describe('candidate passages and context', () => {
     ]
     const found = candidatePassages(candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'u' }), [unit({ id: 'u', artifactId: 'a1', sourceNodeIds: ['row'] })], sheet)
     expect(found[0]?.location).toBe('Sheet "Clauses", row 14')
+  })
+
+  it('names a Word table row as a table row and leaves a spreadsheet row as a row', () => {
+    const table = [
+      node({ id: 'body', nodeType: 'BODY' }),
+      node({ id: 'table', nodeType: 'TABLE', parentId: 'body' }),
+      node({ id: 'trow', nodeType: 'TABLE_ROW', parentId: 'table', rowIndex: 0 }),
+      node({ id: 'tcell', nodeType: 'TABLE_CELL', parentId: 'trow', text: 'Cap at 12 months' }),
+    ]
+    const word = candidatePassages(candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'u' }), [unit({ id: 'u', artifactId: 'a1', sourceNodeIds: ['trow'] })], table)
+    expect(word[0]?.location).toBe('Table row 1')
+
+    const sheet = [
+      node({ id: 'wb', nodeType: 'WORKBOOK' }),
+      node({ id: 'sh', nodeType: 'SHEET', parentId: 'wb', sheetName: 'Clauses' }),
+      node({ id: 'row', nodeType: 'SPREADSHEET_ROW', parentId: 'sh', rowIndex: 13 }),
+      node({ id: 'cell', nodeType: 'SPREADSHEET_CELL', parentId: 'row', text: 'Mutual' }),
+    ]
+    const excel = candidatePassages(candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'u' }), [unit({ id: 'u', artifactId: 'a1', sourceNodeIds: ['row'] })], sheet)
+    expect(excel[0]?.location).toBe('Sheet "Clauses", row 14')
+  })
+
+  it('locates a Word table row by its table row in a list', () => {
+    const nodes = [
+      node({ id: 'body', nodeType: 'BODY' }),
+      node({ id: 'table', nodeType: 'TABLE', parentId: 'body' }),
+      node({ id: 'trow', nodeType: 'TABLE_ROW', parentId: 'table', rowIndex: 2 }),
+      node({ id: 'tcell', nodeType: 'TABLE_CELL', parentId: 'trow', text: 'Cap at 12 months' }),
+    ]
+    const found = candidateLocations(
+      [candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'u' })],
+      [unit({ id: 'u', artifactId: 'a1', sourceNodeIds: ['trow'] })],
+      nodes,
+    )
+    expect(found.get('c')).toBe('Table row 3')
   })
 
   it('windows the original around the passage and says when more exists', () => {
