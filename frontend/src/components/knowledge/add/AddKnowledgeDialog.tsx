@@ -1,8 +1,9 @@
 import { useId, useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { useUploadKnowledge, type ArtifactManifestInput, type ArtifactType } from '../../../api/knowledge'
+import { CONTRACT_TYPES, CONTRACT_TYPE_LABELS } from '../../../lib/contractSemantics'
 import { formatBytes } from '../../../lib/knowledgeLabels'
-import { sourceFileProblem } from '../../../lib/knowledgeUpload'
+import { sourceFileProblem, suggestContractTypes } from '../../../lib/knowledgeUpload'
 import { Button } from '../../ui/Button'
 import { Dialog } from '../../ui/Dialog'
 import { ErrorState } from '../../ui/State'
@@ -17,7 +18,6 @@ const TYPES: { type: AddType; label: string; hint: string }[] = [
 ]
 
 interface Details {
-  declaredContractTypes: string
   contractPackKey: string
   partyPerspective: string
   paperSource: string
@@ -29,7 +29,6 @@ interface Details {
 }
 
 const NO_DETAILS: Details = {
-  declaredContractTypes: '',
   contractPackKey: '',
   partyPerspective: '',
   paperSource: '',
@@ -40,13 +39,15 @@ const NO_DETAILS: Details = {
   note: '',
 }
 
-function manifestFrom(type: AddType, details: Details): ArtifactManifestInput {
+function manifestFrom(
+  type: AddType,
+  details: Details,
+  contractTypes: string[],
+  allContractTypes: boolean,
+): ArtifactManifestInput {
   return {
     artifactType: type,
-    declaredContractTypes: details.declaredContractTypes
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0),
+    declaredContractTypes: allContractTypes ? [] : contractTypes,
     contractPackKey: details.contractPackKey,
     partyPerspective: details.partyPerspective,
     paperSource: details.paperSource,
@@ -80,14 +81,37 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
   const [fileError, setFileError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const [details, setDetails] = useState<Details>(NO_DETAILS)
+  const [contractTypes, setContractTypes] = useState<string[]>([])
+  const [allContractTypes, setAllContractTypes] = useState(false)
+  /** A suggestion stops changing the choices once the reviewer has made one by hand. */
+  const [typesChosenByReviewer, setTypesChosenByReviewer] = useState(false)
   const [periodError, setPeriodError] = useState<string | null>(null)
   const busy = upload.isPending
+  const hasContractTypes = allContractTypes || contractTypes.length > 0
 
   function choose(next: File | undefined) {
     if (!next) return
     const problem = sourceFileProblem(next)
     setFileError(problem)
     setFile(problem ? null : next)
+    // The file name is only a suggestion, and only until the reviewer makes a choice.
+    if (!problem && !typesChosenByReviewer) setContractTypes(suggestContractTypes(next.name))
+  }
+
+  function toggleAllContractTypes() {
+    setTypesChosenByReviewer(true)
+    setAllContractTypes((chosen) => !chosen)
+    setContractTypes([])
+  }
+
+  function toggleContractType(type: string) {
+    setTypesChosenByReviewer(true)
+    setAllContractTypes(false)
+    setContractTypes((previous) =>
+      previous.includes(type)
+        ? previous.filter((entry) => entry !== type)
+        : CONTRACT_TYPES.filter((entry) => entry === type || previous.includes(entry)),
+    )
   }
 
   function onDrop(event: DragEvent) {
@@ -98,14 +122,14 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!type || !file || busy) return
+    if (!type || !file || !hasContractTypes || busy) return
     if (details.effectiveFrom && details.effectiveTo && details.effectiveFrom > details.effectiveTo) {
       setPeriodError('Effective from must not be after effective to.')
       return
     }
     setPeriodError(null)
     upload.mutate(
-      { file, manifest: manifestFrom(type, details) },
+      { file, manifest: manifestFrom(type, details, contractTypes, allContractTypes) },
       { onSuccess: (artifact) => navigate(`/knowledge/compilations/${artifact.id}`) },
     )
   }
@@ -136,7 +160,6 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
               </label>
             ))}
           </div>
-          <p className="rv-dlg__note">Rivell uses the type you choose.</p>
         </fieldset>
 
         <div>
@@ -189,16 +212,47 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
           ) : null}
         </div>
 
+        <fieldset className="rv-k-add__field" disabled={busy}>
+          <legend className="rv-dlg__lb">Which contracts does this apply to?</legend>
+          <p className="rv-dlg__note">
+            Choose every contract type this knowledge applies to. A file that applies to every
+            type is used in every review.
+          </p>
+          <div className="rv-k-add__chips">
+            <label className="rv-k-add__chip">
+              <input
+                type="checkbox"
+                className="rv-visually-hidden"
+                checked={allContractTypes}
+                onChange={toggleAllContractTypes}
+              />
+              All contract types
+            </label>
+            {CONTRACT_TYPES.map((contractType) => (
+              <label key={contractType} className="rv-k-add__chip">
+                <input
+                  type="checkbox"
+                  className="rv-visually-hidden"
+                  checked={contractTypes.includes(contractType)}
+                  onChange={() => toggleContractType(contractType)}
+                />
+                {CONTRACT_TYPE_LABELS[contractType]}
+              </label>
+            ))}
+          </div>
+          {!hasContractTypes ? (
+            <p className="rv-dlg__note" role="status">
+              Choose which contracts this applies to.
+            </p>
+          ) : null}
+        </fieldset>
+
         <details className="rv-k-add__more">
           <summary>Where this applies (optional)</summary>
           <p className="rv-dlg__note">
             Where this knowledge applies. You can change it for each entry later.
           </p>
           <div className="rv-k-add__grid">
-            <label>
-              Contract types
-              <input value={details.declaredContractTypes} onChange={set('declaredContractTypes')} placeholder="MSA, NDA" disabled={busy} />
-            </label>
             <label>
               Review pack
               <input value={details.contractPackKey} onChange={set('contractPackKey')} disabled={busy} />
@@ -252,7 +306,7 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
           <Button disabled={busy} onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" type="submit" disabled={!type || !file || busy}>
+          <Button variant="primary" type="submit" disabled={!type || !file || !hasContractTypes || busy}>
             {busy ? 'Reading…' : upload.isError ? 'Try again' : 'Continue to draft'}
           </Button>
         </div>

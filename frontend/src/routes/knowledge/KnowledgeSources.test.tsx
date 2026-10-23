@@ -83,6 +83,21 @@ describe('Source detail and lineage', () => {
     expect(document.querySelector('a[href*="/original"]')).toBeNull()
   })
 
+  it('shows a published file with no declared types as all contract types, with a narrowing hint', async () => {
+    await open('pb')
+    expect(screen.getAllByText('All contract types').length).toBeGreaterThan(0)
+    expect(
+      screen.getByText('To narrow it, add the file again and choose the contract types.'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not offer the narrowing hint for a file that is not published yet', async () => {
+    await open('draft', '', false)
+    expect(
+      screen.queryByText('To narrow it, add the file again and choose the contract types.'),
+    ).not.toBeInTheDocument()
+  })
+
   it('highlights exactly the source nodes the extraction recorded for published knowledge', async () => {
     await open('pb')
     const highlighted = screen.getAllByRole('button', { pressed: false }).filter((button) => button.classList.contains('rv-k-hl'))

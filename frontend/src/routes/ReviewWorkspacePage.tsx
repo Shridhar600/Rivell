@@ -35,7 +35,7 @@ import { useSemanticsQuery } from '../api/semantics'
 import { useTaxonomy } from '../api/taxonomy'
 import { buildRegionLabelMap, CONTRACT_TYPE_LABELS } from '../lib/contractSemantics'
 import { clearResumeFor, writeResume } from '../lib/resume'
-import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun } from '../lib/reviews'
+import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun, playbooksUsedText } from '../lib/reviews'
 import {
   defaultFinding,
   executableChange,
@@ -45,6 +45,7 @@ import {
   nextOpenFinding,
   orderForReview,
   profileLine,
+  regionBodyText,
   regionText,
 } from '../lib/workspace'
 import { AnalysisWarnings, ReviewLifecyclePanel } from '../components/review/ReviewLifecyclePanel'
@@ -94,10 +95,11 @@ type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { ki
 /** Every single-key shortcut of the workspace, as the reader would say what it does. */
 const SHORTCUTS: [string, string][] = [
   ['J or ↓', 'Next finding'],
-  ['K or ↑', 'Previous finding'],
+  ['↑', 'Previous finding'],
   ['A', 'Accept the finding'],
   ['E', 'Edit the wording'],
-  ['R', 'Reject the finding'],
+  ['K', 'Keep the clause as drafted'],
+  ['D', 'Dismiss the finding'],
   ['S', 'Escalate the finding'],
   ['V', 'Switch between Changes, Original and Preview'],
   ['/', 'Search'],
@@ -306,6 +308,12 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     () => (headingNodeId && nodes ? regionText(nodes, headingNodeId) : null),
     [headingNodeId, nodes],
   )
+  // A replacement keeps the heading, so the editor starts from the body only; a run-in
+  // heading carries its clause text in the heading itself, where the full text is the body.
+  const replacementText = useMemo(
+    () => (headingNodeId && nodes ? (regionBodyText(nodes, headingNodeId) ?? regionText(nodes, headingNodeId)) : null),
+    [headingNodeId, nodes],
+  )
 
   const flow = useDecisionFlow({
     reviewId,
@@ -390,14 +398,17 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         if (target) chooseFinding(target.id)
       }
       if (key === 'j' || event.key === 'ArrowDown') step(1)
-      else if (key === 'k' || event.key === 'ArrowUp') step(-1)
+      else if (event.key === 'ArrowUp') step(-1)
       else if (key === 'a' && canDecideNow) flow.decide('ACCEPT')
       else if (key === 'e' && canDecideNow) {
         event.preventDefault()
         flow.decide('EDIT')
-      } else if (key === 'r' && canDecideNow) {
+      } else if (key === 'k' && canDecideNow) {
         event.preventDefault()
-        flow.decide('REJECT')
+        flow.decide('KEEP_AS_DRAFTED')
+      } else if (key === 'd' && canDecideNow) {
+        event.preventDefault()
+        flow.decide('FINDING_WRONG')
       } else if (key === 's' && canDecideNow) {
         event.preventDefault()
         flow.decide('ESCALATE')
@@ -435,15 +446,16 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     })),
     ...(canDecideNow
       ? ([
-          ['ACCEPT', 'Accept', 'A', <CheckIcon key="a" />],
-          ['EDIT', 'Edit', 'E', <EditIcon key="e" />],
-          ['REJECT', 'Reject', 'R', <CloseIcon key="r" />],
-          ['ESCALATE', 'Escalate', 'S', <EscalateIcon key="s" />],
+          ['ACCEPT', 'Accept finding', 'A', <CheckIcon key="a" />],
+          ['EDIT', 'Edit finding', 'E', <EditIcon key="e" />],
+          ['KEEP_AS_DRAFTED', 'Keep as drafted', 'K', <CheckIcon key="k" />],
+          ['FINDING_WRONG', 'Dismiss finding', 'D', <CloseIcon key="d" />],
+          ['ESCALATE', 'Escalate finding', 'S', <EscalateIcon key="s" />],
         ] as const)
           .filter(([kind]) => kind !== 'ACCEPT' || flow.acceptEligibility.eligible)
           .map(([kind, label, key, icon]) => ({
             group: 'This finding',
-            label: `${label} finding`,
+            label,
             key,
             icon,
             run: () => flow.decide(kind),
@@ -483,6 +495,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         decisionsQuery.data && !decisionsQuery.data.truncated
           ? findings.flatMap((f) => executableChange(decisions.get(f.id)) ?? [])
           : null,
+        findings.filter((f) => decisions.get(f.id)?.action === 'RESOLVE').length,
       )
     : []
   const finalizeError = finalizeMutation.isError
@@ -580,7 +593,15 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       : undefined
   const contractType = summary.snapshot?.profile?.contractType
   const pin = summary.snapshot?.knowledgePinNumber
-  const context = [profileLine(summary.snapshot), pin ? `Knowledge version ${pin}` : null].filter(Boolean).join('. ') || null
+  const playbooksUsed = playbooksUsedText(summary.snapshot?.playbooksUsed ?? null)
+  const context =
+    [
+      profileLine(summary.snapshot),
+      pin ? `Knowledge version ${pin}` : null,
+      playbooksUsed !== null ? `Playbooks used: ${playbooksUsed}` : null,
+    ]
+      .filter(Boolean)
+      .join('. ') || null
 
   // The search menu lists this review's findings and commands first, and can find text in the contract.
   usePageCommands(() => ({
@@ -692,7 +713,9 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           position={index >= 0 ? { index: index + 1, total: findings.length } : null}
           context={context}
           regionLabels={regionLabels}
+          playbooksUsed={summary.snapshot?.playbooksUsed ?? null}
           currentText={currentText}
+          replacementText={replacementText}
           decision={decision}
           decisionsLoaded={decisionsLoaded}
           decisionsTruncated={decisionsQuery.data?.truncated ?? false}

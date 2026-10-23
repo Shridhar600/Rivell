@@ -126,6 +126,36 @@ function renderWorkspace(initialEntry = '/reviews/c1/analysis/r-1', options: Stu
   return { api, router }
 }
 
+const FROZEN_PLAYBOOKS = [
+  {
+    artifactId: 'a-playbook',
+    artifactType: 'PLAYBOOK',
+    name: 'Mutual NDA Negotiation Guide',
+    publicationNumber: 2,
+  },
+]
+
+function summaryWithPlaybooks(playbooks = FROZEN_PLAYBOOKS) {
+  return {
+    ...fixtureCompletedReviewSummary,
+    snapshot: {
+      ...fixtureCompletedReviewSummary.snapshot,
+      playbooksUsed: playbooks,
+    },
+  }
+}
+
+const withSecondOpinion = {
+  reviewSummary: {
+    ...summaryWithPlaybooks(),
+    snapshot: { ...summaryWithPlaybooks().snapshot, engine: 'V2' },
+  },
+  findings: {
+    items: [fixtureNeedsYourLookFindingSummary, ...findingsForThisReview.items],
+    truncated: false,
+  },
+}
+
 /** The workspace's three regions. A closed command palette also holds role=option nodes, so the
  *  Findings list is always reached through its own listbox. */
 const findingsList = () => within(screen.getByRole('listbox', { name: 'Findings list' }))
@@ -302,22 +332,28 @@ describe('findings list', () => {
 })
 
 describe('finding detail', () => {
-  it('separates observation, policy basis and recommendation with approved language', async () => {
+  it('puts the gap first and keeps the playbook basis and recommendation in Details', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
     await findDetailTitle('6. Limitation of Liability')
+    expect(section('The gap')).toHaveTextContent(
+      'The clause is worse for us than every fallback the position lists.',
+    )
+    const playbook = section('Your playbook')
+    expect(playbook).toHaveTextContent('Limitation of liability')
+    expect(playbook).toHaveTextContent('Liability must be capped at fees paid in the preceding 12 months.')
+
     const found = section('Rivell found')
-    expect(found).toHaveTextContent(/worse for us than every fallback the position lists/)
     expect(found).toHaveTextContent('Beyond our fallbacks')
     expect(found).toHaveTextContent(
-      'Policy basis: Published policy lists a fallback at two times the fees paid over a twelve-month period.',
+      'Playbook: Published policy lists a fallback at two times the fees paid over a twelve-month period.',
     )
     expect(found).toHaveTextContent(
       'Recommendation: Use the approved fallback wording. Replace the clause with the approved fallback wording for the liability cap.',
     )
 
     // The proposed wording is labelled with where it came from.
-    const proposed = section('Proposed language')
+    const proposed = section('Suggested change')
     expect(proposed).toHaveTextContent(/two times the fees paid in the twelve months/)
     expect(proposed).toHaveTextContent('Approved organizational drafting')
     expect(proposed).toHaveTextContent('Knowledge version 2')
@@ -342,11 +378,11 @@ describe('finding detail', () => {
     await findDetailTitle('6. Limitation of Liability')
     // The clause is its heading and the top-level passages after it, up to the next heading.
     await waitFor(() =>
-      expect(section('In the contract')).toHaveTextContent(
+      expect(section('What the contract says')).toHaveTextContent(
         '6.3 The exclusions in Section 6.2 do not apply to breaches of Section 8.',
       ),
     )
-    const source = section('In the contract')
+    const source = section('What the contract says')
     expect(source).toHaveTextContent('6. Limitation of Liability')
     expect(source).not.toHaveTextContent('1. Definitions')
     expect(source).not.toHaveTextContent('5. Termination')
@@ -370,18 +406,18 @@ describe('finding detail', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
-  it('says so when the clause text for this version is not available', async () => {
+  it('falls back to the frozen contract evidence when the version text is unavailable', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
       findingDetailResponse: () =>
         jsonResponse(envelope({ ...fixtureClauseFindingDetail, subjectHeadingNodeId: 'node-missing' })),
     })
 
-    await findDetailText('Rivell found')
-    expect(section('In the contract')).toHaveTextContent(
-      'The clause text for this version is not available.',
+    await findDetailText('What the contract says')
+    expect(section('What the contract says')).toHaveTextContent(
+      '6. Limitation of Liability. Subject to the provisions of this Agreement',
     )
     expect(
-      within(section('In the contract')).queryByRole('button', { name: 'Show in document' }),
+      within(section('What the contract says')).queryByRole('button', { name: 'Show in document' }),
     ).not.toBeInTheDocument()
   })
 
@@ -394,7 +430,7 @@ describe('finding detail', () => {
     })
 
     await findDetailTitle('6. Limitation of Liability')
-    await waitFor(() => expect(section('In the contract')).toHaveTextContent('6.3 The exclusions'))
+    await waitFor(() => expect(section('What the contract says')).toHaveTextContent('6.3 The exclusions'))
     const structureCalls = api.requests.filter((request) => request.url.includes('/structure'))
     expect(structureCalls).toHaveLength(1)
     expect(structureCalls[0].url).toContain('/versions/1/structure')
@@ -414,7 +450,7 @@ describe('finding detail', () => {
     expect(section('Rivell found')).toHaveTextContent(
       'No limitation of liability provision was found in this contract.',
     )
-    expect(section('In the contract')).toHaveTextContent(
+    expect(section('The gap')).not.toHaveTextContent(
       'This provision is not in this contract version.',
     )
     expect(pane.queryByRole('button', { name: 'Show in document' })).not.toBeInTheDocument()
@@ -436,10 +472,9 @@ describe('finding detail', () => {
     })
 
     await findDetailTitle('Missing: Limitation of liability')
-    await waitFor(() =>
-      expect(section('In the contract')).toHaveTextContent('This provision is not in this contract version.'),
-    )
-    expect(section('In the contract')).not.toHaveTextContent('6.3 The exclusions')
+    await findDetailTitle('Missing: Limitation of liability')
+    expect(section('The gap')).not.toHaveTextContent('6.3 The exclusions')
+    expect(within(detailPane()).queryByText('What the contract says')).not.toBeInTheDocument()
     expect(
       within(detailPane()).queryByRole('button', { name: 'Show in document' }),
     ).not.toBeInTheDocument()
@@ -448,8 +483,8 @@ describe('finding detail', () => {
   it('labels generative language as machine-proposed, never approved', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-5')
 
-    await findDetailText('Proposed language')
-    const proposed = section('Proposed language')
+    await findDetailText('Suggested change')
+    const proposed = section('Suggested change')
     expect(proposed).toHaveTextContent(/Neither party’s aggregate liability/)
     expect(proposed).toHaveTextContent('Proposed by Rivell')
     expect(proposed).toHaveTextContent(/not approved organizational language/)
@@ -469,7 +504,7 @@ describe('finding detail', () => {
     expect(within(detailPane()).queryByText('Policy position')).not.toBeInTheDocument()
     expect(within(detailPane()).queryByRole('group', { name: 'Preferred' })).not.toBeInTheDocument()
     expect(within(detailPane()).queryByRole('group', { name: 'Fallback' })).not.toBeInTheDocument()
-    expect(within(detailPane()).queryByText('Proposed language')).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByText('Suggested change')).not.toBeInTheDocument()
   })
 
   it('labels a clause no playbook covers as a review item, with the model’s confidence as an estimate', async () => {
@@ -496,8 +531,10 @@ describe('finding detail', () => {
     await findDetailText('Rivell found')
     const found = section('Rivell found')
     expect(found).toHaveTextContent(/Rivell did not choose between them/)
-    expect(found).toHaveTextContent(/More than one published policy applies/)
-    expect(found).toHaveTextContent('The applicable policies disagree; no rule was chosen.')
+    expect(found).toHaveTextContent(/More than one rule in your playbook applies/)
+    expect(found).toHaveTextContent(
+      'More than one playbook position applies to this topic and they conflict. Rivell did not choose between them.',
+    )
     // Both policies stay reachable, told apart by number, so neither is presented as the answer.
     expect(within(found).getByRole('button', { name: 'Policy 1' })).toBeInTheDocument()
     expect(within(found).getByRole('button', { name: 'Policy 2' })).toBeInTheDocument()
@@ -529,9 +566,9 @@ describe('finding detail', () => {
   it('renders a cross-clause finding without faking counterpart navigation', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-6')
 
-    await findDetailText('Rivell found')
-    expect(section('Rivell found')).toHaveTextContent(/not covered by a survival provision/)
-    expect(section('In the contract')).toHaveTextContent('6. Limitation of Liability')
+    await findDetailText('The gap')
+    expect(section('The gap')).toHaveTextContent(/not covered by a survival provision/)
+    expect(section('What the contract says')).toHaveTextContent('6. Limitation of Liability')
     expect(
       within(detailPane()).queryByRole('button', { name: /related|corresponding|counterpart/i }),
     ).not.toBeInTheDocument()
@@ -621,7 +658,9 @@ describe('position findings', () => {
     await findDetailTitle('6. Limitation of Liability')
     const note = detailPane().querySelector('.rv-ws-note--approval')
     expect(note).not.toBeNull()
-    // The note itself carries the approval statement and the condition, not only the comparison grid.
+    // The note itself is visible before the decision bar, carries the approval statement and the
+    // condition, not only the comparison grid.
+    expect(note).toBeVisible()
     expect(note).toHaveTextContent('Approval is needed.')
     expect(note).toHaveTextContent('Escalate when: Uncapped liability or consequential damages.')
   })
@@ -846,7 +885,7 @@ describe('finding evidence amendment', () => {
     })
 
     // The centre column carries the limitation as a note; the navigator reports what was recorded.
-    expect(await screen.findByText(/Review coverage is limited for:/)).toBeInTheDocument()
+    expect(await screen.findByText(/Rivell did not check:/)).toBeInTheDocument()
     expect(
       await screen.findByText(/No findings for this contract version/),
     ).toBeInTheDocument()
@@ -928,7 +967,7 @@ describe('finding evidence amendment', () => {
     expect(sheet.getByText('Detected as a secondary mention only')).toBeInTheDocument()
     expect(sheet.getByText('Not found in the contract')).toBeInTheDocument()
     expect(sheet.getByText('Coverage not established')).toBeInTheDocument()
-    expect(sheet.getByText(/Review coverage is limited for:/)).toBeInTheDocument()
+    expect(sheet.getByText('Rivell did not check: Confidentiality obligations, Indemnification')).toBeInTheDocument()
     expect(
       await screen.findByText(/No findings for this contract version/),
     ).toBeInTheDocument()
@@ -970,7 +1009,7 @@ describe('review workspace authority and network guards', () => {
   it('does not call machine-proposed language approved', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-5')
 
-    await findDetailText('Proposed language')
+    await findDetailText('Suggested change')
     const text = document.body.textContent ?? ''
     expect(text).toMatch(/Proposed by Rivell/)
     expect(text).not.toMatch(/Approved organizational drafting/)
@@ -1010,7 +1049,7 @@ describe('engine v2: who decided', () => {
   it('shows both views on a "needs your look" item, with the quoted words and no provider name', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-11', withV2)
 
-    await findDetailText('The two checks disagree')
+    await screen.findByTestId('second-opinion-views')
     const views = within(screen.getByTestId('second-opinion-views'))
     expect(views.getByText('First review')).toBeInTheDocument()
     expect(views.getByText(/Beyond every listed fallback/)).toBeInTheDocument()
@@ -1021,6 +1060,29 @@ describe('engine v2: who decided', () => {
     // the selected item's group opens by itself
     expect(screen.getByRole('button', { name: 'Needs your look (1)' })).toHaveAttribute('aria-expanded', 'true')
     expect(document.body.textContent ?? '').not.toMatch(/\bJev\b|OpenAI|OpenRouter/i)
+  })
+
+  it('does not say the checks disagree when the second check was unavailable', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-11', {
+      ...withSecondOpinion,
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({
+            ...fixtureNeedsYourLookFindingDetail,
+            quality: {
+              ...fixtureNeedsYourLookFindingDetail.quality,
+              secondOpinionOutcome: 'UNAVAILABLE',
+              secondOpinionQuote: null,
+              secondOpinionReason: null,
+            },
+          }),
+        ),
+    })
+
+    await screen.findByTestId('second-opinion-views')
+    const views = within(screen.getByTestId('second-opinion-views'))
+    expect(views.getByText('Only one reading is available')).toBeInTheDocument()
+    expect(views.queryByText('Two readings of this clause disagree')).not.toBeInTheDocument()
   })
 
   it('says when an agreeing second opinion confirmed a finding', async () => {
@@ -1102,7 +1164,7 @@ describe('engine v2: the items P4 adds', () => {
   it('shows the playbook and the whole-contract read side by side on a playbook-silent item', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-14', withP4)
 
-    await findDetailText('The two checks disagree')
+    await findDetailText('Two readings of this clause disagree')
     const views = within(screen.getByTestId('playbook-silent-views'))
     expect(views.getByText(/No position in your playbook covers this clause/)).toBeInTheDocument()
     expect(views.getByText(/estimate 12%/)).toBeInTheDocument()
@@ -1119,7 +1181,7 @@ describe('engine v2: the items P4 adds', () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-15', withP4)
 
     await findDetailTitle('Missing: Cap Exceptions')
-    expect(section('Rivell found')).toHaveTextContent('Missing: Cap Exceptions. Searched 5 clauses; none addresses it.')
+    expect(section('The gap')).toHaveTextContent('Missing: Cap Exceptions. Searched 5 clauses; none addresses it.')
     expect(section('Rivell found')).toHaveTextContent('Missing from the contract')
     expect(within(detailPane()).getByTestId('finding-decided-by')).toHaveTextContent(
       'Decided by Rivell’s first review · 92%',
@@ -1150,7 +1212,7 @@ describe('engine v2: the items P4 adds', () => {
   it('writes no label with an em dash', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-14', withP4)
 
-    await findDetailText('The two checks disagree')
+    await findDetailText('Two readings of this clause disagree')
     await openLookGroup()
     // Rivell's own words only: the contract pane shows the document as received
     expect(screen.getByRole('complementary', { name: 'Findings' }).textContent ?? '').not.toMatch(/\u2014/)
@@ -1158,3 +1220,101 @@ describe('engine v2: the items P4 adds', () => {
   })
 })
 
+
+describe('finding detail: contract words, rule, gap, change', () => {
+  it('reads in that order and keeps technical detail closed', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      reviewSummary: summaryWithPlaybooks(),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const quote = section('What the contract says')
+    const playbook = section('Your playbook')
+    const gap = section('The gap')
+    const change = section('Suggested change')
+
+    expect(quote).toHaveTextContent('6.3 The exclusions in Section 6.2 do not apply to breaches of Section 8.')
+    expect(within(quote).getByRole('button', { name: 'Show in document' })).toBeInTheDocument()
+    expect(playbook).toHaveTextContent('Limitation of liability')
+    expect(playbook).toHaveTextContent('Liability must be capped at fees paid in the preceding 12 months.')
+    expect(playbook).toHaveTextContent('Based on: Mutual NDA Negotiation Guide, version 2')
+    expect(playbook).toHaveTextContent('Escalate when: Uncapped liability or consequential damages.')
+    expect(gap).toHaveTextContent('The clause is worse for us than every fallback the position lists.')
+    expect(change).toHaveTextContent(/two times the fees paid in the twelve months/)
+
+    expect(quote.compareDocumentPosition(playbook) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(playbook.compareDocumentPosition(gap) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(gap.compareDocumentPosition(change) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    const main = screen.getByTestId('finding-main')
+    expect(main).not.toHaveTextContent('Policy basis')
+    expect(main).not.toHaveTextContent('Recommendation:')
+
+    const details = screen.getByTestId('finding-details')
+    expect(details).not.toHaveAttribute('open')
+    expect(within(details).getByText(/Confidence: high/)).toBeInTheDocument()
+    expect(within(details).getByText('Policy position')).toBeInTheDocument()
+    expect(within(details).getByText('Sources')).toBeInTheDocument()
+  })
+
+  it('uses the second opinion’s words and reason on an old stored disagreement', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-11', {
+      ...withSecondOpinion,
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({
+            ...fixtureNeedsYourLookFindingDetail,
+            observationText:
+              "Rivell's two reviewers disagree on this clause against the position: one finds an issue, the other does not. Rivell does not decide; please take a look.",
+          }),
+        ),
+    })
+
+    await findDetailText('The gap')
+    const quote = section('What the contract says')
+    expect(quote).toHaveTextContent('liability shall not exceed the fees paid')
+    expect(quote).toHaveTextContent('The cap matches the preferred basis in the position.')
+    expect(section('The gap')).toHaveTextContent(
+      'Rivell is unsure about this clause. Here is the clause and the closest rule.',
+    )
+    expect(within(detailPane()).queryByText(/two reviewers disagree/i)).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByText(/please take a look/i)).not.toBeInTheDocument()
+
+    const details = screen.getByTestId('finding-details')
+    expect(within(details).getByTestId('finding-decided-by')).toHaveTextContent('Needs your look')
+    expect(within(details).getByTestId('second-opinion-views')).toBeInTheDocument()
+  })
+
+  it('draws no empty blocks and keeps an absence honest', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-2')
+
+    await findDetailTitle('Missing: Limitation of liability')
+    expect(within(detailPane()).queryByText('What the contract says')).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByText('Your playbook')).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByText('Suggested change')).not.toBeInTheDocument()
+    expect(section('The gap')).toHaveTextContent(
+      'The required provision Limitation of liability is missing from this contract.',
+    )
+    expect(section('The gap')).not.toHaveTextContent('This provision is not in this contract version.')
+  })
+
+  it('never shows policy words in the contract quote or guesses the playbook', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      reviewSummary: summaryWithPlaybooks([
+        {
+          artifactId: 'a-different-playbook',
+          artifactType: 'PLAYBOOK',
+          name: 'Another Playbook',
+          publicationNumber: 9,
+        },
+      ]),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const quote = section('What the contract says')
+    expect(quote).toHaveTextContent('6. Limitation of Liability')
+    expect(quote).not.toHaveTextContent('Liability must be capped at fees paid')
+    expect(section('Your playbook')).toHaveTextContent('Liability must be capped at fees paid')
+    expect(section('Your playbook')).not.toHaveTextContent('Based on:')
+  })
+})

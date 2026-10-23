@@ -413,7 +413,7 @@ class DemoScenarioCatalogIT {
 
         assertThat(summary.contracts()).isEqualTo(14);
         assertThat(summary.reviews()).isEqualTo(12);
-        assertThat(summary.findings()).isEqualTo(22);
+        assertThat(summary.findings()).isEqualTo(18);
         assertThat(summary.knowledgeSources()).isEqualTo(6);
         assertThat(summary.publications()).isEqualTo(2);
         assertThat(summary.escalationTriggerPublished()).isTrue();

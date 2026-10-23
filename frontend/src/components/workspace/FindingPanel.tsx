@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { EvidenceItem } from '../../api/retrieval'
-import type { FindingClaim, FindingDetail, FindingQuality } from '../../api/reviews'
+import type { FindingClaim, FindingDetail, FindingQuality, PlaybookUsed } from '../../api/reviews'
 import type { ConceptLabel } from '../../api/taxonomy'
 import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
@@ -13,7 +13,10 @@ import {
   classificationLabel,
   comparisonCategoryLabel,
   decidedByLabel,
+  findingGapText,
   findingIssueLabel,
+  findingPlaybookRule,
+  findingQuote,
   findingSubjectLabel,
   isRelatedPosition,
   observationKindLabel,
@@ -57,8 +60,12 @@ interface Props {
   position: { index: number; total: number } | null
   context: string | null
   regionLabels: Map<string, string>
+  /** The playbooks the review froze, used to name the source of a rule; null when unknown. */
+  playbooksUsed: readonly PlaybookUsed[] | null
   /** The clause as received, from the pinned contract structure. */
   currentText: string | null
+  /** The clause body a replacement starts from, without its heading. */
+  replacementText: string | null
   decision: HumanDecision | null
   decisionsLoaded: boolean
   decisionsTruncated: boolean
@@ -202,12 +209,40 @@ export function FindingPanel(props: Props) {
   const sources = showAll ? finding.evidenceItems : finding.evidenceItems.slice(0, SOURCES_SHOWN)
   const edited = decision?.action === 'EDIT' && decision.approvedLanguage !== finding.proposedLanguage
   const eligible = flow.acceptEligibility.eligible
-  const reason = flow.acceptEligibility.eligible ? '' : flow.acceptEligibility.reason
+  const escalated = decision?.action === 'ESCALATE'
+  const keptAsDrafted = decision?.action === 'REJECT' && decision.rejectReason === 'KEEP_AS_DRAFTED'
+  const dismissed = decision?.action === 'REJECT' && decision.rejectReason === 'FINDING_WRONG'
   const missingEvidence = finding.claims.some((claim) => claim.evidenceItemIds.some((id) => !items.has(id)))
   const title = findingSubjectLabel(finding, props.regionLabels, labelFor)
   // A position on a topic the clause only touches is a related note, never a defect in the clause.
   const related = isRelatedPosition(finding)
-  const excerpt = props.currentText ? clauseExcerpt(props.currentText) : null
+  // The four things a reader needs first: the words, the rule, the gap and the fix. Everything
+  // else is one closed disclosure away.
+  const gapText = findingGapText(finding, labelFor)
+  const quote = findingQuote(finding, props.currentText)
+  const quoteText = quote ? (quote.source === 'contract' ? clauseExcerpt(quote.text) : quote.text) : null
+  const quoteReason =
+    quote?.source === 'second-opinion' ? (finding.quality?.secondOpinionReason?.trim() ?? null) : null
+  const playbookRule = findingPlaybookRule(finding, labelFor, props.playbooksUsed)
+  const proposedLanguage = finding.proposedLanguage
+  const showDetails =
+    !added ||
+    Boolean(
+      decidedBy ||
+        assessment ||
+        related ||
+        withinFallback ||
+        quality.length > 0 ||
+        why.length > 0 ||
+        absences.length > 0 ||
+        note ||
+        recommendations.length > 0 ||
+        (finding.quality?.route === 'NEEDS_YOUR_LOOK' && finding.quality.secondOpinionOutcome) ||
+        (silent && finding.quality) ||
+        position ||
+        finding.evidenceItems.length > 0 ||
+        missingEvidence,
+    )
 
   return (
     <aside className="rv-ws-pane rv-ws-dt" aria-label="Finding detail">
@@ -233,165 +268,199 @@ export function FindingPanel(props: Props) {
         </div>
         <h2>{title}</h2>
         {props.context ? <div className="rv-ws-ctx">{props.context}</div> : null}
-        {decidedBy ? (
-          <p className="rv-ws-badge" data-testid="finding-decided-by">
-            {decidedBy}
-          </p>
-        ) : null}
-        {related ? (
-          <p className="rv-ws-note rv-ws-note--related">
-            <b>Related position, not a breach.</b> It covers a topic this clause touches but does not
-            govern.
-          </p>
-        ) : null}
+        <div className="rv-ws-main" data-testid="finding-main">
+          {quote && quoteText ? (
+            <div className="rv-ws-sec">
+              <div className="rv-ws-sec-h">
+                <span>What the contract says</span>
+                {finding.subjectKind === 'CLAUSE' && props.currentText ? (
+                  <button type="button" className="rv-ws-link" onClick={props.onShowInDocument}>
+                    Show in document
+                  </button>
+                ) : null}
+              </div>
+              <blockquote className="rv-ws-quote">“{quoteText}”</blockquote>
+              {quoteReason ? <p className="rv-ws-caption">{quoteReason}</p> : null}
+            </div>
+          ) : null}
 
-        <div className="rv-ws-sec">
-          <div className="rv-ws-sec-h">{added ? 'Reviewer’s note' : 'Rivell found'}</div>
-          <div className="rv-ws-machine">
-            <p>
-              {finding.observationText}
-              {added ? null : (
+          {playbookRule && (playbookRule.label || playbookRule.text || playbookRule.basedOn) ? (
+            <div className="rv-ws-sec">
+              <div className="rv-ws-sec-h">Your playbook</div>
+              {playbookRule.label ? (
+                <div className="rv-ws-authority">
+                  <b>{playbookRule.label}</b>
+                </div>
+              ) : null}
+              {playbookRule.text ? <div className="rv-ws-incl">{playbookRule.text}</div> : null}
+              {playbookRule.basedOn ? (
+                <p className="rv-ws-caption">Based on: {playbookRule.basedOn}</p>
+              ) : null}
+              {playbookRule.escalation ? (
+                <p className="rv-ws-caption">Escalate when: {playbookRule.escalation}.</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {gapText ? (
+            <div className="rv-ws-sec">
+              <div className="rv-ws-sec-h">{added ? 'Reviewer’s note' : 'The gap'}</div>
+              <p className="rv-ws-gap">{gapText}</p>
+            </div>
+          ) : null}
+
+          {proposedLanguage && grounded ? (
+            <div className="rv-ws-sec">
+              <div className="rv-ws-sec-h">Suggested change</div>
+              <div className="rv-ws-prop">
+                <ins>{proposedLanguage}</ins>
+              </div>
+              {authority ? (
+                <div className="rv-ws-authority">
+                  <b>{authority.strong}</b>
+                  <span>{authority.rest}</span>
+                </div>
+              ) : null}
+              {edited ? <div className="rv-ws-src">Your edit differs from the proposed wording.</div> : null}
+            </div>
+          ) : null}
+
+          {withinFallback ? (
+            <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
+              {approvalNeeded ? (
                 <>
-                  <br />
-                  <span className="rv-ws-authority">
-                    {related ? 'Related position on a secondary topic' : observationKindLabel(finding.observationKind)}
-                  </span>
+                  <b>Approval is needed.</b> This position names an approver. Escalate the finding,
+                  then resolve it with the approver's name.
+                  {escalationTriggers.length > 0 ? ` Escalate when: ${escalationTriggers.join('; ')}.` : ''}
+                </>
+              ) : (
+                <>
+                  <b>This is a note, not a problem.</b> The clause departs from the preferred position
+                  but stays within an acceptable fallback; accept and record it.
                 </>
               )}
             </p>
+          ) : null}
+        </div>
+
+        {showDetails ? (
+          <details className="rv-ws-sec rv-ws-srcs" data-testid="finding-details">
+            <summary className="rv-ws-sec-h">Details</summary>
+            {decidedBy ? (
+              <p className="rv-ws-badge" data-testid="finding-decided-by">
+                {decidedBy}
+              </p>
+            ) : null}
+            {related ? (
+              <p className="rv-ws-note rv-ws-note--related">
+                <b>Related position, not a breach.</b> It covers a topic this clause touches but does not
+                govern.
+              </p>
+            ) : null}
             {assessment ? (
               <p className="rv-ws-caption" data-testid="finding-assessment">
                 Assessment{related ? ' (secondary topic)' : ''}: {assessment}
               </p>
             ) : null}
-            {absences.map((claim) => (
-              <p key={claim.ordinal}>
-                {claim.text}
-                <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
-              </p>
-            ))}
-            {why.map((claim) => (
-              <p key={claim.ordinal}>
-                <span className="rv-ws-authority">{claimKindLabel(claim.claimKind)}: </span>
-                {claim.text}
-                <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
-              </p>
-            ))}
+
             {added ? null : (
-              <p>
-                <b>Recommendation:</b> {proposedActionLabel(finding.proposedAction)}.
-                {recommendations.map((claim) => (
-                  <span key={claim.ordinal}>
-                    {' '}
-                    {claim.text}
-                    <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
-                  </span>
+              <div className="rv-ws-sec">
+                <div className="rv-ws-sec-h">Rivell found</div>
+                <div className="rv-ws-machine">
+                  <p>
+                    <span className="rv-ws-authority">
+                      {related ? 'Related position on a secondary topic' : observationKindLabel(finding.observationKind)}
+                    </span>
+                  </p>
+                  {absences.map((claim) => (
+                    <p key={claim.ordinal}>
+                      {claim.text}
+                      <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
+                    </p>
+                  ))}
+                  {why.map((claim) => (
+                    <p key={claim.ordinal}>
+                      <span className="rv-ws-authority">{claimKindLabel(claim.claimKind)}: </span>
+                      {claim.text}
+                      <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
+                    </p>
+                  ))}
+                  <p>
+                    <b>Recommendation:</b> {proposedActionLabel(finding.proposedAction)}.
+                    {recommendations.map((claim) => (
+                      <span key={claim.ordinal}>
+                        {' '}
+                        {claim.text}
+                        <ClaimEvidence claim={claim} items={items} onOpen={props.onOpenSource} />
+                      </span>
+                    ))}
+                  </p>
+                  {note ? <p>{note}</p> : null}
+                  {missingEvidence ? (
+                    <p className="rv-ws-warn">Some supporting sources are missing from this view.</p>
+                  ) : null}
+                </div>
+              </div>
+            )}
+
+            {finding.quality?.route === 'NEEDS_YOUR_LOOK' && finding.quality.secondOpinionOutcome ? (
+              <SecondOpinionViews quality={finding.quality} />
+            ) : null}
+            {silent && finding.quality ? <PlaybookSilentViews quality={finding.quality} /> : null}
+
+            {position ? (
+              <PolicyPosition
+                view={position}
+                openable={new Set(items.keys())}
+                onOpenSource={props.onOpenSource}
+                caption={finding.quality?.foundBy === 'SEARCH' ? SEARCH_CAPTION : null}
+              />
+            ) : null}
+
+            {finding.evidenceItems.length > 0 ? (
+              // Condensed: the main blocks say what matters, so the full source list is one
+              // disclosure away, each item still labelled with its own authority.
+              <details className="rv-ws-sec rv-ws-srcs">
+                <summary className="rv-ws-sec-h">
+                  Sources
+                  <small>{finding.evidenceItems.length}</small>
+                </summary>
+                {sources.map((item) => {
+                  const row = sourceRow(item, props.regionLabels, labelFor)
+                  return (
+                    <button key={item.evidenceId} type="button" className="rv-ws-srow" onClick={() => props.onOpenSource(item.evidenceId)}>
+                      <span className="rv-ws-sico">
+                        <BookIcon className="rv-icon" />
+                      </span>
+                      <span className="rv-ws-stxt">
+                        <b>{row.title}</b>
+                        <small>{row.detail}</small>
+                      </span>
+                      <ChevronIcon className="rv-icon rv-ws-chev-r" />
+                    </button>
+                  )
+                })}
+                {finding.evidenceItems.length > SOURCES_SHOWN ? (
+                  <button type="button" className="rv-ws-link" onClick={() => setShowAll((value) => !value)}>
+                    {showAll ? 'Show fewer sources' : `Show all ${finding.evidenceItems.length} sources`}
+                  </button>
+                ) : null}
+                {quality.map((row) => (
+                  <div key={row} className="rv-ws-caption">
+                    {row}
+                  </div>
                 ))}
-              </p>
-            )}
-            {note ? <p>{note}</p> : null}
-            {missingEvidence ? (
-              <p className="rv-ws-warn">Some supporting sources are missing from this view.</p>
-            ) : null}
-          </div>
-        </div>
-
-        {finding.quality?.route === 'NEEDS_YOUR_LOOK' && finding.quality.secondOpinionOutcome ? (
-          <SecondOpinionViews quality={finding.quality} />
-        ) : null}
-        {silent && finding.quality ? <PlaybookSilentViews quality={finding.quality} /> : null}
-
-        {withinFallback ? (
-          <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
-            {approvalNeeded ? (
-              <>
-                <b>Approval is needed.</b> This position names an approver, so approve it before
-                accepting.
-                {escalationTriggers.length > 0 ? ` Escalate when: ${escalationTriggers.join('; ')}.` : ''}
-              </>
-            ) : (
-              <>
-                <b>This is a note, not a problem.</b> The clause departs from the preferred position
-                but stays within an acceptable fallback; accept and record it.
-              </>
-            )}
-          </p>
-        ) : null}
-
-        {position ? (
-          <PolicyPosition
-            view={position}
-            openable={new Set(items.keys())}
-            onOpenSource={props.onOpenSource}
-            caption={finding.quality?.foundBy === 'SEARCH' ? SEARCH_CAPTION : null}
-          />
-        ) : null}
-
-        <div className="rv-ws-sec">
-          <div className="rv-ws-sec-h">
-            In the contract
-            {finding.subjectKind === 'CLAUSE' && props.currentText ? (
-              <button type="button" className="rv-ws-link" onClick={props.onShowInDocument}>
-                Show in document
-              </button>
-            ) : null}
-          </div>
-          <div className="rv-ws-incl">
-            {finding.subjectKind === 'ABSENCE'
-              ? 'This provision is not in this contract version.'
-              : (excerpt ?? 'The clause text for this version is not available.')}
-          </div>
-        </div>
-
-        {finding.proposedLanguage && grounded ? (
-          <div className="rv-ws-sec">
-            <div className="rv-ws-sec-h">Proposed language</div>
-            <div className="rv-ws-prop">
-              <ins>{finding.proposedLanguage}</ins>
-            </div>
-            {authority ? (
-              <div className="rv-ws-authority">
-                <b>{authority.strong}</b>
-                <span>{authority.rest}</span>
+              </details>
+            ) : quality.length > 0 ? (
+              <div className="rv-ws-sec">
+                <div className="rv-ws-sec-h">Checks</div>
+                {quality.map((row) => (
+                  <div key={row} className="rv-ws-caption">
+                    {row}
+                  </div>
+                ))}
               </div>
             ) : null}
-            {edited ? <div className="rv-ws-src">Your edit differs from the proposed wording.</div> : null}
-          </div>
-        ) : null}
-
-        {finding.evidenceItems.length > 0 ? (
-          // Condensed: the policy position and the proposed wording are above already, so the full
-          // source list is one disclosure away, each item still labelled with its own authority.
-          <details className="rv-ws-sec rv-ws-srcs">
-            <summary className="rv-ws-sec-h">
-              Sources
-              <small>{finding.evidenceItems.length}</small>
-            </summary>
-            {sources.map((item) => {
-              const row = sourceRow(item, props.regionLabels, labelFor)
-              return (
-                <button key={item.evidenceId} type="button" className="rv-ws-srow" onClick={() => props.onOpenSource(item.evidenceId)}>
-                  <span className="rv-ws-sico">
-                    <BookIcon className="rv-icon" />
-                  </span>
-                  <span className="rv-ws-stxt">
-                    <b>{row.title}</b>
-                    <small>{row.detail}</small>
-                  </span>
-                  <ChevronIcon className="rv-icon rv-ws-chev-r" />
-                </button>
-              )
-            })}
-            {finding.evidenceItems.length > SOURCES_SHOWN ? (
-              <button type="button" className="rv-ws-link" onClick={() => setShowAll((value) => !value)}>
-                {showAll ? 'Show fewer sources' : `Show all ${finding.evidenceItems.length} sources`}
-              </button>
-            ) : null}
-            {quality.map((row) => (
-              <div key={row} className="rv-ws-caption">
-                {row}
-              </div>
-            ))}
           </details>
         ) : null}
 
@@ -432,7 +501,7 @@ export function FindingPanel(props: Props) {
             kind={flow.compose}
             finding={finding}
             currentText={props.currentText}
-            initialLanguage={decision?.action === 'EDIT' ? (decision.approvedLanguage ?? '') : ''}
+            initialLanguage={decision?.action === 'EDIT' ? (decision.approvedLanguage ?? '') : (props.replacementText ?? props.currentText ?? '')}
             isSubmitting={flow.isSubmitting}
             error={flow.error}
             onSubmit={flow.submit}
@@ -469,43 +538,62 @@ export function FindingPanel(props: Props) {
               {added ? null : <span>Rivell’s recommendation is kept separately</span>}
             </div>
             <div className="rv-ws-dbtns">
-              <Button
-                aria-pressed={decision?.action === 'ACCEPT'}
-                disabled={flow.isSubmitting || !eligible}
-                title={eligible ? 'Shortcut A' : reason}
-                onClick={() => flow.decide('ACCEPT')}
-              >
-                <CheckIcon />
-                Accept
-              </Button>
+              {eligible ? (
+                <Button
+                  aria-pressed={decision?.action === 'ACCEPT'}
+                  disabled={flow.isSubmitting}
+                  title="Shortcut A"
+                  onClick={() => flow.decide('ACCEPT')}
+                >
+                  <CheckIcon />
+                  Accept
+                </Button>
+              ) : null}
+              {escalated ? (
+                <Button
+                  variant="primary"
+                  disabled={flow.isSubmitting}
+                  onClick={() => flow.decide('RESOLVE')}
+                >
+                  <CheckIcon />
+                  Resolve
+                </Button>
+              ) : null}
               <Button aria-pressed={decision?.action === 'EDIT'} disabled={flow.isSubmitting} title="Shortcut E" onClick={() => flow.decide('EDIT')}>
                 <EditIcon />
                 Edit
               </Button>
               <Button
-                className="rv-ws-rej"
-                aria-pressed={decision?.action === 'REJECT'}
+                aria-pressed={keptAsDrafted}
                 disabled={flow.isSubmitting}
-                title="Shortcut R"
-                onClick={() => flow.decide('REJECT')}
+                title="Shortcut K"
+                onClick={() => flow.decide('KEEP_AS_DRAFTED')}
               >
-                <CloseIcon />
-                Reject
+                <CheckIcon />
+                Keep as drafted
               </Button>
               <Button
-                className="rv-ws-esc"
-                aria-pressed={decision?.action === 'ESCALATE'}
+                className="rv-ws-rej"
+                aria-pressed={dismissed}
                 disabled={flow.isSubmitting}
-                title="Shortcut S"
-                onClick={() => flow.decide('ESCALATE')}
+                title="Shortcut D"
+                onClick={() => flow.decide('FINDING_WRONG')}
               >
-                <EscalateIcon />
-                Escalate
+                <CloseIcon />
+                Dismiss
               </Button>
+              {escalated ? null : (
+                <Button
+                  className="rv-ws-esc"
+                  disabled={flow.isSubmitting}
+                  title="Shortcut S"
+                  onClick={() => flow.decide('ESCALATE')}
+                >
+                  <EscalateIcon />
+                  Escalate
+                </Button>
+              )}
             </div>
-            {!eligible && !decision ? (
-              <div className="rv-ws-caption">Accept unavailable. Edit the wording, or reject or escalate this finding.</div>
-            ) : null}
           </>
         )}
       </div>
@@ -517,9 +605,15 @@ export function FindingPanel(props: Props) {
 function SecondOpinionViews({ quality }: { quality: FindingQuality }) {
   const estimate =
     quality.flagProbability === null ? '' : ` (issue estimate ${Math.round(quality.flagProbability * 100)}%)`
+  const heading =
+    quality.secondOpinionOutcome === 'DISAGREED'
+      ? 'Two readings of this clause disagree'
+      : quality.secondOpinionOutcome === 'AGREED'
+        ? 'Two readings of this clause agree'
+        : 'Only one reading is available'
   return (
     <div className="rv-ws-sec" data-testid="second-opinion-views">
-      <div className="rv-ws-sec-h">The two checks disagree</div>
+      <div className="rv-ws-sec-h">{heading}</div>
       <dl className="rv-ws-views">
         <div>
           <dt>First review</dt>
@@ -557,7 +651,7 @@ function PlaybookSilentViews({ quality }: { quality: FindingQuality }) {
     quality.uncoveredProbability === null ? '' : ` (estimate ${Math.round(quality.uncoveredProbability * 100)}%)`
   return (
     <div className="rv-ws-sec" data-testid="playbook-silent-views">
-      <div className="rv-ws-sec-h">The two checks disagree</div>
+      <div className="rv-ws-sec-h">Two readings of this clause disagree</div>
       <dl className="rv-ws-views">
         <div>
           <dt>First review</dt>

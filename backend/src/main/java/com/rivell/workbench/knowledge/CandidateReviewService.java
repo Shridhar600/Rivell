@@ -100,6 +100,15 @@ public class CandidateReviewService {
                 throw new InvalidCandidateReviewStateException(candidate, "edited");
             }
             var editedSemantic = semanticFields == null ? SemanticFields.EMPTY : semanticFields;
+            // A playbook correction always carries the complete corrected set, so a null
+            // approval in it is a deliberate clear rather than an omitted field. Marking it
+            // keeps effectiveRequiresApproval() from resurrecting the machine answer. An
+            // empty object is therefore an explicit empty set, not a no-op.
+            if (semanticFields != null
+                    && candidate.candidateType() == CandidateType.PLAYBOOK_RULE
+                    && editedSemantic.requiresApproval() == null) {
+                editedSemantic = editedSemantic.withRequiresApprovalCleared();
+            }
             var semanticChanged = !editedSemantic.equals(SemanticFields.EMPTY);
             var scopeChanged = scope != null;
             var payloadChanged = payload != null && !payload.columns().isEmpty();

@@ -87,7 +87,6 @@ def nda_body(title):
         ('Term and Termination', [
             'This Agreement continues for two years from the Effective Date.',
             'Either party may terminate this Agreement on thirty days written notice.',
-            'Confidentiality obligations survive termination for three years.',
         ]),
         ('Governing Law', [
             'This Agreement is governed by the laws of the State of New York.',
@@ -132,9 +131,6 @@ def msa_body(title):
         ]),
         ('Governing Law', [
             'This Agreement is governed by the laws of the State of Delaware.',
-        ]),
-        ('Survival', [
-            'Limitation of Liability, Confidentiality and Governing Law survive termination.',
         ]),
     ])
 

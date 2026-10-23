@@ -243,6 +243,45 @@ describe('review parsers', () => {
     expect(summary.coverage[0].coverage).toBe('PRESENT_PRIMARY')
   })
 
+  it('parses the playbooks a review froze, and keeps a missing freeze unknown', () => {
+    const withUsed = {
+      ...completedSummary,
+      snapshot: {
+        ...completedSummary.snapshot,
+        playbooksUsed: [
+          {
+            artifactId: 'pb-1',
+            artifactType: 'PLAYBOOK',
+            name: 'Commercial MSA Playbook',
+            publicationNumber: 4,
+          },
+          {
+            artifactId: 'cl-1',
+            artifactType: 'CLAUSE_LIBRARY',
+            name: 'Clause Library',
+            publicationNumber: 2,
+          },
+        ],
+      },
+    }
+    expect(parseReviewSummary(withUsed).snapshot?.playbooksUsed).toEqual([
+      {
+        artifactId: 'pb-1',
+        artifactType: 'PLAYBOOK',
+        name: 'Commercial MSA Playbook',
+        publicationNumber: 4,
+      },
+      {
+        artifactId: 'cl-1',
+        artifactType: 'CLAUSE_LIBRARY',
+        name: 'Clause Library',
+        publicationNumber: 2,
+      },
+    ])
+    // A review created before the freeze existed must not be recomputed at read time.
+    expect(parseReviewSummary(completedSummary).snapshot?.playbooksUsed).toBeNull()
+  })
+
   it('tolerates unknown enum-like values instead of throwing', () => {
     const summary = parseReviewSummary({
       ...completedSummary,

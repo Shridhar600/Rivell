@@ -286,9 +286,15 @@ public record KnowledgeCandidate(
     }
 
     public Boolean effectiveRequiresApproval() {
-        return editedSemanticFields != null && editedSemanticFields.requiresApproval() != null
-                ? editedSemanticFields.requiresApproval()
-                : semanticFields.requiresApproval();
+        if (editedSemanticFields != null) {
+            if (editedSemanticFields.requiresApproval() != null) {
+                return editedSemanticFields.requiresApproval();
+            }
+            if (editedSemanticFields.requiresApprovalCleared()) {
+                return null;
+            }
+        }
+        return semanticFields.requiresApproval();
     }
 
     /**

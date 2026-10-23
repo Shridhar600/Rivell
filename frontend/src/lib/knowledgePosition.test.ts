@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { conceptName, positionRoles, positionRow, scopeLine, scopeRows } from './knowledgePosition'
+import { conceptName, contractTypesLabel, positionRoles, positionRow, scopeLine, scopeRows } from './knowledgePosition'
 import { humanizeCode } from './domainLabels'
 import { candidate } from '../test/knowledgeFixtures'
 
@@ -58,6 +58,18 @@ describe('roles and scope', () => {
       { label: 'Applies to', value: 'NDA, MSA, Commercial msa pack' },
       { label: 'Paper', value: 'Our paper' },
       { label: 'Jurisdiction', value: 'United Kingdom' },
+    ])
+  })
+
+  it('states an empty contract-type scope as all contract types', () => {
+    expect(contractTypesLabel([])).toBe('All contract types')
+    expect(contractTypesLabel(['MSA', 'NDA'])).toBe('MSA, NDA')
+  })
+
+  it('does not let a pack hide that an empty contract-type scope is all types', () => {
+    const rows = scopeRows(candidate({ ...base, contractPackKey: 'COMMERCIAL_MSA' }))
+    expect(rows).toEqual([
+      { label: 'Applies to', value: 'All contract types, Commercial msa pack' },
     ])
   })
 

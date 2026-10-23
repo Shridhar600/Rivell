@@ -125,6 +125,9 @@ public final class CorpusScriptedProvider implements SemanticDecisionProvider {
             case "topic_term" ->
                     combined.contains("terminat") || combined.contains(" term ")
                             ? 0.95 : 0.05;
+            case "topic_confidentiality_period" ->
+                    combined.contains("confidential") && combined.contains("continue")
+                            ? 0.95 : 0.05;
             case "topic_indemnification" -> combined.contains("indemnif") ? 0.95 : 0.05;
             case "topic_governing_law" -> combined.contains("govern") ? 0.95 : 0.05;
             case "role_preferred" -> combined.contains("preferred") ? 0.9 : 0.02;

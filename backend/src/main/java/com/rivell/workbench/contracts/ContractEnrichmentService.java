@@ -286,7 +286,8 @@ public class ContractEnrichmentService {
         var secondaries = reordered.stream()
                 .filter(concept -> !concept.equals(effective))
                 .toList();
-        return new ConceptClassification(reordered, secondaries, classification.probabilities());
+        return new ConceptClassification(reordered, secondaries,
+                classification.probabilities(), classification.headingTopic());
     }
 
     private void validateCorrection(ClauseSemantics clause, FactCorrection correction) {

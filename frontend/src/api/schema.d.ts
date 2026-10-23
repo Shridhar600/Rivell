@@ -221,7 +221,10 @@ export interface paths {
         /** List the organization's knowledge artifacts, newest first. Supply limit to bound the read; omitting it returns every artifact. */
         get: operations["listArtifacts"];
         put?: never;
-        /** Upload a legal knowledge source with its human-declared manifest */
+        /**
+         * Upload a legal knowledge source with its human-declared manifest
+         * @description declaredContractTypes is optional. When it is empty or omitted, the source applies to every contract type; the API does not reject an empty declaration, because existing clients and the evaluation runner rely on it.
+         */
         post: operations["upload"];
         delete?: never;
         options?: never;
@@ -756,6 +759,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/applicable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the published playbooks and clause libraries that apply to a contract type
+         * @description Applies the same matching rule as review retrieval: the contract type, its family (a mutual NDA is an NDA), the record's own declared scope, and the optional jurisdiction, pack, perspective, paper source and effective date. A source that declares no contract types applies to every contract type.
+         */
+        get: operations["applicable"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/contracts/{id}": {
         parameters: {
             query?: never;
@@ -851,11 +874,14 @@ export interface components {
             /** Format: uuid */
             clientRequestId?: string;
             /** @enum {string} */
-            action: "ACCEPT" | "EDIT" | "REJECT" | "ESCALATE";
+            action: "ACCEPT" | "EDIT" | "REJECT" | "ESCALATE" | "RESOLVE";
             /** @enum {string} */
             approvedAction?: "REPLACE" | "INSERT" | "DELETE";
             approvedLanguage?: string;
             comment?: string;
+            /** @enum {string} */
+            rejectReason?: "KEEP_AS_DRAFTED" | "FINDING_WRONG";
+            approvedBy?: string;
         };
         /** @description Error returned by contract API failures */
         ErrorResponse: {
@@ -884,6 +910,8 @@ export interface components {
             /** Format: uuid */
             approvedDraftingEvidenceId?: string;
             comment?: string;
+            rejectReason?: string;
+            approvedBy?: string;
             /** Format: uuid */
             actorId?: string;
             /** Format: date-time */
@@ -1616,6 +1644,14 @@ export interface components {
             code?: string;
             message?: string;
         };
+        PlaybookUsedView: {
+            /** Format: uuid */
+            artifactId?: string;
+            artifactType?: string;
+            name?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
+        };
         ProfileView: {
             contractType?: string;
             ourSideRole?: string;
@@ -1689,6 +1725,7 @@ export interface components {
             /** Format: date */
             effectiveOn?: string;
             engine?: string;
+            playbooksUsed?: components["schemas"]["PlaybookUsedView"][] | null;
         };
         TaxonomyConceptView: {
             key: string;
@@ -2396,6 +2433,21 @@ export interface components {
             firstColumn?: number;
             /** Format: int32 */
             lastColumn?: number;
+        };
+        ApiResultListApplicableKnowledgeView: {
+            data?: components["schemas"]["ApplicableKnowledgeView"][];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ApplicableKnowledgeView: {
+            /** Format: uuid */
+            artifactId?: string;
+            artifactType?: string;
+            name?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
         };
         ApiResultContractListResponse: {
             data?: components["schemas"]["ContractListResponse"];
@@ -4459,6 +4511,51 @@ export interface operations {
             };
             /** @description Resource does not exist in this organization */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    applicable: {
+        parameters: {
+            query: {
+                contractType: string;
+                jurisdiction?: string;
+                partyPerspective?: string;
+                paperSource?: string;
+                contractPackKey?: string;
+                effectiveOn?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultListApplicableKnowledgeView"];
+                };
+            };
+            /** @description Missing or invalid contract type */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing knowledge:read */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

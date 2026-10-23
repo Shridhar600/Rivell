@@ -103,6 +103,12 @@ public interface KnowledgeRepository {
 
     List<PublishedCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query);
 
+    /**
+     * The published playbooks and clause libraries that apply to a declared context, by the same
+     * contract-type and scope rule as {@link #findPublishedCandidatesAsOf(PublishedKnowledgeQuery)}.
+     */
+    List<ApplicableKnowledge> findApplicableKnowledge(ApplicableKnowledgeQuery query);
+
     /** System-level read (background flows): orgs that have published knowledge. */
     List<UUID> organizationsWithPublishedKnowledge();
 

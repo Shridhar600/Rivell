@@ -337,6 +337,9 @@
   background: var(--accent-soft);
   box-shadow: 0 0 0 1.5px var(--accent);
 }
+.rv-ws-cl-text p {
+  white-space: pre-line;
+}
 /* An evidence jump target: distinct from the finding selection, which carries data-sel. */
 .rv-ws-cl--focus {
   scroll-margin-top: 12px;
@@ -407,6 +410,11 @@
   flex-direction: column;
   gap: 16px;
   padding: 18px 20px 28px;
+}
+.rv-ws-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 .rv-ws-kicker {
   display: flex;
@@ -513,6 +521,24 @@
   background: var(--side);
   color: var(--text-2);
   white-space: pre-line;
+}
+/* The exact contract words: the same sunken block, with a quiet quote edge. */
+.rv-ws-quote {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--side);
+  color: var(--text-2);
+  font: 14px/1.6 var(--doc);
+  white-space: pre-line;
+}
+/* The one sentence the finding stands on, set in the document face so it reads first. */
+.rv-ws-gap {
+  margin: 0;
+  color: var(--text);
+  font: 15px/1.5 var(--doc);
 }
 .rv-ws-prop {
   padding: 12px 14px;
@@ -797,6 +823,17 @@
 .rv-ws-composer textarea[aria-invalid='true'] {
   border-color: var(--red);
 }
+.rv-ws-composer input[type='text'] {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  color: var(--text);
+  font: 14px/1.4 var(--doc);
+}
+.rv-ws-composer input[type='text'][aria-invalid='true'] {
+  border-color: var(--red);
+}
 .rv-ws-composer-actions {
   display: flex;
   justify-content: flex-end;
@@ -854,8 +891,12 @@
 }
 .rv-ws-dbtns {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
+}
+/* An odd count (Accept plus four) puts the first action on its own row. */
+.rv-ws-dbtns > :first-child:nth-last-child(odd) {
+  grid-column: 1 / -1;
 }
 .rv-ws-dbtns .rv-btn {
   height: 32px;

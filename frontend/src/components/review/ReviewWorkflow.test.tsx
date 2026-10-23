@@ -433,15 +433,19 @@ describe('workflow state availability and conflict truth', () => {
     renderRouter('/reviews/c1/analysis/r-1?finding=f-1', stub)
     await findSelectedFindingDetail()
     await user.click(await findingDetail().findByRole('button', { name: 'Change decision' }))
-    await user.click(findingDetail().getByRole('button', { name: 'Reject' }))
-    const form = screen.getByRole('form', { name: 'Reject finding' })
-    await user.type(within(form).getByLabelText('Reason'), 'Second opinion.')
-    await user.click(within(form).getByRole('button', { name: 'Reject' }))
+    await user.click(findingDetail().getByRole('button', { name: 'Dismiss' }))
+    const form = screen.getByRole('form', { name: 'Dismiss finding' })
+    await user.type(within(form).getByLabelText('Note (optional)'), 'Second opinion.')
+    await user.click(within(form).getByRole('button', { name: 'Dismiss finding' }))
 
     expect(await within(form).findByRole('alert')).toHaveTextContent(/changed elsewhere/)
     expect(screen.queryByText(/expected version/)).not.toBeInTheDocument()
     const put = stub.requests.find((request) => request.method === 'PUT')
-    expect(put?.body).toMatchObject({ action: 'REJECT', expectedVersion: 2 })
+    expect(put?.body).toMatchObject({
+      action: 'REJECT',
+      rejectReason: 'FINDING_WRONG',
+      expectedVersion: 2,
+    })
   })
 })
 

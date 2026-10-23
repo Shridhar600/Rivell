@@ -22,7 +22,12 @@ export function isActionable(finding: Pick<FindingSummary, 'reviewClassification
 }
 
 export function isResolved(decision: HumanDecision | null | undefined): boolean {
-  return decision?.action === 'ACCEPT' || decision?.action === 'EDIT' || decision?.action === 'REJECT'
+  return (
+    decision?.action === 'ACCEPT' ||
+    decision?.action === 'EDIT' ||
+    decision?.action === 'REJECT' ||
+    decision?.action === 'RESOLVE'
+  )
 }
 
 /** A decision that will become an approved change: accepted or edited, with a concrete change type. */
@@ -45,9 +50,20 @@ export function findingState(
     case 'EDIT':
       return { tone: 'resolved', label: 'Edited' }
     case 'REJECT':
+      if (decision.rejectReason === 'KEEP_AS_DRAFTED') {
+        return { tone: 'resolved', label: 'Kept as drafted' }
+      }
+      if (decision.rejectReason === 'FINDING_WRONG') {
+        return { tone: 'rejected', label: 'Dismissed' }
+      }
       return { tone: 'rejected', label: 'Rejected' }
     case 'ESCALATE':
       return { tone: 'escalated', label: 'Escalated · unresolved' }
+    case 'RESOLVE':
+      return {
+        tone: 'resolved',
+        label: decision.approvedBy ? `Approved by ${decision.approvedBy}` : 'Approved',
+      }
     default:
       return { tone: 'open', label: isActionable(finding) ? 'Needs decision' : 'Informational' }
   }
@@ -72,14 +88,14 @@ export function proposedChangeType(
   }
 }
 
-/** "MSA, counterparty paper, our side Customer", from the review's frozen profile only. */
+/** "MSA, counterparty paper, our side: Customer", from the review's frozen profile only. */
 export function profileLine(snapshot: ReviewSnapshot | null | undefined): string | null {
   const profile = snapshot?.profile
   if (!profile) return null
   const parts = [
     profile.contractType ? (CONTRACT_TYPE_LABELS[profile.contractType] ?? profile.contractType) : null,
     profile.paperSource ? (PAPER_SOURCE_LABELS[profile.paperSource] ?? profile.paperSource).toLowerCase() : null,
-    profile.ourSideRole ? `our side ${roleLabel(profile.ourSideRole).toLowerCase()}` : null,
+    profile.ourSideRole ? `our side: ${roleLabel(profile.ourSideRole)}` : null,
   ].filter((part): part is string => part !== null)
   return parts.length > 0 ? parts.join(', ') : null
 }
@@ -195,6 +211,18 @@ export function regionText(nodes: StructureNode[], headingNodeId: string): strin
   return text || null
 }
 
+/**
+ * The body of a clause, without its heading. A replacement keeps the heading, so this is
+ * what an edit starts from; see regionText for the clause as the reader sees it.
+ */
+export function regionBodyText(nodes: StructureNode[], headingNodeId: string): string | null {
+  const top = topLevelNodes(nodes)
+  const at = top.findIndex((node) => node.id === headingNodeId)
+  if (at === -1) return null
+  const text = clauseBody(top, at).map(nodeText).filter(Boolean).join('\n')
+  return text || null
+}
+
 /** How many characters of a clause the detail panel shows before it stops: about two lines. */
 export const CLAUSE_EXCERPT_CHARS = 180
 
@@ -235,6 +263,7 @@ export function clauseExcerpt(text: string, maxChars: number = CLAUSE_EXCERPT_CH
 export function finalizeSummary(
   review: Pick<HumanReview, 'accepted' | 'edited' | 'rejected'>,
   loaded: readonly { type: ChangeActionType }[] | null,
+  resolvedEscalations = 0,
 ): string[] {
   const approved = review.accepted + review.edited
   const split =
@@ -243,10 +272,16 @@ export function finalizeSummary(
           .map((type) => `${loaded.filter((change) => change.type === type).length} ${type.toLowerCase()}`)
           .join(', ')}`
       : ''
-  return [
+  const lines = [
     `${approved} approved ${approved === 1 ? 'change' : 'changes'} (${review.accepted} accepted, ${review.edited} edited)${split}`,
-    `${review.rejected} rejected ${review.rejected === 1 ? 'finding' : 'findings'}; no approved change created`,
+    `${review.rejected} ${review.rejected === 1 ? 'finding' : 'findings'} with no approved change`,
   ]
+  if (resolvedEscalations > 0) {
+    lines.push(
+      `${resolvedEscalations} ${resolvedEscalations === 1 ? 'escalation' : 'escalations'} resolved with an approver name; no approved change created`,
+    )
+  }
+  return lines
 }
 
 /** Approved wording is groundable only when the evidence it cites is part of the finding. */
@@ -263,7 +298,7 @@ export function acceptEligibilityFor(finding: FindingDetail): AcceptEligibility 
   if (!base.eligible || isWordingGrounded(finding)) return base
   return {
     eligible: false,
-    reason: 'The approved wording cannot be traced to its source in this review’s evidence. Use Edit to author the change, or Reject or Escalate it.',
+    reason: 'The approved wording cannot be traced to its source in this review’s evidence. Use Edit to author the change, or keep the clause as drafted, dismiss or escalate the finding.',
   }
 }
 

@@ -4,8 +4,8 @@ import type { ReviewSummary } from '../../api/reviews'
 import { useReviewProgressQuery } from '../../api/reviews'
 import { useTaxonomy } from '../../api/taxonomy'
 import {
+  analysisWarningCheckLabel,
   analysisWarningMessage,
-  checkKeyLabel,
   hasNewerRun,
   progressPercent,
   reviewFailureMessage,
@@ -27,14 +27,19 @@ export function AnalysisWarnings({
         Some checks were incomplete.
       </p>
       <ul>
-        {summary.analysisWarnings.map((warning, index) => (
-          <li key={`${warning.checkKey}-${index}`}>
-            <span className="rv-ws-cov-c">
-              {checkKeyLabel(warning.checkKey, labelFor)}
-            </span>{' '}
-            {analysisWarningMessage(warning)}
-          </li>
-        ))}
+        {summary.analysisWarnings.map((warning, index) => {
+          const heading = analysisWarningCheckLabel(warning, labelFor)
+          return (
+            <li key={`${warning.checkKey}-${index}`}>
+              {heading ? (
+                <>
+                  <span className="rv-ws-cov-c">{heading}</span>{' '}
+                </>
+              ) : null}
+              {analysisWarningMessage(warning)}
+            </li>
+          )
+        })}
       </ul>
       {summary.analysisWarningsTruncated ? (
         <p className="rv-ws-caption">Additional warnings were omitted.</p>

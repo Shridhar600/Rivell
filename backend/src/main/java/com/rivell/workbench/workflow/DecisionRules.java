@@ -13,12 +13,14 @@ import com.rivell.workbench.review.ProposedLanguageSource;
 /**
  * Deterministic decision validation and change derivation. ACCEPT approves the machine
  * recommendation as-is (strictly executable); EDIT authors the action/language; REJECT
- * and ESCALATE produce no change. No model participates.
+ * and ESCALATE produce no change; RESOLVE records who approved an escalated clause and
+ * produces no change. No model participates.
  */
 public final class DecisionRules {
 
     public static final int MAX_COMMENT_LENGTH = 2000;
     public static final int MAX_LANGUAGE_LENGTH = 20000;
+    public static final int MAX_APPROVED_BY_LENGTH = 120;
 
     private DecisionRules() {
     }
@@ -26,7 +28,8 @@ public final class DecisionRules {
     /** Validates the request shape independently of the finding. */
     public static void validateRequest(
             DecisionAction action, ChangeActionType approvedAction,
-            String approvedLanguage, String comment) {
+            String approvedLanguage, String comment, RejectReason rejectReason,
+            String approvedBy) {
         if (action == null) {
             throw new InvalidDecisionException("Choose a decision.");
         }
@@ -42,16 +45,55 @@ public final class DecisionRules {
                     requireLanguage(approvedLanguage);
                 }
             }
-            case REJECT, ESCALATE -> {
+            case REJECT -> {
                 if (approvedAction != null || approvedLanguage != null) {
                     throw new InvalidDecisionException(
-                            "A " + decisionWord(action) + " decision cannot include new wording.");
+                            "A reject decision cannot include new wording.");
+                }
+                if (rejectReason == null && (comment == null || comment.isBlank())) {
+                    throw new InvalidDecisionException(
+                            "Add a comment that explains why you chose to reject.");
+                }
+            }
+            case ESCALATE -> {
+                if (approvedAction != null || approvedLanguage != null) {
+                    throw new InvalidDecisionException(
+                            "An escalate decision cannot include new wording.");
                 }
                 if (comment == null || comment.isBlank()) {
                     throw new InvalidDecisionException(
-                            "Add a comment that explains why you chose to "
-                                    + decisionWord(action) + ".");
+                            "Add a comment that explains why you chose to escalate.");
                 }
+            }
+            case RESOLVE -> {
+                if (approvedAction != null || approvedLanguage != null) {
+                    throw new InvalidDecisionException(
+                            "Resolving an escalation cannot include new wording.");
+                }
+                if (approvedBy == null || approvedBy.isBlank()) {
+                    throw new InvalidDecisionException(
+                            "Add the name of the person who approved this clause.");
+                }
+            }
+        }
+        if (rejectReason != null && action != DecisionAction.REJECT) {
+            throw new InvalidDecisionException(
+                    "A rejection reason belongs only to a reject decision.");
+        }
+        if (approvedBy != null) {
+            if (action != DecisionAction.RESOLVE) {
+                throw new InvalidDecisionException(
+                        "Only a resolved escalation carries the approver's name.");
+            }
+            var trimmed = approvedBy.strip();
+            if (trimmed.isEmpty()) {
+                throw new InvalidDecisionException(
+                        "Add the name of the person who approved this clause.");
+            }
+            if (trimmed.length() > MAX_APPROVED_BY_LENGTH) {
+                throw new InvalidDecisionException(
+                        "The approver's name is too long. Keep it to "
+                                + MAX_APPROVED_BY_LENGTH + " characters or fewer.");
             }
         }
         if (comment != null && comment.length() > MAX_COMMENT_LENGTH) {
@@ -72,7 +114,7 @@ public final class DecisionRules {
         return switch (action) {
             case ACCEPT -> acceptPlan(finding, decisionId);
             case EDIT -> editPlan(finding, requestedAction, requestedLanguage, decisionId);
-            case REJECT, ESCALATE -> throw new IllegalArgumentException(
+            case REJECT, ESCALATE, RESOLVE -> throw new IllegalArgumentException(
                     "no change is derived for " + action);
         };
     }
@@ -149,10 +191,6 @@ public final class DecisionRules {
         return new PlannedChange(finding.id(), decision.id(), decision.approvedAction(),
                 targetKind, finding.subjectHeadingNodeId(), finding.absenceConcept(),
                 decision.approvedLanguage(), source, decision.approvedDraftingEvidenceId());
-    }
-
-    private static String decisionWord(DecisionAction action) {
-        return action.name().toLowerCase(java.util.Locale.ROOT);
     }
 
     private static ChangeTargetKind targetKind(Finding finding) {

@@ -75,6 +75,9 @@ public final class HumanReviewResolver {
                 case EDIT -> edited++;
                 case REJECT -> rejected++;
                 case ESCALATE -> escalatedCount++;
+                case RESOLVE -> {
+                    // A resolved escalation approves the clause as drafted and adds no change.
+                }
             }
             if (decision.resolved()) {
                 if (isActionable) {
@@ -136,9 +139,8 @@ public final class HumanReviewResolver {
         if (!escalated.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.ACTIVE_ESCALATION,
                     escalated.size() == 1
-                            ? "1 escalated finding is still open."
-                            : escalated.size()
-                                    + " escalated findings are still open.",
+                            ? "1 clause is waiting for approval."
+                            : escalated.size() + " clauses are waiting for approval.",
                     escalated));
         }
         if (!conflicts.isEmpty()) {

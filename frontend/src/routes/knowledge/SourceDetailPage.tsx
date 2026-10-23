@@ -26,6 +26,7 @@ import {
   type SourceView,
 } from '../../lib/knowledgeCatalog'
 import { ARTIFACT_TYPE_LABELS, formatBytes, shortSha } from '../../lib/knowledgeLabels'
+import { contractTypesLabel } from '../../lib/knowledgePosition'
 import { highlightMap, sourceBlocks } from '../../lib/knowledgeSource'
 import { partMarksByNode } from '../../lib/knowledgeMarks'
 import { SourceContent } from '../../components/knowledge/read/SourceContent'
@@ -98,6 +99,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
 
   const target = publishedTarget(source)
   const clauseCount = clauseGroups(catalog.clauseLibrary, catalog.index, labelFor).length
+  const declaredTypes = detail.data?.declaredContractTypes
 
   return (
     <KnowledgeFrame
@@ -108,6 +110,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
           <SourceStateBadge state={source.state} />
           <Chip>{ARTIFACT_TYPE_LABELS[artifact.artifactType]}</Chip>
           <Chip>{artifactFormat(artifact)}</Chip>
+          {declaredTypes ? <Chip>{contractTypesLabel(declaredTypes)}</Chip> : null}
           <Chip>
             <LockIcon className="rv-icon" />
             Original cannot be changed
@@ -116,6 +119,10 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
       }
     >
       <CatalogNotices state={state} catalog={catalog} />
+
+      {source.publications.length > 0 && declaredTypes && declaredTypes.length === 0 ? (
+        <p className="rv-note">To narrow it, add the file again and choose the contract types.</p>
+      ) : null}
 
       <div className="rv-k-lin" aria-label="Lineage: source, draft, published knowledge">
         <div className="rv-k-lc">
