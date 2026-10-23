@@ -25,7 +25,7 @@ class StructuredPolicyResolverTest {
     @Test
     void namedJurisdictionsReachTheQueryAndUnspecifiedStaysTheWildcard() {
         var queries = new ArrayList<PublishedKnowledgeQuery>();
-        var queryService = new KnowledgeQueryService(null, null, null) {
+        var queryService = new KnowledgeQueryService(null, null, null, java.time.Clock.systemUTC()) {
             @Override
             public List<PublishedCandidate> listPublishedCandidatesForOrganization(
                     PublishedKnowledgeQuery query) {

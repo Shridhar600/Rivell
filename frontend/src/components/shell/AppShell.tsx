@@ -37,6 +37,8 @@ export function AppShell() {
 
   // On a phone the sidebar slides over the page; it closes again when the reader moves on.
   const narrow = useMediaQuery('(max-width: 760px)')
+  // Below 768px the product is not offered at all: one message replaces every route.
+  const phone = useMediaQuery('(max-width: 767.98px)')
   const [overlayOn, setOverlayOn] = useState<string | null>(null)
 
   const toggleSidebar = useCallback(() => {
@@ -115,7 +117,12 @@ export function AppShell() {
     [railed, toggleSidebar, inspectorClosed, compactInspector, toggleInspector, inspectorMounted, setInspectorMounted, inspectorWidth, resizeInspector, searchOpen, openSearch, setPageCommands],
   )
 
-  return (
+  return phone ? (
+    <main className="rv-phonegate">
+      <h1>Rivell needs a larger screen</h1>
+      <p>Open Rivell on a laptop or tablet to review contracts.</p>
+    </main>
+  ) : (
     <ShellContext value={state}>
       <div
         className="rv-shell"

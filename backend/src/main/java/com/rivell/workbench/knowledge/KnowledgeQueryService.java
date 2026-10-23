@@ -20,14 +20,17 @@ public class KnowledgeQueryService {
     private final KnowledgeRepository repository;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
+    private final java.time.Clock clock;
 
     public KnowledgeQueryService(
             KnowledgeRepository repository,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            java.time.Clock clock) {
         this.repository = repository;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+        this.clock = clock;
     }
 
     /**
@@ -134,6 +137,31 @@ public class KnowledgeQueryService {
     public List<PublishedCandidate> listPublishedCandidatesForOrganization(
             PublishedKnowledgeQuery query) {
         return repository.findPublishedCandidatesAsOf(query);
+    }
+
+    /**
+     * The playbooks and clause libraries that apply to the caller's chosen context. The as-of
+     * publication is the organization's latest, so the preview names what a review created now
+     * would freeze.
+     */
+    public List<ApplicableKnowledge> applicableKnowledge(
+            String contractType, String contractPackKey, String partyPerspective,
+            String paperSource, String jurisdiction, java.time.LocalDate effectiveOn) {
+        requireRead();
+        var organizationId = organizationId();
+        var asOfDate = effectiveOn == null ? java.time.LocalDate.now(clock) : effectiveOn;
+        return repository.findApplicableKnowledge(new ApplicableKnowledgeQuery(
+                organizationId, repository.maxPublicationNumber(organizationId), contractType,
+                contractPackKey, partyPerspective, paperSource, jurisdiction, asOfDate));
+    }
+
+    /**
+     * System-level read for review creation: the caller is authorized for the review, and the
+     * snapshot must freeze the same published set the analysis will use.
+     */
+    public List<ApplicableKnowledge> applicableKnowledgeForOrganization(
+            ApplicableKnowledgeQuery query) {
+        return repository.findApplicableKnowledge(query);
     }
 
     /** System-level read: organizations that have published knowledge. */

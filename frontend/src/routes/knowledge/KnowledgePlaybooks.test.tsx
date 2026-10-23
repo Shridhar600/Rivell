@@ -53,6 +53,32 @@ describe('Playbooks list', () => {
     expect(within(breadcrumbs).getByText('Mutual NDA Negotiation Guide')).toBeInTheDocument()
   })
 
+  it('states an all-types playbook instead of leaving its scope out', async () => {
+    const world = buildWorld()
+    world.candidates.pb = (world.candidates.pb ?? []).map((entry) => ({
+      ...entry,
+      declaredContractTypes: [],
+    }))
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks')
+
+    const list = await screen.findByRole('list', { name: 'Published playbooks' })
+    const row = within(list).getByRole('link')
+    expect(row).toHaveTextContent('Applies to All contract types.')
+  })
+
+  it('names an all-types playbook in its detail header', async () => {
+    const world = buildWorld()
+    world.candidates.pb = (world.candidates.pb ?? []).map((entry) => ({
+      ...entry,
+      declaredContractTypes: [],
+    }))
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks/pb')
+    await screen.findByRole('heading', { level: 1, name: 'Commercial MSA Playbook' })
+    expect(screen.getAllByText('All contract types').length).toBeGreaterThan(0)
+  })
+
   it('shows a playbook that is still in compilation separately, never as published', async () => {
     stubKnowledgeApi(buildWorld())
     renderKnowledge('/knowledge/playbooks')

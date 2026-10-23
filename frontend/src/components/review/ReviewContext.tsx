@@ -1,7 +1,7 @@
 import type { FindingSummary, ReviewSummary } from '../../api/reviews'
 import { useReviewPacksQuery } from '../../api/reviews'
 import { contractPackLabel } from '../../lib/evidence'
-import { engineLabel, routeCountsLabel } from '../../lib/reviews'
+import { engineLabel, playbooksUsedText, routeCountsLabel } from '../../lib/reviews'
 import {
   CONTRACT_TYPE_LABELS,
   JURISDICTION_LABELS,
@@ -25,6 +25,7 @@ export function ReviewContext({
   const packLabel = packKey
     ? (packsQuery.data?.find((pack) => pack.key === packKey)?.displayName ?? contractPackLabel(packKey))
     : null
+  const playbooksUsed = playbooksUsedText(snapshot?.playbooksUsed ?? null)
 
   return (
       <dl className="rv-ws-props" aria-label="Review details">
@@ -79,6 +80,12 @@ export function ReviewContext({
                 : 'No published knowledge at creation'}
           </dd>
         </div>
+        {playbooksUsed !== null ? (
+          <div>
+            <dt>Playbooks used</dt>
+            <dd>{playbooksUsed}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>Review pack</dt>
           <dd>

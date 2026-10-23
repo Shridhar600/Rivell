@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { useReviewPacksQuery } from '../api/reviews'
+import { useApplicableKnowledgeQuery, type ApplicableKnowledge } from '../api/knowledge'
 import { Breadcrumbs } from '../components/shell/Breadcrumbs'
 import { Inspector, TopBar } from '../components/shell/TopBar'
 import { Button, LinkButton } from '../components/ui/Button'
@@ -196,6 +197,8 @@ export function StartReviewPage() {
                     </div>
                   </div>
 
+                  {context.contractType ? <ApplicablePlaybooks context={context} /> : null}
+
                   <OptionGroup
                     label="Our side"
                     options={PARTY_ROLES.map((role) => ({ value: role, label: roleLabel(role) }))}
@@ -293,6 +296,43 @@ export function StartReviewPage() {
       </Inspector>
     </>
   )
+}
+
+function ApplicablePlaybooks({ context }: { context: StartContext }) {
+  const query = useApplicableKnowledgeQuery({
+    contractType: context.contractType,
+    jurisdiction: context.jurisdiction === 'UNSPECIFIED' ? undefined : context.jurisdiction,
+    partyPerspective: context.ourSideRole || undefined,
+    paperSource: context.paperSource || undefined,
+    contractPackKey: context.packKey || undefined,
+  })
+  const items = query.data ?? []
+  const shown = items.slice(0, 5)
+  return (
+    <div className="rv-fld">
+      <div className="rv-lb rv-lb--field">Playbooks that will apply</div>
+      {query.isPending ? (
+        <p className="rv-hint">Checking which playbooks apply.</p>
+      ) : query.isError ? (
+        <p className="rv-hint">The published playbooks could not be loaded.</p>
+      ) : items.length === 0 ? (
+        <p className="rv-hint">No playbook covers this contract type. Rivell checks general risks only.</p>
+      ) : (
+        <ul className="rv-startpb">
+          {shown.map((item) => (
+            <li key={item.artifactId}>{applicableKnowledgeLabel(item)}</li>
+          ))}
+          {items.length > shown.length ? <li>and {items.length - shown.length} more</li> : null}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function applicableKnowledgeLabel(item: ApplicableKnowledge): string {
+  return item.publicationNumber
+    ? `${item.name}, version ${item.publicationNumber}`
+    : item.name
 }
 
 function Kept({ children }: { children: string }) {

@@ -14,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -84,7 +85,10 @@ class KnowledgeController {
         this.userPositionService = userPositionService;
     }
 
-    @Operation(summary = "Upload a legal knowledge source with its human-declared manifest")
+    @Operation(summary = "Upload a legal knowledge source with its human-declared manifest",
+            description = "declaredContractTypes is optional. When it is empty or omitted, the "
+                    + "source applies to every contract type; the API does not reject an empty "
+                    + "declaration, because existing clients and the evaluation runner rely on it.")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
             @ApiResponse(
@@ -147,6 +151,33 @@ class KnowledgeController {
     @GetMapping("/artifacts/{id}")
     ApiResult<KnowledgeArtifactDetailResponse> getArtifact(@PathVariable UUID id) {
         return ApiResult.ok(toDetail(queryService.getArtifact(id)));
+    }
+
+    @Operation(summary = "List the published playbooks and clause libraries that apply to a contract type",
+            description = "Applies the same matching rule as review retrieval: the contract type, "
+                    + "its family (a mutual NDA is an NDA), the record's own declared scope, and the "
+                    + "optional jurisdiction, pack, perspective, paper source and effective date. "
+                    + "A source that declares no contract types applies to every contract type.")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "403", description = "Missing knowledge:read",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Missing or invalid contract type",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/applicable")
+    ApiResult<List<ApplicableKnowledgeView>> applicable(
+            @RequestParam String contractType,
+            @RequestParam(required = false) String jurisdiction,
+            @RequestParam(required = false) String partyPerspective,
+            @RequestParam(required = false) String paperSource,
+            @RequestParam(required = false) String contractPackKey,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate effectiveOn) {
+        return ApiResult.ok(queryService.applicableKnowledge(contractType, contractPackKey,
+                        partyPerspective, paperSource, jurisdiction, effectiveOn).stream()
+                .map(ApplicableKnowledgeView::from)
+                .toList());
     }
 
     @Operation(summary = "Get the deterministic structural parse of a knowledge source")

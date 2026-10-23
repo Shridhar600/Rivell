@@ -4,6 +4,7 @@ import type {
   FindingClaim,
   FindingDetail,
   FindingSummary,
+  PlaybookUsed,
   ReviewCoverage,
   ReviewFailure,
   ReviewSummary,
@@ -474,4 +475,19 @@ export function routeCountsLabel(findings: readonly Pick<FindingSummary, 'decide
   const look = findings.filter((finding) => finding.decidedBy === 'NEEDS_YOUR_LOOK').length
   if (second === 0 && look === 0) return null
   return `${second} decided with a second opinion · ${look} need${look === 1 ? 's' : ''} your look`
+}
+
+/** The sentence used wherever a review's frozen playbook set is empty. */
+export const NO_PLAYBOOK_COVERS =
+  'No playbook covers this contract type. Rivell checks general risks only.'
+
+/**
+ * The names of the playbooks a review actually froze. Null means the review predates the freeze,
+ * so there is nothing honest to show; an empty list is a real answer.
+ */
+export function playbooksUsedText(
+  used: readonly Pick<PlaybookUsed, 'name'>[] | null,
+): string | null {
+  if (used === null) return null
+  return used.length === 0 ? NO_PLAYBOOK_COVERS : used.map((playbook) => playbook.name).join(', ')
 }

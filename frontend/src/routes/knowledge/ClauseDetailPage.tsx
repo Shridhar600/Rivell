@@ -19,7 +19,7 @@ import {
   type ClauseGroup,
   type ClauseVariant,
 } from '../../lib/knowledgeCatalog'
-import { positionRoles, POSITION_ROLE_LABELS, scopeLine, scopeRows } from '../../lib/knowledgePosition'
+import { contractTypesLabel, displayScopeRows, positionRoles, POSITION_ROLE_LABELS } from '../../lib/knowledgePosition'
 import { sourceLocation } from '../../lib/knowledgeSource'
 
 export function ClauseDetailPage() {
@@ -60,7 +60,11 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
     { label: 'Clause library', to: '/knowledge/clauses' },
     { label: group.title },
   ]
-  const scope = scopeLine([variant.candidate])
+  const scopeTypes =
+    variant.candidate.sourceContractTypes.length > 0
+      ? variant.candidate.sourceContractTypes
+      : variant.candidate.declaredContractTypes
+  const scope = contractTypesLabel(scopeTypes)
 
   return (
     <KnowledgeFrame
@@ -70,7 +74,7 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
         <>
           <span className="rv-stb rv-stb--ok">Published</span>
           <Chip>Knowledge version {variant.publication.number}</Chip>
-          {scope ? <Chip>{scope}</Chip> : null}
+          <Chip>{scope}</Chip>
         </>
       }
       actions={
@@ -156,7 +160,7 @@ function VariantBody({ variant }: { variant: ClauseVariant }) {
               <dd>{roles.map((role) => POSITION_ROLE_LABELS[role]).join(', ')}</dd>
             </>
           ) : null}
-          {scopeRows(candidate).map((row) => (
+          {displayScopeRows(candidate).map((row) => (
             <ScopeRow key={row.label} label={row.label} value={row.value} />
           ))}
           <dt>Published</dt>

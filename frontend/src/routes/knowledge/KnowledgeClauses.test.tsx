@@ -85,6 +85,18 @@ describe('Clause detail', () => {
     expect(within(variants).getByRole('tab', { name: 'Mutual, standard' })).toHaveAttribute('aria-selected', 'true')
   })
 
+  it('names the variant\'s own scope in the header, not the file default', async () => {
+    const world = buildWorld()
+    world.candidates.cl = (world.candidates.cl ?? []).map((entry) =>
+      entry.id === 'c1' ? { ...entry, sourceContractTypes: ['NDA'] } : entry,
+    )
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/clauses/LIMITATION_OF_LIABILITY')
+    await screen.findByRole('heading', { level: 1, name: 'Limitation of liability' })
+    expect(screen.getAllByText('NDA').length).toBeGreaterThan(0)
+    expect(screen.queryByText('All contract types')).not.toBeInTheDocument()
+  })
+
   it('switches variant and shows that variant\'s own wording and provenance', async () => {
     await open('/knowledge/clauses/LIMITATION_OF_LIABILITY')
     await userEvent.click(screen.getByRole('tab', { name: 'Supplier-favorable' }))

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useCandidateQuery, type Candidate, type ConflictSignal, type ConflictType } from '../../../api/knowledge'
 import { conditionsOf, needsConflictAcknowledgement, reasonLines, type Condition } from '../../../lib/compilation'
 import { positionText } from '../../../lib/knowledgeCatalog'
-import { scopeRows } from '../../../lib/knowledgePosition'
+import { displayScopeRows } from '../../../lib/knowledgePosition'
 import { formatPositions } from '../../../lib/semantics'
 import { ArrowRightIcon, CautionIcon } from '../../ui/Icon'
 
@@ -21,7 +21,7 @@ function PublishedPeer({ candidateId }: { candidateId: string }) {
   if (peer.isError || !peer.data) return <p className="rv-kc-muted">The published knowledge could not be loaded.</p>
   const entry = peer.data
   const text = positionText(entry)
-  const scope = scopeRows(entry)
+  const scope = displayScopeRows(entry)
   return (
     <div className="rv-kc-peer">
       {text ? <p>{text}</p> : <p className="rv-kc-muted">It has no authored wording.</p>}

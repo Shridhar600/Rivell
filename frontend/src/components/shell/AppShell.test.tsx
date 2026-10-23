@@ -369,6 +369,73 @@ describe('one search menu for the whole app', () => {
   })
 })
 
+describe('phone gate', () => {
+  function stubViewport(initial: boolean) {
+    const listeners = new Set<() => void>()
+    const phone = {
+      matches: initial,
+      media: '(max-width: 767.98px)',
+      addEventListener: (_event: 'change', listener: () => void) => listeners.add(listener),
+      removeEventListener: (_event: 'change', listener: () => void) => listeners.delete(listener),
+    }
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) =>
+        query === '(max-width: 767.98px)'
+          ? phone
+          : {
+              matches: false,
+              media: query,
+              addEventListener: () => undefined,
+              removeEventListener: () => undefined,
+            },
+      ),
+    )
+    return {
+      widen() {
+        phone.matches = false
+        listeners.forEach((listener) => listener())
+      },
+    }
+  }
+
+  it('shows one centred message instead of the page below 768px', async () => {
+    stubApi()
+    stubViewport(true)
+    renderAt('/reviews/new')
+    expect(
+      screen.getByRole('heading', { name: 'Rivell needs a larger screen' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Open Rivell on a laptop or tablet to review contracts.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument()
+  })
+
+  it('restores the page when the viewport widens, without a reload', async () => {
+    stubApi()
+    const viewport = stubViewport(true)
+    const { router } = renderAt('/reviews/new')
+    expect(screen.queryByRole('heading', { name: 'Start a contract review' })).not.toBeInTheDocument()
+    act(() => viewport.widen())
+    expect(
+      await screen.findByRole('heading', { name: 'Start a contract review' }),
+    ).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/reviews/new')
+  })
+
+  it('does not show the gate at desktop size', async () => {
+    stubApi()
+    stubViewport(false)
+    renderAt('/reviews/new')
+    expect(
+      await screen.findByRole('heading', { name: 'Start a contract review' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Rivell needs a larger screen')).not.toBeInTheDocument()
+  })
+})
+
 describe('the workspace starts from the icon rail', () => {
   it('rails the app sidebar without changing the saved preference, and expands it on this page only', async () => {
     globalThis.localStorage?.setItem('rv-sidebar', '')

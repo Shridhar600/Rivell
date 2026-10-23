@@ -13,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -175,6 +177,37 @@ class ReviewApiIT {
                         .value(greaterThan(0)))
                 .andExpect(jsonPath("$.data.analysisWarnings[0].reasonCode")
                         .value("SURVIVAL_COVERAGE_PARTIAL"));
+    }
+
+    @Test
+    void summaryFreezesTheApplicablePlaybooksAtCreation() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+
+        var used = created.get("snapshot").get("playbooksUsed");
+        assertThat(used.isArray()).isTrue();
+        assertThat(used.size()).isPositive();
+        for (var knowledge : used) {
+            assertThat(knowledge.get("artifactId").asText()).isNotBlank();
+            assertThat(knowledge.get("artifactType").asText())
+                    .isIn("PLAYBOOK", "CLAUSE_LIBRARY");
+            assertThat(knowledge.get("name").asText()).isNotBlank();
+            assertThat(knowledge.get("publicationNumber").asLong()).isPositive();
+        }
+
+        // A review created before the freeze has no list, and reading it must not recompute one.
+        var reviewId = UUID.fromString(created.get("id").asText());
+        jdbcClient.sql("""
+                        update review_snapshot set applicable_knowledge_frozen = false
+                        where review_id = :id
+                        """)
+                .param("id", reviewId)
+                .update();
+        var summary = json(mockMvc.perform(get("/api/reviews/{id}", reviewId))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+        assertThat(summary.get("snapshot").get("playbooksUsed").isNull()).isTrue();
     }
 
     @Test
