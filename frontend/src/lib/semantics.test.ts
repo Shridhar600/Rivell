@@ -5,6 +5,7 @@ import {
   hasSupersessionProposal,
   interpretationFor,
   isBulkEligible,
+  normalizeJurisdiction,
   positionsDiverge,
   proposedPositions,
   reviewReasonLabel,
@@ -174,6 +175,43 @@ describe('semantic display helpers', () => {
       { label: 'Jurisdiction', candidateValue: 'UK', manifestValue: 'US' },
     ])
     expect(scopeDifferences(candidate(), artifact)).toEqual([])
+  })
+
+  it('compares jurisdictions with the shared normalisation', () => {
+    expect(normalizeJurisdiction('United Kingdom')).toBe('uk')
+    expect(normalizeJurisdiction('UK')).toBe('uk')
+    expect(normalizeJurisdiction('United States')).toBe('us')
+    expect(normalizeJurisdiction('US')).toBe('us')
+    expect(normalizeJurisdiction('New Zealand')).toBe('newzealand')
+    expect(normalizeJurisdiction('NEW_ZEALAND')).toBe('newzealand')
+
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'New Zealand' }), {
+        ...artifact,
+        jurisdiction: 'NEW_ZEALAND',
+      }),
+    ).toEqual([])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'United Kingdom' }), {
+        ...artifact,
+        jurisdiction: 'UK',
+      }),
+    ).toEqual([])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'United States' }), {
+        ...artifact,
+        jurisdiction: 'US',
+      }),
+    ).toEqual([])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'United Kingdom' }), {
+        ...artifact,
+        jurisdiction: 'US',
+      }),
+    ).toEqual([{ label: 'Jurisdiction', candidateValue: 'United Kingdom', manifestValue: 'US' }])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: '' }), { ...artifact, jurisdiction: null }),
+    ).toEqual([])
   })
 
   it('shows bulk eligibility from server fields only', () => {

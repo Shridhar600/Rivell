@@ -26,6 +26,8 @@ final class M4SemanticSpecs {
     static final String FIELD_VERIFICATION_SPEC = "field-verification";
 
     private static final int VERSION = 1;
+    /** The known-jurisdiction criteria widened beyond US and UK. */
+    private static final int SCOPE_NARROWING_VERSION = 2;
 
     private M4SemanticSpecs() {
     }
@@ -91,7 +93,7 @@ final class M4SemanticSpecs {
             jurisdictionCriteria.put(jurisdiction.name(), jurisdiction.description());
         }
         return new DecisionSpec(
-                SCOPE_NARROWING_SPEC, VERSION,
+                SCOPE_NARROWING_SPEC, SCOPE_NARROWING_VERSION,
                 "Determine whether a source unit narrows applicability compared to the manifest "
                         + "and, if so, which known jurisdiction it names.",
                 M4SemanticStates.PlaybookUnitState.SCHEMA_VERSION,

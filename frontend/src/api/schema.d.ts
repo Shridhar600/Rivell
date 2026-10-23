@@ -1580,7 +1580,7 @@ export interface components {
             /** @enum {string} */
             paperSource?: "OUR_PAPER" | "COUNTERPARTY_PAPER" | "THIRD_PARTY";
             /** @enum {string} */
-            jurisdiction?: "US" | "UK" | "UNSPECIFIED";
+            jurisdiction?: "US" | "UK" | "AUSTRALIA" | "CANADA" | "IRELAND" | "INDIA" | "NEW_ZEALAND" | "SINGAPORE" | "HONG_KONG" | "GERMANY" | "FRANCE" | "NETHERLANDS" | "OTHER" | "UNSPECIFIED";
             contractPackKey?: string;
         };
         CreateReviewRequest: {

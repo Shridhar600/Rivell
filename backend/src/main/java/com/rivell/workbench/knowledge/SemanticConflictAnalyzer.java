@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
@@ -82,7 +83,7 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
     private boolean isExactDuplicate(KnowledgeCandidate candidate, KnowledgeCandidate peer) {
         return sameText(peer.rawLabel(), candidate.rawLabel())
                 && sameText(peer.effectiveContentText(), candidate.effectiveContentText())
-                && sameText(peer.scope().jurisdiction(), candidate.scope().jurisdiction())
+                && Jurisdiction.same(peer.scope().jurisdiction(), candidate.scope().jurisdiction())
                 && sameText(peer.scope().paperSource(), candidate.scope().paperSource())
                 && periodBoundsEqual(peer.scope(), candidate.scope());
     }
@@ -163,7 +164,7 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
 
     private static boolean compatibleJurisdiction(KnowledgeCandidate a, KnowledgeCandidate b) {
         return a.scope().jurisdiction() == null || b.scope().jurisdiction() == null
-                || a.scope().jurisdiction().equalsIgnoreCase(b.scope().jurisdiction());
+                || Jurisdiction.same(a.scope().jurisdiction(), b.scope().jurisdiction());
     }
 
     private static boolean compatiblePaperSource(KnowledgeCandidate a, KnowledgeCandidate b) {

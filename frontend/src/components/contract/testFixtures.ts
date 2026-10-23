@@ -131,7 +131,7 @@ export function fixtureSemantics(
       },
       {
         field: 'GOVERNING_LAW',
-        value: 'UK',
+        value: 'England and Wales',
         correctedValue: null,
         corrected: false,
         sourceNodeIds: ['node-6'],

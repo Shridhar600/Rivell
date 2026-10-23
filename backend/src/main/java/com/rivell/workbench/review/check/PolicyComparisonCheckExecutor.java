@@ -450,9 +450,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * What the contract says about itself outside the clause, as quotable lines for the P3 check: our
      * side, the parties with their roles and the jurisdiction declared for the review. The governing-law
-     * metadata is left out: when a jurisdiction is declared it holds that declaration, not the law the
-     * contract names (user review UX-002), so it would read as a stated fact it is not. A governing-law
-     * clause carries its own words.
+     * metadata is left out because it repeats the governing-law clause's own words; the declared
+     * jurisdiction above is the review's context, not a claim about the clause.
      */
     private static List<String> contractFacts(ReviewCheckContext context) {
         var facts = new ArrayList<String>();
