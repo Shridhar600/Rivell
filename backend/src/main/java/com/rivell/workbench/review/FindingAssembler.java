@@ -139,15 +139,14 @@ public final class FindingAssembler {
                 && PolicyUnavailablePayload.NOT_COVERED.equals(unavailable.sufficiency())) {
             return new Observation(PolicyUnavailablePayload.NOT_COVERED,
                     "No playbook position addresses this clause, and it reads as unusual for "
-                            + "this kind of contract and against our side; a lawyer should "
-                            + "review it.");
+                            + "this kind of contract and against our side.");
         }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
                 && signal.payload() instanceof PolicyUnavailablePayload unavailable
                 && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())) {
             return new Observation(PolicyUnavailablePayload.SPOTTED,
-                    "A whole-contract read named this clause as one our side must act on, and no "
-                            + "playbook position check flagged it; a lawyer should review it.");
+                    "A whole-contract read named this clause as one our side must act on, but "
+                            + "no playbook position check flagged it.");
         }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE) {
             return new Observation("POLICY_UNAVAILABLE",
@@ -156,9 +155,9 @@ public final class FindingAssembler {
         }
         if (signal.signalType() == SignalType.POLICY_AMBIGUOUS) {
             return new Observation("AMBIGUOUS_POLICY",
-                    "Multiple conflicting published policies apply to "
+                    "More than one rule in your playbook applies to "
                             + signal.concept().value()
-                            + "; no rule was chosen and the ambiguity is preserved.");
+                            + ", and they conflict. Rivell did not choose between them.");
         }
         if (signal.signalType() == SignalType.POLICY_DEVIATION
                 && signal.payload() instanceof PositionDeviationPayload deviation) {
@@ -204,26 +203,26 @@ public final class FindingAssembler {
 
     private static String uncertaintyText(String reason, RawReviewSignal signal) {
         return switch (reason) {
-            case "classification_uncertain" -> "Rivell was not confident enough about "
-                    + "this clause to judge it against the position. Please take a look.";
+            case "classification_uncertain" -> "Rivell could not check this clause against "
+                    + "your playbook. Please check it yourself.";
             case "bounded_decision_unavailable", "cross_clause_decision_unavailable" ->
                     "Rivell could not check this clause because the analysis "
-                            + "service was unavailable. Please take a look.";
-            case "carve_out_context_too_large" -> "The clauses were too long for Rivell to "
-                    + "compare, so it did not check how they interact. Please take a look.";
-            case "carve_out_not_comparable" -> "Rivell could not tell how the liability "
-                    + "carve-out and the indemnification clause interact, so it reports no "
-                    + "conflict either way. Please take a look.";
-            case "cross_clause_classification_uncertain" -> "Rivell could not reach a clear view of "
-                    + "how these clauses interact. Please take a look.";
+                            + "service was unavailable. Please check it yourself.";
+            case "carve_out_context_too_large" -> "There was too much text for Rivell to "
+                    + "compare these clauses. Please check how the liability cap and its "
+                    + "exceptions fit together.";
+            case "carve_out_not_comparable" -> "Rivell could not check how the liability cap "
+                    + "and its exceptions fit together. Please check both clauses yourself.";
+            case "cross_clause_classification_uncertain" -> "Rivell could not check how these "
+                    + "clauses fit together. Please check them yourself.";
             case "survival_coverage_partial" -> "Rivell could not check whether every "
-                    + "confidentiality obligation survives termination. Please take a look.";
+                    + "confidentiality obligation survives termination. Please check the "
+                    + "termination clause yourself.";
             case DeviationUncertainPayload.SECOND_OPINION_DISAGREES -> "Rivell is unsure "
-                    + "whether this clause meets your position: one check finds an issue and "
-                    + "the other does not. Compare the clause with the position below.";
+                    + "about this clause. Here is the clause and the closest rule.";
             case DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE -> "Rivell is unsure "
-                    + "whether this clause meets your position, and could not get a second "
-                    + "check. Compare the clause with the position below.";
+                    + "about this clause, and could not get a second check. Here is the clause "
+                    + "and the closest rule.";
             default -> "The check recorded unresolved uncertainty for "
                     + signal.concept().value() + ".";
         };
@@ -246,9 +245,8 @@ public final class FindingAssembler {
                     + "every fallback the position lists.";
             case PolicyComparisonSpecs.WITHIN_FALLBACK -> "The clause departs from the "
                     + "preferred position but stays within a listed fallback; accept and note.";
-            default -> "The clause deals with this subject, but its wording is ambiguous or "
-                    + "depends on something outside the contract, so compliance cannot be "
-                    + "decided.";
+            default -> "The clause depends on something outside the contract, so Rivell "
+                    + "cannot tell whether it meets your playbook.";
         };
     }
 

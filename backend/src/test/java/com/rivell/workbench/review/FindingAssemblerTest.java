@@ -258,6 +258,82 @@ class FindingAssemblerTest {
     }
 
     @Test
+    void aSecondOpinionDisagreementSaysWhatRivellIsUnsureAboutInPlainWords() {
+        var finding = assembler.assemble(
+                run(), List.of(disagreement(PolicyComparisonSpecs.WALK_AWAY)), NOW).get(0);
+
+        assertThat(finding.observationText()).isEqualTo(
+                "Rivell is unsure about this clause. Here is the clause and the closest rule.");
+        assertThat(finding.observationText()).doesNotContain("two reviewers", "please take a look");
+    }
+
+    @Test
+    void anUnclearComparisonNamesWhatIsMissingInsteadOfCompliance() {
+        var finding = assembler.assemble(
+                run(), List.of(deviation(PolicyComparisonSpecs.UNCLEAR, false, Map.of())), NOW).get(0);
+
+        assertThat(finding.observationText()).isEqualTo(
+                "The clause depends on something outside the contract, so Rivell cannot tell "
+                        + "whether it meets your playbook.");
+        assertThat(finding.observationText()).doesNotContain("compliance cannot be decided");
+    }
+
+    @Test
+    void anUncoveredClauseDoesNotAskForAHumanLegalReview() {
+        var uncovered = signal(SignalType.POLICY_UNAVAILABLE, IssueFamily.POLICY_UNAVAILABLE,
+                new PolicyUnavailablePayload(PolicyUnavailablePayload.NOT_COVERED),
+                List.of(UUID.randomUUID()), null);
+        var spotted = signal(SignalType.POLICY_UNAVAILABLE, IssueFamily.POLICY_UNAVAILABLE,
+                new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED),
+                List.of(UUID.randomUUID()), null);
+
+        var uncoveredFinding = assembler.assemble(run(), List.of(uncovered), NOW).get(0);
+        var spottedFinding = assembler.assemble(run(), List.of(spotted), NOW).get(0);
+
+        assertThat(List.of(uncoveredFinding.observationText(), spottedFinding.observationText()))
+                .allSatisfy(text -> assertThat(text).doesNotContain("lawyer", "legal review"));
+        assertThat(uncoveredFinding.observationText())
+                .isEqualTo("No playbook position addresses this clause, and it reads as unusual "
+                        + "for this kind of contract and against our side.");
+        assertThat(spottedFinding.observationText())
+                .isEqualTo("A whole-contract read named this clause as one our side must act on, "
+                        + "but no playbook position check flagged it.");
+    }
+
+    @Test
+    void anAmbiguousPolicyNamesTheRulesThatConflictInPlainWords() {
+        var ambiguous = assembler.assemble(run(),
+                List.of(signal(SignalType.POLICY_AMBIGUOUS, IssueFamily.POLICY_AMBIGUOUS,
+                        new PolicyAmbiguousPayload(2), List.of(UUID.randomUUID()), null)), NOW).get(0);
+
+        assertThat(ambiguous.observationText()).isEqualTo(
+                "More than one rule in your playbook applies to LIMITATION_OF_LIABILITY, and they "
+                        + "conflict. Rivell did not choose between them.");
+        assertThat(ambiguous.observationText()).doesNotContain("ambiguity is preserved", "no rule was chosen");
+    }
+
+    @Test
+    void anUncertainClassificationAndTheCarveOutCheckAreSaidWithoutBoundedLanguage() {
+        var classification = assembler.assemble(run(),
+                List.of(signal(SignalType.DEVIATION_UNCERTAIN, IssueFamily.POSITION_UNCERTAIN,
+                        new DeviationUncertainPayload("classification_uncertain"),
+                        List.of(UUID.randomUUID()), null)), NOW).get(0);
+        var carveOut = assembler.assemble(run(),
+                List.of(signal(SignalType.CROSS_CLAUSE_UNCERTAIN, IssueFamily.CARVE_OUT_INCONSISTENCY,
+                        new DeviationUncertainPayload("carve_out_not_comparable"),
+                        List.of(UUID.randomUUID()), null)), NOW).get(0);
+
+        assertThat(classification.observationText())
+                .isEqualTo("Rivell could not check this clause against your playbook. "
+                        + "Please check it yourself.");
+        assertThat(carveOut.observationText())
+                .isEqualTo("Rivell could not check how the liability cap and its exceptions fit "
+                        + "together. Please check both clauses yourself.");
+        assertThat(classification.observationText() + carveOut.observationText())
+                .doesNotContain("bounded", "Please take a look");
+    }
+
+    @Test
     void unknownFallbackConditionsAddALookNoteAndNeverChangeTheSeverity() {
         var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
                 Map.of("fallbackConditionsUnknown", List.of("the work is delivered from our UK studio")))),
