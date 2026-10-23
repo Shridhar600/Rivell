@@ -1,6 +1,6 @@
 import type { ArtifactDetail, Candidate, Interpretation, VerificationState } from '../api/knowledge'
 import type { ConceptLabel } from '../api/taxonomy'
-import { effectiveContentText, effectivePayloadColumns } from './candidates'
+import { effectiveContentText, effectivePayloadColumns, isWordingHeader } from './candidates'
 import { contractTypesText, scopeRows } from './knowledgePosition'
 import {
   approvalDiverge,
@@ -160,6 +160,7 @@ export function interpretationRows(
   // column-only correction therefore changes this text even though it changed no wording field, so
   // the text is shown first and the columns, where there are any, follow as the source's own cells.
   const text = effectiveContentText(candidate)
+  const shownWording = textOrNull(text)
   const columnsDiverge = Object.keys(candidate.editedPayloadColumns).some(
     (name) => candidate.editedPayloadColumns[name] !== candidate.payloadColumns[name],
   )
@@ -169,19 +170,23 @@ export function interpretationRows(
   rows.push({
     key: 'wording',
     label: isClause ? 'Approved wording' : 'Wording',
-    value: textOrNull(text) ?? 'No wording was read',
+    value: shownWording ?? 'No wording was read',
     machine: textChanged ? `Rivell read: ${candidate.contentText ?? ''}` : null,
     support: null,
     corrected: textChanged,
   })
   const columns = effectivePayloadColumns(candidate)
   for (const name of Object.keys(columns)) {
+    const value = columns[name] ?? ''
+    // The wording column is already the "Approved wording" row, so it is not shown twice. A
+    // value that differs from the wording stays visible: it is then not a duplicate.
+    if (isWordingHeader(name) && shownWording !== null && value.trim() === shownWording) continue
     const edited = candidate.editedPayloadColumns[name]
     const changed = edited !== undefined && edited !== candidate.payloadColumns[name]
     rows.push({
       key: `column:${name}`,
       label: payloadColumnLabel(name, true),
-      value: columns[name] ?? '',
+      value,
       machine: changed ? `Rivell read: ${candidate.payloadColumns[name] ?? ''}` : null,
       support: null,
       corrected: changed,

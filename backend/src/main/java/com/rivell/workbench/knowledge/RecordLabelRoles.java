@@ -39,6 +39,11 @@ final class RecordLabelRoles {
         exact("contract type", RecordFieldRole.APPLICABILITY);
         exact("topic", RecordFieldRole.TOPIC);
         exact("clause topic", RecordFieldRole.TOPIC);
+        exact("title", RecordFieldRole.TITLE);
+        exact("clause title", RecordFieldRole.TITLE);
+        exact("name", RecordFieldRole.TITLE);
+        exact("clause name", RecordFieldRole.TITLE);
+        exact("heading", RecordFieldRole.TITLE);
         exact("wording", RecordFieldRole.WORDING);
         exact("approved language", RecordFieldRole.WORDING);
         exact("approved wording", RecordFieldRole.WORDING);

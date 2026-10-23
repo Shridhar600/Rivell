@@ -120,11 +120,54 @@ class KnowledgeImportQualityTest {
     }
 
     @Test
+    void aSpreadsheetClauseVariantIsTitledByItsTopicColumnAndVariant() {
+        var compiled = compileLibrary();
+
+        var governing = compiled.candidates().stream()
+                .filter(candidate -> "G-GOV-01".equals(candidate.payload().columns().get("Clause ID")))
+                .findFirst().orElseThrow();
+
+        assertThat(governing.rawLabel()).isEqualTo("Governing law and jurisdiction · Preferred");
+        assertThat(governing.effectiveTitle()).isEqualTo("Governing law and jurisdiction · Preferred");
+        assertThat(governing.payload().columns()).containsEntry("Clause ID", "G-GOV-01");
+    }
+
+    @Test
+    void threeVariantsOfOneSpreadsheetClauseHaveTitlesThatTellThemApart() {
+        var compiled = compileLibrary();
+
+        var liability = compiled.candidates().stream()
+                .filter(candidate -> "G-LIAB-01".equals(candidate.payload().columns().get("Clause ID")))
+                .toList();
+
+        assertThat(liability).hasSize(3);
+        assertThat(liability.stream().map(KnowledgeCandidate::rawLabel))
+                .containsExactlyInAnyOrder(
+                        "Limitation of liability · Preferred",
+                        "Limitation of liability · Fallback 1",
+                        "Limitation of liability · Fallback 2");
+    }
+
+    @Test
+    void aSpreadsheetClauseRowsSectionPathStaysTheSheetName() {
+        var compiled = compileLibrary();
+
+        var governing = compiled.candidates().stream()
+                .filter(candidate -> "G-GOV-01".equals(candidate.payload().columns().get("Clause ID")))
+                .findFirst().orElseThrow();
+        var unit = compiled.units().stream()
+                .filter(candidateUnit -> candidateUnit.id().equals(governing.extractionUnitId()))
+                .findFirst().orElseThrow();
+
+        assertThat(unit.title()).isEqualTo("Clause Library");
+    }
+
+    @Test
     void aClauseVariantsWordingIsItsClauseTextColumnNotTheWholeRow() {
         var compiled = compileLibrary();
 
         var fallback = compiled.candidates().stream()
-                .filter(candidate -> "G-IND-01".equals(candidate.rawLabel())
+                .filter(candidate -> "G-IND-01".equals(candidate.payload().columns().get("Clause ID"))
                         && "Fallback 1".equals(candidate.payload().columns().get("Variant")))
                 .findFirst().orElseThrow();
         assertThat(fallback.contentText())

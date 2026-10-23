@@ -65,7 +65,7 @@ describe('structured interpretation', () => {
     expect(row(rows, 'wording')).toMatchObject({ value: 'Net 45', machine: 'Rivell read: Net 90', corrected: true })
   })
 
-  it('shows spreadsheet columns, with the machine value only where a column changed', () => {
+  it('shows spreadsheet columns, hiding the wording column that repeats the shown wording', () => {
     const rows = interpretationRows(
       make({
         candidateType: 'CLAUSE_VARIANT',
@@ -75,7 +75,8 @@ describe('structured interpretation', () => {
       }),
     )
     expect(row(rows, 'column:Variant')).toMatchObject({ value: 'Mutual', machine: null, corrected: false })
-    expect(row(rows, 'column:Wording')).toMatchObject({ value: 'Capped at 6 months', machine: 'Rivell read: Capped at 12 months', corrected: true })
+    // The payload wording column would repeat the approved wording, so it is not a second row.
+    expect(row(rows, 'column:Wording')).toBeUndefined()
     // A clause variant's wording is its wording column, so changing another column does not
     // change it; the machine wording stays beside the corrected one.
     expect(row(rows, 'wording')).toMatchObject({
@@ -83,6 +84,47 @@ describe('structured interpretation', () => {
       machine: 'Rivell read: Mutual | Capped at 12 months',
       corrected: true,
     })
+  })
+
+  it('keeps the machine value of a changed column that is not the wording', () => {
+    const rows = interpretationRows(
+      make({
+        candidateType: 'CLAUSE_VARIANT',
+        contentText: 'Capped at 12 months',
+        payloadColumns: { Variant: 'Mutual', 'Clause text': 'Capped at 12 months' },
+        editedPayloadColumns: { Variant: 'Mutual, standard', 'Clause text': 'Capped at 12 months' },
+      }),
+    )
+    expect(row(rows, 'column:Variant')).toMatchObject({
+      value: 'Mutual, standard',
+      machine: 'Rivell read: Mutual',
+      corrected: true,
+    })
+    expect(row(rows, 'column:Clause text')).toBeUndefined()
+  })
+
+  it('keeps a wording column whose value is not the shown wording', () => {
+    const rows = interpretationRows(
+      make({
+        candidateType: 'CLAUSE_VARIANT',
+        contentText: 'Capped at 12 months',
+        editedContentText: 'A different agreed wording.',
+        payloadColumns: { Variant: 'Mutual', 'Clause text': 'Capped at 12 months' },
+      }),
+    )
+    expect(row(rows, 'wording')?.value).toBe('A different agreed wording.')
+    expect(row(rows, 'column:Clause text')).toMatchObject({ value: 'Capped at 12 months' })
+  })
+
+  it('does not hide another column whose value repeats the shown wording', () => {
+    const rows = interpretationRows(
+      make({
+        candidateType: 'CLAUSE_VARIANT',
+        contentText: 'G-GOV-01',
+        payloadColumns: { 'Clause ID': 'G-GOV-01' },
+      }),
+    )
+    expect(row(rows, 'column:Clause ID')).toMatchObject({ value: 'G-GOV-01' })
   })
 
   it('shows the reviewer concept correction and what Rivell classified', () => {

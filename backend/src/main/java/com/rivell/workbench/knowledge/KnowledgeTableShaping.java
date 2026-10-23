@@ -223,6 +223,73 @@ final class KnowledgeTableShaping {
     }
 
     /**
+     * The title a spreadsheet clause row gives itself: its title column ("Title", "Clause
+     * title", "Name", ...) or, when it has none, its topic column, followed by the variant
+     * ("Preferred"). Empty when the row names itself by neither, so the caller keeps the
+     * first value it read.
+     */
+    static String clauseVariantTitle(Map<String, String> columns) {
+        var title = firstRoleValue(columns, RecordFieldRole.TITLE);
+        if (title == null) {
+            title = firstRoleValue(columns, RecordFieldRole.TOPIC);
+        }
+        if (title == null) {
+            return null;
+        }
+        var baseTitle = KnowledgeTitles.bounded(title);
+        if (baseTitle == null || baseTitle.isBlank()) {
+            return null;
+        }
+        var variant = firstRoleValue(columns, RecordFieldRole.VARIANT);
+        var variantText = variant == null ? "" : firstLine(variant);
+        if (variantText.isEmpty()) {
+            return baseTitle;
+        }
+        // The variant must survive the title bound, otherwise two variants of one long title
+        // truncate to the same name. Leave room for " · " and the variant in the title part.
+        var room = KnowledgeTitles.MAX_LENGTH - " · ".length() - variantText.length();
+        var fittedTitle = fitTitle(baseTitle, room);
+        if (fittedTitle.isEmpty()) {
+            return KnowledgeTitles.bounded(variantText);
+        }
+        return fittedTitle + " · " + variantText;
+    }
+
+    private static String firstLine(String text) {
+        return text.lines().map(String::strip).filter(line -> !line.isEmpty())
+                .findFirst().orElse("");
+    }
+
+    private static String fitTitle(String title, int room) {
+        if (room <= 0) {
+            return "";
+        }
+        if (title.length() <= room) {
+            return title;
+        }
+        if (room == 1) {
+            return "…";
+        }
+        var cut = title.lastIndexOf(' ', room - 2);
+        if (cut < 1) {
+            cut = room - 1;
+        }
+        return title.substring(0, cut).stripTrailing() + "…";
+    }
+
+    private static String firstRoleValue(Map<String, String> columns, RecordFieldRole wanted) {
+        for (var entry : columns.entrySet()) {
+            var value = entry.getValue();
+            if (value != null && !value.isBlank()
+                    && RecordLabelRoles.known(entry.getKey())
+                            .filter(role -> role == wanted).isPresent()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    /**
      * A placeholder must not read as a source column name or as a field role. "Field 1" says
      * only where the value came from, so it cannot outrank a real "Clause text" column.
      */
@@ -250,7 +317,11 @@ final class KnowledgeTableShaping {
         long known = rows.stream()
                 .filter(row -> {
                     var first = firstColumnCell(row);
-                    return first != null && RecordLabelRoles.known(first.text()).isPresent();
+                    // A title column names the row, not a field in it: counting it as a known
+                    // field label would turn a two-column table with a "Title" header into one
+                    // key-value record instead of a grid.
+                    return first != null && RecordLabelRoles.known(first.text())
+                            .filter(role -> role != RecordFieldRole.TITLE).isPresent();
                 })
                 .count();
         return (double) known / rows.size();
