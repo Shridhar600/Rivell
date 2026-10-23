@@ -37,7 +37,8 @@ describe('structured interpretation', () => {
         declaredContractTypes: ['MSA'],
       }),
     )
-    expect(rows.map((entry) => entry.label)).toEqual(['Topic', 'Position', 'Escalate', 'Counsel approval', 'Wording', 'Applies to'])
+    expect(rows.map((entry) => entry.label)).toEqual(['Topic', 'Covers', 'Escalate', 'Counsel approval', 'Wording', 'Applies to'])
+    expect(row(rows, 'positions')?.label).toBe('Covers')
     expect(row(rows, 'positions')?.value).toBe('Preferred, Fallback')
     expect(row(rows, 'escalation')?.value).toBe('Below six months')
     expect(row(rows, 'approval')?.value).toBe('Required')
