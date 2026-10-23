@@ -88,14 +88,14 @@ export function proposedChangeType(
   }
 }
 
-/** "MSA, counterparty paper, our side Customer", from the review's frozen profile only. */
+/** "MSA, counterparty paper, our side: Customer", from the review's frozen profile only. */
 export function profileLine(snapshot: ReviewSnapshot | null | undefined): string | null {
   const profile = snapshot?.profile
   if (!profile) return null
   const parts = [
     profile.contractType ? (CONTRACT_TYPE_LABELS[profile.contractType] ?? profile.contractType) : null,
     profile.paperSource ? (PAPER_SOURCE_LABELS[profile.paperSource] ?? profile.paperSource).toLowerCase() : null,
-    profile.ourSideRole ? `our side ${roleLabel(profile.ourSideRole).toLowerCase()}` : null,
+    profile.ourSideRole ? `our side: ${roleLabel(profile.ourSideRole)}` : null,
   ].filter((part): part is string => part !== null)
   return parts.length > 0 ? parts.join(', ') : null
 }

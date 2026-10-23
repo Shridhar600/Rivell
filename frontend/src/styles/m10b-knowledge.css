@@ -677,6 +677,31 @@ a.rv-k-lc:focus-visible {
 .rv-k-add__type:has(input:focus-visible) {
   box-shadow: inset 0 0 0 1px var(--text), var(--rv-focus);
 }
+.rv-k-add__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rv-k-add__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--text-2);
+  font: 500 13px/1 var(--font);
+  cursor: pointer;
+}
+.rv-k-add__chip:has(input:checked) {
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
+  color: var(--text);
+}
+.rv-k-add__chip:has(input:focus-visible) {
+  box-shadow: inset 0 0 0 1px var(--text), var(--rv-focus);
+}
 .rv-k-add__drop {
   display: flex;
   align-items: center;
