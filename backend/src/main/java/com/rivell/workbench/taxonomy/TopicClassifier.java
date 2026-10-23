@@ -79,33 +79,31 @@ public final class TopicClassifier {
         var questions = registry.leaves().size();
         if (topics.size() <= 1) {
             var primary = topics.isEmpty() ? null : topics.getFirst();
-            return new TopicClassification(topics, primary, probabilities, registry.version(),
-                    List.of(topicsExecution.metadata()), questions);
+            return new TopicClassification(topics, primary, null, probabilities,
+                    registry.version(), List.of(topicsExecution.metadata()), questions);
         }
         var candidates = topics.subList(0, Math.min(topics.size(), properties.maxPrimaryCandidates()));
         var primaryExecution = decisions.evaluate(primarySpec(candidates), state);
         var modelPrimary = primaryTopic(primaryExecution, candidates);
-        return new TopicClassification(topics,
-                modelPrimary != null ? modelPrimary : headingPrimary(heading, topics),
+        return new TopicClassification(topics, modelPrimary, headingTopic(heading, topics),
                 probabilities, registry.version(),
                 List.of(topicsExecution.metadata(), primaryExecution.metadata()),
                 questions + 1);
     }
 
     /**
-     * DW-098: a numbered heading that names its topic ("XIII TERM AND TERMINATION") decides
-     * the primary when the model expressed no clear main subject. Only a topic that already
-     * passed the classifier can be promoted, and a model-chosen primary is never overridden.
-     * A phrase of any topic shadows a shorter phrase it contains, so "Termination for
-     * Convenience" does not fall back to the generic "Termination" alias and "Duration of
-     * Confidentiality" does not fall back to "Duration". The whole heading decides when it
-     * is exactly a label or alias; otherwise its first noun phrase must name exactly one
-     * passed topic. A topic named only in a later phrase is not promoted ("Confidentiality
-     * and Data Protection" stays without a primary when only Data Protection matches), so a
-     * heading never hands the section to a topic that is not its main subject. Matching is
-     * by whole taxonomy label or alias, so "Term" does not match inside "Termination".
+     * DW-098: a numbered heading that names its topic ("XIII TERM AND TERMINATION") carries
+     * that topic for coverage. It never becomes the primary. Only a topic that already passed
+     * the classifier can be carried. A phrase of any topic shadows a shorter phrase it
+     * contains, so "Termination for Convenience" does not fall back to the generic
+     * "Termination" alias and "Duration of Confidentiality" does not fall back to "Duration".
+     * The whole heading decides when it is exactly a label or alias; otherwise its first noun
+     * phrase must name exactly one passed topic. A topic named only in a later phrase is not
+     * carried ("Confidentiality and Data Protection" carries nothing when only Data Protection
+     * matches). Matching is by whole taxonomy label or alias, so "Term" does not match inside
+     * "Termination".
      */
-    private ConceptKey headingPrimary(String heading, List<ConceptKey> topics) {
+    private ConceptKey headingTopic(String heading, List<ConceptKey> topics) {
         if (heading == null || heading.isBlank() || topics.isEmpty()) {
             return null;
         }

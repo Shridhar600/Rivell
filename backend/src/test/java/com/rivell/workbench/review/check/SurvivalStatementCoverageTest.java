@@ -234,6 +234,129 @@ class SurvivalStatementCoverageTest {
     }
 
     @Test
+    void terminationDoesNotAffectConfidentialInformationObligations() {
+        var clause2 = confidentialityClause("2. Confidentiality",
+                "2.1 Each Party shall protect the other Party's confidential information.");
+        var survival = clause("3. Term and Survival",
+                "Termination does not affect obligations in respect of Confidential "
+                        + "Information disclosed before termination.");
+        var obligationsOf = clause("4. Term and Survival",
+                "Termination shall not affect the obligations of confidentiality.");
+
+        var covered = coverage(List.of(clause2, survival), List.of(clause2));
+
+        assertThat(covered.coveredClauseIds()).containsExactly(clause2.id());
+        assertThat(covered.sourceClauseIds()).containsExactly(survival.id());
+        assertThat(coverage(List.of(clause2, obligationsOf), List.of(clause2))
+                .coveredClauseIds()).containsExactly(clause2.id());
+    }
+
+    @Test
+    void expiryWithoutPrejudiceToNamedConfidentialityClauseCoversIt() {
+        var clause2 = confidentialityClause("2. Confidentiality",
+                "2.1 Each Party shall protect the other Party's confidential information.");
+        var clause8 = confidentialityClause("8. Confidentiality of Deliverables",
+                "8.1 Supplier shall protect the confidentiality of Customer deliverables.");
+        var survival = clause("9. Expiry",
+                "Expiry shall not affect the obligations under Section 2.");
+        var prejudice = clause("10. Expiry",
+                "Expiry is without prejudice to the obligations under Section 2.");
+
+        var covered = coverage(List.of(clause2, clause8, survival),
+                List.of(clause2, clause8));
+
+        assertThat(covered.coveredClauseIds()).containsExactly(clause2.id());
+        assertThat(covered.sourceClauseIds()).containsExactly(survival.id());
+        assertThat(coverage(List.of(clause2, clause8, prejudice),
+                List.of(clause2, clause8)).coveredClauseIds()).containsExactly(clause2.id());
+    }
+
+    @Test
+    void continuingConfidentialityObligationsForAStatedPeriodCoverTheClause() {
+        var clause2 = confidentialityClause("2. Confidentiality",
+                "2.1 Each Party shall protect the other Party's confidential information.");
+        var survival = clause("3. Term and Survival",
+                "The obligations of confidentiality and restricted use continue for "
+                        + "three (3) years from the date of each disclosure, and "
+                        + "indefinitely in respect of trade secrets.");
+
+        var covered = coverage(List.of(clause2, survival), List.of(clause2));
+
+        assertThat(covered.coveredClauseIds()).containsExactly(clause2.id());
+        assertThat(covered.sourceClauseIds()).containsExactly(survival.id());
+    }
+
+    @Test
+    void boundedContinuationThatStartsWithOnlyForStillCovers() {
+        var clause2 = confidentialityClause("2. Confidentiality",
+                "2.1 Each Party shall protect the other Party's confidential information.");
+        var survival = clause("3. Survival",
+                "The obligations of confidentiality continue only for three (3) years "
+                        + "after termination.");
+
+        var covered = coverage(List.of(clause2, survival), List.of(clause2));
+
+        assertThat(covered.coveredClauseIds()).containsExactly(clause2.id());
+    }
+
+    @Test
+    void remainingInForceOrApplyingAfterTerminationCoversTheClause() {
+        var clause2 = confidentialityClause("2. Confidentiality",
+                "2.1 Each Party shall protect the other Party's confidential information.");
+        var remains = clause("3. Survival",
+                "The obligations of confidentiality remain in force indefinitely.");
+        var applies = clause("4. Survival",
+                "The confidentiality obligations apply after termination of this Agreement.");
+
+        assertThat(coverage(List.of(clause2, remains), List.of(clause2)).coveredClauseIds())
+                .containsExactly(clause2.id());
+        assertThat(coverage(List.of(clause2, applies), List.of(clause2)).coveredClauseIds())
+                .containsExactly(clause2.id());
+    }
+
+    @Test
+    void noAffectAndContinuationNearMissesAreNotCoverage() {
+        var clause2 = confidentialityClause("2. Confidentiality",
+                "2.1 Each Party shall protect the other Party's confidential information.");
+        var fees = clause("3. Termination",
+                "Termination does not affect the fees payable under this Agreement.");
+        var indemnity = clause("4. Termination",
+                "Termination does not affect obligations in respect of indemnification.");
+        var notContinue = clause("5. Survival",
+                "The obligations of confidentiality do not continue after termination.");
+        var mayContinue = clause("6. Survival",
+                "The obligations of confidentiality may continue after termination.");
+        var conditional = clause("7. Survival",
+                "The obligations of confidentiality continue only if the Disclosing "
+                        + "Party asks.");
+        var notRequired = clause("8. Survival",
+                "The obligations of confidentiality are not required to continue "
+                        + "after termination.");
+        var noObligation = clause("9. Survival",
+                "The obligations of confidentiality are under no obligation to "
+                        + "continue after termination.");
+        var noPeriod = clause("10. Survival",
+                "The obligations of confidentiality continue to apply to the Services.");
+
+        assertThat(coverage(List.of(clause2, fees), List.of(clause2)).coveredClauseIds())
+                .isEmpty();
+        assertThat(coverage(List.of(clause2, indemnity), List.of(clause2)).coveredClauseIds())
+                .isEmpty();
+        assertThat(coverage(List.of(clause2, notContinue), List.of(clause2)).coveredClauseIds())
+                .isEmpty();
+        assertThat(coverage(List.of(clause2, mayContinue), List.of(clause2)).coveredClauseIds())
+                .isEmpty();
+        assertThat(coverage(List.of(clause2, conditional), List.of(clause2)).coveredClauseIds())
+                .isEmpty();
+        assertThat(coverage(List.of(clause2, notRequired), List.of(clause2)).coveredClauseIds())
+                .isEmpty();
+        assertThat(coverage(List.of(clause2, noObligation), List.of(clause2)).coveredClauseIds())
+                .isEmpty();
+        assertThat(coverage(List.of(clause2, noPeriod), List.of(clause2)).coveredClauseIds())
+                .isEmpty();
+    }
+
+    @Test
     void noStatementCoversNothing() {
         var clause2 = confidentialityClause("2. Confidentiality",
                 "2.1 Each Party shall protect confidential information.");

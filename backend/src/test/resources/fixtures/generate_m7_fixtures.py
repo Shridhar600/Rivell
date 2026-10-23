@@ -227,10 +227,40 @@ write_docx('m7-msa-stated-survival.docx', (
     + p('3. Term and Survival', 'Heading1')
     + p('3.1 This Agreement starts on the Effective Date and continues for one year.',
         'Normal')
-    + p('3.2 The obligations of confidentiality survive termination of this Agreement '
-        'for five (5) years.', 'Normal')
+    + p('3.2 Termination does not affect obligations in respect of Confidential '
+        'Information disclosed before termination.', 'Normal')
+    + p('3.3 The obligations of confidentiality and restricted use continue for '
+        'three (3) years from the date of each disclosure, and indefinitely in '
+        'respect of trade secrets.', 'Normal')
     + p('4. Governing Law', 'Heading1')
     + p('4.1 This Agreement is governed by the laws of the State of Delaware.',
         'Normal')))
+
+write_docx('m7-msa-term-survival-conf-period.docx', (
+    p('Master Services Agreement', 'Title')
+    + p('This Master Services Agreement is entered into as of January 1, 2026 by and '
+        'between Northwind Customer Group LLC ("Customer") and Pallas Cloud Services '
+        'GmbH ("Supplier").', 'Normal')
+    + p('1. Limitation of Liability', 'Heading1')
+    + p('Supplier\'s aggregate liability shall not exceed two times the fees paid in '
+        'the preceding 12 months.', 'Normal')
+    + p('2. Confidentiality', 'Heading1')
+    + p('2.1 Each Party shall protect the other Party\'s confidential information '
+        'with reasonable care.', 'Normal')
+    + p('3. Term and Survival', 'Heading1')
+    + p('3.1 This Agreement starts on the Effective Date and continues for one year. '
+        'Either Party may terminate this Agreement for convenience upon sixty (60) '
+        'days\' prior written notice.', 'Normal')
+    + p('3.2 The confidentiality obligations continue for three (3) years after '
+        'termination.', 'Normal')
+    + p('4. Governing Law', 'Heading1')
+    + p('4.1 This Agreement is governed by the laws of the State of Delaware. Any '
+        'termination dispute is governed by those laws.', 'Normal')))
+
+write_docx('m7-policy-confidentiality-period.docx', (
+    p('Helios General Negotiation Playbook', 'Title')
+    + p('Confidentiality Period', 'Heading1')
+    + p('Preferred: The obligations of confidentiality continue for three (3) years '
+        'from the date of each disclosure.')))
 
 print('m7 review fixtures written')

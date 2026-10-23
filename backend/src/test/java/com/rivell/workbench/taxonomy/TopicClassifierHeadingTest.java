@@ -24,8 +24,9 @@ import com.rivell.workbench.intelligence.TokenUsage;
 import com.rivell.workbench.intelligence.YesNoAnswer;
 
 /**
- * DW-098: a heading that names exactly one of the topics the classifier passed decides the
- * primary topic when the model did not. The model's own choice always wins.
+ * DW-098: a heading that names exactly one of the topics the classifier passed is carried as
+ * the heading topic. It never becomes the primary: the model's own choice, or no primary when
+ * the model gave none, stays the primary.
  */
 class TopicClassifierHeadingTest {
 
@@ -42,10 +43,11 @@ class TopicClassifierHeadingTest {
     private static final ConceptKey INDEMNITY = ConceptKey.of("INDEMNIFICATION");
 
     @Test
-    void promotesTheOnlyPassedTopicTheHeadingNames() {
+    void headingTopicNamesTheOnlyPassedTopicWithoutBecomingPrimary() {
         var result = classify("XIV GOVERNING LAW", Map.of(TERM, 0.95, GOVERNING_LAW, 0.95));
 
-        assertThat(result.primaryTopic()).contains(GOVERNING_LAW);
+        assertThat(result.primaryTopic()).isEmpty();
+        assertThat(result.headingTopic()).contains(GOVERNING_LAW);
     }
 
     @Test
@@ -53,39 +55,44 @@ class TopicClassifierHeadingTest {
         var result = classify("XIII TERM AND TERMINATION",
                 Map.of(TERM, 0.95, TERMINATION, 0.95));
 
-        assertThat(result.primaryTopic()).contains(TERM);
+        assertThat(result.primaryTopic()).isEmpty();
+        assertThat(result.headingTopic()).contains(TERM);
     }
 
     @Test
-    void termAndSurvivalHeadingPromotesTermWhenBothPassed() {
+    void termAndSurvivalHeadingCarriesTermWithoutBecomingPrimary() {
         var result = classify("Term and Survival", Map.of(TERM, 0.95, SURVIVAL, 0.95));
 
-        assertThat(result.primaryTopic()).contains(TERM);
+        assertThat(result.primaryTopic()).isEmpty();
+        assertThat(result.headingTopic()).contains(TERM);
     }
 
     @Test
-    void limitationAndIndemnityHeadingPromotesLimitation() {
+    void limitationAndIndemnityHeadingCarriesLimitation() {
         var result = classify("Limitation of Liability and Indemnity",
                 Map.of(LIABILITY, 0.95, INDEMNITY, 0.95));
 
-        assertThat(result.primaryTopic()).contains(LIABILITY);
+        assertThat(result.primaryTopic()).isEmpty();
+        assertThat(result.headingTopic()).contains(LIABILITY);
     }
 
     @Test
-    void confidentialityAndDataProtectionHeadingPromotesNothing() {
+    void confidentialityAndDataProtectionHeadingNamesNothing() {
         var result = classify("Confidentiality and Data Protection",
                 Map.of(CONFIDENTIALITY, 0.95, DATA_PROTECTION_LEAF, 0.95));
 
         assertThat(result.primaryTopic()).as("no leaf label or alias names the first phrase").isEmpty();
+        assertThat(result.headingTopic()).isEmpty();
         assertThat(result.secondaryTopics()).contains(CONFIDENTIALITY, DATA_PROTECTION_LEAF);
     }
 
     @Test
-    void exactMultiWordAliasPromotesEvenAcrossAnd() {
+    void exactMultiWordAliasCarriesEvenAcrossAnd() {
         var result = classify("Use and Protection of Confidential Information",
                 Map.of(CONFIDENTIALITY, 0.95, TERM, 0.95));
 
-        assertThat(result.primaryTopic()).contains(CONFIDENTIALITY);
+        assertThat(result.primaryTopic()).isEmpty();
+        assertThat(result.headingTopic()).contains(CONFIDENTIALITY);
     }
 
     @Test
@@ -93,7 +100,8 @@ class TopicClassifierHeadingTest {
         var result = classify("Termination for Convenience",
                 Map.of(TERMINATION, 0.95, TERMINATION_CONVENIENCE, 0.95));
 
-        assertThat(result.primaryTopic()).contains(TERMINATION_CONVENIENCE);
+        assertThat(result.primaryTopic()).isEmpty();
+        assertThat(result.headingTopic()).contains(TERMINATION_CONVENIENCE);
     }
 
     @Test
@@ -101,9 +109,10 @@ class TopicClassifierHeadingTest {
         var result = classify("Duration of Confidentiality",
                 Map.of(TERM, 0.95, CONFIDENTIALITY_PERIOD, 0.95));
 
-        assertThat(result.primaryTopic()).contains(CONFIDENTIALITY_PERIOD);
+        assertThat(result.primaryTopic()).isEmpty();
+        assertThat(result.headingTopic()).contains(CONFIDENTIALITY_PERIOD);
         assertThat(classify("Duration of Confidentiality", Map.of(TERM, 0.95, INDEMNITY, 0.95))
-                .primaryTopic()).isEmpty();
+                .headingTopic()).isEmpty();
     }
 
     @Test
@@ -112,14 +121,16 @@ class TopicClassifierHeadingTest {
                 TERM);
 
         assertThat(result.primaryTopic()).contains(TERM);
+        assertThat(result.headingTopic()).contains(GOVERNING_LAW);
     }
 
     @Test
-    void neverPromotesATopicTheClassifierDidNotPass() {
+    void neverCarriesATopicTheClassifierDidNotPass() {
         var result = classify("Governing Law", Map.of(TERM, 0.95, INDEMNITY, 0.95));
 
         assertThat(result.topics()).containsExactlyInAnyOrder(TERM, INDEMNITY);
         assertThat(result.primaryTopic()).isEmpty();
+        assertThat(result.headingTopic()).isEmpty();
     }
 
     @Test
@@ -127,14 +138,15 @@ class TopicClassifierHeadingTest {
         var result = classify("Termination", Map.of(TERM, 0.95, GOVERNING_LAW, 0.95));
 
         assertThat(result.primaryTopic()).isEmpty();
+        assertThat(result.headingTopic()).isEmpty();
     }
 
     @Test
-    void nullHeadingPromotesNothingAndNumberingIsStripped() {
-        assertThat(classify(null, Map.of(TERM, 0.95, GOVERNING_LAW, 0.95)).primaryTopic())
+    void nullHeadingCarriesNothingAndNumberingIsStripped() {
+        assertThat(classify(null, Map.of(TERM, 0.95, GOVERNING_LAW, 0.95)).headingTopic())
                 .isEmpty();
         assertThat(classify("I. Governing Law", Map.of(TERM, 0.95, GOVERNING_LAW, 0.95))
-                .primaryTopic()).contains(GOVERNING_LAW);
+                .headingTopic()).contains(GOVERNING_LAW);
     }
 
     private static TopicClassification classify(
