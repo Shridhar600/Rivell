@@ -192,4 +192,45 @@ write_docx('m7-msa-exotic.docx', msa(
     'Supplier\'s aggregate liability shall not exceed the insurance proceeds '
     'actually recovered by Supplier in respect of the claim.'))
 
+write_docx('m7-msa-heading-term-conf.docx', (
+    p('Master Services Agreement', 'Title')
+    + p('This Master Services Agreement is entered into as of January 1, 2026 by and '
+        'between Northwind Customer Group LLC ("Customer") and Pallas Cloud Services '
+        'GmbH ("Supplier").', 'Normal')
+    + p('1. Limitation of Liability', 'Heading1')
+    + p('Supplier\'s aggregate liability shall not exceed two times the fees paid in '
+        'the preceding 12 months.', 'Normal')
+    + p('2. Confidentiality', 'Heading1')
+    + p('2.1 Each Party shall protect the other Party\'s confidential information '
+        'with reasonable care.', 'Normal')
+    + p('3. Term and Termination', 'Heading1')
+    + p('3.1 This Agreement starts on the Effective Date and continues for one year. '
+        'Either Party may terminate this Agreement for convenience upon sixty (60) '
+        'days\' prior written notice.', 'Normal')
+    + p('3.2 The confidentiality obligations in this Agreement continue after '
+        'termination as stated in Section 2.', 'Normal')
+    + p('4. Governing Law', 'Heading1')
+    + p('4.1 This Agreement is governed by the laws of the State of Delaware.',
+        'Normal')))
+
+write_docx('m7-msa-stated-survival.docx', (
+    p('Master Services Agreement', 'Title')
+    + p('This Master Services Agreement is entered into as of January 1, 2026 by and '
+        'between Northwind Customer Group LLC ("Customer") and Pallas Cloud Services '
+        'GmbH ("Supplier").', 'Normal')
+    + p('1. Limitation of Liability', 'Heading1')
+    + p('Supplier\'s aggregate liability shall not exceed two times the fees paid in '
+        'the preceding 12 months.', 'Normal')
+    + p('2. Confidentiality', 'Heading1')
+    + p('2.1 Each Party shall protect the other Party\'s confidential information '
+        'with reasonable care.', 'Normal')
+    + p('3. Term and Survival', 'Heading1')
+    + p('3.1 This Agreement starts on the Effective Date and continues for one year.',
+        'Normal')
+    + p('3.2 The obligations of confidentiality survive termination of this Agreement '
+        'for five (5) years.', 'Normal')
+    + p('4. Governing Law', 'Heading1')
+    + p('4.1 This Agreement is governed by the laws of the State of Delaware.',
+        'Normal')))
+
 print('m7 review fixtures written')

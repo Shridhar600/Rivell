@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.ChoiceQuestion;
@@ -36,6 +38,14 @@ public final class TopicClassifier {
     private final SemanticDecisionService decisions;
     private final TaxonomyProperties properties;
     private final DecisionSpec topicsSpec;
+
+    private static final Pattern HEADING_NUMBER = Pattern.compile(
+            "^\\s*(?:(?:clause|section|article)\\s+)?"
+                    + "(?:\\d+(?:\\.\\d+)*|[IVXLCDM]+|[A-Z]-\\d+[A-Za-z]?|[A-Z])"
+                    + "(?:\\s*[.):]\\s*|\\s+)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern FIRST_PHRASE_BREAK = Pattern.compile(
+            "\\s+(?:and|or)\\s+|\\s*[,;/]\\s*");
 
     public TopicClassifier(
             ConceptRegistry registry, SemanticDecisionService decisions, TaxonomyProperties properties) {
@@ -74,9 +84,105 @@ public final class TopicClassifier {
         }
         var candidates = topics.subList(0, Math.min(topics.size(), properties.maxPrimaryCandidates()));
         var primaryExecution = decisions.evaluate(primarySpec(candidates), state);
-        return new TopicClassification(topics, primaryTopic(primaryExecution, candidates), probabilities,
-                registry.version(), List.of(topicsExecution.metadata(), primaryExecution.metadata()),
+        var modelPrimary = primaryTopic(primaryExecution, candidates);
+        return new TopicClassification(topics,
+                modelPrimary != null ? modelPrimary : headingPrimary(heading, topics),
+                probabilities, registry.version(),
+                List.of(topicsExecution.metadata(), primaryExecution.metadata()),
                 questions + 1);
+    }
+
+    /**
+     * DW-098: a numbered heading that names its topic ("XIII TERM AND TERMINATION") decides
+     * the primary when the model expressed no clear main subject. Only a topic that already
+     * passed the classifier can be promoted, and a model-chosen primary is never overridden.
+     * A phrase of any topic shadows a shorter phrase it contains, so "Termination for
+     * Convenience" does not fall back to the generic "Termination" alias and "Duration of
+     * Confidentiality" does not fall back to "Duration". The whole heading decides when it
+     * is exactly a label or alias; otherwise its first noun phrase must name exactly one
+     * passed topic. A topic named only in a later phrase is not promoted ("Confidentiality
+     * and Data Protection" stays without a primary when only Data Protection matches), so a
+     * heading never hands the section to a topic that is not its main subject. Matching is
+     * by whole taxonomy label or alias, so "Term" does not match inside "Termination".
+     */
+    private ConceptKey headingPrimary(String heading, List<ConceptKey> topics) {
+        if (heading == null || heading.isBlank() || topics.isEmpty()) {
+            return null;
+        }
+        var normalized = normalizeHeading(heading);
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        var exact = maximalMatches(normalized).stream()
+                .filter(match -> match.phrase().equals(normalized))
+                .map(PhraseMatch::topic)
+                .distinct()
+                .toList();
+        if (!exact.isEmpty()) {
+            return exact.size() == 1 && topics.contains(exact.getFirst())
+                    ? exact.getFirst() : null;
+        }
+        var firstPhrase = firstPhrase(normalized);
+        var namedInFirstPhrase = maximalMatches(firstPhrase).stream()
+                .map(PhraseMatch::topic)
+                .distinct()
+                .filter(topics::contains)
+                .toList();
+        return namedInFirstPhrase.size() == 1 ? namedInFirstPhrase.getFirst() : null;
+    }
+
+    private List<PhraseMatch> maximalMatches(String text) {
+        if (text.isEmpty()) {
+            return List.of();
+        }
+        var matches = new ArrayList<PhraseMatch>();
+        for (var concept : registry.leaves()) {
+            addMatch(matches, concept.key(), concept.label(), text);
+            for (var alias : concept.aliases()) {
+                addMatch(matches, concept.key(), alias, text);
+            }
+        }
+        return matches.stream()
+                .distinct()
+                .filter(match -> matches.stream().noneMatch(other ->
+                        !other.phrase().equals(match.phrase())
+                                && containsPhrase(other.phrase(), match.phrase())))
+                .toList();
+    }
+
+    private static void addMatch(
+            List<PhraseMatch> matches, ConceptKey topic, String phrase, String text) {
+        var normalized = normalize(phrase);
+        if (!normalized.isEmpty() && containsPhrase(text, normalized)) {
+            matches.add(new PhraseMatch(topic, normalized));
+        }
+    }
+
+    private static boolean containsPhrase(String text, String phrase) {
+        return (" " + text + " ").contains(" " + phrase + " ");
+    }
+
+    private static String firstPhrase(String heading) {
+        var matcher = FIRST_PHRASE_BREAK.matcher(heading);
+        return matcher.find() ? heading.substring(0, matcher.start()).strip() : heading;
+    }
+
+    private record PhraseMatch(ConceptKey topic, String phrase) {
+    }
+
+    /** Lowercase, numbering and punctuation stripped; "&" reads as "and". */
+    private static String normalizeHeading(String heading) {
+        return normalize(HEADING_NUMBER.matcher(heading).replaceFirst(""));
+    }
+
+    private static String normalize(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.toLowerCase(Locale.ROOT)
+                .replace("&", " and ")
+                .replaceAll("[^a-z0-9]+", " ")
+                .strip();
     }
 
     /**

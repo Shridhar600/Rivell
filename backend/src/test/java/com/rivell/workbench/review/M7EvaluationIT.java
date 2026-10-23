@@ -319,6 +319,9 @@ class M7EvaluationIT {
         var run = analysisService.analyze(organizationId, review.id());
         var elapsed = (System.nanoTime() - start) / 1_000_000;
 
+        assertThat(analysisRepository.findSignals(organizationId, run.id()))
+                .as("the clause states its survival, so DW-100 leaves no gap")
+                .noneMatch(signal -> signal.issueFamily() == IssueFamily.SURVIVAL_COVERAGE_GAP);
         var findings = findingRepository.findFindings(organizationId, run.id());
         assertThat(findings).extracting(Finding::issueFamily)
                 .contains(IssueFamily.POSITION_NEEDS_FALLBACK,
@@ -331,9 +334,8 @@ class M7EvaluationIT {
         record("S10 same clause, two issue families, no overmerge",
                 organizationId, review.id(),
                 Set.of(IssueFamily.POSITION_NEEDS_FALLBACK,
-                        IssueFamily.CARVE_OUT_INCONSISTENCY,
-                        IssueFamily.SURVIVAL_COVERAGE_GAP),
-                3, 0, elapsed);
+                        IssueFamily.CARVE_OUT_INCONSISTENCY),
+                2, 0, elapsed);
     }
 
     @Test

@@ -228,8 +228,7 @@ class GoldenEndToEndIT {
                 "m5-nda-counterparty.docx",
                 "NDA",
                 "ABSENCE",
-                Set.of("MISSING_REQUIRED_CONCEPT", "EXPECTED_CONCEPT_ABSENT",
-                        "SURVIVAL_COVERAGE_GAP"),
+                Set.of("MISSING_REQUIRED_CONCEPT", "EXPECTED_CONCEPT_ABSENT"),
                 Set.of("ADD_REQUIRED_PROVISION"),
                 "INSERT",
                 "REDLINE_GENERATED");

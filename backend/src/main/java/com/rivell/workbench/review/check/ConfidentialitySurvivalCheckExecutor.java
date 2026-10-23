@@ -20,8 +20,9 @@ import com.rivell.workbench.review.SignalType;
 
 /**
  * Deterministic survival-coverage check: the confidentiality obligation must be
- * covered by survival semantics (M5 SURVIVES relationship or the retrieval lane's
- * survival evidence). Absence produces a cross-clause conflict signal; no model call.
+ * covered by survival semantics (M5 SURVIVES relationship, the retrieval lane's
+ * survival evidence, or a survival statement written in the contract). Absence
+ * produces a cross-clause conflict signal; no model call.
  */
 public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckExecutor {
 
@@ -61,6 +62,16 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
                 .anyMatch(item -> item.retrievalReason() != null
                         && item.retrievalReason().contains("SURVIVES"));
         var subjectCoveredByRelationship = survivalEndpoints.contains(clause.headingNodeId());
+        // DW-100: a survival statement written in the contract covers the confidentiality
+        // clauses it names. It is deterministic evidence, so it can clear a gap that neither
+        // a SURVIVES relationship nor retrieval evidence covered.
+        var statementCoverage = SurvivalStatementCoverage.coverage(
+                context.semantics().clauses(), candidates);
+        var statementCoveredCount = candidates.stream()
+                .filter(candidate -> statementCoverage.coveredClauseIds().contains(candidate.id()))
+                .count();
+        var statementCoversAll = !candidates.isEmpty()
+                && statementCoveredCount == candidates.size();
 
         boolean covered;
         boolean uncertain = false;
@@ -68,6 +79,15 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
         if (subjectCoveredByRelationship || coveredByEvidence) {
             covered = true;
             basis = subjectCoveredByRelationship ? "relationship" : "evidence";
+        } else if (statementCoversAll) {
+            covered = true;
+            basis = "clause_text";
+        } else if (statementCoveredCount > 0) {
+            // The statement covers some confidentiality clauses but not all of them: DW-027
+            // asks for explicit uncertainty, never a clean pass and never a HIGH gap.
+            covered = false;
+            uncertain = true;
+            basis = "partial";
         } else if (relationshipCoveredCount > 0) {
             // Survival semantics exist for the concept but cannot be established for
             // this clause; the limitation is explicit instead of a fabricated verdict.
@@ -84,6 +104,9 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
         detail.put("basis", basis);
         detail.put("candidateClauseCount", candidates.size());
         detail.put("relationshipCoveredCount", relationshipCoveredCount);
+        detail.put("statementCoveredCount", statementCoveredCount);
+        detail.put("statementSourceClauseIds", statementCoverage.sourceClauseIds().stream()
+                .map(UUID::toString).toList());
         detail.put("sufficiency", bundle.sufficiency().name());
 
         if (covered) {
