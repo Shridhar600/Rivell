@@ -295,6 +295,61 @@ class M7HardeningIT {
                 .contains(subjectClauseId, counterpartClauseId);
     }
 
+    @Test
+    void headingNamedSectionGivesTheTopicSubstantiveCoverage() throws Exception {
+        var organizationId = organizationId();
+        publishMainPolicyAndLibrary(organizationId);
+        scriptedProvider.indecisivePrimaryHeadings.add("Term and Termination");
+        var review = enrichedReview("m7-msa-heading-term-conf.docx",
+                ReviewPackRegistry.MSA_PACK);
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(scriptedProvider.indecisivePrimaryAnswers())
+                .as("the model gave no primary, so the heading rule is the only source")
+                .isPositive();
+        var semantics = enrichmentService.getSemantics(review.contractId(),
+                review.contractVersionNumber());
+        var headingSection = semantics.clauses().stream()
+                .filter(clause -> clause.contentText().contains("Term and Termination"))
+                .findFirst().orElseThrow();
+        assertThat(headingSection.effectivePrimaryConcept()).contains(CoreConcepts.TERM);
+        var termPresence = presenceExecution(
+                organizationId, review.id(), run.id(), CoreConcepts.TERM);
+        assertThat(termPresence.detail()).containsEntry("coverage", "PRESENT_PRIMARY");
+    }
+
+    @Test
+    void statedConfidentialitySurvivalCoversTheObligation() throws Exception {
+        var organizationId = organizationId();
+        publishMainPolicyAndLibrary(organizationId);
+        var review = enrichedReview("m7-msa-stated-survival.docx", ReviewPackRegistry.MSA_PACK);
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(analysisRepository.findSignals(organizationId, run.id()))
+                .noneMatch(signal -> signal.issueFamily() == IssueFamily.SURVIVAL_COVERAGE_GAP);
+        var survivalExecution = analysisRepository.findExecutions(organizationId, run.id()).stream()
+                .filter(execution -> execution.detail().containsKey("covered"))
+                .findFirst().orElseThrow();
+        assertThat(survivalExecution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
+        assertThat(survivalExecution.detail()).containsEntry("covered", true);
+        assertThat(survivalExecution.detail()).containsEntry("basis", "clause_text");
+    }
+
+    private ReviewCheckExecution presenceExecution(
+            UUID organizationId, UUID reviewId, UUID runId,
+            com.rivell.workbench.taxonomy.ConceptKey concept) {
+        var checkIds = reviewRepository.findPlanChecks(organizationId, reviewId).stream()
+                .filter(check -> check.mechanism() == CheckMechanism.PRESENCE
+                        && check.concept().equals(concept))
+                .map(check -> check.id())
+                .toList();
+        return analysisRepository.findExecutions(organizationId, runId).stream()
+                .filter(execution -> checkIds.contains(execution.planCheckId()))
+                .findFirst().orElseThrow();
+    }
+
     private UUID organizationId() {
         return identityProvider.currentIdentity().organizationId();
     }
