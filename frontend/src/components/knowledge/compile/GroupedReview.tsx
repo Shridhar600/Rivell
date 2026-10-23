@@ -57,7 +57,7 @@ export function GroupedReview({ artifact, candidates, sourceFor, inspected, onTo
               <div key={candidate.id} className={`rv-kc-brow${open ? ' rv-kc-brow--open' : ''}`}>
                 <button type="button" className="rv-kc-brow__btn" aria-expanded={open} onClick={() => onToggle(candidate.id)}>
                   <ChevronIcon className="rv-icon rv-kc-brow__chev" />
-                  <b>{candidate.rawLabel}</b>
+                  <b>{candidate.title}</b>
                   <span className="rv-kc-brow__sum">{positionText(candidate) ?? ''}</span>
                   {open ? <span className="rv-kc-brow__seen">Reviewed</span> : null}
                 </button>

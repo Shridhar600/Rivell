@@ -2,6 +2,7 @@ import { useId, type FormEvent, type ReactNode } from 'react'
 import { POSITION_ROLES, type ArtifactDetail, type Candidate, type PositionRole } from '../../../api/knowledge'
 import { useTaxonomy } from '../../../api/taxonomy'
 import { humanizeCode } from '../../../lib/domainLabels'
+import { artifactFormat } from '../../../lib/knowledgeCatalog'
 import { POSITION_LABELS, formatPositions, proposedPositions, positionsDiverge, scopeDifferences } from '../../../lib/semantics'
 import type { SemanticDraft } from '../../../lib/semantics'
 import type { Correction } from './useCorrection'
@@ -38,6 +39,8 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
   const isPlaybook = candidate.candidateType === 'PLAYBOOK_RULE'
   const isClause = candidate.candidateType === 'CLAUSE_VARIANT'
   const columns = Object.keys(draft.columns)
+  const tableCells = artifactFormat(artifact) === 'Word file'
+  const columnLabel = (name: string) => (/^(Column|Field) \d+$/.test(name) ? 'Value' : name)
   const machinePositions = proposedPositions(candidate)
   const scopeDiffs = scopeDifferences(candidate, artifact)
   const conceptDisabled = pending || taxonomy.isPending || taxonomy.isError
@@ -60,6 +63,12 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
 
   return (
     <form id={id} className="rv-kc-edit" onSubmit={submit} aria-label="Edit this entry">
+      <Field label="Title" hint="A clear, short name for this entry. Clearing a correction uses the title Rivell read.">
+        {(id) => (
+          <input id={id} value={draft.title} maxLength={200} disabled={pending} onChange={(event) => setDraft((previous) => ({ ...previous, title: event.target.value }))} />
+        )}
+      </Field>
+
       <Field
         label="Topic"
         hint={
@@ -157,16 +166,16 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
 
       {columns.length > 0 ? (
         <fieldset className="rv-kc-ef" disabled={pending}>
-          <legend>Spreadsheet columns</legend>
+          <legend>{tableCells ? 'Table cells' : 'Spreadsheet columns'}</legend>
           {columns.map((name) => (
-            <Field key={name} label={name} className="rv-kc-ef--inline">
+            <Field key={name} label={columnLabel(name)} className="rv-kc-ef--inline">
               {(id) => (
                 <input id={id} value={draft.columns[name] ?? ''} onChange={(event) => setDraft((previous) => ({ ...previous, columns: { ...previous.columns, [name]: event.target.value } }))} />
               )}
             </Field>
           ))}
           <small>
-            Column values are saved with this entry and published as its wording. Wording set above takes precedence.
+            {tableCells ? 'Cell values' : 'Column values'} are saved with this entry and published as its wording. Wording set above takes precedence.
           </small>
         </fieldset>
       ) : null}

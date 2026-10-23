@@ -35,7 +35,7 @@ function Row({ candidate, selected, location, recordKind, madeByReviewer, onSele
       <button type="button" className="rv-kc-row" aria-current={selected ? 'true' : undefined} onClick={() => onSelect(candidate.id)}>
         <Glyph outcome={outcome} attention={condition !== null} />
         <span>
-          <b>{candidate.rawLabel}</b>
+          <b>{candidate.title}</b>
           <span className="rv-kc-row__sub">
             {OUTCOME_LABELS[outcome]}
             {open && location ? ` · ${location}` : ''}

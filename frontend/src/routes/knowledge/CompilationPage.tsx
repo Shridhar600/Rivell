@@ -4,11 +4,12 @@ import { CompilationWorkspace } from '../../components/knowledge/compile/Compila
 import { CompileLayout, CompileTopBar } from '../../components/knowledge/compile/CompileLayout'
 import { LinkButton } from '../../components/ui/Button'
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/State'
+import { artifactName } from '../../lib/knowledgeCatalog'
 import { warningLabel } from '../../lib/warnings'
 
 function Frame({ artifact, children }: { artifact?: ArtifactDetail; children: React.ReactNode }) {
   return (
-    <CompileLayout top={<CompileTopBar type={artifact?.artifactType ?? null} filename={artifact?.filename ?? 'Knowledge draft'} />}>
+    <CompileLayout top={<CompileTopBar type={artifact?.artifactType ?? null} name={artifact ? artifactName(artifact) : 'Knowledge draft'} />}>
       <div className="rv-kc-center">{children}</div>
     </CompileLayout>
   )

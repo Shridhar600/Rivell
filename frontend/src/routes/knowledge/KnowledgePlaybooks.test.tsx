@@ -26,6 +26,33 @@ describe('Playbooks list', () => {
     expect(within(list).queryByText(/Draft Playbook/)).not.toBeInTheDocument()
   })
 
+  it('names a playbook by the title its document gives itself', async () => {
+    const world = buildWorld()
+    world.artifacts = world.artifacts.map((entry) =>
+      entry.id === 'pb' ? { ...entry, documentTitle: 'Mutual NDA Negotiation Guide' } : entry,
+    )
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks')
+
+    const list = await screen.findByRole('list', { name: 'Published playbooks' })
+    const row = within(list).getByRole('link')
+    expect(row).toHaveTextContent('Mutual NDA Negotiation Guide')
+    expect(row).not.toHaveTextContent('Commercial MSA Playbook')
+  })
+
+  it('shows a document title in the detail header and breadcrumb', async () => {
+    const world = buildWorld()
+    world.artifacts = world.artifacts.map((entry) =>
+      entry.id === 'pb' ? { ...entry, documentTitle: 'Mutual NDA Negotiation Guide' } : entry,
+    )
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks/pb')
+
+    await screen.findByRole('heading', { level: 1, name: 'Mutual NDA Negotiation Guide' })
+    const breadcrumbs = screen.getByRole('navigation', { name: /Breadcrumb/i })
+    expect(within(breadcrumbs).getByText('Mutual NDA Negotiation Guide')).toBeInTheDocument()
+  })
+
   it('shows a playbook that is still in compilation separately, never as published', async () => {
     stubKnowledgeApi(buildWorld())
     renderKnowledge('/knowledge/playbooks')

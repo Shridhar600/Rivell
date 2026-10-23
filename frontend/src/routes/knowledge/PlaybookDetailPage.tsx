@@ -189,7 +189,7 @@ function PlaybookDetail({
         </KnowledgeTabs>
       </KnowledgeFrame>
       {showInspector && !compact ? (
-        <Inspector status={selected ? `Selected position ${selected.rawLabel}` : ''}>
+        <Inspector status={selected ? `Selected position ${selected.title}` : ''}>
           {selected && selectedPublication ? (
             <PositionInspector
               key={selected.id}

@@ -15,7 +15,7 @@ import {
 import { useAllPublicationsQuery } from '../../../api/knowledgeRead'
 import type { PublishedCompilation as PublishedResult } from '../../../api/knowledgeCompile'
 import { groupCandidates, isPublishedCompilation, nextTarget, publishedDestination, readiness } from '../../../lib/compilation'
-import { buildPublicationIndex } from '../../../lib/knowledgeCatalog'
+import { artifactName, buildPublicationIndex } from '../../../lib/knowledgeCatalog'
 import { candidateLocations, highlightMap, indexNodes, passagesIn, sourceBlocks } from '../../../lib/knowledgeSource'
 import { unitMark } from '../../../lib/knowledgeMarks'
 import { publishedState } from '../../../lib/publishedNotice'
@@ -204,7 +204,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
   function approveGroup() {
     setBulkError(null)
     const ids = groups.bulk.map((candidate) => candidate.id)
-    const labels = new Map(candidates.map((candidate) => [candidate.id, candidate.rawLabel]))
+    const labels = new Map(candidates.map((candidate) => [candidate.id, candidate.title]))
     bulk.mutate(
       { candidateIds: ids, artifactId: artifact.id },
       {
@@ -245,7 +245,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
 
   // --------------------------------------------------------------- rendering
   const top = (
-    <CompileTopBar type={artifact.artifactType} filename={artifact.filename} rail={{ open: railOpen, onToggle: () => setRailOpen((value) => !value), id: railId }}>
+    <CompileTopBar type={artifact.artifactType} name={artifactName(artifact)} rail={{ open: railOpen, onToggle: () => setRailOpen((value) => !value), id: railId }}>
       {candidates.length > 0 ? <PublishControl type={artifact.artifactType} candidates={candidates} onPublish={() => setPublishing(true)} /> : null}
     </CompileTopBar>
   )

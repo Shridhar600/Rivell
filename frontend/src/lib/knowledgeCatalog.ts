@@ -226,7 +226,7 @@ export function clauseGroups(
     if (!group) {
       group = {
         key,
-        title: candidate.effectiveConceptKey ? label(candidate.effectiveConceptKey) : candidate.rawLabel,
+        title: candidate.effectiveConceptKey ? label(candidate.effectiveConceptKey) : candidate.title,
         conceptKey: candidate.effectiveConceptKey,
         variants: [],
       }
@@ -335,9 +335,9 @@ export function buildCatalog({ artifacts, publications, candidates }: CatalogInp
 
 // ------------------------------------------------------------- presentation
 
-/** The filename without its extension. The only name a source has, so it is never shortened further. */
+/** The title the file gives itself, else the filename without its extension. */
 export function artifactName(artifact: ArtifactSummary): string {
-  return artifact.filename.replace(/\.(docx|xlsx)$/i, '')
+  return artifact.documentTitle ?? artifact.filename.replace(/\.(docx|xlsx)$/i, '')
 }
 
 export function artifactFormat(artifact: ArtifactSummary): string {

@@ -168,6 +168,8 @@ export interface ArtifactSummary {
   id: string
   artifactType: ArtifactType
   filename: string
+  /** The title a Word file gives itself; null when it names none. */
+  documentTitle: string | null
   contentType: string
   sizeBytes: number
   sha256: string
@@ -265,7 +267,12 @@ export interface Candidate {
   extractionUnitId: string
   candidateType: CandidateType
   reviewStatus: ReviewStatus
+  /** What Rivell read, unchanged by a reviewer. */
   rawLabel: string
+  /** A title a person typed; null until one is given. */
+  editedTitle: string | null
+  /** The title to show: the person's when there is one, else `rawLabel`. */
+  title: string
   contentText: string | null
   payloadColumns: Record<string, string>
   legalConceptKey: string | null
@@ -284,6 +291,8 @@ export interface Candidate {
   supersedingCandidateId: string | null
   contractPackKey: string | null
   declaredContractTypes: string[]
+  /** Contract types the record itself states it applies to; empty when it states none. */
+  sourceContractTypes: string[]
   partyPerspective: string | null
   paperSource: string | null
   jurisdiction: string | null
@@ -346,6 +355,7 @@ export function parseArtifactSummary(
     id: readString(record, 'id', what),
     artifactType: readEnum(record, 'artifactType', what, ARTIFACT_TYPES),
     filename: readString(record, 'filename', what),
+    documentTitle: readNullableString(record, 'documentTitle', what),
     contentType: readString(record, 'contentType', what),
     sizeBytes: readNumber(record, 'sizeBytes', what),
     sha256: readString(record, 'sha256', what),
@@ -493,6 +503,8 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     candidateType: readEnum(record, 'candidateType', what, CANDIDATE_TYPES),
     reviewStatus: readEnum(record, 'reviewStatus', what, REVIEW_STATUSES),
     rawLabel: readString(record, 'rawLabel', what),
+    editedTitle: readNullableString(record, 'editedTitle', what),
+    title: readString(record, 'title', what),
     contentText: readNullableString(record, 'contentText', what),
     payloadColumns: readStringMap(record, 'payloadColumns', what),
     legalConceptKey: readNullableString(record, 'legalConceptKey', what),
@@ -509,6 +521,10 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     supersedingCandidateId: readNullableString(record, 'supersedingCandidateId', what),
     contractPackKey: readNullableString(record, 'contractPackKey', what),
     declaredContractTypes: readStringArray(record, 'declaredContractTypes', what),
+    sourceContractTypes:
+      record.sourceContractTypes === undefined
+        ? []
+        : readStringArray(record, 'sourceContractTypes', what),
     partyPerspective: readNullableString(record, 'partyPerspective', what),
     paperSource: readNullableString(record, 'paperSource', what),
     jurisdiction: readNullableString(record, 'jurisdiction', what),
@@ -828,13 +844,15 @@ export interface ScopeEditInput {
 
 export interface SemanticFieldsEditInput {
   positions?: PositionRole[]
-  requiresApproval?: boolean
+  /** null means "not specified", which is different from leaving the field unsent. */
+  requiresApproval?: boolean | null
   escalationTrigger?: string
   variantRole?: PositionRole
 }
 
 export interface EditCandidateInput {
   candidateId: string
+  title?: string
   contentText?: string
   payloadColumns?: Record<string, string>
   scope?: ScopeEditInput
@@ -842,13 +860,25 @@ export interface EditCandidateInput {
   note?: string
 }
 
-type EditRequestBody = NonNullable<
+type GeneratedEditRequestBody = NonNullable<
   paths['/api/knowledge/candidates/{id}/edit']['post']['requestBody']
 >['content']['application/json']
+
+/**
+ * The contract accepts an explicit null for counsel approval ("not specified"), but the generated
+ * schema types it as boolean only.
+ */
+type EditRequestBody = Omit<GeneratedEditRequestBody, 'semanticFields'> & {
+  semanticFields?: Omit<
+    NonNullable<GeneratedEditRequestBody['semanticFields']>,
+    'requiresApproval'
+  > & { requiresApproval?: boolean | null }
+}
 
 async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
   const client = createApiClient()
   const body: EditRequestBody = {}
+  if (input.title !== undefined) body.title = input.title
   if (input.contentText !== undefined) body.contentText = input.contentText
   if (input.payloadColumns !== undefined) body.payloadColumns = input.payloadColumns
   if (input.scope !== undefined) body.scope = input.scope
@@ -857,7 +887,7 @@ async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
 
   const { data, response } = await client.POST('/api/knowledge/candidates/{id}/edit', {
     params: { path: { id: input.candidateId } },
-    body,
+    body: body as GeneratedEditRequestBody,
   })
 
   if (!data) {

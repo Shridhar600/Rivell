@@ -45,7 +45,7 @@ function PublishedPeer({ candidateId }: { candidateId: string }) {
 
 function PeerLabel({ candidateId }: { candidateId: string }) {
   const peer = useCandidateQuery(candidateId)
-  return <strong>{peer.data ? peer.data.rawLabel : 'earlier published knowledge'}</strong>
+  return <strong>{peer.data ? peer.data.title : 'earlier published knowledge'}</strong>
 }
 
 interface PeerRelation {

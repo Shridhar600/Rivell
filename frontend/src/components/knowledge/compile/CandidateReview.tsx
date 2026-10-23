@@ -104,7 +104,7 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
               Entry {index} of {total}
             </div>
             <h1 tabIndex={-1} ref={headingRef}>
-              {candidate.rawLabel}
+              {candidate.title}
             </h1>
             <div className="rv-kc-meta">
               <span className={`rv-kc-stb${outcome === 'approved' || outcome === 'published' || outcome === 'corrected' ? ' rv-kc-stb--ok' : ''}`}>{OUTCOME_LABELS[outcome]}</span>

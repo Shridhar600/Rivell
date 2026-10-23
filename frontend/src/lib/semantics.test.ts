@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ArtifactDetail, Candidate } from '../api/knowledge'
 import {
   escalationDiverge,
+  formatBoolean,
   hasSupersessionProposal,
   interpretationFor,
   isBulkEligible,
@@ -10,6 +11,8 @@ import {
   proposedPositions,
   reviewReasonLabel,
   scopeDifferences,
+  semanticDraftFrom,
+  semanticInputFrom,
   variantRoleDiverge,
   VERIFICATION_LABELS,
 } from './semantics'
@@ -22,6 +25,8 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     candidateType: 'PLAYBOOK_RULE',
     reviewStatus: 'PENDING',
     rawLabel: 'Rule',
+    editedTitle: null,
+    title: 'Rule',
     contentText: 'Rule content',
     payloadColumns: {},
     legalConceptKey: 'LIMITATION_OF_LIABILITY',
@@ -38,6 +43,7 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     supersedingCandidateId: null,
     contractPackKey: 'MSA',
     declaredContractTypes: ['MSA'],
+    sourceContractTypes: [],
     partyPerspective: 'Customer',
     paperSource: 'Third-party',
     jurisdiction: 'US',
@@ -58,6 +64,7 @@ const artifact: ArtifactDetail = {
   id: 'a1',
   artifactType: 'PLAYBOOK',
   filename: 'playbook.docx',
+  documentTitle: null,
   contentType: 'application/octet-stream',
   sizeBytes: 2048,
   sha256: 'a'.repeat(64),
@@ -219,6 +226,23 @@ describe('semantic display helpers', () => {
     expect(isBulkEligible(candidate({ reviewCategory: 'ELEVATED' }))).toBe(false)
     expect(isBulkEligible(candidate({ reviewStatus: 'APPROVED' }))).toBe(false)
     expect(isBulkEligible(candidate({ reviewCategory: null }))).toBe(false)
+  })
+
+  it('sends an explicit null when counsel approval is set back to not specified', () => {
+    const current = candidate({ requiresApproval: true, positions: ['PREFERRED'], escalationTrigger: 'Above 2x' })
+    const draft = semanticDraftFrom(current)
+    expect(draft.requiresApproval).toBe('true')
+
+    const unset = semanticInputFrom({ ...draft, requiresApproval: 'unset' }, current)
+
+    expect(unset).toEqual({ positions: ['PREFERRED'], requiresApproval: null, escalationTrigger: 'Above 2x' })
+    expect(formatBoolean(null)).toBe('Not specified')
+  })
+
+  it('sends no approval field when approval did not change', () => {
+    const current = candidate({ requiresApproval: null })
+    const input = semanticInputFrom(semanticDraftFrom(current), current)
+    expect(input).toBeUndefined()
   })
 
   it('detects supersession proposals from conflict signals', () => {

@@ -13,18 +13,19 @@ const LIST_CRUMB: Partial<Record<ArtifactType, Crumb>> = {
 
 interface TopBarProps {
   type: ArtifactType | null
-  filename: string
+  /** The artifact's display name: its document title, else its file name. */
+  name: string
   /** The candidate list is hidden or shown. Absent where there is no list. */
   rail?: { open: boolean; onToggle: () => void; id: string }
   /** Progress and the publish control, when there is a compilation to review. */
   children?: ReactNode
 }
 
-export function CompileTopBar({ type, filename, rail, children }: TopBarProps) {
+export function CompileTopBar({ type, name, rail, children }: TopBarProps) {
   const listCrumb = type ? LIST_CRUMB[type] : undefined
   return (
     <TopBar
-      pageTitle={filename}
+      pageTitle={name}
       leading={
         rail ? (
           <IconButton label="Entry list" expanded={rail.open} controls={rail.id} title={rail.open ? 'Hide list [' : 'Show list ['} onClick={rail.onToggle}>
@@ -34,7 +35,7 @@ export function CompileTopBar({ type, filename, rail, children }: TopBarProps) {
       }
       title={
         <div className="rv-ws-crumbs">
-          <Breadcrumbs crumbs={[{ label: 'Knowledge', to: '/knowledge' }, ...(listCrumb ? [listCrumb] : []), { label: filename }]} />
+          <Breadcrumbs crumbs={[{ label: 'Knowledge', to: '/knowledge' }, ...(listCrumb ? [listCrumb] : []), { label: name }]} />
           {type ? <span className="rv-chip">{kindLabel(type)}</span> : null}
         </div>
       }

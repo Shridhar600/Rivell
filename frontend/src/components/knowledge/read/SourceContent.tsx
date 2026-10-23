@@ -96,7 +96,7 @@ export function SourceContent({ type, blocks, produced, selectedId, onSelect, op
                   aria-pressed={candidate.id === selectedId}
                   onClick={() => onSelect(candidate.id === selectedId ? null : candidate.id)}
                 >
-                  <span>{candidate.rawLabel}</span>
+                  <span>{candidate.title}</span>
                   <ChevronIcon className="rv-icon" />
                 </button>
               </li>
