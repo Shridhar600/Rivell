@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -131,6 +132,93 @@ class KnowledgeApiIT {
         mockMvc.perform(get("/api/knowledge/artifacts/{id}", artifact.get("id").asText()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.filename").value("knowledge-playbook.docx"));
+    }
+
+    @Test
+    void listsApplicablePublishedPlaybooksByContractTypeAndScope() throws Exception {
+        var msa = upload("knowledge-playbook.docx", ArtifactType.PLAYBOOK,
+                "MSA_PACK", "Customer", "Third-Party", "US", "MSA");
+        var msaPublication = publishFirstCandidate(msa.get("id").asText());
+        var nda = upload("knowledge-playbook.docx", ArtifactType.PLAYBOOK,
+                null, null, null, null, "NDA");
+        var ndaPublication = publishFirstCandidate(nda.get("id").asText());
+        var all = upload("knowledge-playbook.docx", ArtifactType.PLAYBOOK,
+                null, null, null, null, null);
+        var allPublication = publishFirstCandidate(all.get("id").asText());
+
+        var mutual = mockMvc.perform(get("/api/knowledge/applicable")
+                        .param("contractType", "MNDA"))
+                .andExpect(status().isOk())
+                .andReturn();
+        var mutualData = objectMapper.readTree(mutual.getResponse().getContentAsString()).get("data");
+        var mutualIds = new ArrayList<String>();
+        mutualData.forEach(node -> mutualIds.add(node.get("artifactId").asText()));
+        assertThat(mutualIds).containsExactlyInAnyOrder(
+                nda.get("id").asText(), all.get("id").asText());
+        var mutualNda = mutualData.get(0).get("artifactId").asText().equals(nda.get("id").asText())
+                ? mutualData.get(0) : mutualData.get(1);
+        assertThat(mutualNda.get("artifactType").asText()).isEqualTo("PLAYBOOK");
+        assertThat(mutualNda.get("name").asText()).isEqualTo("Negotiation Playbook 2026");
+        assertThat(mutualNda.get("publicationNumber").asLong()).isEqualTo(ndaPublication);
+
+        var msaResult = mockMvc.perform(get("/api/knowledge/applicable")
+                        .param("contractType", "MSA"))
+                .andExpect(status().isOk())
+                .andReturn();
+        var msaData = objectMapper.readTree(msaResult.getResponse().getContentAsString()).get("data");
+        var msaIds = new ArrayList<String>();
+        msaData.forEach(node -> msaIds.add(node.get("artifactId").asText()));
+        assertThat(msaIds).containsExactlyInAnyOrder(
+                msa.get("id").asText(), all.get("id").asText());
+        var msaVersions = new ArrayList<Long>();
+        msaData.forEach(node -> msaVersions.add(node.get("publicationNumber").asLong()));
+        assertThat(msaVersions).containsExactlyInAnyOrder(msaPublication, allPublication);
+
+        // A declared jurisdiction narrows the set; the file that declared none stays a wildcard.
+        var uk = mockMvc.perform(get("/api/knowledge/applicable")
+                        .param("contractType", "MSA")
+                        .param("jurisdiction", "UK"))
+                .andExpect(status().isOk())
+                .andReturn();
+        var ukData = objectMapper.readTree(uk.getResponse().getContentAsString()).get("data");
+        assertThat(ukData.size()).isEqualTo(1);
+        assertThat(ukData.get(0).get("artifactId").asText()).isEqualTo(all.get("id").asText());
+    }
+
+    @Test
+    void applicableKnowledgeDefaultsToTodayForEffectiveWindows() throws Exception {
+        var expired = uploadWithPeriod("knowledge-playbook.docx", ArtifactType.PLAYBOOK,
+                null, null, null, null, "MSA",
+                LocalDate.of(2020, 1, 1), LocalDate.of(2020, 12, 31));
+        publishFirstCandidate(expired.get("id").asText());
+
+        mockMvc.perform(get("/api/knowledge/applicable").param("contractType", "MSA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        mockMvc.perform(get("/api/knowledge/applicable")
+                        .param("contractType", "MSA")
+                        .param("effectiveOn", "2020-06-01"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].artifactId").value(expired.get("id").asText()));
+    }
+
+    @Test
+    void applicableKnowledgeLeavesDraftsOutAndRequiresAReadPermission() throws Exception {
+        var draft = upload("knowledge-playbook.docx", ArtifactType.PLAYBOOK,
+                null, null, null, null, "MSA");
+
+        mockMvc.perform(get("/api/knowledge/applicable").param("contractType", "MSA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        identityProvider.use(new UserIdentity(
+                UUID.randomUUID(), UUID.randomUUID(), Set.of()));
+        mockMvc.perform(get("/api/knowledge/applicable")
+                        .param("contractType", "MSA"))
+                .andExpect(status().isForbidden());
+        assertThat(draft.get("ingestStatus").asText()).isEqualTo("EXTRACTED");
     }
 
     @Test
@@ -317,10 +405,36 @@ class KnowledgeApiIT {
                         .value("Escalate every walk-away to the General Counsel."));
     }
 
+    private long publishFirstCandidate(String artifactId) throws Exception {
+        var candidates = mockMvc.perform(
+                        get("/api/knowledge/artifacts/{id}/candidates", artifactId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        var candidateId = objectMapper.readTree(candidates).get("data").get(0).get("id").asText();
+        mockMvc.perform(post("/api/knowledge/candidates/{id}/approve", candidateId)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk());
+        var publication = mockMvc.perform(post("/api/knowledge/publications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"candidateIds\":[\"%s\"]}".formatted(candidateId)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(publication).get("data").get("publicationNumber").asLong();
+    }
+
     private JsonNode upload(
             String fixture, ArtifactType artifactType, String contractPackKey,
             String partyPerspective, String paperSource, String jurisdiction,
             String declaredContractTypes) throws Exception {
+        return uploadWithPeriod(fixture, artifactType, contractPackKey, partyPerspective,
+                paperSource, jurisdiction, declaredContractTypes, null, null);
+    }
+
+    private JsonNode uploadWithPeriod(
+            String fixture, ArtifactType artifactType, String contractPackKey,
+            String partyPerspective, String paperSource, String jurisdiction,
+            String declaredContractTypes, LocalDate effectiveFrom, LocalDate effectiveTo)
+            throws Exception {
         byte[] bytes;
         try (var stream = getClass().getClassLoader()
                 .getResourceAsStream("fixtures/" + fixture)) {
@@ -338,6 +452,12 @@ class KnowledgeApiIT {
         }
         if (declaredContractTypes != null) {
             request = request.param("declaredContractTypes", declaredContractTypes);
+        }
+        if (effectiveFrom != null) {
+            request = request.param("effectiveFrom", effectiveFrom.toString());
+        }
+        if (effectiveTo != null) {
+            request = request.param("effectiveTo", effectiveTo.toString());
         }
 
         MvcResult result = mockMvc.perform(request)

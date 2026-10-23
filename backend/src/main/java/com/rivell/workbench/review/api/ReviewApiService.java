@@ -473,7 +473,16 @@ public class ReviewApiService {
                         snapshot.packVersion(),
                         snapshot.knowledgePinNumber(),
                         snapshot.effectiveOn(),
-                        snapshot.reviewEngine().name()),
+                        snapshot.reviewEngine().name(),
+                        snapshot.applicableKnowledge() == null
+                                ? null
+                                : snapshot.applicableKnowledge().stream()
+                                        .map(knowledge -> new ReviewSummaryView.PlaybookUsedView(
+                                                knowledge.artifactId(),
+                                                knowledge.artifactType().name(),
+                                                knowledge.name(),
+                                                knowledge.publicationNumber()))
+                                        .toList()),
                 coverage(organizationId, reviewId, counted),
                 warnings.items(),
                 warnings.truncated());

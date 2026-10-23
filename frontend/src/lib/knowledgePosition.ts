@@ -79,6 +79,11 @@ export function contractTypesText(types: string[]): string | null {
   return labels.length > 0 ? labels.join(', ') : null
 }
 
+/** The same, with the meaning of an empty declaration stated plainly. */
+export function contractTypesLabel(types: string[]): string {
+  return contractTypesText(types) ?? 'All contract types'
+}
+
 /**
  * The applicability the source declared for this passage. Only what was actually declared is
  * listed: an unset field is absent, never "Any". `contractTypes` lets a caller show the record's
@@ -92,8 +97,13 @@ export function scopeRows(
 ): ScopeRow[] {
   const rows: ScopeRow[] = []
   const types = contractTypes.map((type) => labelled(CONTRACT_TYPE_LABELS, type))
-  if (candidate.contractPackKey) types.push(`${humanizeCode(candidate.contractPackKey)} pack`)
-  if (types.length > 0) rows.push({ label: 'Applies to', value: types.join(', ') })
+  const pack = candidate.contractPackKey ? `${humanizeCode(candidate.contractPackKey)} pack` : null
+  if (types.length > 0) {
+    if (pack) types.push(pack)
+    rows.push({ label: 'Applies to', value: types.join(', ') })
+  } else if (pack) {
+    rows.push({ label: 'Applies to', value: `All contract types, ${pack}` })
+  }
   if (candidate.paperSource) rows.push({ label: 'Paper', value: labelled(PAPER_SOURCE_LABELS, candidate.paperSource) })
   if (candidate.partyPerspective) rows.push({ label: 'Perspective', value: roleLabel(candidate.partyPerspective) })
   if (candidate.jurisdiction) rows.push({ label: 'Jurisdiction', value: labelled(JURISDICTION_LABELS, candidate.jurisdiction) })
@@ -103,6 +113,20 @@ export function scopeRows(
   else if (from) rows.push({ label: 'Effective', value: `From ${from}` })
   else if (to) rows.push({ label: 'Effective', value: `Until ${to}` })
   return rows
+}
+
+/**
+ * The same rows for a reader: a contract-type scope that was not declared is shown as what it
+ * means, not left out. Other absent dimensions stay absent.
+ */
+export function displayScopeRows(
+  candidate: Candidate,
+  contractTypes?: string[],
+): ScopeRow[] {
+  const rows = scopeRows(candidate, contractTypes)
+  return rows.some((row) => row.label === 'Applies to')
+    ? rows
+    : [{ label: 'Applies to', value: 'All contract types' }, ...rows]
 }
 
 export function conceptName(candidate: Candidate, label: ConceptLabel): string | null {

@@ -450,6 +450,12 @@ class KnowledgeReviewConcurrencyIT {
         }
 
         @Override
+        public List<com.rivell.workbench.knowledge.ApplicableKnowledge> findApplicableKnowledge(
+                com.rivell.workbench.knowledge.ApplicableKnowledgeQuery query) {
+            return delegate.findApplicableKnowledge(query);
+        }
+
+        @Override
         public List<UUID> organizationsWithPublishedKnowledge() {
             return delegate.organizationsWithPublishedKnowledge();
         }

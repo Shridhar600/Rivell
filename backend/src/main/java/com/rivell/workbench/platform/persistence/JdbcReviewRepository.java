@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
+import com.rivell.workbench.knowledge.ApplicableKnowledge;
+import com.rivell.workbench.knowledge.ArtifactType;
 import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
@@ -71,7 +73,8 @@ class JdbcReviewRepository implements ReviewRepository {
                    pack_version, knowledge_pin_number, effective_on,
                    review_pipeline_version, embedding_index_version,
                    embedding_model_identity, decision_provider_id, decision_model_alias,
-                   generative_provider_id, generative_model_alias, review_engine, created_at)
+                   generative_provider_id, generative_model_alias, review_engine,
+                   applicable_knowledge_frozen, created_at)
                 values (:reviewId, :organizationId, :contractId, :contractVersionId,
                    :contractVersionNumber, :contractSemanticsId,
                    :semanticsPipelineVersion, :semanticsDigest, :contractType,
@@ -79,7 +82,8 @@ class JdbcReviewRepository implements ReviewRepository {
                    :packVersion, :knowledgePinNumber, :effectiveOn,
                    :reviewPipelineVersion, :embeddingIndexVersion,
                    :embeddingModelIdentity, :decisionProviderId, :decisionModelAlias,
-                   :generativeProviderId, :generativeModelAlias, :reviewEngine, :createdAt)
+                   :generativeProviderId, :generativeModelAlias, :reviewEngine,
+                   :applicableKnowledgeFrozen, :createdAt)
                 """)
                 .param("reviewId", snapshot.reviewId())
                 .param("organizationId", snapshot.organizationId())
@@ -105,8 +109,30 @@ class JdbcReviewRepository implements ReviewRepository {
                 .param("generativeProviderId", snapshot.modelPolicy().generativeProviderId())
                 .param("generativeModelAlias", snapshot.modelPolicy().generativeModelAlias())
                 .param("reviewEngine", snapshot.reviewEngine().name())
+                .param("applicableKnowledgeFrozen", snapshot.applicableKnowledge() != null)
                 .param("createdAt", timestamp(snapshot.createdAt()))
                 .update();
+
+        if (snapshot.applicableKnowledge() != null) {
+            var ordinal = 0;
+            for (var knowledge : snapshot.applicableKnowledge()) {
+                jdbcClient.sql("""
+                        insert into review_applicable_knowledge
+                          (review_id, organization_id, ordinal, artifact_id, artifact_type, name,
+                           publication_number)
+                        values (:reviewId, :organizationId, :ordinal, :artifactId, :artifactType,
+                           :name, :publicationNumber)
+                        """)
+                        .param("reviewId", snapshot.reviewId())
+                        .param("organizationId", snapshot.organizationId())
+                        .param("ordinal", ordinal++)
+                        .param("artifactId", knowledge.artifactId())
+                        .param("artifactType", knowledge.artifactType().name())
+                        .param("name", knowledge.name())
+                        .param("publicationNumber", knowledge.publicationNumber())
+                        .update();
+            }
+        }
 
         for (var check : checks) {
             jdbcClient.sql("""
@@ -198,6 +224,20 @@ class JdbcReviewRepository implements ReviewRepository {
     @Override
     @Transactional(readOnly = true)
     public Optional<ReviewSnapshot> findSnapshot(UUID organizationId, UUID reviewId) {
+        var frozen = jdbcClient.sql("""
+                        select applicable_knowledge_frozen from review_snapshot
+                        where review_id = :reviewId and organization_id = :organizationId
+                        """)
+                .param("reviewId", reviewId)
+                .param("organizationId", organizationId)
+                .query(Boolean.class)
+                .optional();
+        if (frozen.isEmpty()) {
+            return Optional.empty();
+        }
+        var applicableKnowledge = frozen.get()
+                ? findApplicableKnowledge(organizationId, reviewId)
+                : null;
         return jdbcClient.sql("""
                 select review_id, organization_id, contract_id, contract_version_id,
                        contract_version_number, contract_semantics_id,
@@ -238,8 +278,26 @@ class JdbcReviewRepository implements ReviewRepository {
                                 rs.getString("generative_provider_id"),
                                 rs.getString("generative_model_alias")),
                         ReviewEngine.valueOf(rs.getString("review_engine")),
+                        applicableKnowledge,
                         rs.getTimestamp("created_at").toInstant()))
                 .optional();
+    }
+
+    private List<ApplicableKnowledge> findApplicableKnowledge(UUID organizationId, UUID reviewId) {
+        return jdbcClient.sql("""
+                        select artifact_id, artifact_type, name, publication_number
+                        from review_applicable_knowledge
+                        where review_id = :reviewId and organization_id = :organizationId
+                        order by ordinal
+                        """)
+                .param("reviewId", reviewId)
+                .param("organizationId", organizationId)
+                .query((rs, rowNum) -> new ApplicableKnowledge(
+                        rs.getObject("artifact_id", UUID.class),
+                        ArtifactType.valueOf(rs.getString("artifact_type")),
+                        rs.getString("name"),
+                        rs.getLong("publication_number")))
+                .list();
     }
 
     @Override

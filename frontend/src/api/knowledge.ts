@@ -636,6 +636,81 @@ export const knowledgeKeys = {
   candidate: (id: string) => ['knowledge', 'candidates', id] as const,
   publications: ['knowledge', 'publications'] as const,
   publication: (id: string) => ['knowledge', 'publications', id] as const,
+  applicable: (query: ApplicableKnowledgeQuery) =>
+    [
+      'knowledge',
+      'applicable',
+      query.contractType,
+      query.jurisdiction ?? '',
+      query.partyPerspective ?? '',
+      query.paperSource ?? '',
+      query.contractPackKey ?? '',
+      query.effectiveOn ?? '',
+    ] as const,
+}
+
+/** The declared context a review will use, as the applicability preview asks about it. */
+export interface ApplicableKnowledgeQuery {
+  contractType: string
+  jurisdiction?: string
+  partyPerspective?: string
+  paperSource?: string
+  contractPackKey?: string
+  effectiveOn?: string
+}
+
+export interface ApplicableKnowledge {
+  artifactId: string
+  artifactType: ArtifactType
+  name: string
+  publicationNumber: number
+}
+
+function parseApplicableKnowledge(value: unknown, what = 'applicable knowledge'): ApplicableKnowledge {
+  const record = asRecord(value, what)
+  return {
+    artifactId: readString(record, 'artifactId', what),
+    artifactType: readEnum(record, 'artifactType', what, ARTIFACT_TYPES),
+    name: readString(record, 'name', what),
+    publicationNumber: readNumber(record, 'publicationNumber', what),
+  }
+}
+
+/**
+ * Published playbooks and clause libraries that apply to the declared context. The backend applies
+ * the same matching rule as the analysis, so the client never re-implements it.
+ */
+export async function fetchApplicableKnowledge(
+  query: ApplicableKnowledgeQuery,
+): Promise<ApplicableKnowledge[]> {
+  const client = createApiClient()
+  const { data, response } = await client.GET('/api/knowledge/applicable', {
+    params: { query },
+  })
+  if (!data) {
+    throw new KnowledgeApiError(
+      response.status,
+      boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Applicable playbooks unavailable'),
+    )
+  }
+  return parseApiResult(
+    data,
+    (raw, what) => readArrayValue(raw, what, parseApplicableKnowledge),
+    'applicable knowledge',
+  )
+}
+
+export function useApplicableKnowledgeQuery(
+  query: ApplicableKnowledgeQuery,
+  enabled = true,
+): UseQueryResult<ApplicableKnowledge[], Error> {
+  return useQuery({
+    retry: knowledgeRetry,
+    queryKey: knowledgeKeys.applicable(query),
+    queryFn: () => fetchApplicableKnowledge(query),
+    enabled: enabled && query.contractType.length > 0,
+    staleTime: 30_000,
+  })
 }
 
 export function isProcessingArtifact(status: IngestStatus): boolean {

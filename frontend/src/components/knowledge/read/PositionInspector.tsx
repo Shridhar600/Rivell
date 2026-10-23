@@ -6,7 +6,7 @@ import { useTaxonomy } from '../../../api/taxonomy'
 import { longDate } from '../../../lib/dates'
 import { resolveCandidateSource } from '../../../lib/candidates'
 import { positionText, type PublicationRef } from '../../../lib/knowledgeCatalog'
-import { conceptName, positionRoles, POSITION_ROLE_LABELS, scopeRows } from '../../../lib/knowledgePosition'
+import { conceptName, displayScopeRows, positionRoles, POSITION_ROLE_LABELS } from '../../../lib/knowledgePosition'
 import { sourceLocation } from '../../../lib/knowledgeSource'
 import { ArrowRightIcon } from '../../ui/Icon'
 
@@ -57,7 +57,7 @@ export function PositionInspector({ candidate, artifact, publication }: Position
             <dd>{concept}</dd>
           </>
         ) : null}
-        {scopeRows(candidate).map((row) => (
+        {displayScopeRows(candidate).map((row) => (
           <Fragment key={row.label}>
             <dt>{row.label}</dt>
             <dd>{row.value}</dd>

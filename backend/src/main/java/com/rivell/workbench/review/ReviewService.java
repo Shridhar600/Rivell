@@ -15,9 +15,11 @@ import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.EnrichmentFailedException;
 import com.rivell.workbench.contracts.EnrichmentInProgressException;
 import com.rivell.workbench.contracts.EnrichmentStatus;
+import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.contracts.SemanticsNotFoundException;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
+import com.rivell.workbench.knowledge.ApplicableKnowledgeQuery;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
@@ -140,6 +142,19 @@ public class ReviewService {
         // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
         // stored rounded, so the returned review would not match a later read of it.
         var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        var effectiveOn = LocalDate.now(clock);
+        var knowledgePinNumber = knowledgeQueryService.maxPublicationNumberForOrganization(organizationId);
+        // The snapshot freezes the playbooks and clause libraries the analysis may use, resolved by
+        // the same rule retrieval applies. A review created before this freeze has no such list and
+        // must never be recomputed at read time.
+        var applicableKnowledge = knowledgeQueryService.applicableKnowledgeForOrganization(
+                new ApplicableKnowledgeQuery(
+                        organizationId, knowledgePinNumber, profile.contractType().name(), packKey,
+                        profile.ourSideRole() == null ? null : profile.ourSideRole().name(),
+                        profile.paperSource() == null ? null : profile.paperSource().name(),
+                        profile.jurisdiction() == Jurisdiction.UNSPECIFIED
+                                ? null : profile.jurisdiction().name(),
+                        effectiveOn));
         var reviewId = UUID.randomUUID();
         var bindings = modelBindingCatalog.current();
         var snapshot = new ReviewSnapshot(
@@ -148,8 +163,8 @@ public class ReviewService {
                 profile.jurisdiction(), packKey,
                 pack == null ? null : pack.version(),
                 semantics.id(), semantics.pipelineVersion(), SemanticsDigest.of(semantics),
-                knowledgeQueryService.maxPublicationNumber(),
-                LocalDate.now(clock), ReviewPipeline.VERSION,
+                knowledgePinNumber,
+                effectiveOn, ReviewPipeline.VERSION,
                 retrievalProperties.indexVersion(),
                 embeddingService.isConfigured() ? embeddingService.modelIdentity() : null,
                 new ModelPolicyIdentity(
@@ -158,6 +173,7 @@ public class ReviewService {
                         bindings.generativeProvider().providerId(),
                         bindings.generativeProvider().modelAlias()),
                 ReviewEngine.V2,
+                applicableKnowledge,
                 now);
         var review = Review.analysisQueued(
                 reviewId, organizationId, contractId, version.versionId(), versionNumber,

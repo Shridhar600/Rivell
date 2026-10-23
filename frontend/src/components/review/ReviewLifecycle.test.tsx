@@ -92,6 +92,45 @@ describe('review lifecycle states', () => {
     expect(check).toBeInTheDocument()
   })
 
+  it('shows the playbooks the analysis froze in the review notes', async () => {
+    renderReview({
+      ...fixtureCompletedReviewSummary,
+      snapshot: {
+        ...fixtureCompletedReviewSummary.snapshot,
+        playbooksUsed: [
+          {
+            artifactId: 'pb-1',
+            artifactType: 'PLAYBOOK',
+            name: 'Commercial MSA Playbook',
+            publicationNumber: 6,
+          },
+          {
+            artifactId: 'cl-1',
+            artifactType: 'CLAUSE_LIBRARY',
+            name: 'Clause Library',
+            publicationNumber: 4,
+          },
+        ],
+      },
+    })
+    const sheet = await openReviewNotes()
+    expect(within(sheet).getByText('Playbooks used')).toBeInTheDocument()
+    expect(
+      within(sheet).getByText('Commercial MSA Playbook, Clause Library'),
+    ).toBeInTheDocument()
+  })
+
+  it('states the empty case in the review notes when no playbook applied', async () => {
+    renderReview({
+      ...fixtureCompletedReviewSummary,
+      snapshot: { ...fixtureCompletedReviewSummary.snapshot, playbooksUsed: [] },
+    })
+    const sheet = await openReviewNotes()
+    expect(
+      within(sheet).getByText('No playbook covers this contract type. Rivell checks general risks only.'),
+    ).toBeInTheDocument()
+  })
+
   it('renders a technical failure distinctly and never leaks the raw reason', async () => {
     renderReview(fixtureFailedReviewSummary)
 

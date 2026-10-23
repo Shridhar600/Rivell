@@ -35,7 +35,7 @@ import { useSemanticsQuery } from '../api/semantics'
 import { useTaxonomy } from '../api/taxonomy'
 import { buildRegionLabelMap, CONTRACT_TYPE_LABELS } from '../lib/contractSemantics'
 import { clearResumeFor, writeResume } from '../lib/resume'
-import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun } from '../lib/reviews'
+import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun, playbooksUsedText } from '../lib/reviews'
 import {
   defaultFinding,
   executableChange,
@@ -580,7 +580,15 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       : undefined
   const contractType = summary.snapshot?.profile?.contractType
   const pin = summary.snapshot?.knowledgePinNumber
-  const context = [profileLine(summary.snapshot), pin ? `Knowledge version ${pin}` : null].filter(Boolean).join('. ') || null
+  const playbooksUsed = playbooksUsedText(summary.snapshot?.playbooksUsed ?? null)
+  const context =
+    [
+      profileLine(summary.snapshot),
+      pin ? `Knowledge version ${pin}` : null,
+      playbooksUsed !== null ? `Playbooks used: ${playbooksUsed}` : null,
+    ]
+      .filter(Boolean)
+      .join('. ') || null
 
   // The search menu lists this review's findings and commands first, and can find text in the contract.
   usePageCommands(() => ({

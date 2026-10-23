@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FindingQuality } from '../api/reviews'
-import { clauseMarkLabel, clauseMarksLegend, decidedByLabel, findingIssueLabel } from './reviews'
+import { clauseMarkLabel, clauseMarksLegend, decidedByLabel, findingIssueLabel, NO_PLAYBOOK_COVERS, playbooksUsedText } from './reviews'
 
 const quality = (overrides: Partial<FindingQuality>): FindingQuality => ({
   sufficiency: null,
@@ -65,5 +65,21 @@ describe('a finding a reviewer added', () => {
     expect(findingIssueLabel({ issueFamily: 'USER_ADDED', observationKind: 'USER_ADDED' })).toBe(
       'Added by a reviewer',
     )
+  })
+})
+
+describe('playbooks used', () => {
+  it('names what the review froze, in the order it froze them', () => {
+    expect(playbooksUsedText([{ name: 'Commercial MSA Playbook' }, { name: 'Clause Library' }])).toBe(
+      'Commercial MSA Playbook, Clause Library',
+    )
+  })
+
+  it('states the empty case plainly', () => {
+    expect(playbooksUsedText([])).toBe(NO_PLAYBOOK_COVERS)
+  })
+
+  it('shows nothing for a review that predates the freeze', () => {
+    expect(playbooksUsedText(null)).toBeNull()
   })
 })

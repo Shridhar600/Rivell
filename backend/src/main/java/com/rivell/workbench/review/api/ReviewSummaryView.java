@@ -7,6 +7,8 @@ import java.util.UUID;
 
 import com.rivell.workbench.review.ProposedChangeCounts;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * Review summary: lifecycle state, active generation, counts, the frozen snapshot
  * context, coverage limitations, and sanitized analysis warnings. Internal snapshot
@@ -68,7 +70,22 @@ public record ReviewSummaryView(
             String packVersion,
             long knowledgePinNumber,
             LocalDate effectiveOn,
-            String engine) {
+            String engine,
+            /**
+             * The published playbooks and clause libraries this review froze at creation.
+             * Null on a review created before the freeze existed, which must show nothing rather
+             * than recompute the applicable set. An empty list means none applied.
+             */
+            @Schema(nullable = true)
+            List<PlaybookUsedView> playbooksUsed) {
+    }
+
+    /** One published playbook or clause library the analysis may use, with its knowledge version. */
+    public record PlaybookUsedView(
+            UUID artifactId,
+            String artifactType,
+            String name,
+            long publicationNumber) {
     }
 
     public record ProfileView(

@@ -86,6 +86,51 @@ afterEach(() => {
 })
 
 describe('analysis states', () => {
+  it('names the playbooks the review froze on the overview', async () => {
+    stubContractApi({
+      reviewSummary: {
+        ...fixtureQueuedReviewSummary,
+        snapshot: {
+          ...fixtureQueuedReviewSummary.snapshot,
+          playbooksUsed: [
+            {
+              artifactId: 'pb-1',
+              artifactType: 'PLAYBOOK',
+              name: 'Commercial MSA Playbook',
+              publicationNumber: 6,
+            },
+          ],
+        },
+      },
+    })
+    renderAt(PATH)
+    expect(
+      await screen.findByText('Playbooks used: Commercial MSA Playbook'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows nothing for a review created before the playbook freeze existed', async () => {
+    stubContractApi({ reviewSummary: fixtureQueuedReviewSummary })
+    renderAt(PATH)
+    await screen.findByRole('heading', { name: 'Waiting for analysis to start' })
+    expect(screen.queryByText(/Playbooks used/)).not.toBeInTheDocument()
+  })
+
+  it('states the empty case when the analysis used no playbook', async () => {
+    stubContractApi({
+      reviewSummary: {
+        ...fixtureQueuedReviewSummary,
+        snapshot: { ...fixtureQueuedReviewSummary.snapshot, playbooksUsed: [] },
+      },
+    })
+    renderAt(PATH)
+    expect(
+      await screen.findByText(
+        'Playbooks used: No playbook covers this contract type. Rivell checks general risks only.',
+      ),
+    ).toBeInTheDocument()
+  })
+
   it('queued: says analysis has not started, with no progress claim and no human-review reads', async () => {
     const api = stubContractApi({ reviewSummary: fixtureQueuedReviewSummary })
     renderAt(PATH)

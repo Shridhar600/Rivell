@@ -79,9 +79,10 @@ class KnowledgeServicesConfiguration {
     KnowledgeQueryService knowledgeQueryService(
             KnowledgeRepository knowledgeRepository,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            java.time.Clock clock) {
         return new KnowledgeQueryService(
-                knowledgeRepository, identityProvider, authorizationService);
+                knowledgeRepository, identityProvider, authorizationService, clock);
     }
 
     @Bean

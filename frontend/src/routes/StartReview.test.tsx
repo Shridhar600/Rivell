@@ -29,26 +29,35 @@ const ingest = {
 }
 
 interface Call {
-  step: 'upload' | 'enrich' | 'create' | 'other'
+  step: 'upload' | 'enrich' | 'create'
   body: Record<string, unknown> | null
 }
+
+type Calls = Call[] & { applicable: URLSearchParams[] }
 
 interface Behaviour {
   upload?: () => Response | Promise<Response>
   enrich?: () => Response | Promise<Response>
   create?: () => Response | Promise<Response>
+  applicable?: unknown[]
 }
 
 /** Replies per endpoint and records the three Start Review requests, in the order they arrive. */
 function stub(behaviour: Behaviour = {}) {
-  const calls: Call[] = []
+  const calls = [] as unknown as Calls
+  calls.applicable = []
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(String(input), init)
-      const path = new URL(request.url).pathname
+      const url = new URL(request.url)
+      const path = url.pathname
       const method = request.method
       if (method === 'GET' && path === '/api/reviews/packs') return ok(fixturePackCatalog)
+      if (method === 'GET' && path === '/api/knowledge/applicable') {
+        calls.applicable.push(url.searchParams)
+        return ok(behaviour.applicable ?? [])
+      }
       if (method === 'POST' && path === '/api/contracts') {
         calls.push({ step: 'upload', body: null })
         return behaviour.upload ? behaviour.upload() : ok(ingest)
@@ -117,9 +126,40 @@ describe('Start Review: the canonical page', () => {
     expect(startButton()).toBeDisabled()
     await userEvent.upload(screen.getByLabelText('Contract file (Word)'), docx())
     expect(startButton()).toBeDisabled()
+    expect(calls.applicable).toHaveLength(0)
     await userEvent.selectOptions(screen.getByLabelText('Contract type'), 'MSA')
     expect(startButton()).toBeEnabled()
     expect(calls).toHaveLength(0)
+    expect(calls.applicable).toHaveLength(1)
+    expect(calls.applicable[0]?.get('contractType')).toBe('MSA')
+    expect(calls.applicable[0]?.get('jurisdiction')).toBeNull()
+  })
+
+  it('shows the published playbooks and clause libraries that will apply, capped at five', async () => {
+    const knowledge = Array.from({ length: 6 }, (_, index) => ({
+      artifactId: `k${index}`,
+      artifactType: index === 1 ? 'CLAUSE_LIBRARY' : 'PLAYBOOK',
+      name: `Applicable ${index + 1}`,
+      publicationNumber: index + 1,
+    }))
+    stub({ applicable: knowledge })
+    renderPage()
+    await userEvent.selectOptions(await screen.findByLabelText('Contract type'), 'MSA')
+
+    expect(await screen.findByText('Applicable 1, version 1')).toBeInTheDocument()
+    expect(screen.getByText('Applicable 2, version 2')).toBeInTheDocument()
+    expect(screen.getByText('Applicable 5, version 5')).toBeInTheDocument()
+    expect(screen.getByText('and 1 more')).toBeInTheDocument()
+    expect(screen.queryByText('Applicable 6, version 6')).not.toBeInTheDocument()
+  })
+
+  it('says plainly when no playbook covers the chosen contract type', async () => {
+    stub({ applicable: [] })
+    renderPage()
+    await userEvent.selectOptions(await screen.findByLabelText('Contract type'), 'MSA')
+    expect(
+      await screen.findByText('No playbook covers this contract type. Rivell checks general risks only.'),
+    ).toBeInTheDocument()
   })
 
   it('offers the declared jurisdictions beyond the United States and the United Kingdom', async () => {

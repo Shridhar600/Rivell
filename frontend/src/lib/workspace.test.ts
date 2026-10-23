@@ -120,6 +120,7 @@ describe('profileLine', () => {
       knowledgePinNumber: null,
       effectiveOn: null,
       engine: null,
+      playbooksUsed: null,
     }
     expect(profileLine(snapshot)).toBe('MSA, counterparty paper, our side customer')
     expect(profileLine({ ...snapshot, profile: null })).toBeNull()

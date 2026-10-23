@@ -199,8 +199,15 @@ export function interpretationRows(
   const fileTypes = file?.declaredContractTypes ?? []
   const scopeSupport = supportNote(interpretationFor(candidate, 'scope'))
   const hasAppliesTo = scope.some((row) => row.label === 'Applies to')
-  if (scope.length === 0 && fileTypes.length === 0) {
-    rows.push({ key: 'scope', label: 'Applies to', value: 'Not declared', machine: null, support: scopeSupport, corrected: false })
+  if (scope.length === 0) {
+    rows.push({
+      key: file ? 'scope:File scope' : 'scope',
+      label: file ? 'File scope' : 'Applies to',
+      value: 'All contract types',
+      machine: null,
+      support: scopeSupport,
+      corrected: false,
+    })
   } else {
     // The declared types row is the record's own when the record states one. Otherwise it is
     // inherited from the file's manifest and says so, rather than repeating "Applies to".
@@ -222,11 +229,16 @@ export function interpretationRows(
       recordTypes.length > 0 &&
       fileTypes.length > 0 &&
       !sameContractTypes(recordTypes, fileTypes)
-    if (ownScopeDiffers || (!hasAppliesTo && fileTypes.length > 0)) {
+    const inheritedScopeShown = hasAppliesTo && inheritedFromFile
+    const needsFileScope =
+      file !== undefined &&
+      !inheritedScopeShown &&
+      (ownTypes.length === 0 || !sameContractTypes(ownTypes, fileTypes))
+    if (ownScopeDiffers || needsFileScope) {
       rows.push({
         key: 'scope:File scope',
         label: 'File scope',
-        value: contractTypesText(fileTypes) ?? '',
+        value: contractTypesText(fileTypes) ?? 'All contract types',
         machine: null,
         support: hasAppliesTo ? null : scopeSupport,
         corrected: false,

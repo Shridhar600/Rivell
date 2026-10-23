@@ -51,7 +51,7 @@ describe('structured interpretation', () => {
     expect(row(rows, 'approval')).toBeUndefined()
     expect(row(rows, 'concept')?.value).toBe('Not classified')
     expect(row(rows, 'wording')?.value).toBe('No wording was read')
-    expect(row(rows, 'scope')?.value).toBe('Not declared')
+    expect(row(rows, 'scope')?.value).toBe('All contract types')
   })
 
   it('shows a clause with its role and approved wording', () => {
@@ -190,6 +190,31 @@ describe('structured interpretation', () => {
     )
     expect(row(own, 'scope:Applies to')).toMatchObject({ label: 'Applies to', value: 'NDA' })
     expect(row(own, 'scope:File scope')).toMatchObject({ label: 'File scope', value: 'MSA' })
+  })
+
+  it('says a file with no declared types applies to all contract types', () => {
+    const rows = interpretationRows(make(), file([]))
+    expect(row(rows, 'scope:File scope')).toMatchObject({
+      label: 'File scope',
+      value: 'All contract types',
+    })
+  })
+
+  it('shows the file scope when an all-types file is narrowed by the entry', () => {
+    const narrowed = interpretationRows(make({ sourceContractTypes: ['NDA'] }), file([]))
+    expect(row(narrowed, 'scope:Applies to')).toMatchObject({ label: 'Applies to', value: 'NDA' })
+    expect(row(narrowed, 'scope:File scope')).toMatchObject({
+      label: 'File scope',
+      value: 'All contract types',
+    })
+  })
+
+  it('shows the file scope when only another dimension narrows the entry', () => {
+    const rows = interpretationRows(make({ jurisdiction: 'UK' }), file([]))
+    expect(row(rows, 'scope:File scope')).toMatchObject({
+      label: 'File scope',
+      value: 'All contract types',
+    })
   })
 })
 

@@ -71,6 +71,14 @@ export type ReviewSnapshotProfile = {
   contractPackKey: string | null
 }
 
+/** A published playbook or clause library the review froze at creation. */
+export type PlaybookUsed = {
+  artifactId: string
+  artifactType: string
+  name: string
+  publicationNumber: number
+}
+
 export type ReviewSnapshot = {
   profile: ReviewSnapshotProfile | null
   packVersion: string | null
@@ -78,6 +86,8 @@ export type ReviewSnapshot = {
   effectiveOn: string | null
   /** The review engine the review is frozen on: 'V1' (one review) or 'V2' (a second opinion when the first review is unsure). */
   engine: string | null
+  /** Null on a review created before the freeze existed; empty means none applied. */
+  playbooksUsed: PlaybookUsed[] | null
 }
 
 export const COVERAGE_STATES = [
@@ -445,6 +455,20 @@ function parseSnapshotProfile(value: unknown, what: string): ReviewSnapshotProfi
   }
 }
 
+function parsePlaybooksUsed(value: unknown, what: string): PlaybookUsed[] | null {
+  if (value === null || value === undefined) return null
+  if (!Array.isArray(value)) throw malformed(what)
+  return value.map((entry, index) => {
+    const item = asRecord(entry, `${what}.playbooksUsed[${index}]`)
+    return {
+      artifactId: readString(item, 'artifactId', what),
+      artifactType: readString(item, 'artifactType', what),
+      name: readString(item, 'name', what),
+      publicationNumber: readNumber(item, 'publicationNumber', what),
+    }
+  })
+}
+
 function parseSnapshot(value: unknown, what: string): ReviewSnapshot | null {
   if (value === null || value === undefined) return null
   const snapshot = asRecord(value, what)
@@ -454,6 +478,7 @@ function parseSnapshot(value: unknown, what: string): ReviewSnapshot | null {
     knowledgePinNumber: readOptionalNullableNumber(snapshot, 'knowledgePinNumber', what),
     effectiveOn: readOptionalNullableString(snapshot, 'effectiveOn', what),
     engine: readOptionalNullableString(snapshot, 'engine', what),
+    playbooksUsed: parsePlaybooksUsed(snapshot.playbooksUsed, what),
   }
 }
 

@@ -115,6 +115,7 @@ class SystemApiIT {
                         "/api/reviews/{id}/redline/download",
                         "/api/reviews/{id}/progress",
                         "/api/knowledge/artifacts",
+                        "/api/knowledge/applicable",
                         "/api/knowledge/artifacts/{id}",
                         "/api/knowledge/artifacts/{id}/structure",
                         "/api/knowledge/artifacts/{id}/coverage",

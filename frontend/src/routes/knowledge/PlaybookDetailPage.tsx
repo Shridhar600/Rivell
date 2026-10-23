@@ -21,7 +21,7 @@ import {
   type Catalog,
   type PlaybookView,
 } from '../../lib/knowledgeCatalog'
-import { scopeLine } from '../../lib/knowledgePosition'
+import { contractTypesLabel, scopeLine } from '../../lib/knowledgePosition'
 
 type Tab = 'positions' | 'history'
 
@@ -123,7 +123,7 @@ function PlaybookDetail({
               {isCurrent && positions.length > 0 ? 'Current' : 'Superseded'}
             </span>
             <Chip>Knowledge version {viewing.publication.number}</Chip>
-            {scope ? <Chip>{scope}</Chip> : null}
+            {scope ? <Chip>{scope}</Chip> : <Chip>{contractTypesLabel([])}</Chip>}
             <span className="rv-k-meta__text">Published {longDate(viewing.publication.createdAt)}</span>
           </>
         }

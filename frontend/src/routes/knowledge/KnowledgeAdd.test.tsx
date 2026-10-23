@@ -28,12 +28,56 @@ describe('Add knowledge', () => {
     expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeDisabled()
   })
 
-  it('needs both a type and a file before it can start', async () => {
+  it('needs a type, a file and a contract-type choice before it can start', async () => {
     const { dialog } = await openDialog()
-    await choose(dialog, docx())
+    await choose(dialog, docx('Supply Agreement.docx'))
     expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeDisabled()
     await userEvent.click(within(dialog).getByRole('radio', { name: /Playbook/ }))
+    expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeDisabled()
+    expect(within(dialog).getByText('Choose which contracts this applies to.')).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'MSA' }))
+    expect(within(dialog).queryByText('Choose which contracts this applies to.')).not.toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeEnabled()
+  })
+
+  it('pre-ticks the contract types the file name suggests, and only as a suggestion', async () => {
+    const { dialog } = await openDialog()
+    await choose(dialog, docx('Mutual NDA.docx'))
+    expect(within(dialog).getByRole('checkbox', { name: 'NDA' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'Mutual NDA' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'One-way NDA' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'MSA' })).not.toBeChecked()
+
+    // Until the reviewer touches the choices, a new file replaces the suggestion.
+    await choose(dialog, docx('Master Services Agreement.docx'))
+    expect(within(dialog).getByRole('checkbox', { name: 'MSA' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'NDA' })).not.toBeChecked()
+
+    // A choice the reviewer made is not overwritten by a later file name.
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'DPA' }))
+    await choose(dialog, docx('Mutual NDA.docx'))
+    expect(within(dialog).getByRole('checkbox', { name: 'MSA' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'DPA' })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: 'NDA' })).not.toBeChecked()
+  })
+
+  it('treats "All contract types" and a named type as one choice', async () => {
+    const { dialog } = await openDialog()
+    await choose(dialog, docx('Supply Agreement.docx'))
+    const all = within(dialog).getByRole('checkbox', { name: 'All contract types' })
+    const msa = within(dialog).getByRole('checkbox', { name: 'MSA' })
+    await userEvent.click(all)
+    expect(all).toBeChecked()
+    expect(msa).not.toBeChecked()
+    await userEvent.click(msa)
+    expect(all).not.toBeChecked()
+    expect(msa).toBeChecked()
+  })
+
+  it('suggests nothing when the file name names no contract type', async () => {
+    const { dialog } = await openDialog()
+    await choose(dialog, docx('Supply Agreement.docx'))
+    expect(within(dialog).getAllByRole('checkbox').every((box) => !(box as HTMLInputElement).checked)).toBe(true)
   })
 
   it('offers the type the page is about, and still lets the reviewer change it', async () => {
@@ -79,6 +123,7 @@ describe('Add knowledge', () => {
     // The file name says clause library. The choice stays Playbook, and no warning second-guesses it.
     expect(within(dialog).getByRole('radio', { name: /Playbook/ })).toBeChecked()
     expect(within(dialog).queryByText(/looks like/i)).not.toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'MSA' }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
     await waitFor(() => expect(world.uploads).toHaveLength(1))
     expect(world.uploads[0]?.artifactType).toBe('PLAYBOOK')
@@ -98,15 +143,29 @@ describe('Add knowledge', () => {
     expect(world.uploads[0]?.artifactType).toBe('PLAYBOOK')
   })
 
-  it('sends the optional applicability with the upload', async () => {
+  it('sends the chosen contract types with the upload', async () => {
     const { dialog, world } = await openDialog('/knowledge/playbooks?add=playbook')
+    await choose(dialog, docx('Master Services Agreement.docx'))
+    expect(within(dialog).getByRole('checkbox', { name: 'MSA' })).toBeChecked()
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'DPA' }))
     await userEvent.click(within(dialog).getByText('Where this applies (optional)'))
-    await userEvent.type(within(dialog).getByLabelText('Contract types'), 'MSA, NDA')
     await userEvent.type(within(dialog).getByLabelText('Jurisdiction'), 'ENGLAND_WALES')
-    await choose(dialog, docx())
     await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
     await waitFor(() => expect(world.uploads).toHaveLength(1))
-    expect(world.uploads[0]?.query).toMatchObject({ artifactType: 'PLAYBOOK', declaredContractTypes: 'MSA,NDA', jurisdiction: 'ENGLAND_WALES' })
+    expect(world.uploads[0]?.query).toMatchObject({
+      artifactType: 'PLAYBOOK',
+      declaredContractTypes: 'MSA,DPA',
+      jurisdiction: 'ENGLAND_WALES',
+    })
+  })
+
+  it('sends no declared types when All contract types is chosen', async () => {
+    const { dialog, world } = await openDialog('/knowledge/playbooks?add=playbook')
+    await choose(dialog, docx('Supply Agreement.docx'))
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'All contract types' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
+    await waitFor(() => expect(world.uploads).toHaveLength(1))
+    expect(world.uploads[0]?.query.declaredContractTypes).toBeUndefined()
   })
 
   it('refuses an effective period that ends before it starts', async () => {

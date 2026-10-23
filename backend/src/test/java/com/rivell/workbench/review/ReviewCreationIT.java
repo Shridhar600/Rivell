@@ -524,6 +524,7 @@ class ReviewCreationIT {
         var review = reviewService.create(ingested.contractId(), 1, null);
         var snapshot = reviewRepository.findSnapshot(organizationId, review.id()).orElseThrow();
         assertThat(snapshot.knowledgePinNumber()).isZero();
+        assertThat(snapshot.applicableKnowledge()).isEmpty();
 
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_NDA,
                 M6EvidenceCorpus.ndaManifest(), null);
