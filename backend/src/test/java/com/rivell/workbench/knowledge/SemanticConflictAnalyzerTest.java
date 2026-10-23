@@ -35,6 +35,6 @@ class SemanticConflictAnalyzerTest {
                 null, null, null,
                 new ApplicabilityScope("MSA", Set.of("MSA"), "Customer", "Third-Party",
                         jurisdiction, LocalDate.of(2026, 1, 1), null),
-                List.of(), ReviewCategory.ROUTINE, Set.of(), null, null, now, now);
+                List.of(), ReviewCategory.ROUTINE, Set.of(), null, null, now, now, null);
     }
 }
