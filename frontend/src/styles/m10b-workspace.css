@@ -891,8 +891,12 @@
 }
 .rv-ws-dbtns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
+}
+/* An odd count (Accept plus four) puts the first action on its own row. */
+.rv-ws-dbtns > :first-child:nth-last-child(odd) {
+  grid-column: 1 / -1;
 }
 .rv-ws-dbtns .rv-btn {
   height: 32px;

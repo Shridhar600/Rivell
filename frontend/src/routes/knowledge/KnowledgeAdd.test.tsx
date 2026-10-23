@@ -24,7 +24,7 @@ describe('Add knowledge', () => {
     const clauses = within(group).getByRole('radio', { name: /Clause library/ })
     expect(playbook).not.toBeChecked()
     expect(clauses).not.toBeChecked()
-    expect(within(dialog).getByText(/Rivell uses the type you choose\./)).toBeInTheDocument()
+    expect(within(dialog).queryByText(/Rivell uses the type you choose/)).not.toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeDisabled()
   })
 

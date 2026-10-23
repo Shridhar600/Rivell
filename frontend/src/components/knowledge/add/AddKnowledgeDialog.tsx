@@ -160,7 +160,6 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
               </label>
             ))}
           </div>
-          <p className="rv-dlg__note">Rivell uses the type you choose.</p>
         </fieldset>
 
         <div>
@@ -219,25 +218,25 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
             Choose every contract type this knowledge applies to. A file that applies to every
             type is used in every review.
           </p>
-          <div className="rv-k-add__types">
-            <label className="rv-k-add__type">
+          <div className="rv-k-add__chips">
+            <label className="rv-k-add__chip">
               <input
                 type="checkbox"
                 className="rv-visually-hidden"
                 checked={allContractTypes}
                 onChange={toggleAllContractTypes}
               />
-              <b>All contract types</b>
+              All contract types
             </label>
             {CONTRACT_TYPES.map((contractType) => (
-              <label key={contractType} className="rv-k-add__type">
+              <label key={contractType} className="rv-k-add__chip">
                 <input
                   type="checkbox"
                   className="rv-visually-hidden"
                   checked={contractTypes.includes(contractType)}
                   onChange={() => toggleContractType(contractType)}
                 />
-                <b>{CONTRACT_TYPE_LABELS[contractType]}</b>
+                {CONTRACT_TYPE_LABELS[contractType]}
               </label>
             ))}
           </div>
