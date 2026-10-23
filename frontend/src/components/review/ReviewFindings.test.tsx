@@ -1038,12 +1038,12 @@ describe('engine v2: who decided', () => {
 
     const toggle = await screen.findByRole('button', { name: 'Needs your look (1)' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(findingsList().queryByRole('option', { name: /The two checks disagree/ })).not.toBeInTheDocument()
+    expect(findingsList().queryByRole('option', { name: /Rivell is unsure/ })).not.toBeInTheDocument()
 
     await userEvent.click(toggle)
 
     const group = within(screen.getByRole('listbox', { name: 'Needs your look list' }))
-    expect(group.getByRole('option', { name: /The two checks disagree/ })).toBeInTheDocument()
+    expect(group.getByRole('option', { name: /Rivell is unsure/ })).toBeInTheDocument()
   })
 
   it('shows both views on a "needs your look" item, with the quoted words and no provider name', async () => {
@@ -1081,8 +1081,8 @@ describe('engine v2: who decided', () => {
 
     await screen.findByTestId('second-opinion-views')
     const views = within(screen.getByTestId('second-opinion-views'))
-    expect(views.getByText('The second check is not available')).toBeInTheDocument()
-    expect(views.queryByText('The two checks disagree')).not.toBeInTheDocument()
+    expect(views.getByText('Only one reading is available')).toBeInTheDocument()
+    expect(views.queryByText('Two readings of this clause disagree')).not.toBeInTheDocument()
   })
 
   it('says when an agreeing second opinion confirmed a finding', async () => {
@@ -1139,7 +1139,7 @@ describe('engine v2: the items P4 adds', () => {
     const options = (await openLookGroup()).getAllByRole('option')
     expect(options[0]).toHaveTextContent('First review: Breaches the walk-away')
     // the rest keep the server's order
-    expect(options[1]).toHaveTextContent(/The two checks disagree/)
+    expect(options[1]).toHaveTextContent(/Rivell is unsure/)
   })
 
   it('tells the reviewer what each kind of look item is', async () => {
@@ -1164,7 +1164,7 @@ describe('engine v2: the items P4 adds', () => {
   it('shows the playbook and the whole-contract read side by side on a playbook-silent item', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-14', withP4)
 
-    await findDetailText('The two checks disagree')
+    await findDetailText('Two readings of this clause disagree')
     const views = within(screen.getByTestId('playbook-silent-views'))
     expect(views.getByText(/No position in your playbook covers this clause/)).toBeInTheDocument()
     expect(views.getByText(/estimate 12%/)).toBeInTheDocument()
@@ -1212,7 +1212,7 @@ describe('engine v2: the items P4 adds', () => {
   it('writes no label with an em dash', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-14', withP4)
 
-    await findDetailText('The two checks disagree')
+    await findDetailText('Two readings of this clause disagree')
     await openLookGroup()
     // Rivell's own words only: the contract pane shows the document as received
     expect(screen.getByRole('complementary', { name: 'Findings' }).textContent ?? '').not.toMatch(/\u2014/)

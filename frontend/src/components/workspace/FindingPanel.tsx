@@ -607,10 +607,10 @@ function SecondOpinionViews({ quality }: { quality: FindingQuality }) {
     quality.flagProbability === null ? '' : ` (issue estimate ${Math.round(quality.flagProbability * 100)}%)`
   const heading =
     quality.secondOpinionOutcome === 'DISAGREED'
-      ? 'The two checks disagree'
+      ? 'Two readings of this clause disagree'
       : quality.secondOpinionOutcome === 'AGREED'
-        ? 'The two checks agree'
-        : 'The second check is not available'
+        ? 'Two readings of this clause agree'
+        : 'Only one reading is available'
   return (
     <div className="rv-ws-sec" data-testid="second-opinion-views">
       <div className="rv-ws-sec-h">{heading}</div>
@@ -651,7 +651,7 @@ function PlaybookSilentViews({ quality }: { quality: FindingQuality }) {
     quality.uncoveredProbability === null ? '' : ` (estimate ${Math.round(quality.uncoveredProbability * 100)}%)`
   return (
     <div className="rv-ws-sec" data-testid="playbook-silent-views">
-      <div className="rv-ws-sec-h">The two checks disagree</div>
+      <div className="rv-ws-sec-h">Two readings of this clause disagree</div>
       <dl className="rv-ws-views">
         <div>
           <dt>First review</dt>

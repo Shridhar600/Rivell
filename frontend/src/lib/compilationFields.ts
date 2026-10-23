@@ -128,7 +128,7 @@ export function interpretationRows(
     const proposed = proposedPositions(candidate)
     rows.push({
       key: 'positions',
-      label: 'Position',
+      label: 'Covers',
       value: candidate.positions.length > 0 ? formatPositions(candidate.positions) : 'Not specified',
       machine: positionsDiverge(candidate) && proposed ? `Rivell proposed: ${formatPositions(proposed)}` : null,
       support: supportNote(interpretationFor(candidate, 'positions')),

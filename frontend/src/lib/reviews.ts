@@ -105,8 +105,8 @@ const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
   carve_out_context_too_large: 'Too much text to compare',
   carve_out_not_comparable: 'Could not be compared',
   survival_coverage_partial: 'Survival not fully checked',
-  second_opinion_disagrees: 'The two checks disagree',
-  second_opinion_unavailable: 'No second check',
+  second_opinion_disagrees: 'Rivell is unsure',
+  second_opinion_unavailable: 'Not double-checked',
 }
 
 export function observationKindLabel(kind: string): string {

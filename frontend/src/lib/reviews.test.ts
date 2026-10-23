@@ -487,8 +487,8 @@ describe('coverage notes and check labels', () => {
 
   it('uses short, specific words for an uncertain check on the row', () => {
     expect(observationKindLabel('UNCERTAINTY:second_opinion_disagrees')).toBe(
-      'The two checks disagree',
+      'Rivell is unsure',
     )
-    expect(observationKindLabel('UNCERTAINTY:second_opinion_unavailable')).toBe('No second check')
+    expect(observationKindLabel('UNCERTAINTY:second_opinion_unavailable')).toBe('Not double-checked')
   })
 })
