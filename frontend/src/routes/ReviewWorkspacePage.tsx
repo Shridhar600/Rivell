@@ -713,6 +713,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           position={index >= 0 ? { index: index + 1, total: findings.length } : null}
           context={context}
           regionLabels={regionLabels}
+          playbooksUsed={summary.snapshot?.playbooksUsed ?? null}
           currentText={currentText}
           replacementText={replacementText}
           decision={decision}

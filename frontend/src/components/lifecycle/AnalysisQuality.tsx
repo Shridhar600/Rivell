@@ -1,8 +1,8 @@
 import type { ReviewSummary } from '../../api/reviews'
 import { useTaxonomy } from '../../api/taxonomy'
 import {
+  analysisWarningCheckLabel,
   analysisWarningMessage,
-  checkKeyLabel,
   coverageLimitationSummary,
   hasNewerRun,
 } from '../../lib/reviews'
@@ -30,11 +30,14 @@ export function AnalysisQuality({ summary }: { summary: ReviewSummary }) {
         <>
           <p>Some checks were incomplete.</p>
           <ul>
-            {summary.analysisWarnings.map((warning, index) => (
-              <li key={`${warning.checkKey}-${index}`}>
-                <b>{checkKeyLabel(warning.checkKey, labelFor)}</b> {analysisWarningMessage(warning)}
-              </li>
-            ))}
+            {summary.analysisWarnings.map((warning, index) => {
+              const heading = analysisWarningCheckLabel(warning, labelFor)
+              return (
+                <li key={`${warning.checkKey}-${index}`}>
+                  {heading ? <b>{heading}</b> : null} {analysisWarningMessage(warning)}
+                </li>
+              )
+            })}
           </ul>
           {summary.analysisWarningsTruncated ? <p>Additional warnings were omitted.</p> : null}
         </>

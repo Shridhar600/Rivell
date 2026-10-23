@@ -494,7 +494,7 @@ export const fixtureNotCoveredFindingDetail = {
   ...fixturePolicyMissingFindingDetail,
   ...fixtureNotCoveredFindingSummary,
   observationText:
-    'No playbook position addresses this clause, and it reads as unusual for this kind of contract and against our side; a lawyer should review it.',
+    'No playbook position addresses this clause, and it reads as unusual for this kind of contract and against our side.',
   quality: {
     sufficiency: 'POLICY_MISSING',
     verificationOutcome: null,
@@ -518,7 +518,7 @@ export const fixtureNeedsYourLookFindingDetail = {
   ...fixtureClauseFindingDetail,
   ...fixtureNeedsYourLookFindingSummary,
   observationText:
-    "Rivell's two reviewers disagree on this clause against the position: one finds an issue, the other does not. Rivell does not decide; please take a look.",
+    'Rivell is unsure about this clause. Here is the clause and the closest rule.',
   proposedLanguage: null,
   approvedDraftingEvidenceId: null,
   quality: {
@@ -582,7 +582,7 @@ export const fixturePlaybookSilentFindingDetail = {
   ...fixtureClauseFindingDetail,
   ...fixturePlaybookSilentFindingSummary,
   observationText:
-    'A whole-contract read named this clause as one our side must act on, and no playbook position check flagged it; a lawyer should review it.',
+    'A whole-contract read named this clause as one our side must act on, but no playbook position check flagged it.',
   proposedLanguage: null,
   approvedDraftingEvidenceId: null,
   positionComparison: null,
@@ -675,7 +675,7 @@ export const fixtureAmbiguousPolicyFindingDetail = {
   issueFamily: 'POLICY_AMBIGUOUS',
   observationKind: 'AMBIGUOUS_POLICY',
   observationText:
-    'Multiple conflicting published policies apply to LIMITATION_OF_LIABILITY; no rule was chosen and the ambiguity is preserved.',
+    'More than one rule in your playbook applies to LIMITATION_OF_LIABILITY, and they conflict. Rivell did not choose between them.',
   severity: 'MEDIUM',
   reviewClassification: 'REVIEW_REQUIRED',
   proposedAction: 'REVIEW_AMBIGUITY',
@@ -695,7 +695,7 @@ export const fixtureAmbiguousPolicyFindingDetail = {
     {
       ordinal: 1,
       claimKind: 'POLICY_BASIS',
-      text: 'The applicable policies disagree; no rule was chosen.',
+      text: 'More than one playbook position applies to this topic and they conflict. Rivell did not choose between them.',
       absence: false,
       evidenceItemIds: ['e-policy', 'e-policy-2'],
     },

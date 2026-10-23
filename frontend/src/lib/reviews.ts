@@ -98,9 +98,15 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
 }
 
 const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
-  bounded_decision_unavailable: 'Could not be assessed',
-  second_opinion_disagrees: 'Needs your look: Rivell is unsure',
-  second_opinion_unavailable: 'Needs your look: no second check',
+  bounded_decision_unavailable: 'Could not be checked',
+  cross_clause_decision_unavailable: 'Could not be checked',
+  classification_uncertain: 'Could not be checked',
+  cross_clause_classification_uncertain: 'Could not be checked',
+  carve_out_context_too_large: 'Too much text to compare',
+  carve_out_not_comparable: 'Could not be compared',
+  survival_coverage_partial: 'Survival not fully checked',
+  second_opinion_disagrees: 'The two checks disagree',
+  second_opinion_unavailable: 'No second check',
 }
 
 export function observationKindLabel(kind: string): string {
@@ -153,7 +159,7 @@ export function assessmentSummary(quality: FindingQuality | null): string | null
 
 const CLAIM_KIND_LABELS: Record<string, string> = {
   OBSERVATION: 'Observation',
-  POLICY_BASIS: 'Policy basis',
+  POLICY_BASIS: 'Playbook',
   EVIDENCE_BASIS: 'Evidence basis',
   ABSENCE_BASIS: 'Absence basis',
   RECOMMENDATION: 'Recommended action',
@@ -181,6 +187,11 @@ export function proposedActionLabel(action: string): string {
 export function checkKeyLabel(checkKey: string, label: ConceptLabel): string {
   const [mechanism, concept] = checkKey.split(':')
   if (!concept) return humanizeCode(checkKey)
+  if (mechanism === 'CROSS') {
+    if (concept === 'CARVE_OUT_CONSISTENCY') return 'Liability cap and its exceptions'
+    if (concept === 'CONFIDENTIALITY_SURVIVAL') return 'Confidentiality after termination'
+    return `Cross-check · ${humanizeCode(concept)}`
+  }
   return `${humanizeCode(mechanism)} · ${label(concept)}`
 }
 
@@ -235,21 +246,45 @@ function degradationFlagLabel(flag: string): string {
     return 'A supporting check was unavailable'
   }
   if (flag.includes('not_comparable')) return 'The assessment was not comparable'
-  if (flag.includes('uncertain')) return 'An uncertain classification is recorded'
-  if (flag.includes('too_large')) return 'The bounded context was exceeded'
+  if (flag.includes('uncertain')) return 'Rivell could not check part of this clause'
+  if (flag.includes('too_large')) return 'There was too much text for this check'
   if (flag.includes('missing')) return 'Some evidence was unavailable'
   return 'The check ran in a degraded mode'
 }
 
-// `AnalysisWarning.message` and `ReviewFailure.message` are the only server strings still rendered
-// verbatim, and they are exempt from the rule the rest of the API layer follows on purpose: the
-// backend builds both from a closed set of fixed sentences (it maps the raw execution detail to a
-// warning reason and replaces anything unrecognised with a generic sentence), so they carry no
-// identifiers or internals and the specific wording is more useful to a reviewer than a flag would
-// be. This exemption depends on that backend sanitization. If a raw message ever appears here, the
-// fix belongs in the same place the other fields were fixed: at the parser boundary.
+/**
+ * The check label before a warning's own sentence. The carve-out check's sentence already names
+ * what it covers, so it gets no second label and reads as one plain sentence.
+ */
+export function analysisWarningCheckLabel(
+  warning: AnalysisWarning,
+  label: ConceptLabel,
+): string | null {
+  if (
+    warning.reasonCode === 'CLASSIFICATION_UNCERTAIN' &&
+    warning.checkKey.startsWith('CROSS:CARVE_OUT_CONSISTENCY')
+  ) {
+    return null
+  }
+  return checkKeyLabel(warning.checkKey, label)
+}
+
+// Most `AnalysisWarning.message` and `ReviewFailure.message` strings are rendered verbatim, and
+// they are exempt from the rule the rest of the API layer follows on purpose: the backend builds
+// both from a closed set of fixed sentences (it maps the raw execution detail to a warning reason
+// and replaces anything unrecognised with a generic sentence), so they carry no identifiers or
+// internals and the specific wording is more useful to a reviewer than a flag would be. This
+// exemption depends on that backend sanitization. Classification uncertainty is the exception: its
+// backend sentence is technical, so this layer replaces it with the plain sentence below. If a raw
+// message ever appears here, the fix belongs in the same place the other fields were fixed: at the
+// parser boundary.
 export function analysisWarningMessage(warning: AnalysisWarning): string {
   const message = warning.message.trim()
+  if (warning.reasonCode === 'CLASSIFICATION_UNCERTAIN') {
+    return warning.checkKey.startsWith('CROSS:CARVE_OUT_CONSISTENCY')
+      ? 'Rivell could not check how the liability cap and its exceptions fit together. Please check both clauses yourself.'
+      : 'Rivell could not check this clause against your playbook. Please check it yourself.'
+  }
   const fallback =
     warning.status === 'FAILED'
       ? 'This check did not complete; its result is missing.'
@@ -291,7 +326,10 @@ export function coverageExpectationLabel(expectation: string): string {
 }
 
 export function coverageLimitations(coverage: ReviewCoverage[]): ReviewCoverage[] {
-  return coverage.filter((entry) => entry.coverage !== 'PRESENT_PRIMARY')
+  // An absent topic was checked and not found, so it is not a topic Rivell failed to check.
+  return coverage.filter(
+    (entry) => entry.coverage === 'PRESENT_SECONDARY_ONLY' || entry.coverage === 'UNKNOWN',
+  )
 }
 
 export function coverageLimitationSummary(
@@ -300,10 +338,196 @@ export function coverageLimitationSummary(
 ): string | null {
   const limited = coverageLimitations(coverage)
   if (limited.length === 0) return null
-  const parts = limited.map(
-    (entry) => `${label(entry.concept)} (${coverageLabel(entry.coverage).toLowerCase()})`,
+  const topics = limited.map((entry) => label(entry.concept))
+  return `Rivell did not check: ${topics.join(', ')}`
+}
+
+/**
+ * The one sentence a finding stands on. Stored findings can predate the current templates, so the
+ * old disagreement and compliance sentences are read into the words Rivell uses now, and the old
+ * "a lawyer should review it" ending is dropped: the whole product is a review tool.
+ */
+export function findingGapText(
+  finding: Pick<
+    FindingDetail,
+    'observationText' | 'concepts' | 'concept' | 'secondaryConcept' | 'absenceConcept' | 'addedBy'
+  >,
+  label: ConceptLabel,
+): string {
+  let text = finding.observationText.trim()
+  if (!text) return ''
+  // A reviewer's own note is theirs: the boilerplate pass is for machine-written findings only.
+  if (finding.addedBy) return text
+  text = text.replace(
+    /Rivell['’]s two reviewers disagree[\s\S]*?please take a look\./i,
+    'Rivell is unsure about this clause. Here is the clause and the closest rule.',
   )
-  return `Review coverage is limited for: ${parts.join('; ')}.`
+  text = text.replace(
+    /Rivell is unsure whether this clause meets your position: one check finds an issue and the other does not\. Compare the clause with the position below\./gi,
+    'Rivell is unsure about this clause. Here is the clause and the closest rule.',
+  )
+  text = text.replace(
+    /Rivell is unsure whether this clause meets your position, and could not get a second check\. Compare the clause with the position below\./gi,
+    'Rivell is unsure about this clause, and could not get a second check. Here is the clause and the closest rule.',
+  )
+  text = text.replace(
+    /Rivell was not confident enough about this clause to judge it against the position\. Please take a look\./gi,
+    'Rivell could not check this clause against your playbook. Please check it yourself.',
+  )
+  text = text.replace(
+    /Rivell could not check this clause because the analysis service was unavailable\. Please take a look\./gi,
+    'Rivell could not check this clause because the analysis service was unavailable. Please check it yourself.',
+  )
+  text = text.replace(
+    /The clauses were too long for Rivell to compare, so it did not check how they interact\. Please take a look\./gi,
+    'There was too much text for Rivell to compare these clauses. Please check how the liability cap and its exceptions fit together.',
+  )
+  text = text.replace(
+    /Rivell could not tell how the liability carve-out and the indemnification clause interact, so it reports no conflict either way\. Please take a look\./gi,
+    'Rivell could not check how the liability cap and its exceptions fit together. Please check both clauses yourself.',
+  )
+  text = text.replace(
+    /Rivell could not reach a clear view of how these clauses interact\. Please take a look\./gi,
+    'Rivell could not check how these clauses fit together. Please check them yourself.',
+  )
+  text = text.replace(
+    /Rivell could not check whether every confidentiality obligation survives termination\. Please take a look\./gi,
+    'Rivell could not check whether every confidentiality obligation survives termination. Please check the termination clause yourself.',
+  )
+  text = text.replace(
+    /The clause deals with this subject, but its wording is ambiguous or depends on something outside the contract, so compliance cannot be decided\./gi,
+    'The clause depends on something outside the contract, so Rivell cannot tell whether it meets your playbook.',
+  )
+  text = text.replace(
+    /Multiple conflicting published policies apply to ([A-Z_]+); no rule was chosen and the ambiguity is preserved\./g,
+    'More than one rule in your playbook applies to $1, and they conflict. Rivell did not choose between them.',
+  )
+  text = text.replace(/\s*Recommend human legal review\.?/gi, '')
+  text = text.replace(/\s*;?\s*a lawyer should review it\.?/gi, '')
+  text = text.replace(/\s+/g, ' ').trim()
+  if (text && !/[.!?]$/.test(text)) text += '.'
+  const codes = [
+    ...new Set(
+      [
+        finding.concept,
+        finding.secondaryConcept,
+        finding.absenceConcept,
+        ...finding.concepts,
+      ].filter((code): code is string => Boolean(code)),
+    ),
+  ].sort((left, right) => right.length - left.length)
+  for (const code of codes) text = text.split(code).join(label(code))
+  return text
+}
+
+export type FindingQuote = {
+  text: string
+  source: 'second-opinion' | 'contract'
+}
+
+/**
+ * The exact words the finding turns on. On a "needs your look" item the second opinion's quote is
+ * the explanation the reader asked for; otherwise the pinned contract words are used, never policy
+ * or precedent prose.
+ */
+export function findingQuote(
+  finding: Pick<
+    FindingDetail,
+    'subjectKind' | 'decidedBy' | 'quality' | 'evidenceItems' | 'evidenceItemIds'
+  >,
+  currentText: string | null,
+): FindingQuote | null {
+  if (finding.subjectKind !== 'CLAUSE') return null
+  const secondOpinion = finding.quality?.secondOpinionQuote?.trim()
+  if (finding.decidedBy === 'NEEDS_YOUR_LOOK' && secondOpinion) {
+    return { text: secondOpinion, source: 'second-opinion' }
+  }
+  if (currentText?.trim()) return { text: currentText.trim(), source: 'contract' }
+  const cited = new Set(finding.evidenceItemIds)
+  const item = finding.evidenceItems.find(
+    (evidence) =>
+      evidence.authorityClass === 'CURRENT_CONTRACT' &&
+      (cited.size === 0 || cited.has(evidence.evidenceId)),
+  )
+  return item?.text.trim() ? { text: item.text.trim(), source: 'contract' } : null
+}
+
+export type FindingPlaybookRule = {
+  label: string
+  text: string | null
+  basedOn: string | null
+  escalation: string | null
+}
+
+function firstNonEmpty<T>(...lists: readonly (readonly T[])[]): readonly T[] {
+  return lists.find((list) => list.length > 0) ?? []
+}
+
+/**
+ * The closest playbook rules behind a finding: the walk-away for a walk-away, the fallbacks for a
+ * beyond-fallback or within-fallback note, the preferred rule otherwise. Every rule the evidence
+ * supports is shown rather than choosing one the API cannot identify as the match. The playbook
+ * name is used only when the rules' own evidence names one artifact the review actually froze.
+ */
+export function findingPlaybookRule(
+  finding: Pick<
+    FindingDetail,
+    | 'issueFamily'
+    | 'concept'
+    | 'secondaryConcept'
+    | 'positionLabel'
+    | 'positionComparison'
+    | 'evidenceItems'
+  >,
+  label: ConceptLabel,
+  playbooks: readonly PlaybookUsed[] | null,
+): FindingPlaybookRule | null {
+  const concept = finding.secondaryConcept ?? finding.concept
+  const labelText = finding.positionLabel ?? (concept ? label(concept) : '')
+  const omission = Boolean(finding.positionLabel)
+  if (!finding.issueFamily.startsWith('POSITION_') && !omission) return null
+  const position = finding.positionComparison
+  if (!position) {
+    return omission && labelText
+      ? { label: labelText, text: null, basedOn: null, escalation: null }
+      : null
+  }
+  const family = finding.issueFamily
+  const chosen = family.startsWith('POSITION_')
+    ? family === 'POSITION_WALK_AWAY'
+      ? firstNonEmpty(position.walkAway, position.preferred)
+      : family === 'POSITION_ACCEPTABLE_FALLBACK' || family === 'POSITION_NEEDS_FALLBACK'
+        ? firstNonEmpty(position.fallback, position.preferred)
+        : firstNonEmpty(position.preferred, position.fallback)
+    : firstNonEmpty(position.preferred, position.fallback, position.walkAway)
+  if (chosen.length === 0) {
+    return omission && labelText
+      ? { label: labelText, text: null, basedOn: null, escalation: null }
+      : null
+  }
+  const texts = chosen.map((entry) => entry.text.trim()).filter(Boolean)
+  const artifacts = new Set(
+    chosen
+      .map(
+        (entry) =>
+          finding.evidenceItems.find((item) => item.evidenceId === entry.evidenceItemId)
+            ?.sourceArtifactId,
+      )
+      .filter((artifactId): artifactId is string => Boolean(artifactId)),
+  )
+  const artifact = artifacts.size === 1 ? [...artifacts][0] : null
+  const playbook = artifact
+    ? (playbooks?.find((used) => used.artifactId === artifact) ?? null)
+    : null
+  const version =
+    playbook?.publicationNumber ?? (chosen.length === 1 ? chosen[0].publicationNumber : null)
+  const escalation = position.escalation[0]?.trigger.trim() || null
+  return {
+    label: labelText,
+    text: texts.length > 0 ? texts.join('\n\n') : null,
+    basedOn: playbook && version !== null ? `${playbook.name}, version ${version}` : null,
+    escalation,
+  }
 }
 
 export function findingSubjectLabel(
@@ -378,7 +602,7 @@ export function policyNoteText(
       : 'Your playbook has no position on this clause. Past contracts are examples only, not your position.'
   }
   if (finding.issueFamily === 'POLICY_AMBIGUOUS') {
-    return 'More than one published policy applies. Rivell did not choose between them; the ambiguity is preserved for your review.'
+    return 'More than one rule in your playbook applies. Rivell did not choose between them.'
   }
   return null
 }
