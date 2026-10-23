@@ -95,6 +95,15 @@ export function AppShell() {
   }, [compactInspector, pathname])
   const inspectorClosed = compactInspector ? inspectorOverlayOn !== pathname : inspectorCollapsed
 
+  // Panels opened for one page close when the reader leaves it, so coming back starts fresh.
+  const [visited, setVisited] = useState(pathname)
+  if (visited !== pathname) {
+    setVisited(pathname)
+    setExpandedOn(null)
+    setOverlayOn(null)
+    setInspectorOverlayOn(null)
+  }
+
   // The saved preference is left alone on a phone and on work surfaces, and applies again elsewhere.
   const railed = narrow ? overlayOn !== pathname : onWorkSurface ? !workSurfaceExpanded : sidebarCollapsed
 

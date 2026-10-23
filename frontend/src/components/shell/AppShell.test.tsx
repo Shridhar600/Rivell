@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter } from 'react-router'
@@ -307,6 +307,19 @@ describe('inspector panel', () => {
   })
 })
 
+describe('the browser tab', () => {
+  it.each([
+    ['/', 'Home · Rivell'],
+    ['/reviews', 'Reviews · Rivell'],
+    ['/reviews/new', 'Start review · Rivell'],
+  ])('%s is named after the page', async (path, name) => {
+    stubApi()
+    renderAt(path)
+    await screen.findByRole('banner')
+    await waitFor(() => expect(document.title).toBe(name))
+  })
+})
+
 describe('one search menu for the whole app', () => {
   it.each(['/', '/knowledge'])('%s opens the Search dialog with ⌘K', async (path) => {
     stubApi()
@@ -323,6 +336,23 @@ describe('one search menu for the whole app', () => {
     renderAt('/')
     await userEvent.click(await screen.findByRole('button', { name: 'Search' }))
     expect(await screen.findByRole('dialog', { name: 'Search' })).toBeInTheDocument()
+  })
+
+  it('says when the reviews could not be loaded', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL((input instanceof Request ? input : new Request(String(input))).url)
+        if (url.pathname === '/api/reviews') return new Response('{}', { status: 500 })
+        if (url.pathname.startsWith('/api/knowledge/')) return new Response(JSON.stringify(envelope([])))
+        return new Response('{}', { status: 404 })
+      }),
+    )
+    renderAt('/knowledge')
+    expect(await screen.findByRole('banner')).toBeInTheDocument()
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    const dialog = await screen.findByRole('dialog', { name: 'Search' })
+    expect(await within(dialog).findByText('Reviews could not be loaded. Try again later.')).toBeInTheDocument()
   })
 
   it('lists a review by filename under Reviews and opens its overview', async () => {
@@ -359,6 +389,25 @@ describe('the workspace starts from the icon rail', () => {
     await userEvent.click(toggle)
     await waitFor(() => expect(shell).not.toHaveAttribute('data-sidebar', 'collapsed'))
     expect(globalThis.localStorage?.getItem('rv-sidebar')).toBe('')
+  })
+
+  it('starts railed again when the reader comes back to the same review', async () => {
+    globalThis.localStorage?.setItem('rv-sidebar', '')
+    stubContractApi({
+      reviewSummary: fixtureCompletedReviewSummary,
+      findings: fixtureFindingList,
+      humanReview: fixtureHumanReview(),
+    })
+    const { container, router } = renderAt('/reviews/c1/analysis/r-1')
+    await screen.findByRole('banner')
+    const shell = container.querySelector('.rv-shell') as HTMLElement
+    await userEvent.click(screen.getByRole('button', { name: 'Sidebar' }))
+    await waitFor(() => expect(shell).not.toHaveAttribute('data-sidebar', 'collapsed'))
+
+    await act(() => router.navigate('/reviews'))
+    await act(() => router.navigate('/reviews/c1/analysis/r-1'))
+
+    await waitFor(() => expect(shell).toHaveAttribute('data-sidebar', 'collapsed'))
   })
 })
 
@@ -416,6 +465,12 @@ describe('the retired contract page address', () => {
     ])
     const router = routerAt('/reviews/c7?view=semantics')
     await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c7/overview/r-new'))
+  })
+
+  it('matches the contract id whatever its letter case', async () => {
+    stubApi([reviewWire('r-new', 'COMPLETED', 'a.docx', { contractId: '9f2a1c44-ab', createdAt: '2026-10-03T08:00:00Z' })])
+    const router = routerAt('/reviews/9F2A1C44-AB')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/9f2a1c44-ab/overview/r-new'))
   })
 
   it('opens the Reviews list when the contract has no review', async () => {

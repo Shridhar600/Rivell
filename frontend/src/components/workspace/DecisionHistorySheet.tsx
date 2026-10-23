@@ -25,7 +25,7 @@ export function DecisionHistorySheet({ reviewId, findingId, title }: { reviewId:
           {query.data.items.map((revision) => (
             <div key={revision.id} className="rv-ws-history-item">
               <b>
-                Version {revision.revision} · {decisionStateLabel(revision)}
+                Decision {revision.revision} · {decisionStateLabel(revision)}
               </b>
               <small>{dateTime(revision.decidedAt) || 'Saved'}</small>
               {revision.approvedAction && revision.approvedAction !== 'UNKNOWN' ? (

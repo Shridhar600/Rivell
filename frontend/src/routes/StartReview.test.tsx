@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -7,6 +7,7 @@ import { AppProviders } from '../app/AppProviders'
 import { appRoutes } from '../app/router'
 import { fixtureSemantics } from '../components/contract/testFixtures'
 import { fixturePackCatalog, fixtureQueuedReviewSummary } from '../components/review/testFixtures'
+import { reviewWire } from '../test/reviewListFixtures'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
@@ -168,10 +169,36 @@ describe('Start Review: the canonical page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Supplier' }))
     await userEvent.click(screen.getByRole('button', { name: 'Counterparty paper' }))
     expect(screen.getByText('MSA, Supplier side, counterparty paper')).toBeInTheDocument()
-    expect(screen.getByRole('note')).toHaveTextContent('The file name suggests a different contract type.')
+    expect(screen.getByRole('note')).toHaveTextContent('The file name looks like an NDA, but you chose MSA.')
     expect(startButton()).toBeEnabled()
     await userEvent.selectOptions(screen.getByLabelText('Contract type'), 'NDA')
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+})
+
+describe('Start Review: what the form says', () => {
+  it.each(['MNDA', 'ONDA'])('does not warn when an NDA file is reviewed as %s', async (type) => {
+    stub()
+    renderPage()
+    await fill({ type, file: docx('incoming-counterparty-nda.docx') })
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('says what is still needed before the review can start', async () => {
+    stub()
+    renderPage()
+    expect(await screen.findByText('Choose a Word file and a contract type to start')).toBeInTheDocument()
+    await userEvent.upload(screen.getByLabelText('Contract file (Word)'), docx())
+    expect(screen.getByText('Choose a contract type to start')).toBeInTheDocument()
+  })
+
+  it('does not show the pack’s internal version', async () => {
+    stub()
+    renderPage()
+    await screen.findByRole('option', { name: 'MSA pack' })
+    await userEvent.selectOptions(screen.getByLabelText(/Review pack/), 'MSA_PACK')
+    expect(screen.getByText(/Liability, confidentiality and termination checks/)).toBeInTheDocument()
+    expect(screen.queryByText(/rivell-review-pack-1/)).not.toBeInTheDocument()
   })
 })
 
@@ -324,5 +351,61 @@ describe('Start Review: the three requests', () => {
     expect(screen.getByLabelText('Contract type')).toBeDisabled()
     release(ok(fixtureSemantics({ contractId: 'c9' })))
     await waitFor(() => expect(screen.queryByText('Saving the review details…')).not.toBeInTheDocument())
+  })
+})
+
+describe('Start Review: leaving while it saves', () => {
+  it('still lists the new review when the reader went back to Reviews before it finished', async () => {
+    let finishEnrichment: () => void = () => {}
+    const enrichment = new Promise<Response>((resolve) => {
+      finishEnrichment = () => resolve(ok(fixtureSemantics({ contractId: 'c9' })))
+    })
+    const calls = stub({ enrich: () => enrichment })
+    const original = globalThis.fetch
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(String(input), init)
+        const path = new URL(request.url).pathname
+        if (request.method === 'GET' && path === '/api/reviews') {
+          const created = calls.some((call) => call.step === 'create')
+          return ok({ items: created ? [reviewWire('r-new', 'ANALYSIS_QUEUED', 'Vendor NDA.docx', { contractId: 'c9' })] : [], truncated: false, nextCursor: null })
+        }
+        return original(input, init)
+      }),
+    )
+    const router = renderPage('/reviews')
+    expect(await screen.findByRole('heading', { name: 'Reviews' })).toBeInTheDocument()
+    await router.navigate('/reviews/new')
+    await screen.findByLabelText('Contract file (Word)')
+    await fill()
+    await userEvent.click(startButton())
+    await waitFor(() => expect(calls.some((call) => call.step === 'enrich')).toBe(true))
+
+    await act(() => router.navigate(-1))
+    expect(router.state.location.pathname).toBe('/reviews')
+    finishEnrichment()
+
+    await waitFor(() => expect(calls.some((call) => call.step === 'create')).toBe(true))
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Reviews" })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Vendor NDA/)).toBeInTheDocument())
+  })
+
+  it('asks the browser to confirm before the page is closed or reloaded while the review is starting', async () => {
+    const enrichment = new Promise<Response>(() => {})
+    stub({ enrich: () => enrichment })
+    renderPage()
+    await screen.findByLabelText('Contract file (Word)')
+    const idle = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(idle)
+    expect(idle.defaultPrevented).toBe(false)
+
+    await fill()
+    await userEvent.click(startButton())
+    await screen.findByText(/Saving the review details/)
+
+    const leaving = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leaving)
+    expect(leaving.defaultPrevented).toBe(true)
   })
 })

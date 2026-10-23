@@ -462,7 +462,7 @@ describe('finding detail', () => {
 
     await findDetailText('Rivell found')
     expect(section('Rivell found')).toHaveTextContent(
-      /No organizational policy covers this clause.*does not establish policy\./,
+      /Your playbook has no position on this clause.*not your position\./,
     )
     // There is no policy to put against the contract, and no wording to propose. The contract has
     // typed facts, but a lone contract slot is not a policy position, so the section is not drawn.
@@ -482,8 +482,8 @@ describe('finding detail', () => {
     expect(pane.getAllByText(/Unusual clause, not covered by your playbook/).length).toBeGreaterThan(0)
     expect(pane.queryByText('Policy unavailable')).not.toBeInTheDocument()
     expect(pane.getByText(/No playbook position addresses this clause/)).toBeInTheDocument()
-    expect(pane.getByText(/Rivell's estimate: 90%/)).toBeInTheDocument()
-    expect(pane.getByText(/not a certainty/)).toBeInTheDocument()
+    expect(pane.getByText(/Confidence: high/)).toBeInTheDocument()
+    expect(pane.queryByText(/90%/)).not.toBeInTheDocument()
     // The list names the same kind, not the generic policy-unavailable family.
     expect(
       await (await findFindingsList()).findByRole('option', { name: /Unusual clause, not covered by your playbook/ }),
@@ -569,15 +569,15 @@ describe('position findings', () => {
     await findDetailTitle('6. Limitation of Liability')
     const pane = within(detailPane())
     expect(pane.getByText(/Beyond every listed fallback/)).toBeInTheDocument()
-    expect(pane.getByText(/Rivell's estimate: 87%/)).toBeInTheDocument()
-    expect(pane.getByText(/not a certainty/)).toBeInTheDocument()
+    expect(pane.getByText(/Confidence: high/)).toBeInTheDocument()
+    expect(pane.queryByText(/87%/)).not.toBeInTheDocument()
   })
 
   it('shows no assessment line when the finding carries no comparison quality', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-2')
 
     await findDetailTitle('Missing: Limitation of liability')
-    expect(within(detailPane()).queryByText(/Rivell's estimate/)).not.toBeInTheDocument()
+    expect(within(detailPane()).queryByText(/Confidence:/)).not.toBeInTheDocument()
   })
 
   it('reads a within-fallback finding as a note to accept and record, not a problem', async () => {
@@ -999,12 +999,12 @@ describe('engine v2: who decided', () => {
 
     const toggle = await screen.findByRole('button', { name: 'Needs your look (1)' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(findingsList().queryByRole('option', { name: /two reviewers disagree/ })).not.toBeInTheDocument()
+    expect(findingsList().queryByRole('option', { name: /Rivell is unsure/ })).not.toBeInTheDocument()
 
     await userEvent.click(toggle)
 
     const group = within(screen.getByRole('listbox', { name: 'Needs your look list' }))
-    expect(group.getByRole('option', { name: /two reviewers disagree/ })).toBeInTheDocument()
+    expect(group.getByRole('option', { name: /Rivell is unsure/ })).toBeInTheDocument()
   })
 
   it('shows both views on a "needs your look" item, with the quoted words and no provider name', async () => {
@@ -1077,7 +1077,7 @@ describe('engine v2: the items P4 adds', () => {
     const options = (await openLookGroup()).getAllByRole('option')
     expect(options[0]).toHaveTextContent('First review: Breaches the walk-away')
     // the rest keep the server's order
-    expect(options[1]).toHaveTextContent(/two reviewers disagree/)
+    expect(options[1]).toHaveTextContent(/Rivell is unsure/)
   })
 
   it('tells the reviewer what each kind of look item is', async () => {

@@ -458,7 +458,7 @@ export const fixturePolicyMissingFindingDetail = {
     {
       ordinal: 1,
       claimKind: 'EVIDENCE_BASIS',
-      text: 'Historical precedent is evidence only and does not establish organizational policy.',
+      text: 'Your playbook has no position on this topic. Past contracts are shown as examples only, not as your position.',
       absence: false,
       evidenceItemIds: ['e-precedent-1'],
     },

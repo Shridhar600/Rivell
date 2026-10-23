@@ -209,7 +209,7 @@ describe('recording a decision in the workspace', () => {
     expect(row).toHaveTextContent('Accepted')
     await userEvent.click(row)
     const detail = findingDetail()
-    expect(await detail.findByText('Version 1', { exact: false })).toBeInTheDocument()
+    expect(await detail.findByText('Decision 1', { exact: false })).toBeInTheDocument()
     expect(detail.getByRole('button', { name: 'Accept' })).toHaveAttribute('aria-pressed', 'true')
 
     expect(
@@ -248,7 +248,7 @@ describe('workflow state availability and conflict truth', () => {
     ) as HTMLElement
     expect(card).toHaveTextContent('1 approved change fixed for this review.')
     // Redline belongs to the review summary. The Workspace only points there.
-    expect(findingDetail().getByRole('link', { name: 'View review summary' })).toHaveAttribute(
+    expect(findingDetail().getByRole('link', { name: 'Go to the redline' })).toHaveAttribute(
       'href',
       '/reviews/c1/overview/r-1',
     )
@@ -366,7 +366,7 @@ describe('workflow state availability and conflict truth', () => {
       expect(api.requests.filter((r) => r.url.includes('/approved-change-set')).length).toBeGreaterThan(0),
     )
 
-    expect(findingDetail().getByRole('link', { name: 'View review summary' })).toBeInTheDocument()
+    expect(findingDetail().getByRole('link', { name: 'Go to the redline' })).toBeInTheDocument()
     expect(api.requests.filter((r) => r.url.includes('/redline'))).toHaveLength(0)
     expect(
       screen.queryByText(/The approved change set could not be loaded/),

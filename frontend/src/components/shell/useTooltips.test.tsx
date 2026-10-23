@@ -68,4 +68,21 @@ describe('app tooltip', () => {
     expect(tip).not.toHaveAttribute('data-open')
     expect(button).toHaveAttribute('title', 'Hide sidebar [')
   })
+
+  it('is a real tooltip for assistive technology while it shows, and leaves other descriptions alone', () => {
+    vi.useFakeTimers()
+    render(<Harness />)
+    const button = screen.getByRole('button')
+    button.setAttribute('aria-describedby', 'own-note')
+    const tip = document.querySelector('.rv-tip') as HTMLElement
+
+    pointer('pointerover', button)
+    act(() => vi.advanceTimersByTime(500))
+    expect(tip).toHaveAttribute('role', 'tooltip')
+    expect(tip).not.toHaveAttribute('aria-hidden')
+    expect(button.getAttribute('aria-describedby')?.split(' ')).toEqual(['own-note', tip.id])
+
+    pointer('pointerout', button, document.body)
+    expect(button).toHaveAttribute('aria-describedby', 'own-note')
+  })
 })

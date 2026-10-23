@@ -136,13 +136,14 @@ function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'summar
           <p>
             {props.frozenChanges === null
               ? 'The approved changes cannot be changed.'
-              : `${plural(props.frozenChanges, 'approved change', 'approved changes')} fixed for this review.`}
+              : `${plural(props.frozenChanges, 'approved change', 'approved changes')} fixed for this review.`}{' '}
+            Next, create the redline as a Word file.
           </p>
         </div>
       </div>
       <div className="rv-ws-phase-actions">
         <Link id={SUMMARY_LINK_ID} className="rv-btn rv-btn--primary" to={props.summaryPath}>
-          View review summary
+          Go to the redline
         </Link>
       </div>
     </div>
@@ -399,7 +400,7 @@ export function FindingPanel(props: Props) {
             <div className="rv-ws-meta-top">
               <strong>{state.label}</strong>
               <small>
-                Version {decision.revision} · {dateTime(decision.decidedAt) || 'Saved'}
+                Decision {decision.revision} · {dateTime(decision.decidedAt) || 'Saved'}
               </small>
             </div>
             {decision.comment ? <p>{decision.comment}</p> : null}

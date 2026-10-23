@@ -75,6 +75,7 @@ export function GlobalSearch({ onClose, page }: Props) {
       items={items}
       onSearch={page?.onSearch}
       loading={reviews.isPending || knowledge.status === 'pending'}
+      unavailable={[...(reviews.isError ? ['Reviews'] : []), ...(knowledge.status === 'error' ? ['Playbooks, clauses and sources'] : [])]}
     />
   )
 }

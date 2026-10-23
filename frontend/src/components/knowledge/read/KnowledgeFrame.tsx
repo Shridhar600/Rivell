@@ -63,7 +63,7 @@ export function KnowledgeFrame({ crumbs, title, lede, meta, actions, addPreset, 
   const dismiss = () => void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
   return (
     <div className={`rv-main${withInspector ? '' : ' rv-main--wide'}`}>
-      <TopBar title={<Breadcrumbs crumbs={crumbs} />} actions={<AddKnowledgeButton preset={addPreset} />} />
+      <TopBar pageTitle={crumbs.at(-1)?.label} title={<Breadcrumbs crumbs={crumbs} />} actions={<AddKnowledgeButton preset={addPreset} />} />
       <div className="rv-scroll">
         <div className="rv-page">
           {notice ? (

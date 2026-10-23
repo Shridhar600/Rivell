@@ -166,7 +166,7 @@ const SUFFICIENCY_PRESENTATIONS: Record<
   },
   PRECEDENT_WEAK: {
     label: 'No comparable past agreement found',
-    description: 'No comparable past agreement was found for this topic. Precedent is evidence only and does not set policy.',
+    description: 'No comparable past contract was found for this topic. Past contracts are examples only, not your position.',
   },
   CONTRACT_CONTEXT_INCOMPLETE: {
     label: 'Contract context incomplete',

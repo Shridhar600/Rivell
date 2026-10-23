@@ -89,7 +89,22 @@ const DETAIL_WIDTH_KEY = 'rv-ws-detail-width'
 const DETAIL_WIDTH = { min: 320, max: 640, initial: 380 } as const
 const MODE_CYCLE: Record<DocMode, DocMode> = { changes: 'orig', orig: 'final', final: 'changes' }
 
-type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'clause'; headingNodeId: string } | { kind: 'contract' }
+type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'clause'; headingNodeId: string } | { kind: 'contract' } | { kind: 'keys' }
+
+/** Every single-key shortcut of the workspace, as the reader would say what it does. */
+const SHORTCUTS: [string, string][] = [
+  ['J or ↓', 'Next finding'],
+  ['K or ↑', 'Previous finding'],
+  ['A', 'Accept the finding'],
+  ['E', 'Edit the wording'],
+  ['R', 'Reject the finding'],
+  ['S', 'Escalate the finding'],
+  ['V', 'Switch between Changes, Original and Preview'],
+  ['/', 'Search'],
+  ['[', 'Show or hide the findings list'],
+  [']', 'Show or hide the details panel'],
+  ['?', 'Show these shortcuts'],
+]
 
 function Gate({ children }: { children: ReactNode }) {
   return (
@@ -394,6 +409,9 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       else if (event.key === '/') {
         event.preventDefault()
         openSearch()
+      } else if (event.key === '?') {
+        event.preventDefault()
+        setSheet({ kind: 'keys' })
       }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -456,6 +474,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       : []),
     { group: 'Review', label: 'Review context, coverage and notes', icon: <ClauseIcon />, run: () => setSheet({ kind: 'notes' }) },
     { group: 'Review', label: 'Contract details: parties, defined terms, references', icon: <ClauseIcon />, run: () => setSheet({ kind: 'contract' }) },
+    { group: 'Review', label: 'Keyboard shortcuts', key: '?', icon: <ClauseIcon />, run: () => setSheet({ kind: 'keys' }) },
   ]
 
   const finalizeLines = humanReview
@@ -691,7 +710,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
 
       <WorkspaceSheet
         open={sheet !== null}
-        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : sheet?.kind === 'contract' ? 'Contract details' : 'Source'}
+        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : sheet?.kind === 'contract' ? 'Contract details' : sheet?.kind === 'keys' ? 'Keyboard shortcuts' : 'Source'}
         onClose={() => setSheet(null)}
         actions={sourceRecord ? <LinkButton to={sourceRecord.to}>{sourceRecord.label}</LinkButton> : null}
       >
@@ -744,6 +763,18 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         ) : null}
         {sheet?.kind === 'history' && selectedId ? (
           <DecisionHistorySheet reviewId={reviewId} findingId={selectedId} title={finding ? findingSubjectLabel(finding, regionLabels, labelFor) : ''} />
+        ) : null}
+        {sheet?.kind === 'keys' ? (
+          <dl className="rv-ws-keys">
+            {SHORTCUTS.map(([keys, action]) => (
+              <div key={keys}>
+                <dt>
+                  <kbd>{keys}</kbd>
+                </dt>
+                <dd>{action}</dd>
+              </div>
+            ))}
+          </dl>
         ) : null}
         {sheet?.kind === 'notes' ? (
           <>

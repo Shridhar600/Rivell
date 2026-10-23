@@ -129,7 +129,7 @@ export function ReviewLifecyclePage() {
   const shell = (content: ReactNode, rail?: ReactNode, actions?: ReactNode) => (
     <>
       <div className="rv-main">
-        <TopBar title={crumbs} actions={actions} />
+        <TopBar pageTitle={summary ? title : 'Review'} title={crumbs} actions={actions} />
         <div className="rv-scroll">
           <div className="rv-lc">{content}</div>
         </div>

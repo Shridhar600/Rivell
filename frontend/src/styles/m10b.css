@@ -275,7 +275,8 @@ a {
 /* Three columns, so search sits in the same place on every page whatever the title's length. */
 .rv-topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 300px) minmax(0, 1fr);
+  /* Search stays centred while it fits; wide actions push it left rather than overlap it. */
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 300px) minmax(max-content, 1fr);
   align-items: center;
   gap: 12px;
   flex: none;
@@ -1568,6 +1569,16 @@ a {
   }
   .rv-topbar {
     padding: 0 12px;
+    gap: 8px;
+  }
+  /* On a phone the page's own actions keep their room; the title gives way first. */
+  .rv-ws-blk__txt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .rv-resume {
     flex-direction: column;

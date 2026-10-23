@@ -133,7 +133,7 @@ describe('workspace decisions — ACCEPT', () => {
     expect(body).not.toHaveProperty('approvedLanguage')
     // Nothing is shown as saved until the server's decision is in: the box appears from its response.
     expect(await detailPane().findByText('Accepted')).toBeInTheDocument()
-    expect(detailPane().getByText(/Version 1/)).toBeInTheDocument()
+    expect(detailPane().getByText(/Decision 1/)).toBeInTheDocument()
     expect(detailPane().getByRole('button', { name: 'Accept' })).toHaveAttribute('aria-pressed', 'true')
   })
 
@@ -341,7 +341,7 @@ describe('workspace decisions — current decision and revision', () => {
     const current = fixtureDecision({ revision: 3, action: 'REJECT', comment: 'Earlier reason.' })
     const { api } = await renderWorkspace({ currentDecision: current })
     expect(await detailPane().findByText('Rejected')).toBeInTheDocument()
-    expect(detailPane().getByText(/Version 3/)).toBeInTheDocument()
+    expect(detailPane().getByText(/Decision 3/)).toBeInTheDocument()
     expect(detailPane().getByText('Earlier reason.')).toBeInTheDocument()
     expect(detailPane().getByRole('button', { name: 'Reject' })).toHaveAttribute('aria-pressed', 'true')
     await user.click(detailPane().getByRole('button', { name: 'Change decision' }))
@@ -354,7 +354,7 @@ describe('workspace decisions — current decision and revision', () => {
     expect(body.expectedVersion).toBe(3)
     expect(body.action).toBe('EDIT')
     expect(body.approvedLanguage).toBe('Revised human text.')
-    expect(await detailPane().findByText(/Version 4/)).toBeInTheDocument()
+    expect(await detailPane().findByText(/Decision 4/)).toBeInTheDocument()
   })
 
   it('does not retry a conflicting submission and shows a safe conflict notice', async () => {
@@ -405,7 +405,7 @@ describe('workspace decisions — current decision and revision', () => {
     await user.type(form.getByRole('textbox', { name: 'Reason' }), 'Mine.')
     await user.click(form.getByRole('button', { name: 'Reject' }))
     expect(await form.findByRole('alert')).toHaveTextContent(/changed elsewhere/)
-    await waitFor(() => expect(detailPane().getByText(/Version 3/)).toBeInTheDocument())
+    await waitFor(() => expect(detailPane().getByText(/Decision 3/)).toBeInTheDocument())
     expect(puts(api)).toHaveLength(1)
     expect(putBody(api).expectedVersion).toBe(2)
   })
@@ -493,7 +493,7 @@ describe('workspace decisions — request identity and permission', () => {
 describe('workspace decision history', () => {
   it('shows no history entry for a first revision', async () => {
     const { api } = await renderWorkspace({ currentDecision: fixtureDecision({ revision: 1 }) })
-    expect(await detailPane().findByText(/Version 1/)).toBeInTheDocument()
+    expect(await detailPane().findByText(/Decision 1/)).toBeInTheDocument()
     expect(detailPane().queryByRole('button', { name: /History/ })).not.toBeInTheDocument()
     expect(historyRequests(api)).toHaveLength(0)
   })
@@ -516,8 +516,8 @@ describe('workspace decision history', () => {
     expect(historyRequests(api)).toHaveLength(0)
     await user.click(open)
     const sheet = within(screen.getByRole('dialog', { name: 'History' }))
-    const second = await sheet.findByText(/Version 2/)
-    const first = sheet.getByText(/Version 1/)
+    const second = await sheet.findByText(/Decision 2/)
+    const first = sheet.getByText(/Decision 1/)
     expect(historyRequests(api)).toHaveLength(1)
     expect(second).toHaveTextContent('Edited')
     expect(first).toHaveTextContent('Accepted')
@@ -566,8 +566,8 @@ describe('workspace decision history', () => {
     stub = api
     await user.click(await detailPane().findByRole('button', { name: 'History (2)' }))
     const first = within(screen.getByRole('dialog', { name: 'History' }))
-    await first.findByText(/Version 2/)
-    expect(first.queryByText(/Version 3/)).not.toBeInTheDocument()
+    await first.findByText(/Decision 2/)
+    expect(first.queryByText(/Decision 3/)).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'History' })).not.toBeInTheDocument())
 
@@ -580,8 +580,8 @@ describe('workspace decision history', () => {
 
     await user.click(await detailPane().findByRole('button', { name: 'History (3)' }))
     const reopened = within(screen.getByRole('dialog', { name: 'History' }))
-    expect(await reopened.findByText(/Version 3/)).toHaveTextContent('Rejected')
-    expect(reopened.getByText(/Version 1/)).toBeInTheDocument()
+    expect(await reopened.findByText(/Decision 3/)).toHaveTextContent('Rejected')
+    expect(reopened.getByText(/Decision 1/)).toBeInTheDocument()
   })
 
   it('offers a retry when history fails that refetches', async () => {

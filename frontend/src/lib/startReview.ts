@@ -44,10 +44,17 @@ export function profileFrom(context: StartContext): ReviewProfileInput {
  * The canonical advisory: the filename names a different contract type than the one declared.
  * Rivell still reviews it as declared; this only lets the reviewer catch a slip.
  */
-export function filenameSuggestsOtherType(fileName: string, contractType: string): boolean {
-  if (!contractType) return false
-  if (/nda/i.test(fileName) && contractType !== 'NDA') return true
-  return /(msa|services)/i.test(fileName) && contractType === 'NDA'
+const NDA_TYPES = new Set(['NDA', 'MNDA', 'ONDA'])
+
+/**
+ * The contract type a file name points to when it differs from the chosen one ("an NDA", "an MSA"),
+ * or null. Every NDA kind counts as an NDA, so a mutual or one-way NDA never warns.
+ */
+export function filenameSuggestedType(fileName: string, contractType: string): string | null {
+  if (!contractType) return null
+  if (/nda/i.test(fileName)) return NDA_TYPES.has(contractType) ? null : 'an NDA'
+  if (/(msa|services)/i.test(fileName) && NDA_TYPES.has(contractType)) return 'an MSA'
+  return null
 }
 
 /** "NDA, Customer side, counterparty paper, United Kingdom": what the reviewer has declared so far. */
@@ -61,7 +68,15 @@ export function contextSummary(context: StartContext): string {
   if (context.jurisdiction && context.jurisdiction !== 'UNSPECIFIED') {
     parts.push(JURISDICTION_LABELS[context.jurisdiction] ?? context.jurisdiction)
   }
-  return parts.length > 0 ? parts.join(', ') : 'Nothing declared yet'
+  return parts.join(', ')
+}
+
+/** What is still missing before Start analysis can be pressed, or null when nothing is. */
+export function startNeeds(file: File | null, context: StartContext): string | null {
+  if (!file && !context.contractType) return 'Choose a Word file and a contract type to start'
+  if (!file) return 'Choose a Word file to start'
+  if (!context.contractType) return 'Choose a contract type to start'
+  return null
 }
 
 export function fileSizeLabel(bytes: number): string {
