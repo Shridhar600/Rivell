@@ -178,6 +178,20 @@ class ReviewApiIT {
     }
 
     @Test
+    void createStoresADeclaredJurisdictionBeyondUsAndUk() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        enrichmentService.enrich(corpus.contract().contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.AUSTRALIA,
+                        ReviewPackRegistry.MSA_PACK));
+
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+        assertThat(created.get("snapshot").get("profile").get("jurisdiction").asText())
+                .isEqualTo("AUSTRALIA");
+    }
+
+    @Test
     void unanalyzedReviewHasNoActiveRunAndNoFindings() throws Exception {
         var corpus = corpusBuilder.buildMainCorpus(organizationId());
         var created = createReview(corpus.contract().contractId(), null);

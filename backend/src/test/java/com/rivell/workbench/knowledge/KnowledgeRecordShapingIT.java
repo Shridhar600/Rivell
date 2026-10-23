@@ -660,6 +660,65 @@ class KnowledgeRecordShapingIT {
     KnowledgePublicationService publicationService;
 
     @Test
+    void jurisdictionScopeMatchesTheDeclaredSpellingOfANewJurisdiction() throws Exception {
+        provider.reset();
+        // publishes into its own organization so the other tests' knowledge cannot match
+        var shared = identityProvider.current;
+        var identity = new UserIdentity(UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN"));
+        identityProvider.use(identity);
+        try {
+            var newZealand = ingestWithJurisdiction("nz-playbook.docx", "New Zealand");
+            var other = ingestWithJurisdiction("other-playbook.docx", "OTHER");
+            var candidates = new java.util.ArrayList<KnowledgeCandidate>();
+            candidates.addAll(queryService.getCandidates(newZealand.id()));
+            candidates.addAll(queryService.getCandidates(other.id()));
+            assertThat(candidates).isNotEmpty();
+            var publication = publicationService.publish(candidates.stream()
+                    .map(candidate -> reviewService.approve(candidate.id(), null).id())
+                    .toList(), Map.of(), "jurisdictions");
+
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "NEW_ZEALAND"))
+                    .contains(newZealand.id())
+                    .doesNotContain(other.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "OTHER"))
+                    .contains(other.id())
+                    .doesNotContain(newZealand.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), null))
+                    .as("an unspecified jurisdiction remains the wildcard")
+                    .contains(newZealand.id(), other.id());
+        } finally {
+            identityProvider.use(shared);
+        }
+    }
+
+    private KnowledgeArtifact ingestWithJurisdiction(String filename, String jurisdiction)
+            throws Exception {
+        var manifest = new ArtifactManifest(
+                Set.of("MSA"), "MSA_PACK", "Customer", "Third-Party",
+                jurisdiction, "en", null, null, null);
+        try (InputStream stream = getClass().getClassLoader()
+                .getResourceAsStream("fixtures/knowledge-playbook.docx")) {
+            assertThat(stream).isNotNull();
+            return ingestionService.ingest(filename,
+                    "application/octet-stream", ArtifactType.PLAYBOOK, manifest, stream);
+        }
+    }
+
+    private List<UUID> publishedArtifactIds(
+            UUID organizationId, long publicationNumber, String jurisdiction) {
+        return queryService.listPublishedCandidatesForOrganization(
+                        PublishedKnowledgeQuery.unpublishedNever(organizationId,
+                                publicationNumber, Set.of(), null, "MSA_PACK", "MSA",
+                                "Customer", "Third-Party", jurisdiction, null))
+                .stream()
+                .map(candidate -> candidate.candidate().artifactId())
+                .toList();
+    }
+
+    @Test
     void contractTypeColumnGroupsBecomeOnePositionPerTypeThatAppliesOnlyToThatType()
             throws Exception {
         provider.reset();

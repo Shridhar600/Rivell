@@ -50,7 +50,6 @@ public final class CorpusScriptedProvider implements SemanticDecisionProvider {
             case "artifact_class" -> declaredTypeCue(state, choice);
             case "variant_role" -> variantRoleCue(state, choice);
             case "primary_topic" -> primaryConceptCue(state, choice);
-            case "governing_law" -> stateText(state).contains("England") ? "UK" : "US";
             default -> choice.criteria().keySet().iterator().next();
         };
         var probabilities = new LinkedHashMap<String, Double>();

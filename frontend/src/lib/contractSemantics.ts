@@ -40,9 +40,22 @@ export const PAPER_SOURCES = [
   'THIRD_PARTY',
 ] as const satisfies readonly NonNullable<ReviewProfileInput['paperSource']>[]
 
-export const JURISDICTIONS = ['US', 'UK', 'UNSPECIFIED'] as const satisfies readonly NonNullable<
-  ReviewProfileInput['jurisdiction']
->[]
+export const JURISDICTIONS = [
+  'US',
+  'UK',
+  'AUSTRALIA',
+  'CANADA',
+  'IRELAND',
+  'INDIA',
+  'NEW_ZEALAND',
+  'SINGAPORE',
+  'HONG_KONG',
+  'GERMANY',
+  'FRANCE',
+  'NETHERLANDS',
+  'OTHER',
+  'UNSPECIFIED',
+] as const satisfies readonly NonNullable<ReviewProfileInput['jurisdiction']>[]
 
 const ROLE_LABELS: Record<string, string> = {
   CUSTOMER: 'Customer',
@@ -132,6 +145,17 @@ export const PAPER_SOURCE_LABELS: Record<string, string> = {
 export const JURISDICTION_LABELS: Record<string, string> = {
   US: 'United States',
   UK: 'United Kingdom',
+  AUSTRALIA: 'Australia',
+  CANADA: 'Canada',
+  IRELAND: 'Ireland',
+  INDIA: 'India',
+  NEW_ZEALAND: 'New Zealand',
+  SINGAPORE: 'Singapore',
+  HONG_KONG: 'Hong Kong',
+  GERMANY: 'Germany',
+  FRANCE: 'France',
+  NETHERLANDS: 'Netherlands',
+  OTHER: 'Another jurisdiction',
   UNSPECIFIED: 'Not specified',
 }
 

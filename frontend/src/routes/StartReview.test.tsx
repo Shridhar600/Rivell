@@ -122,6 +122,39 @@ describe('Start Review: the canonical page', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('offers the declared jurisdictions beyond the United States and the United Kingdom', async () => {
+    stub()
+    renderPage()
+    const select = await screen.findByLabelText('Jurisdiction')
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'United States',
+      'United Kingdom',
+      'Australia',
+      'Canada',
+      'Ireland',
+      'India',
+      'New Zealand',
+      'Singapore',
+      'Hong Kong',
+      'Germany',
+      'France',
+      'Netherlands',
+      'Another jurisdiction',
+      'Not specified',
+    ])
+  })
+
+  it('submits a jurisdiction beyond the United States and the United Kingdom when selected', async () => {
+    const calls = stub()
+    const router = renderPage()
+    await fill()
+    await userEvent.selectOptions(screen.getByLabelText('Jurisdiction'), 'AUSTRALIA')
+    await waitFor(() => expect(within(screen.getByLabelText(/Review pack/)).getByRole('option', { name: 'NDA pack' })).toBeInTheDocument())
+    await userEvent.click(startButton())
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/overview/r-new'))
+    expect(calls[1].body).toMatchObject({ jurisdiction: 'AUSTRALIA' })
+  })
+
   it('shows the chosen file, and Replace puts the picker back', async () => {
     stub()
     renderPage()
