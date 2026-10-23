@@ -28,6 +28,10 @@ public record CandidateView(
         CandidateType candidateType,
         ReviewStatus reviewStatus,
         String rawLabel,
+        /** A title a person typed; null until one is given. {@code rawLabel} stays as read. */
+        String editedTitle,
+        /** The title to show and publish: the person's when there is one, else {@code rawLabel}. */
+        String title,
         String contentText,
         Map<String, String> payloadColumns,
         /** Role of each payload label (PREFERRED, FALLBACK, APPLICABILITY, ...), known or resolved. */

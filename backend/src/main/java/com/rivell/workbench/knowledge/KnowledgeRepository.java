@@ -14,6 +14,8 @@ public interface KnowledgeRepository {
 
     void insertArtifact(KnowledgeArtifact artifact);
 
+    void updateDocumentTitle(UUID artifactId, String documentTitle);
+
     void updateIngestOutcome(
             UUID artifactId, String parserVersion, IngestStatus status, List<String> warnings);
 
@@ -85,6 +87,7 @@ public interface KnowledgeRepository {
             ReviewStatus expectedStatus,
             ReviewStatus reviewStatus,
             String editedContentText,
+            String editedTitle,
             CandidatePayload editedPayload,
             SemanticFields editedSemanticFields,
             ApplicabilityScope scope,

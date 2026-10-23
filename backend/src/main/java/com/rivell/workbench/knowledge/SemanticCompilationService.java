@@ -374,10 +374,15 @@ public class SemanticCompilationService {
         var positions = new LinkedHashSet<PositionRole>();
         var positionNames = new ArrayList<String>();
         String escalationTrigger = null;
+        PositionRole variantRole = null;
         for (var key : candidate.payload().orderedKeys()) {
             var role = roles.get(key);
             if (role == null) {
                 continue;
+            }
+            if (role == RecordFieldRole.VARIANT && variantRole == null) {
+                variantRole = RecordLabelRoles.variantRole(candidate.payload().columns().get(key))
+                        .orElse(null);
             }
             var position = role.toPositionRole();
             if (position != null && positions.add(position)) {
@@ -387,7 +392,13 @@ public class SemanticCompilationService {
                 escalationTrigger = candidate.payload().columns().get(key);
             }
         }
-        builder.positions(positions).escalationTrigger(escalationTrigger);
+        builder.positions(positions).escalationTrigger(escalationTrigger).variantRole(variantRole);
+        if (variantRole != null) {
+            fields.put("variantRole", new FieldInterpretation(
+                    "variantRole", InterpretationKind.DETERMINISTIC, variantRole.name(),
+                    DETERMINISTIC_COLUMN_SPEC, 1,
+                    null, provenance, VerificationState.VERIFIED, null));
+        }
         if (!positions.isEmpty()) {
             fields.put("positions", new FieldInterpretation(
                     "positions", InterpretationKind.DETERMINISTIC,
@@ -416,10 +427,7 @@ public class SemanticCompilationService {
                 positions.add(role);
             }
         }
-        var approval = execution.answers().get("requires_approval");
-        var requiresApproval = approval instanceof YesNoAnswer yesNo
-                ? yesNo.probability() >= properties.approvalProposal()
-                : null;
+        var requiresApproval = requiresApproval(execution.answers().get("requires_approval"));
         builder.positions(positions).requiresApproval(requiresApproval);
         if (positions.contains(PositionRole.ESCALATION)) {
             interpretEscalationTrigger(state, provenance, stateColumnsHasEscalation(state), builder, fields);
@@ -438,6 +446,22 @@ public class SemanticCompilationService {
                     M4SemanticSpecs.PLAYBOOK_POSITION_SPEC, M4SemanticSpecs.playbookPositions().version(),
                     execution.metadata().executionId(), provenance, VerificationState.NOT_VERIFIED, null));
         }
+    }
+
+    /**
+     * Approval is proposed above the threshold and denied only as far below it; an answer between
+     * the two is not an answer, so the record states no approval requirement instead of "not
+     * required".
+     */
+    private Boolean requiresApproval(com.rivell.workbench.intelligence.SemanticAnswer answer) {
+        if (!(answer instanceof YesNoAnswer yesNo)) {
+            return null;
+        }
+        var probability = yesNo.probability();
+        if (probability >= properties.approvalProposal()) {
+            return Boolean.TRUE;
+        }
+        return probability <= 1.0 - properties.approvalProposal() ? Boolean.FALSE : null;
     }
 
     /**

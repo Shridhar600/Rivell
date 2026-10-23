@@ -78,12 +78,22 @@ public class CandidateReviewService {
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
                     Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
-                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS));
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.editedTitle());
         });
     }
 
     public KnowledgeCandidate edit(
             UUID candidateId, String contentText, CandidatePayload payload,
+            ApplicabilityScope scope, SemanticFields semanticFields, String note) {
+        return edit(candidateId, null, contentText, payload, scope, semanticFields, note);
+    }
+
+    /** Longest title a person may give an entry; a title names an entry, it does not hold its text. */
+    static final int MAX_EDITED_TITLE_LENGTH = 200;
+
+    public KnowledgeCandidate edit(
+            UUID candidateId, String title, String contentText, CandidatePayload payload,
             ApplicabilityScope scope, SemanticFields semanticFields, String note) {
         return transition(candidateId, "edited", candidate -> {
             if (candidate.isPublished()) {
@@ -93,10 +103,23 @@ public class CandidateReviewService {
             var semanticChanged = !editedSemantic.equals(SemanticFields.EMPTY);
             var scopeChanged = scope != null;
             var payloadChanged = payload != null && !payload.columns().isEmpty();
-            if ((contentText == null || contentText.isBlank()) && !payloadChanged
-                    && !semanticChanged && !scopeChanged) {
+            if (title != null && (title.contains("\n") || title.contains("\r"))) {
+                throw new IllegalArgumentException("A title must be a single line");
+            }
+            var newTitle = Texts.normalize(title);
+            if (newTitle != null && newTitle.length() > MAX_EDITED_TITLE_LENGTH) {
                 throw new IllegalArgumentException(
-                        "Change the wording, a value, the scope or a field before you save an edit.");
+                        "A title must be at most " + MAX_EDITED_TITLE_LENGTH + " characters");
+            }
+            // A present blank title is a deliberate clear of an earlier correction. An absent
+            // title leaves the correction alone, so the two must not collapse to the same null.
+            var titleChanged = title != null && newTitle == null
+                    ? candidate.editedTitle() != null
+                    : newTitle != null && !newTitle.equals(candidate.effectiveTitle());
+            if ((contentText == null || contentText.isBlank()) && !payloadChanged
+                    && !semanticChanged && !scopeChanged && !titleChanged) {
+                throw new IllegalArgumentException(
+                        "Change the title, the wording, a value, the scope or a field before you save an edit.");
             }
             // A structured correction is a set of corrected values, not wording: it composes onto
             // the values already corrected, so a second correction does not drop the first, and its
@@ -142,7 +165,8 @@ public class CandidateReviewService {
                             : candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
                     Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
-                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS));
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    titleChanged ? newTitle : candidate.editedTitle());
             return recomputeConditions(edited, candidate.artifactId());
         });
     }
@@ -180,7 +204,8 @@ public class CandidateReviewService {
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
                     Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
-                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS));
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.editedTitle());
         });
     }
 
@@ -260,7 +285,7 @@ public class CandidateReviewService {
         var updated = change.apply(candidate);
         var applied = repository.updateReviewState(
                 updated.id(), identity.organizationId(), candidate.reviewStatus(),
-                updated.reviewStatus(), updated.editedContentText(),
+                updated.reviewStatus(), updated.editedContentText(), updated.editedTitle(),
                 updated.editedPayload(), updated.editedSemanticFields(), updated.scope(),
                 updated.supersedingCandidateId(),
                 updated.reviewNote(), updated.reviewedAt(),

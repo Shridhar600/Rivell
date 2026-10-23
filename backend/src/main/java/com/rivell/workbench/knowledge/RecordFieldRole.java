@@ -15,6 +15,8 @@ enum RecordFieldRole {
     APPLICABILITY,
     TOPIC,
     WORDING,
+    /** Which variant of a clause the record holds: Preferred, Fallback 1, and so on. */
+    VARIANT,
     OTHER;
 
     boolean isPositionBearing() {

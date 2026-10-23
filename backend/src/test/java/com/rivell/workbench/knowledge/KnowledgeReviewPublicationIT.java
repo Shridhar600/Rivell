@@ -152,7 +152,7 @@ class KnowledgeReviewPublicationIT {
 
         rawRepository.updateReviewState(
                 candidate.id(), organizationId, ReviewStatus.PENDING, ReviewStatus.EDITED,
-                null, null, null, candidate.scope(), null, "ordering probe",
+                null, null, null, null, candidate.scope(), null, "ordering probe",
                 java.time.Instant.now(), java.time.Instant.now(),
                 List.of(), ReviewCategory.ELEVATED, reasons);
 

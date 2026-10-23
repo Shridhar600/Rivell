@@ -610,12 +610,10 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             signals.add(signal(context, b -> b
                     .signalType(SignalType.ESCALATION_REQUIRED).issueFamily(family)
                     .payload(new EscalationPayload(facts.escalationTrigger(),
-                            Boolean.TRUE.equals(facts.requiresApproval())))
+                            facts.requiresApproval()))
                     .evidence(List.of(judged.position().evidenceId()))
-                    .quality(Map.of("requiresApproval",
-                            Boolean.TRUE.equals(facts.requiresApproval()),
-                            "escalationTrigger", facts.escalationTrigger() == null
-                                    ? "" : facts.escalationTrigger()))
+                    .quality(escalationQuality(facts.escalationTrigger(),
+                            facts.requiresApproval()))
                     .dedupeSuffix(judged.key())));
         }
         return signals;
@@ -783,6 +781,19 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private static boolean wantsLanguage(String category) {
         return PolicyComparisonSpecs.WALK_AWAY.equals(category)
                 || PolicyComparisonSpecs.BEYOND_FALLBACK.equals(category);
+    }
+
+    /**
+     * The escalation quality is the escalation payload in map form. An approval the policy did
+     * not state is left out rather than written as false.
+     */
+    static Map<String, Object> escalationQuality(String trigger, Boolean requiresApproval) {
+        var quality = new LinkedHashMap<String, Object>();
+        quality.put("escalationTrigger", trigger == null ? "" : trigger);
+        if (requiresApproval != null) {
+            quality.put("requiresApproval", requiresApproval);
+        }
+        return quality;
     }
 
     private static Map<String, Object> flaggedQuality(

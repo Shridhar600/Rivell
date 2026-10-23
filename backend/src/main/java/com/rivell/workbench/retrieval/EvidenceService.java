@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
+import com.rivell.workbench.knowledge.PublishedCandidate;
 
 /**
  * Orchestrates authority-aware evidence construction (AD #8): resolves the pinned
@@ -157,11 +158,17 @@ public class EvidenceService {
                 asOfPublication, limit);
         var none = new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false);
         var bundle = assemble(request, asOfPublication, policy, none, List.of(), false, null);
+        return new ApplicablePositions(bundle, positionLabels(policy.published()),
+                policy.truncated());
+    }
+
+    /** The label a reader sees for each omission position: the person's title when there is one. */
+    static Map<UUID, String> positionLabels(List<PublishedCandidate> published) {
         var labels = new LinkedHashMap<UUID, String>();
-        for (var match : policy.published()) {
-            labels.put(match.candidate().id(), match.candidate().rawLabel());
+        for (var match : published) {
+            labels.put(match.candidate().id(), match.candidate().effectiveTitle());
         }
-        return new ApplicablePositions(bundle, labels, policy.truncated());
+        return labels;
     }
 
     private EvidenceBundle buildInternal(EvidenceRequest request) {
