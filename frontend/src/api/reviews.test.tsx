@@ -622,7 +622,7 @@ describe('review requests', () => {
 
   it('rejects malformed payloads with a malformed-response error', async () => {
     stubFetch(() => jsonResponse(envelope({ id: 'r-1' })))
-    await expect(createReview('c-1', 1)).rejects.toThrow(/Malformed review summary/)
+    await expect(createReview('c-1', 1)).rejects.toThrow(/could not read this response/)
   })
 })
 

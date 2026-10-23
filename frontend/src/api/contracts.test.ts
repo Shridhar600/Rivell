@@ -134,13 +134,13 @@ describe('fetchContract', () => {
   it('rejects a malformed successful summary instead of crashing later', async () => {
     stubFetch(() => jsonResponse(envelope({ id: 'c1', title: 'MSA' })))
 
-    await expect(fetchContract('c1')).rejects.toThrow(/malformed contract response/i)
+    await expect(fetchContract('c1')).rejects.toThrow(/could not read this response/i)
   })
 
   it('requires the runtime ApiResult envelope for contract reads', async () => {
     stubFetch(() => jsonResponse(summary))
 
-    await expect(fetchContract('c1')).rejects.toThrow(/malformed contract response/i)
+    await expect(fetchContract('c1')).rejects.toThrow(/could not read this response/i)
   })
 })
 
@@ -161,7 +161,7 @@ describe('fetchContractStructure', () => {
     stubFetch(() => jsonResponse(envelope({ ...structure, nodes: 'not-an-array' })))
 
     await expect(fetchContractStructure('c1', 1)).rejects.toThrow(
-      /malformed structure response/i,
+      /could not read this response/i,
     )
   })
 
@@ -176,7 +176,7 @@ describe('fetchContractStructure', () => {
     )
 
     await expect(fetchContractStructure('c1', 1)).rejects.toThrow(
-      /malformed structure response/i,
+      /could not read this response/i,
     )
   })
 
@@ -246,14 +246,14 @@ describe('uploadContract', () => {
     stubFetch(() => jsonResponse(envelope({ contractId: 'c1' })))
 
     const file = new File(['bytes'], 'msa.docx')
-    await expect(uploadContract(file)).rejects.toThrow(/malformed upload response/i)
+    await expect(uploadContract(file)).rejects.toThrow(/could not read this response/i)
   })
 
   it('requires the runtime ApiResult envelope on upload', async () => {
     stubFetch(() => jsonResponse(ingest))
 
     const file = new File(['bytes'], 'msa.docx')
-    await expect(uploadContract(file)).rejects.toThrow(/malformed upload response/i)
+    await expect(uploadContract(file)).rejects.toThrow(/could not read this response/i)
   })
 })
 

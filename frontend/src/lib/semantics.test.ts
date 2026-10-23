@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest'
 import type { ArtifactDetail, Candidate } from '../api/knowledge'
 import {
   escalationDiverge,
+  formatBoolean,
   hasSupersessionProposal,
   interpretationFor,
   isBulkEligible,
+  normalizeJurisdiction,
   positionsDiverge,
   proposedPositions,
   reviewReasonLabel,
   scopeDifferences,
+  semanticDraftFrom,
+  semanticInputFrom,
   variantRoleDiverge,
   VERIFICATION_LABELS,
 } from './semantics'
@@ -21,6 +25,8 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     candidateType: 'PLAYBOOK_RULE',
     reviewStatus: 'PENDING',
     rawLabel: 'Rule',
+    editedTitle: null,
+    title: 'Rule',
     contentText: 'Rule content',
     payloadColumns: {},
     legalConceptKey: 'LIMITATION_OF_LIABILITY',
@@ -37,6 +43,7 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     supersedingCandidateId: null,
     contractPackKey: 'MSA',
     declaredContractTypes: ['MSA'],
+    sourceContractTypes: [],
     partyPerspective: 'Customer',
     paperSource: 'Third-party',
     jurisdiction: 'US',
@@ -57,6 +64,7 @@ const artifact: ArtifactDetail = {
   id: 'a1',
   artifactType: 'PLAYBOOK',
   filename: 'playbook.docx',
+  documentTitle: null,
   contentType: 'application/octet-stream',
   sizeBytes: 2048,
   sha256: 'a'.repeat(64),
@@ -84,9 +92,9 @@ describe('semantic display helpers', () => {
   })
 
   it('labels verification states', () => {
-    expect(VERIFICATION_LABELS.VERIFIED).toMatch(/supported by source/i)
+    expect(VERIFICATION_LABELS.VERIFIED).toMatch(/matches the source/i)
     expect(VERIFICATION_LABELS.DISPUTED).toMatch(/disputed/i)
-    expect(VERIFICATION_LABELS.NOT_VERIFIED).toMatch(/not independently verified/i)
+    expect(VERIFICATION_LABELS.NOT_VERIFIED).toMatch(/not checked against a second source/i)
   })
 
   it('finds an interpretation by field', () => {
@@ -176,11 +184,65 @@ describe('semantic display helpers', () => {
     expect(scopeDifferences(candidate(), artifact)).toEqual([])
   })
 
+  it('compares jurisdictions with the shared normalisation', () => {
+    expect(normalizeJurisdiction('United Kingdom')).toBe('uk')
+    expect(normalizeJurisdiction('UK')).toBe('uk')
+    expect(normalizeJurisdiction('United States')).toBe('us')
+    expect(normalizeJurisdiction('US')).toBe('us')
+    expect(normalizeJurisdiction('New Zealand')).toBe('newzealand')
+    expect(normalizeJurisdiction('NEW_ZEALAND')).toBe('newzealand')
+
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'New Zealand' }), {
+        ...artifact,
+        jurisdiction: 'NEW_ZEALAND',
+      }),
+    ).toEqual([])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'United Kingdom' }), {
+        ...artifact,
+        jurisdiction: 'UK',
+      }),
+    ).toEqual([])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'United States' }), {
+        ...artifact,
+        jurisdiction: 'US',
+      }),
+    ).toEqual([])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'United Kingdom' }), {
+        ...artifact,
+        jurisdiction: 'US',
+      }),
+    ).toEqual([{ label: 'Jurisdiction', candidateValue: 'United Kingdom', manifestValue: 'US' }])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: '' }), { ...artifact, jurisdiction: null }),
+    ).toEqual([])
+  })
+
   it('shows bulk eligibility from server fields only', () => {
     expect(isBulkEligible(candidate())).toBe(true)
     expect(isBulkEligible(candidate({ reviewCategory: 'ELEVATED' }))).toBe(false)
     expect(isBulkEligible(candidate({ reviewStatus: 'APPROVED' }))).toBe(false)
     expect(isBulkEligible(candidate({ reviewCategory: null }))).toBe(false)
+  })
+
+  it('sends an explicit null when counsel approval is set back to not specified', () => {
+    const current = candidate({ requiresApproval: true, positions: ['PREFERRED'], escalationTrigger: 'Above 2x' })
+    const draft = semanticDraftFrom(current)
+    expect(draft.requiresApproval).toBe('true')
+
+    const unset = semanticInputFrom({ ...draft, requiresApproval: 'unset' }, current)
+
+    expect(unset).toEqual({ positions: ['PREFERRED'], requiresApproval: null, escalationTrigger: 'Above 2x' })
+    expect(formatBoolean(null)).toBe('Not specified')
+  })
+
+  it('sends no approval field when approval did not change', () => {
+    const current = candidate({ requiresApproval: null })
+    const input = semanticInputFrom(semanticDraftFrom(current), current)
+    expect(input).toBeUndefined()
   })
 
   it('detects supersession proposals from conflict signals', () => {

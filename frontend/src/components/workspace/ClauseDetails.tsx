@@ -119,6 +119,11 @@ function ConceptEditor({ clause, contractId, versionNumber, onRefresh }: { claus
       setError('Choose the topic this clause is about.')
       return
     }
+    if (selected === effective) {
+      // A no-op save would still mark the clause "Corrected by you".
+      setError('This is already the topic. Choose a different one to correct it.')
+      return
+    }
     setError(null)
     correct.mutate({ clauseId: clause.id, primary: selected })
   }
@@ -145,10 +150,10 @@ function ConceptEditor({ clause, contractId, versionNumber, onRefresh }: { claus
             </optgroup>
           ))}
         </select>
-        {taxonomy.isPending ? <p role="status" className="rv-ws-caption">Loading legal topics…</p> : null}
+        {taxonomy.isPending ? <p role="status" className="rv-ws-caption">Loading topics…</p> : null}
         {taxonomy.isError ? (
           <p role="status" className="rv-ws-caption">
-            The legal topic list could not be loaded. The topic cannot be changed right now.
+            The topic list could not be loaded. The topic cannot be changed right now.
           </p>
         ) : null}
         <p className="rv-ws-caption">
@@ -166,7 +171,7 @@ function ConceptEditor({ clause, contractId, versionNumber, onRefresh }: { claus
         </div>
       </form>
       {correct.isError ? <CorrectionFailure error={correct.error} onRefresh={onRefresh} /> : null}
-      {correct.isSuccess && !correct.isPending ? (
+      {correct.isSuccess && !correct.isPending && selected === correct.variables?.primary ? (
         <p role="status" className="rv-ws-caption">
           Topic updated. Rivell&apos;s own reading is kept.
         </p>
@@ -321,7 +326,7 @@ function FactSection({
                 {interpretation ? (
                   <span className="rv-ws-cd-machine">
                     {interpretationKindDescription(interpretation.kind)}{' '}
-                    <RegionButtons nodeIds={interpretation.sourceNodeIds} regionLabels={regionLabels} onNavigateToNode={onNavigateToNode} empty="no source region recorded" />
+                    <RegionButtons nodeIds={interpretation.sourceNodeIds} regionLabels={regionLabels} onNavigateToNode={onNavigateToNode} empty="no source passage recorded" />
                   </span>
                 ) : null}
               </dd>
@@ -398,7 +403,7 @@ export function ClauseDetails({ clause, semantics, nodes, contractId, versionNum
       </div>
 
       {clause.effectiveFacts.length === 0 && otherInterpretations.length === 0 ? (
-        <p className="rv-ws-caption">No typed facts were extracted for this clause.</p>
+        <p className="rv-ws-caption">No details were found for this clause.</p>
       ) : null}
       {clause.effectiveFacts.map((fact) => (
         <FactSection
@@ -421,7 +426,7 @@ export function ClauseDetails({ clause, semantics, nodes, contractId, versionNum
                 <dd>
                   <span>{/^[A-Z][A-Z0-9_]*$/.test(entry.proposedValue) ? humanizeCode(entry.proposedValue) : entry.proposedValue}</span> <span className="rv-ws-chip">{verificationLabel(entry.verification)}</span>
                   <span className="rv-ws-cd-machine">
-                    <RegionButtons nodeIds={entry.sourceNodeIds} regionLabels={regionLabels} onNavigateToNode={onNavigateToNode} empty="no source region recorded" />
+                    <RegionButtons nodeIds={entry.sourceNodeIds} regionLabels={regionLabels} onNavigateToNode={onNavigateToNode} empty="no source passage recorded" />
                   </span>
                 </dd>
               </div>
@@ -494,7 +499,7 @@ export function ClauseDetails({ clause, semantics, nodes, contractId, versionNum
 
       <p className="rv-ws-caption">
         {editable
-          ? 'A correction is used by the next review of this contract. It does not change this review, which stays as it was when it was created.'
+          ? 'Corrections apply to the next review. This review stays as it was.'
           : `Corrections apply to the latest contract version${latestVersionNumber ? ` (version ${latestVersionNumber})` : ''}. This review uses version ${versionNumber}, so this view is read-only.`}
       </p>
     </article>

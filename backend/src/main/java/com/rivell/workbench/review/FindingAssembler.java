@@ -151,9 +151,8 @@ public final class FindingAssembler {
         }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE) {
             return new Observation("POLICY_UNAVAILABLE",
-                    "No applicable published policy exists for " + signal.concept().value()
-                            + "; no deviation judgment was made and precedent does not "
-                            + "substitute for policy.");
+                    "Your playbook has no position on " + signal.concept().value()
+                            + ", so Rivell did not judge this clause against one.");
         }
         if (signal.signalType() == SignalType.POLICY_AMBIGUOUS) {
             return new Observation("AMBIGUOUS_POLICY",
@@ -205,28 +204,26 @@ public final class FindingAssembler {
 
     private static String uncertaintyText(String reason, RawReviewSignal signal) {
         return switch (reason) {
-            case "classification_uncertain" -> "The bounded classifier did not reach a "
-                    + "clear classification for this clause; the uncertainty is recorded "
-                    + "rather than a deviation judgment.";
+            case "classification_uncertain" -> "Rivell was not confident enough about "
+                    + "this clause to judge it against the position. Please take a look.";
             case "bounded_decision_unavailable", "cross_clause_decision_unavailable" ->
-                    "The bounded semantic decision was unavailable; the clause was not "
-                            + "classified and requires human review.";
-            case "carve_out_context_too_large" -> "The cross-clause context exceeds the "
-                    + "bounded prompt; the interaction was not assessed.";
-            case "carve_out_not_comparable" -> "The bounded classifier could not determine "
-                    + "how the liability carve-out and the indemnification clause interact; "
-                    + "no conflict or consistency was asserted.";
-            case "cross_clause_classification_uncertain" -> "The cross-clause classification "
-                    + "did not reach a clear verdict; the interaction requires human review.";
-            case "survival_coverage_partial" -> "Survival coverage could not be established "
-                    + "for all confidentiality provisions; the limitation requires human "
-                    + "review.";
-            case DeviationUncertainPayload.SECOND_OPINION_DISAGREES -> "Rivell's two reviewers "
-                    + "disagree on this clause against the position: one finds an issue, the "
-                    + "other does not. Rivell does not decide; please take a look.";
-            case DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE -> "Rivell was unsure about "
-                    + "this clause against the position, and a second opinion could not be "
-                    + "obtained; please take a look.";
+                    "Rivell could not check this clause because the analysis "
+                            + "service was unavailable. Please take a look.";
+            case "carve_out_context_too_large" -> "The clauses were too long for Rivell to "
+                    + "compare, so it did not check how they interact. Please take a look.";
+            case "carve_out_not_comparable" -> "Rivell could not tell how the liability "
+                    + "carve-out and the indemnification clause interact, so it reports no "
+                    + "conflict either way. Please take a look.";
+            case "cross_clause_classification_uncertain" -> "Rivell could not reach a clear view of "
+                    + "how these clauses interact. Please take a look.";
+            case "survival_coverage_partial" -> "Rivell could not check whether every "
+                    + "confidentiality obligation survives termination. Please take a look.";
+            case DeviationUncertainPayload.SECOND_OPINION_DISAGREES -> "Rivell is unsure "
+                    + "whether this clause meets your position: one check finds an issue and "
+                    + "the other does not. Compare the clause with the position below.";
+            case DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE -> "Rivell is unsure "
+                    + "whether this clause meets your position, and could not get a second "
+                    + "check. Compare the clause with the position below.";
             default -> "The check recorded unresolved uncertainty for "
                     + signal.concept().value() + ".";
         };
@@ -321,11 +318,7 @@ public final class FindingAssembler {
             if (deviation.secondaryTopic()) {
                 return FindingSeverity.LOW;
             }
-            return switch (deviation.category()) {
-                case PolicyComparisonSpecs.WALK_AWAY -> FindingSeverity.HIGH;
-                case PolicyComparisonSpecs.WITHIN_FALLBACK -> FindingSeverity.LOW;
-                default -> FindingSeverity.MEDIUM;
-            };
+            return categorySeverity(deviation.category());
         }
         if (primary.signalType() == SignalType.CROSS_CLAUSE_CONFLICT) {
             return FindingSeverity.HIGH;
@@ -343,6 +336,27 @@ public final class FindingAssembler {
                     ? FindingSeverity.MEDIUM : FindingSeverity.LOW;
         }
         return FindingSeverity.MEDIUM;
+    }
+
+    private static FindingSeverity categorySeverity(String category) {
+        return switch (category) {
+            case PolicyComparisonSpecs.WALK_AWAY -> FindingSeverity.HIGH;
+            case PolicyComparisonSpecs.WITHIN_FALLBACK -> FindingSeverity.LOW;
+            default -> FindingSeverity.MEDIUM;
+        };
+    }
+
+    /**
+     * Severity R3 levers: the severity this finding would have had without the levers tagged on it,
+     * so an eval can restore it. The category before the levers is Jev's (P1, P3) or WITHIN_FALLBACK
+     * (P2: a routed item that became a "needs your look" item stands for a WITHIN_FALLBACK note).
+     */
+    private static FindingSeverity severityWithoutLevers(RawReviewSignal primary) {
+        var before = primary.quality().get("categoryBeforeLevers");
+        if (primary.payload() instanceof PositionDeviationPayload deviation && before instanceof String category) {
+            return deviation.secondaryTopic() ? FindingSeverity.LOW : categorySeverity(category);
+        }
+        return FindingSeverity.LOW;
     }
 
     private static FindingClassification classification(
@@ -395,20 +409,17 @@ public final class FindingAssembler {
         }
         if (primary.signalType() == SignalType.POLICY_DEVIATION) {
             claims.add(FindingClaim.of(1, ClaimKind.POLICY_BASIS,
-                    "The assessment is based on the applicable published organizational "
-                            + "policy resolved for this review; precedent is evidence, "
-                            + "never policy.",
+                    "Judged against your published playbook position for this review.",
                     absenceSubject, evidence));
         } else if (primary.signalType() == SignalType.POLICY_UNAVAILABLE) {
             claims.add(FindingClaim.of(1, ClaimKind.POLICY_BASIS,
-                    "No published policy applies to this concept; the finding records "
-                            + "that absence and does not infer policy. Precedent is "
-                            + "evidence, never policy.",
+                    "Your playbook has no position on this topic. Past contracts are "
+                            + "shown as examples only, not as your position.",
                     absenceSubject, evidence));
         } else if (primary.signalType() == SignalType.POLICY_AMBIGUOUS) {
             claims.add(FindingClaim.of(1, ClaimKind.POLICY_BASIS,
-                    "Multiple applicable published rules conflict for this concept; no "
-                            + "rule was selected. Precedent is evidence, never policy.",
+                    "More than one playbook position applies to this topic and they "
+                            + "conflict. Rivell did not choose between them.",
                     absenceSubject, evidence));
         }
         if (drafting != null && action == ProposedAction.USE_APPROVED_FALLBACK) {
@@ -426,6 +437,15 @@ public final class FindingAssembler {
                 && "VERIFIED".equals(openEnded.verificationOutcome())) {
             claims.add(FindingClaim.of(claims.size(), ClaimKind.GENERATIVE_EXPLANATION,
                     openEnded.explanation(), absenceSubject, evidence));
+        }
+        if (primary.quality().get("fallbackConditionsUnknown") instanceof List<?> unknown
+                && !unknown.isEmpty()) {
+            // P3: a look note, never a severity change; the conditions the contract does not settle
+            claims.add(FindingClaim.of(claims.size(), ClaimKind.OBSERVATION,
+                    "Some conditions of the listed fallback could not be checked from the clause or the "
+                            + "contract facts, so please check them yourself: "
+                            + String.join("; ", unknown.stream().map(String::valueOf).toList()) + ".",
+                    absenceSubject, evidence));
         }
         claims.add(FindingClaim.of(claims.size(), ClaimKind.RECOMMENDATION,
                 recommendation(action), absenceSubject, evidence));
@@ -447,13 +467,13 @@ public final class FindingAssembler {
                     + "approved fallback wording.";
             case ADD_REQUIRED_PROVISION -> "Recommend adding the required provision before "
                     + "signature.";
-            case REVIEW_AMBIGUITY -> "Recommend human legal review to resolve the policy "
-                    + "ambiguity before any change.";
-            case ESCALATE_TO_HUMAN -> "Recommend escalation to the responsible legal "
-                    + "reviewer; no machine-approved change is proposed.";
-            case CONSIDER_GENERATED_LANGUAGE -> "Recommend human review of the machine "
-                    + "candidate; it is not approved language.";
-            case NO_ACTION -> "No action proposed; this is an informational observation.";
+            case REVIEW_AMBIGUITY -> "Decide which position applies before changing the "
+                    + "clause.";
+            case ESCALATE_TO_HUMAN -> "Your playbook says this needs approval. Rivell "
+                    + "proposes no wording.";
+            case CONSIDER_GENERATED_LANGUAGE -> "Rivell suggests wording below. It is not "
+                    + "from your playbook, so check it before you use it.";
+            case NO_ACTION -> "No change needed. This is for your information.";
         };
     }
 
@@ -463,7 +483,8 @@ public final class FindingAssembler {
             "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
             "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
             "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
-            "positionLabel");
+            "positionLabel", "levers", "categoryBeforeLevers", "routeReason", "fallbackListed",
+            "fallbackConditionsOutcome", "fallbackConditionsUnknown", "fallbackConditionsUnmet", "fallbackConditionsExecutionId", "secondOpinionExecutionId");
 
     private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
@@ -472,6 +493,9 @@ public final class FindingAssembler {
             if (value != null) {
                 quality.put(key, value);
             }
+        }
+        if (primary.quality().get("levers") instanceof List<?> levers && !levers.isEmpty()) {
+            quality.put("severityWithoutLevers", severityWithoutLevers(primary).name());
         }
         var flags = new LinkedHashSet<String>();
         for (var signal : group) {

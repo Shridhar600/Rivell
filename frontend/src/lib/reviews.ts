@@ -13,7 +13,7 @@ import { humanizeCode } from './domainLabels'
 import type { ConceptLabel } from '../api/taxonomy'
 
 const REVIEW_STATUS_LABELS: Record<string, string> = {
-  ANALYSIS_QUEUED: 'Analysis queued',
+  ANALYSIS_QUEUED: 'Waiting to start',
   ANALYZING: 'Analyzing',
   COMPLETED: 'Completed',
   FAILED: 'Failed',
@@ -22,20 +22,6 @@ const REVIEW_STATUS_LABELS: Record<string, string> = {
 
 export function reviewStatusLabel(status: string): string {
   return REVIEW_STATUS_LABELS[status] ?? humanizeCode(status)
-}
-
-export function reviewStatusModifier(status: string): string {
-  switch (status) {
-    case 'COMPLETED':
-      return 'badge--status-complete'
-    case 'FAILED':
-      return 'badge--status-failed'
-    case 'ANALYZING':
-    case 'ANALYSIS_QUEUED':
-      return 'badge--status-active'
-    default:
-      return 'badge--muted'
-  }
 }
 
 export function runStatusLabel(status: string): string {
@@ -60,19 +46,6 @@ const SEVERITY_LABELS: Record<string, string> = {
 
 export function severityLabel(severity: string): string {
   return SEVERITY_LABELS[severity] ?? humanizeCode(severity)
-}
-
-export function severityModifier(severity: string): string {
-  switch (severity) {
-    case 'HIGH':
-      return 'badge--attention-high'
-    case 'MEDIUM':
-      return 'badge--attention-elevated'
-    case 'LOW':
-      return 'badge--attention-routine'
-    default:
-      return 'badge--muted'
-  }
 }
 
 const CLASSIFICATION_LABELS: Record<string, string> = {
@@ -111,7 +84,7 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
   EXPECTED_CONCEPT_ABSENT: 'Expected provision absent',
   POLICY_UNAVAILABLE: 'Policy unavailable',
   NOT_COVERED_BY_PLAYBOOK: 'Unusual clause, not covered by your playbook',
-  SPOTTED_IN_WHOLE_CONTRACT_READ: 'Picked by the whole-contract read',
+  SPOTTED_IN_WHOLE_CONTRACT_READ: 'Picked by the full-contract read',
   MISSING_POSITION: 'Missing from the contract',
   AMBIGUOUS_POLICY: 'Policy ambiguous',
   SURVIVAL_COVERAGE_GAP: 'Survival coverage gap',
@@ -125,8 +98,8 @@ const OBSERVATION_KIND_LABELS: Record<string, string> = {
 
 const UNCERTAINTY_REASON_LABELS: Record<string, string> = {
   bounded_decision_unavailable: 'Could not be assessed',
-  second_opinion_disagrees: 'Needs your look: two reviewers disagree',
-  second_opinion_unavailable: 'Needs your look: no second opinion',
+  second_opinion_disagrees: 'Needs your look: Rivell is unsure',
+  second_opinion_unavailable: 'Needs your look: no second check',
 }
 
 export function observationKindLabel(kind: string): string {
@@ -151,21 +124,27 @@ export function comparisonCategoryLabel(category: string): string {
 }
 
 /**
- * The comparison's own assessment in one line: the code-owned category, then the model's flag
- * probability as a percentage. The uncovered-clause triage's probability stands in the same place
- * when no comparison category exists. The probability is the model's estimate, never a certainty,
- * and a finding whose quality lacks every part shows no line.
+ * The comparison's own assessment in one line: the code-owned category, then how sure Rivell is,
+ * in words. A percentage read as false precision to lawyers, so the model's flag probability (or
+ * the uncovered-clause triage's) is shown as high, medium or low. A finding whose quality lacks
+ * every part shows no line.
  */
+export function confidenceWord(probability: number): 'high' | 'medium' | 'low' {
+  if (probability >= 0.8) return 'high'
+  if (probability >= 0.6) return 'medium'
+  return 'low'
+}
+
 export function assessmentSummary(quality: FindingQuality | null): string | null {
   const parts: string[] = []
   if (quality?.category) parts.push(comparisonCategoryLabel(quality.category))
   const probability = quality?.flagProbability ?? quality?.uncoveredProbability ?? null
   if (probability !== null) {
-    parts.push(`Model confidence ${Math.round(probability * 100)}% (an estimate, not a certainty)`)
+    parts.push(`Confidence: ${confidenceWord(probability)}`)
   } else if (quality?.presenceProbability != null) {
     // an omission: how likely the playbook position requires the provision at all
     parts.push(
-      `Required by your playbook: estimate ${Math.round(quality.presenceProbability * 100)}% (an estimate, not a certainty)`,
+      `Your playbook requires this (estimate ${Math.round(quality.presenceProbability * 100)}%).`,
     )
   }
   return parts.length > 0 ? parts.join(' · ') : null
@@ -177,7 +156,7 @@ const CLAIM_KIND_LABELS: Record<string, string> = {
   EVIDENCE_BASIS: 'Evidence basis',
   ABSENCE_BASIS: 'Absence basis',
   RECOMMENDATION: 'Recommended action',
-  GENERATIVE_EXPLANATION: 'AI-proposed explanation',
+  GENERATIVE_EXPLANATION: "Rivell's explanation",
 }
 
 export function claimKindLabel(kind: string): string {
@@ -187,9 +166,9 @@ export function claimKindLabel(kind: string): string {
 const PROPOSED_ACTION_LABELS: Record<string, string> = {
   USE_APPROVED_FALLBACK: 'Use the approved fallback wording',
   ADD_REQUIRED_PROVISION: 'Add the required provision',
-  REVIEW_AMBIGUITY: 'Policy ambiguity needs human review',
-  ESCALATE_TO_HUMAN: 'Human review needed',
-  CONSIDER_GENERATED_LANGUAGE: 'Consider the AI-proposed wording',
+  REVIEW_AMBIGUITY: 'Policy ambiguity needs your review',
+  ESCALATE_TO_HUMAN: 'Your review needed',
+  CONSIDER_GENERATED_LANGUAGE: "Consider Rivell's proposed wording",
   NO_ACTION: 'No action proposed',
   UNKNOWN: 'Recommended action',
 }
@@ -252,7 +231,7 @@ const LOOK_REASONS = new Set([
 
 function degradationFlagLabel(flag: string): string {
   if (flag.includes('provider_unavailable') || flag.includes('unavailable')) {
-    return 'A supporting semantic decision was unavailable'
+    return 'A supporting check was unavailable'
   }
   if (flag.includes('not_comparable')) return 'The assessment was not comparable'
   if (flag.includes('uncertain')) return 'An uncertain classification is recorded'
@@ -276,7 +255,7 @@ export function analysisWarningMessage(warning: AnalysisWarning): string {
       : 'This check ran in a degraded mode; its result may be incomplete.'
   const base = message || fallback
   if (warning.reasonCode === 'SURVIVAL_COVERAGE_PARTIAL') {
-    return `${base} Human review is required before treating the provision as covered or uncovered.`
+    return `${base} Your review is required before treating the provision as covered or uncovered.`
   }
   return base
 }
@@ -394,11 +373,11 @@ export function policyNoteText(
 ): string | null {
   if (finding.issueFamily === 'POLICY_UNAVAILABLE') {
     return finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK'
-      ? 'This is a gap in the playbook, not a breach of one. Precedent is evidence only and does not establish a position.'
-      : 'No organizational policy covers this clause. Historical precedent is evidence only and does not establish policy.'
+      ? 'This is a gap in the playbook, not a breach of one. Past contracts are examples only, not your position.'
+      : 'Your playbook has no position on this clause. Past contracts are examples only, not your position.'
   }
   if (finding.issueFamily === 'POLICY_AMBIGUOUS') {
-    return 'More than one published policy applies. Rivell did not choose between them; the ambiguity is preserved for human review.'
+    return 'More than one published policy applies. Rivell did not choose between them; the ambiguity is preserved for your review.'
   }
   return null
 }
@@ -484,8 +463,8 @@ export function clauseMarksLegend(marks: readonly ShownClauseMark[]): string {
 }
 
 export function engineLabel(engine: string | null): string {
-  if (engine === 'V2') return 'v2: a second opinion when the first review is unsure'
-  if (engine === 'V1') return 'v1: one review only'
+  if (engine === 'V2') return 'A second opinion when the first check is unsure'
+  if (engine === 'V1') return 'One check only'
   return 'Not recorded'
 }
 

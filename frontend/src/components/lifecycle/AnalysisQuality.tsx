@@ -5,7 +5,6 @@ import {
   checkKeyLabel,
   coverageLimitationSummary,
   hasNewerRun,
-  runStatusLabel,
 } from '../../lib/reviews'
 
 /**
@@ -23,14 +22,13 @@ export function AnalysisQuality({ summary }: { summary: ReviewSummary }) {
       <h3 className="rv-lc-lb">Analysis quality</h3>
       {newer ? (
         <p>
-          A newer analysis attempt exists ({runStatusLabel(summary.latestRunStatus ?? 'UNKNOWN')}). This page shows
-          the latest completed analysis.
+          A newer analysis has run. This page shows the latest completed one.
         </p>
       ) : null}
       {coverage ? <p>{coverage}</p> : null}
       {summary.analysisWarnings.length > 0 ? (
         <>
-          <p>These checks ran with reduced certainty. Their results may be incomplete.</p>
+          <p>Some checks were incomplete.</p>
           <ul>
             {summary.analysisWarnings.map((warning, index) => (
               <li key={`${warning.checkKey}-${index}`}>

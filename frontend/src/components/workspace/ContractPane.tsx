@@ -16,6 +16,7 @@ import {
   topLevelNodes,
 } from '../../lib/workspace'
 import { Button } from '../ui/Button'
+import { ClauseIcon } from '../ui/Icon'
 import { ErrorState, LoadingState } from '../ui/State'
 
 export type DocMode = 'changes' | 'orig' | 'final'
@@ -23,7 +24,7 @@ export type DocMode = 'changes' | 'orig' | 'final'
 const MODES: { mode: DocMode; label: (final: boolean) => string }[] = [
   { mode: 'changes', label: () => 'Changes' },
   { mode: 'orig', label: () => 'Original' },
-  { mode: 'final', label: (final) => (final ? 'Approved preview' : 'Decision preview') },
+  { mode: 'final', label: () => 'Preview' },
 ]
 
 interface Props {
@@ -44,8 +45,6 @@ interface Props {
   selected: FindingDetail | undefined
   onSelect: (findingId: string) => void
   isFinalized: boolean
-  /** The server's count of findings still needing a decision. */
-  remaining: number | null
   /** Notes above the page: a pinned older version, limited coverage, analysis warnings. */
   notes: ReactNode
   /** An evidence jump target. A new object re-reveals the same node, so repeated jumps work. */
@@ -408,10 +407,10 @@ function AbsenceCards({ ctx, findings }: { ctx: Ctx; findings: FindingSummary[] 
             </b>
             <span>
               {ctx.mode === 'final'
-                ? `${change?.language ?? ''}\nPlacement will be resolved by deterministic redline execution.`
+                ? `${change?.language ?? ''}\nRivell places this when it builds the redline.`
                 : change
-                  ? 'Insertion language is approved. Physical placement is not shown here; Rivell resolves placement deterministically during redline execution.'
-                  : 'This clause does not exist in the contract, so there is no source location. The proposed insertion is shown in the Finding panel.'}
+                  ? 'Rivell will place this provision when it builds the redline.'
+                  : 'This clause does not exist in the contract, so there is no source location. The proposed insertion is shown in the finding detail panel.'}
             </span>
           </div>
         )
@@ -421,7 +420,7 @@ function AbsenceCards({ ctx, findings }: { ctx: Ctx; findings: FindingSummary[] 
 }
 
 export function ContractPane(props: Props) {
-  const { nodes, findings, mode, term, isFinalized, remaining, selectedId, onSelect } = props
+  const { nodes, findings, mode, term, isFinalized, selectedId, onSelect } = props
   const page = useRef<HTMLElement>(null)
   const focusNodeId = props.focusTarget?.nodeId ?? null
 
@@ -476,6 +475,15 @@ export function ContractPane(props: Props) {
     ? clauseMarksLegend(top.filter((node) => node.nodeType === 'HEADING').map((node) => markOf(ctx, node.id)))
     : ''
 
+  // What each view shows is a tooltip on its tab, so the toolbar holds only the tabs.
+  const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`
+  const modeHelp: Record<DocMode, string> = {
+    changes: 'The contract with Rivell’s suggestion for the selected finding and the changes you decided',
+    orig: 'The contract as received, shown as plain text',
+    final: isFinalized
+      ? `The contract with the ${plural(executable, 'approved change')} that go into the redline`
+      : `The contract with your ${plural(executable, 'decided change')}. Open findings keep the original text.`,
+  }
   const note = term ? (
     <>
       Matches for “{term}”{' '}
@@ -483,15 +491,7 @@ export function ContractPane(props: Props) {
         Clear
       </button>
     </>
-  ) : mode === 'changes' ? (
-    'Selected open Finding previews Rivell’s proposal; decided changes reflect current human decisions.'
-  ) : mode === 'orig' ? (
-    'As received. Extracted structural text, not native DOCX rendering.'
-  ) : isFinalized ? (
-    `${executable} frozen executable ${executable === 1 ? 'change' : 'changes'} shown; INSERT placement remains unresolved until execution.`
-  ) : (
-    `${executable} current executable ${executable === 1 ? 'decision' : 'decisions'} shown; ${remaining ?? 'the remaining'} unresolved ${remaining === 1 ? 'Finding remains' : 'Findings remain'} as received.`
-  )
+  ) : null
 
   return (
     <main className="rv-ws-pane rv-ws-doc" aria-label="Contract">
@@ -503,24 +503,28 @@ export function ContractPane(props: Props) {
               type="button"
               role="tab"
               aria-selected={mode === entry.mode}
+              title={modeHelp[entry.mode]}
               onClick={() => props.onMode(entry.mode)}
             >
               {entry.label(isFinalized)}
             </button>
           ))}
         </div>
-        <span className="rv-ws-dnote">{note}</span>
+        {/* A search match note wins; otherwise the one-line clause summary. */}
+        {note ? (
+          <span className="rv-ws-dnote">{note}</span>
+        ) : legend ? (
+          <span className="rv-ws-dnote" title="What Rivell did with each clause">
+            Clauses: {legend}
+          </span>
+        ) : null}
+        {props.onContractAnalysis ? (
+          <Button compact className="rv-ws-details" title="Parties, defined terms and cross-references Rivell read in this contract" onClick={props.onContractAnalysis}>
+            <ClauseIcon className="rv-icon" />
+            Contract details
+          </Button>
+        ) : null}
       </div>
-      {legend || props.onContractAnalysis ? (
-        <div className="rv-ws-legend">
-          {legend ? <span aria-label="What Rivell did with each clause">Clauses: {legend}</span> : null}
-          {props.onContractAnalysis ? (
-            <button type="button" className="rv-ws-link" onClick={props.onContractAnalysis}>
-              Contract analysis
-            </button>
-          ) : null}
-        </div>
-      ) : null}
       {props.notes}
       {props.isPending ? <LoadingState label="Loading contract…" /> : null}
       {props.isError ? <ErrorState message="The contract could not be loaded." onRetry={props.onRetry} /> : null}

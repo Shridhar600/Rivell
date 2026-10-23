@@ -21,6 +21,22 @@ final class KnowledgeTableShaping {
     private static final double LABEL_LIKE_RATIO = 0.8;
     private static final double ROLE_KEYED_RATIO = 0.5;
 
+    /** Words that open a sentence, so a line that starts with one is not a field label. */
+    private static final Set<String> SENTENCE_STARTERS = Set.of(
+            "the", "a", "an", "no", "not", "any", "all", "this", "that", "these", "those",
+            "our", "your", "its", "their", "we", "you", "it", "and", "or", "but", "if",
+            "when", "unless", "for", "to", "of", "in", "on", "at", "by", "with", "from",
+            "as", "is", "are", "shall", "must", "will", "may", "can", "should", "would",
+            "could", "has", "have", "had", "do", "does", "did");
+
+    /**
+     * Words that end a phrase promising a continuation, not naming a field. Prepositions are
+     * left out: "Approved by" and "Dated as of" are ordinary form labels.
+     */
+    private static final Set<String> CONTINUATION_ENDINGS = Set.of(
+            "the", "a", "an", "shall", "must", "will", "may", "can", "should", "would",
+            "could", "and", "or");
+
     private KnowledgeTableShaping() {
     }
 
@@ -63,6 +79,15 @@ final class KnowledgeTableShaping {
         if (nonEmpty.isEmpty()) {
             return new Grid(List.of());
         }
+        var labelled = labelledCells(nonEmpty);
+        if (labelled != null) {
+            return labelled;
+        }
+        // A cell that carries a label on its first line but cannot be split with certainty
+        // stays a grid: turning it into a field key would drop or mangle source text.
+        if (hasMultiLineLabelLikeCell(nonEmpty)) {
+            return grid(nonEmpty);
+        }
         var width = nonEmpty.stream().mapToInt(KnowledgeTableShaping::populatedWidth).max().orElse(0);
         if (firstColumnLabelLikeRatio(nonEmpty) < LABEL_LIKE_RATIO) {
             return grid(nonEmpty);
@@ -77,6 +102,69 @@ final class KnowledgeTableShaping {
         var subjectGrid = isHeaderRow(nonEmpty.get(0)) && roleRatio < ROLE_KEYED_RATIO
                 && sentenceValueRatio(nonEmpty.subList(1, nonEmpty.size())) >= ROLE_KEYED_RATIO;
         return width <= 2 && !subjectGrid ? keyValue(nonEmpty) : grid(nonEmpty);
+    }
+
+    /**
+     * A table whose every cell carries its own label on its first line ("OWNER" over "Director,
+     * Commercial Legal") is a set of labelled fields, not a grid: no row of it is a header.
+     */
+    private static KeyValue labelledCells(List<Row> rows) {
+        var fields = new LinkedHashMap<String, String>();
+        var provenance = new ArrayList<UUID>();
+        for (var row : rows) {
+            provenance.add(row.rowNodeId());
+            for (var cell : row.nonBlankCells()) {
+                var lines = cell.text().lines().map(String::strip).filter(line -> !line.isEmpty()).toList();
+                if (lines.size() < 2 || !isCertainLabel(lines.getFirst())) {
+                    return null;
+                }
+                var value = String.join("\n", lines.subList(1, lines.size()));
+                // A lower-case value continues the first line's sentence: the cell is prose.
+                if (!value.isEmpty() && Character.isLowerCase(value.codePointAt(0))) {
+                    return null;
+                }
+                fields.put(uniqueKey(fields, lines.getFirst()), value);
+                provenance.add(cell.nodeId());
+            }
+        }
+        return fields.isEmpty() ? null : new KeyValue(Collections.unmodifiableMap(fields), List.copyOf(provenance));
+    }
+
+    /**
+     * A label we are sure of: a known field label, an all-caps heading, or a short phrase that
+     * reads as a name rather than the opening of a sentence ("The Supplier shall").
+     */
+    static boolean isCertainLabel(String text) {
+        if (!isLabelLike(text)) {
+            return false;
+        }
+        var stripped = text.strip();
+        if (RecordLabelRoles.known(stripped).isPresent()) {
+            return true;
+        }
+        var letters = stripped.chars().filter(Character::isLetter).toArray();
+        if (letters.length > 0
+                && java.util.Arrays.stream(letters).noneMatch(Character::isLowerCase)) {
+            return true;
+        }
+        var words = stripped.split("\\s+");
+        var first = RecordLabelRoles.normalize(words[0]);
+        if (SENTENCE_STARTERS.contains(first)) {
+            return false;
+        }
+        var last = RecordLabelRoles.normalize(words[words.length - 1]);
+        return !CONTINUATION_ENDINGS.contains(last);
+    }
+
+    private static boolean hasMultiLineLabelLikeCell(List<Row> rows) {
+        return rows.stream()
+                .flatMap(row -> row.nonBlankCells().stream())
+                .map(Cell::text)
+                .anyMatch(text -> {
+                    var lines = text.lines().map(String::strip)
+                            .filter(line -> !line.isEmpty()).toList();
+                    return lines.size() > 1 && isLabelLike(lines.getFirst());
+                });
     }
 
     private static double sentenceValueRatio(List<Row> rows) {
@@ -116,7 +204,7 @@ final class KnowledgeTableShaping {
         var taken = new LinkedHashSet<String>();
         for (int i = 0; i < width; i++) {
             var label = i < headerLabels.size() ? headerLabels.get(i) : null;
-            var base = label == null || label.isBlank() ? "Column " + (i + 1) : label.strip();
+            var base = label == null || label.isBlank() ? neutralKey(i) : label.strip();
             var key = base;
             for (int suffix = 2; taken.contains(key); suffix++) {
                 key = base + " (" + suffix + ")";
@@ -132,6 +220,81 @@ final class KnowledgeTableShaping {
                 .filter(value -> value != null && !value.isBlank())
                 .findFirst()
                 .orElse("");
+    }
+
+    /**
+     * The title a spreadsheet clause row gives itself: its title column ("Title", "Clause
+     * title", "Name", ...) or, when it has none, its topic column, followed by the variant
+     * ("Preferred"). Empty when the row names itself by neither, so the caller keeps the
+     * first value it read.
+     */
+    static String clauseVariantTitle(Map<String, String> columns) {
+        var title = firstRoleValue(columns, RecordFieldRole.TITLE);
+        if (title == null) {
+            title = firstRoleValue(columns, RecordFieldRole.TOPIC);
+        }
+        if (title == null) {
+            return null;
+        }
+        var baseTitle = KnowledgeTitles.bounded(title);
+        if (baseTitle == null || baseTitle.isBlank()) {
+            return null;
+        }
+        var variant = firstRoleValue(columns, RecordFieldRole.VARIANT);
+        var variantText = variant == null ? "" : firstLine(variant);
+        if (variantText.isEmpty()) {
+            return baseTitle;
+        }
+        // The variant must survive the title bound, otherwise two variants of one long title
+        // truncate to the same name. Leave room for " · " and the variant in the title part.
+        var room = KnowledgeTitles.MAX_LENGTH - " · ".length() - variantText.length();
+        var fittedTitle = fitTitle(baseTitle, room);
+        if (fittedTitle.isEmpty()) {
+            return KnowledgeTitles.bounded(variantText);
+        }
+        return fittedTitle + " · " + variantText;
+    }
+
+    private static String firstLine(String text) {
+        return text.lines().map(String::strip).filter(line -> !line.isEmpty())
+                .findFirst().orElse("");
+    }
+
+    private static String fitTitle(String title, int room) {
+        if (room <= 0) {
+            return "";
+        }
+        if (title.length() <= room) {
+            return title;
+        }
+        if (room == 1) {
+            return "…";
+        }
+        var cut = title.lastIndexOf(' ', room - 2);
+        if (cut < 1) {
+            cut = room - 1;
+        }
+        return title.substring(0, cut).stripTrailing() + "…";
+    }
+
+    private static String firstRoleValue(Map<String, String> columns, RecordFieldRole wanted) {
+        for (var entry : columns.entrySet()) {
+            var value = entry.getValue();
+            if (value != null && !value.isBlank()
+                    && RecordLabelRoles.known(entry.getKey())
+                            .filter(role -> role == wanted).isPresent()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A placeholder must not read as a source column name or as a field role. "Field 1" says
+     * only where the value came from, so it cannot outrank a real "Clause text" column.
+     */
+    private static String neutralKey(int column) {
+        return "Field " + (column + 1);
     }
 
     private static double firstColumnLabelLikeRatio(List<Row> rows) {
@@ -154,7 +317,11 @@ final class KnowledgeTableShaping {
         long known = rows.stream()
                 .filter(row -> {
                     var first = firstColumnCell(row);
-                    return first != null && RecordLabelRoles.known(first.text()).isPresent();
+                    // A title column names the row, not a field in it: counting it as a known
+                    // field label would turn a two-column table with a "Title" header into one
+                    // key-value record instead of a grid.
+                    return first != null && RecordLabelRoles.known(first.text())
+                            .filter(role -> role != RecordFieldRole.TITLE).isPresent();
                 })
                 .count();
         return (double) known / rows.size();
@@ -234,7 +401,7 @@ final class KnowledgeTableShaping {
                     continue;
                 }
                 var column = columnOf(cell, index);
-                columns.put(column < keys.size() ? keys.get(column) : "Column " + (column + 1),
+                columns.put(column < keys.size() ? keys.get(column) : neutralKey(column),
                         cell.text());
             }
             if (columns.isEmpty()) {
@@ -295,7 +462,7 @@ final class KnowledgeTableShaping {
 
         String key(int column) {
             var label = column < labels.size() ? labels.get(column) : null;
-            return label == null || label.isBlank() ? "Column " + (column + 1) : label.strip();
+            return label == null || label.isBlank() ? neutralKey(column) : label.strip();
         }
 
         String group(int column) {
@@ -382,7 +549,9 @@ final class KnowledgeTableShaping {
         if (cells.size() < 2) {
             return false;
         }
-        var labelLike = cells.stream().filter(cell -> isLabelLike(cell.text())).count();
+        var labelLike = cells.stream()
+                .filter(cell -> cell.text().lines().count() == 1 && isLabelLike(cell.text()))
+                .count();
         return (double) labelLike / cells.size() >= LABEL_LIKE_RATIO;
     }
 

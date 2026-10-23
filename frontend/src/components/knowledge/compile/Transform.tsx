@@ -41,12 +41,12 @@ function SourceCard({ artifact, source, onContext }: { artifact: ArtifactDetail;
           : null}
         {passages !== null && passages.length === 0 && unitText ? (
           <div className="rv-kc-pass">
-            <div className="rv-kc-loc">Extracted text of the source region</div>
+            <div className="rv-kc-loc">Text read from the source passage</div>
             <p>{unitText}</p>
           </div>
         ) : null}
         {passages !== null && passages.length === 0 && !unitText ? (
-          <p className="rv-kc-muted">The source region for this candidate is not available in the extracted structure.</p>
+          <p className="rv-kc-muted">The source passage for this entry is not available.</p>
         ) : null}
         <div className="rv-kc-provline">
           <span>{artifact.filename}</span>
@@ -63,12 +63,12 @@ function SourceCard({ artifact, source, onContext }: { artifact: ArtifactDetail;
 function InterpretationCard({ candidate, artifact, editing }: { candidate: Candidate; artifact: ArtifactDetail; editing: ReactNode | null }) {
   const { labelFor } = useTaxonomy()
   const corrected = hasHumanCorrection(candidate, artifact)
-  const rows = interpretationRows(candidate, labelFor)
+  const rows = interpretationRows(candidate, labelFor, artifact)
   return (
-    <section className="rv-kc-xcard" aria-label="Structured interpretation">
+    <section className="rv-kc-xcard" aria-label="What Rivell read">
       <div className="rv-kc-xh">
-        <strong>Structured interpretation</strong>
-        {corrected ? <span className="rv-kc-stb rv-kc-stb--ok">Corrected by you</span> : <span className="rv-kc-xh__meta">Rivell extracted</span>}
+        <strong>What Rivell read</strong>
+        {corrected ? <span className="rv-kc-stb rv-kc-stb--ok">Corrected by you</span> : <span className="rv-kc-xh__meta">Rivell read</span>}
       </div>
       <div className="rv-kc-xb">
         {editing ?? (
@@ -86,7 +86,7 @@ function InterpretationCard({ candidate, artifact, editing }: { candidate: Candi
           </dl>
         )}
         {corrected && !editing ? (
-          <p className="rv-kc-history">Rivell&apos;s extracted values remain in history. Your correction is the effective candidate value.</p>
+          <p className="rv-kc-history">Rivell&apos;s original reading is kept. Your correction is used.</p>
         ) : null}
       </div>
     </section>

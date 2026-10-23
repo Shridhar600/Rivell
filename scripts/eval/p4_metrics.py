@@ -18,7 +18,8 @@ TRIAGE_FLAGGED = 0.5
 
 QUALITY_KEYS = ("route", "foundBy", "uncertaintyReason", "spottedSeverity",
                 "presenceProbability", "searchedClauses", "comparedClauses",
-                "positionLabel", "jevCategory", "secondOpinionCategory")
+                "positionLabel", "jevCategory", "secondOpinionCategory", "levers",
+                "severityWithoutLevers")
 
 LEVER_KEYS = ("issues", "issuesDetected", "falseAlarmSections",
               "seriousFalseAlarmSections", "findings")
@@ -208,5 +209,38 @@ def severity_raise_score(score_contract, answer, nodes, clauses, findings):
                              [dict(finding, severity="LOW") if severity_raised(finding) else finding
                               for finding in findings])
     return {"raised": sum(1 for finding in findings if severity_raised(finding)),
+            "seriousCaught": serious_caught(without["issues"]),
+            "seriousFalseAlarmSections": without["seriousFalseAlarmSections"]}
+
+
+SEVERITIES = ("LOW", "MEDIUM", "HIGH")
+R3_LEVERS = ("P1", "P2", "P3")
+
+
+def _tagged(finding, levers):
+    return any(lever in (quality(finding).get("levers") or []) for lever in levers)
+
+
+def lever_changed(finding, levers):
+    """Severity R3: the finding carries one of the levers and its severity moved because of them."""
+    restored = quality(finding).get("severityWithoutLevers")
+    return (_tagged(finding, levers) and restored in SEVERITIES
+            and restored != finding.get("severity"))
+
+
+def lever_tagged(findings, levers):
+    """Findings the given levers touched, whether or not their severity moved."""
+    return sum(1 for finding in findings if _tagged(finding, levers))
+
+
+def lever_severity_score(score_contract, answer, nodes, clauses, findings, levers):
+    """The same run re-scored with the findings the given levers changed back at their unchanged
+    severity (P1: agreed worse category, P2: within-split routing, P3: fallback conditions)."""
+    without = score_contract(answer, nodes, clauses,
+                             [dict(finding, severity=quality(finding)["severityWithoutLevers"])
+                              if lever_changed(finding, levers) else finding
+                              for finding in findings])
+    return {"tagged": lever_tagged(findings, levers),
+            "raised": sum(1 for finding in findings if lever_changed(finding, levers)),
             "seriousCaught": serious_caught(without["issues"]),
             "seriousFalseAlarmSections": without["seriousFalseAlarmSections"]}

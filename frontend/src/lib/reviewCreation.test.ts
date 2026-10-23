@@ -7,7 +7,7 @@ describe('classifyCreateOutcome', () => {
 
     expect(outcome.kind).toBe('CONFLICT')
     expect(outcome.uncertain).toBe(false)
-    expect(outcome.message).toMatch(/semantic analysis may not be ready/i)
+    expect(outcome.message).toMatch(/analysis may not be ready/i)
     expect(outcome.message).toMatch(/already used for a different contract version/i)
     expect(outcome.message).not.toMatch(/IllegalState|Exception|at com\./)
   })

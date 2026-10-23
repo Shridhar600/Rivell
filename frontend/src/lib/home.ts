@@ -72,15 +72,15 @@ const GUIDANCE: Partial<Record<LifecycleKey, string>> = {
   queued: 'You can leave this page. Analysis starts on its own.',
   analyzing: 'You can leave this page. Analysis keeps running.',
   failed: 'The contract is unchanged. Open the review to see what stopped it.',
-  completed: 'Nothing is decided yet. Your decisions are recorded separately from the recommendations.',
+  completed: "No decision yet. Your decisions are kept separate from Rivell's recommendations.",
   progress: 'Open the review to continue deciding.',
-  blocked: 'An escalated Finding blocks finalizing until it is resolved.',
+  blocked: 'An escalated finding blocks finalizing until it is resolved.',
   ready: 'Every decision is made. Finalizing is yours to do.',
-  degraded: 'Analysis finished, but no planned check completed, so there is nothing to finalize.',
-  finalized: 'Finalized. The decisions are frozen.',
+  degraded: 'No check completed, so there is nothing to finalize.',
+  finalized: 'Finalized. The decisions cannot be changed.',
   finalized_zero: 'Finalized with no approved changes, so no redline was needed.',
-  rl_verified: 'Generated from the frozen decisions and checked against the result.',
-  rl_failed: 'The redline could not be produced. The frozen decisions are unchanged.',
+  rl_verified: 'Built from your final decisions and checked.',
+  rl_failed: 'The redline could not be produced. Your decisions are unchanged.',
 }
 
 /** When something last happened to the Review, by the most specific fact the server gives. */

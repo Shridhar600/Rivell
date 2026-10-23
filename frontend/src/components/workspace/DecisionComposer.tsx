@@ -62,7 +62,7 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
     onSubmit(submission)
   }
 
-  const title = kind === 'EDIT' ? 'Edit decision' : kind === 'REJECT' ? 'Reject Finding' : 'Escalate Finding'
+  const title = kind === 'EDIT' ? 'Edit decision' : kind === 'REJECT' ? 'Reject finding' : 'Escalate finding'
   return (
     <form
       className="rv-ws-composer"
@@ -73,8 +73,8 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
       }}
     >
       <h3>{title}</h3>
-      {kind === 'REJECT' ? <p>No approved change will be created from this Finding.</p> : null}
-      {kind === 'ESCALATE' ? <p>This Finding will remain unresolved and block finalization.</p> : null}
+      {kind === 'REJECT' ? <p>No approved change will be created from this finding.</p> : null}
+      {kind === 'ESCALATE' ? <p>This finding will remain unresolved and block finalization.</p> : null}
 
       {kind === 'EDIT' ? (
         <>
@@ -106,7 +106,7 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
             </div>
           ) : null}
           {approvedAction === 'DELETE' ? (
-            <p>This edit creates a DELETE decision for the exact frozen target. No replacement language is required.</p>
+            <p>This deletes the clause. No replacement wording is needed.</p>
           ) : null}
           {needsLanguage ? (
             <div>
@@ -114,7 +114,7 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
               <textarea
                 ref={firstField}
                 aria-label="Approved language"
-                placeholder="Enter the human-approved language"
+                placeholder="Enter the approved wording"
                 value={language}
                 aria-required
                 aria-invalid={errors.approvedLanguage ? true : undefined}
@@ -132,8 +132,7 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
           ) : null}
           {cannotEdit ? (
             <p className="rv-ws-error" role="alert">
-              This finding&apos;s subject type is not recognized, so a change cannot be authored here. Reject or escalate it
-              instead.
+              This finding cannot be edited here. Reject or escalate it instead.
             </p>
           ) : null}
         </>

@@ -5,6 +5,6 @@ import java.util.UUID;
 public class AnalysisNotCompleteException extends RuntimeException {
 
     public AnalysisNotCompleteException(UUID reviewId) {
-        super("Review " + reviewId + " has no completed machine analysis");
+        super("The analysis for this review has not finished yet.");
     }
 }

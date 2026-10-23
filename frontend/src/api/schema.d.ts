@@ -1186,6 +1186,8 @@ export interface components {
             /** @enum {string} */
             reviewStatus?: "PENDING" | "APPROVED" | "EDITED" | "REJECTED" | "PUBLISHED";
             rawLabel?: string;
+            editedTitle?: string;
+            title?: string;
             contentText?: string;
             payloadColumns?: {
                 [key: string]: string;
@@ -1257,6 +1259,7 @@ export interface components {
             verification?: "NOT_VERIFIED" | "VERIFIED" | "UNCERTAIN" | "DISPUTED";
         };
         ReviewEditRequest: {
+            title?: string;
             contentText?: string;
             payloadColumns?: {
                 [key: string]: string;
@@ -1325,6 +1328,7 @@ export interface components {
             /** @enum {string} */
             artifactType?: "PLAYBOOK" | "CLAUSE_LIBRARY" | "TEMPLATE" | "EXECUTED_PRECEDENT" | "NEGOTIATION_HISTORY" | "EXTERNAL_REFERENCE";
             filename?: string;
+            documentTitle?: string;
             contentType?: string;
             /** Format: int64 */
             sizeBytes?: number;
@@ -1580,7 +1584,7 @@ export interface components {
             /** @enum {string} */
             paperSource?: "OUR_PAPER" | "COUNTERPARTY_PAPER" | "THIRD_PARTY";
             /** @enum {string} */
-            jurisdiction?: "US" | "UK" | "UNSPECIFIED";
+            jurisdiction?: "US" | "UK" | "AUSTRALIA" | "CANADA" | "IRELAND" | "INDIA" | "NEW_ZEALAND" | "SINGAPORE" | "HONG_KONG" | "GERMANY" | "FRANCE" | "NETHERLANDS" | "OTHER" | "UNSPECIFIED";
             contractPackKey?: string;
         };
         CreateReviewRequest: {
@@ -2304,6 +2308,7 @@ export interface components {
             /** @enum {string} */
             artifactType?: "PLAYBOOK" | "CLAUSE_LIBRARY" | "TEMPLATE" | "EXECUTED_PRECEDENT" | "NEGOTIATION_HISTORY" | "EXTERNAL_REFERENCE";
             filename?: string;
+            documentTitle?: string;
             contentType?: string;
             /** Format: int64 */
             sizeBytes?: number;

@@ -47,8 +47,8 @@ function Overview({ catalog, state }: { catalog: Catalog; state: ReturnType<type
       {catalog.inCompilation.length > 0 ? (
         <section aria-labelledby="k-compiling">
           <div className="rv-k-sech">
-            <h2 id="k-compiling">In compilation</h2>
-            <span>Nothing is used in reviews until you publish it</span>
+            <h2 id="k-compiling">Drafts</h2>
+            <span>Not used in reviews until published</span>
           </div>
           <ul className="rv-k-list">
             {catalog.inCompilation.map((source) => (
@@ -122,7 +122,7 @@ function Overview({ catalog, state }: { catalog: Catalog; state: ReturnType<type
                 to={recentTarget(entry)}
                 type={entry.type}
                 title={artifactName(entry.artifact)}
-                detail={`Publication ${entry.publication.number}, published ${longDate(entry.publication.createdAt)}`}
+                detail={`Knowledge version ${entry.publication.number}, published ${longDate(entry.publication.createdAt)}`}
                 right={countNoun(entry.artifact.artifactType, entry.count)}
               />
             ))}

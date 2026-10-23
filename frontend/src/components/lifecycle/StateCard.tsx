@@ -44,15 +44,15 @@ export function StateCard(props: Props) {
   switch (state) {
     case 'queued':
       return (
-        <LcCard label="Analysis queued">
+        <LcCard label="Analysis waiting to start">
           <LcBody>
             <BigGlyph>
               <QueuedIcon className="rv-icon" />
             </BigGlyph>
             <h2>Waiting for analysis to start</h2>
             <p role="status">
-              The immutable contract version and confirmed review context are stored. Analysis begins
-              asynchronously, so you can leave this page.
+              Your contract and review details are saved. Analysis starts on its own, so you can leave
+              this page.
             </p>
           </LcBody>
         </LcCard>
@@ -66,8 +66,7 @@ export function StateCard(props: Props) {
             </BigGlyph>
             <h2>Analyzing the contract</h2>
             <p role="status">
-              Rivell is running the review against the frozen contract/context/knowledge snapshot. This
-              page updates when analysis completes or fails.
+              Rivell is reviewing the contract. This page updates when analysis finishes.
             </p>
             <CheckCounts summary={summary} />
           </LcBody>
@@ -82,8 +81,7 @@ export function StateCard(props: Props) {
             </BigGlyph>
             <h2>Analysis could not be completed</h2>
             <p>
-              Rivell could not finish the review safely. The uploaded contract version remains stored
-              unchanged and no Findings were produced by this failed run.
+              Analysis could not finish. Your contract is unchanged and no findings were produced.
             </p>
             <p className="rv-lc-quiet">{reviewFailureMessage(summary.failure)}</p>
           </LcBody>
@@ -104,7 +102,7 @@ export function StateCard(props: Props) {
               <NeedsHumanIcon className="rv-icon" />
             </BigGlyph>
             <h2>The analysis did not produce a usable result</h2>
-            <p>{blockerLabel('ANALYSIS_DEGRADED')} No Findings are offered for human review.</p>
+            <p>{blockerLabel('ANALYSIS_DEGRADED')} No findings are offered for your review.</p>
             <CheckCounts summary={summary} />
           </LcBody>
           <LcFoot>
@@ -124,9 +122,11 @@ export function StateCard(props: Props) {
               <QueuedIcon className="rv-icon" />
             </BigGlyph>
             <h2>Analysis results are not final yet</h2>
-            <p role="status">
-              The server still lists the analysis as incomplete, so no human review is offered. This page
-              shows the state as the server reports it.
+            <p
+              role="status"
+              title="The analysis is not finished yet, so you cannot decide on findings. This page shows the current state."
+            >
+              Analysis is still running.
             </p>
           </LcBody>
           <LcFoot>
@@ -146,10 +146,9 @@ export function StateCard(props: Props) {
             <BigGlyph tone="amber">
               <EscalateIcon className="rv-icon" />
             </BigGlyph>
-            <h2>An escalated Finding is still unresolved</h2>
+            <h2>An escalated finding is still unresolved</h2>
             <p>
-              Escalation remains blocking. Return to the Review Workspace and revise the Finding to
-              Accept, Edit or Reject before Finalize can become available.
+              Open the review and accept, edit, or reject the finding before you finalize.
             </p>
             <p className="rv-lc-prv">
               <span>
@@ -166,7 +165,7 @@ export function StateCard(props: Props) {
           <LcFoot>
             <Spacer />
             <LinkButton to={workspaceTo} variant="primary">
-              Open Review Workspace
+              Open review
             </LinkButton>
           </LcFoot>
         </LcCard>
@@ -180,11 +179,10 @@ export function StateCard(props: Props) {
             </BigGlyph>
             <h2>Ready to finalize</h2>
             <p>
-              The server-owned review state reports no remaining blockers. Finalize remains an explicit
-              authority action inside the Review Workspace.
+              No blockers remain. Finalize the review when you are ready.
             </p>
             <Stat3
-              label="Human decisions"
+              label="Your decisions"
               stats={[
                 { figure: humanReview.accepted, label: 'Accepted' },
                 { figure: humanReview.edited, label: 'Edited' },
@@ -193,16 +191,16 @@ export function StateCard(props: Props) {
             />
             <Checks
               items={[
-                { text: 'Finalizing freezes the approved changes' },
-                { text: 'Human decisions become read-only' },
-                { text: 'Redline execution remains a separate action after Finalize' },
+                { text: 'Finalizing makes the approved changes final' },
+                { text: 'Your decisions become read-only' },
+                { text: 'Generating the redline is a separate step after Finalize' },
               ]}
             />
           </LcBody>
           <LcFoot>
             <Spacer />
             <LinkButton to={workspaceTo} variant="primary">
-              Open Review Workspace to finalize
+              Open review to finalize
             </LinkButton>
           </LcFoot>
         </LcCard>
@@ -215,7 +213,7 @@ export function StateCard(props: Props) {
               <QueuedIcon className="rv-icon" />
             </BigGlyph>
             <h2>This review is in a state this version does not recognise</h2>
-            <p role="status">It may still be running. Check again to read the latest state from the server.</p>
+            <p role="status">It may still be running. Check again to read the latest state.</p>
           </LcBody>
           <LcFoot>
             <Spacer />
@@ -282,23 +280,23 @@ function ReadyForReview({ summary, findings, findingsComplete, semantics, worksp
   const rows = semanticsRows(semantics)
   return (
     <>
-      <LcCard label="Ready for human review">
+      <LcCard label="Ready for review">
         <LcBody>
           <BigGlyph tone="amber">
             <NeedsHumanIcon className="rv-icon" />
           </BigGlyph>
           <h2>
             {summary.findings === 1
-              ? '1 Finding is ready for human review'
-              : `${summary.findings} Findings are ready for human review`}
+              ? '1 finding is ready for your review'
+              : `${summary.findings} findings are ready for your review`}
           </h2>
           <p>
-            Machine review is complete. Nothing changes until a person resolves the Findings and
-            explicitly finalizes the review.
+            Analysis is complete. The contract does not change until you resolve the findings and
+            finalize.
           </p>
           {findingsComplete && findings.length > 0 ? (
             <Stat3
-              label="Findings by classification"
+              label="By classification"
               stats={classificationCounts(findings).map((entry) => ({ figure: entry.count, label: entry.label }))}
             />
           ) : null}
@@ -307,18 +305,14 @@ function ReadyForReview({ summary, findings, findingsComplete, semantics, worksp
         <LcFoot>
           <Spacer />
           <LinkButton to={workspaceTo} variant="primary">
-            Open Review Workspace
+            Open review
           </LinkButton>
         </LcFoot>
       </LcCard>
       {rows.length > 0 ? (
-        <LcCard label="Contract semantics">
+        <LcCard label="Contract details">
           <LcBody>
-            <h3 className="rv-lc-lb">Contract semantics available for context</h3>
-            <p className="rv-lc-quiet">
-              These fields come from the contract’s existing structural/semantic representation, not from a
-              new authority decision made by this analysis state.
-            </p>
+            <h3 className="rv-lc-lb">Contract details</h3>
             <dl className="rv-lc-fdl">
               {rows.map((row) => (
                 <div key={row.label}>
@@ -370,9 +364,9 @@ function InProgress({
         </BigGlyph>
         <h2>{decidedLine(humanReview)}</h2>
         <p>
-          {next ? `Next unresolved: ${next}. ` : ''}
-          {pluralise(humanReview.remainingFindings, 'Finding')} still open. Human decisions remain
-          revisable until Finalize.
+          {next ? `Next open: ${next}. ` : ''}
+          {pluralise(humanReview.remainingFindings, 'finding')} still open. Decisions can change until you
+          finalize.
         </p>
         <div className="rv-lc-seg" role="img" aria-label={decidedLine(humanReview)}>
           {segments.map((decided, index) => (
@@ -381,9 +375,9 @@ function InProgress({
         </div>
       </LcBody>
       <LcFoot>
-        <Spacer note="Finalize readiness is server-owned." />
+        <Spacer />
         <LinkButton to={workspaceTo} variant="primary">
-          Continue in Review Workspace
+          Continue review
         </LinkButton>
       </LcFoot>
     </LcCard>

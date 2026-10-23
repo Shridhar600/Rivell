@@ -78,7 +78,6 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
         var candidate = switch (name) {
             case "primary_topic" -> primaryConceptCue(state, choice);
             case "variant_role" -> variantRoleCue(state, choice);
-            case "governing_law" -> cues(state).contains("england") ? "UK" : "US";
             default -> choice.criteria().keySet().iterator().next();
         };
         var selected = choice.criteria().containsKey(candidate)

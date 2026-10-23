@@ -108,7 +108,7 @@ public class ReviewDiagnosticsService {
         var run = analysisRepository.findLatestRun(organizationId, reviewId);
         var analysis = run.map(r -> analysisView(organizationId, r, stalled)).orElse(null);
         if (run.isEmpty()) {
-            stalled.add("No analysis run has been created for this review.");
+            stalled.add("The analysis has not started for this review.");
         }
 
         // One lookup, reused by the finding counts and the decision counters. Both previously asked
@@ -148,8 +148,8 @@ public class ReviewDiagnosticsService {
                         run.completedAt())).toSeconds();
         if (run.completedAt() == null && run.startedAt() != null
                 && Duration.between(run.startedAt(), now).compareTo(STUCK_RUN_THRESHOLD) > 0) {
-            stalled.add("The analysis run has been in flight for " + age
-                    + "s with no completion. It may be wedged.");
+            stalled.add("The analysis has been running for " + age
+                    + " seconds without finishing. It may be stuck.");
         }
         // Loaded once per request, not once per check: resolving each key separately re-read the
         // whole plan for every execution.

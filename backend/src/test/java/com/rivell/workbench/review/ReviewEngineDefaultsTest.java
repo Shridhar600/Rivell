@@ -8,7 +8,7 @@ class ReviewEngineDefaultsTest {
 
     @Test
     void unsetPropertiesDefaultToOmissionsOffAndDefinitionsOff() {
-        var properties = new ReviewEngineProperties(null, null, null);
+        var properties = new ReviewEngineProperties(null, null, null, null, null);
 
         assertThat(properties.omissions()).isFalse();
         assertThat(properties.definitions()).isFalse();

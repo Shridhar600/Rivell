@@ -47,18 +47,18 @@ public record PageCursor(Instant createdAt, UUID id) {
         try {
             raw = new String(Base64.getUrlDecoder().decode(token), StandardCharsets.UTF_8);
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("cursor is not a valid page position");
+            throw new IllegalArgumentException("That page position is not valid. Start again from the first page.");
         }
         var separator = raw.indexOf(SEPARATOR);
         if (separator < 1 || separator == raw.length() - 1) {
-            throw new IllegalArgumentException("cursor is not a valid page position");
+            throw new IllegalArgumentException("That page position is not valid. Start again from the first page.");
         }
         try {
             return new PageCursor(
                     Instant.parse(raw.substring(0, separator)),
                     UUID.fromString(raw.substring(separator + 1)));
         } catch (RuntimeException e) {
-            throw new IllegalArgumentException("cursor is not a valid page position");
+            throw new IllegalArgumentException("That page position is not valid. Start again from the first page.");
         }
     }
 }

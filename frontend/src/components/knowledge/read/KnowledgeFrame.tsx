@@ -1,36 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
+import { Breadcrumbs, type Crumb } from '../../shell/Breadcrumbs'
 import { TopBar } from '../../shell/TopBar'
 import { CheckIcon, CloseIcon, PlusIcon } from '../../ui/Icon'
 import { IconButton } from '../../ui/Button'
 import { useHeadingFocus } from '../../../lib/useHeadingFocus'
 import { readPublishedNotice, type PublishedNotice } from '../../../lib/publishedNotice'
 
-export interface Crumb {
-  label: string
-  to?: string
-}
-
-function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
-  return (
-    <nav className="rv-crumbs" aria-label="Breadcrumb">
-      {crumbs.map((crumb, position) =>
-        position === crumbs.length - 1 || !crumb.to ? (
-          <b key={crumb.label} aria-current={position === crumbs.length - 1 ? 'page' : undefined}>
-            {crumb.label}
-          </b>
-        ) : (
-          <span key={crumb.label} className="rv-crumbs__item">
-            <Link to={crumb.to}>{crumb.label}</Link>
-            <span className="rv-crumbs__sep" aria-hidden="true">
-              {' / '}
-            </span>
-          </span>
-        ),
-      )}
-    </nav>
-  )
-}
+export type { Crumb } from '../../shell/Breadcrumbs'
 
 /** Which document the reviewer is adding. A page can offer one type, and the dialog still lets them change it. */
 export type AddPreset = 'playbook' | 'clause-library'
@@ -58,7 +35,7 @@ function publishedMessage(notice: PublishedNotice): string {
   const parts = [`${notice.published} ${notice.published === 1 ? one : many} published`]
   if (notice.corrected > 0) parts.push(`${notice.corrected} corrected by you`)
   if (notice.rejected > 0) parts.push(`${notice.rejected} rejected and left out`)
-  return `${parts.join(', ')}. The original source is unchanged and earlier publications remain reproducible.`
+  return `${parts.join(', ')}. The original source is unchanged and earlier versions stay as they were.`
 }
 
 interface KnowledgeFrameProps {
@@ -86,16 +63,16 @@ export function KnowledgeFrame({ crumbs, title, lede, meta, actions, addPreset, 
   const dismiss = () => void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
   return (
     <div className={`rv-main${withInspector ? '' : ' rv-main--wide'}`}>
-      <TopBar title={<Breadcrumbs crumbs={crumbs} />} actions={<AddKnowledgeButton preset={addPreset} />} />
+      <TopBar pageTitle={crumbs.at(-1)?.label} title={<Breadcrumbs crumbs={crumbs} />} actions={<AddKnowledgeButton preset={addPreset} />} />
       <div className="rv-scroll">
         <div className="rv-page">
           {notice ? (
             <p className="rv-k-published" role="status">
               <CheckIcon className="rv-icon" />
               <span>
-                <b>Published as publication {notice.publicationNumber}.</b> {publishedMessage(notice)}
+                <b>Published as knowledge version {notice.publicationNumber}.</b> {publishedMessage(notice)}
               </span>
-              <IconButton label="Dismiss" onClick={dismiss}>
+              <IconButton label="Dismiss" title="Dismiss" onClick={dismiss}>
                 <CloseIcon className="rv-icon" />
               </IconButton>
             </p>

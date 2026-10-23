@@ -58,7 +58,12 @@ public record KnowledgeCandidate(
         String reviewNote,
         Instant reviewedAt,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        /**
+         * A title a person typed, and nothing else. The machine title in {@link #rawLabel} is kept
+         * beside it, as for wording; {@link #effectiveTitle()} is the one to show and publish.
+         */
+        String editedTitle) {
 
     public KnowledgeCandidate {
         Objects.requireNonNull(id, "id");
@@ -81,13 +86,18 @@ public record KnowledgeCandidate(
         Objects.requireNonNull(updatedAt, "updatedAt");
     }
 
+    /** The title to show: a person's correction when there is one, else the one Rivell read. */
+    public String effectiveTitle() {
+        return editedTitle == null || editedTitle.isBlank() ? rawLabel : editedTitle;
+    }
+
     public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
                 conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope, signals,
-                reviewCategory, reviewReasons, reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewCategory, reviewReasons, reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     /**
@@ -102,16 +112,17 @@ public record KnowledgeCandidate(
         return conceptCorrection.isBlank() ? null : conceptCorrection;
     }
 
-    public KnowledgeCandidate withConceptCorrection(String correction) {
+    public KnowledgeCandidate withConceptCorrection(
+            String correction, UUID correctedBy, Instant correctedAt) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
                 correctionTopicKeys(correction),
                 correction,
-                conceptCorrectedBy, conceptCorrectedAt,
+                correctedBy, correctedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons, reviewNote, reviewedAt,
-                createdAt, Instant.now());
+                createdAt, correctedAt, editedTitle);
     }
 
     /**
@@ -135,7 +146,7 @@ public record KnowledgeCandidate(
                 fields, editedSemanticFields, fieldInterpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withSupersedingCandidateId(
@@ -152,7 +163,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersededId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withReviewOutcome(ReviewCategory category, Set<ReviewReason> reasons) {
@@ -162,7 +173,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, category, reasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withScope(ApplicabilityScope newScope) {
@@ -172,7 +183,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, newScope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withReviewStatus(ReviewStatus status) {
@@ -182,7 +193,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public boolean isPublished() {
@@ -200,10 +211,13 @@ public record KnowledgeCandidate(
      *   <li>the machine/source wording captured at extraction.</li>
      * </ol>
      *
-     * <p>The machine wording is deliberately not re-derived from the stored payload at read time:
-     * the payload is held in {@code jsonb}, which does not preserve object key order, so a
-     * re-render could place "Fallback" before "Preferred" and misrepresent the source row. The
-     * machine wording was captured in true source order at extraction and stored as text.
+     * <p>The machine wording is deliberately not re-rendered from its values at read time: the
+     * payload is held in {@code jsonb}, which does not preserve object key order, so a re-render
+     * could place "Fallback" before "Preferred" and misrepresent the source row. One exception is
+     * a clause variant's own wording column: its value does not depend on the order of the other
+     * columns, and extraction could not know the label was wording until the field-role decision
+     * answered. Reading that column is what keeps a resolved "Provision" or "Text" header from
+     * publishing the whole row.
      *
      * <p>Before this rule existed a human spreadsheet-column correction was stored but inert:
      * {@code editedPayload} was persisted while wording, duplicate/conflict analysis and
@@ -211,9 +225,28 @@ public record KnowledgeCandidate(
      * discarded the correction (AD 6.8, 6.11).
      */
     public String effectiveContentText() {
-        return firstReadable(editedContentText,
-                editedPayload == null ? null : editedPayload.render(),
-                contentText);
+        return firstReadable(editedContentText, renderedEditedColumns(),
+                renderedMachineWording(), contentText);
+    }
+
+    /** The wording column of the machine payload, when extraction or the role decision named one. */
+    private String renderedMachineWording() {
+        if (candidateType != CandidateType.CLAUSE_VARIANT || payload.columns().isEmpty()) {
+            return null;
+        }
+        return payload.wordingText().orElse(null);
+    }
+
+    /**
+     * The wording of the human's corrected columns. A clause variant's wording is its wording
+     * column, as at extraction; any other record reads its values in column order.
+     */
+    private String renderedEditedColumns() {
+        if (editedPayload == null) {
+            return null;
+        }
+        return candidateType == CandidateType.CLAUSE_VARIANT
+                ? editedPayload.renderedWording() : editedPayload.render();
     }
 
     /**
@@ -259,6 +292,15 @@ public record KnowledgeCandidate(
     }
 
     /**
+     * The payload a reader sees: the human's corrected columns when there are any, else the
+     * machine payload. Review classification must read the same values the API shows.
+     */
+    public CandidatePayload effectivePayload() {
+        return editedPayload != null && !editedPayload.columns().isEmpty()
+                ? editedPayload : payload;
+    }
+
+    /**
      * The role of one payload label: the code synonym table first, else the role the field-role
      * decision resolved for this record's source at compile time.
      */
@@ -267,7 +309,7 @@ public record KnowledgeCandidate(
         if (known.isPresent()) {
             return known;
         }
-        var resolved = payload.fieldRoles().get(label);
+        var resolved = effectivePayload().fieldRoles().get(label);
         if (resolved == null) {
             return Optional.empty();
         }
@@ -281,7 +323,7 @@ public record KnowledgeCandidate(
     /** Label -> role name of every payload field with a known or resolved role. */
     public Map<String, String> effectiveFieldRoles() {
         var roles = new LinkedHashMap<String, String>();
-        for (var key : payload.orderedKeys()) {
+        for (var key : effectivePayload().orderedKeys()) {
             fieldRole(key).filter(role -> role != RecordFieldRole.OTHER)
                     .ifPresent(role -> roles.put(key, role.name()));
         }
@@ -295,7 +337,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     /**
@@ -305,8 +347,7 @@ public record KnowledgeCandidate(
      * map; the question then carries its content text as the position.
      */
     public Map<PositionRole, List<String>> effectivePositionFieldValues() {
-        var payload = editedPayload != null && !editedPayload.columns().isEmpty()
-                ? editedPayload : this.payload;
+        var payload = effectivePayload();
         var values = new LinkedHashMap<PositionRole, List<String>>();
         for (var key : payload.orderedKeys()) {
             var value = payload.columns().get(key);

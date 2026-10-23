@@ -40,9 +40,22 @@ export const PAPER_SOURCES = [
   'THIRD_PARTY',
 ] as const satisfies readonly NonNullable<ReviewProfileInput['paperSource']>[]
 
-export const JURISDICTIONS = ['US', 'UK', 'UNSPECIFIED'] as const satisfies readonly NonNullable<
-  ReviewProfileInput['jurisdiction']
->[]
+export const JURISDICTIONS = [
+  'US',
+  'UK',
+  'AUSTRALIA',
+  'CANADA',
+  'IRELAND',
+  'INDIA',
+  'NEW_ZEALAND',
+  'SINGAPORE',
+  'HONG_KONG',
+  'GERMANY',
+  'FRANCE',
+  'NETHERLANDS',
+  'OTHER',
+  'UNSPECIFIED',
+] as const satisfies readonly NonNullable<ReviewProfileInput['jurisdiction']>[]
 
 const ROLE_LABELS: Record<string, string> = {
   CUSTOMER: 'Customer',
@@ -81,7 +94,7 @@ const REFERENCE_STATUS_LABELS: Record<string, string> = {
 const INTERPRETATION_KIND_DESCRIPTIONS: Record<string, string> = {
   DETERMINISTIC: 'Taken directly from the contract text',
   BOUNDED_CLASSIFICATION: 'Classified from the clause text',
-  GENERATIVE_EXTRACTION: 'Extracted from the clause text',
+  GENERATIVE_EXTRACTION: 'Read from the clause text',
 }
 
 const RELATIONSHIP_TYPE_VERBS: Record<string, string> = {
@@ -92,15 +105,15 @@ const RELATIONSHIP_TYPE_VERBS: Record<string, string> = {
 }
 
 const QUALITY_NOTE_LABELS: Record<string, string> = {
-  PARSER_WARNINGS_PRESENT: 'The document parser reported warnings',
+  PARSER_WARNINGS_PRESENT: 'Some parts of the document could not be read',
   DUPLICATE_DEFINED_TERM: 'A defined term appears more than once',
   AMBIGUOUS_DEFINITIONS: 'Some definitions could not be matched to a single meaning',
   UNRESOLVED_REFERENCES: 'Some cross-references could not be resolved',
   AMBIGUOUS_PARTY_ROLES: 'Some party roles could not be determined confidently',
   UNCLASSIFIED_REGIONS: 'Some contract regions could not be classified',
-  NO_PRIMARY_CONCEPT: 'Some classified regions have no primary concept',
-  UNVERIFIED_FACTS: 'Some extracted facts could not be verified',
-  UNSUPPORTED_FACT_SHAPE: 'Some extracted facts use an unsupported shape',
+  NO_PRIMARY_CONCEPT: 'Some classified regions have no primary topic',
+  UNVERIFIED_FACTS: 'Some facts could not be verified',
+  UNSUPPORTED_FACT_SHAPE: 'Some facts use an unsupported shape',
   PROVIDER_DEGRADATION: 'Some analysis could not be completed automatically',
   BUDGET_EXHAUSTED: 'Analysis stopped at the configured limit',
 }
@@ -132,6 +145,17 @@ export const PAPER_SOURCE_LABELS: Record<string, string> = {
 export const JURISDICTION_LABELS: Record<string, string> = {
   US: 'United States',
   UK: 'United Kingdom',
+  AUSTRALIA: 'Australia',
+  CANADA: 'Canada',
+  IRELAND: 'Ireland',
+  INDIA: 'India',
+  NEW_ZEALAND: 'New Zealand',
+  SINGAPORE: 'Singapore',
+  HONG_KONG: 'Hong Kong',
+  GERMANY: 'Germany',
+  FRANCE: 'France',
+  NETHERLANDS: 'Netherlands',
+  OTHER: 'Another jurisdiction',
   UNSPECIFIED: 'Not specified',
 }
 
@@ -523,13 +547,13 @@ const ENRICHMENT_FAILURE_NOTES: Record<
   EnrichmentFailureNote
 > = {
   SERVICE_UNAVAILABLE: {
-    summary: 'Rivell could not complete the semantic analysis of this contract version.',
+    summary: 'Rivell could not complete the analysis of this contract version.',
   },
   UNSUPPORTED_SOURCE: {
-    summary: 'This document cannot be analysed for semantics as it is supplied.',
+    summary: 'This document cannot be analysed as it is supplied.',
   },
   INTERNAL: {
-    summary: 'Rivell could not complete the semantic analysis of this contract version.',
+    summary: 'Rivell could not complete the analysis of this contract version.',
   },
 }
 
@@ -539,7 +563,7 @@ export function enrichmentFailureNote(
   if (reason === null) {
     return {
       summary:
-        'Rivell could not complete the semantic analysis of this contract version and did not record a reason.',
+        'Rivell could not complete the analysis of this contract version and did not record a reason.',
     }
   }
   // The record is keyed by the real reasons so a typo is a compile error, mirroring the backend's
@@ -549,7 +573,7 @@ export function enrichmentFailureNote(
   return (
     known ?? {
       summary:
-        'Rivell could not complete the semantic analysis of this contract version and recorded a reason Rivell does not recognise.',
+        'Rivell could not complete the analysis of this contract version and recorded a reason Rivell does not recognise.',
     }
   )
 }

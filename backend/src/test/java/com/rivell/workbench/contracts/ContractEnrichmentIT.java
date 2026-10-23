@@ -183,7 +183,6 @@ public class ContractEnrichmentIT {
             }
             var selected = switch (name) {
                 case "primary_topic" -> primaryConceptCue(choice, state);
-                case "governing_law" -> stateText(state).contains("England") ? "UK" : "US";
                 default -> choice.criteria().keySet().iterator().next();
             };
             var probabilities = new java.util.LinkedHashMap<String, Double>();
@@ -367,7 +366,8 @@ public class ContractEnrichmentIT {
                 .isEqualTo("Mutual Non-Disclosure Agreement");
         assertThat(metadataByField(semantics, MetadataField.EFFECTIVE_DATE))
                 .isEqualTo("2026-03-15");
-        assertThat(metadataByField(semantics, MetadataField.GOVERNING_LAW)).isEqualTo("US");
+        assertThat(metadataByField(semantics, MetadataField.GOVERNING_LAW))
+                .isEqualTo("State of Delaware");
         assertThat(metadataByField(semantics, MetadataField.CONTRACT_TYPE)).isEqualTo("NDA");
 
         var roles = semantics.parties().stream()

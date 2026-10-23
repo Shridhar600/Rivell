@@ -219,7 +219,7 @@ class ContractApiIT {
         mockMvc.perform(multipart("/api/contracts").file(file))
                 .andExpect(status().isPayloadTooLarge())
                 .andExpect(jsonPath("$.code").value("413"))
-                .andExpect(jsonPath("$.title").value("Payload too large"))
+                .andExpect(jsonPath("$.title").value("File too large"))
                 .andExpect(jsonPath("$.detail").isNotEmpty());
     }
 
@@ -231,7 +231,7 @@ class ContractApiIT {
         mockMvc.perform(multipart("/api/contracts").file(file))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("400"))
-                .andExpect(jsonPath("$.title").value("Invalid request"));
+                .andExpect(jsonPath("$.title").value("Request not accepted"));
     }
 
     @Test

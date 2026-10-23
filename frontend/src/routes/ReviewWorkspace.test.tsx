@@ -59,7 +59,7 @@ describe('review identity', () => {
       ),
     )
     expect(await screen.findByText(/The file was damaged. Rivell repaired it/)).toBeInTheDocument()
-    expect(screen.getByText('Footnotes contain content that is not represented.')).toBeInTheDocument()
+    expect(screen.getByText('Footnotes hold text that Rivell did not read.')).toBeInTheDocument()
   })
 
   it('treats a review from another contract as not found', async () => {
@@ -73,15 +73,53 @@ describe('review identity', () => {
 })
 
 describe('workspace layout', () => {
-  it('draws the three canonical regions, with no sidebar around them', async () => {
+  it('draws the three canonical regions inside the app sidebar', async () => {
     renderWorkspace(stubContractApi(options()))
     await waitFor(() =>
       expect(within(screen.getByRole('complementary', { name: 'Findings' })).getByRole('option', { name: /6\. Limitation of Liability/ })).toBeInTheDocument(),
     )
     expect(screen.getByRole('main', { name: 'Contract' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })).toBeInTheDocument()
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
-    expect(within(await topBar()).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument()
+    const crumbs = within(await topBar()).getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumbs).getByRole('link', { name: 'Reviews' })).toHaveAttribute('href', '/reviews')
+    expect(crumbs).toHaveTextContent('Master Services Agreement')
+    expect(crumbs).not.toHaveTextContent('Home')
+  })
+
+  it('lets the reader resize the findings list and the detail panel, and remembers both widths', async () => {
+    renderWorkspace(stubContractApi(options()))
+    const findings = await screen.findByRole('separator', { name: 'Resize findings list' })
+    const detail = screen.getByRole('separator', { name: 'Resize detail panel' })
+    findings.focus()
+    await userEvent.keyboard('{ArrowRight}')
+    expect(findings).toHaveAttribute('aria-valuenow', '288')
+    detail.focus()
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(detail).toHaveAttribute('aria-valuenow', '396')
+    expect(globalThis.localStorage?.getItem('rv-ws-findings-width')).toBe('288')
+    expect(globalThis.localStorage?.getItem('rv-ws-detail-width')).toBe('396')
+  })
+
+  it('ignores its single-key shortcuts while focus is outside the workspace, on the top bar', async () => {
+    const router = renderWorkspace(stubContractApi(options()))
+    await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
+    await waitFor(() => expect(router.state.location.search).toBe('?finding=f-1'))
+    within(await topBar()).getByRole('button', { name: 'Search' }).focus()
+    await userEvent.keyboard('j')
+    expect(router.state.location.search).toBe('?finding=f-1')
+    await userEvent.keyboard('r')
+    expect(screen.queryByRole('dialog', { name: /reject/i })).not.toBeInTheDocument()
+  })
+
+  it('lists its keyboard shortcuts when the reader presses ?', async () => {
+    renderWorkspace(stubContractApi(options()))
+    await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    await userEvent.keyboard('?')
+    const sheet = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })
+    expect(sheet).toHaveTextContent('Accept the finding')
+    expect(sheet).toHaveTextContent('Escalate the finding')
   })
 
   it('opens on the first finding that needs a decision and names it in the URL', async () => {
@@ -100,7 +138,7 @@ describe('workspace layout', () => {
     expect(page.querySelector('del')).toBeNull()
   })
 
-  it('shows an edited decision as the reviewer’s wording in the decision preview, not as a verified file', async () => {
+  it('shows an edited decision as the reviewer’s wording in the preview, not as a verified file', async () => {
     renderWorkspace(
       stubContractApi(
         options({
@@ -112,12 +150,14 @@ describe('workspace layout', () => {
         }),
       ),
     )
-    await userEvent.click(await screen.findByRole('tab', { name: 'Decision preview' }))
+    await userEvent.click(await screen.findByRole('tab', { name: 'Preview' }))
+    // What the view contains is the tab's tooltip, not a line beside the tabs.
+    expect(screen.getByRole('tab', { name: 'Preview' })).toHaveAttribute(
+      'title',
+      'The contract with your 1 decided change. Open findings keep the original text.',
+    )
     const page = screen.getByRole('article')
     await waitFor(() => expect(within(page).getByText('Cap is two times fees.')).toBeInTheDocument())
-    expect(screen.getByRole('main', { name: 'Contract' })).toHaveTextContent(
-      '1 current executable decision shown; 1 unresolved Finding remains as received.',
-    )
     expect(screen.queryByText(/verified (redline|document|file)|tracked DOCX/i)).not.toBeInTheDocument()
   })
 
@@ -131,17 +171,25 @@ describe('workspace layout', () => {
 })
 
 describe('finalize is the server’s decision', () => {
-  it('is disabled with one compact status while the server reports blockers, and the exact reason is in a disclosure', async () => {
+  it('is disabled with one compact status while the server reports blockers, and the exact reason is on the finalize control', async () => {
     renderWorkspace(stubContractApi(options()))
     const finalize = await within(await topBar()).findByRole('button', { name: 'Finalize review' })
     expect(finalize).toBeDisabled()
-    expect(finalize).toHaveAttribute('title', '1 finding that requires review still needs a decision.')
-    expect(await topBar()).toHaveTextContent('0 of 2 resolved')
+    expect(finalize.closest('.rv-ws-fin')).toHaveAttribute(
+      'title',
+      '1 finding that requires review still needs a decision.',
+    )
+    expect(await topBar()).toHaveTextContent('0 of 2 decided')
     // The unresolved count is not repeated on the button, and the blocker is not a clipped line.
     expect(await topBar()).not.toHaveTextContent(/unresolved/)
-    expect(await topBar()).toHaveTextContent('Not ready to finalize')
-    await userEvent.click(within(await topBar()).getByText('Not ready to finalize'))
-    expect(await topBar()).toHaveTextContent('1 finding that requires review still needs a decision.')
+    const progress = (await topBar()).querySelector('.rv-ws-prog') as HTMLElement
+    expect(progress).toHaveAttribute('title', 'Not ready to finalize')
+    // The reason is in plain sight, one click or Enter away, for every reader.
+    const why = within(await topBar()).getByText('What is left').closest('summary') as HTMLElement
+    await userEvent.click(why)
+    expect(screen.getByRole('group', { name: 'What is left before you can finalize' })).toHaveTextContent(
+      '1 finding that requires review still needs a decision.',
+    )
   })
 
   it('is enabled only when the server says ready, and finalizes after one confirmation', async () => {
@@ -155,12 +203,13 @@ describe('finalize is the server’s decision', () => {
     renderWorkspace(api)
     const finalize = await within(await topBar()).findByRole('button', { name: 'Finalize review' })
     await waitFor(() => expect(finalize).toBeEnabled())
-    expect(await topBar()).toHaveTextContent('Ready to finalize')
+    const progress = (await topBar()).querySelector('.rv-ws-prog') as HTMLElement
+    expect(progress).toHaveAttribute('title', 'Ready to finalize')
     await userEvent.click(finalize)
     const dialog = await screen.findByRole('dialog', { name: 'Finalize this review?' })
     expect(dialog).toHaveTextContent('1 approved change (1 accepted, 0 edited)')
-    expect(dialog).toHaveTextContent('1 rejected Finding; no approved change created')
-    expect(dialog).toHaveTextContent('Redline generation is a separate downstream step.')
+    expect(dialog).toHaveTextContent('1 rejected finding; no approved change created')
+    expect(dialog).toHaveTextContent('After you finalize, you generate the redline separately.')
     expect(api.requests.filter((r) => r.method === 'POST' && r.url.endsWith('/finalize'))).toHaveLength(0)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Finalize review' }))
     await waitFor(() => expect(api.requests.filter((r) => r.method === 'POST' && r.url.endsWith('/finalize'))).toHaveLength(1))
@@ -178,8 +227,8 @@ describe('finalize is the server’s decision', () => {
       ),
     )
     expect(await within(await detail()).findByText('This finding could not be loaded.')).toBeInTheDocument()
-    expect(within(await detail()).getByText('Approved changes frozen')).toBeInTheDocument()
-    expect(within(await detail()).getByRole('link', { name: 'View review summary' })).toBeInTheDocument()
+    expect(within(await detail()).getByText('Approved changes are final')).toBeInTheDocument()
+    expect(within(await detail()).getByRole('link', { name: 'Go to the redline' })).toBeInTheDocument()
     expect(within(await topBar()).getByRole('button', { name: 'Finalized' })).toBeDisabled()
   })
 })
@@ -210,11 +259,11 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
     renderWorkspace(api)
     await finalizeFromDialog()
 
-    const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
+    const link = await within(await detail()).findByRole('link', { name: 'Go to the redline' })
     expect(link).toHaveAttribute('href', '/reviews/c1/overview/r-1')
-    expect(within(await detail()).getByText('Approved changes frozen')).toBeInTheDocument()
-    expect(within(await detail()).getByText(/1 executable change in the immutable approved change set/)).toBeInTheDocument()
-    expect(await topBar()).toHaveTextContent('Approved changes frozen')
+    expect(within(await detail()).getByText('Approved changes are final')).toBeInTheDocument()
+    expect(within(await detail()).getByText(/1 approved change fixed for this review/)).toBeInTheDocument()
+    expect(await topBar()).toHaveTextContent('Approved changes are final')
 
     // Redline is not run, offered, or even read from here.
     expect(screen.queryByRole('button', { name: /redline/i })).not.toBeInTheDocument()
@@ -226,7 +275,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
   it('moves keyboard focus to the review summary link once the review is finalized', async () => {
     renderWorkspace(stubContractApi(readyToFinalize()))
     await finalizeFromDialog()
-    const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
+    const link = await within(await detail()).findByRole('link', { name: 'Go to the redline' })
     await waitFor(() => expect(link).toHaveFocus())
     expect(screen.queryByRole('dialog', { name: 'Finalize this review?' })).not.toBeInTheDocument()
   })
@@ -236,7 +285,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
     await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
     await userEvent.click(within(await topBar()).getByRole('button', { name: 'Toggle detail panel' }))
     await finalizeFromDialog()
-    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Approved changes frozen')).toHaveFocus())
+    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Approved changes are final')).toHaveFocus())
     expect(document.body).not.toHaveFocus()
   })
 
@@ -250,7 +299,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
         }),
       ),
     )
-    const link = await within(await detail()).findByRole('link', { name: 'View review summary' })
+    const link = await within(await detail()).findByRole('link', { name: 'Go to the redline' })
     expect(link).not.toHaveFocus()
   })
 
@@ -263,7 +312,7 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
     )
     await finalizeFromDialog()
     expect(await screen.findByRole('alert')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'View review summary' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Go to the redline' })).not.toBeInTheDocument()
   })
 })
 
@@ -277,18 +326,43 @@ describe('keyboard and command menu', () => {
     await waitFor(() => expect(router.state.location.search).toBe('?finding=f-1'))
   })
 
-  it('lists only commands that can run, and no global entity search', async () => {
+  it('lists the page’s own commands first, then the global places, and can find text in the contract', async () => {
     renderWorkspace(stubContractApi(options()))
+    // The shell's one search menu reads the global lists when it opens.
+    const inner = globalThis.fetch
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(String(input), init)
+        const url = new URL(request.url)
+        if (request.method === 'GET' && url.pathname === '/api/reviews') {
+          return new Response(JSON.stringify({ data: { items: [], truncated: false }, status: 200, timestamp: '2026-10-02T09:00:00Z' }))
+        }
+        if (
+          request.method === 'GET' &&
+          (url.pathname === '/api/knowledge/artifacts' || url.pathname === '/api/knowledge/publications')
+        ) {
+          return new Response(JSON.stringify({ data: [], status: 200, timestamp: '2026-10-02T09:00:00Z' }))
+        }
+        return inner(request)
+      }),
+    )
     await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
-    await userEvent.click(within(await topBar()).getByRole('button', { name: 'Open command menu' }))
-    const menu = await screen.findByRole('dialog', { name: 'Command menu' })
+    await userEvent.keyboard('/')
+    const menu = await screen.findByRole('dialog', { name: 'Search' })
     const labels = within(menu).getAllByRole('option').map((option) => option.textContent)
     expect(labels.join('|')).toMatch(/Edit finding/)
     expect(labels.join('|')).toMatch(/Show original document/)
     expect(labels.join('|')).not.toMatch(/Finalize review/)
-    expect(labels.join('|')).not.toMatch(/Generate redline|Start a contract review|Add legal knowledge/)
-    await userEvent.type(within(menu).getByRole('textbox'), 'exclusions')
-    await userEvent.click(within(menu).getByRole('option', { name: /Find “exclusions” in contract/ }))
+    // The page's own commands come first; the global places follow.
+    const groups = Array.from(menu.querySelectorAll('.rv-ws-pal-h')).map((heading) => heading.textContent)
+    expect(groups[0]).toBe('Findings')
+    expect(groups).toContain('Create')
+    expect(groups).toContain('Go to')
+    // The old workspace "Go to" entries are gone: the global group replaces them.
+    expect(labels.join('|')).not.toMatch(/Contract reviews/)
+    await userEvent.type(within(menu).getByRole('textbox', { name: 'Search' }), 'exclusions')
+    await userEvent.click(within(menu).getByRole('option', { name: /Find “exclusions” in this contract/ }))
     await waitFor(() => expect(screen.getByRole('main', { name: 'Contract' })).toHaveTextContent('Matches for “exclusions”'))
     expect(screen.getByRole('tab', { name: 'Original' })).toHaveAttribute('aria-selected', 'true')
   })
@@ -445,7 +519,7 @@ describe('clause details in place', () => {
     expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
     expect(within(sheet).getByRole('heading', { name: '6. Limitation of Liability' })).toBeInTheDocument()
     expect(sheet).toHaveTextContent('Limitation of liability')
-    expect(sheet).toHaveTextContent('A correction is used by the next review of this contract')
+    expect(sheet).toHaveTextContent('Corrections apply to the next review')
   })
 
   it('corrects the topic and keeps Rivell’s own reading beside it', async () => {
@@ -467,6 +541,46 @@ describe('clause details in place', () => {
     const reading = within(sheet).getByText('Rivell read').parentElement as HTMLElement
     expect(reading).toHaveTextContent('Limitation of liability')
     expect(within(sheet).getAllByText('Corrected by you').length).toBeGreaterThan(0)
+  })
+
+  it('keeps Tab inside the open panel', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+    const [headerClose, footerClose] = within(sheet).getAllByRole('button', { name: /^Close/ })
+
+    footerClose!.focus()
+    await userEvent.tab()
+    expect(document.activeElement).toBe(headerClose)
+
+    await userEvent.tab({ shift: true })
+    expect(document.activeElement).toBe(footerClose)
+  })
+
+  it('does not save a topic that has not changed', async () => {
+    const api = stubContractApi(options({ clauseMarks: fixtureClauseMarks }))
+    renderWorkspace(api)
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+    await within(sheet).findByRole('option', { name: 'Indemnification' })
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save topic' }))
+
+    expect(await within(sheet).findByRole('alert')).toHaveTextContent('This is already the topic. Choose a different one to correct it.')
+    expect(api.requests.some((request) => request.method === 'POST' && request.url.endsWith('/concepts'))).toBe(false)
+  })
+
+  it('clears the saved note once a different topic is chosen', async () => {
+    renderWorkspace(stubContractApi(options({ clauseMarks: fixtureClauseMarks })))
+    const sheet = await openClauseDetails('6. Limitation of Liability')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
+    await within(sheet).findByRole('option', { name: 'Indemnification' })
+    await userEvent.selectOptions(within(sheet).getByLabelText('Topic'), 'INDEMNIFICATION')
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Save topic' }))
+    expect(await within(sheet).findByText(/Topic updated/)).toBeInTheDocument()
+
+    await userEvent.selectOptions(within(sheet).getByLabelText('Topic'), 'CONFIDENTIALITY_OBLIGATIONS')
+
+    expect(within(sheet).queryByText(/Topic updated/)).not.toBeInTheDocument()
   })
 
   it('keeps keyboard focus where it is when the workspace updates behind the sheet', async () => {
@@ -567,7 +681,7 @@ describe('clause details in place', () => {
     await userEvent.click(within(sheet).getByRole('button', { name: 'Correct the topic' }))
 
     await waitFor(() => expect(within(sheet).getByLabelText('Topic')).toBeDisabled())
-    expect(await within(sheet).findByText(/legal topic list could not be loaded/i, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(await within(sheet).findByText(/topic list could not be loaded/i, {}, { timeout: 3000 })).toBeInTheDocument()
     expect(within(sheet).getByRole('button', { name: 'Save topic' })).toBeDisabled()
   })
 
@@ -639,8 +753,8 @@ describe('clause details in place', () => {
 
 describe('contract analysis in place', () => {
   async function openContractAnalysis() {
-    await userEvent.click(await screen.findByRole('button', { name: 'Contract analysis' }))
-    return screen.getByRole('dialog', { name: 'Contract analysis' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Contract details' }))
+    return screen.getByRole('dialog', { name: 'Contract details' })
   }
 
   async function openGroup(sheet: HTMLElement, name: string) {
@@ -659,7 +773,7 @@ describe('contract analysis in place', () => {
     expect(within(terms).getByText('Defined more than once')).toBeInTheDocument()
     await userEvent.click(within(terms).getByRole('button', { name: 'Services' }))
     expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Contract analysis' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Contract details' })).not.toBeInTheDocument())
   })
 
   it('shows each cross-reference’s state, broken ones first, and never invents a target', async () => {

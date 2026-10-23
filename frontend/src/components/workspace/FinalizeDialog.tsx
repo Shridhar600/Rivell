@@ -31,15 +31,14 @@ export function FinalizeDialog({ open, onClose, onConfirm, isFinalizing, error, 
       <div className="rv-ws-dlg">
         <h2 id="rv-ws-fin-title">Finalize this review?</h2>
         <p>
-          Your decisions become the approved change set for {contractLabel}. It is frozen and can&apos;t be edited
-          afterwards.
+          Your decisions become the approved changes for {contractLabel}. You can&apos;t edit them after this.
         </p>
         <ul>
           {summary.map((line) => (
             <li key={line}>{line}</li>
           ))}
         </ul>
-        <p>Finalization freezes the approved changes. Redline generation is a separate downstream step.</p>
+        <p>After you finalize, you generate the redline separately.</p>
         {error ? (
           <p className="rv-ws-error" role="alert">
             {error}

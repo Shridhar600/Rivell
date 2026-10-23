@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -34,14 +35,39 @@ final class KnowledgeStructure {
     static final class ProseRegion implements Region {
         private final KnowledgeSourceNode heading;
         private final List<KnowledgeSourceNode> paragraphs;
+        private final KnowledgeDocumentTitle.DocumentTitle documentTitle;
 
         ProseRegion(KnowledgeSourceNode heading, List<KnowledgeSourceNode> paragraphs) {
+            this(heading, paragraphs, null);
+        }
+
+        /** The region a document's title opens: it is named by the document title, not its masthead. */
+        ProseRegion(KnowledgeSourceNode heading, List<KnowledgeSourceNode> paragraphs,
+                KnowledgeDocumentTitle.DocumentTitle documentTitle) {
             this.heading = heading;
             this.paragraphs = paragraphs;
+            this.documentTitle = documentTitle;
+        }
+
+        private boolean ownsDocumentTitle() {
+            if (heading == null || heading.nodeType() != KnowledgeNodeType.TITLE
+                    || documentTitle == null) {
+                return false;
+            }
+            return heading.id().equals(documentTitle.nodeId())
+                    || paragraphs.stream().anyMatch(node -> node.id().equals(documentTitle.nodeId()));
         }
 
         String headingText() {
+            if (ownsDocumentTitle()) {
+                return documentTitle.text();
+            }
             return heading == null ? null : heading.text();
+        }
+
+        /** A document title is not a section heading: the tables after it are not under it. */
+        boolean isTitleRegion() {
+            return ownsDocumentTitle();
         }
 
         @Override
@@ -65,7 +91,7 @@ final class KnowledgeStructure {
             }
             var rawLabel = unit.title() != null && !unit.title().isBlank()
                     ? unit.title()
-                    : unit.contentText().lines().findFirst().orElseThrow();
+                    : unit.contentText();
             return List.of(candidate(artifact, unit, scope, now, rawLabel, unit.contentText()));
         }
 
@@ -137,8 +163,64 @@ final class KnowledgeStructure {
         public List<KnowledgeCandidate> toCandidates(
                 KnowledgeArtifact artifact, ExtractionUnit unit,
                 ApplicabilityScope scope, Instant now) {
+            // Only a spreadsheet clause row names itself by its title and variant; a Word
+            // table keeps the first cell as its display title, and the unit title (the
+            // model's section path) is never touched here.
+            var label = unitKind == ExtractionUnitKind.SPREADSHEET_ROW
+                    && candidateType(artifact.artifactType()) == CandidateType.CLAUSE_VARIANT
+                    ? KnowledgeTableShaping.clauseVariantTitle(columns)
+                    : null;
             return List.of(structuredCandidate(artifact, unit, scope, now,
-                    recordLabel, columns));
+                    label != null ? label : recordLabel, columns));
+        }
+    }
+
+    /**
+     * One row of a table with a single column: a callout box or a list item. It is prose, not a
+     * grid, so it has no column names. A lead line that reads as a label ("DO NOT TRADE THIS
+     * BOUNDARY FOR SPEED") titles it and the rest is its wording.
+     */
+    static final class CalloutRegion implements Region {
+        private final String label;
+        private final String text;
+        private final String cellText;
+        private final List<UUID> sourceNodeIds;
+
+        CalloutRegion(String cellText, List<UUID> sourceNodeIds) {
+            var lines = cellText.lines().map(String::strip).filter(line -> !line.isEmpty()).toList();
+            var labelled = lines.size() > 1
+                    && KnowledgeTableShaping.isCertainLabel(lines.getFirst());
+            this.label = labelled ? lines.getFirst() : null;
+            this.text = labelled ? String.join("\n", lines.subList(1, lines.size())) : cellText.strip();
+            this.cellText = cellText.strip();
+            this.sourceNodeIds = List.copyOf(sourceNodeIds);
+        }
+
+        private String title() {
+            return KnowledgeTitles.bounded(label != null ? label : text);
+        }
+
+        /** A callout whose lead line names nothing still needs a non-blank, one-line name. */
+        private String titleOrText() {
+            var title = title();
+            if (title != null && !title.isBlank()) {
+                return title;
+            }
+            return text.lines().map(String::strip).filter(line -> !line.isEmpty())
+                    .findFirst().orElse(text);
+        }
+
+        @Override
+        public ExtractionUnit toUnit(UUID artifactId, int ordinal) {
+            return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal, ExtractionUnitKind.TABLE,
+                    titleOrText(), cellText, sourceNodeIds, null, null);
+        }
+
+        @Override
+        public List<KnowledgeCandidate> toCandidates(
+                KnowledgeArtifact artifact, ExtractionUnit unit,
+                ApplicabilityScope scope, Instant now) {
+            return List.of(candidate(artifact, unit, scope, now, titleOrText(), text));
         }
     }
 
@@ -176,11 +258,11 @@ final class KnowledgeStructure {
         return new KnowledgeCandidate(
                 UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                 candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                rawLabel, contentText, CandidatePayload.EMPTY, null, List.of(), null,
+                displayTitle(rawLabel), contentText, CandidatePayload.EMPTY, null, List.of(), null,
                 null, null,
                 SemanticFields.EMPTY, null, List.of(),
                 null, null, null, scope, List.of(), null, null,
-                null, null, now, now);
+                null, null, now, now, null);
     }
 
     private static KnowledgeCandidate structuredCandidate(
@@ -193,11 +275,23 @@ final class KnowledgeStructure {
         return new KnowledgeCandidate(
                 UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                 candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                rawLabel, payload.render(), payload, null, List.of(), null,
+                displayTitle(rawLabel),
+                candidateType(artifact.artifactType()) == CandidateType.CLAUSE_VARIANT
+                        ? payload.renderedWording() : payload.render(),
+                payload, null, List.of(), null,
                 null, null,
                 SemanticFields.EMPTY, null, List.of(),
                 null, null, null, scope, List.of(), null, null,
-                null, null, now, now);
+                null, null, now, now, null);
+    }
+
+    /** A record with no words of its own still needs a non-blank name; its source text is it. */
+    private static String displayTitle(String rawLabel) {
+        var title = KnowledgeTitles.bounded(rawLabel);
+        if (title != null && !title.isBlank()) {
+            return title;
+        }
+        return rawLabel == null ? "" : rawLabel.strip();
     }
 
     private static CandidateType candidateType(ArtifactType artifactType) {
@@ -231,9 +325,14 @@ final class KnowledgeStructure {
         }
 
         ProseRegion open = null;
+        var documentTitle = KnowledgeDocumentTitle.of(nodes);
         for (KnowledgeSourceNode node : childrenOf(root, nodes)) {
             switch (node.nodeType()) {
-                case TITLE, HEADING -> {
+                case TITLE -> {
+                    open = new ProseRegion(node, new ArrayList<>(), documentTitle);
+                    regions.add(open);
+                }
+                case HEADING -> {
                     open = new ProseRegion(node, new ArrayList<>());
                     regions.add(open);
                 }
@@ -267,7 +366,20 @@ final class KnowledgeStructure {
             rows.add(new KnowledgeTableShaping.Row(row.id(),
                     row.rowIndex() == null ? -1 : row.rowIndex(), cells));
         }
-        var sectionTitle = open == null ? null : open.headingText();
+        var sectionTitle = open == null || open.isTitleRegion() ? null : open.headingText();
+        var populated = rows.stream().filter(row -> !row.isEmpty()).toList();
+        if (!populated.isEmpty() && populated.stream().allMatch(row -> row.nonBlankCells().size() == 1)) {
+            // A one-column list often carries a header ("Term"). It names the list, not an entry.
+            var start = populated.size() > 1 && isSingleColumnHeader(populated.getFirst()) ? 1 : 0;
+            for (var row : populated.subList(start, populated.size())) {
+                var provenance = new ArrayList<UUID>();
+                provenance.add(table.id());
+                provenance.add(row.rowNodeId());
+                row.cells().forEach(cell -> provenance.add(cell.nodeId()));
+                regions.add(new CalloutRegion(row.nonBlankCells().getFirst().text(), provenance));
+            }
+            return;
+        }
         var shape = KnowledgeTableShaping.shape(rows);
         if (shape instanceof KnowledgeTableShaping.KeyValue keyValue) {
             var provenance = new ArrayList<UUID>();
@@ -285,9 +397,28 @@ final class KnowledgeStructure {
             var provenance = new ArrayList<UUID>();
             provenance.add(table.id());
             provenance.addAll(row.provenance());
+            var rowLabel = KnowledgeTableShaping.firstValue(row.columns());
+            // The unit title is the model's section path; the row's own label is display only.
             regions.add(new GridRecordRegion(ExtractionUnitKind.TABLE, sectionTitle,
-                    KnowledgeTableShaping.firstValue(row.columns()), row.columns(), provenance));
+                    rowLabel, row.columns(), provenance));
         }
+    }
+
+    /** Known one-column list names; anything else is a value, so no source row is dropped. */
+    private static final Set<String> LIST_HEADERS = Set.of(
+            "term", "defined term", "definition", "definitions", "item", "items", "name",
+            "clause", "topic", "concept", "key", "category");
+
+    /** A known one-line list name at the top of a one-column list names the list, not a value. */
+    private static boolean isSingleColumnHeader(KnowledgeTableShaping.Row row) {
+        var text = row.nonBlankCells().getFirst().text().strip();
+        if (text.lines().count() != 1) {
+            return false;
+        }
+        var normalized = RecordLabelRoles.normalize(text);
+        return LIST_HEADERS.contains(normalized)
+                || normalized.startsWith("definition ")
+                || normalized.startsWith("defined term ");
     }
 
     private static void buildSpreadsheet(

@@ -124,8 +124,10 @@ function passageLocation(node: KnowledgeNode | undefined, byId: ReadonlyMap<stri
       sheet = parent.sheetName
       parent = parent.parentId ? byId.get(parent.parentId) : undefined
     }
-    // Row indexes are zero-based in the extraction; a person counts rows from one.
-    const row = node.rowIndex !== null ? `row ${node.rowIndex + 1}` : null
+    // Row indexes are zero-based in the extraction; a person counts rows from one. A Word table
+    // row says so; a spreadsheet row stays the plain row the spreadsheet reader expects.
+    const rowLabel = node.nodeType === 'TABLE_ROW' ? 'Table row' : 'row'
+    const row = node.rowIndex !== null ? `${rowLabel} ${node.rowIndex + 1}` : null
     return [sheet ? `Sheet "${sheet}"` : null, row].filter(Boolean).join(', ') || null
   }
   return node.numberingLabel
@@ -192,8 +194,8 @@ export function candidateLocations(candidates: Candidate[], units: ExtractionUni
     const unit = unitById.get(candidate.extractionUnitId)
     const sourceNodes = (unit?.sourceNodeIds ?? []).map((id) => byId.get(id)).filter((node): node is KnowledgeNode => node !== undefined)
     const first = sourceNodes[0]
-    const sheet = sourceNodes.find((node) => node.sheetName)?.sheetName
-    const label = sheet ? passageLocation(first, byId) : sourceLocation(sourceNodes)
+    // A row keeps its sheet and row; anything else falls back to the numbering label.
+    const label = passageLocation(first, byId) ?? sourceLocation(sourceNodes)
     found.set(candidate.id, label ?? null)
   }
   return found

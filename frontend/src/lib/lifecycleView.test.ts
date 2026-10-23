@@ -87,7 +87,7 @@ describe('approved changes', () => {
 
   it('does not invent a place for an insertion', () => {
     const insert = { ...change, actionType: 'INSERT' as const, targetKind: 'ABSENCE' as const, targetHeadingNodeId: null, absenceConcept: 'CONFIDENTIALITY_OBLIGATIONS' }
-    expect(changeLocation(insert, labels, humanizeCode)).toBe('Placement resolved during redline execution')
+    expect(changeLocation(insert, labels, humanizeCode)).toBe('Rivell places this when it builds the redline')
     expect(changeLocation(change, labels, humanizeCode)).toBe('8. Limitation of Liability')
   })
 
@@ -114,7 +114,7 @@ describe('redline report: no partial success is ever shown as success', () => {
   it('shows a failed or unapplied change as such', () => {
     const execution = fixtureFailedRedlineExecution()
     expect(reportResult(execution, fixtureRedlineChange({ status: 'FAILED', verification: null }))).toEqual({
-      label: 'Execution failed',
+      label: 'Failed',
       variant: 'red',
     })
     expect(reportResult(execution, fixtureRedlineChange({ status: 'NOT_APPLIED', verification: null })).variant).toBe('neutral')
@@ -123,17 +123,17 @@ describe('redline report: no partial success is ever shown as success', () => {
   it('does not call an applied but unverified change verified', () => {
     const execution = fixtureRedlineExecution()
     expect(reportResult(execution, fixtureRedlineChange({ verification: 'FAILED' })).variant).toBe('red')
-    expect(reportResult(execution, fixtureRedlineChange({ verification: null })).label).toBe('Applied · Not verified')
+    expect(reportResult(execution, fixtureRedlineChange({ verification: null })).label).toBe('Applied · Not checked')
   })
 
   it('states the overall result from the execution record', () => {
-    expect(overallResult(fixtureRedlineExecution())).toMatchObject({ word: 'VERIFIED', tone: 'ok' })
-    expect(overallResult(fixtureFailedRedlineExecution())).toMatchObject({ word: 'FAILED', tone: 'red' })
+    expect(overallResult(fixtureRedlineExecution())).toMatchObject({ word: 'Verified', tone: 'ok' })
+    expect(overallResult(fixtureFailedRedlineExecution())).toMatchObject({ word: 'Failed', tone: 'red' })
     expect(overallResult(fixtureRedlineExecution({ downloadAvailable: true, changes: [fixtureRedlineChange({ verification: 'FAILED' })] }))).toMatchObject({
-      word: 'NOT VERIFIED',
+      word: 'Not verified',
       tone: 'red',
     })
-    expect(overallResult(fixtureFailedRedlineExecution()).sentence).toContain('no partial-success artifact')
+    expect(overallResult(fixtureFailedRedlineExecution()).sentence).toContain('No file is offered')
   })
 
   it('names where an insertion landed, or says it was not resolved', () => {
@@ -144,7 +144,7 @@ describe('redline report: no partial success is ever shown as success', () => {
 
   it('shows only a fixed, user-safe sentence for a failure, never the server detail', () => {
     const note = failureNote(fixtureRedlineChange({ failureCode: 'TARGET_NOT_FOUND' }))
-    expect(note).toBe('An approved change targets a location that could not be found in the frozen document.')
+    expect(note).toBe('An approved change targets a location that could not be found in the document.')
     expect(failureNote(fixtureRedlineChange({ failureCode: null }))).toBeNull()
   })
 })

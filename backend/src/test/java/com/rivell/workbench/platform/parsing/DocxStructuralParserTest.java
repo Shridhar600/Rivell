@@ -374,7 +374,7 @@ class DocxStructuralParserTest {
         assertThat(result.parserVersion()).isEqualTo(PARSER_VERSION);
         assertThat(result.nodes()).isEmpty();
         assertThat(result.warnings()).isNotEmpty();
-        assertThat(result.warnings().get(0)).startsWith("The document could not be parsed");
+        assertThat(result.warnings().get(0)).startsWith("Rivell could not read this Word file");
     }
 
     /**

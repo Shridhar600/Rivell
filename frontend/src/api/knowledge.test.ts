@@ -44,6 +44,7 @@ const artifactDetail = {
   id: '666c50a4-b4d0-435d-97ee-eec8822cc9f9',
   artifactType: 'PLAYBOOK',
   filename: 'knowledge-playbook.docx',
+  documentTitle: 'Mutual NDA Negotiation Guide',
   contentType: 'application/octet-stream',
   sizeBytes: 1487,
   sha256: '3eaad38b59dba45ea79754850eb04fd71eaac95c865d7a8a0be01683b9581f04',
@@ -70,7 +71,9 @@ const candidate = {
   extractionUnitId: 'c4847c0c-8ac0-465d-842f-90b218a9286d',
   candidateType: 'PLAYBOOK_RULE',
   reviewStatus: 'PENDING',
-  rawLabel: 'Liability cap',
+  rawLabel: 'Liability cap | 1x annual fees | 2x annual fees',
+  editedTitle: null,
+  title: 'Liability cap',
   contentText: 'Liability cap | 1x annual fees | 2x annual fees',
   payloadColumns: {
     Clause: 'Liability cap',
@@ -101,6 +104,7 @@ const candidate = {
   supersedingCandidateId: null,
   contractPackKey: null,
   declaredContractTypes: [],
+  sourceContractTypes: ['MSA'],
   partyPerspective: null,
   paperSource: null,
   jurisdiction: null,
@@ -230,7 +234,7 @@ describe('knowledge parsers', () => {
 
   it('rejects candidates with an unknown review status', () => {
     expect(() => parseCandidate({ ...candidate, reviewStatus: 'ARCHIVED' })).toThrow(
-      /malformed candidate response/i,
+      /could not read this response/i,
     )
   })
 
@@ -265,7 +269,7 @@ describe('knowledge parsers', () => {
   it('rejects unknown review categories at the boundary', () => {
     expect(() =>
       parseCandidate({ ...candidate, reviewCategory: 'CRITICAL' }),
-    ).toThrow(/malformed candidate response/i)
+    ).toThrow(/could not read this response/i)
   })
 
   it('parses an artifact assessment and tolerates its absence', () => {
@@ -309,7 +313,7 @@ describe('knowledge parsers', () => {
     expect(parseCandidate(candidate).effectiveConceptKey).toBeNull()
     const { effectiveConceptKey: _omitted, ...withoutField } = candidate
     // Like every other field the server always sends, a missing key is a malformed response.
-    expect(() => parseCandidate(withoutField)).toThrow(/malformed candidate/i)
+    expect(() => parseCandidate(withoutField)).toThrow(/could not read this response/i)
   })
 
   it('parses extraction units and publications', () => {
@@ -334,6 +338,18 @@ describe('knowledge list queries', () => {
 
     expect(artifacts).toHaveLength(1)
     expect(artifacts[0].filename).toBe('knowledge-playbook.docx')
+    expect(artifacts[0].documentTitle).toBe('Mutual NDA Negotiation Guide')
+  })
+
+  it('reads the title a reviewer sees and the machine title beside it', async () => {
+    stubFetch(() => jsonResponse(envelope([{ ...candidate, editedTitle: 'Liability cap', title: 'Liability cap' }])))
+
+    const candidates = await fetchCandidates('a1')
+
+    expect(candidates[0].title).toBe('Liability cap')
+    expect(candidates[0].editedTitle).toBe('Liability cap')
+    expect(candidates[0].rawLabel).toBe('Liability cap | 1x annual fees | 2x annual fees')
+    expect(candidates[0].sourceContractTypes).toEqual(['MSA'])
   })
 
   it('asks for the page size it is given, and keeps the short default for the legacy lists', async () => {
@@ -347,7 +363,7 @@ describe('knowledge list queries', () => {
   it('rejects a list response that is not enveloped', async () => {
     stubFetch(() => jsonResponse([artifactDetail]))
 
-    await expect(fetchArtifacts()).rejects.toThrow(/malformed knowledge sources response/i)
+    await expect(fetchArtifacts()).rejects.toThrow(/could not read this response/i)
   })
 
   it('unwraps the envelope for candidates', async () => {
@@ -355,7 +371,8 @@ describe('knowledge list queries', () => {
 
     const candidates = await fetchCandidates('a1')
 
-    expect(candidates[0].rawLabel).toBe('Liability cap')
+    expect(candidates[0].title).toBe('Liability cap')
+    expect(candidates[0].rawLabel).toBe('Liability cap | 1x annual fees | 2x annual fees')
   })
 })
 
@@ -428,6 +445,6 @@ describe('uploadKnowledge', () => {
     const file = new File(['bytes'], 'knowledge-playbook.docx')
     await expect(
       uploadKnowledge(file, { artifactType: 'PLAYBOOK', declaredContractTypes: [] }),
-    ).rejects.toThrow(/malformed knowledge source response/i)
+    ).rejects.toThrow(/could not read this response/i)
   })
 })

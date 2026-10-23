@@ -15,7 +15,7 @@ public final class FilenameSanitizer {
 
     public static String sanitize(String filename, Set<String> allowedExtensions) {
         if (filename == null || filename.isBlank()) {
-            throw new IllegalArgumentException("Filename must not be blank");
+            throw new IllegalArgumentException("The file needs a name.");
         }
         var base = filename.trim();
         var slash = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
@@ -24,13 +24,21 @@ public final class FilenameSanitizer {
         }
         var cleaned = base.replaceAll("[\\p{Cntrl}]", "");
         if (cleaned.isBlank()) {
-            throw new IllegalArgumentException("Filename must not be blank");
+            throw new IllegalArgumentException("The file needs a name.");
         }
         var lower = cleaned.toLowerCase(Locale.ROOT);
         if (allowedExtensions.stream().noneMatch(lower::endsWith)) {
             throw new IllegalArgumentException(
-                    "Only " + String.join(", ", allowedExtensions) + " files are supported");
+                    "Upload " + acceptedFiles(allowedExtensions) + ".");
         }
         return cleaned;
+    }
+
+    private static String acceptedFiles(Set<String> allowedExtensions) {
+        return allowedExtensions.stream().sorted().map(extension -> switch (extension) {
+            case ".docx" -> "a Word file (.docx)";
+            case ".xlsx" -> "an Excel file (.xlsx)";
+            default -> "a " + extension + " file";
+        }).collect(java.util.stream.Collectors.joining(" or "));
     }
 }

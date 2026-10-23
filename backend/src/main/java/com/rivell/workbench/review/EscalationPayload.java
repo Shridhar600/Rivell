@@ -1,7 +1,7 @@
 package com.rivell.workbench.review;
 
 /** Policy facts require human escalation for this deviation. */
-public record EscalationPayload(String trigger, boolean requiresApproval)
+public record EscalationPayload(String trigger, Boolean requiresApproval)
         implements SignalPayload {
 
     @Override

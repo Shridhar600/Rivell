@@ -42,7 +42,7 @@ export function ClauseDetailPage() {
             <CatalogNotices state={state} catalog={catalog} />
             <EmptyState
               title="This clause is not in the published clause library"
-              message={at ? `It is not part of publication ${at}.` : 'It may have been superseded, or opened from an old link.'}
+              message={at ? `It is not part of knowledge version ${at}.` : 'It may have been superseded, or opened from an old link.'}
               action={<LinkButton to="/knowledge/clauses">Clause library</LinkButton>}
             />
           </KnowledgeFrame>
@@ -69,7 +69,7 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
       meta={
         <>
           <span className="rv-stb rv-stb--ok">Published</span>
-          <Chip>Publication {variant.publication.number}</Chip>
+          <Chip>Knowledge version {variant.publication.number}</Chip>
           {scope ? <Chip>{scope}</Chip> : null}
         </>
       }
@@ -102,7 +102,7 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
                 )
               }
             >
-              {entry.candidate.rawLabel}
+              {entry.candidate.title}
             </button>
           ))}
         </div>
@@ -143,7 +143,7 @@ function VariantBody({ variant }: { variant: ClauseVariant }) {
             </button>
           ) : null}
         </div>
-        {text ? <p>{text}</p> : <p className="rv-k-loc">This variant has no authored wording.</p>}
+        {text ? <p>{text}</p> : <p className="rv-k-loc">This clause has no approved wording.</p>}
         <span role="status" className="rv-visually-hidden">
           {copied === 'done' ? 'Copied the approved wording' : copied === 'failed' ? 'The wording could not be copied' : ''}
         </span>
@@ -161,11 +161,11 @@ function VariantBody({ variant }: { variant: ClauseVariant }) {
           ))}
           <dt>Published</dt>
           <dd>
-            Publication {publication.number}, {longDate(publication.createdAt)}
+            Knowledge version {publication.number}, {longDate(publication.createdAt)}
           </dd>
         </dl>
         <div className="rv-k-prov">
-          <span className="rv-k-loc">Provenance</span>
+          <span className="rv-k-loc">Source</span>
           <b>{artifact.filename}</b>
           {location ? <span className="rv-k-loc">{location}</span> : null}
           <Link className="rv-k-lnk" to={`/knowledge/sources/${artifact.id}?position=${candidate.id}`}>

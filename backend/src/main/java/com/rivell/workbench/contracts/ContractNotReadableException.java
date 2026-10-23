@@ -7,6 +7,7 @@ package com.rivell.workbench.contracts;
 public class ContractNotReadableException extends RuntimeException {
 
     public ContractNotReadableException() {
-        super("The contract file could not be read, so it cannot be analysed.");
+        super("Rivell could not read this contract file, so it cannot check it. "
+                + "Upload the contract again.");
     }
 }

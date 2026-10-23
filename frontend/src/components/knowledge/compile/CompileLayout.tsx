@@ -1,39 +1,46 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router'
 import type { ArtifactType } from '../../../api/knowledge'
-import { backTarget, kindLabel } from '../../../lib/compilation'
-import { BackIcon, PanelLeftIcon } from '../../ui/Icon'
+import { kindLabel } from '../../../lib/compilation'
+import { Breadcrumbs, type Crumb } from '../../shell/Breadcrumbs'
+import { TopBar } from '../../shell/TopBar'
+import { PanelLeftIcon } from '../../ui/Icon'
 import { IconButton } from '../../ui/Button'
+
+const LIST_CRUMB: Partial<Record<ArtifactType, Crumb>> = {
+  PLAYBOOK: { label: 'Playbooks', to: '/knowledge/playbooks' },
+  CLAUSE_LIBRARY: { label: 'Clause library', to: '/knowledge/clauses' },
+}
 
 interface TopBarProps {
   type: ArtifactType | null
-  filename: string
+  /** The artifact's display name: its document title, else its file name. */
+  name: string
   /** The candidate list is hidden or shown. Absent where there is no list. */
   rail?: { open: boolean; onToggle: () => void; id: string }
   /** Progress and the publish control, when there is a compilation to review. */
   children?: ReactNode
 }
 
-export function CompileTopBar({ type, filename, rail, children }: TopBarProps) {
+export function CompileTopBar({ type, name, rail, children }: TopBarProps) {
+  const listCrumb = type ? LIST_CRUMB[type] : undefined
   return (
-    <header className="rv-kc-top">
-      {rail ? (
-        <IconButton label="Candidate list" expanded={rail.open} controls={rail.id} title={rail.open ? 'Hide list [' : 'Show list ['} onClick={rail.onToggle}>
-          <PanelLeftIcon className="rv-icon" />
-        </IconButton>
-      ) : null}
-      <Link className="rv-kc-back" to={backTarget(type)}>
-        <BackIcon className="rv-icon" />
-        Knowledge
-      </Link>
-      <span className="rv-kc-sep" aria-hidden="true">
-        /
-      </span>
-      <span className="rv-kc-ttl">{filename}</span>
-      {type ? <span className="rv-chip">{kindLabel(type)}</span> : null}
-      <span className="rv-kc-sp" />
-      {children}
-    </header>
+    <TopBar
+      pageTitle={name}
+      leading={
+        rail ? (
+          <IconButton label="Entry list" expanded={rail.open} controls={rail.id} title={rail.open ? 'Hide list [' : 'Show list ['} onClick={rail.onToggle}>
+            <PanelLeftIcon className="rv-icon" />
+          </IconButton>
+        ) : null
+      }
+      title={
+        <div className="rv-ws-crumbs">
+          <Breadcrumbs crumbs={[{ label: 'Knowledge', to: '/knowledge' }, ...(listCrumb ? [listCrumb] : []), { label: name }]} />
+          {type ? <span className="rv-chip">{kindLabel(type)}</span> : null}
+        </div>
+      }
+      actions={children}
+    />
   )
 }
 
@@ -45,17 +52,16 @@ interface LayoutProps {
 }
 
 /**
- * The compilation workspace is full-bleed, as in the canonical design: its own top bar, a candidate
- * list on the left and the candidate on the right. It carries no app sidebar, so it renders outside
- * the shell.
+ * The compilation workspace takes the full page width inside the shell: the shared top bar, a
+ * candidate list on the left and the candidate on the right.
  */
 export function CompileLayout({ top, rail, railOpen = true, children }: LayoutProps) {
   return (
-    <div className="rv-kc">
+    <div className="rv-kc" data-panel-keys="own">
       {top}
       <div className="rv-kc-work" data-rail={rail && railOpen ? 'open' : 'closed'}>
         {rail && railOpen ? rail : null}
-        <main className="rv-kc-main" aria-label="Candidate review">
+        <main className="rv-kc-main" aria-label="Entry review">
           {children}
         </main>
       </div>

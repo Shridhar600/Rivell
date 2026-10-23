@@ -1,8 +1,8 @@
 export const VERIFICATION_LABELS: Record<string, string> = {
-  VERIFIED: 'Supported by source',
+  VERIFIED: 'Matches the source',
   UNCERTAIN: 'Verification uncertain',
   DISPUTED: 'Source support disputed',
-  NOT_VERIFIED: 'Not independently verified',
+  NOT_VERIFIED: 'Not checked against a second source',
 }
 
 export function humanizeCode(code: string): string {

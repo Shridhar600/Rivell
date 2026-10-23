@@ -103,15 +103,15 @@ export function FindingNavigator({
     <aside className="rv-ws-pane rv-ws-fl" aria-label="Findings">
       <div className="rv-ws-fl-h">
         Findings
-        <small>{remaining !== null ? `${remaining} unresolved` : enabled && !isPending ? findings.length : ''}</small>
+        <small>{remaining !== null ? `${remaining} open` : enabled && !isPending ? findings.length : ''}</small>
       </div>
-      {!enabled ? <p className="rv-ws-fl-note">Findings appear here when the automated analysis completes.</p> : null}
+      {!enabled ? <p className="rv-ws-fl-note">Findings appear when analysis finishes.</p> : null}
       {enabled && isPending ? <LoadingState label="Loading findings…" /> : null}
       {enabled && isError ? <ErrorState message="Findings could not be loaded." onRetry={onRetry} /> : null}
       {enabled && !isPending && !isError && findings.length === 0 ? (
         <p className="rv-ws-fl-note">
           {analysisComplete
-            ? 'No findings. The automated review recorded none for this contract version.'
+            ? 'No findings for this contract version.'
             : 'This review did not complete an analysis, so there are no findings to show.'}
         </p>
       ) : null}
@@ -128,10 +128,11 @@ export function FindingNavigator({
           >
             Needs your look ({look.length})
           </button>
-          <p className="rv-ws-fl-note">
-            Rivell did not decide these. Rivell’s first review and a second opinion disagreed, a second opinion
-            was not available, your playbook is silent on the clause, or Rivell is unsure a missing provision is
-            required.
+          <p
+            className="rv-ws-fl-note"
+            title="Rivell did not decide these. The first check and a second opinion disagreed, a second opinion was not available, your playbook is silent on the clause, or Rivell is not sure that a missing provision is required."
+          >
+            Rivell left these to you.
           </p>
           {showLook ? (
             <div role="listbox" aria-label="Needs your look list">

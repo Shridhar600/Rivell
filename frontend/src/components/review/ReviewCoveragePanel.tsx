@@ -17,7 +17,7 @@ export function ReviewCoveragePanel({ coverage }: { coverage: ReviewCoverage[] }
         Review coverage
       </h2>
       <p className="rv-ws-caption">
-        How the planned concepts were found in this contract version. Coverage describes what was
+        How the planned topics were found in this contract version. Coverage describes what was
         reviewed; it is not a severity or a legal conclusion.
       </p>
       <ul className="rv-ws-cov">

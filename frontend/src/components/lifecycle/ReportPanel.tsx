@@ -31,8 +31,8 @@ export function ReportPanel({ execution, approvedChanges, findingsById, regionLa
         <h2>{heading}</h2>
         <span>
           {result.tone === 'ok'
-            ? 'Execution and verification against the frozen approved change set'
-            : 'Why no verified artifact was produced'}
+            ? 'Applied and checked against the approved changes'
+            : 'Why no verified file was produced'}
         </span>
       </div>
       <div className="rv-lc-klist">

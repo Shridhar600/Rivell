@@ -133,7 +133,7 @@ public class WorkflowApiService {
             return DEFAULT_PAGE_LIMIT;
         }
         if (limit < 1) {
-            throw new IllegalArgumentException("limit must be >= 1");
+            throw new IllegalArgumentException("The page size must be 1 or more.");
         }
         return Math.min(limit, MAX_PAGE_LIMIT);
     }

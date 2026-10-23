@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import { createApiClient } from './client'
 import {
+  MALFORMED_RESPONSE_MESSAGE,
   asRecord,
   parseApiResult,
   readArray,
@@ -167,6 +168,8 @@ export interface ArtifactSummary {
   id: string
   artifactType: ArtifactType
   filename: string
+  /** The title a Word file gives itself; null when it names none. */
+  documentTitle: string | null
   contentType: string
   sizeBytes: number
   sha256: string
@@ -264,7 +267,12 @@ export interface Candidate {
   extractionUnitId: string
   candidateType: CandidateType
   reviewStatus: ReviewStatus
+  /** What Rivell read, unchanged by a reviewer. */
   rawLabel: string
+  /** A title a person typed; null until one is given. */
+  editedTitle: string | null
+  /** The title to show: the person's when there is one, else `rawLabel`. */
+  title: string
   contentText: string | null
   payloadColumns: Record<string, string>
   legalConceptKey: string | null
@@ -283,6 +291,8 @@ export interface Candidate {
   supersedingCandidateId: string | null
   contractPackKey: string | null
   declaredContractTypes: string[]
+  /** Contract types the record itself states it applies to; empty when it states none. */
+  sourceContractTypes: string[]
   partyPerspective: string | null
   paperSource: string | null
   jurisdiction: string | null
@@ -345,6 +355,7 @@ export function parseArtifactSummary(
     id: readString(record, 'id', what),
     artifactType: readEnum(record, 'artifactType', what, ARTIFACT_TYPES),
     filename: readString(record, 'filename', what),
+    documentTitle: readNullableString(record, 'documentTitle', what),
     contentType: readString(record, 'contentType', what),
     sizeBytes: readNumber(record, 'sizeBytes', what),
     sha256: readString(record, 'sha256', what),
@@ -492,6 +503,8 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     candidateType: readEnum(record, 'candidateType', what, CANDIDATE_TYPES),
     reviewStatus: readEnum(record, 'reviewStatus', what, REVIEW_STATUSES),
     rawLabel: readString(record, 'rawLabel', what),
+    editedTitle: readNullableString(record, 'editedTitle', what),
+    title: readString(record, 'title', what),
     contentText: readNullableString(record, 'contentText', what),
     payloadColumns: readStringMap(record, 'payloadColumns', what),
     legalConceptKey: readNullableString(record, 'legalConceptKey', what),
@@ -508,6 +521,10 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     supersedingCandidateId: readNullableString(record, 'supersedingCandidateId', what),
     contractPackKey: readNullableString(record, 'contractPackKey', what),
     declaredContractTypes: readStringArray(record, 'declaredContractTypes', what),
+    sourceContractTypes:
+      record.sourceContractTypes === undefined
+        ? []
+        : readStringArray(record, 'sourceContractTypes', what),
     partyPerspective: readNullableString(record, 'partyPerspective', what),
     paperSource: readNullableString(record, 'paperSource', what),
     jurisdiction: readNullableString(record, 'jurisdiction', what),
@@ -550,7 +567,7 @@ export function parsePublication(value: unknown, what = 'publication'): Publicat
 
 const PUBLISH_MESSAGES: Partial<Record<number, string>> = {
   404: 'That knowledge source could not be found.',
-  409: 'Only candidates that have been approved can be published. Review the candidate states, then try again.',
+  409: 'Only entries that have been approved can be published. Check the entry states, then try again.',
   500: 'The knowledge version could not be published.',
   503: 'The knowledge service is unavailable right now.',
 }
@@ -580,22 +597,22 @@ export function isKnowledgeForbiddenError(error: unknown): boolean {
  * have left one behind. These do not claim that nothing was changed.
  */
 const KNOWLEDGE_UPLOAD_MESSAGES: Partial<Record<number, string>> = {
-  400: 'The file was not accepted. Use a .docx or .xlsx file.',
+  400: 'The file was not accepted. Use a Word or Excel file.',
   500: 'Rivell could not process this file. If it was stored, it appears in Sources as a failed source. Nothing was published.',
 }
 
 const CONCEPT_MESSAGES: Partial<Record<number, string>> = {
-  400: 'That legal concept is not one Rivell knows.',
-  404: 'That candidate could not be found.',
-  409: 'A published or rejected candidate cannot be corrected.',
-  500: 'The legal concept could not be corrected.',
+  400: 'That topic is not one Rivell knows.',
+  404: 'That entry could not be found.',
+  409: 'A published or rejected entry cannot be corrected.',
+  500: 'The topic could not be corrected.',
   503: 'The knowledge service is unavailable right now.',
 }
 
 const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
-  404: 'That knowledge source or candidate could not be found.',
+  404: 'That knowledge source or entry could not be found.',
   409: 'That knowledge request does not apply in the current state.',
-  413: 'The submitted content is larger than this Rivell deployment accepts.',
+  413: 'The submitted content is larger than Rivell accepts.',
   500: 'The knowledge request could not be completed.',
   503: 'The knowledge service is unavailable right now.',
 }
@@ -680,7 +697,7 @@ export async function fetchExtractionUnits(
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Extraction units unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Source parts unavailable'))
   }
   return parseApiResult(
     data,
@@ -696,7 +713,7 @@ export async function fetchCandidates(artifactId: string): Promise<Candidate[]> 
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge candidates unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge entries unavailable'))
   }
   return parseApiResult(
     data,
@@ -712,7 +729,7 @@ export async function fetchCandidate(candidateId: string): Promise<Candidate> {
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Candidate unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Entry unavailable'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -724,7 +741,7 @@ export async function fetchPublications(limit = KNOWLEDGE_PAGE_LIMIT): Promise<P
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publications unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge versions unavailable'))
   }
   return parseApiResult(
     data,
@@ -740,7 +757,7 @@ export async function fetchPublication(publicationId: string): Promise<Publicati
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publication unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge version unavailable'))
   }
   return parseApiResult(data, parsePublication, 'publication')
 }
@@ -797,7 +814,7 @@ async function makePosition(artifactId: string, unitId: string): Promise<Candida
     throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'The part could not be made a position'))
   }
   return parseApiResult(data, (value, what) => {
-    if (!Array.isArray(value)) throw new Error(`${what} is not a list`)
+    if (!Array.isArray(value)) throw new Error(MALFORMED_RESPONSE_MESSAGE)
     return value.map((entry, index) => parseCandidate(entry, `${what}[${index}]`))
   }, 'made position')
 }
@@ -827,13 +844,15 @@ export interface ScopeEditInput {
 
 export interface SemanticFieldsEditInput {
   positions?: PositionRole[]
-  requiresApproval?: boolean
+  /** null means "not specified", which is different from leaving the field unsent. */
+  requiresApproval?: boolean | null
   escalationTrigger?: string
   variantRole?: PositionRole
 }
 
 export interface EditCandidateInput {
   candidateId: string
+  title?: string
   contentText?: string
   payloadColumns?: Record<string, string>
   scope?: ScopeEditInput
@@ -841,13 +860,25 @@ export interface EditCandidateInput {
   note?: string
 }
 
-type EditRequestBody = NonNullable<
+type GeneratedEditRequestBody = NonNullable<
   paths['/api/knowledge/candidates/{id}/edit']['post']['requestBody']
 >['content']['application/json']
+
+/**
+ * The contract accepts an explicit null for counsel approval ("not specified"), but the generated
+ * schema types it as boolean only.
+ */
+type EditRequestBody = Omit<GeneratedEditRequestBody, 'semanticFields'> & {
+  semanticFields?: Omit<
+    NonNullable<GeneratedEditRequestBody['semanticFields']>,
+    'requiresApproval'
+  > & { requiresApproval?: boolean | null }
+}
 
 async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
   const client = createApiClient()
   const body: EditRequestBody = {}
+  if (input.title !== undefined) body.title = input.title
   if (input.contentText !== undefined) body.contentText = input.contentText
   if (input.payloadColumns !== undefined) body.payloadColumns = input.payloadColumns
   if (input.scope !== undefined) body.scope = input.scope
@@ -856,7 +887,7 @@ async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
 
   const { data, response } = await client.POST('/api/knowledge/candidates/{id}/edit', {
     params: { path: { id: input.candidateId } },
-    body,
+    body: body as GeneratedEditRequestBody,
   })
 
   if (!data) {
@@ -886,7 +917,7 @@ async function correctConcept(candidateId: string, primary: string): Promise<Can
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, CONCEPT_MESSAGES, 'The legal concept could not be corrected.'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, CONCEPT_MESSAGES, 'The topic could not be corrected.'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -1007,7 +1038,7 @@ export function useCandidateQuery(
     retry: knowledgeRetry,
     queryKey: knowledgeKeys.candidate(candidateId ?? ''),
     queryFn: () => {
-      if (!candidateId) throw new Error('Candidate id is required')
+      if (!candidateId) throw new Error('An entry is required')
       return fetchCandidate(candidateId)
     },
     enabled: Boolean(candidateId),

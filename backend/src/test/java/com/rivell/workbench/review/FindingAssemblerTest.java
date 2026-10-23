@@ -131,7 +131,7 @@ class FindingAssemblerTest {
         assertThat(finding.claims())
                 .filteredOn(claim -> claim.claimKind() == ClaimKind.POLICY_BASIS)
                 .allSatisfy(claim -> assertThat(claim.text())
-                        .contains("No published policy applies"));
+                        .contains("Your playbook has no position on this topic"));
     }
 
     private static RawReviewSignal disagreement(String secondOpinionCategory) {
@@ -184,5 +184,88 @@ class FindingAssemblerTest {
         var finding = assembler.assemble(run(), List.of(unavailable), NOW).get(0);
 
         assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+    }
+
+    private static RawReviewSignal deviation(String category, boolean secondaryTopic, Map<String, Object> quality) {
+        return signal(SignalType.POLICY_DEVIATION, IssueFamily.POSITION_ACCEPTABLE_FALLBACK,
+                new PositionDeviationPayload(UUID.randomUUID(), category, 0.9, Map.of(), secondaryTopic),
+                List.of(UUID.randomUUID()), null, quality);
+    }
+
+    @Test
+    void p1AFindingRaisedBySecondOpinionCategoryGetsTheSeverityOfTheNewCategoryAndKeepsItsTag() {
+        var walk = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WALK_AWAY, false,
+                Map.of("levers", List.of("P1", "P2"), "categoryBeforeLevers", PolicyComparisonSpecs.WITHIN_FALLBACK,
+                        "secondOpinionCategory", PolicyComparisonSpecs.WALK_AWAY))), NOW).get(0);
+        var beyond = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.BEYOND_FALLBACK, false,
+                Map.of("levers", List.of("P1"), "categoryBeforeLevers", PolicyComparisonSpecs.WITHIN_FALLBACK))),
+                NOW).get(0);
+
+        assertThat(walk.severity()).isEqualTo(FindingSeverity.HIGH);
+        assertThat(walk.quality()).containsEntry("levers", List.of("P1", "P2"))
+                .containsEntry("severityWithoutLevers", "LOW")
+                .containsEntry("categoryBeforeLevers", PolicyComparisonSpecs.WITHIN_FALLBACK)
+                .containsEntry("secondOpinionCategory", PolicyComparisonSpecs.WALK_AWAY);
+        assertThat(beyond.severity()).isEqualTo(FindingSeverity.MEDIUM);
+        assertThat(beyond.quality()).containsEntry("severityWithoutLevers", "LOW");
+    }
+
+    @Test
+    void p3AFindingRaisedByTheConditionCheckIsMediumAndRestorableToLow() {
+        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.BEYOND_FALLBACK, false,
+                Map.of("levers", List.of("P3"), "categoryBeforeLevers", PolicyComparisonSpecs.WITHIN_FALLBACK))),
+                NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
+        assertThat(finding.quality()).containsEntry("severityWithoutLevers", "LOW");
+    }
+
+    @Test
+    void aLeverRaisedBeyondFallbackFromAHigherJevCategoryRestoresToThatCategorysSeverity() {
+        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WALK_AWAY, false,
+                Map.of("levers", List.of("P1"), "categoryBeforeLevers", PolicyComparisonSpecs.BEYOND_FALLBACK))),
+                NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.HIGH);
+        assertThat(finding.quality()).containsEntry("severityWithoutLevers", "MEDIUM");
+    }
+
+    @Test
+    void aFindingNoLeverChangedCarriesNoLeverKeys() {
+        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
+                Map.of("route", "SECOND_OPINION"))), NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(finding.quality()).doesNotContainKeys("levers", "severityWithoutLevers");
+    }
+
+    @Test
+    void p2ARoutedNeedsYourLookItemIsTaggedAndRestorableToTheLowWithinNote() {
+        var look = signal(SignalType.DEVIATION_UNCERTAIN, IssueFamily.POSITION_UNCERTAIN,
+                new DeviationUncertainPayload(DeviationUncertainPayload.SECOND_OPINION_DISAGREES),
+                List.of(UUID.randomUUID()), null,
+                Map.of("route", "NEEDS_YOUR_LOOK", "secondOpinionOutcome", "DISAGREED",
+                        "secondOpinionCategory", PolicyComparisonSpecs.MEETS_PREFERRED,
+                        "routeReason", "P2_WITHIN_SPLIT", "levers", List.of("P2"),
+                        "categoryBeforeLevers", PolicyComparisonSpecs.WITHIN_FALLBACK));
+
+        var finding = assembler.assemble(run(), List.of(look), NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(finding.quality()).containsEntry("levers", List.of("P2"))
+                .containsEntry("routeReason", "P2_WITHIN_SPLIT")
+                .containsEntry("severityWithoutLevers", "LOW");
+    }
+
+    @Test
+    void unknownFallbackConditionsAddALookNoteAndNeverChangeTheSeverity() {
+        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
+                Map.of("fallbackConditionsUnknown", List.of("the work is delivered from our UK studio")))),
+                NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(finding.claims()).anySatisfy(claim -> assertThat(claim.text())
+                .contains("could not be checked").contains("the work is delivered from our UK studio"));
+        assertThat(finding.quality()).doesNotContainKey("levers");
     }
 }

@@ -12,6 +12,7 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.rivell.workbench.knowledge.IngestStatus;
@@ -35,13 +36,23 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
 
     public static final String PARSER_VERSION = "rivell-xlsx-parser-1";
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(XlsxKnowledgeExtractor.class);
+
     private static final String WORKBOOK_PART_PATH = "xl/workbook.xml";
 
     private final DocxParserProperties properties;
     private final DataFormatter formatter = new DataFormatter();
+    private final DocumentWorkLimiter limiter;
 
     public XlsxKnowledgeExtractor(DocxParserProperties properties) {
+        this(properties, new DocumentWorkLimiter(DocumentWorkLimiter.DEFAULT_MAX_CONCURRENT));
+    }
+
+    @Autowired
+    public XlsxKnowledgeExtractor(DocxParserProperties properties, DocumentWorkLimiter limiter) {
         this.properties = properties;
+        this.limiter = limiter;
     }
 
     @Override
@@ -51,6 +62,10 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
 
     @Override
     public StructureExtraction extractStructure(UUID artifactId, InputStream source) {
+        return limiter.run(() -> extractWithinLimit(artifactId, source));
+    }
+
+    private StructureExtraction extractWithinLimit(UUID artifactId, InputStream source) {
         try {
             var bytes = source.readAllBytes();
             boundedScan(bytes);
@@ -74,9 +89,10 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
                         coverage);
             }
         } catch (Exception e) {
+            log.warn("Excel file could not be parsed ({}: {})", e.getClass().getSimpleName(), e.getMessage());
             return StructureExtraction.failed(
                     PARSER_VERSION,
-                    List.of("The workbook could not be parsed (" + e.getClass().getSimpleName() + ")"));
+                    List.of("Rivell could not read this Excel file. Check that it opens in Excel, then upload it again."));
         }
     }
 

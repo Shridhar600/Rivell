@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.knowledge.ApplicabilityScope;
 import com.rivell.workbench.knowledge.ArtifactManifest;
 import com.rivell.workbench.knowledge.ArtifactType;
@@ -161,6 +162,15 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                         throw new IllegalStateException("Unreadable parse coverage for an artifact", e);
                     }
                 });
+    }
+
+    @Override
+    @Transactional
+    public void updateDocumentTitle(UUID artifactId, String documentTitle) {
+        jdbcClient.sql("update knowledge_artifact set document_title = :title where id = :id")
+                .param("title", documentTitle)
+                .param("id", artifactId)
+                .update();
     }
 
     @Override
@@ -316,7 +326,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                              review_status, raw_label, content_text, payload, legal_concept_key,
                              topic_keys,
                              semantic_fields, edited_semantic_fields, interpretations,
-                             edited_content_text, edited_payload, superseding_candidate_id,
+                             edited_content_text, edited_title, edited_payload, superseding_candidate_id,
                              contract_pack_key, declared_contract_types, party_perspective,
                              paper_source, jurisdiction, effective_from, effective_to,
                              source_contract_types,
@@ -329,7 +339,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                                     :topicKeys::text[],
                                     :semanticFields::jsonb, :editedSemanticFields::jsonb,
                                     :interpretations::jsonb,
-                                    :editedContentText, :editedPayload::jsonb, :supersedingCandidateId,
+                                    :editedContentText, :editedTitle, :editedPayload::jsonb, :supersedingCandidateId,
                                     :contractPackKey, :declaredContractTypes::jsonb,
                                     :partyPerspective, :paperSource, :jurisdiction, :effectiveFrom,
                                     :effectiveTo, :sourceContractTypes::jsonb,
@@ -348,6 +358,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("legalConceptKey", candidate.legalConceptKey())
                     .param("topicKeys", topicKeysLiteral(candidate.topicKeys()))
                     .param("editedContentText", candidate.editedContentText())
+                    .param("editedTitle", candidate.editedTitle())
                     .param("editedPayload", writePayload(candidate.editedPayload()))
                     .param("supersedingCandidateId", candidate.supersedingCandidateId())
                     .param("contractPackKey", candidate.scope().contractPackKey())
@@ -510,7 +521,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     @Transactional
     public boolean updateReviewState(
             UUID candidateId, UUID organizationId, ReviewStatus expectedStatus,
-            ReviewStatus reviewStatus, String editedContentText,
+            ReviewStatus reviewStatus, String editedContentText, String editedTitle,
             CandidatePayload editedPayload, SemanticFields editedSemanticFields,
             ApplicabilityScope scope, UUID supersedingCandidateId, String reviewNote,
             Instant reviewedAt, Instant updatedAt,
@@ -519,6 +530,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         var updateCount = jdbcClient.sql("""
                         update knowledge_candidate
                         set review_status = :reviewStatus, edited_content_text = :editedContentText,
+                            edited_title = :editedTitle,
                             edited_payload = :editedPayload::jsonb,
                             edited_semantic_fields = :editedSemanticFields::jsonb,
                             superseding_candidate_id = :supersedingCandidateId,
@@ -537,6 +549,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                         """)
                 .param("reviewStatus", reviewStatus.name())
                 .param("editedContentText", editedContentText)
+                .param("editedTitle", editedTitle)
                 .param("editedPayload", writePayload(editedPayload))
                 .param("editedSemanticFields", writeNullableSemanticFields(editedSemanticFields))
                 .param("contractPackKey", scope.contractPackKey())
@@ -624,9 +637,14 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             params.put("paperSource", query.paperSource());
         }
         if (query.jurisdiction() != null) {
-            conditions.add("(c.jurisdiction is null or regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:jurisdiction), '[^a-z0-9]', '', 'g'))");
-            params.put("jurisdiction", query.jurisdiction());
+            conditions.add("(c.jurisdiction is null or case regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g')"
+                    + " when 'unitedstates' then 'us'"
+                    + " when 'unitedstatesofamerica' then 'us'"
+                    + " when 'usa' then 'us'"
+                    + " when 'unitedkingdom' then 'uk'"
+                    + " else regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g') end"
+                    + " = :jurisdiction)");
+            params.put("jurisdiction", Jurisdiction.normalize(query.jurisdiction()));
         }
         if (query.effectiveOn() != null) {
             conditions.add("(c.effective_from is null or c.effective_from <= :effectiveOn)");
@@ -874,7 +892,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("parser_version"),
                 readList(rs.getString("parse_warnings")),
                 readArtifactAssessment(rs.getString("artifact_assessment")),
-                instant(rs, "created_at"));
+                instant(rs, "created_at"),
+                rs.getString("document_title"));
     }
 
     private KnowledgeSourceNode mapNode(ResultSet rs, int rowNum) throws SQLException {
@@ -966,7 +985,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("review_note"),
                 instant(rs, "reviewed_at"),
                 instant(rs, "created_at"),
-                instant(rs, "updated_at"));
+                instant(rs, "updated_at"),
+                rs.getString("edited_title"));
     }
 
     private PublicationItem mapItem(ResultSet rs, int rowNum) throws SQLException {

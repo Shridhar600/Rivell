@@ -35,7 +35,7 @@ export function VersionTimeline({ versions, type, viewing, source, onView }: Ver
             <span className="rv-k-dot" aria-hidden="true" />
             <div>
               <b>
-                Publication {entry.publication.number}
+                Knowledge version {entry.publication.number}
                 {position === 0 ? ' (current)' : ''}
               </b>
               <p>
@@ -51,7 +51,7 @@ export function VersionTimeline({ versions, type, viewing, source, onView }: Ver
                 <button
                   type="button"
                   className="rv-btn rv-btn--compact"
-                  aria-label={`View publication ${entry.publication.number}`}
+                  aria-label={`View knowledge version ${entry.publication.number}`}
                   onClick={() => onView(entry.publication.number)}
                 >
                   View

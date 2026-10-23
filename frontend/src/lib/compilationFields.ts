@@ -1,7 +1,7 @@
 import type { ArtifactDetail, Candidate, Interpretation, VerificationState } from '../api/knowledge'
 import type { ConceptLabel } from '../api/taxonomy'
-import { effectiveContentText, effectivePayloadColumns } from './candidates'
-import { scopeRows } from './knowledgePosition'
+import { effectiveContentText, effectivePayloadColumns, isWordingHeader } from './candidates'
+import { contractTypesText, scopeRows } from './knowledgePosition'
 import {
   approvalDiverge,
   escalationDiverge,
@@ -47,7 +47,7 @@ function supportNote(interpretation: Interpretation | null): string | null {
   const note = SUPPORT_NOTES[interpretation.verification]
   if (note) return note
   return interpretation.verification === 'NOT_VERIFIED' && interpretation.kind === 'GENERATIVE_EXTRACTION'
-    ? 'Not independently verified'
+    ? 'Not checked against a second source'
     : null
 }
 
@@ -67,6 +67,7 @@ export function conceptCorrected(candidate: Candidate): boolean {
 
 /** Whether a person has changed anything about this candidate's interpretation. */
 export function hasHumanCorrection(candidate: Candidate, artifact?: ArtifactDetail): boolean {
+  if (candidate.editedTitle !== null) return true
   if (candidate.editedContentText !== null && candidate.editedContentText !== candidate.contentText) return true
   if (Object.keys(candidate.editedPayloadColumns).length > 0) return true
   if (conceptCorrected(candidate)) return true
@@ -76,7 +77,24 @@ export function hasHumanCorrection(candidate: Candidate, artifact?: ArtifactDeta
   return artifact ? scopeDifferences(candidate, artifact).length > 0 : false
 }
 
-export function interpretationRows(candidate: Candidate, label: ConceptLabel): FieldRow[] {
+/** A payload column the source did not name is not a label a reviewer should read. */
+function payloadColumnLabel(name: string, conceptRow: boolean): string {
+  if (/^(Column|Field) \d+$/.test(name)) return 'Value'
+  if (conceptRow && name.trim().toLowerCase() === 'topic') return 'Topic in the file'
+  return name
+}
+
+function sameContractTypes(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const set = new Set(b)
+  return a.every((type) => set.has(type))
+}
+
+export function interpretationRows(
+  candidate: Candidate,
+  label: ConceptLabel,
+  file?: ArtifactDetail,
+): FieldRow[] {
   const rows: FieldRow[] = []
   const isPlaybook = candidate.candidateType === 'PLAYBOOK_RULE'
   const isClause = candidate.candidateType === 'CLAUSE_VARIANT'
@@ -87,10 +105,10 @@ export function interpretationRows(candidate: Candidate, label: ConceptLabel): F
   const classified = machine ? label(machine) : null
   rows.push({
     key: 'concept',
-    label: 'Legal concept',
+    label: 'Topic',
     value: concept ?? 'Not classified',
     machine: conceptCorrected(candidate) && classified !== concept ? `Rivell classified: ${classified ?? 'not classified'}` : null,
-    support: concept ? null : 'Rivell could not place this under a legal concept',
+    support: concept ? null : 'Rivell could not place this under a topic',
     corrected: conceptCorrected(candidate),
   })
 
@@ -142,6 +160,7 @@ export function interpretationRows(candidate: Candidate, label: ConceptLabel): F
   // column-only correction therefore changes this text even though it changed no wording field, so
   // the text is shown first and the columns, where there are any, follow as the source's own cells.
   const text = effectiveContentText(candidate)
+  const shownWording = textOrNull(text)
   const columnsDiverge = Object.keys(candidate.editedPayloadColumns).some(
     (name) => candidate.editedPayloadColumns[name] !== candidate.payloadColumns[name],
   )
@@ -151,40 +170,68 @@ export function interpretationRows(candidate: Candidate, label: ConceptLabel): F
   rows.push({
     key: 'wording',
     label: isClause ? 'Approved wording' : 'Wording',
-    value: textOrNull(text) ?? 'No wording was extracted',
-    machine: textChanged ? `Rivell extracted: ${candidate.contentText ?? ''}` : null,
+    value: shownWording ?? 'No wording was read',
+    machine: textChanged ? `Rivell read: ${candidate.contentText ?? ''}` : null,
     support: null,
     corrected: textChanged,
   })
   const columns = effectivePayloadColumns(candidate)
   for (const name of Object.keys(columns)) {
+    const value = columns[name] ?? ''
+    // The wording column is already the "Approved wording" row, so it is not shown twice. A
+    // value that differs from the wording stays visible: it is then not a duplicate.
+    if (isWordingHeader(name) && shownWording !== null && value.trim() === shownWording) continue
     const edited = candidate.editedPayloadColumns[name]
     const changed = edited !== undefined && edited !== candidate.payloadColumns[name]
     rows.push({
       key: `column:${name}`,
-      label: name,
-      value: columns[name] ?? '',
-      machine: changed ? `Rivell extracted: ${candidate.payloadColumns[name] ?? ''}` : null,
+      label: payloadColumnLabel(name, true),
+      value,
+      machine: changed ? `Rivell read: ${candidate.payloadColumns[name] ?? ''}` : null,
       support: null,
       corrected: changed,
     })
   }
 
-  const scope = scopeRows(candidate)
+  const recordTypes = candidate.sourceContractTypes
+  const ownTypes = recordTypes.length > 0 ? recordTypes : candidate.declaredContractTypes
+  const scope = scopeRows(candidate, ownTypes)
+  const fileTypes = file?.declaredContractTypes ?? []
   const scopeSupport = supportNote(interpretationFor(candidate, 'scope'))
-  if (scope.length === 0) {
+  const hasAppliesTo = scope.some((row) => row.label === 'Applies to')
+  if (scope.length === 0 && fileTypes.length === 0) {
     rows.push({ key: 'scope', label: 'Applies to', value: 'Not declared', machine: null, support: scopeSupport, corrected: false })
   } else {
+    // The declared types row is the record's own when the record states one. Otherwise it is
+    // inherited from the file's manifest and says so, rather than repeating "Applies to".
+    const inheritedFromFile =
+      recordTypes.length === 0 &&
+      file !== undefined &&
+      sameContractTypes(ownTypes, fileTypes)
     scope.forEach((row, position) =>
       rows.push({
         key: `scope:${row.label}`,
-        label: row.label,
+        label: inheritedFromFile && row.label === 'Applies to' ? 'File scope' : row.label,
         value: row.value,
         machine: null,
         support: position === 0 ? scopeSupport : null,
         corrected: false,
       }),
     )
+    const ownScopeDiffers =
+      recordTypes.length > 0 &&
+      fileTypes.length > 0 &&
+      !sameContractTypes(recordTypes, fileTypes)
+    if (ownScopeDiffers || (!hasAppliesTo && fileTypes.length > 0)) {
+      rows.push({
+        key: 'scope:File scope',
+        label: 'File scope',
+        value: contractTypesText(fileTypes) ?? '',
+        machine: null,
+        support: hasAppliesTo ? null : scopeSupport,
+        corrected: false,
+      })
+    }
   }
   return rows
 }

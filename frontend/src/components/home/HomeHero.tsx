@@ -36,8 +36,8 @@ export function HomeHero({ resolved, hasWork, counts, onReveal }: HomeHeroProps)
             targetId="needs"
             onReveal={() => onReveal('needs')}
           />
-          <SummaryPill count={counts.analyzing} label="analyzing" tone="active" targetId="running" onReveal={() => onReveal('running')} />
-          <SummaryPill count={counts.queued} label="queued" tone="neutral" targetId="running" onReveal={() => onReveal('running')} />
+          <SummaryPill count={counts.analyzing} label="In progress" tone="active" targetId="running" onReveal={() => onReveal('running')} />
+          <SummaryPill count={counts.queued} label="Waiting to start" tone="neutral" targetId="running" onReveal={() => onReveal('running')} />
         </div>
       ) : null}
     </div>

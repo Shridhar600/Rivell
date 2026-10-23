@@ -174,7 +174,7 @@ const SAFE_ERROR_MESSAGES: Record<number, string> = {
   403: 'You do not have permission to generate or download redlines for this review.',
   404: 'This review or its redline could not be found.',
   409: 'The redline is not available in its current state.',
-  500: 'The redline engine is unavailable right now.',
+  500: 'Redlining is unavailable right now.',
   503: 'Document storage is unavailable, so the redline was not produced.',
 }
 

@@ -255,7 +255,7 @@ class KnowledgeController {
     ApiResult<CandidateView> edit(
             @PathVariable UUID id, @RequestBody ReviewEditRequest request) {
         return ApiResult.ok(toCandidateView(reviewService.edit(
-                id, request.contentText(),
+                id, request.title(), request.contentText(),
                 request.payloadColumns() == null ? null : new com.rivell.workbench.knowledge.CandidatePayload(
                         request.payloadColumns()),
                 request.scope() == null ? null : new com.rivell.workbench.knowledge.ApplicabilityScope(
@@ -413,14 +413,14 @@ class KnowledgeController {
 
     private static KnowledgeArtifactSummaryResponse toSummary(KnowledgeArtifact artifact) {
         return new KnowledgeArtifactSummaryResponse(
-                artifact.id(), artifact.artifactType(), artifact.filename(),
+                artifact.id(), artifact.artifactType(), artifact.filename(), artifact.documentTitle(),
                 artifact.contentType(), artifact.sizeBytes(), artifact.sha256(),
                 artifact.ingestStatus(), artifact.createdAt());
     }
 
     private static KnowledgeArtifactDetailResponse toDetail(KnowledgeArtifact artifact) {
         return new KnowledgeArtifactDetailResponse(
-                artifact.id(), artifact.artifactType(), artifact.filename(),
+                artifact.id(), artifact.artifactType(), artifact.filename(), artifact.documentTitle(),
                 artifact.contentType(), artifact.sizeBytes(), artifact.sha256(),
                 artifact.storageKey(),
                 artifact.manifest().declaredContractTypes(),
@@ -448,10 +448,18 @@ class KnowledgeController {
                 assessment.warnings());
     }
 
+    /** Preferred, fallback, prohibited, escalation: the order a reader expects, not a set's. */
+    private static java.util.Set<com.rivell.workbench.knowledge.PositionRole> inRoleOrder(
+            java.util.Set<com.rivell.workbench.knowledge.PositionRole> positions) {
+        return positions.stream().sorted()
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
     private static CandidateView toCandidateView(com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
         return new CandidateView(
                 candidate.id(), candidate.artifactId(), candidate.extractionUnitId(),
                 candidate.candidateType(), candidate.reviewStatus(), candidate.rawLabel(),
+                candidate.editedTitle(), candidate.effectiveTitle(),
                 candidate.contentText(), candidate.payload().columns(),
                 candidate.effectiveFieldRoles(),
                 candidate.legalConceptKey(),
@@ -465,7 +473,7 @@ class KnowledgeController {
                                 java.util.Map.Entry::getValue,
                                 (left, right) -> left,
                                 java.util.LinkedHashMap::new)),
-                candidate.effectivePositions(),
+                inRoleOrder(candidate.effectivePositions()),
                 candidate.effectiveVariantRole(),
                 candidate.effectiveEscalationTrigger(),
                 candidate.effectiveRequiresApproval(),

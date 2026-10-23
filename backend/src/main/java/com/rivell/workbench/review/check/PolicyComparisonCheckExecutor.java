@@ -30,6 +30,7 @@ import com.rivell.workbench.review.CheckMechanism;
 import com.rivell.workbench.review.ClauseTopics;
 import com.rivell.workbench.review.DeviationUncertainPayload;
 import com.rivell.workbench.review.EscalationPayload;
+import com.rivell.workbench.review.FallbackConditionSpecs;
 import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.OpenEndedAnalysisPayload;
 import com.rivell.workbench.review.OurSide;
@@ -62,6 +63,12 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private static final String SEARCH = "SEARCH";
     /** Search-found positions get their own keys, so their signals never merge with topic ones. */
     private static final String SEARCH_KEY_PREFIX = "search_";
+    /** Severity R3 lever tags (P7) and the route reason of a position P2 sent to the second opinion. */
+    private static final String P1 = "P1";
+    private static final String P2 = "P2";
+    private static final String P3 = "P3";
+    private static final String P2_WITHIN_SPLIT = "P2_WITHIN_SPLIT";
+    private static final int MAX_UNKNOWN_NOTES = 5;
 
     private final SemanticDecisionService decisionService;
     private final PositionLanguageGenerator languageGenerator;
@@ -74,6 +81,13 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private final boolean definitionsEnabled;
     private final LlmAdjudicator adjudicator;
     private final AdjudicationBudget budget;
+    private final boolean agreedWorseCategory;
+    private final boolean fallbackConditionsEnabled;
+    private final int maxConditionChecks;
+    private final FallbackConditionChecker conditionChecker;
+    private final AdjudicationBudget conditionBudget;
+    /** P2's own second-opinion budget, so its extra calls never use up the one the doubt band needs. */
+    private final AdjudicationBudget splitBudget;
 
     public PolicyComparisonCheckExecutor(
             SemanticDecisionService decisionService,
@@ -93,6 +107,12 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         this.definitionsEnabled = engineProperties.definitions();
         this.adjudicator = new LlmAdjudicator(reasoningService);
         this.budget = new AdjudicationBudget(routing.maxAdjudications());
+        this.agreedWorseCategory = engineProperties.severity().agreedWorseCategory();
+        this.fallbackConditionsEnabled = engineProperties.fallbackConditions().enabled();
+        this.maxConditionChecks = engineProperties.fallbackConditions().maxChecks();
+        this.splitBudget = new AdjudicationBudget(routing.maxAdjudications());
+        this.conditionChecker = new FallbackConditionChecker(reasoningService);
+        this.conditionBudget = new AdjudicationBudget(engineProperties.fallbackConditions().maxChecks());
     }
 
     @Override
@@ -129,6 +149,11 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             ReviewCheckContext context, ClauseSemantics clause, EvidenceBundle bundle,
             Map<String, Object> detail) {
         var positions = bundle.policyItems();
+        // reviews stay reproducible: the lever settings this comparison ran with are kept with it
+        detail.put("levers", Map.of("agreedWorseCategory", agreedWorseCategory,
+                "withinSplitMargin", routing.withinSplitMargin(),
+                "fallbackConditions", fallbackConditionsEnabled,
+                "fallbackConditionsMaxChecks", maxConditionChecks));
         detail.put("positionCount", positions.size());
         detail.put("positionsTruncated",
                 bundle.degradationWarnings().contains("POLICY_POSITIONS_TRUNCATED"));
@@ -203,22 +228,29 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         detail.put("addressed", addressed);
         var opinions = secondOpinions(context, clause, judgeState, judgedPositions,
                 definitions.texts(), definitionsUsed);
+        var resolutions = new LinkedHashMap<String, Resolution>();
+        var contractFacts = fallbackConditionsEnabled ? contractFacts(context) : List.<String>of();
+        for (var judged : judgedPositions) {
+            resolutions.put(judged.key(), resolve(context, clause, judgeState, judged, opinions,
+                    contractFacts));
+        }
         if (!judgedPositions.isEmpty()) {
             var probeAnswers = probe;
             detail.put("positions", judgedPositions.stream()
                     .map(judged -> detailEntry(judged, probeAnswers.get(judged.key()),
-                            opinions.get(judged.key())))
+                            opinions.byKey().get(judged.key()), resolutions.get(judged.key())))
                     .toList());
         }
         var signals = new ArrayList<RawReviewSignal>();
         var definitionsCarried = !definitions.isEmpty();
         for (var judged : judgedPositions) {
-            var opinion = opinions.get(judged.key());
+            var opinion = opinions.effective(judged.key());
+            var resolution = resolutions.get(judged.key());
             if (opinion != null && !opinion.agreed()) {
-                signals.add(needsYourLook(context, clause, judged, opinion, definitionsCarried));
+                signals.add(needsYourLook(context, clause, judged, opinion, definitionsCarried, resolution));
             } else if (judged.judgement().flagged()) {
                 signals.addAll(flaggedSignals(context, clause, judged, opinion, detail,
-                        definitionsCarried));
+                        definitionsCarried, resolution));
             }
         }
         if (definitionsUsed[0]) {
@@ -301,31 +333,148 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
      * run's budget; over budget it goes to the user without a call. The definitions the judging
      * state carried go to every call made.
      */
-    private Map<String, LlmAdjudicator.SecondOpinion> secondOpinions(
+    private Opinions secondOpinions(
             ReviewCheckContext context, ClauseSemantics clause,
             PolicyComparisonSpecs.PolicyComparisonState state, List<JudgedPosition> judgedPositions,
             List<String> definitions, boolean[] definitionsUsed) {
         var opinions = new LinkedHashMap<String, LlmAdjudicator.SecondOpinion>();
-        for (var judged : judgedPositions) {
-            if (DecisionRouter.route(judged.judgement(), addresses(judged), routing)
-                    != DecisionRouter.Route.ADJUDICATE) {
-                continue;
+        var splitRouted = new java.util.HashSet<String>();
+        // the doubt band asks first: P2's extra calls never use up the budget it needs
+        for (var splitPass : new boolean[] {false, true}) {
+            for (var judged : judgedPositions) {
+                var addresses = addresses(judged);
+                var bySplit = DecisionRouter.routedByWithinSplit(judged.judgement(), addresses, routing);
+                if (bySplit != splitPass || DecisionRouter.route(judged.judgement(), addresses, routing)
+                        != DecisionRouter.Route.ADJUDICATE) {
+                    continue;
+                }
+                if (bySplit) {
+                    splitRouted.add(judged.key());
+                }
+                if (!(bySplit ? splitBudget : budget).take(context.runId())) {
+                    opinions.put(judged.key(),
+                            LlmAdjudicator.SecondOpinion.failed(LlmAdjudicator.SecondOpinion.OVER_BUDGET));
+                    continue;
+                }
+                definitionsUsed[0] |= !definitions.isEmpty();
+                opinions.put(judged.key(), adjudicator.ask(new LlmAdjudicator.Ask(
+                        OurSide.describe(context.snapshot().ourSideRole()),
+                        state.contractType(), state.heading(), state.clause(),
+                        PolicyPositionQuestions.instructions(judged.position(), clause,
+                                conceptRegistry),
+                        definitions),
+                        judged.judgement()));
             }
-            if (!budget.take(context.runId())) {
-                opinions.put(judged.key(),
-                        LlmAdjudicator.SecondOpinion.failed(LlmAdjudicator.SecondOpinion.OVER_BUDGET));
-                continue;
-            }
-            definitionsUsed[0] |= !definitions.isEmpty();
-            opinions.put(judged.key(), adjudicator.ask(new LlmAdjudicator.Ask(
-                    OurSide.describe(context.snapshot().ourSideRole()),
-                    state.contractType(), state.heading(), state.clause(),
-                    PolicyPositionQuestions.instructions(judged.position(), clause,
-                            conceptRegistry),
-                    definitions),
-                    judged.judgement()));
         }
-        return opinions;
+        return new Opinions(opinions, splitRouted);
+    }
+
+    /**
+     * The second opinions of one clause by position key, and which of those positions only P2 sent.
+     * P2 is a speculative extra look at a judgement Jev was sure of: when it gets no answer (failed,
+     * invalid, over budget) Jev's finding stands as it was, so {@link #effective} hides that opinion.
+     */
+    private record Opinions(Map<String, LlmAdjudicator.SecondOpinion> byKey, java.util.Set<String> splitRouted) {
+
+        LlmAdjudicator.SecondOpinion effective(String key) {
+            var opinion = byKey.get(key);
+            return opinion != null && splitRouted.contains(key) && !opinion.answered() ? null : opinion;
+        }
+    }
+
+    /**
+     * Severity R3 on one judged position. P1: an agreed second opinion lends its category when it is
+     * worse. P3: a final WITHIN_FALLBACK on the clause's own topic is checked against the conditions of
+     * its fallback; a quoted unmet condition in every listed fallback makes it BEYOND_FALLBACK, nothing
+     * else changes it. {@code levers} lists the levers whose work this finding's category or kind depends
+     * on, so a counterfactual can drop them; a lever that could not answer changes nothing.
+     */
+    private Resolution resolve(
+            ReviewCheckContext context, ClauseSemantics clause,
+            PolicyComparisonSpecs.PolicyComparisonState state, JudgedPosition judged, Opinions opinions,
+            List<String> contractFacts) {
+        var opinion = opinions.effective(judged.key());
+        var routeReason = opinions.splitRouted().contains(judged.key()) ? P2_WITHIN_SPLIT : null;
+        var levers = new ArrayList<String>();
+        if (opinion != null && !opinion.agreed()) {
+            // Jev's WITHIN note became a "needs your look" item because P2 asked
+            if (routeReason != null) {
+                levers.add(P2);
+            }
+            return new Resolution(null, List.copyOf(levers), routeReason, null, null);
+        }
+        if (!judged.judgement().flagged()) {
+            return new Resolution(null, List.of(), routeReason, null, null);
+        }
+        var jevCategory = judged.judgement().category();
+        var category = jevCategory;
+        // with P1 off a finding carries nothing of the second opinion's category, as before P7
+        var secondOpinionCategory = agreedWorseCategory && opinion != null && opinion.answered()
+                ? opinion.category() : null;
+        if (secondOpinionCategory != null) {
+            category = PolicyComparisonOutcome.worse(jevCategory, secondOpinionCategory);
+            if (!category.equals(jevCategory)) {
+                levers.add(P1);
+                if (routeReason != null) {
+                    levers.add(P2);
+                }
+            }
+        }
+        FallbackConditionChecker.Result conditions = null;
+        if (fallbackConditionsEnabled && PolicyComparisonSpecs.WITHIN_FALLBACK.equals(category)
+                && (judged.searched() || !governsOnlySecondaryTopic(clause, judged.position()))) {
+            conditions = checkConditions(context, clause, state, judged, contractFacts);
+            if (conditions.raises()) {
+                category = PolicyComparisonSpecs.BEYOND_FALLBACK;
+                levers.add(P3);
+            }
+        }
+        return new Resolution(category, List.copyOf(levers), routeReason, secondOpinionCategory, conditions);
+    }
+
+    private FallbackConditionChecker.Result checkConditions(
+            ReviewCheckContext context, ClauseSemantics clause,
+            PolicyComparisonSpecs.PolicyComparisonState state, JudgedPosition judged,
+            List<String> contractFacts) {
+        if (!conditionBudget.take(context.runId())) {
+            return FallbackConditionChecker.Result.failed(FallbackConditionChecker.Result.OVER_BUDGET);
+        }
+        var listed = FallbackConditionChecker.listed(judged.position().policyFacts());
+        return conditionChecker.check(new FallbackConditionChecker.Ask(
+                OurSide.describe(context.snapshot().ourSideRole()), state.contractType(), state.heading(),
+                state.clause(), PolicyPositionQuestions.instructions(judged.position(), clause, conceptRegistry),
+                listed, Boolean.TRUE.equals(listed) ? judged.position().policyFacts().fallbacks().size() : null,
+                contractFacts));
+    }
+
+    /**
+     * What the contract says about itself outside the clause, as quotable lines for the P3 check: our
+     * side, the parties with their roles and the jurisdiction declared for the review. The governing-law
+     * metadata is left out because it repeats the governing-law clause's own words; the declared
+     * jurisdiction above is the review's context, not a claim about the clause.
+     */
+    private static List<String> contractFacts(ReviewCheckContext context) {
+        var facts = new ArrayList<String>();
+        var snapshot = context.snapshot();
+        if (snapshot.ourSideRole() != null) {
+            facts.add("Our side: " + snapshot.ourSideRole().name());
+        }
+        for (var party : context.semantics().parties()) {
+            var roles = party.effectiveRoles().stream().map(Enum::name).toList();
+            facts.add("Party: " + party.rawName() + (roles.isEmpty() ? "" : " (" + String.join(", ", roles) + ")"));
+        }
+        facts.add("Jurisdiction (declared for this review): " + snapshot.jurisdiction().name());
+        return List.copyOf(facts);
+    }
+
+    /**
+     * The lever work on one judged position. {@code category}: the final category of a flagged finding
+     * (null when the position yields none or a "needs your look" item); {@code conditions}: the P3 check
+     * when one ran.
+     */
+    private record Resolution(
+            String category, List<String> levers, String routeReason, String secondOpinionCategory,
+            FallbackConditionChecker.Result conditions) {
     }
 
     /**
@@ -335,7 +484,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
      */
     private RawReviewSignal needsYourLook(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
-            LlmAdjudicator.SecondOpinion opinion, boolean definitionsCarried) {
+            LlmAdjudicator.SecondOpinion opinion, boolean definitionsCarried, Resolution resolution) {
         var bundle = judged.bundle();
         var execution = judged.execution();
         // when the judge read this position's own bundle's definitions, the finding cites them
@@ -349,6 +498,13 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var jev = judged.judgement();
         var quality = new LinkedHashMap<String, Object>();
         quality.put("route", NEEDS_YOUR_LOOK);
+        if (resolution.routeReason() != null) {
+            quality.put("routeReason", resolution.routeReason());
+        }
+        if (!resolution.levers().isEmpty()) {
+            quality.put("levers", resolution.levers());
+            quality.put("categoryBeforeLevers", jev.category());
+        }
         if (judged.searched()) {
             quality.put("foundBy", SEARCH);
         }
@@ -393,10 +549,11 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private List<RawReviewSignal> flaggedSignals(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
             LlmAdjudicator.SecondOpinion opinion, Map<String, Object> detail,
-            boolean definitionsCarried) {
+            boolean definitionsCarried, Resolution resolution) {
         var bundle = judged.bundle();
         var execution = judged.execution();
-        var family = PolicyComparisonOutcome.family(judged.judgement().category());
+        var category = resolution.category();
+        var family = PolicyComparisonOutcome.family(category);
         // when the judge read this position's own bundle's definitions, the finding cites them
         var evidence = definitionsCarried
                 ? union(union(List.of(judged.position().evidenceId()),
@@ -413,7 +570,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         signals.add(signal(context, b -> b
                 .signalType(SignalType.POLICY_DEVIATION).issueFamily(family)
                 .payload(new PositionDeviationPayload(judged.position().sourceCandidateId(),
-                        judged.judgement().category(), judged.judgement().flagProbability(),
+                        category, judged.judgement().flagProbability(),
                         judged.judgement().probabilities(), secondaryTopic))
                 .evidence(evidence)
                 .decisionSpec(PolicyComparisonSpecs.POLICY_COMPARISON_SPEC,
@@ -421,11 +578,13 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                         execution.executionId())
                 .resolvedModel(execution.metadata().resolvedModel())
                 .usage(execution.metadata().usage())
-                .generativeExecution(opinion == null ? null : opinion.executionId())
+                .generativeExecution(resolution.conditions() != null && resolution.conditions().raises()
+                        ? resolution.conditions().executionId()
+                        : opinion == null ? null : opinion.executionId())
                 .quality(flaggedQuality(judged, secondaryTopic,
-                        opinion == null ? JEV : SECOND_OPINION))
+                        opinion == null ? JEV : SECOND_OPINION, resolution, opinion))
                 .dedupeSuffix(judged.key())));
-        if (wantsLanguage(judged.judgement().category())) {
+        if (wantsLanguage(category)) {
             var drafting = chooseDrafting(bundle.approvedDraftingItems(), judged.position());
             if (drafting != null) {
                 signals.add(signal(context, b -> b
@@ -450,12 +609,10 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             signals.add(signal(context, b -> b
                     .signalType(SignalType.ESCALATION_REQUIRED).issueFamily(family)
                     .payload(new EscalationPayload(facts.escalationTrigger(),
-                            Boolean.TRUE.equals(facts.requiresApproval())))
+                            facts.requiresApproval()))
                     .evidence(List.of(judged.position().evidenceId()))
-                    .quality(Map.of("requiresApproval",
-                            Boolean.TRUE.equals(facts.requiresApproval()),
-                            "escalationTrigger", facts.escalationTrigger() == null
-                                    ? "" : facts.escalationTrigger()))
+                    .quality(escalationQuality(facts.escalationTrigger(),
+                            facts.requiresApproval()))
                     .dedupeSuffix(judged.key())));
         }
         return signals;
@@ -625,11 +782,25 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 || PolicyComparisonSpecs.BEYOND_FALLBACK.equals(category);
     }
 
+    /**
+     * The escalation quality is the escalation payload in map form. An approval the policy did
+     * not state is left out rather than written as false.
+     */
+    static Map<String, Object> escalationQuality(String trigger, Boolean requiresApproval) {
+        var quality = new LinkedHashMap<String, Object>();
+        quality.put("escalationTrigger", trigger == null ? "" : trigger);
+        if (requiresApproval != null) {
+            quality.put("requiresApproval", requiresApproval);
+        }
+        return quality;
+    }
+
     private static Map<String, Object> flaggedQuality(
-            JudgedPosition judged, boolean secondaryTopic, String route) {
+            JudgedPosition judged, boolean secondaryTopic, String route, Resolution resolution,
+            LlmAdjudicator.SecondOpinion opinion) {
         var quality = new LinkedHashMap<String, Object>();
         quality.put("flagged", true);
-        quality.put("category", judged.judgement().category());
+        quality.put("category", resolution.category());
         quality.put("flagProbability", judged.judgement().flagProbability());
         quality.put("confidence", judged.confidence());
         quality.put("probabilities", judged.judgement().probabilities());
@@ -637,6 +808,40 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         quality.put("route", route);
         if (judged.searched()) {
             quality.put("foundBy", SEARCH);
+        }
+        if (resolution.secondOpinionCategory() != null) {
+            quality.put("secondOpinionCategory", resolution.secondOpinionCategory());
+        }
+        if (resolution.routeReason() != null) {
+            quality.put("routeReason", resolution.routeReason());
+        }
+        if (!resolution.levers().isEmpty()) {
+            quality.put("levers", resolution.levers());
+            quality.put("categoryBeforeLevers", judged.judgement().category());
+            // the signal links one generation; when P3 raised it, the second opinion's is kept here
+            if (opinion != null && opinion.executionId() != null) {
+                quality.put("secondOpinionExecutionId", opinion.executionId().toString());
+            }
+        }
+        var conditions = resolution.conditions();
+        if (conditions != null) {
+            quality.put("fallbackConditionsOutcome", conditions.outcome());
+            if (conditions.answered()) {
+                quality.put("fallbackListed", conditions.fallbackListed());
+                if (conditions.executionId() != null) {
+                    quality.put("fallbackConditionsExecutionId", conditions.executionId().toString());
+                }
+                var unknown = conditions.unknown().stream()
+                        .map(FallbackConditionChecker.Condition::text).limit(MAX_UNKNOWN_NOTES).toList();
+                if (!unknown.isEmpty()) {
+                    quality.put("fallbackConditionsUnknown", unknown);
+                }
+                if (conditions.raises()) {
+                    quality.put("fallbackConditionsUnmet", conditions.conditions().stream()
+                            .filter(condition -> FallbackConditionSpecs.UNMET.equals(condition.status()))
+                            .map(condition -> condition.text() + " (\"" + condition.quote() + "\")").toList());
+                }
+            }
         }
         return quality;
     }
@@ -653,7 +858,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
 
     private static Map<String, Object> detailEntry(
             JudgedPosition judged, PolicyComparisonOutcome.Judgement probe,
-            LlmAdjudicator.SecondOpinion opinion) {
+            LlmAdjudicator.SecondOpinion opinion, Resolution resolution) {
         var entry = new LinkedHashMap<String, Object>();
         entry.put("positionKey", judged.key());
         entry.put("positionCandidateId", judged.position().sourceCandidateId() == null
@@ -688,6 +893,18 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         if (opinion != null) {
             entry.put("secondOpinionOutcome", opinion.outcome());
             entry.put("secondOpinionCategory", opinion.category() == null ? "" : opinion.category());
+        }
+        if (resolution.routeReason() != null) {
+            entry.put("routeReason", resolution.routeReason());
+        }
+        if (!resolution.levers().isEmpty()) {
+            entry.put("levers", resolution.levers());
+            if (resolution.category() != null) {
+                entry.put("finalCategory", resolution.category());
+            }
+        }
+        if (resolution.conditions() != null) {
+            entry.put("fallbackConditionsOutcome", resolution.conditions().outcome());
         }
         return entry;
     }

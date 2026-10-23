@@ -30,7 +30,7 @@ export function CatalogGate({ state, crumbs, title, children }: CatalogGateProps
         <ErrorState
           tone="neutral"
           title="Knowledge is not available to you"
-          message="Your account does not have permission to read published Knowledge. Ask an administrator for access."
+          message="Your account does not have permission to read published knowledge. Ask an administrator for access."
         />
       ) : null}
       {state.status === 'error' && !state.forbidden ? (
@@ -59,7 +59,7 @@ export function CatalogNotices({ state, catalog }: { state: KnowledgeCatalogStat
         </UnavailableNotice>
       ) : null}
       {state.truncated ? (
-        <p className="rv-note">Showing the newest 100 sources and publications. Older entries are not loaded.</p>
+        <p className="rv-note">Showing the newest 100 sources and versions.</p>
       ) : null}
     </>
   )

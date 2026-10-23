@@ -15,7 +15,7 @@ describe('which Home section a Review belongs to', () => {
   it('treats queued and analyzing as running, never as needing the reviewer', () => {
     expect(sectionOf('queued').section).toBe('running')
     expect(sectionOf('analyzing').section).toBe('running')
-    expect(sectionOf('queued').stateLabel).toBe('Queued')
+    expect(sectionOf('queued').stateLabel).toBe('Waiting to start')
     expect(sectionOf('analyzing').stateLabel).toBe('Analyzing')
   })
 
@@ -29,9 +29,9 @@ describe('which Home section a Review belongs to', () => {
     ['analysisFailed', 'Analysis failed', 'danger'],
     ['unresolved', 'In review', 'attention'],
     ['notStarted', 'Ready for review', 'attention'],
-    ['escalated', 'Escalation blocking', 'attention'],
+    ['escalated', 'Escalated, needs resolution', 'attention'],
     ['ready', 'Ready to finalize', 'attention'],
-    ['degraded', 'Analysis degraded', 'attention'],
+    ['degraded', 'Analysis incomplete', 'attention'],
     ['redlineFailed', 'Redline failed', 'danger'],
   ] as const)('puts %s in Needs you with the server state "%s"', (key, label, tone) => {
     const view = sectionOf(key)
