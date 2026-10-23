@@ -9,6 +9,7 @@ import java.util.Set;
  * corrections use the canonical enum/value names as strings and are validated server-side.
  */
 public record ReviewEditRequest(
+        String title,
         String contentText,
         Map<String, String> payloadColumns,
         ScopeEdit scope,

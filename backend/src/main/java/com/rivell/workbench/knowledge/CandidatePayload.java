@@ -171,6 +171,22 @@ public record CandidatePayload(
     }
 
     /**
+     * The wording of a clause variant record: the value of its wording column ("Clause text",
+     * "Approved language"), as it stands in the source. A record with no such column, or an empty
+     * one, falls back to {@link #render()}.
+     */
+    public String renderedWording() {
+        for (var key : orderedKeys()) {
+            var value = columns.get(key);
+            if (value != null && !value.isBlank()
+                    && RecordLabelRoles.known(key).filter(role -> role == RecordFieldRole.WORDING).isPresent()) {
+                return value;
+            }
+        }
+        return render();
+    }
+
+    /**
      * The single canonical wording rendering of structured source values: the non-blank cell
      * values in authoritative column order, separated by {@code " | "}. Extraction renders
      * machine wording this way and a human column correction is rendered the same way, so the

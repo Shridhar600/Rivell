@@ -63,6 +63,10 @@ final class KnowledgeTableShaping {
         if (nonEmpty.isEmpty()) {
             return new Grid(List.of());
         }
+        var labelled = labelledCells(nonEmpty);
+        if (labelled != null) {
+            return labelled;
+        }
         var width = nonEmpty.stream().mapToInt(KnowledgeTableShaping::populatedWidth).max().orElse(0);
         if (firstColumnLabelLikeRatio(nonEmpty) < LABEL_LIKE_RATIO) {
             return grid(nonEmpty);
@@ -77,6 +81,28 @@ final class KnowledgeTableShaping {
         var subjectGrid = isHeaderRow(nonEmpty.get(0)) && roleRatio < ROLE_KEYED_RATIO
                 && sentenceValueRatio(nonEmpty.subList(1, nonEmpty.size())) >= ROLE_KEYED_RATIO;
         return width <= 2 && !subjectGrid ? keyValue(nonEmpty) : grid(nonEmpty);
+    }
+
+    /**
+     * A table whose every cell carries its own label on its first line ("OWNER" over "Director,
+     * Commercial Legal") is a set of labelled fields, not a grid: no row of it is a header.
+     */
+    private static KeyValue labelledCells(List<Row> rows) {
+        var fields = new LinkedHashMap<String, String>();
+        var provenance = new ArrayList<UUID>();
+        for (var row : rows) {
+            provenance.add(row.rowNodeId());
+            for (var cell : row.nonBlankCells()) {
+                var lines = cell.text().lines().map(String::strip).filter(line -> !line.isEmpty()).toList();
+                if (lines.size() < 2 || !isLabelLike(lines.getFirst())) {
+                    return null;
+                }
+                fields.put(uniqueKey(fields, lines.getFirst()),
+                        String.join("\n", lines.subList(1, lines.size())));
+                provenance.add(cell.nodeId());
+            }
+        }
+        return fields.isEmpty() ? null : new KeyValue(Collections.unmodifiableMap(fields), List.copyOf(provenance));
     }
 
     private static double sentenceValueRatio(List<Row> rows) {

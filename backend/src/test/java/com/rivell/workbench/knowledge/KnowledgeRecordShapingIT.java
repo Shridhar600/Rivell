@@ -785,7 +785,7 @@ class KnowledgeRecordShapingIT {
         try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
             var sheet = xssf.createSheet("Library");
             String[][] rows = {
-                    {"Ref", "Clause topic", "Variant", "Approved language"},
+                    {"Ref", "Clause topic", "Which deals", "Approved language"},
                     {"C08", "Foreground IP", "Preferred",
                             "Our position: all deliverables vest in the Customer on creation."}};
             for (int r = 0; r < rows.length; r++) {
@@ -802,7 +802,7 @@ class KnowledgeRecordShapingIT {
                 ArtifactType.CLAUSE_LIBRARY, manifest, new ByteArrayInputStream(workbook));
 
         var candidate = queryService.getCandidates(artifact.id()).getFirst();
-        assertThat(candidate.effectiveFieldRoles()).containsEntry("Variant", "APPLICABILITY");
+        assertThat(candidate.effectiveFieldRoles()).containsEntry("Which deals", "APPLICABILITY");
         assertThat(candidate.scope().sourceContractTypes())
                 .as("\"Preferred\" names no contract type, so the record applies wherever its source does")
                 .isEmpty();

@@ -137,7 +137,7 @@ public class KnowledgePublicationService {
                         var applied = repository.updateReviewState(
                                 candidate.id(), organizationId, candidate.reviewStatus(),
                                 ReviewStatus.PUBLISHED, candidate.editedContentText(),
-                                candidate.editedPayload(), candidate.editedSemanticFields(),
+                                candidate.editedTitle(), candidate.editedPayload(), candidate.editedSemanticFields(),
                                 candidate.scope(), candidate.supersedingCandidateId(),
                                 candidate.reviewNote(), candidate.reviewedAt(), now,
                                 candidate.conflictSignals(), candidate.reviewCategory(),

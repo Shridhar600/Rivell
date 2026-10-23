@@ -58,7 +58,12 @@ public record KnowledgeCandidate(
         String reviewNote,
         Instant reviewedAt,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        /**
+         * A title a person typed, and nothing else. The machine title in {@link #rawLabel} is kept
+         * beside it, as for wording; {@link #effectiveTitle()} is the one to show and publish.
+         */
+        String editedTitle) {
 
     public KnowledgeCandidate {
         Objects.requireNonNull(id, "id");
@@ -81,13 +86,18 @@ public record KnowledgeCandidate(
         Objects.requireNonNull(updatedAt, "updatedAt");
     }
 
+    /** The title to show: a person's correction when there is one, else the one Rivell read. */
+    public String effectiveTitle() {
+        return editedTitle == null || editedTitle.isBlank() ? rawLabel : editedTitle;
+    }
+
     public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
                 conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope, signals,
-                reviewCategory, reviewReasons, reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewCategory, reviewReasons, reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     /**
@@ -111,7 +121,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons, reviewNote, reviewedAt,
-                createdAt, Instant.now());
+                createdAt, Instant.now(), editedTitle);
     }
 
     /**
@@ -135,7 +145,7 @@ public record KnowledgeCandidate(
                 fields, editedSemanticFields, fieldInterpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withSupersedingCandidateId(
@@ -152,7 +162,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersededId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withReviewOutcome(ReviewCategory category, Set<ReviewReason> reasons) {
@@ -162,7 +172,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, category, reasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withScope(ApplicabilityScope newScope) {
@@ -172,7 +182,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, newScope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withReviewStatus(ReviewStatus status) {
@@ -182,7 +192,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public boolean isPublished() {
@@ -211,9 +221,19 @@ public record KnowledgeCandidate(
      * discarded the correction (AD 6.8, 6.11).
      */
     public String effectiveContentText() {
-        return firstReadable(editedContentText,
-                editedPayload == null ? null : editedPayload.render(),
-                contentText);
+        return firstReadable(editedContentText, renderedEditedColumns(), contentText);
+    }
+
+    /**
+     * The wording of the human's corrected columns. A clause variant's wording is its wording
+     * column, as at extraction; any other record reads its values in column order.
+     */
+    private String renderedEditedColumns() {
+        if (editedPayload == null) {
+            return null;
+        }
+        return candidateType == CandidateType.CLAUSE_VARIANT
+                ? editedPayload.renderedWording() : editedPayload.render();
     }
 
     /**
@@ -295,7 +315,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     /**

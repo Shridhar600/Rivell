@@ -26,6 +26,14 @@ final class RecordLabelRoles {
         exact("never accept", RecordFieldRole.PROHIBITED);
         exact("ref", RecordFieldRole.REFERENCE);
         exact("reference", RecordFieldRole.REFERENCE);
+        exact("clause id", RecordFieldRole.REFERENCE);
+        exact("clause ref", RecordFieldRole.REFERENCE);
+        exact("clause reference", RecordFieldRole.REFERENCE);
+        exact("clause number", RecordFieldRole.REFERENCE);
+        exact("clause no", RecordFieldRole.REFERENCE);
+        exact("variant", RecordFieldRole.VARIANT);
+        exact("variant role", RecordFieldRole.VARIANT);
+        exact("clause variant", RecordFieldRole.VARIANT);
         exact("applies to", RecordFieldRole.APPLICABILITY);
         exact("contract types", RecordFieldRole.APPLICABILITY);
         exact("contract type", RecordFieldRole.APPLICABILITY);
@@ -70,6 +78,29 @@ final class RecordLabelRoles {
             if (normalized.startsWith(entry.getKey())) {
                 return Optional.of(entry.getValue());
             }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * The negotiation role a clause variant value names ("Preferred", "Fallback 1", "Walk-away"),
+     * or empty when it names none. Code-owned, so a variant column never needs a model call.
+     */
+    static Optional<PositionRole> variantRole(String value) {
+        var normalized = normalize(value);
+        if (normalized.equals("preferred") || normalized.equals("standard")
+                || normalized.equals("preferred position")) {
+            return Optional.of(PositionRole.PREFERRED);
+        }
+        if (normalized.startsWith("fallback")) {
+            return Optional.of(PositionRole.FALLBACK);
+        }
+        if (normalized.startsWith("walk away") || normalized.startsWith("walkaway")
+                || normalized.startsWith("red line") || normalized.startsWith("prohibited")) {
+            return Optional.of(PositionRole.PROHIBITED);
+        }
+        if (normalized.startsWith("escalat")) {
+            return Optional.of(PositionRole.ESCALATION);
         }
         return Optional.empty();
     }

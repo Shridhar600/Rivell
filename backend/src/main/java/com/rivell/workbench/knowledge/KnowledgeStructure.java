@@ -34,14 +34,31 @@ final class KnowledgeStructure {
     static final class ProseRegion implements Region {
         private final KnowledgeSourceNode heading;
         private final List<KnowledgeSourceNode> paragraphs;
+        private final String documentTitle;
 
         ProseRegion(KnowledgeSourceNode heading, List<KnowledgeSourceNode> paragraphs) {
+            this(heading, paragraphs, null);
+        }
+
+        /** The region a document's title opens: it is named by the document title, not its masthead. */
+        ProseRegion(KnowledgeSourceNode heading, List<KnowledgeSourceNode> paragraphs,
+                String documentTitle) {
             this.heading = heading;
             this.paragraphs = paragraphs;
+            this.documentTitle = documentTitle;
         }
 
         String headingText() {
+            if (heading != null && heading.nodeType() == KnowledgeNodeType.TITLE
+                    && documentTitle != null && !documentTitle.isBlank()) {
+                return documentTitle;
+            }
             return heading == null ? null : heading.text();
+        }
+
+        /** A document title is not a section heading: the tables after it are not under it. */
+        boolean isTitleRegion() {
+            return heading != null && heading.nodeType() == KnowledgeNodeType.TITLE;
         }
 
         @Override
@@ -65,7 +82,7 @@ final class KnowledgeStructure {
             }
             var rawLabel = unit.title() != null && !unit.title().isBlank()
                     ? unit.title()
-                    : unit.contentText().lines().findFirst().orElseThrow();
+                    : unit.contentText();
             return List.of(candidate(artifact, unit, scope, now, rawLabel, unit.contentText()));
         }
 
@@ -142,6 +159,44 @@ final class KnowledgeStructure {
         }
     }
 
+    /**
+     * One row of a table with a single column: a callout box or a list item. It is prose, not a
+     * grid, so it has no column names. A lead line that reads as a label ("DO NOT TRADE THIS
+     * BOUNDARY FOR SPEED") titles it and the rest is its wording.
+     */
+    static final class CalloutRegion implements Region {
+        private final String label;
+        private final String text;
+        private final String cellText;
+        private final List<UUID> sourceNodeIds;
+
+        CalloutRegion(String cellText, List<UUID> sourceNodeIds) {
+            var lines = cellText.lines().map(String::strip).filter(line -> !line.isEmpty()).toList();
+            var labelled = lines.size() > 1 && KnowledgeTableShaping.isLabelLike(lines.getFirst());
+            this.label = labelled ? lines.getFirst() : null;
+            this.text = labelled ? String.join("\n", lines.subList(1, lines.size())) : cellText.strip();
+            this.cellText = cellText.strip();
+            this.sourceNodeIds = List.copyOf(sourceNodeIds);
+        }
+
+        private String title() {
+            return KnowledgeTitles.bounded(label != null ? label : text);
+        }
+
+        @Override
+        public ExtractionUnit toUnit(UUID artifactId, int ordinal) {
+            return new ExtractionUnit(UUID.randomUUID(), artifactId, ordinal, ExtractionUnitKind.TABLE,
+                    title(), cellText, sourceNodeIds, null, null);
+        }
+
+        @Override
+        public List<KnowledgeCandidate> toCandidates(
+                KnowledgeArtifact artifact, ExtractionUnit unit,
+                ApplicabilityScope scope, Instant now) {
+            return List.of(candidate(artifact, unit, scope, now, title(), text));
+        }
+    }
+
     /** A sheet row outside any table: kept as a record, never a candidate by default. */
     static final class RowTextRegion implements Region {
         private final String sheetName;
@@ -176,11 +231,11 @@ final class KnowledgeStructure {
         return new KnowledgeCandidate(
                 UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                 candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                rawLabel, contentText, CandidatePayload.EMPTY, null, List.of(), null,
+                KnowledgeTitles.bounded(rawLabel), contentText, CandidatePayload.EMPTY, null, List.of(), null,
                 null, null,
                 SemanticFields.EMPTY, null, List.of(),
                 null, null, null, scope, List.of(), null, null,
-                null, null, now, now);
+                null, null, now, now, null);
     }
 
     private static KnowledgeCandidate structuredCandidate(
@@ -193,11 +248,14 @@ final class KnowledgeStructure {
         return new KnowledgeCandidate(
                 UUID.randomUUID(), artifact.id(), artifact.organizationId(), unit.id(),
                 candidateType(artifact.artifactType()), ReviewStatus.PENDING,
-                rawLabel, payload.render(), payload, null, List.of(), null,
+                KnowledgeTitles.bounded(rawLabel),
+                candidateType(artifact.artifactType()) == CandidateType.CLAUSE_VARIANT
+                        ? payload.renderedWording() : payload.render(),
+                payload, null, List.of(), null,
                 null, null,
                 SemanticFields.EMPTY, null, List.of(),
                 null, null, null, scope, List.of(), null, null,
-                null, null, now, now);
+                null, null, now, now, null);
     }
 
     private static CandidateType candidateType(ArtifactType artifactType) {
@@ -231,9 +289,14 @@ final class KnowledgeStructure {
         }
 
         ProseRegion open = null;
+        var documentTitle = KnowledgeDocumentTitle.of(nodes);
         for (KnowledgeSourceNode node : childrenOf(root, nodes)) {
             switch (node.nodeType()) {
-                case TITLE, HEADING -> {
+                case TITLE -> {
+                    open = new ProseRegion(node, new ArrayList<>(), documentTitle);
+                    regions.add(open);
+                }
+                case HEADING -> {
                     open = new ProseRegion(node, new ArrayList<>());
                     regions.add(open);
                 }
@@ -267,7 +330,18 @@ final class KnowledgeStructure {
             rows.add(new KnowledgeTableShaping.Row(row.id(),
                     row.rowIndex() == null ? -1 : row.rowIndex(), cells));
         }
-        var sectionTitle = open == null ? null : open.headingText();
+        var sectionTitle = open == null || open.isTitleRegion() ? null : open.headingText();
+        var populated = rows.stream().filter(row -> !row.isEmpty()).toList();
+        if (!populated.isEmpty() && populated.stream().allMatch(row -> row.nonBlankCells().size() == 1)) {
+            for (var row : populated) {
+                var provenance = new ArrayList<UUID>();
+                provenance.add(table.id());
+                provenance.add(row.rowNodeId());
+                row.cells().forEach(cell -> provenance.add(cell.nodeId()));
+                regions.add(new CalloutRegion(row.nonBlankCells().getFirst().text(), provenance));
+            }
+            return;
+        }
         var shape = KnowledgeTableShaping.shape(rows);
         if (shape instanceof KnowledgeTableShaping.KeyValue keyValue) {
             var provenance = new ArrayList<UUID>();
@@ -285,9 +359,22 @@ final class KnowledgeStructure {
             var provenance = new ArrayList<UUID>();
             provenance.add(table.id());
             provenance.addAll(row.provenance());
-            regions.add(new GridRecordRegion(ExtractionUnitKind.TABLE, sectionTitle,
-                    KnowledgeTableShaping.firstValue(row.columns()), row.columns(), provenance));
+            var rowLabel = KnowledgeTableShaping.firstValue(row.columns());
+            regions.add(new GridRecordRegion(ExtractionUnitKind.TABLE, rowTitle(sectionTitle, rowLabel),
+                    rowLabel, row.columns(), provenance));
         }
+    }
+
+    /**
+     * The unit title of one table row: its heading and its own label, so rows under one heading
+     * can be told apart in a list.
+     */
+    private static String rowTitle(String sectionTitle, String rowLabel) {
+        var label = KnowledgeTitles.bounded(rowLabel);
+        if (sectionTitle == null || sectionTitle.isBlank()) {
+            return label == null || label.isBlank() ? null : label;
+        }
+        return label == null || label.isBlank() ? sectionTitle : sectionTitle + ": " + label;
     }
 
     private static void buildSpreadsheet(

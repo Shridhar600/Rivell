@@ -159,7 +159,7 @@ public class EvidenceService {
         var bundle = assemble(request, asOfPublication, policy, none, List.of(), false, null);
         var labels = new LinkedHashMap<UUID, String>();
         for (var match : policy.published()) {
-            labels.put(match.candidate().id(), match.candidate().rawLabel());
+            labels.put(match.candidate().id(), match.candidate().effectiveTitle());
         }
         return new ApplicablePositions(bundle, labels, policy.truncated());
     }

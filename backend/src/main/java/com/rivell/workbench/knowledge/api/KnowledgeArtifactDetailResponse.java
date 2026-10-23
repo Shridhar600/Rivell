@@ -13,6 +13,8 @@ public record KnowledgeArtifactDetailResponse(
         UUID id,
         ArtifactType artifactType,
         String filename,
+        /** The title a Word source gives itself; null when it names none. */
+        String documentTitle,
         String contentType,
         long sizeBytes,
         String sha256,

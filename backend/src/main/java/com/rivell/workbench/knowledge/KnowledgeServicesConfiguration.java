@@ -29,8 +29,9 @@ class KnowledgeServicesConfiguration {
     @Bean
     CandidateReviewCategorizer candidateReviewCategorizer(
             SemanticPolicyProperties properties,
-            ConceptClassificationProperties conceptProperties) {
-        return new CandidateReviewCategorizer(properties, conceptProperties);
+            ConceptClassificationProperties conceptProperties,
+            com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry) {
+        return new CandidateReviewCategorizer(properties, conceptProperties, conceptRegistry);
     }
 
     @Bean

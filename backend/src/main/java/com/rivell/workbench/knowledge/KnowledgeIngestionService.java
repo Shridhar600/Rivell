@@ -96,13 +96,15 @@ public class KnowledgeIngestionService {
                 artifactId, identity.organizationId(), artifactType,
                 safeFilename, resolvedContentType(safeFilename, contentType),
                 bytes.length, sha256, storageKey.value(),
-                effectiveManifest, IngestStatus.EXTRACTING, null, List.of(), null, now);
+                effectiveManifest, IngestStatus.EXTRACTING, null, List.of(), null, now, null);
 
         try {
             transactionTemplate.executeWithoutResult(status ->
                     repository.insertArtifact(artifact));
 
             var extraction = extractStructure(artifact, bytes);
+            var documentTitle = extraction.status() == IngestStatus.FAILED
+                    ? null : KnowledgeDocumentTitle.of(extraction.nodes());
             var compiled = extraction.status() == IngestStatus.FAILED
                     ? new KnowledgeCompiler.CompiledKnowledge(List.of(), List.of(), extraction.warnings())
                     : KnowledgeCompiler.compile(artifact, extraction.nodes());
@@ -141,6 +143,9 @@ public class KnowledgeIngestionService {
                 if (finalAssessment != null) {
                     repository.updateArtifactAssessment(artifactId, finalAssessment);
                 }
+                if (documentTitle != null) {
+                    repository.updateDocumentTitle(artifactId, documentTitle);
+                }
                 if (!extraction.nodes().isEmpty()) {
                     repository.insertNodes(artifactId, extraction.nodes());
                     repository.insertUnits(artifactId, finalUnits);
@@ -149,6 +154,7 @@ public class KnowledgeIngestionService {
             });
 
             return artifact
+                    .withDocumentTitle(documentTitle)
                     .withAssessment(finalAssessment)
                     .withIngestOutcome(
                             extraction.parserVersion(), outcomeStatus, outcomeWarnings);

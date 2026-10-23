@@ -77,12 +77,22 @@ public class CandidateReviewService {
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
                     Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
-                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS));
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.editedTitle());
         });
     }
 
     public KnowledgeCandidate edit(
             UUID candidateId, String contentText, CandidatePayload payload,
+            ApplicabilityScope scope, SemanticFields semanticFields, String note) {
+        return edit(candidateId, null, contentText, payload, scope, semanticFields, note);
+    }
+
+    /** Longest title a person may give an entry; a title names an entry, it does not hold its text. */
+    static final int MAX_EDITED_TITLE_LENGTH = 200;
+
+    public KnowledgeCandidate edit(
+            UUID candidateId, String title, String contentText, CandidatePayload payload,
             ApplicabilityScope scope, SemanticFields semanticFields, String note) {
         return transition(candidateId, "edited", candidate -> {
             if (candidate.isPublished()) {
@@ -92,9 +102,16 @@ public class CandidateReviewService {
             var semanticChanged = !editedSemantic.equals(SemanticFields.EMPTY);
             var scopeChanged = scope != null;
             var payloadChanged = payload != null && !payload.columns().isEmpty();
+            var newTitle = Texts.normalize(title);
+            if (newTitle != null && newTitle.length() > MAX_EDITED_TITLE_LENGTH) {
+                throw new IllegalArgumentException(
+                        "A title must be at most " + MAX_EDITED_TITLE_LENGTH + " characters");
+            }
+            var titleChanged = newTitle != null && !newTitle.equals(candidate.effectiveTitle());
             if ((contentText == null || contentText.isBlank()) && !payloadChanged
-                    && !semanticChanged && !scopeChanged) {
-                throw new IllegalArgumentException("An edit must change content, payload, scope, or semantic fields");
+                    && !semanticChanged && !scopeChanged && !titleChanged) {
+                throw new IllegalArgumentException(
+                        "An edit must change title, content, payload, scope, or semantic fields");
             }
             // A structured correction is a set of corrected values, not wording: it composes onto
             // the values already corrected, so a second correction does not drop the first, and its
@@ -140,7 +157,8 @@ public class CandidateReviewService {
                             : candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
                     Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
-                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS));
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    titleChanged ? newTitle : candidate.editedTitle());
             return recomputeConditions(edited, candidate.artifactId());
         });
     }
@@ -178,7 +196,8 @@ public class CandidateReviewService {
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
                     Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
-                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS));
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.editedTitle());
         });
     }
 
@@ -255,7 +274,7 @@ public class CandidateReviewService {
         var updated = change.apply(candidate);
         var applied = repository.updateReviewState(
                 updated.id(), identity.organizationId(), candidate.reviewStatus(),
-                updated.reviewStatus(), updated.editedContentText(),
+                updated.reviewStatus(), updated.editedContentText(), updated.editedTitle(),
                 updated.editedPayload(), updated.editedSemanticFields(), updated.scope(),
                 updated.supersedingCandidateId(),
                 updated.reviewNote(), updated.reviewedAt(),
