@@ -163,8 +163,15 @@ final class KnowledgeStructure {
         public List<KnowledgeCandidate> toCandidates(
                 KnowledgeArtifact artifact, ExtractionUnit unit,
                 ApplicabilityScope scope, Instant now) {
+            // Only a spreadsheet clause row names itself by its title and variant; a Word
+            // table keeps the first cell as its display title, and the unit title (the
+            // model's section path) is never touched here.
+            var label = unitKind == ExtractionUnitKind.SPREADSHEET_ROW
+                    && candidateType(artifact.artifactType()) == CandidateType.CLAUSE_VARIANT
+                    ? KnowledgeTableShaping.clauseVariantTitle(columns)
+                    : null;
             return List.of(structuredCandidate(artifact, unit, scope, now,
-                    recordLabel, columns));
+                    label != null ? label : recordLabel, columns));
         }
     }
 

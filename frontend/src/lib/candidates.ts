@@ -27,11 +27,17 @@ const WORDING_HEADERS = new Set(
   ['clause text', 'approved wording', 'approved language', 'wording', 'clause', 'clause wording', 'provision', 'text'],
 )
 
+function normalizeHeader(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/** Whether a payload column names the wording itself, by the headers a source uses for it. */
+export function isWordingHeader(name: string): boolean {
+  return WORDING_HEADERS.has(normalizeHeader(name))
+}
+
 function wordingColumn(columns: Record<string, string>): string | null {
-  return (
-    Object.keys(columns).find((name) => WORDING_HEADERS.has(name.trim().toLowerCase().replace(/\s+/g, ' '))) ??
-    null
-  )
+  return Object.keys(columns).find(isWordingHeader) ?? null
 }
 
 /**

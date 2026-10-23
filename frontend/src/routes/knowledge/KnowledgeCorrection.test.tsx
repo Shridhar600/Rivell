@@ -281,6 +281,40 @@ describe('candidate correction', () => {
     expect(editCalls(world)[0]?.body).toEqual({ semanticFields: { variantRole: 'FALLBACK' } })
   })
 
+  it('shows a clause wording once, and keeps the wording column in the correction form', async () => {
+    const world = reviewWorld()
+    world.artifacts = [{ ...world.artifacts[0]!, artifactType: 'CLAUSE_LIBRARY', filename: 'Clauses.xlsx' }]
+    const wording = 'This Agreement is governed by the laws of the Commonwealth of Massachusetts.'
+    world.candidates[SRC] = [
+      candidate({
+        id: 'v1',
+        artifactId: SRC,
+        extractionUnitId: 'u-uncertain',
+        reviewStatus: 'PENDING',
+        candidateType: 'CLAUSE_VARIANT',
+        rawLabel: 'Governing law and jurisdiction · Preferred',
+        contentText: wording,
+        payloadColumns: { 'Clause ID': 'G-GOV-01', 'Clause text': wording },
+        positions: [],
+        variantRole: 'PREFERRED',
+      }),
+    ]
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}?candidate=v1`)
+    await screen.findByRole('heading', { level: 1 })
+
+    const card = screen.getByRole('region', { name: 'What Rivell read' })
+    expect(within(card).getByText('Approved wording')).toBeInTheDocument()
+    expect(within(card).getAllByText(wording)).toHaveLength(1)
+    expect(within(card).queryByText('Clause text')).not.toBeInTheDocument()
+    expect(within(card).getByText('Clause ID')).toBeInTheDocument()
+    expect(within(card).getByText('G-GOV-01')).toBeInTheDocument()
+
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
+    const form = await screen.findByRole('form', { name: 'Edit this entry' })
+    expect(within(form).getByLabelText('Clause text')).toHaveValue(wording)
+  })
+
   it('calls a Word table cell a table cell and never shows a placeholder column name', async () => {
     const world = reviewWorld()
     world.candidates[SRC] = (world.candidates[SRC] ?? []).map((entry) =>

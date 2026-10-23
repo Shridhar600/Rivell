@@ -131,8 +131,109 @@ class KnowledgeStructureTest {
                 .contains("fleet data may enter the evaluation");
     }
 
+    @Test
+    void aSpreadsheetClauseRowIsTitledByItsTitleColumnAndVariant() {
+        var compiled = spreadsheet(ArtifactType.CLAUSE_LIBRARY,
+                new String[] {"Clause ID", "Title", "Variant", "Clause text"},
+                new String[] {"G-GOV-01", "Governing law and jurisdiction", "Preferred",
+                        "This Agreement is governed by the laws of Massachusetts."});
+
+        assertThat(compiled.candidates()).hasSize(1);
+        assertThat(compiled.candidates().getFirst().rawLabel())
+                .isEqualTo("Governing law and jurisdiction · Preferred");
+    }
+
+    @Test
+    void aSpreadsheetClauseRowWithoutATitleColumnKeepsItsFirstValueAsTheTitle() {
+        var compiled = spreadsheet(ArtifactType.CLAUSE_LIBRARY,
+                new String[] {"Clause ID", "Variant", "Clause text"},
+                new String[] {"G-01", "Preferred",
+                        "The Supplier shall defend the Customer against third-party claims."});
+
+        assertThat(compiled.candidates()).hasSize(1);
+        assertThat(compiled.candidates().getFirst().rawLabel()).isEqualTo("G-01");
+    }
+
+    @Test
+    void aWordClauseTableIsNotRetitledByATitleColumn() {
+        var table = node(KnowledgeNodeType.TABLE, null);
+        var nodes = document(table,
+                row(table, 0, "Clause ID", "Title", "Variant", "Clause text"),
+                row(table, 1, "G-01", "Governing law and jurisdiction", "Preferred",
+                        "This Agreement is governed by the laws of Massachusetts."));
+
+        var compiled = compile(ArtifactType.CLAUSE_LIBRARY, nodes);
+
+        assertThat(compiled.candidates()).hasSize(1);
+        assertThat(compiled.candidates().getFirst().rawLabel()).isEqualTo("G-01");
+    }
+
+    @Test
+    void aTwoColumnWordTableWithATitleHeaderStaysAGrid() {
+        var table = node(KnowledgeNodeType.TABLE, null);
+        var nodes = document(table,
+                row(table, 0, "Title", "Clause text"),
+                row(table, 1, "Governing law", "This Agreement is governed by the laws of Massachusetts."));
+
+        var compiled = compile(ArtifactType.CLAUSE_LIBRARY, nodes);
+
+        assertThat(compiled.candidates()).hasSize(1);
+        assertThat(compiled.candidates().getFirst().rawLabel()).isEqualTo("Governing law");
+        assertThat(compiled.candidates().getFirst().payload().columns())
+                .containsEntry("Clause text", "This Agreement is governed by the laws of Massachusetts.");
+    }
+
+    @Test
+    void aLongSpreadsheetClauseTitleKeepsItsVariantWithinTheTitleBound() {
+        var longTitle = "Governing law and jurisdiction " + "a".repeat(91);
+        var compiled = spreadsheet(ArtifactType.CLAUSE_LIBRARY,
+                new String[] {"Clause ID", "Title", "Variant", "Clause text"},
+                new String[] {"G-GOV-01", longTitle, "Preferred",
+                        "This Agreement is governed by the laws of Massachusetts."},
+                new String[] {"G-GOV-02", longTitle, "Fallback 1",
+                        "This Agreement is governed by the laws of Massachusetts."});
+
+        assertThat(compiled.candidates()).hasSize(2);
+        var titles = compiled.candidates().stream().map(KnowledgeCandidate::rawLabel).toList();
+        assertThat(titles).allSatisfy(title -> {
+            assertThat(title.length()).isLessThanOrEqualTo(KnowledgeTitles.MAX_LENGTH);
+            assertThat(title).doesNotContain("\n").contains("…");
+        });
+        assertThat(titles.get(0)).endsWith(" · Preferred");
+        assertThat(titles.get(1)).endsWith(" · Fallback 1");
+    }
+
     private KnowledgeCompiler.CompiledKnowledge compile(List<KnowledgeSourceNode> nodes) {
         return compile(ArtifactType.PLAYBOOK, nodes);
+    }
+
+    private KnowledgeCompiler.CompiledKnowledge spreadsheet(ArtifactType type, String[]... rows) {
+        var workbook = new KnowledgeSourceNode(UUID.randomUUID(), artifactId, null,
+                KnowledgeNodeType.WORKBOOK, ordinal++, null, null, null,
+                "xl/workbook.xml", 0, null, null, null, null, null, null, null, null, null, null);
+        var sheetId = UUID.randomUUID();
+        var nodes = new ArrayList<KnowledgeSourceNode>();
+        nodes.add(workbook);
+        nodes.add(new KnowledgeSourceNode(sheetId, artifactId, workbook.id(),
+                KnowledgeNodeType.SHEET, ordinal++, null, null, null,
+                "xl/worksheets/sheet1.xml", 0, null, null, null, null, null, null,
+                "Clauses", null, null, null));
+        for (int rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+            var rowId = UUID.randomUUID();
+            nodes.add(new KnowledgeSourceNode(rowId, artifactId, sheetId,
+                    KnowledgeNodeType.SPREADSHEET_ROW, ordinal++, null, null, null,
+                    "xl/worksheets/sheet1.xml", rowIndex, null, null, rowIndex, null,
+                    null, null, "Clauses", null, null, null));
+            for (int column = 0; column < rows[rowIndex].length; column++) {
+                var text = rows[rowIndex][column];
+                nodes.add(new KnowledgeSourceNode(UUID.randomUUID(), artifactId, rowId,
+                        KnowledgeNodeType.SPREADSHEET_CELL, ordinal++,
+                        text == null || text.isBlank() ? null : text,
+                        null, null, "xl/worksheets/sheet1.xml", rowIndex, null, null,
+                        rowIndex, column, null, null, "Clauses", column, null, null));
+            }
+        }
+        return compile(type, nodes);
     }
 
     private KnowledgeCompiler.CompiledKnowledge compile(
