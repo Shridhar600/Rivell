@@ -1,7 +1,10 @@
 package com.rivell.workbench.contracts;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -37,12 +40,27 @@ class DeterministicContractExtractorsTest {
     }
 
     private static String governingLawOf(String text) {
-        var paragraph = paragraph(text, 1);
-        var nodes = List.of(bodyNode(), paragraph);
+        return valueOf(governingLawFactOfParagraphs(text));
+    }
+
+    private static String governingLawOfParagraphs(String... paragraphs) {
+        return valueOf(governingLawFactOfParagraphs(paragraphs));
+    }
+
+    private static String valueOf(MetadataFact fact) {
+        return fact == null ? null : fact.value();
+    }
+
+    private static MetadataFact governingLawFactOfParagraphs(String... paragraphs) {
+        var nodes = new ArrayList<DocumentNode>();
+        nodes.add(bodyNode());
+        var ordinal = 1;
+        for (var text : paragraphs) {
+            nodes.add(paragraph(text, ordinal++));
+        }
         var regions = new ContractRegionSegmenter().segment(nodes);
         return new DeterministicContractExtractors().metadata(VERSION_ID, regions, nodes).stream()
                 .filter(fact -> fact.field() == MetadataField.GOVERNING_LAW)
-                .map(MetadataFact::value)
                 .findFirst()
                 .orElse(null);
     }
@@ -178,6 +196,191 @@ class DeterministicContractExtractorsTest {
         assertThat(governingLawOf("This Agreement is governed by the laws of " + "A".repeat(100)))
                 .hasSize(80);
         assertThat(governingLawOf("This Agreement is governed by the laws of the.")).isNull();
+    }
+
+    @Test
+    void governingLawHuntTableCleanRowsStayClean() {
+        assertThat(governingLawOf("This Agreement shall be governed by and construed in accordance "
+                + "with the laws of the State of New York, without regard to its conflict of laws "
+                + "principles.")).isEqualTo("State of New York");
+        assertThat(governingLawOf("The laws of England and Wales govern this Agreement."))
+                .isEqualTo("England and Wales");
+        assertThat(governingLawOf("This Agreement is governed by the law of Ireland."))
+                .isEqualTo("Ireland");
+        assertThat(governingLawOf("Governing Law: Delaware")).isEqualTo("Delaware");
+        assertThat(governingLawOf("governed by the laws of the State of Washington, U.S.A."))
+                .isEqualTo("State of Washington");
+        assertThat(governingLawOf("governed by the laws of New South Wales, Australia"))
+                .isEqualTo("New South Wales");
+        assertThat(governingLawOf("the laws of India")).isNull();
+        assertThat(governingLawOf("The laws of the State of New York govern the interpretation of "
+                + "this Section 1. This Agreement is governed by the laws of the State of Delaware."))
+                .isEqualTo("State of Delaware");
+    }
+
+    @Test
+    void governingLawJoinsANameSplitAcrossParagraphNodesOfOneRegion() {
+        assertThat(governingLawOfParagraphs("This Agreement is governed by the laws of the State of New",
+                "York.")).isEqualTo("State of New York");
+        assertThat(governingLawOfParagraphs("This Agreement is governed by the laws of New South",
+                "Wales.")).isEqualTo("New South Wales");
+        assertThat(governingLawOfParagraphs("This Agreement is governed by the laws of England and",
+                "Wales.")).isEqualTo("England and Wales");
+    }
+
+    @Test
+    void agreementWideGoverningLawBeatsASectionSpecificSentence() {
+        assertThat(governingLawOf("This Section 1 is construed in accordance with the laws of "
+                + "the State of New York. The laws of England and Wales govern this Agreement."))
+                .isEqualTo("England and Wales");
+        assertThat(governingLawOf("The operation of this Section is governed by the laws of "
+                + "the State of New York. This Agreement is governed by the laws of "
+                + "England and Wales.")).isEqualTo("England and Wales");
+        assertThat(governingLawOf("This Section 7.1 is construed in accordance with the laws of "
+                + "the State of New York. The laws of England and Wales govern this Agreement."))
+                .isEqualTo("England and Wales");
+        assertThat(governingLawOf("The operation of this Section 7.1 is governed by the laws of "
+                + "the State of New York. This Agreement is governed by the laws of "
+                + "England and Wales.")).isEqualTo("England and Wales");
+        assertThat(governingLawOfParagraphs("This Section 1 is construed in accordance with the laws of "
+                + "the State of New York.", "The laws of England and Wales govern this Agreement."))
+                .isEqualTo("England and Wales");
+        assertThat(governingLawOfParagraphs("The operation of this Section is governed by the laws of "
+                + "the State of New York.", "This Agreement is governed by the laws of "
+                        + "England and Wales.")).isEqualTo("England and Wales");
+        assertThat(governingLawOfParagraphs("This Section 1",
+                "is governed by the laws of the State of New York.",
+                "This Agreement is governed by the laws of England and Wales."))
+                .isEqualTo("England and Wales");
+        assertThat(governingLawOfParagraphs("The laws of the State of New York govern",
+                "this Section 1.",
+                "This Agreement is governed by the laws of England and Wales."))
+                .isEqualTo("England and Wales");
+    }
+
+    @Test
+    void agreementWideGoverningLawBeatsASectionSpecificSentenceInAnotherRegion() {
+        var nodes = List.of(
+                bodyNode(),
+                heading("Governing Law", "7", 1),
+                paragraph("7.1 This Section 1 is construed in accordance with the laws of "
+                        + "the State of New York.", 2),
+                heading("General", "8", 3),
+                paragraph("8.1 This Agreement is governed by the laws of England and Wales.", 4));
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var metadata = new DeterministicContractExtractors().metadata(VERSION_ID, regions, nodes);
+
+        assertThat(metadata).filteredOn(fact -> fact.field() == MetadataField.GOVERNING_LAW)
+                .singleElement()
+                .extracting(MetadataFact::value)
+                .isEqualTo("England and Wales");
+    }
+
+    @Test
+    void governingLawProvenanceNamesTheRegionHeadingAndTextNodes() {
+        var governingHeading = heading("Governing Law", "7", 1);
+        var text = paragraph("7.1 This Agreement is governed by the laws of the State of Delaware.", 2);
+        var nodes = List.of(bodyNode(), governingHeading, text);
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var fact = new DeterministicContractExtractors().metadata(VERSION_ID, regions, nodes).stream()
+                .filter(metadataFact -> metadataFact.field() == MetadataField.GOVERNING_LAW)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(fact.interpretation().sourceNodeIds())
+                .containsExactlyInAnyOrder(governingHeading.id(), text.id());
+    }
+
+    @Test
+    void governingLawBoundsTheCaptureToAJurisdictionName() {
+        assertThat(governingLawOf("The laws of the State of New York apply to this Agreement and "
+                + "the parties agree that the laws of Singapore shall govern disputes."))
+                .isEqualTo("Singapore");
+        assertThat(governingLawOf("This Agreement is governed by the laws of the Province of "
+                + "Ontario and the federal laws of Canada applicable therein"))
+                .isEqualTo("Province of Ontario");
+        assertThat(governingLawOf("Subject to the laws of the State of New York the parties agree "
+                + "as follows.")).isEqualTo("State of New York");
+    }
+
+    @Test
+    void governingLawRejectsCourtsAndJurisdictionText() {
+        assertThat(governingLawOf("Governing Law: the courts of Singapore")).isNull();
+        assertThat(governingLawOf("Governing Law: subject to the exclusive jurisdiction of the "
+                + "courts of Singapore.")).isNull();
+        assertThat(governingLawOf("subject to the exclusive jurisdiction of the courts of Singapore"))
+                .isNull();
+        assertThat(governingLawOf("Governing Law: Courts of Singapore")).isNull();
+        assertThat(governingLawOf("Governing Law: Arbitration")).isNull();
+    }
+
+    @Test
+    void governingLawStopsAtAllCapsProseAndKeepsUnicodeNames() {
+        assertThat(governingLawOf("THIS AGREEMENT IS GOVERNED BY THE LAWS OF THE STATE OF NEW YORK "
+                + "ALL DISPUTES ARISING HEREUNDER SHALL BE RESOLVED BY ARBITRATION."))
+                .isEqualTo("STATE OF NEW YORK");
+        assertThat(governingLawOf("This Agreement is governed by the laws of the State of New York "
+                + "All disputes arising hereunder shall be resolved by arbitration."))
+                .isEqualTo("State of New York");
+        assertThat(governingLawOf("This Agreement is governed by the laws of Québec."))
+                .isEqualTo("Québec");
+        assertThat(governingLawOf("This Agreement is governed by the laws of Namibia."))
+                .isEqualTo("Namibia");
+        assertThat(governingLawOf("This Agreement is governed by the laws of the Province of "
+                + "Québec.")).isEqualTo("Province of Québec");
+        assertThat(governingLawOf("This Agreement is governed by the laws of the United Kingdom of "
+                + "Great Britain and Northern Ireland."))
+                .isEqualTo("United Kingdom of Great Britain and Northern Ireland");
+    }
+
+    @Test
+    void aNameThatRunsIntoTheScanCapOrEndsInAKnownPairIsNoFact() {
+        assertThat(governingLawOf("This Agreement is governed by the laws of England and")).isNull();
+        var longName = "This Agreement is governed by the laws of " + "A".repeat(20_100);
+        assertThat(governingLawOf(longName)).as("truncated at the 20k scan cap").isNull();
+    }
+
+    @Test
+    void governingLawLabelAlsoAcceptsAndJurisdiction() {
+        assertThat(governingLawOf("Governing law and jurisdiction: the laws of Singapore"))
+                .isEqualTo("Singapore");
+        assertThat(governingLawOf("Governing law and jurisdiction: the courts of Singapore shall "
+                + "have exclusive jurisdiction and the laws of Singapore shall govern this Agreement."))
+                .isEqualTo("Singapore");
+        assertThat(governingLawOf("Governing law and jurisdiction: the courts of Singapore have "
+                + "exclusive jurisdiction. This Agreement is governed by the laws of Singapore."))
+                .isEqualTo("Singapore");
+        assertThat(governingLawOf("Governing law and jurisdiction: the laws of Singapore, and the "
+                + "courts of Singapore shall have exclusive jurisdiction."))
+                .isEqualTo("Singapore");
+    }
+
+    @Test
+    void governingLawPlaceholderWordingIsNoFact() {
+        for (var value : List.of("N/A", "NA", "TBD", "TBA", "TBC", "as agreed between the parties",
+                "a matter for the parties", "at the discretion of the parties", "to be agreed",
+                "mutually agreed", "As agreed between the parties", "A matter for the parties")) {
+            assertThat(governingLawOf("Governing law: " + value)).as(value).isNull();
+        }
+    }
+
+    @Test
+    void governingLawNormalisesNonBreakingSpacesAndCurlyQuotes() {
+        assertThat(governingLawOf("This Agreement is governed by the laws of\u00A0the State of "
+                + "New York.")).isEqualTo("State of New York");
+        assertThat(governingLawOf("This Agreement is governed by the laws of New\u00A0South\u00A0Wales."))
+                .isEqualTo("New South Wales");
+        assertThat(governingLawOf("\u201CGoverning Law\u201D: Delaware")).isEqualTo("Delaware");
+        assertThat(governingLawOf("Governing Law: \u201CDelaware\u201D")).isEqualTo("Delaware");
+    }
+
+    @Test
+    void governingLawScanIsBoundedOnAProtocolPathologicalText() {
+        var text = "the laws of ".repeat(50_000);
+        assertTimeoutPreemptively(Duration.ofSeconds(1),
+                () -> assertThat(DeterministicContractExtractors.governingLawIn(text)).isEmpty());
     }
 
     @Test

@@ -41,23 +41,69 @@ public final class DeterministicContractExtractors {
             List.of("; and", ", and", ";", ",", " and");
     private static final Pattern EFFECTIVE_DATE_PATTERN = Pattern.compile(
             "(?:as of|dated)\\s+([A-Z][a-z]+ \\d{1,2}, \\d{4})");
-    private static final List<Pattern> GOVERNING_LAW_PATTERNS = List.of(
-            Pattern.compile("\\bgoverned by(?:,? and construed in accordance with,?)?\\s+"
-                    + "the laws? of\\s+([^.;,]+)", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("\\bconstrued(?:,? and enforced,?)? in accordance with "
-                    + "the laws? of\\s+([^.;,]+)", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("\\bthe laws? of\\s+([^.;,]+?)(?:\\s+shall)?\\s+governs?\\b",
-                    Pattern.CASE_INSENSITIVE),
-            Pattern.compile("\\bsubject to the laws? of\\s+([^.;,]+)",
-                    Pattern.CASE_INSENSITIVE),
-            Pattern.compile("\\bgoverning law\\s*(?::|\\bis\\b|\\bshall be\\b)\\s*"
-                    + "(?:the laws? of\\s+)?([^.;,]+)", Pattern.CASE_INSENSITIVE));
+    /**
+     * A jurisdiction name as written: an optional article and country prefix, then capitalised
+     * name words. The words are deliberately case-sensitive inside an otherwise
+     * case-insensitive pattern, so a capture stops at the first non-name word instead of
+     * spanning the rest of a sentence.
+     */
+    private static final String JURISDICTION_NAME_WORD =
+            "(?-i:(?!(?i:This|That|The|Agreement|Section|Clause|Paragraph|Parties?|Party|"
+                    + "Company|Contract|Schedule|Exhibit|Annex|Notwithstanding|Subject|"
+                    + "Governing|Governed|Terms?|Conditions?|Customer|Supplier|All|Any|Each|"
+                    + "Disputes?|Arbitration|Tribunal|Courts?|Jurisdiction|Forum|Venue|Shall|"
+                    + "Will|Must|May|Be|Is|Are|Was|Were|Arising|Hereunder|Herein|Hereof|"
+                    + "Thereof|Hereto|Hereby|Resolved|Laws?|Provision|Provisions)\\b)"
+                    + "[\\p{Lu}][\\p{L}\\p{M}'’\\-]+)";
+    private static final String JURISDICTION_COMPOUND =
+            "(?-i:(?:United\\s+Kingdom\\s+of\\s+Great\\s+Britain\\s+and\\s+Northern\\s+Ireland"
+                    + "|England\\s+and\\s+Wales|Antigua\\s+and\\s+Barbuda"
+                    + "|Trinidad\\s+and\\s+Tobago|Bosnia\\s+and\\s+Herzegovina))";
+    private static final String JURISDICTION_PREFIX =
+            "(?:(?:State|Commonwealth|Province|Territory|Republic|Kingdom)\\s+of\\s+)?";
+    private static final String JURISDICTION_NAME_GUARD =
+            "(?!n\\s*[./]\\s*a\\b|na\\b|tbd\\b|tba\\b|tbc\\b|as\\s+agreed\\b|a\\s+matter\\b|"
+                    + "at\\s+the\\s+discretion\\b|to\\s+be\\s+agreed\\b|mutually\\s+agreed\\b|"
+                    + "not\\b|none\\b|set\\s+out\\b|specified\\s+in\\b|stated\\s+in\\b|see\\b|"
+                    + "as\\s+follows\\b|to\\s+be\\b|per\\b)";
+    private static final String JURISDICTION_NAME =
+            "[\"']?\\s*(?:the\\s+)?" + JURISDICTION_PREFIX + "(?:the\\s+)?"
+                    + JURISDICTION_NAME_GUARD
+                    + "(?:" + JURISDICTION_COMPOUND + "|" + JURISDICTION_NAME_WORD
+                    + "(?:\\s+(?:of\\s+)?" + JURISDICTION_NAME_WORD + "){0,7})"
+                    + "(?:\\s*[\"'])?";
+    private static final Pattern GOVERNING_LAW_DANGLING_PAIR =
+            Pattern.compile("^\\s+and\\s*$", Pattern.CASE_INSENSITIVE);
+    private static final int GOVERNING_LAW_STRONG = 2;
+    private static final int GOVERNING_LAW_WEAK = 1;
+    private static final List<GoverningLawPattern> GOVERNING_LAW_PATTERNS = List.of(
+            new GoverningLawPattern(Pattern.compile(
+                    "\\bgoverned by(?:,? and construed in accordance with,?)?\\s+"
+                            + "the laws? of\\s+(" + JURISDICTION_NAME + ")",
+                    Pattern.CASE_INSENSITIVE), GOVERNING_LAW_STRONG),
+            new GoverningLawPattern(Pattern.compile(
+                    "\\bconstrued(?:,? and enforced,?)? in accordance with "
+                            + "the laws? of\\s+(" + JURISDICTION_NAME + ")",
+                    Pattern.CASE_INSENSITIVE), GOVERNING_LAW_WEAK),
+            new GoverningLawPattern(Pattern.compile(
+                    "\\bthe laws? of\\s+(" + JURISDICTION_NAME + ")"
+                            + "(?:\\s+shall)?\\s+governs?\\b",
+                    Pattern.CASE_INSENSITIVE), GOVERNING_LAW_STRONG),
+            new GoverningLawPattern(Pattern.compile(
+                    "\\bsubject to the laws? of\\s+(" + JURISDICTION_NAME + ")",
+                    Pattern.CASE_INSENSITIVE), GOVERNING_LAW_WEAK),
+            new GoverningLawPattern(Pattern.compile(
+                    "\\bgoverning law(?:\\s+and\\s+jurisdiction)?[\"']?\\s*"
+                            + "(?::|\\bis\\b|\\bshall be\\b)\\s*"
+                            + "(?:the laws? of\\s+)?(" + JURISDICTION_NAME + ")",
+                    Pattern.CASE_INSENSITIVE), GOVERNING_LAW_STRONG, true));
     private static final List<String> GOVERNING_LAW_STOPS = List.of(
             " without regard", " excluding", " and the parties", " and the courts",
             " and any dispute", " and each party");
     private static final List<String> GOVERNING_LAW_UNSET_PREFIXES = List.of(
             "not ", "none", "set out", "as set out", "specified in", "stated in", "see ",
-            "as follows", "to be ", "per ");
+            "as follows", "to be ", "per ", "n/a", "tbd", "tba", "tbc", "as agreed",
+            "a matter for", "at the discretion", "to be agreed", "mutually agreed");
     private static final List<String> GOVERNING_LAW_INCOMPLETE = List.of(
             "new", "state", "commonwealth", "province", "territory", "united", "republic",
             "kingdom");
@@ -66,7 +112,28 @@ public final class DeterministicContractExtractors {
     private static final Pattern GOVERNING_LAW_TRAILING_CONNECTOR =
             Pattern.compile("\\s+(?:of|the|in|to|for|with|under|by|at|as|from|a|an)$",
                     Pattern.CASE_INSENSITIVE);
+    private static final Pattern GOVERNING_LAW_TRAILING_INCOMPLETE =
+            Pattern.compile("\\s+(?:new|south|north)$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern GOVERNING_LAW_COURTS_WORDING = Pattern.compile(
+            "\\b(?:court|courts|jurisdiction|dispute|disputes|arbitration|tribunal|forum|venue)\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern GOVERNING_LAW_NAME_WORD =
+            Pattern.compile("\\b\\p{Lu}[\\p{L}\\p{M}'’\\-]*\\b");
+    private static final Pattern SECTION_REFERENCE =
+            Pattern.compile("\\bthis\\s+(?:section|clause|paragraph)\\b",
+                    Pattern.CASE_INSENSITIVE);
     private static final int GOVERNING_LAW_MAX_LENGTH = 80;
+    private static final int GOVERNING_LAW_SCAN_LIMIT = 20_000;
+
+    private record GoverningLawPattern(Pattern pattern, int rank, boolean lineScoped) {
+
+        GoverningLawPattern(Pattern pattern, int rank) {
+            this(pattern, rank, false);
+        }
+    }
+
+    private record GoverningLawCandidate(String value, int rank, int start) {
+    }
     private static final Pattern LEADING_NUMBER_PATTERN = Pattern.compile(
             "^(\\d+(?:\\.\\d+)*)[.)]?\\s+");
 
@@ -90,12 +157,41 @@ public final class DeterministicContractExtractors {
             }
             effectiveDate(node.text()).ifPresent(date -> addOnce(facts, versionId,
                     MetadataField.EFFECTIVE_DATE, date, "effectiveDate", node));
-            governingLawIn(node.text()).ifPresent(law -> addOnce(facts, versionId,
-                    MetadataField.GOVERNING_LAW, law, "governingLaw", node));
             termOf(node.text()).ifPresent(term -> addOnce(facts, versionId,
                     MetadataField.TERM, term, "term", node));
         }
+        governingLawFact(versionId, regions).ifPresent(facts::add);
         return facts;
+    }
+
+    /**
+     * Governing law is read from the joined text of each region, never from one node, so a
+     * name split across paragraphs is whole. The strongest candidate wins; document order
+     * breaks a tie. Provenance is the region the winning candidate came from.
+     */
+    private Optional<MetadataFact> governingLawFact(
+            UUID versionId, List<ContractRegionSegmenter.Region> regions) {
+        GoverningLawCandidate best = null;
+        ContractRegionSegmenter.Region bestRegion = null;
+        for (var region : regions) {
+            var candidate = governingLawCandidateIn(region.contentText())
+                    .filter(found -> found.rank() > 0);
+            if (candidate.isPresent() && (best == null || candidate.get().rank() > best.rank())) {
+                best = candidate.get();
+                bestRegion = region;
+            }
+        }
+        if (best == null) {
+            return Optional.empty();
+        }
+        var sources = new ArrayList<UUID>(bestRegion.textNodeIds());
+        if (!bestRegion.isPreamble() && bestRegion.headingNodeId() != null
+                && !sources.contains(bestRegion.headingNodeId())) {
+            sources.add(bestRegion.headingNodeId());
+        }
+        return Optional.of(new MetadataFact(UUID.randomUUID(), versionId,
+                MetadataField.GOVERNING_LAW, best.value(),
+                Interpretation.deterministic("governingLaw", best.value(), sources), null, null));
     }
 
     public List<ContractParty> parties(
@@ -415,23 +511,104 @@ public final class DeterministicContractExtractors {
     }
 
     static Optional<String> governingLawIn(String text) {
+        return governingLawCandidateIn(text)
+                .filter(candidate -> candidate.rank() > 0)
+                .map(GoverningLawCandidate::value);
+    }
+
+    private static Optional<GoverningLawCandidate> governingLawCandidateIn(String text) {
         if (text == null || text.isBlank()) {
             return Optional.empty();
         }
-        for (var pattern : GOVERNING_LAW_PATTERNS) {
-            var matcher = pattern.matcher(text);
+        var normalized = normalizeGoverningLawText(text);
+        var scanned = normalized.length() > GOVERNING_LAW_SCAN_LIMIT
+                ? normalized.substring(0, GOVERNING_LAW_SCAN_LIMIT) : normalized;
+        GoverningLawCandidate best = null;
+        for (var governingPattern : GOVERNING_LAW_PATTERNS) {
+            var matcher = governingPattern.pattern().matcher(scanned);
             while (matcher.find()) {
+                if (runsIntoScanCap(normalized, scanned, matcher.end())
+                        || danglingPairConjunction(scanned, matcher.end())) {
+                    continue;
+                }
                 var law = cleanGoverningLaw(matcher.group(1));
-                if (law.isPresent()) {
-                    return law;
+                if (law.isEmpty()) {
+                    continue;
+                }
+                var sentence = sentenceAround(scanned, matcher.start(),
+                        governingPattern.lineScoped());
+                var rank = SECTION_REFERENCE.matcher(sentence).find() ? 0 : governingPattern.rank();
+                var candidate = new GoverningLawCandidate(law.get(), rank, matcher.start());
+                if (best == null || candidate.rank() > best.rank()
+                        || (candidate.rank() == best.rank() && candidate.start() < best.start())) {
+                    best = candidate;
                 }
             }
         }
-        return Optional.empty();
+        return Optional.ofNullable(best);
+    }
+
+    private static boolean runsIntoScanCap(String normalized, String scanned, int matchEnd) {
+        return normalized.length() > scanned.length() && matchEnd >= scanned.length();
+    }
+
+    private static boolean danglingPairConjunction(String text, int matchEnd) {
+        return GOVERNING_LAW_DANGLING_PAIR.matcher(text.substring(matchEnd)).matches();
+    }
+
+    private static String normalizeGoverningLawText(String text) {
+        return text.replace('\u00A0', ' ')
+                .replace('\u2007', ' ')
+                .replace('\u202F', ' ')
+                .replace('\u201C', '"')
+                .replace('\u201D', '"')
+                .replace('\u2018', '\'')
+                .replace('\u2019', '\'');
+    }
+
+    /**
+     * The sentence around a match; used to demote "this Section" wording. A line break is
+     * whitespace in prose, so a sentence wrapped across paragraph nodes keeps its context.
+     * A label heading is line-scoped so the body's "this Section" cannot demote the label.
+     */
+    private static String sentenceAround(String text, int matchStart, boolean lineScoped) {
+        var start = 0;
+        for (var index = Math.min(matchStart - 1, text.length() - 1); index >= 0; index--) {
+            if (isSentenceBoundary(text, index, lineScoped)) {
+                start = index + 1;
+                break;
+            }
+        }
+        var end = text.length();
+        for (var index = Math.max(matchStart, 0); index < text.length(); index++) {
+            if (isSentenceBoundary(text, index, lineScoped)) {
+                end = index;
+                break;
+            }
+        }
+        return text.substring(start, end);
+    }
+
+    /** A decimal or section number such as "7.1" is not a sentence boundary. */
+    private static boolean isSentenceBoundary(String text, int index, boolean lineScoped) {
+        var character = text.charAt(index);
+        if (character == ';' || character == '!' || character == '?'
+                || (lineScoped && character == '\n')) {
+            return true;
+        }
+        if (character != '.') {
+            return false;
+        }
+        return !(index > 0 && index + 1 < text.length()
+                && Character.isDigit(text.charAt(index - 1))
+                && Character.isDigit(text.charAt(index + 1)));
     }
 
     private static Optional<String> cleanGoverningLaw(String captured) {
-        var law = captured == null ? "" : captured.strip();
+        var law = stripQuotes(captured == null ? "" : captured);
+        if (law.isEmpty()) {
+            return Optional.empty();
+        }
         var lower = law.toLowerCase(Locale.ROOT);
         var end = law.length();
         for (var terminator : new char[] {'.', ';', ','}) {
@@ -452,18 +629,39 @@ public final class DeterministicContractExtractors {
         } else if (law.regionMatches(true, 0, "the ", 0, 4)) {
             law = law.substring(4).strip();
         }
-        law = law.replaceAll("\\s+", " ");
+        law = law.replaceAll("\\s+", " ").strip();
         law = GOVERNING_LAW_TRAILING_CONJUNCTION.matcher(law).replaceFirst("");
         if (law.length() > GOVERNING_LAW_MAX_LENGTH) {
             law = law.substring(0, GOVERNING_LAW_MAX_LENGTH);
         }
         law = law.replaceAll("[\\s.,;:]+$", "");
+        law = GOVERNING_LAW_TRAILING_CONJUNCTION.matcher(law).replaceFirst("");
+        law = law.replaceAll("[\\s.,;:]+$", "");
         if (law.isEmpty() || looksUnset(law)
+                || GOVERNING_LAW_COURTS_WORDING.matcher(law).find()
                 || GOVERNING_LAW_TRAILING_CONNECTOR.matcher(law).find()
-                || GOVERNING_LAW_INCOMPLETE.contains(law.toLowerCase(Locale.ROOT))) {
+                || GOVERNING_LAW_TRAILING_INCOMPLETE.matcher(law).find()
+                || GOVERNING_LAW_INCOMPLETE.contains(law.toLowerCase(Locale.ROOT))
+                || !GOVERNING_LAW_NAME_WORD.matcher(law).find()) {
             return Optional.empty();
         }
         return Optional.of(law);
+    }
+
+    private static String stripQuotes(String value) {
+        var stripped = value.strip();
+        while (!stripped.isEmpty() && isQuote(stripped.charAt(0))) {
+            stripped = stripped.substring(1).strip();
+        }
+        while (!stripped.isEmpty() && isQuote(stripped.charAt(stripped.length() - 1))) {
+            stripped = stripped.substring(0, stripped.length() - 1).strip();
+        }
+        return stripped;
+    }
+
+    private static boolean isQuote(char character) {
+        return character == '"' || character == '\'' || character == '\u201C'
+                || character == '\u201D' || character == '\u2018' || character == '\u2019';
     }
 
     private static boolean looksUnset(String law) {

@@ -131,7 +131,9 @@ public final class ContractSemanticEnricher {
         var relationships = analyzeRelationships(clauses, references, clausesByHeading,
                 counters, quality);
 
-        metadata.addAll(governingLawFallback(metadata, clauses));
+        var metadataWithGoverningLaw = applyGoverningLawFallback(metadata, clauses);
+        metadata.clear();
+        metadata.addAll(metadataWithGoverningLaw);
 
         composeQuality(quality, definedTerms, references, parties, clauses);
         if (counters.providerDegraded) {
@@ -394,15 +396,10 @@ public final class ContractSemanticEnricher {
     /**
      * A governing-law phrase split across the nodes of one clause is still deterministic:
      * apply the same extractors to the clause's full text. No model call, and no fact when
-     * nothing is written.
+     * nothing is written. A classified GOVERNING_LAW clause outranks a region-level match.
      */
     List<MetadataFact> governingLawFallback(
             List<MetadataFact> metadata, List<ClauseSemantics> clauses) {
-        var declared = metadata.stream()
-                .anyMatch(fact -> fact.field() == MetadataField.GOVERNING_LAW);
-        if (declared) {
-            return List.of();
-        }
         for (var clause : clauses) {
             if (!clause.classification().concepts().contains(CoreConcepts.GOVERNING_LAW)) {
                 continue;
@@ -421,6 +418,26 @@ public final class ContractSemanticEnricher {
                     null, null));
         }
         return List.of();
+    }
+
+    /**
+     * One governing-law fact at most: a clause-level value replaces any region-level value
+     * instead of being added beside it.
+     */
+    List<MetadataFact> applyGoverningLawFallback(
+            List<MetadataFact> metadata, List<ClauseSemantics> clauses) {
+        var fallback = governingLawFallback(metadata, clauses);
+        if (fallback.isEmpty()) {
+            return List.copyOf(metadata);
+        }
+        var merged = new ArrayList<MetadataFact>();
+        for (var fact : metadata) {
+            if (fact.field() != MetadataField.GOVERNING_LAW) {
+                merged.add(fact);
+            }
+        }
+        merged.addAll(fallback);
+        return List.copyOf(merged);
     }
 
     private MetadataFact contractTypeFact(UUID versionId, ReviewProfile profile) {

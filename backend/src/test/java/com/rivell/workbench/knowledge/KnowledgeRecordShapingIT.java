@@ -41,8 +41,17 @@ import com.rivell.workbench.intelligence.SemanticDecisionProvider;
 import com.rivell.workbench.intelligence.SemanticQuestion;
 import com.rivell.workbench.intelligence.TokenUsage;
 import com.rivell.workbench.intelligence.YesNoAnswer;
+import com.rivell.workbench.contracts.ContractType;
+import com.rivell.workbench.contracts.Jurisdiction;
+import com.rivell.workbench.contracts.PaperSource;
+import com.rivell.workbench.contracts.PartyRole;
+import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
+import com.rivell.workbench.retrieval.EvidenceRequest;
+import com.rivell.workbench.retrieval.KnowledgePin;
+import com.rivell.workbench.retrieval.StructuredPolicyResolver;
+import com.rivell.workbench.taxonomy.CoreConcepts;
 
 /**
  * The blind-corpus acceptance for one knowledge record per playbook position / clause
@@ -330,6 +339,9 @@ class KnowledgeRecordShapingIT {
 
     @Autowired
     KnowledgeQueryService queryService;
+
+    @Autowired
+    StructuredPolicyResolver policyResolver;
 
     @Autowired
     CorpusDecisionProvider provider;
@@ -689,6 +701,82 @@ class KnowledgeRecordShapingIT {
                     publication.publicationNumber(), null))
                     .as("an unspecified jurisdiction remains the wildcard")
                     .contains(newZealand.id(), other.id());
+
+            var newZealandResolution = policyResolver.resolveAll(
+                    resolutionRequest(identity.organizationId(), Jurisdiction.NEW_ZEALAND),
+                    Set.of(), publication.publicationNumber(), 50);
+            assertThat(newZealandResolution.candidates())
+                    .as("a scope typed New Zealand matches the NEW_ZEALAND profile")
+                    .extracting(KnowledgeCandidate::artifactId)
+                    .contains(newZealand.id())
+                    .doesNotContain(other.id());
+
+            var otherResolution = policyResolver.resolveAll(
+                    resolutionRequest(identity.organizationId(), Jurisdiction.OTHER),
+                    Set.of(), publication.publicationNumber(), 50);
+            assertThat(otherResolution.candidates())
+                    .extracting(KnowledgeCandidate::artifactId)
+                    .contains(other.id())
+                    .doesNotContain(newZealand.id());
+
+            var unspecifiedResolution = policyResolver.resolveAll(
+                    resolutionRequest(identity.organizationId(), Jurisdiction.UNSPECIFIED),
+                    Set.of(), publication.publicationNumber(), 50);
+            assertThat(unspecifiedResolution.candidates())
+                    .as("an unspecified jurisdiction remains the wildcard")
+                    .extracting(KnowledgeCandidate::artifactId)
+                    .contains(newZealand.id(), other.id());
+        } finally {
+            identityProvider.use(shared);
+        }
+    }
+
+    private static EvidenceRequest resolutionRequest(UUID organizationId, Jurisdiction jurisdiction) {
+        var profile = new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                PaperSource.THIRD_PARTY, jurisdiction, "MSA_PACK");
+        return EvidenceRequest.forClauseReview(organizationId, CoreConcepts.GOVERNING_LAW,
+                UUID.randomUUID(), 1, UUID.randomUUID(),
+                "This Agreement is governed by the laws of New Zealand.", profile,
+                java.time.LocalDate.of(2026, 1, 1), KnowledgePin.LATEST);
+    }
+
+    @Test
+    void jurisdictionScopeMatchesUnitedKingdomAndUnitedStatesSpellings() throws Exception {
+        provider.reset();
+        var shared = identityProvider.current;
+        var identity = new UserIdentity(UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN"));
+        identityProvider.use(identity);
+        try {
+            var uk = ingestWithJurisdiction("uk-playbook.docx", "UK");
+            var unitedKingdom = ingestWithJurisdiction("united-kingdom-playbook.docx",
+                    "United Kingdom");
+            var us = ingestWithJurisdiction("us-playbook.docx", "US");
+            var unitedStates = ingestWithJurisdiction("united-states-playbook.docx",
+                    "United States");
+            var candidates = new java.util.ArrayList<KnowledgeCandidate>();
+            for (var artifact : List.of(uk, unitedKingdom, us, unitedStates)) {
+                candidates.addAll(queryService.getCandidates(artifact.id()));
+            }
+            var publication = publicationService.publish(candidates.stream()
+                    .map(candidate -> reviewService.approve(candidate.id(), null).id())
+                    .toList(), Map.of(), "jurisdiction-spellings");
+
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "UK"))
+                    .contains(uk.id(), unitedKingdom.id())
+                    .doesNotContain(us.id(), unitedStates.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "United Kingdom"))
+                    .contains(uk.id(), unitedKingdom.id())
+                    .doesNotContain(us.id(), unitedStates.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "US"))
+                    .contains(us.id(), unitedStates.id())
+                    .doesNotContain(uk.id(), unitedKingdom.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "United States"))
+                    .contains(us.id(), unitedStates.id())
+                    .doesNotContain(uk.id(), unitedKingdom.id());
         } finally {
             identityProvider.use(shared);
         }

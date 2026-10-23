@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.knowledge.ApplicabilityScope;
 import com.rivell.workbench.knowledge.ArtifactManifest;
 import com.rivell.workbench.knowledge.ArtifactType;
@@ -624,9 +625,14 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             params.put("paperSource", query.paperSource());
         }
         if (query.jurisdiction() != null) {
-            conditions.add("(c.jurisdiction is null or regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:jurisdiction), '[^a-z0-9]', '', 'g'))");
-            params.put("jurisdiction", query.jurisdiction());
+            conditions.add("(c.jurisdiction is null or case regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g')"
+                    + " when 'unitedstates' then 'us'"
+                    + " when 'unitedstatesofamerica' then 'us'"
+                    + " when 'usa' then 'us'"
+                    + " when 'unitedkingdom' then 'uk'"
+                    + " else regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g') end"
+                    + " = :jurisdiction)");
+            params.put("jurisdiction", Jurisdiction.normalize(query.jurisdiction()));
         }
         if (query.effectiveOn() != null) {
             conditions.add("(c.effective_from is null or c.effective_from <= :effectiveOn)");

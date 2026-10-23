@@ -36,4 +36,25 @@ class JurisdictionTest {
         assertThat(KnownJurisdiction.AUSTRALIA.description())
                 .isEqualTo("The unit names Australia or an Australian state or territory.");
     }
+
+    @Test
+    void jurisdictionEqualityNormalisesSpellingAndTheUsAndUkAliases() {
+        assertThat(Jurisdiction.normalize("New Zealand")).isEqualTo("newzealand");
+        assertThat(Jurisdiction.normalize("NEW_ZEALAND")).isEqualTo("newzealand");
+        assertThat(Jurisdiction.same("New Zealand", "NEW_ZEALAND")).isTrue();
+
+        assertThat(Jurisdiction.normalize("United Kingdom")).isEqualTo("uk");
+        assertThat(Jurisdiction.normalize("UK")).isEqualTo("uk");
+        assertThat(Jurisdiction.same("United Kingdom", "UK")).isTrue();
+        assertThat(Jurisdiction.same("UK", "United Kingdom")).isTrue();
+
+        assertThat(Jurisdiction.normalize("United States")).isEqualTo("us");
+        assertThat(Jurisdiction.normalize("US")).isEqualTo("us");
+        assertThat(Jurisdiction.same("United States", "US")).isTrue();
+        assertThat(Jurisdiction.same("US", "United States")).isTrue();
+
+        assertThat(Jurisdiction.same("United States", "United Kingdom")).isFalse();
+        assertThat(Jurisdiction.same(null, null)).isTrue();
+        assertThat(Jurisdiction.same(null, "US")).isFalse();
+    }
 }

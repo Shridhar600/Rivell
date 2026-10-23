@@ -155,6 +155,26 @@ export interface ScopeDifference {
   manifestValue: string | null
 }
 
+/**
+ * One equality form for jurisdiction names: lower case with non-alphanumerics removed,
+ * plus the long-form aliases the product displays. Mirrors Jurisdiction.normalize in
+ * the backend.
+ */
+export function normalizeJurisdiction(value: string | null): string | null {
+  if (value === null) return null
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (normalized === 'uk' || normalized === 'unitedkingdom') return 'uk'
+  if (
+    normalized === 'us' ||
+    normalized === 'unitedstates' ||
+    normalized === 'unitedstatesofamerica' ||
+    normalized === 'usa'
+  ) {
+    return 'us'
+  }
+  return normalized
+}
+
 export function scopeDifferences(
   candidate: Candidate,
   artifact: ArtifactDetail,
@@ -164,8 +184,10 @@ export function scopeDifferences(
     label: string,
     candidateValue: string | null,
     manifestValue: string | null,
+    equal: (left: string | null, right: string | null) => boolean = (left, right) =>
+      (left ?? '') === (right ?? ''),
   ) => {
-    if ((candidateValue ?? '') !== (manifestValue ?? '')) {
+    if (!equal(candidateValue, manifestValue)) {
       differences.push({ label, candidateValue, manifestValue })
     }
   }
@@ -178,7 +200,13 @@ export function scopeDifferences(
   )
   compare('Party perspective', candidate.partyPerspective, artifact.partyPerspective)
   compare('Paper source', candidate.paperSource, artifact.paperSource)
-  compare('Jurisdiction', candidate.jurisdiction, artifact.jurisdiction)
+  compare(
+    'Jurisdiction',
+    candidate.jurisdiction,
+    artifact.jurisdiction,
+    (left, right) =>
+      (normalizeJurisdiction(left) ?? '') === (normalizeJurisdiction(right) ?? ''),
+  )
   compare('Effective from', candidate.effectiveFrom, artifact.effectiveFrom)
   compare('Effective to', candidate.effectiveTo, artifact.effectiveTo)
 
