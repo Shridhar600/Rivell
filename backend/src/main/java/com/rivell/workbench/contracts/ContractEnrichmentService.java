@@ -156,7 +156,7 @@ public class ContractEnrichmentService {
      */
     private FactCorrection mergeCorrectionPatch(FactCorrection current, FactCorrection patch) {
         if (!patch.corrected()) {
-            throw new InvalidCorrectionException(null, "A correction must carry a change");
+            throw new InvalidCorrectionException(null, "Choose a change to make.");
         }
         var primary = patch.primaryConcept() == null
                 ? current.primaryConcept()
@@ -294,10 +294,10 @@ public class ContractEnrichmentService {
             try {
                 var key = ConceptKey.of(correction.primaryConcept());
                 if (!conceptRegistry.contains(key)) {
-                    throw new InvalidCorrectionException(clause.id(), "Unknown concept");
+                    throw new InvalidCorrectionException(clause.id(), "That topic is not recognized.");
                 }
             } catch (IllegalArgumentException e) {
-                throw new InvalidCorrectionException(clause.id(), "Unknown concept");
+                throw new InvalidCorrectionException(clause.id(), "That topic is not recognized.");
             }
         }
         var changedValues = correction.factValues() == null ? Map.<String, String>of()
@@ -312,7 +312,7 @@ public class ContractEnrichmentService {
                             .anyMatch(field -> FactSchema.byId(schema).fields().contains(field)))
                     .findFirst()
                     .orElseThrow(() -> new InvalidCorrectionException(clause.id(),
-                            "Corrected fields do not belong to the clause's fact schemas"));
+                            "These fields do not belong to this clause."));
             var schema = FactSchema.byId(schemaId);
             var merged = new LinkedHashMap<String, String>();
             for (var fact : clause.facts()) {

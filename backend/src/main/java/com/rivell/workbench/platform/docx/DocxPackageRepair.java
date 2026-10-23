@@ -47,30 +47,46 @@ public final class DocxPackageRepair {
     }
 
     public static Result repair(byte[] docxBytes) throws IOException {
-        var entries = entries(docxBytes);
-        var knownParts = new HashSet<String>();
-        for (var name : entries.keySet()) {
-            knownParts.add(name.toLowerCase(Locale.ROOT));
-        }
-
-        var repaired = false;
-        var result = new LinkedHashMap<String, byte[]>();
-        for (var entry : entries.entrySet()) {
-            var name = entry.getKey();
-            if (name.toLowerCase(Locale.ROOT).endsWith(RELS_SUFFIX)) {
-                var rewritten = withoutDanglingRelationships(name, entry.getValue(), knownParts);
-                if (rewritten != null) {
-                    result.put(name, rewritten);
-                    repaired = true;
-                    continue;
-                }
+        var scan = scan(docxBytes);
+        var rewrittenRels = new LinkedHashMap<String, byte[]>();
+        for (var rels : scan.relationshipParts().entrySet()) {
+            var rewritten = withoutDanglingRelationships(
+                    rels.getKey(), rels.getValue(), scan.knownParts());
+            if (rewritten != null) {
+                rewrittenRels.put(rels.getKey(), rewritten);
             }
-            result.put(name, entry.getValue());
         }
-        if (!repaired) {
+        if (rewrittenRels.isEmpty()) {
             return new Result(docxBytes, false);
         }
+        // Only a damaged package pays for the copy: every part is read, the rewritten .rels swapped in.
+        var result = entries(docxBytes);
+        result.putAll(rewrittenRels);
         return new Result(zipBytes(result), true);
+    }
+
+    /** What the check needs from a package: every part name, and the bytes of each {@code .rels}. */
+    private record Scan(Set<String> knownParts, Map<String, byte[]> relationshipParts) {
+    }
+
+    /**
+     * One pass over the package. The data of every other entry is skipped, never kept, so an
+     * intact package costs no more than its small relationship parts.
+     */
+    private static Scan scan(byte[] docxBytes) throws IOException {
+        var knownParts = new HashSet<String>();
+        var relationshipParts = new LinkedHashMap<String, byte[]>();
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(docxBytes))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                knownParts.add(entry.getName().toLowerCase(Locale.ROOT));
+                if (!entry.isDirectory()
+                        && entry.getName().toLowerCase(Locale.ROOT).endsWith(RELS_SUFFIX)) {
+                    relationshipParts.put(entry.getName(), zip.readAllBytes());
+                }
+            }
+        }
+        return new Scan(knownParts, relationshipParts);
     }
 
     /**

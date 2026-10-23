@@ -340,7 +340,7 @@ public class EvidenceService {
             if (!knowledgeQueries.publicationNumberExistsForOrganization(
                     request.organizationId(), pin)) {
                 throw new IllegalArgumentException(
-                        "Pinned knowledge publication does not exist: " + pin);
+                        "Knowledge version " + pin + " does not exist.");
             }
             return pin;
         }

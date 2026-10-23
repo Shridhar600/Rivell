@@ -56,7 +56,8 @@ public class KnowledgePublicationService {
             throw new UnauthorizedKnowledgeAccessException(identity.userId());
         }
         if (candidateIds == null || candidateIds.isEmpty()) {
-            throw new IllegalArgumentException("A publication requires at least one candidate");
+            throw new IllegalArgumentException(
+                    "Choose at least one entry for the new knowledge version.");
         }
         var organizationId = identity.organizationId();
 
@@ -67,8 +68,9 @@ public class KnowledgePublicationService {
                     .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
             if (candidate.reviewStatus() != ReviewStatus.APPROVED) {
                 throw new InvalidPublicationException(candidateId,
-                        "only APPROVED candidates can be published (current state: "
-                                + candidate.reviewStatus() + ")");
+                        "Only approved entries can go into a new knowledge version. "
+                                + "This entry is " + InvalidCandidateReviewStateException
+                                        .describe(candidate.reviewStatus()) + ".");
             }
             if (supersededCandidates != null && supersededCandidates.containsKey(candidateId)) {
                 candidate = candidate.withSupersedingCandidateId(
@@ -90,16 +92,16 @@ public class KnowledgePublicationService {
             if (supersededId != null) {
                 var superseded = repository.findCandidate(supersededId, organizationId)
                         .orElseThrow(() -> new InvalidPublicationException(candidate.id(),
-                                "superseded candidate does not exist"));
+                                "The entry this one replaces no longer exists."));
                 if (!superseded.isPublished()) {
                     throw new InvalidPublicationException(candidate.id(),
-                            "superseded candidate must itself be published");
+                            "The entry this one replaces must already be published.");
                 }
                 if (superseded.effectiveConceptKey() != null
                         && candidate.effectiveConceptKey() != null
                         && !superseded.effectiveConceptKey().equals(candidate.effectiveConceptKey())) {
                     throw new InvalidPublicationException(candidate.id(),
-                            "superseded candidate must cover the same legal concept");
+                            "The entry this one replaces must cover the same topic.");
                 }
                 items.add(new PublicationItem(
                         UUID.randomUUID(), publicationId, candidate.id(), supersededId,
@@ -144,8 +146,8 @@ public class KnowledgePublicationService {
                                 candidate.reviewReasons());
                         if (!applied) {
                             throw new InvalidPublicationException(candidate.id(),
-                                    "it changed state during publication and was no longer "
-                                            + "APPROVED when published");
+                                    "This entry changed while the knowledge version was being "
+                                            + "created and is no longer approved.");
                         }
                     }
                     // published inside the transaction: AFTER_COMMIT listeners fire post-commit

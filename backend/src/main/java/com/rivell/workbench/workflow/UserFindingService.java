@@ -72,14 +72,15 @@ public class UserFindingService {
                 .orElseThrow(() -> new ReviewNotFoundException(reviewId));
         var note = command.note() == null ? "" : command.note().strip();
         if (note.isEmpty()) {
-            throw new InvalidDecisionException("a note saying what Rivell missed is required");
+            throw new InvalidDecisionException("Add a note that says what Rivell missed.");
         }
         if (note.length() > DecisionRules.MAX_COMMENT_LENGTH) {
             throw new InvalidDecisionException(
-                    "note exceeds " + DecisionRules.MAX_COMMENT_LENGTH + " characters");
+                    "The note is too long. Keep it to " + DecisionRules.MAX_COMMENT_LENGTH
+                            + " characters or fewer.");
         }
         if (command.headingNodeId() == null) {
-            throw new InvalidDecisionException("headingNodeId is required");
+            throw new InvalidDecisionException("Choose the clause this finding is about.");
         }
         var severity = command.severity() == null ? FindingSeverity.MEDIUM : command.severity();
         if (review.status() != ReviewStatus.COMPLETED) {
@@ -91,7 +92,7 @@ public class UserFindingService {
                 .filter(check -> command.headingNodeId().equals(check.subjectHeadingNodeId()))
                 .findFirst()
                 .orElseThrow(() -> new InvalidDecisionException(
-                        "the heading is not a clause this review planned"));
+                        "Rivell did not check that clause in this review."));
 
         return transactionTemplate.execute(status -> {
             if (!reviewRepository.lock(organizationId, reviewId)) {

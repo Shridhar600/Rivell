@@ -5,6 +5,6 @@ import java.util.UUID;
 public class ReviewAlreadyFinalizedException extends RuntimeException {
 
     public ReviewAlreadyFinalizedException(UUID reviewId) {
-        super("Review " + reviewId + " is already finalized; decisions are immutable");
+        super("This review is already finalized. Its decisions can no longer be changed.");
     }
 }

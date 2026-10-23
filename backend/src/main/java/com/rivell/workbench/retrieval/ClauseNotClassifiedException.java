@@ -6,6 +6,6 @@ import java.util.UUID;
 public class ClauseNotClassifiedException extends RuntimeException {
 
     public ClauseNotClassifiedException(UUID clauseId) {
-        super("Clause region has no legal concept classification: " + clauseId);
+        super("Rivell has not assigned a topic to this clause yet.");
     }
 }

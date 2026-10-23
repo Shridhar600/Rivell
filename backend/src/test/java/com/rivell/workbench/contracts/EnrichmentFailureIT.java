@@ -171,7 +171,8 @@ class EnrichmentFailureIT {
                                 + "\"paperSource\":\"THIRD_PARTY\",\"jurisdiction\":\"US\"}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.detail").value(
-                        "The contract file could not be read, so it cannot be analysed."));
+                        "Rivell could not read this contract file, so it cannot check it. "
+                                + "Upload the contract again."));
 
         var semantics = enrichmentService.getSemantics(contractId, 1);
         assertThat(semantics.enrichmentStatus()).isEqualTo(EnrichmentStatus.FAILED);

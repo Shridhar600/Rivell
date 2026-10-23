@@ -155,7 +155,8 @@ public class HumanDecisionService {
     private static void requireExpectedVersion(DecisionCommand command) {
         if (command.expectedVersion() == null || command.expectedVersion() < 0) {
             throw new InvalidDecisionException(
-                    "expectedVersion is required and must be >= 0 (0 when no decision exists)");
+                    "Reload the review before you decide. Rivell needs the current version of "
+                            + "this finding.");
         }
     }
 }

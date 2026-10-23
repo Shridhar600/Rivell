@@ -6,8 +6,8 @@ import java.util.UUID;
 public class UntrackableChangeTargetException extends RuntimeException {
 
     public UntrackableChangeTargetException(UUID findingId) {
-        super("Finding " + findingId + " targets a schedule or a clause that holds a table; "
-                + "Rivell cannot apply a tracked change there. Reject the finding and edit the "
-                + "clause by hand in the redline.");
+        super("This finding targets a schedule or a clause that holds a table. Rivell cannot "
+                + "apply tracked changes there. Reject the finding, then edit the clause by hand "
+                + "in the redline.");
     }
 }

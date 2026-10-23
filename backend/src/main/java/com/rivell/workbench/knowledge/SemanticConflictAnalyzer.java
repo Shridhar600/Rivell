@@ -42,7 +42,7 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
             if (isExactDuplicate(candidate, peer)) {
                 signals.add(new ConflictSignal(
                         ConflictType.DUPLICATE,
-                        "Matches published candidate with the same label, content, and scope",
+                        "Matches a published entry with the same label, wording and scope.",
                         peer.id()));
                 continue;
             }
@@ -105,16 +105,14 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
                 && yesNo.probability() >= properties.conflictProposal()) {
             signals.add(new ConflictSignal(
                     ConflictType.CONTRADICTS_EXISTING,
-                    "Materially contradicts a published position of the same concept and scope (p="
-                            + yesNo.probability() + ")",
+                    "May contradict a published position on the same topic and scope.",
                     peer.id()));
         }
         if (supersedes instanceof YesNoAnswer yesNo
                 && yesNo.probability() >= properties.supersedeProposal()) {
             signals.add(new ConflictSignal(
                     ConflictType.SUPERSEDES_EXISTING,
-                    "Appears intended to replace a published position of the same concept (p="
-                            + yesNo.probability() + ")",
+                    "Looks like it replaces a published position on the same topic.",
                     peer.id()));
         }
         return signals;

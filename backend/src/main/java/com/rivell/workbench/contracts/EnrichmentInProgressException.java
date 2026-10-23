@@ -9,8 +9,7 @@ public class EnrichmentInProgressException extends RuntimeException {
     private final int versionNumber;
 
     public EnrichmentInProgressException(UUID contractId, int versionNumber) {
-        super("Enrichment is already running for contract " + contractId
-                + " version " + versionNumber);
+        super("Rivell is already analyzing this contract. Wait for it to finish.");
         this.contractId = contractId;
         this.versionNumber = versionNumber;
     }

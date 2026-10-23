@@ -235,6 +235,27 @@ class CandidateConceptCorrectionIT {
                 });
     }
 
+    /**
+     * DW-088: PostgreSQL timestamptz keeps microseconds, and a correction records who and when.
+     * The candidate it returns must carry what was stored, so it equals a later read of it.
+     */
+    @Test
+    void aCorrectedConceptReturnsTheTimestampsTheDatabaseKeeps() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var precedent = ingestUnclassifiedPrecedent(organizationId);
+
+        var corrected = reviewService.correctConcept(precedent.clause().id(),
+                CoreConcepts.LIMITATION_OF_LIABILITY.value());
+
+        assertThat(corrected.updatedAt().getNano() % 1000).isZero();
+        assertThat(corrected.conceptCorrectedAt()).isNotNull();
+        assertThat(corrected.conceptCorrectedAt().getNano() % 1000).isZero();
+        var readBack = knowledgeQueries.getCandidate(precedent.clause().id());
+        assertThat(corrected.updatedAt()).isEqualTo(readBack.updatedAt());
+        assertThat(corrected.conceptCorrectedAt()).isEqualTo(readBack.conceptCorrectedAt());
+        assertThat(corrected.conceptCorrectedBy()).isEqualTo(readBack.conceptCorrectedBy());
+    }
+
     @Test
     void correctionRejectsUnknownConceptsAndPublishedCandidatesAcrossTenants() throws Exception {
         var organizationId = identityProvider.currentIdentity().organizationId();

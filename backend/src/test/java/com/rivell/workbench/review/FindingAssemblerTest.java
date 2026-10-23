@@ -131,7 +131,7 @@ class FindingAssemblerTest {
         assertThat(finding.claims())
                 .filteredOn(claim -> claim.claimKind() == ClaimKind.POLICY_BASIS)
                 .allSatisfy(claim -> assertThat(claim.text())
-                        .contains("No published policy applies"));
+                        .contains("Your playbook has no position on this topic"));
     }
 
     private static RawReviewSignal disagreement(String secondOpinionCategory) {

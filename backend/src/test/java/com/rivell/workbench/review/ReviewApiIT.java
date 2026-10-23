@@ -452,7 +452,7 @@ class ReviewApiIT {
                         .content("{\"contractPackKey\":\"UNKNOWN_PACK\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("400"))
-                .andExpect(jsonPath("$.title").value("Invalid review configuration"));
+                .andExpect(jsonPath("$.title").value("Review setup not accepted"));
 
         enrichmentService.enrich(corpus.contract().contractId(), 1,
                 new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
@@ -522,7 +522,7 @@ class ReviewApiIT {
                 .andExpect(jsonPath("$.data.analysisWarnings[0].reasonCode")
                         .value("SEMANTICS_CHANGED"))
                 .andExpect(jsonPath("$.data.analysisWarnings[0].message")
-                        .value(containsString("semantics changed")))
+                        .value(containsString("contract analysis changed")))
                 .andReturn()).get("data");
         assertThat(summary.get("degradedChecks").asInt())
                 .isEqualTo(summary.get("plannedChecks").asInt())

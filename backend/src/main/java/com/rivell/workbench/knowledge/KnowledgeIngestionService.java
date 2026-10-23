@@ -36,6 +36,9 @@ import java.util.HexFormat;
  */
 public class KnowledgeIngestionService {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(KnowledgeIngestionService.class);
+
     private static final String DOCX_EXTENSION = ".docx";
     private static final String XLSX_EXTENSION = ".xlsx";
 
@@ -165,10 +168,12 @@ public class KnowledgeIngestionService {
      * artifact row never committed) compensates by deleting the orphan file.
      */
     private void markFailedQuietly(UUID artifactId, RuntimeException cause) {
+        log.warn("Knowledge artifact {} could not be processed ({}: {})", artifactId,
+                cause.getClass().getSimpleName(), cause.getMessage());
         try {
             transactionTemplate.executeWithoutResult(status -> repository.updateIngestOutcome(
                     artifactId, null, IngestStatus.FAILED,
-                    List.of("The artifact could not be processed (" + cause.getClass().getSimpleName() + ")")));
+                    List.of("Rivell could not process this file. Upload it again.")));
         } catch (RuntimeException compensationFailure) {
             // compensation failed; reconciliation is deferred (M10-class work)
         }
@@ -180,9 +185,11 @@ public class KnowledgeIngestionService {
                 try (var stream = new ByteArrayInputStream(bytes)) {
                     return extractor.extractStructure(artifact.id(), stream);
                 } catch (IOException e) {
+                    log.warn("Knowledge artifact {} could not be read ({}: {})", artifact.id(),
+                            e.getClass().getSimpleName(), e.getMessage());
                     return StructureExtraction.failed(
                             extractorName(extractor),
-                            List.of("The source could not be read (" + e.getClass().getSimpleName() + ")"));
+                            List.of("Rivell could not read this file. Check that it opens, then upload it again."));
                 }
             }
         }
