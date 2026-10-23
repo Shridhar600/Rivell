@@ -14,10 +14,15 @@ export const CONTRACT_TYPES = [
   'ONDA',
   'NDA',
   'MSA',
+  'SERVICES',
+  'SUPPLY',
   'SAAS',
-  'DPA',
+  'ORDER_FORM',
   'SOW',
+  'DPA',
   'SWL',
+  'RESELLER',
+  'AMENDMENT',
   'OTHER',
 ] as const satisfies readonly NonNullable<
   ReviewProfileInput['contractType']
@@ -129,10 +134,15 @@ export const CONTRACT_TYPE_LABELS: Record<string, string> = {
   ONDA: 'One-way NDA',
   NDA: 'NDA',
   MSA: 'MSA',
+  SERVICES: 'Services',
+  SUPPLY: 'Supply',
   SAAS: 'SaaS',
-  DPA: 'DPA',
+  ORDER_FORM: 'Order form',
   SOW: 'SOW',
+  DPA: 'DPA',
   SWL: 'Software licence',
+  RESELLER: 'Reseller',
+  AMENDMENT: 'Amendment',
   OTHER: 'Other',
 }
 

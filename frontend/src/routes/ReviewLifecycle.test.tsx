@@ -126,7 +126,7 @@ describe('analysis states', () => {
     renderAt(PATH)
     expect(
       await screen.findByText(
-        'Playbooks used: No playbook covers this contract type. Rivell checks general risks only.',
+        'Playbooks used: No playbook covers this contract type, so this is not a policy review. Rivell flagged only clauses that read as unusual. Read the whole contract yourself.',
       ),
     ).toBeInTheDocument()
   })

@@ -47,6 +47,7 @@ import {
   fixtureSearchFoundFindingSummary,
 } from './testFixtures'
 import { fixtureHumanReview } from './workflowFixtures'
+import { NO_PLAYBOOK_COVERS } from '../../lib/reviews'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -192,6 +193,42 @@ afterEach(() => {
 })
 
 describe('findings list', () => {
+  it('states at the top of the findings list when no playbook covered the review', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1', { reviewSummary: summaryWithPlaybooks([]) })
+
+    const findingsPane = await screen.findByRole('complementary', { name: 'Findings' })
+    const notice = await within(findingsPane).findByText(NO_PLAYBOOK_COVERS)
+    const listbox = within(findingsPane).getByRole('listbox', { name: 'Findings list' })
+    expect(
+      notice.compareDocumentPosition(listbox) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('does not claim findings were flagged before analysis finishes', async () => {
+    const analyzing = {
+      ...summaryWithPlaybooks([]),
+      status: 'ANALYZING',
+      completedAt: null,
+      activeRun: { id: 'run-1', runNumber: 1, status: 'RUNNING' },
+      latestRunStatus: 'RUNNING',
+    }
+    renderWorkspace('/reviews/c1/analysis/r-1', { reviewSummary: analyzing })
+
+    const findingsPane = await screen.findByRole('complementary', { name: 'Findings' })
+    expect(
+      await within(findingsPane).findByText('Findings appear when analysis finishes.'),
+    ).toBeInTheDocument()
+    expect(within(findingsPane).queryByText(NO_PLAYBOOK_COVERS)).not.toBeInTheDocument()
+  })
+
+  it('does not claim no playbook covered the review when one was frozen', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1', { reviewSummary: summaryWithPlaybooks() })
+
+    const findingsPane = await screen.findByRole('complementary', { name: 'Findings' })
+    await within(findingsPane).findByRole('listbox', { name: 'Findings list' })
+    expect(within(findingsPane).queryByText(NO_PLAYBOOK_COVERS)).not.toBeInTheDocument()
+  })
+
   it('lists findings with distinguishable subjects and opens one', async () => {
     const { router } = renderWorkspace('/reviews/c1/analysis/r-1', {
       humanReview: fixtureHumanReview({ actionableFindings: 6, remainingFindings: 6 }),

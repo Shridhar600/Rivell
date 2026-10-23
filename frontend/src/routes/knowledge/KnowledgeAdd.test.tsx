@@ -30,7 +30,7 @@ describe('Add knowledge', () => {
 
   it('needs a type, a file and a contract-type choice before it can start', async () => {
     const { dialog } = await openDialog()
-    await choose(dialog, docx('Supply Agreement.docx'))
+    await choose(dialog, docx('Standard Terms.docx'))
     expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeDisabled()
     await userEvent.click(within(dialog).getByRole('radio', { name: /Playbook/ }))
     expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeDisabled()
@@ -63,7 +63,7 @@ describe('Add knowledge', () => {
 
   it('treats "All contract types" and a named type as one choice', async () => {
     const { dialog } = await openDialog()
-    await choose(dialog, docx('Supply Agreement.docx'))
+    await choose(dialog, docx('Standard Terms.docx'))
     const all = within(dialog).getByRole('checkbox', { name: 'All contract types' })
     const msa = within(dialog).getByRole('checkbox', { name: 'MSA' })
     await userEvent.click(all)
@@ -76,7 +76,7 @@ describe('Add knowledge', () => {
 
   it('suggests nothing when the file name names no contract type', async () => {
     const { dialog } = await openDialog()
-    await choose(dialog, docx('Supply Agreement.docx'))
+    await choose(dialog, docx('Standard Terms.docx'))
     expect(within(dialog).getAllByRole('checkbox').every((box) => !(box as HTMLInputElement).checked)).toBe(true)
   })
 

@@ -13,6 +13,48 @@ def contract(detected, alarms, decided, without=None):
     return scored
 
 
+class ContractTypeMappingTest(unittest.TestCase):
+
+    def test_keeps_the_types_the_product_already_modelled(self):
+        self.assertEqual(run_eval.contract_type({"contractType": "NDA"}), "NDA")
+        self.assertEqual(run_eval.contract_type({"contractType": "Mutual NDA"}), "MNDA")
+        self.assertEqual(run_eval.contract_type({"contractType": "Unilateral NDA"}), "ONDA")
+        self.assertEqual(run_eval.contract_type({"contractType": "Master services agreement"}), "MSA")
+        self.assertEqual(run_eval.contract_type({"contractType": "Data processing agreement"}), "DPA")
+        self.assertEqual(run_eval.contract_type({"contractType": "Statement of work"}), "SOW")
+        self.assertEqual(run_eval.contract_type({"contractType": "Software licence"}), "SWL")
+        self.assertEqual(run_eval.contract_type({"contractType": "Something else"}), "OTHER")
+
+    def test_maps_the_new_commercial_types(self):
+        self.assertEqual(run_eval.contract_type({"contractType": "Supply agreement"}), "SUPPLY")
+        self.assertEqual(run_eval.contract_type({"contractType": "Professional services"}), "SERVICES")
+        self.assertEqual(run_eval.contract_type({"contractType": "Reseller agreement"}), "RESELLER")
+        self.assertEqual(run_eval.contract_type({"contractType": "Order form"}), "ORDER_FORM")
+        self.assertEqual(run_eval.contract_type({"contractType": "Amendment"}), "AMENDMENT")
+
+    def test_code_answers_map_to_themselves(self):
+        for code in ("NDA", "MNDA", "ONDA", "MSA", "SAAS", "DPA", "SOW", "SWL",
+                     "SUPPLY", "SERVICES", "RESELLER", "ORDER_FORM", "AMENDMENT", "OTHER"):
+            self.assertEqual(run_eval.contract_type({"contractType": code}), code)
+
+    def test_nda_does_not_hide_inside_an_unrelated_word(self):
+        self.assertEqual(run_eval.contract_type({"contractType": "Standard Supply Agreement"}), "SUPPLY")
+        self.assertEqual(run_eval.contract_type({"contractType": "Standard agreement"}), "OTHER")
+
+    def test_hyphenated_names_read_as_words(self):
+        self.assertEqual(run_eval.contract_type({"contractType": "Master-services agreement"}), "MSA")
+        self.assertEqual(run_eval.contract_type({"contractType": "Data-processing addendum"}), "DPA")
+        self.assertEqual(run_eval.contract_type({"contractType": "SaaS-order-form"}), "ORDER_FORM")
+
+    def test_specific_names_win_over_the_words_they_contain(self):
+        self.assertEqual(run_eval.contract_type({"contractType": "Master services agreement"}), "MSA")
+        self.assertEqual(run_eval.contract_type({"contractType": "Data processing addendum"}), "DPA")
+        self.assertEqual(run_eval.contract_type({"contractType": "SaaS order form"}), "ORDER_FORM")
+        self.assertEqual(run_eval.contract_type({"contractType": "Purchase order"}), "ORDER_FORM")
+        self.assertEqual(run_eval.contract_type({"contractType": "Purchase agreement"}), "SUPPLY")
+        self.assertEqual(run_eval.contract_type({"contractType": "Distribution agreement"}), "RESELLER")
+
+
 class NeedsLookLineTest(unittest.TestCase):
 
     def test_reports_the_group_and_what_only_it_reaches(self):

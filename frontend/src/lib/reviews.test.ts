@@ -90,7 +90,10 @@ describe('playbooks used', () => {
     )
   })
 
-  it('states the empty case plainly', () => {
+  it('states the empty case plainly, so an unusual clause is not read as a policy review', () => {
+    expect(NO_PLAYBOOK_COVERS).toBe(
+      'No playbook covers this contract type, so this is not a policy review. Rivell flagged only clauses that read as unusual. Read the whole contract yourself.',
+    )
     expect(playbooksUsedText([])).toBe(NO_PLAYBOOK_COVERS)
   })
 

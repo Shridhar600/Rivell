@@ -29,6 +29,8 @@ interface Props {
   analysisComplete: boolean
   isPending: boolean
   isError: boolean
+  /** The empty frozen playbook set, stated at the top of the list; null when a playbook applied. */
+  noPlaybookNotice: string | null
   onRetry: () => void
   onSelect: (findingId: string) => void
 }
@@ -45,6 +47,7 @@ export function FindingNavigator({
   analysisComplete,
   isPending,
   isError,
+  noPlaybookNotice,
   onRetry,
   onSelect,
 }: Props) {
@@ -105,6 +108,9 @@ export function FindingNavigator({
         Findings
         <small>{remaining !== null ? `${remaining} open` : enabled && !isPending ? findings.length : ''}</small>
       </div>
+      {noPlaybookNotice !== null && analysisComplete ? (
+        <p className="rv-ws-fl-note">{noPlaybookNotice}</p>
+      ) : null}
       {!enabled ? <p className="rv-ws-fl-note">Findings appear when analysis finishes.</p> : null}
       {enabled && isPending ? <LoadingState label="Loading findings…" /> : null}
       {enabled && isError ? <ErrorState message="Findings could not be loaded." onRetry={onRetry} /> : null}

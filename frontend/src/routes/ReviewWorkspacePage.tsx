@@ -35,7 +35,7 @@ import { useSemanticsQuery } from '../api/semantics'
 import { useTaxonomy } from '../api/taxonomy'
 import { buildRegionLabelMap, CONTRACT_TYPE_LABELS } from '../lib/contractSemantics'
 import { clearResumeFor, writeResume } from '../lib/resume'
-import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun, playbooksUsedText } from '../lib/reviews'
+import { NO_PLAYBOOK_COVERS, coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun, playbooksUsedText } from '../lib/reviews'
 import {
   defaultFinding,
   executableChange,
@@ -594,6 +594,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   const contractType = summary.snapshot?.profile?.contractType
   const pin = summary.snapshot?.knowledgePinNumber
   const playbooksUsed = playbooksUsedText(summary.snapshot?.playbooksUsed ?? null)
+  const noPlaybookNotice =
+    summary.snapshot?.playbooksUsed?.length === 0 ? NO_PLAYBOOK_COVERS : null
   const context =
     [
       profileLine(summary.snapshot),
@@ -673,6 +675,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           analysisComplete={analysisCompleted}
           isPending={findingsQuery.isPending}
           isError={findingsQuery.isError}
+          noPlaybookNotice={noPlaybookNotice}
           onRetry={() => void findingsQuery.refetch()}
           onSelect={chooseFinding}
         />

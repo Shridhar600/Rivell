@@ -15,17 +15,24 @@ public enum ContractType {
     ONDA("One-way non-disclosure agreement", "NDA"),
     MSA("Master services agreement", null),
     SAAS("SaaS subscription agreement", null),
-    DPA("Data processing agreement", null),
-    SOW("Statement of work", null),
+    DPA("Data processing agreement", null, "MSA"),
+    SOW("Statement of work", null, "MSA"),
     SWL("Software licence agreement", null),
+    SUPPLY("Supply agreement", null),
+    SERVICES("Services agreement", null),
+    RESELLER("Reseller or distribution agreement", null),
+    ORDER_FORM("Order form", null, "MSA", "SAAS"),
+    AMENDMENT("Amendment", null, "MSA"),
     OTHER("Other agreement", null);
 
     private final String label;
     private final String familyCode;
+    private final Set<String> parentTypeCodes;
 
-    ContractType(String label, String familyCode) {
+    ContractType(String label, String familyCode, String... parentTypeCodes) {
         this.label = label;
         this.familyCode = familyCode;
+        this.parentTypeCodes = Set.of(parentTypeCodes);
     }
 
     public String label() {
@@ -54,17 +61,14 @@ public enum ContractType {
 
     /**
      * Types a record's own "Applies to" may name for it to apply to a contract of this type:
-     * {@link #applicableCodes()}, plus MSA for a statement of work or a data processing
-     * agreement. Both are made under a master agreement and form part of it, so a position
-     * stated for the MSA (governing law, data export) also governs a SOW or DPA that departs
-     * from it.
+     * {@link #applicableCodes()}, plus the {@link #parentTypeCodes} the type is made under. A
+     * statement of work, a data processing agreement, an order form and an amendment all form
+     * part of the master agreement (or SaaS agreement) they sit under, so a position stated for
+     * the parent (governing law, data export) also governs the child that departs from it.
      */
     public Set<String> recordApplicableCodes() {
-        if (this != SOW && this != DPA) {
-            return applicableCodes();
-        }
         var codes = new LinkedHashSet<>(applicableCodes());
-        codes.add(MSA.name());
+        codes.addAll(parentTypeCodes);
         return Set.copyOf(codes);
     }
 }

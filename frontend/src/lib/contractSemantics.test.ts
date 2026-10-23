@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CONTRACT_TYPES,
+  CONTRACT_TYPE_LABELS,
   describeFact,
   enrichmentFailureNote,
   factDivergence,
@@ -18,6 +20,49 @@ import {
 } from './contractSemantics'
 import { ENRICHMENT_FAILURE_REASONS } from '../api/semantics'
 import type { EnrichmentFailureReason, SemanticFact } from '../api/semantics'
+
+describe('contract type choices', () => {
+  it('puts the common commercial types where a reviewer looks for them', () => {
+    expect(CONTRACT_TYPES).toEqual([
+      'MNDA',
+      'ONDA',
+      'NDA',
+      'MSA',
+      'SERVICES',
+      'SUPPLY',
+      'SAAS',
+      'ORDER_FORM',
+      'SOW',
+      'DPA',
+      'SWL',
+      'RESELLER',
+      'AMENDMENT',
+      'OTHER',
+    ])
+  })
+
+  it('labels every choice in the vocabulary a reviewer uses', () => {
+    expect(CONTRACT_TYPE_LABELS).toMatchObject({
+      MNDA: 'Mutual NDA',
+      ONDA: 'One-way NDA',
+      NDA: 'NDA',
+      MSA: 'MSA',
+      SERVICES: 'Services',
+      SUPPLY: 'Supply',
+      SAAS: 'SaaS',
+      ORDER_FORM: 'Order form',
+      SOW: 'SOW',
+      DPA: 'DPA',
+      SWL: 'Software licence',
+      RESELLER: 'Reseller',
+      AMENDMENT: 'Amendment',
+      OTHER: 'Other',
+    })
+    for (const type of CONTRACT_TYPES) {
+      expect(CONTRACT_TYPE_LABELS[type]).toBeTruthy()
+    }
+  })
+})
 
 describe('label maps', () => {
   it('labels roles, metadata fields, references and verification', () => {

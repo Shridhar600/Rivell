@@ -15,6 +15,7 @@ import {
   PARTY_ROLES,
   roleLabel,
 } from '../lib/contractSemantics'
+import { NO_PLAYBOOK_COVERS } from '../lib/reviews'
 import { EMPTY_CONTEXT, STAGE_LABELS, canStart, contextSummary, filenameSuggestedType, fileSizeLabel, isDocx, type StartContext, startNeeds } from '../lib/startReview'
 import { useStartReview } from '../lib/useStartReview'
 
@@ -316,7 +317,7 @@ function ApplicablePlaybooks({ context }: { context: StartContext }) {
       ) : query.isError ? (
         <p className="rv-hint">The published playbooks could not be loaded.</p>
       ) : items.length === 0 ? (
-        <p className="rv-hint">No playbook covers this contract type. Rivell checks general risks only.</p>
+        <p className="rv-hint">{NO_PLAYBOOK_COVERS}</p>
       ) : (
         <ul className="rv-startpb">
           {shown.map((item) => (

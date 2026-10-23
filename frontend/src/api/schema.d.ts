@@ -1606,7 +1606,7 @@ export interface components {
              * @description Declared contract type for enrichment
              * @enum {string}
              */
-            contractType: "NDA" | "MNDA" | "ONDA" | "MSA" | "SAAS" | "DPA" | "SOW" | "SWL" | "OTHER";
+            contractType: "NDA" | "MNDA" | "ONDA" | "MSA" | "SAAS" | "DPA" | "SOW" | "SWL" | "SUPPLY" | "SERVICES" | "RESELLER" | "ORDER_FORM" | "AMENDMENT" | "OTHER";
             /** @enum {string} */
             ourSideRole?: "CUSTOMER" | "SUPPLIER" | "DISCLOSING_PARTY" | "RECEIVING_PARTY" | "LICENSOR" | "LICENSEE" | "PARTY_A" | "PARTY_B";
             /** @enum {string} */

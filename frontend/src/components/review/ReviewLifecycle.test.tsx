@@ -127,7 +127,9 @@ describe('review lifecycle states', () => {
     })
     const sheet = await openReviewNotes()
     expect(
-      within(sheet).getByText('No playbook covers this contract type. Rivell checks general risks only.'),
+      within(sheet).getByText(
+        'No playbook covers this contract type, so this is not a policy review. Rivell flagged only clauses that read as unusual. Read the whole contract yourself.',
+      ),
     ).toBeInTheDocument()
   })
 

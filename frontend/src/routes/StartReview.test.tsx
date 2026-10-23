@@ -158,7 +158,9 @@ describe('Start Review: the canonical page', () => {
     renderPage()
     await userEvent.selectOptions(await screen.findByLabelText('Contract type'), 'MSA')
     expect(
-      await screen.findByText('No playbook covers this contract type. Rivell checks general risks only.'),
+      await screen.findByText(
+        'No playbook covers this contract type, so this is not a policy review. Rivell flagged only clauses that read as unusual. Read the whole contract yourself.',
+      ),
     ).toBeInTheDocument()
   })
 

@@ -87,24 +87,37 @@ def stop_backend(proc, log):
 
 def contract_type(answer):
     """Answer-key free text -> the product's contract type code. Order matters: an SOW under an
-    MSA is an SOW; a data processing addendum is a DPA."""
-    text = answer.get("contractType", "").lower()
+    MSA is an SOW; a data processing addendum is a DPA; a master services agreement is an MSA, not
+    a services agreement; an order form is its own type, not SaaS."""
+    text = answer.get("contractType", "").lower().replace("-", " ").replace("_", " ")
     if "data processing" in text or "dpa" in text.split():
         return "DPA"
+    if "amendment" in text or "variation" in text or "addendum" in text:
+        return "AMENDMENT"
     if "statement of work" in text or "sow" in text.split():
         return "SOW"
-    if "saas" in text or "subscription" in text or "order form" in text:
+    if "order form" in text or "purchase order" in text or "order schedule" in text:
+        return "ORDER_FORM"
+    if "saas" in text or "subscription" in text:
         return "SAAS"
-    if "licen" in text:
+    if "licen" in text or "swl" in text.split():
         return "SWL"
-    if "nda" in text or "non-disclosure" in text or "confidentiality agreement" in text:
-        if "mutual" in text:
+    if ("nda" in text.split() or "mnda" in text.split() or "onda" in text.split()
+            or "non disclosure" in text or "nondisclosure" in text
+            or "confidentiality agreement" in text):
+        if "mutual" in text or "mnda" in text.split():
             return "MNDA"
-        if "one-way" in text or "one way" in text or "unilateral" in text:
+        if "one way" in text or "unilateral" in text or "onda" in text.split():
             return "ONDA"
         return "NDA"
-    if "master services" in text or "msa" in text.split() or "services agreement" in text:
+    if "master services" in text or "msa" in text.split() or "master agreement" in text:
         return "MSA"
+    if "service" in text or "consult" in text:
+        return "SERVICES"
+    if "supply" in text or "purchase" in text or "procurement" in text:
+        return "SUPPLY"
+    if "resell" in text or "distribut" in text or "channel partner" in text:
+        return "RESELLER"
     return "OTHER"
 
 

@@ -240,7 +240,7 @@ class KnowledgeImportQualityIT {
         var row = variant(queryService.getCandidates(artifact.id()), "G-IND-01", "Fallback 1");
 
         assertThat(row.scope().sourceContractTypes())
-                .containsExactlyInAnyOrder(ContractType.SWL.name(), ContractType.SAAS.name());
+                .containsExactlyInAnyOrder(ContractType.SWL.name(), ContractType.ORDER_FORM.name());
     }
 
     @Test

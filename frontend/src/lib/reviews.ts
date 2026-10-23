@@ -703,7 +703,7 @@ export function routeCountsLabel(findings: readonly Pick<FindingSummary, 'decide
 
 /** The sentence used wherever a review's frozen playbook set is empty. */
 export const NO_PLAYBOOK_COVERS =
-  'No playbook covers this contract type. Rivell checks general risks only.'
+  'No playbook covers this contract type, so this is not a policy review. Rivell flagged only clauses that read as unusual. Read the whole contract yourself.'
 
 /**
  * The names of the playbooks a review actually froze. Null means the review predates the freeze,
