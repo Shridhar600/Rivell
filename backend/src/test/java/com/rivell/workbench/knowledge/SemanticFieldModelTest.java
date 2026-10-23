@@ -41,6 +41,32 @@ class SemanticFieldModelTest {
     }
 
     @Test
+    void clearedApprovalIsNotSpecifiedButAnOlderEditWithoutTheMarkerStillFallsBack() {
+        var machine = new SemanticFields(Set.of(PositionRole.PREFERRED), true, null, null, Map.of());
+        var cleared = new SemanticFields(Set.of(), null, null, null, Map.of())
+                .withRequiresApprovalCleared();
+        var legacyEdit = new SemanticFields(
+                Set.of(PositionRole.FALLBACK), null, null, null, Map.of());
+
+        assertThat(candidate(machine, cleared).effectiveRequiresApproval()).isNull();
+        assertThat(candidate(machine, legacyEdit).effectiveRequiresApproval()).isTrue();
+        assertThat(candidate(machine, cleared).semanticFields().requiresApproval()).isTrue();
+    }
+
+    private static KnowledgeCandidate candidate(
+            SemanticFields machine, SemanticFields edited) {
+        var now = java.time.Instant.now();
+        return new KnowledgeCandidate(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                CandidateType.PLAYBOOK_RULE, ReviewStatus.PENDING, "G-LIAB-01", "wording",
+                new CandidatePayload(Map.of("Position", "Preferred")),
+                "LIMITATION_OF_LIABILITY", List.of("LIMITATION_OF_LIABILITY"),
+                null, null, null, machine, edited, List.of(), null, null, null,
+                new ApplicabilityScope(null, Set.of(), null, null, null, null, null),
+                List.of(), null, null, null, null, now, now, null);
+    }
+
+    @Test
     void interpretationRequiresSpecAndKind() {
         var interpretation = interpretation("position", "BOUNDED_CLASSIFICATION");
 

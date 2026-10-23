@@ -757,6 +757,8 @@ export function stubContractApi(options: StubOptions = {}) {
                 : null,
           approvedDraftingEvidenceId: null,
           comment: requestBody.comment ?? null,
+          rejectReason: requestBody.rejectReason ?? null,
+          approvedBy: requestBody.approvedBy ?? null,
           actorId: 'u-1',
           decidedAt: '2026-09-26T09:20:00Z',
           clientRequestId: requestBody.clientRequestId ?? null,

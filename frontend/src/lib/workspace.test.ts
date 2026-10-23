@@ -14,6 +14,7 @@ import {
   orderForReview,
   profileLine,
   proposedChangeType,
+  regionBodyText,
   regionText,
   splitOnTerm,
   topLevelNodes,
@@ -54,6 +55,8 @@ function decision(findingId: string, overrides: Partial<HumanDecision> = {}): Hu
     languageSource: 'APPROVED_DRAFTING',
     approvedDraftingEvidenceId: null,
     comment: null,
+    rejectReason: null,
+    approvedBy: null,
     actorId: 'u',
     decidedAt: '2026-10-01T00:00:00Z',
     clientRequestId: null,
@@ -82,6 +85,9 @@ describe('findingState', () => {
     expect(findingState(f, decision('a', { action: 'ACCEPT' })).label).toBe('Accepted')
     expect(findingState(f, decision('a', { action: 'EDIT' })).label).toBe('Edited')
     expect(findingState(f, decision('a', { action: 'REJECT' })).tone).toBe('rejected')
+    expect(findingState(f, decision('a', { action: 'REJECT', rejectReason: 'KEEP_AS_DRAFTED' }))).toEqual({ tone: 'resolved', label: 'Kept as drafted' })
+    expect(findingState(f, decision('a', { action: 'REJECT', rejectReason: 'FINDING_WRONG' }))).toEqual({ tone: 'rejected', label: 'Dismissed' })
+    expect(findingState(f, decision('a', { action: 'RESOLVE', approvedAction: null, approvedLanguage: null, languageSource: null, approvedBy: 'Jane Doe' }))).toEqual({ tone: 'resolved', label: 'Approved by Jane Doe' })
     expect(findingState(f, decision('a', { action: 'ESCALATE' }))).toEqual({ tone: 'escalated', label: 'Escalated · unresolved' })
   })
 
@@ -95,6 +101,7 @@ describe('executableChange', () => {
     expect(executableChange(decision('a'))).toEqual({ type: 'REPLACE', language: 'New text.' })
     expect(executableChange(decision('a', { action: 'EDIT', approvedAction: 'DELETE', approvedLanguage: null }))).toEqual({ type: 'DELETE', language: null })
     expect(executableChange(decision('a', { action: 'REJECT' }))).toBeNull()
+    expect(executableChange(decision('a', { action: 'RESOLVE', approvedBy: 'Jane Doe' }))).toBeNull()
     expect(executableChange(decision('a', { action: 'ESCALATE' }))).toBeNull()
     expect(executableChange(decision('a', { approvedAction: null }))).toBeNull()
     expect(executableChange(null)).toBeNull()
@@ -178,6 +185,9 @@ describe('clauses from the real, flat structure', () => {
     expect(regionText(nodes, 'h1')).toBe('3. Fees\n3.1 Pay in thirty days.\n3.2 Late interest applies.')
     expect(regionText(nodes, 'h2')).toBe('4. Term\n4.1 Two years.')
     expect(regionText(nodes, 'missing')).toBeNull()
+    expect(regionBodyText(nodes, 'h1')).toBe('3.1 Pay in thirty days.\n3.2 Late interest applies.')
+    expect(regionBodyText(nodes, 'h2')).toBe('4.1 Two years.')
+    expect(regionBodyText(nodes, 'missing')).toBeNull()
   })
 })
 
@@ -223,7 +233,17 @@ describe('finalizeSummary', () => {
     const loaded = [{ type: 'REPLACE' as const }, { type: 'REPLACE' as const }, { type: 'DELETE' as const }]
     expect(finalizeSummary(review, loaded)).toEqual([
       '3 approved changes (1 accepted, 2 edited): 2 replace, 0 insert, 1 delete',
-      '1 rejected finding; no approved change created',
+      '1 finding with no approved change',
+    ])
+  })
+
+  it('names resolved escalations in the final summary', () => {
+    expect(
+      finalizeSummary({ accepted: 1, edited: 1, rejected: 1 }, null, 1),
+    ).toEqual([
+      '2 approved changes (1 accepted, 1 edited)',
+      '1 finding with no approved change',
+      '1 escalation resolved with an approver name; no approved change created',
     ])
   })
 

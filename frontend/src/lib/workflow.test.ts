@@ -30,6 +30,8 @@ const decision = (overrides: Partial<HumanDecision> = {}): HumanDecision => ({
   languageSource: 'APPROVED_DRAFTING',
   approvedDraftingEvidenceId: 'e-drafting',
   comment: null,
+  rejectReason: null,
+  approvedBy: null,
   actorId: 'u-1',
   decidedAt: '2026-09-26T09:00:00Z',
   clientRequestId: null,
@@ -59,15 +61,25 @@ const humanReview = (overrides: Partial<HumanReview> = {}): HumanReview => ({
 })
 
 describe('workflow labels', () => {
-  it('names the four human actions and current decision states in product language', () => {
+  it('names the five human actions and current decision states in product language', () => {
     expect(decisionActionLabel('ACCEPT')).toBe('Accept recommendation')
     expect(decisionActionLabel('EDIT')).toBe('Edit change')
     expect(decisionActionLabel('REJECT')).toBe('Reject recommendation')
     expect(decisionActionLabel('ESCALATE')).toBe('Escalate for legal review')
+    expect(decisionActionLabel('RESOLVE')).toBe('Resolve escalation')
     expect(decisionStateLabel(null)).toBe('No decision')
     expect(decisionStateLabel(decision({ action: 'ACCEPT' }))).toBe('Accepted')
     expect(decisionStateLabel(decision({ action: 'EDIT' }))).toBe('Edited')
     expect(decisionStateLabel(decision({ action: 'REJECT' }))).toBe('Rejected')
+    expect(
+      decisionStateLabel(decision({ action: 'REJECT', rejectReason: 'KEEP_AS_DRAFTED' })),
+    ).toBe('Kept as drafted')
+    expect(
+      decisionStateLabel(decision({ action: 'REJECT', rejectReason: 'FINDING_WRONG' })),
+    ).toBe('Dismissed')
+    expect(decisionStateLabel(decision({ action: 'RESOLVE', approvedAction: null, approvedLanguage: null, languageSource: null, approvedBy: 'Jane Doe' }))).toBe(
+      'Approved by Jane Doe',
+    )
     expect(decisionStateLabel(decision({ action: 'ESCALATE' }))).toBe(
       'Escalated (unresolved)',
     )
@@ -83,7 +95,7 @@ describe('workflow labels', () => {
 
   it('explains finalization blockers with safe product copy', () => {
     expect(blockerLabel('UNRESOLVED_BLOCKING_FINDINGS')).toContain('Blocking findings')
-    expect(blockerLabel('ACTIVE_ESCALATION')).toContain('escalated')
+    expect(blockerLabel('ACTIVE_ESCALATION')).toContain('waiting for approval')
     expect(blockerLabel('APPROVED_CHANGE_CONFLICT')).toContain('same contract location')
     expect(blockerLabel('ANALYSIS_DEGRADED')).toMatch(/produced no trustworthy result/)
     expect(blockerLabel('SOMETHING_NEW')).toBe('The review cannot be finalized yet.')
@@ -132,7 +144,7 @@ describe('accept eligibility', () => {
       expect(result.eligible).toBe(false)
       if (!result.eligible) {
         expect(result.reason).toContain('Edit')
-        expect(result.reason).toContain('Reject')
+        expect(result.reason).toContain('keep the clause as drafted')
       }
     }
   })
@@ -170,6 +182,19 @@ describe('decision form validation', () => {
       validateDecisionForm({ action: 'ESCALATE', comment: '   ' }).comment,
     ).toContain('comment')
     expect(validateDecisionForm({ action: 'REJECT', comment: 'Reason.' }).comment).toBeUndefined()
+    expect(
+      validateDecisionForm({
+        action: 'REJECT',
+        rejectReason: 'KEEP_AS_DRAFTED',
+        comment: '',
+      }).comment,
+    ).toBeUndefined()
+    expect(
+      validateDecisionForm({ action: 'RESOLVE', approvedBy: '  ' }).approvedBy,
+    ).toContain('name')
+    expect(
+      validateDecisionForm({ action: 'RESOLVE', approvedBy: 'x'.repeat(121) }).approvedBy,
+    ).toContain('120')
   })
 
   it('requires language for REPLACE and INSERT edits and forbids it for DELETE', () => {

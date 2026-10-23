@@ -142,8 +142,7 @@ export function ChangesPanel({
       </ol>
       {humanReview.rejected > 0 ? (
         <p className="rv-lc-quiet">
-          Also reviewed: {pluralise(humanReview.rejected, 'finding')} rejected; no approved change was created for{' '}
-          {humanReview.rejected === 1 ? 'it' : 'them'}.
+          Also reviewed: {pluralise(humanReview.rejected, 'finding')} with no approved change.
         </p>
       ) : null}
     </>

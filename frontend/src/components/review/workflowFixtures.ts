@@ -105,6 +105,8 @@ export function fixtureDecision(overrides: Partial<HumanDecision> = {}): HumanDe
     languageSource: 'APPROVED_DRAFTING',
     approvedDraftingEvidenceId: 'e-drafting',
     comment: null,
+    rejectReason: null,
+    approvedBy: null,
     actorId: 'u-1',
     decidedAt: '2026-09-26T09:10:00Z',
     clientRequestId: 'cr-1',

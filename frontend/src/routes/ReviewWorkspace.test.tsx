@@ -119,7 +119,45 @@ describe('workspace layout', () => {
     await userEvent.keyboard('?')
     const sheet = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })
     expect(sheet).toHaveTextContent('Accept the finding')
+    expect(sheet).toHaveTextContent('Keep the clause as drafted')
+    expect(sheet).toHaveTextContent('Dismiss the finding')
     expect(sheet).toHaveTextContent('Escalate the finding')
+    expect(sheet).not.toHaveTextContent('Reject the finding')
+  })
+
+  it('keeps and dismisses from the keyboard, and R no longer does anything', async () => {
+    renderWorkspace(stubContractApi(options()))
+    await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
+    ;(document.activeElement as HTMLElement | null)?.blur()
+
+    await userEvent.keyboard('k')
+    const keep = await screen.findByRole('form', { name: 'Keep as drafted' })
+    await userEvent.click(within(keep).getByRole('button', { name: 'Cancel' }))
+    ;(document.activeElement as HTMLElement | null)?.blur()
+
+    await userEvent.keyboard('d')
+    const dismiss = await screen.findByRole('form', { name: 'Dismiss finding' })
+    await userEvent.click(within(dismiss).getByRole('button', { name: 'Cancel' }))
+    ;(document.activeElement as HTMLElement | null)?.blur()
+
+    await userEvent.keyboard('r')
+    expect(screen.queryByRole('form', { name: /Reject/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: /Dismiss/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Keep as drafted' })).not.toBeInTheDocument()
+  })
+
+  it('ignores its single-key shortcuts while the reader is typing in a text box', async () => {
+    renderWorkspace(stubContractApi(options()))
+    await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    await userEvent.keyboard('e')
+    const form = await screen.findByRole('form', { name: 'Edit decision' })
+    const language = within(form).getByRole('textbox', { name: 'Approved language' })
+    await userEvent.click(language)
+    await userEvent.keyboard('drk')
+    expect((language as HTMLTextAreaElement).value).toContain('drk')
+    expect(screen.queryByRole('form', { name: 'Dismiss finding' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Keep as drafted' })).not.toBeInTheDocument()
   })
 
   it('opens on the first finding that needs a decision and names it in the URL', async () => {
@@ -159,6 +197,29 @@ describe('workspace layout', () => {
     const page = screen.getByRole('article')
     await waitFor(() => expect(within(page).getByText('Cap is two times fees.')).toBeInTheDocument())
     expect(screen.queryByText(/verified (redline|document|file)|tracked DOCX/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps the paragraph breaks of a replaced clause in the preview', async () => {
+    renderWorkspace(
+      stubContractApi(
+        options({
+          decisions: {
+            items: [
+              fixtureDecision({
+                action: 'EDIT',
+                approvedLanguage: 'First paragraph of the replacement.\n\nSecond paragraph of the replacement.',
+              }),
+            ],
+            truncated: false,
+          },
+          humanReview: fixtureHumanReview({ actionableFindings: 2, resolvedFindings: 1, remainingFindings: 1, edited: 1 }),
+        }),
+      ),
+    )
+    await userEvent.click(await screen.findByRole('tab', { name: 'Preview' }))
+    const page = screen.getByRole('article')
+    expect(await within(page).findByText('First paragraph of the replacement.')).toBeInTheDocument()
+    expect(within(page).getByText('Second paragraph of the replacement.')).toBeInTheDocument()
   })
 
   it('draws a finding about a missing provision as a card with no invented location', async () => {
@@ -208,7 +269,7 @@ describe('finalize is the server’s decision', () => {
     await userEvent.click(finalize)
     const dialog = await screen.findByRole('dialog', { name: 'Finalize this review?' })
     expect(dialog).toHaveTextContent('1 approved change (1 accepted, 0 edited)')
-    expect(dialog).toHaveTextContent('1 rejected finding; no approved change created')
+    expect(dialog).toHaveTextContent('1 finding with no approved change')
     expect(dialog).toHaveTextContent('After you finalize, you generate the redline separately.')
     expect(api.requests.filter((r) => r.method === 'POST' && r.url.endsWith('/finalize'))).toHaveLength(0)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Finalize review' }))
@@ -317,12 +378,12 @@ describe('after Finalize the Workspace hands over to the review summary', () => 
 })
 
 describe('keyboard and command menu', () => {
-  it('moves between findings with j and k', async () => {
+  it('moves between findings with j and the arrow keys', async () => {
     const router = renderWorkspace(stubContractApi(options()))
     await screen.findByRole('heading', { level: 2, name: '6. Limitation of Liability' })
     await userEvent.keyboard('j')
     await waitFor(() => expect(router.state.location.search).toBe('?finding=f-2'))
-    await userEvent.keyboard('k')
+    await userEvent.keyboard('{ArrowUp}')
     await waitFor(() => expect(router.state.location.search).toBe('?finding=f-1'))
   })
 

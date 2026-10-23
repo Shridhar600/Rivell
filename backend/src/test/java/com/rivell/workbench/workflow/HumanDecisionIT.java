@@ -206,6 +206,163 @@ class HumanDecisionIT {
     }
 
     @Test
+    void keepAsDraftedRecordsItsReasonAndProducesNoChange() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        var decision = decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "REJECT",
+                 "rejectReason": "KEEP_AS_DRAFTED"}
+                """).get("data");
+
+        assertThat(decision.get("action").asText()).isEqualTo("REJECT");
+        assertThat(decision.get("rejectReason").asText()).isEqualTo("KEEP_AS_DRAFTED");
+        assertThat(decision.get("approvedBy").isNull()).isTrue();
+        assertThat(decision.get("approvedAction").isNull()).isTrue();
+        assertThat(decision.get("approvedLanguage").isNull()).isTrue();
+        assertThat(decision.get("comment").isNull()).isTrue();
+
+        mockMvc.perform(get("/api/reviews/{id}/human-review", fixture.review().id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.rejected").value(1))
+                .andExpect(jsonPath("$.data.escalated").value(0));
+    }
+
+    @Test
+    void dismissFindingRecordsItsReason() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        var decision = decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "REJECT",
+                 "rejectReason": "FINDING_WRONG", "comment": "The clause is standard."}
+                """).get("data");
+
+        assertThat(decision.get("action").asText()).isEqualTo("REJECT");
+        assertThat(decision.get("rejectReason").asText()).isEqualTo("FINDING_WRONG");
+        assertThat(decision.get("approvedBy").isNull()).isTrue();
+        assertThat(decision.get("comment").asText()).isEqualTo("The clause is standard.");
+    }
+
+    @Test
+    void oldRejectWithoutAReasonStillLoadsAndDisplaysAsRejected() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        var decision = decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "REJECT", "comment": "Legacy reason."}
+                """).get("data");
+
+        assertThat(decision.get("action").asText()).isEqualTo("REJECT");
+        assertThat(decision.get("rejectReason").isNull()).isTrue();
+        assertThat(decision.get("approvedBy").isNull()).isTrue();
+
+        mockMvc.perform(get("/api/reviews/{id}/decisions", fixture.review().id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].action").value("REJECT"));
+    }
+
+    @Test
+    void resolveEscalationRequiresAnApproverNameAndClearsTheBlocker() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "ESCALATE",
+                 "comment": "Needs GC review before accepting."}
+                """);
+
+        mockMvc.perform(get("/api/reviews/{id}/human-review", fixture.review().id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.blockers[0].code").value("ACTIVE_ESCALATION"))
+                .andExpect(jsonPath("$.data.blockers[0].message")
+                        .value("1 clause is waiting for approval."));
+
+        mockMvc.perform(put(decisionPath(fixture.review().id(), finding.id()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"expectedVersion": 1, "action": "RESOLVE"}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(put(decisionPath(fixture.review().id(), finding.id()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"expectedVersion": 1, "action": "RESOLVE", "approvedBy": "%s"}
+                                """.formatted("x".repeat(121))))
+                .andExpect(status().isBadRequest());
+
+        var resolved = decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 1, "action": "RESOLVE",
+                 "approvedBy": "Jane Doe", "comment": "Approved by the GC."}
+                """).get("data");
+        assertThat(resolved.get("action").asText()).isEqualTo("RESOLVE");
+        assertThat(resolved.get("approvedBy").asText()).isEqualTo("Jane Doe");
+        assertThat(resolved.get("comment").asText()).isEqualTo("Approved by the GC.");
+
+        mockMvc.perform(get("/api/reviews/{id}/human-review", fixture.review().id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.escalated").value(0))
+                .andExpect(jsonPath("$.data.blockers[?(@.code == 'ACTIVE_ESCALATION')]")
+                        .doesNotExist());
+        mockMvc.perform(get("/api/reviews/{id}/findings/{findingId}/decisions",
+                        fixture.review().id(), finding.id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].approvedBy").value("Jane Doe"));
+    }
+
+    @Test
+    void rejectReasonAndApproverAreRefusedOnTheWrongAction() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        mockMvc.perform(put(decisionPath(fixture.review().id(), finding.id()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"expectedVersion": 0, "action": "ESCALATE",
+                                 "rejectReason": "KEEP_AS_DRAFTED", "comment": "Why not."}
+                                """))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(put(decisionPath(fixture.review().id(), finding.id()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"expectedVersion": 0, "action": "REJECT",
+                                 "approvedBy": "Jane Doe", "comment": "Why not."}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resolveRequiresAnExistingEscalation() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        mockMvc.perform(put(decisionPath(fixture.review().id(), finding.id()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"expectedVersion": 0, "action": "RESOLVE",
+                                 "approvedBy": "Jane Doe"}
+                                """))
+                .andExpect(status().isBadRequest());
+
+        decide(fixture.review().id(), finding.id(), """
+                {"expectedVersion": 0, "action": "ACCEPT"}
+                """);
+        mockMvc.perform(put(decisionPath(fixture.review().id(), finding.id()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"expectedVersion": 1, "action": "RESOLVE",
+                                 "approvedBy": "Jane Doe"}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void escalateIsUnresolvedAndRevisable() throws Exception {
         var fixture = analyzedMainCorpus();
         var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);

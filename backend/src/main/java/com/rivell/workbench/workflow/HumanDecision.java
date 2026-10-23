@@ -25,6 +25,8 @@ public record HumanDecision(
         ChangeLanguageSource languageSource,
         UUID approvedDraftingEvidenceId,
         String comment,
+        RejectReason rejectReason,
+        String approvedBy,
         UUID actorId,
         Instant decidedAt,
         UUID clientRequestId,
@@ -67,8 +69,20 @@ public record HumanDecision(
             throw new IllegalArgumentException(
                     "drafting evidence id is set iff the source is approved drafting");
         }
-        if (!executable && (comment == null || comment.isBlank())) {
-            throw new IllegalArgumentException("rejections and escalations require a comment");
+        if (!executable && action != DecisionAction.RESOLVE
+                && (comment == null || comment.isBlank())
+                && !(action == DecisionAction.REJECT && rejectReason != null)) {
+            throw new IllegalArgumentException(
+                    "only a rejection without a reason or an escalation requires a comment");
+        }
+        if (rejectReason != null && action != DecisionAction.REJECT) {
+            throw new IllegalArgumentException("only a rejection carries a rejection reason");
+        }
+        if ((approvedBy != null) != (action == DecisionAction.RESOLVE)) {
+            throw new IllegalArgumentException("an approver name is set iff the decision resolves");
+        }
+        if (approvedBy != null && (approvedBy.isBlank() || approvedBy.length() > 120)) {
+            throw new IllegalArgumentException("an approver name must be 1 to 120 characters");
         }
     }
 

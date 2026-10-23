@@ -5,5 +5,6 @@ public enum DecisionAction {
     ACCEPT,
     EDIT,
     REJECT,
-    ESCALATE
+    ESCALATE,
+    RESOLVE
 }
