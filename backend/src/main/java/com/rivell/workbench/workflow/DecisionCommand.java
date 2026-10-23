@@ -11,5 +11,15 @@ public record DecisionCommand(
         DecisionAction action,
         ChangeActionType approvedAction,
         String approvedLanguage,
-        String comment) {
+        String comment,
+        RejectReason rejectReason,
+        String approvedBy) {
+
+    /** A decision without the two later fields, for callers that record a legacy rejection. */
+    public DecisionCommand(
+            Integer expectedVersion, UUID clientRequestId, DecisionAction action,
+            ChangeActionType approvedAction, String approvedLanguage, String comment) {
+        this(expectedVersion, clientRequestId, action, approvedAction, approvedLanguage, comment,
+                null, null);
+    }
 }

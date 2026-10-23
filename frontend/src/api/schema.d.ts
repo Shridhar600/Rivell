@@ -874,11 +874,14 @@ export interface components {
             /** Format: uuid */
             clientRequestId?: string;
             /** @enum {string} */
-            action: "ACCEPT" | "EDIT" | "REJECT" | "ESCALATE";
+            action: "ACCEPT" | "EDIT" | "REJECT" | "ESCALATE" | "RESOLVE";
             /** @enum {string} */
             approvedAction?: "REPLACE" | "INSERT" | "DELETE";
             approvedLanguage?: string;
             comment?: string;
+            /** @enum {string} */
+            rejectReason?: "KEEP_AS_DRAFTED" | "FINDING_WRONG";
+            approvedBy?: string;
         };
         /** @description Error returned by contract API failures */
         ErrorResponse: {
@@ -907,6 +910,8 @@ export interface components {
             /** Format: uuid */
             approvedDraftingEvidenceId?: string;
             comment?: string;
+            rejectReason?: string;
+            approvedBy?: string;
             /** Format: uuid */
             actorId?: string;
             /** Format: date-time */

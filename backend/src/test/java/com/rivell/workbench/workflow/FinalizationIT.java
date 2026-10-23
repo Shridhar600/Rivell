@@ -291,6 +291,43 @@ class FinalizationIT {
         assertThat(set.get("changes").size()).isZero();
     }
 
+    @Test
+    void keptClauseCreatesNoApprovedChange() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "REJECT", "rejectReason": "KEEP_AS_DRAFTED"}
+                """);
+        var set = finalizeReview(fixture.review().id());
+        assertThat(set.get("changes").size())
+                .as("kept wording is not a redline change")
+                .isZero();
+    }
+
+    @Test
+    void resolvedEscalationUnblocksFinalizationWithNoApprovedChange() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "ESCALATE",
+                 "comment": "Needs GC review."}
+                """);
+        var resolved = decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 1, "action": "RESOLVE", "approvedBy": "Jane Doe"}
+                """);
+        assertThat(resolved.get("data").get("approvedBy").asText()).isEqualTo("Jane Doe");
+
+        var set = finalizeReview(fixture.review().id());
+        assertThat(set.get("changes").size())
+                .as("a resolved escalation approves the clause as drafted and changes no wording")
+                .isZero();
+    }
+
     /**
      * M10: the product's hardest failure to diagnose is a review that stops. With the default
      * configuration there is no background worker, so an enqueued analysis is never picked up and the

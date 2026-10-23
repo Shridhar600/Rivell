@@ -33,6 +33,7 @@ import com.rivell.workbench.review.ReviewHumanReviewSummary;
 import com.rivell.workbench.workflow.DecisionAction;
 import com.rivell.workbench.workflow.HumanDecision;
 import com.rivell.workbench.workflow.HumanReviewResolver;
+import com.rivell.workbench.workflow.RejectReason;
 
 /**
  * Batched human-review state for a page of reviews.
@@ -127,6 +128,7 @@ class JdbcReviewHumanReviewListQuery implements ReviewHumanReviewListQuery {
                            d.id, d.organization_id, d.review_id, d.finding_id, d.run_id,
                            d.revision, d.action, d.approved_action, d.approved_language,
                            d.language_source, d.approved_drafting_evidence_id, d.comment,
+                           d.reject_reason, d.approved_by,
                            d.actor_id, d.decided_at, d.client_request_id,
                            d.supersedes_decision_id
                     from human_decision d
@@ -148,7 +150,9 @@ class JdbcReviewHumanReviewListQuery implements ReviewHumanReviewListQuery {
                        cd.approved_language as d_approved_language,
                        cd.language_source as d_language_source,
                        cd.approved_drafting_evidence_id as d_evidence_id,
-                       cd.comment as d_comment, cd.actor_id as d_actor_id,
+                       cd.comment as d_comment,
+                       cd.reject_reason as d_reject_reason, cd.approved_by as d_approved_by,
+                       cd.actor_id as d_actor_id,
                        cd.decided_at as d_decided_at,
                        cd.client_request_id as d_client_request_id,
                        cd.supersedes_decision_id as d_supersedes_id
@@ -200,6 +204,8 @@ class JdbcReviewHumanReviewListQuery implements ReviewHumanReviewListQuery {
                                 ChangeLanguageSource.class),
                         rs.getObject("d_evidence_id", UUID.class),
                         rs.getString("d_comment"),
+                        enumOrNull(rs.getString("d_reject_reason"), RejectReason.class),
+                        rs.getString("d_approved_by"),
                         rs.getObject("d_actor_id", UUID.class),
                         rs.getObject("d_decided_at", OffsetDateTime.class).toInstant(),
                         rs.getObject("d_client_request_id", UUID.class),

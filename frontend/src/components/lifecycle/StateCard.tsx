@@ -148,7 +148,7 @@ export function StateCard(props: Props) {
             </BigGlyph>
             <h2>An escalated finding is still unresolved</h2>
             <p>
-              Open the review and accept, edit, or reject the finding before you finalize.
+              Open the review and resolve the finding with the approver's name before you finalize.
             </p>
             <p className="rv-lc-prv">
               <span>
@@ -186,7 +186,7 @@ export function StateCard(props: Props) {
               stats={[
                 { figure: humanReview.accepted, label: 'Accepted' },
                 { figure: humanReview.edited, label: 'Edited' },
-                { figure: humanReview.rejected, label: 'Rejected, no change' },
+                { figure: humanReview.rejected, label: 'No approved change' },
               ]}
             />
             <Checks

@@ -222,6 +222,14 @@ function Text({ text, term }: { text: string; term: string }) {
   )
 }
 
+/** Approved wording keeps its own paragraphs: blank lines separate them, single breaks stay. */
+function paragraphs(text: string): string[] {
+  return text
+    .split(/\r?\n\s*\r?\n/)
+    .map((paragraph) => paragraph.replace(/\s+$/, ''))
+    .filter((paragraph) => paragraph.trim() !== '')
+}
+
 function Plain({ node, ctx }: { node: TreeNode; ctx: Ctx }) {
   const content = nodeLabel(node)
   const children = <Sequence nodes={node.children} ctx={{ ...ctx, regionsOpen: false }} />
@@ -317,7 +325,11 @@ function Region({ heading, body, findings, ctx }: { heading: TreeNode; body: Tre
       <>
         <h4>{nodeLabel(heading)}</h4>
         {ctx.mode === 'final' ? (
-          <p>{change.language}</p>
+          <div className="rv-ws-cl-text">
+            {paragraphs(change.language ?? '').map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
+          </div>
         ) : (
           <p>
             {bodyOriginal ? <del>{bodyOriginal}</del> : null} {change.language ? <ins>{change.language}</ins> : null}

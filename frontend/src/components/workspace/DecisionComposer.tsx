@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FindingDetail } from '../../api/reviews'
-import type { ChangeActionType, DecisionAction } from '../../api/workflow'
+import type {
+  ChangeActionType,
+  DecisionAction,
+  RejectReason,
+} from '../../api/workflow'
 import {
   changeActionLabel,
   defaultEditAction,
@@ -10,19 +14,23 @@ import {
 } from '../../lib/workflow'
 import { Button } from '../ui/Button'
 
+export type ComposeKind = 'EDIT' | 'KEEP_AS_DRAFTED' | 'FINDING_WRONG' | 'ESCALATE' | 'RESOLVE'
+
 export interface DecisionSubmission {
   action: DecisionAction
   approvedAction?: ChangeActionType
   approvedLanguage?: string
   comment?: string
+  rejectReason?: RejectReason
+  approvedBy?: string
 }
 
 interface Props {
-  kind: 'EDIT' | 'REJECT' | 'ESCALATE'
+  kind: ComposeKind
   finding: FindingDetail
   /** The clause as received, shown above a replacement. */
   currentText: string | null
-  /** The language of the existing edit, so changing a decision starts from it. */
+  /** The starting text: the clause as received, or the wording of the existing edit. */
   initialLanguage: string
   isSubmitting: boolean
   error: string | null
@@ -30,39 +38,77 @@ interface Props {
   onCancel: () => void
 }
 
+const TITLES: Record<ComposeKind, string> = {
+  EDIT: 'Edit decision',
+  KEEP_AS_DRAFTED: 'Keep as drafted',
+  FINDING_WRONG: 'Dismiss finding',
+  ESCALATE: 'Escalate finding',
+  RESOLVE: 'Resolve escalation',
+}
+
 /**
- * Edit, Reject and Escalate each need something from the reviewer. Reject and Escalate need a
- * reason. Edit needs the approved language, and its change type is the real one for the finding:
- * a clause can be replaced or deleted, a missing provision can only be inserted.
+ * Edit needs the approved language and its change type; Keep and Dismiss explain that the
+ * clause is left alone; Escalate needs a reason because it blocks finalization; Resolve
+ * needs the name of the person who approved the clause. No action asks a person to retype
+ * text: a replacement starts from the clause as received.
  */
 export function DecisionComposer({ kind, finding, currentText, initialLanguage, isSubmitting, error, onSubmit, onCancel }: Props) {
   const changeTypes = editActionsForSubject(finding.subjectKind)
   const [approvedAction, setApprovedAction] = useState<ChangeActionType>(defaultEditAction(finding.subjectKind))
   const [language, setLanguage] = useState(initialLanguage)
   const [comment, setComment] = useState('')
-  const [errors, setErrors] = useState<{ comment?: string; approvedLanguage?: string }>({})
+  const [approvedBy, setApprovedBy] = useState('')
+  const [errors, setErrors] = useState<{ comment?: string; approvedLanguage?: string; approvedBy?: string }>({})
   const firstField = useRef<HTMLTextAreaElement>(null)
+  const approverField = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    firstField.current?.focus()
-  }, [])
+    if (kind === 'RESOLVE') approverField.current?.focus()
+    else firstField.current?.focus()
+  }, [kind])
 
-  const needsReason = kind !== 'EDIT'
-  const needsLanguage = kind === 'EDIT' && editLanguageRequired(approvedAction)
-  const cannotEdit = kind === 'EDIT' && changeTypes.length === 0
+  const isEdit = kind === 'EDIT'
+  const isResolve = kind === 'RESOLVE'
+  const needsReason = kind === 'ESCALATE'
+  const needsLanguage = isEdit && editLanguageRequired(approvedAction)
+  const cannotEdit = isEdit && changeTypes.length === 0
+  const rejectReason: RejectReason | undefined =
+    kind === 'KEEP_AS_DRAFTED' ? 'KEEP_AS_DRAFTED' : kind === 'FINDING_WRONG' ? 'FINDING_WRONG' : undefined
+  const action: DecisionAction =
+    kind === 'EDIT' || kind === 'ESCALATE' || kind === 'RESOLVE' ? kind : 'REJECT'
 
   function save() {
-    const next = validateDecisionForm({ action: kind, approvedAction, approvedLanguage: language, comment })
+    if (isEdit && needsLanguage && initialLanguage !== '' && language === initialLanguage) {
+      setErrors({ approvedLanguage: 'Change the wording before you save.' })
+      return
+    }
+    const next = validateDecisionForm({
+      action,
+      approvedAction,
+      approvedLanguage: language,
+      comment,
+      rejectReason,
+      approvedBy,
+    })
     setErrors(next)
-    if (next.comment || next.approvedLanguage) return
-    const submission: DecisionSubmission = { action: kind }
-    if (kind === 'EDIT') submission.approvedAction = approvedAction
+    if (next.comment || next.approvedLanguage || next.approvedBy) return
+    const submission: DecisionSubmission = { action }
+    if (isEdit) submission.approvedAction = approvedAction
     if (needsLanguage) submission.approvedLanguage = language
-    if (comment.trim() || needsReason) submission.comment = comment
+    if (comment.trim()) submission.comment = comment
+    if (rejectReason) submission.rejectReason = rejectReason
+    if (isResolve) submission.approvedBy = approvedBy.trim()
     onSubmit(submission)
   }
 
-  const title = kind === 'EDIT' ? 'Edit decision' : kind === 'REJECT' ? 'Reject finding' : 'Escalate finding'
+  const title = TITLES[kind]
+  const submitLabel =
+    kind === 'EDIT' ? 'Save decision'
+      : kind === 'KEEP_AS_DRAFTED' ? 'Keep as drafted'
+        : kind === 'FINDING_WRONG' ? 'Dismiss finding'
+          : kind === 'RESOLVE' ? 'Resolve'
+            : 'Escalate'
+
   return (
     <form
       className="rv-ws-composer"
@@ -73,10 +119,16 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
       }}
     >
       <h3>{title}</h3>
-      {kind === 'REJECT' ? <p>No approved change will be created from this finding.</p> : null}
+      {kind === 'KEEP_AS_DRAFTED' ? (
+        <p>The clause stays as written. No approved change will be created.</p>
+      ) : null}
+      {kind === 'FINDING_WRONG' ? <p>No approved change will be created from this finding.</p> : null}
       {kind === 'ESCALATE' ? <p>This finding will remain unresolved and block finalization.</p> : null}
+      {kind === 'RESOLVE' ? (
+        <p>Record who approved this clause. The escalation will no longer block finalization.</p>
+      ) : null}
 
-      {kind === 'EDIT' ? (
+      {isEdit ? (
         <>
           <div className="rv-ws-change-type">
             <span>Change type</span>
@@ -132,15 +184,33 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
           ) : null}
           {cannotEdit ? (
             <p className="rv-ws-error" role="alert">
-              This finding cannot be edited here. Reject or escalate it instead.
+              This finding cannot be edited here. Keep the clause as drafted, dismiss or escalate it instead.
             </p>
           ) : null}
         </>
       ) : null}
 
+      {isResolve ? (
+        <div>
+          <div className="rv-ws-sec-h">Approved by</div>
+          <input
+            ref={approverField}
+            type="text"
+            aria-label="Approved by"
+            placeholder="Name of the person who approved"
+            maxLength={120}
+            value={approvedBy}
+            aria-required
+            aria-invalid={errors.approvedBy ? true : undefined}
+            onChange={(event) => setApprovedBy(event.target.value)}
+          />
+          {errors.approvedBy ? <p className="rv-ws-error">{errors.approvedBy}</p> : null}
+        </div>
+      ) : null}
+
       <div>
         <textarea
-          ref={needsLanguage ? undefined : firstField}
+          ref={isEdit && needsLanguage ? undefined : isResolve ? undefined : firstField}
           aria-label={needsReason ? 'Reason' : 'Note (optional)'}
           placeholder={needsReason ? 'Reason required' : 'Note (optional)'}
           style={needsReason ? undefined : { minHeight: 56 }}
@@ -160,7 +230,7 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
       <div className="rv-ws-composer-actions">
         <Button onClick={onCancel}>Cancel</Button>
         <Button variant="primary" disabled={isSubmitting || cannotEdit} onClick={save}>
-          {kind === 'EDIT' ? 'Save decision' : kind === 'REJECT' ? 'Reject' : 'Escalate'}
+          {submitLabel}
         </Button>
       </div>
     </form>

@@ -59,6 +59,8 @@ interface Props {
   regionLabels: Map<string, string>
   /** The clause as received, from the pinned contract structure. */
   currentText: string | null
+  /** The clause body a replacement starts from, without its heading. */
+  replacementText: string | null
   decision: HumanDecision | null
   decisionsLoaded: boolean
   decisionsTruncated: boolean
@@ -202,7 +204,9 @@ export function FindingPanel(props: Props) {
   const sources = showAll ? finding.evidenceItems : finding.evidenceItems.slice(0, SOURCES_SHOWN)
   const edited = decision?.action === 'EDIT' && decision.approvedLanguage !== finding.proposedLanguage
   const eligible = flow.acceptEligibility.eligible
-  const reason = flow.acceptEligibility.eligible ? '' : flow.acceptEligibility.reason
+  const escalated = decision?.action === 'ESCALATE'
+  const keptAsDrafted = decision?.action === 'REJECT' && decision.rejectReason === 'KEEP_AS_DRAFTED'
+  const dismissed = decision?.action === 'REJECT' && decision.rejectReason === 'FINDING_WRONG'
   const missingEvidence = finding.claims.some((claim) => claim.evidenceItemIds.some((id) => !items.has(id)))
   const title = findingSubjectLabel(finding, props.regionLabels, labelFor)
   // A position on a topic the clause only touches is a related note, never a defect in the clause.
@@ -305,8 +309,8 @@ export function FindingPanel(props: Props) {
           <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
             {approvalNeeded ? (
               <>
-                <b>Approval is needed.</b> This position names an approver, so approve it before
-                accepting.
+                <b>Approval is needed.</b> This position names an approver. Escalate the finding,
+                then resolve it with the approver's name.
                 {escalationTriggers.length > 0 ? ` Escalate when: ${escalationTriggers.join('; ')}.` : ''}
               </>
             ) : (
@@ -432,7 +436,7 @@ export function FindingPanel(props: Props) {
             kind={flow.compose}
             finding={finding}
             currentText={props.currentText}
-            initialLanguage={decision?.action === 'EDIT' ? (decision.approvedLanguage ?? '') : ''}
+            initialLanguage={decision?.action === 'EDIT' ? (decision.approvedLanguage ?? '') : (props.replacementText ?? props.currentText ?? '')}
             isSubmitting={flow.isSubmitting}
             error={flow.error}
             onSubmit={flow.submit}
@@ -469,43 +473,62 @@ export function FindingPanel(props: Props) {
               {added ? null : <span>Rivell’s recommendation is kept separately</span>}
             </div>
             <div className="rv-ws-dbtns">
-              <Button
-                aria-pressed={decision?.action === 'ACCEPT'}
-                disabled={flow.isSubmitting || !eligible}
-                title={eligible ? 'Shortcut A' : reason}
-                onClick={() => flow.decide('ACCEPT')}
-              >
-                <CheckIcon />
-                Accept
-              </Button>
+              {eligible ? (
+                <Button
+                  aria-pressed={decision?.action === 'ACCEPT'}
+                  disabled={flow.isSubmitting}
+                  title="Shortcut A"
+                  onClick={() => flow.decide('ACCEPT')}
+                >
+                  <CheckIcon />
+                  Accept
+                </Button>
+              ) : null}
+              {escalated ? (
+                <Button
+                  variant="primary"
+                  disabled={flow.isSubmitting}
+                  onClick={() => flow.decide('RESOLVE')}
+                >
+                  <CheckIcon />
+                  Resolve
+                </Button>
+              ) : null}
               <Button aria-pressed={decision?.action === 'EDIT'} disabled={flow.isSubmitting} title="Shortcut E" onClick={() => flow.decide('EDIT')}>
                 <EditIcon />
                 Edit
               </Button>
               <Button
-                className="rv-ws-rej"
-                aria-pressed={decision?.action === 'REJECT'}
+                aria-pressed={keptAsDrafted}
                 disabled={flow.isSubmitting}
-                title="Shortcut R"
-                onClick={() => flow.decide('REJECT')}
+                title="Shortcut K"
+                onClick={() => flow.decide('KEEP_AS_DRAFTED')}
               >
-                <CloseIcon />
-                Reject
+                <CheckIcon />
+                Keep as drafted
               </Button>
               <Button
-                className="rv-ws-esc"
-                aria-pressed={decision?.action === 'ESCALATE'}
+                className="rv-ws-rej"
+                aria-pressed={dismissed}
                 disabled={flow.isSubmitting}
-                title="Shortcut S"
-                onClick={() => flow.decide('ESCALATE')}
+                title="Shortcut D"
+                onClick={() => flow.decide('FINDING_WRONG')}
               >
-                <EscalateIcon />
-                Escalate
+                <CloseIcon />
+                Dismiss
               </Button>
+              {escalated ? null : (
+                <Button
+                  className="rv-ws-esc"
+                  disabled={flow.isSubmitting}
+                  title="Shortcut S"
+                  onClick={() => flow.decide('ESCALATE')}
+                >
+                  <EscalateIcon />
+                  Escalate
+                </Button>
+              )}
             </div>
-            {!eligible && !decision ? (
-              <div className="rv-ws-caption">Accept unavailable. Edit the wording, or reject or escalate this finding.</div>
-            ) : null}
           </>
         )}
       </div>

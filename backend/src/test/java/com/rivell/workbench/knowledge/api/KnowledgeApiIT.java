@@ -422,6 +422,55 @@ class KnowledgeApiIT {
         return objectMapper.readTree(publication).get("data").get("publicationNumber").asLong();
     }
 
+    @Test
+    void clearingCounselApprovalToNotSpecifiedSticksAfterReload() throws Exception {
+        var artifact = upload("knowledge-playbook.docx", ArtifactType.PLAYBOOK,
+                "MSA_PACK", "Customer", "Third-Party", "US", null);
+        var candidates = mockMvc.perform(get("/api/knowledge/artifacts/{id}/candidates",
+                        artifact.get("id").asText()))
+                .andExpect(status().isOk())
+                .andReturn();
+        var candidateArray = objectMapper.readTree(
+                candidates.getResponse().getContentAsString()).get("data");
+        var rule = java.util.stream.StreamSupport.stream(candidateArray.spliterator(), false)
+                .filter(node -> "PLAYBOOK_RULE".equals(node.get("candidateType").asText()))
+                .findFirst().orElseThrow();
+        var candidateId = rule.get("id").asText();
+
+        mockMvc.perform(post("/api/knowledge/candidates/{id}/edit", candidateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"semanticFields":{"requiresApproval":true}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requiresApproval").value(true));
+
+        // A correction that does not touch semantics must not clear the answer.
+        mockMvc.perform(post("/api/knowledge/candidates/{id}/edit", candidateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"contentText":"Corrected wording only."}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requiresApproval").value(true));
+
+        mockMvc.perform(post("/api/knowledge/candidates/{id}/edit", candidateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"semanticFields":{"requiresApproval":null}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requiresApproval").doesNotExist());
+
+        var reloaded = mockMvc.perform(get("/api/knowledge/candidates/{id}", candidateId))
+                .andExpect(status().isOk())
+                .andReturn();
+        var stored = objectMapper.readTree(reloaded.getResponse().getContentAsString()).get("data");
+        assertThat(stored.path("requiresApproval").isNull())
+                .as("a cleared approval is not specified, not the machine answer")
+                .isTrue();
+    }
+
     private JsonNode upload(
             String fixture, ArtifactType artifactType, String contractPackKey,
             String partyPerspective, String paperSource, String jurisdiction,

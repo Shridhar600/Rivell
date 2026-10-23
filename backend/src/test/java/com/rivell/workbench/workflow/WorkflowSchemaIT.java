@@ -256,6 +256,115 @@ class WorkflowSchemaIT {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void decisionReasonsAndApproverNamesAreConstrainedByTheDatabase() throws Exception {
+        var setup = acceptedMainCorpusReview();
+
+        var kept = jdbcClient.sql("""
+                insert into human_decision
+                  (id, organization_id, review_id, finding_id, run_id, revision, action,
+                   reject_reason, actor_id, decided_at)
+                values (:id, :organizationId, :reviewId, :findingId, :runId, 2, 'REJECT',
+                   'KEEP_AS_DRAFTED', :actorId, :decidedAt)
+                """)
+                .param("id", UUID.randomUUID())
+                .param("organizationId", setup.organizationId())
+                .param("reviewId", setup.reviewId())
+                .param("findingId", setup.findingId())
+                .param("runId", setup.runId())
+                .param("actorId", UUID.randomUUID())
+                .param("decidedAt", now())
+                .update();
+        assertThat(kept).isEqualTo(1);
+
+        var resolved = jdbcClient.sql("""
+                insert into human_decision
+                  (id, organization_id, review_id, finding_id, run_id, revision, action,
+                   approved_by, actor_id, decided_at)
+                values (:id, :organizationId, :reviewId, :findingId, :runId, 3, 'RESOLVE',
+                   :approvedBy, :actorId, :decidedAt)
+                """)
+                .param("id", UUID.randomUUID())
+                .param("organizationId", setup.organizationId())
+                .param("reviewId", setup.reviewId())
+                .param("findingId", setup.findingId())
+                .param("runId", setup.runId())
+                .param("approvedBy", "x".repeat(120))
+                .param("actorId", UUID.randomUUID())
+                .param("decidedAt", now())
+                .update();
+        assertThat(resolved).isEqualTo(1);
+
+        assertThatThrownBy(() -> jdbcClient.sql("""
+                insert into human_decision
+                  (id, organization_id, review_id, finding_id, run_id, revision, action,
+                   approved_by, actor_id, decided_at)
+                values (:id, :organizationId, :reviewId, :findingId, :runId, 4, 'RESOLVE',
+                   :approvedBy, :actorId, :decidedAt)
+                """)
+                .param("id", UUID.randomUUID())
+                .param("organizationId", setup.organizationId())
+                .param("reviewId", setup.reviewId())
+                .param("findingId", setup.findingId())
+                .param("runId", setup.runId())
+                .param("approvedBy", "x".repeat(121))
+                .param("actorId", UUID.randomUUID())
+                .param("decidedAt", now())
+                .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcClient.sql("""
+                insert into human_decision
+                  (id, organization_id, review_id, finding_id, run_id, revision, action,
+                   approved_by, actor_id, decided_at)
+                values (:id, :organizationId, :reviewId, :findingId, :runId, 4, 'RESOLVE',
+                   '   ', :actorId, :decidedAt)
+                """)
+                .param("id", UUID.randomUUID())
+                .param("organizationId", setup.organizationId())
+                .param("reviewId", setup.reviewId())
+                .param("findingId", setup.findingId())
+                .param("runId", setup.runId())
+                .param("actorId", UUID.randomUUID())
+                .param("decidedAt", now())
+                .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcClient.sql("""
+                insert into human_decision
+                  (id, organization_id, review_id, finding_id, run_id, revision, action,
+                   actor_id, decided_at)
+                values (:id, :organizationId, :reviewId, :findingId, :runId, 5, 'RESOLVE',
+                   :actorId, :decidedAt)
+                """)
+                .param("id", UUID.randomUUID())
+                .param("organizationId", setup.organizationId())
+                .param("reviewId", setup.reviewId())
+                .param("findingId", setup.findingId())
+                .param("runId", setup.runId())
+                .param("actorId", UUID.randomUUID())
+                .param("decidedAt", now())
+                .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> jdbcClient.sql("""
+                insert into human_decision
+                  (id, organization_id, review_id, finding_id, run_id, revision, action,
+                   reject_reason, comment, actor_id, decided_at)
+                values (:id, :organizationId, :reviewId, :findingId, :runId, 6, 'ESCALATE',
+                   'FINDING_WRONG', 'Wrong action', :actorId, :decidedAt)
+                """)
+                .param("id", UUID.randomUUID())
+                .param("organizationId", setup.organizationId())
+                .param("reviewId", setup.reviewId())
+                .param("findingId", setup.findingId())
+                .param("runId", setup.runId())
+                .param("actorId", UUID.randomUUID())
+                .param("decidedAt", now())
+                .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private Setup acceptedMainCorpusReview() throws Exception {
         var corpus = corpusBuilder.buildMainCorpus(
                 identityProvider.currentIdentity().organizationId());

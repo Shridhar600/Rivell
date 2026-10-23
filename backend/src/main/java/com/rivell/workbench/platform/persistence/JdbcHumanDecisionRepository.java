@@ -17,6 +17,7 @@ import com.rivell.workbench.redline.ChangeLanguageSource;
 import com.rivell.workbench.workflow.DecisionAction;
 import com.rivell.workbench.workflow.HumanDecision;
 import com.rivell.workbench.workflow.HumanDecisionRepository;
+import com.rivell.workbench.workflow.RejectReason;
 
 @Repository
 class JdbcHumanDecisionRepository implements HumanDecisionRepository {
@@ -74,8 +75,8 @@ class JdbcHumanDecisionRepository implements HumanDecisionRepository {
                 select distinct on (finding_id)
                        id, organization_id, review_id, finding_id, run_id, revision, action,
                        approved_action, approved_language, language_source,
-                       approved_drafting_evidence_id, comment, actor_id, client_request_id,
-                       decided_at, supersedes_decision_id
+                       approved_drafting_evidence_id, comment, reject_reason, approved_by,
+                       actor_id, client_request_id, decided_at, supersedes_decision_id
                 from human_decision
                 where organization_id = :organizationId and review_id = :reviewId
                   and run_id = :runId
@@ -95,8 +96,8 @@ class JdbcHumanDecisionRepository implements HumanDecisionRepository {
                 select distinct on (finding_id)
                        id, organization_id, review_id, finding_id, run_id, revision, action,
                        approved_action, approved_language, language_source,
-                       approved_drafting_evidence_id, comment, actor_id, client_request_id,
-                       decided_at, supersedes_decision_id
+                       approved_drafting_evidence_id, comment, reject_reason, approved_by,
+                       actor_id, client_request_id, decided_at, supersedes_decision_id
                 from human_decision
                 where organization_id = :organizationId and review_id = :reviewId
                   and run_id = :runId
@@ -149,12 +150,12 @@ class JdbcHumanDecisionRepository implements HumanDecisionRepository {
                 insert into human_decision
                   (id, organization_id, review_id, finding_id, run_id, revision, action,
                    approved_action, approved_language, language_source,
-                   approved_drafting_evidence_id, comment, actor_id, client_request_id,
-                   decided_at, supersedes_decision_id)
+                   approved_drafting_evidence_id, comment, reject_reason, approved_by,
+                   actor_id, client_request_id, decided_at, supersedes_decision_id)
                 values (:id, :organizationId, :reviewId, :findingId, :runId, :revision,
                    :action, :approvedAction, :approvedLanguage, :languageSource,
-                   :approvedDraftingEvidenceId, :comment, :actorId, :clientRequestId,
-                   :decidedAt, :supersedesDecisionId)
+                   :approvedDraftingEvidenceId, :comment, :rejectReason, :approvedBy,
+                   :actorId, :clientRequestId, :decidedAt, :supersedesDecisionId)
                 """)
                 .param("id", decision.id())
                 .param("organizationId", decision.organizationId())
@@ -170,6 +171,9 @@ class JdbcHumanDecisionRepository implements HumanDecisionRepository {
                         ? null : decision.languageSource().name())
                 .param("approvedDraftingEvidenceId", decision.approvedDraftingEvidenceId())
                 .param("comment", decision.comment())
+                .param("rejectReason", decision.rejectReason() == null
+                        ? null : decision.rejectReason().name())
+                .param("approvedBy", decision.approvedBy())
                 .param("actorId", decision.actorId())
                 .param("clientRequestId", decision.clientRequestId())
                 .param("decidedAt", timestamp(decision.decidedAt()))
@@ -181,14 +185,15 @@ class JdbcHumanDecisionRepository implements HumanDecisionRepository {
     private static final String SELECT = """
             select id, organization_id, review_id, finding_id, run_id, revision, action,
                    approved_action, approved_language, language_source,
-                   approved_drafting_evidence_id, comment, actor_id, client_request_id,
-                   decided_at, supersedes_decision_id
+                   approved_drafting_evidence_id, comment, reject_reason, approved_by,
+                   actor_id, client_request_id, decided_at, supersedes_decision_id
             from human_decision
             """;
 
     private HumanDecision map(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         var approvedAction = rs.getString("approved_action");
         var languageSource = rs.getString("language_source");
+        var rejectReason = rs.getString("reject_reason");
         return new HumanDecision(
                 rs.getObject("id", UUID.class),
                 rs.getObject("organization_id", UUID.class),
@@ -202,6 +207,8 @@ class JdbcHumanDecisionRepository implements HumanDecisionRepository {
                 languageSource == null ? null : ChangeLanguageSource.valueOf(languageSource),
                 rs.getObject("approved_drafting_evidence_id", UUID.class),
                 rs.getString("comment"),
+                rejectReason == null ? null : RejectReason.valueOf(rejectReason),
+                rs.getString("approved_by"),
                 rs.getObject("actor_id", UUID.class),
                 rs.getTimestamp("decided_at").toInstant(),
                 rs.getObject("client_request_id", UUID.class),

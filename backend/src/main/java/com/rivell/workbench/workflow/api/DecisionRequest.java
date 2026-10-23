@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import com.rivell.workbench.redline.ChangeActionType;
 import com.rivell.workbench.workflow.DecisionAction;
+import com.rivell.workbench.workflow.RejectReason;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -12,7 +13,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * {@code clientRequestId} optionally makes a retried submission idempotent. ACCEPT
  * carries no action/language (the machine proposal is approved as-is); EDIT may carry
  * {@code approvedAction} and requires {@code approvedLanguage} for REPLACE/INSERT;
- * REJECT/ESCALATE require a comment.
+ * REJECT may carry a {@code rejectReason} instead of a comment; ESCALATE requires a
+ * comment; RESOLVE requires {@code approvedBy} and an optional comment.
  */
 public record DecisionRequest(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Integer expectedVersion,
@@ -20,5 +22,7 @@ public record DecisionRequest(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) DecisionAction action,
         ChangeActionType approvedAction,
         String approvedLanguage,
-        String comment) {
+        String comment,
+        RejectReason rejectReason,
+        String approvedBy) {
 }
