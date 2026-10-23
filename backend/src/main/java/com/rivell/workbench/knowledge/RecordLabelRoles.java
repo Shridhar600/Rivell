@@ -42,7 +42,11 @@ final class RecordLabelRoles {
         exact("wording", RecordFieldRole.WORDING);
         exact("approved language", RecordFieldRole.WORDING);
         exact("approved wording", RecordFieldRole.WORDING);
+        exact("clause", RecordFieldRole.WORDING);
         exact("clause text", RecordFieldRole.WORDING);
+        exact("clause wording", RecordFieldRole.WORDING);
+        exact("provision", RecordFieldRole.WORDING);
+        exact("text", RecordFieldRole.WORDING);
         exact("note", RecordFieldRole.COMMENTARY);
         exact("notes", RecordFieldRole.COMMENTARY);
 
@@ -70,6 +74,9 @@ final class RecordLabelRoles {
         if (normalized.isEmpty()) {
             return Optional.empty();
         }
+        // A repeated table label is stored as "Preferred (2)" so no value is lost; its role is
+        // the role of the base label.
+        normalized = normalized.replaceFirst(" \\d+$", "");
         var exact = EXACT.get(normalized);
         if (exact != null) {
             return Optional.of(exact);

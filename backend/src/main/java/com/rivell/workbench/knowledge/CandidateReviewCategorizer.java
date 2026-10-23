@@ -100,19 +100,25 @@ public class CandidateReviewCategorizer {
             return false;
         }
         try {
-            return conceptRegistry.find(ConceptKey.of(conceptKey))
+            var placed = ConceptKey.of(conceptKey);
+            var named = java.util.stream.Stream.concat(
+                    conceptRegistry.leaves().stream(), conceptRegistry.parents().stream())
                     .filter(concept -> RecordLabelRoles.normalize(concept.label()).equals(topic)
                             || concept.aliases().stream()
                                     .anyMatch(alias -> RecordLabelRoles.normalize(alias).equals(topic)))
-                    .isPresent();
+                    .toList();
+            // Only a topic unique to the placed concept confirms it. A shared alias
+            // ("Suspension of Services") is ambiguous, not agreement.
+            return named.size() == 1 && named.getFirst().key().equals(placed);
         } catch (IllegalArgumentException malformedKey) {
             return false;
         }
     }
 
     private static String firstTopicValue(KnowledgeCandidate candidate) {
-        for (var key : candidate.payload().orderedKeys()) {
-            var value = candidate.payload().columns().get(key);
+        var payload = candidate.effectivePayload();
+        for (var key : payload.orderedKeys()) {
+            var value = payload.columns().get(key);
             if (value != null && !value.isBlank()
                     && candidate.fieldRole(key).filter(role -> role == RecordFieldRole.TOPIC).isPresent()) {
                 return RecordLabelRoles.normalize(value);

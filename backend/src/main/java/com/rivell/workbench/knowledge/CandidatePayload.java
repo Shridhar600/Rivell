@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Typed payload of a knowledge candidate. M2 captures source column values verbatim
@@ -176,14 +177,39 @@ public record CandidatePayload(
      * one, falls back to {@link #render()}.
      */
     public String renderedWording() {
+        return wordingText().orElseGet(this::render);
+    }
+
+    /**
+     * The value of the column that plays the wording role, when there is one. The code synonym
+     * table is consulted first; a label the field-role decision resolved ("Provision" as
+     * WORDING) counts the same, because the source said it and the model read it.
+     */
+    Optional<String> wordingText() {
         for (var key : orderedKeys()) {
             var value = columns.get(key);
             if (value != null && !value.isBlank()
-                    && RecordLabelRoles.known(key).filter(role -> role == RecordFieldRole.WORDING).isPresent()) {
-                return value;
+                    && roleOf(key).filter(role -> role == RecordFieldRole.WORDING).isPresent()) {
+                return Optional.of(value);
             }
         }
-        return render();
+        return Optional.empty();
+    }
+
+    private Optional<RecordFieldRole> roleOf(String label) {
+        var known = RecordLabelRoles.known(label);
+        if (known.isPresent()) {
+            return known;
+        }
+        var resolved = fieldRoles.get(label);
+        if (resolved == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(RecordFieldRole.valueOf(resolved));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
     }
 
     /**

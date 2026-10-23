@@ -55,6 +55,7 @@ class KnowledgeImportQualityTest {
     void noPlaceholderColumnNameReachesAnEntry() {
         var compiled = compileGuide();
 
+        assertThat(compiled.candidates()).isNotEmpty();
         assertThat(compiled.candidates()).allSatisfy(candidate ->
                 assertThat(candidate.payload().columns().keySet())
                         .noneMatch(name -> name.matches("Column \\d+") || name.contains("\n")));
@@ -85,12 +86,37 @@ class KnowledgeImportQualityTest {
     void tableRowsUnderOneHeadingHaveTitlesThatTellThemApart() {
         var compiled = compileGuide();
 
-        var approvalRows = compiled.units().stream()
+        var approvalUnits = compiled.units().stream()
                 .filter(unit -> unit.kind() == ExtractionUnitKind.TABLE
-                        && unit.title() != null && unit.title().startsWith("Approval path"))
+                        && "Approval path".equals(unit.title()))
+                .toList();
+        var unitIds = approvalUnits.stream().map(ExtractionUnit::id)
+                .collect(java.util.stream.Collectors.toSet());
+        var approvalRows = compiled.candidates().stream()
+                .filter(candidate -> unitIds.contains(candidate.extractionUnitId()))
                 .toList();
         assertThat(approvalRows).hasSize(5);
-        assertThat(approvalRows.stream().map(ExtractionUnit::title).distinct()).hasSize(5);
+        assertThat(approvalRows.stream().map(KnowledgeCandidate::effectiveTitle).distinct()).hasSize(5);
+    }
+
+    @Test
+    void modelInputKeepsTheSectionTitleWhileEachRowKeepsItsDisplayTitle() {
+        var compiled = compileGuide();
+
+        var approvalUnits = compiled.units().stream()
+                .filter(unit -> unit.kind() == ExtractionUnitKind.TABLE
+                        && "Approval path".equals(unit.title()))
+                .toList();
+        assertThat(approvalUnits).hasSize(5)
+                .allSatisfy(unit -> assertThat(unit.title()).isEqualTo("Approval path"));
+
+        var unitIds = approvalUnits.stream().map(ExtractionUnit::id)
+                .collect(java.util.stream.Collectors.toSet());
+        var approvalEntries = compiled.candidates().stream()
+                .filter(candidate -> unitIds.contains(candidate.extractionUnitId()))
+                .toList();
+        assertThat(approvalEntries).hasSize(5);
+        assertThat(approvalEntries.stream().map(KnowledgeCandidate::rawLabel).distinct()).hasSize(5);
     }
 
     @Test
@@ -115,7 +141,7 @@ class KnowledgeImportQualityTest {
         var nodes = new DocxKnowledgeExtractor(new DocxStructuralParser(PARSER_LIMITS))
                 .extractStructure(UUID.randomUUID(), stream(GUIDE)).nodes();
 
-        assertThat(KnowledgeDocumentTitle.of(nodes)).isEqualTo("Mutual NDA Negotiation Guide");
+        assertThat(KnowledgeDocumentTitle.of(nodes).text()).isEqualTo("Mutual NDA Negotiation Guide");
         assertThat(compileGuide().units().getFirst().title()).isEqualTo("Mutual NDA Negotiation Guide");
     }
 

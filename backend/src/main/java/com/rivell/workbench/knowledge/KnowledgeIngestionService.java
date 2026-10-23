@@ -144,7 +144,7 @@ public class KnowledgeIngestionService {
                     repository.updateArtifactAssessment(artifactId, finalAssessment);
                 }
                 if (documentTitle != null) {
-                    repository.updateDocumentTitle(artifactId, documentTitle);
+                    repository.updateDocumentTitle(artifactId, documentTitle.text());
                 }
                 if (!extraction.nodes().isEmpty()) {
                     repository.insertNodes(artifactId, extraction.nodes());
@@ -154,7 +154,7 @@ public class KnowledgeIngestionService {
             });
 
             return artifact
-                    .withDocumentTitle(documentTitle)
+                    .withDocumentTitle(documentTitle == null ? null : documentTitle.text())
                     .withAssessment(finalAssessment)
                     .withIngestOutcome(
                             extraction.parserVersion(), outcomeStatus, outcomeWarnings);

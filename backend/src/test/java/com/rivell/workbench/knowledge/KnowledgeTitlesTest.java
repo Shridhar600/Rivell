@@ -43,4 +43,52 @@ class KnowledgeTitlesTest {
         assertThat(KnowledgeTitles.bounded("  ")).isEqualTo("  ");
         assertThat(KnowledgeTitles.bounded(null)).isNull();
     }
+
+    @Test
+    void aLegalAbbreviationIsNotASentenceBoundary() {
+        var paragraph = "The notice period in Sec. 4 must be at least thirty days, and the "
+                + "Supplier must defend all third-party claims, and the parties must cooperate "
+                + "in the defence of the claim.";
+
+        var title = KnowledgeTitles.bounded(paragraph);
+
+        assertThat(title).startsWith("The notice period in Sec. 4")
+                .doesNotEndWith("Sec.");
+    }
+
+    @Test
+    void anInlineAbbreviationIsNotASentenceBoundary() {
+        var paragraph = "The Supplier shall, e.g. where the Customer requires it, defend all "
+                + "third-party claims and pay any damages awarded, and the parties shall cooperate "
+                + "in the defence of the claim at all times.";
+
+        var title = KnowledgeTitles.bounded(paragraph);
+
+        assertThat(title).isNotEqualTo("The Supplier shall, e.g.")
+                .startsWith("The Supplier shall, e.g. where");
+    }
+
+    @Test
+    void aNumberedFirstLineIsSkippedForTheTextBelowIt() {
+        var paragraph = "1.\nThe Supplier shall defend and indemnify the Customer against all "
+                + "third-party claims that the Software infringes any intellectual property right.";
+
+        var title = KnowledgeTitles.bounded(paragraph);
+
+        assertThat(title).isNotEqualTo("1.").startsWith("The Supplier shall defend");
+    }
+
+    @Test
+    void aNumberOnlyPassageHasNoTitle() {
+        assertThat(KnowledgeTitles.bounded("2026")).isNull();
+        assertThat(KnowledgeTitles.bounded("1.\n2.\n")).isNull();
+    }
+
+    @Test
+    void aCutNeverLeavesASingleLetter() {
+        var title = KnowledgeTitles.bounded("A " + "x".repeat(200));
+
+        assertThat(title).isNotEqualTo("A…");
+        assertThat(title.length()).isLessThanOrEqualTo(KnowledgeTitles.MAX_LENGTH);
+    }
 }

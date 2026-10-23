@@ -156,6 +156,53 @@ class KnowledgeImportQualityApiIT {
     }
 
     @Test
+    void aBlankTitleClearsTheCorrectionAndIsAChangeOnItsOwn() throws Exception {
+        var artifactId = upload(GUIDE, ArtifactType.PLAYBOOK).get("id").asText();
+        var callout = candidate(artifactId, CALLOUT);
+        edit(callout.get("id").asText(), Map.of("title", "Data boundary"));
+
+        var cleared = edit(callout.get("id").asText(), Map.of("title", ""));
+
+        assertThat(cleared.get("title").asText()).isEqualTo(CALLOUT);
+        assertThat(cleared.get("editedTitle").isNull()).isTrue();
+        assertThat(cleared.get("rawLabel").asText()).isEqualTo(CALLOUT);
+        assertThat(json(get("/api/knowledge/candidates/{id}", callout.get("id").asText()))
+                .get("editedTitle").isNull()).isTrue();
+    }
+
+    @Test
+    void aTitleWithALineBreakIsRefused() throws Exception {
+        var artifactId = upload(GUIDE, ArtifactType.PLAYBOOK).get("id").asText();
+        var callout = candidate(artifactId, CALLOUT);
+
+        mockMvc.perform(post("/api/knowledge/candidates/{id}/edit", callout.get("id").asText())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(Map.of("title", "Data\nboundary"))))
+                .andExpect(status().isBadRequest());
+        assertThat(json(get("/api/knowledge/candidates/{id}", callout.get("id").asText()))
+                .get("reviewStatus").asText()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void aCorrectedTitleSurvivesApprovalAndPublication() throws Exception {
+        var artifactId = upload(GUIDE, ArtifactType.PLAYBOOK).get("id").asText();
+        var callout = candidate(artifactId, CALLOUT);
+        var candidateId = callout.get("id").asText();
+        edit(candidateId, Map.of("title", "Data boundary"));
+        json(post("/api/knowledge/candidates/{id}/approve", candidateId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"));
+
+        json(post("/api/knowledge/publications")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(Map.of("candidateIds", List.of(candidateId)))));
+
+        var published = json(get("/api/knowledge/candidates/{id}", candidateId));
+        assertThat(published.get("title").asText()).isEqualTo("Data boundary");
+        assertThat(published.get("reviewStatus").asText()).isEqualTo("PUBLISHED");
+    }
+
+    @Test
     void positionsAreListedInTheOrderAReaderExpects() throws Exception {
         var artifactId = upload(GUIDE, ArtifactType.PLAYBOOK).get("id").asText();
         var callout = candidate(artifactId, CALLOUT);

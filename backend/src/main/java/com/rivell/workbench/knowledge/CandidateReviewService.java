@@ -102,12 +102,19 @@ public class CandidateReviewService {
             var semanticChanged = !editedSemantic.equals(SemanticFields.EMPTY);
             var scopeChanged = scope != null;
             var payloadChanged = payload != null && !payload.columns().isEmpty();
+            if (title != null && (title.contains("\n") || title.contains("\r"))) {
+                throw new IllegalArgumentException("A title must be a single line");
+            }
             var newTitle = Texts.normalize(title);
             if (newTitle != null && newTitle.length() > MAX_EDITED_TITLE_LENGTH) {
                 throw new IllegalArgumentException(
                         "A title must be at most " + MAX_EDITED_TITLE_LENGTH + " characters");
             }
-            var titleChanged = newTitle != null && !newTitle.equals(candidate.effectiveTitle());
+            // A present blank title is a deliberate clear of an earlier correction. An absent
+            // title leaves the correction alone, so the two must not collapse to the same null.
+            var titleChanged = title != null && newTitle == null
+                    ? candidate.editedTitle() != null
+                    : newTitle != null && !newTitle.equals(candidate.effectiveTitle());
             if ((contentText == null || contentText.isBlank()) && !payloadChanged
                     && !semanticChanged && !scopeChanged && !titleChanged) {
                 throw new IllegalArgumentException(

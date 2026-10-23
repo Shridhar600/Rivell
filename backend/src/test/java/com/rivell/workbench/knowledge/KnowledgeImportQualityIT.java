@@ -255,6 +255,29 @@ class KnowledgeImportQualityIT {
     }
 
     @Test
+    void onlyTheRowsWhoseTopicNamesTheirPlacementLoseTheFlag() throws Exception {
+        var artifact = ingest("fixtures/import-quality-clause-library.xlsx", "g-clause-library.xlsx",
+                ArtifactType.CLAUSE_LIBRARY);
+
+        var clauseRows = queryService.getCandidates(artifact.id()).stream()
+                .filter(candidate -> candidate.payload().columns().containsKey("Variant"))
+                .toList();
+
+        assertThat(clauseRows).hasSize(14);
+        assertThat(clauseRows.stream()
+                .filter(candidate -> !candidate.reviewReasons()
+                        .contains(ReviewReason.LOW_CLASSIFICATION_CONFIDENCE))
+                .toList())
+                .hasSize(2)
+                .allSatisfy(candidate -> assertThat(candidate.payload().columns().get("Topic"))
+                        .isEqualTo("IP indemnity"));
+        assertThat(clauseRows.stream()
+                .filter(candidate -> candidate.reviewReasons()
+                        .contains(ReviewReason.LOW_CLASSIFICATION_CONFIDENCE))
+                .count()).isEqualTo(12);
+    }
+
+    @Test
     void anApprovalAnswerBetweenTheThresholdsIsNotStatedAsNotRequired() throws Exception {
         provider.requiresApproval = 0.5;
 
