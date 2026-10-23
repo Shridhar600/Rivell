@@ -318,11 +318,7 @@ public final class FindingAssembler {
             if (deviation.secondaryTopic()) {
                 return FindingSeverity.LOW;
             }
-            return switch (deviation.category()) {
-                case PolicyComparisonSpecs.WALK_AWAY -> FindingSeverity.HIGH;
-                case PolicyComparisonSpecs.WITHIN_FALLBACK -> FindingSeverity.LOW;
-                default -> FindingSeverity.MEDIUM;
-            };
+            return categorySeverity(deviation.category());
         }
         if (primary.signalType() == SignalType.CROSS_CLAUSE_CONFLICT) {
             return FindingSeverity.HIGH;
@@ -340,6 +336,27 @@ public final class FindingAssembler {
                     ? FindingSeverity.MEDIUM : FindingSeverity.LOW;
         }
         return FindingSeverity.MEDIUM;
+    }
+
+    private static FindingSeverity categorySeverity(String category) {
+        return switch (category) {
+            case PolicyComparisonSpecs.WALK_AWAY -> FindingSeverity.HIGH;
+            case PolicyComparisonSpecs.WITHIN_FALLBACK -> FindingSeverity.LOW;
+            default -> FindingSeverity.MEDIUM;
+        };
+    }
+
+    /**
+     * Severity R3 levers: the severity this finding would have had without the levers tagged on it,
+     * so an eval can restore it. The category before the levers is Jev's (P1, P3) or WITHIN_FALLBACK
+     * (P2: a routed item that became a "needs your look" item stands for a WITHIN_FALLBACK note).
+     */
+    private static FindingSeverity severityWithoutLevers(RawReviewSignal primary) {
+        var before = primary.quality().get("categoryBeforeLevers");
+        if (primary.payload() instanceof PositionDeviationPayload deviation && before instanceof String category) {
+            return deviation.secondaryTopic() ? FindingSeverity.LOW : categorySeverity(category);
+        }
+        return FindingSeverity.LOW;
     }
 
     private static FindingClassification classification(
@@ -421,6 +438,15 @@ public final class FindingAssembler {
             claims.add(FindingClaim.of(claims.size(), ClaimKind.GENERATIVE_EXPLANATION,
                     openEnded.explanation(), absenceSubject, evidence));
         }
+        if (primary.quality().get("fallbackConditionsUnknown") instanceof List<?> unknown
+                && !unknown.isEmpty()) {
+            // P3: a look note, never a severity change; the conditions the contract does not settle
+            claims.add(FindingClaim.of(claims.size(), ClaimKind.OBSERVATION,
+                    "Some conditions of the listed fallback could not be checked from the clause or the "
+                            + "contract facts, so please check them yourself: "
+                            + String.join("; ", unknown.stream().map(String::valueOf).toList()) + ".",
+                    absenceSubject, evidence));
+        }
         claims.add(FindingClaim.of(claims.size(), ClaimKind.RECOMMENDATION,
                 recommendation(action), absenceSubject, evidence));
         var ordinals = new int[claims.size()];
@@ -457,7 +483,8 @@ public final class FindingAssembler {
             "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
             "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
             "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
-            "positionLabel");
+            "positionLabel", "levers", "categoryBeforeLevers", "routeReason", "fallbackListed",
+            "fallbackConditionsOutcome", "fallbackConditionsUnknown", "fallbackConditionsUnmet", "fallbackConditionsExecutionId", "secondOpinionExecutionId");
 
     private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
@@ -466,6 +493,9 @@ public final class FindingAssembler {
             if (value != null) {
                 quality.put(key, value);
             }
+        }
+        if (primary.quality().get("levers") instanceof List<?> levers && !levers.isEmpty()) {
+            quality.put("severityWithoutLevers", severityWithoutLevers(primary).name());
         }
         var flags = new LinkedHashSet<String>();
         for (var signal : group) {
