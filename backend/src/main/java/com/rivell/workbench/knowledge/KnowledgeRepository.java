@@ -58,6 +58,31 @@ public interface KnowledgeRepository {
 
     List<KnowledgeCandidate> loadCandidates(UUID artifactId, UUID organizationId);
 
+    /**
+     * Every stored candidate, across organizations, together with the text its extraction unit
+     * read. Used only by the one-time source-applicability migration: it needs the same two
+     * inputs the compiler used, the candidate payload and, for a heading section, the unit text
+     * that may state "Applies to:". This is intentionally not organization-scoped.
+     */
+    List<CandidateUnit> listCandidateUnitsForMigration();
+
+    /** One candidate and the source text its unit read. */
+    record CandidateUnit(
+            KnowledgeCandidate candidate,
+            ExtractionUnitKind unitKind,
+            String unitContentText) {
+    }
+
+    /** Rewrites only the derived record-level scope; review state and timestamps are untouched. */
+    boolean updateSourceContractTypes(
+            UUID candidateId, UUID organizationId, Set<String> types);
+
+    /** Whether the named one-time data migration has completed in this database. */
+    boolean dataMigrationCompleted(String migrationKey);
+
+    /** Records a completed one-time data migration; a repeated record is harmless. */
+    void recordDataMigration(String migrationKey, String detail, Instant completedAt);
+
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);
 
     /**

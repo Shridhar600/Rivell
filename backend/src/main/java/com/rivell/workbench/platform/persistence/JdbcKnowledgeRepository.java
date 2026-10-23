@@ -473,6 +473,61 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<CandidateUnit> listCandidateUnitsForMigration() {
+        return jdbcClient.sql("""
+                        select c.*, u.kind as unit_kind, u.content_text as unit_content_text
+                        from knowledge_candidate c
+                        join knowledge_extraction_unit u
+                          on u.id = c.extraction_unit_id
+                         and u.organization_id = c.organization_id
+                        order by c.organization_id, c.id
+                        """)
+                .query((rs, rowNum) -> new CandidateUnit(
+                        mapCandidate(rs, rowNum),
+                        ExtractionUnitKind.valueOf(rs.getString("unit_kind")),
+                        rs.getString("unit_content_text")))
+                .list();
+    }
+
+    @Override
+    public boolean updateSourceContractTypes(
+            UUID candidateId, UUID organizationId, Set<String> types) {
+        return jdbcClient.sql("""
+                        update knowledge_candidate
+                        set source_contract_types = :types::jsonb
+                        where id = :id and organization_id = :organizationId
+                        """)
+                .param("types", writeStringSet(types))
+                .param("id", candidateId)
+                .param("organizationId", organizationId)
+                .update() == 1;
+    }
+
+    @Override
+    public boolean dataMigrationCompleted(String migrationKey) {
+        return Boolean.TRUE.equals(jdbcClient.sql("""
+                        select exists (select 1 from knowledge_data_migration
+                                       where migration_key = :key)
+                        """)
+                .param("key", migrationKey)
+                .query(Boolean.class)
+                .single());
+    }
+
+    @Override
+    public void recordDataMigration(String migrationKey, String detail, Instant completedAt) {
+        jdbcClient.sql("""
+                        insert into knowledge_data_migration (migration_key, completed_at, detail)
+                        values (:key, :completedAt, :detail)
+                        on conflict (migration_key) do nothing
+                        """)
+                .param("key", migrationKey)
+                .param("completedAt", Timestamp.from(completedAt))
+                .param("detail", detail)
+                .update();
+    }
+
+    @Override
     public Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId) {
         return jdbcClient.sql("""
                         select * from knowledge_candidate

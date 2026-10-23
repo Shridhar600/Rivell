@@ -184,7 +184,7 @@ public class SemanticCompilationService {
             KnowledgeCandidate enriched, ExtractionUnit unit, Map<String, RecordFieldRole> roles,
             List<KnowledgeCandidate> publishedCandidates, ArtifactTypeAssessment assessment,
             boolean semanticUnavailable) {
-        var applied = withSourceApplicability(withResolvedFieldRoles(enriched, roles), unit, roles);
+        var applied = withSourceApplicability(withResolvedFieldRoles(enriched, roles), unit);
         var withSignals = applied.withConflictSignals(
                 conflictDetector.inspect(applied, publishedCandidates));
         var categorization = categorizer.categorize(withSignals, assessment);
@@ -299,24 +299,15 @@ public class SemanticCompilationService {
     }
 
     /**
-     * The contract types the record itself says it applies to: its APPLICABILITY field, or a
-     * prose "Applies to:" line. Deterministic; a record that states nothing keeps the scope it
-     * inherited from the manifest. A label only the model resolved as applicability ("Variant",
-     * "Trigger") narrows only when its value names a contract type the product models.
+     * The contract types the record itself says it applies to. Deterministic; a record that
+     * states nothing keeps the scope it inherited from the manifest. The derivation itself lives
+     * in {@link SourceApplicabilityDerivation} because the one-time re-derivation of stored rows
+     * must read the same rule.
      */
     private static KnowledgeCandidate withSourceApplicability(
-            KnowledgeCandidate candidate, ExtractionUnit unit, Map<String, RecordFieldRole> roles) {
-        var label = firstFieldLabel(candidate, roles, RecordFieldRole.APPLICABILITY);
-        Set<String> types = Set.of();
-        if (label != null) {
-            var codeKnown = RecordLabelRoles.known(label).orElse(null) == RecordFieldRole.APPLICABILITY;
-            types = ContractTypeApplicability.contractTypes(
-                    candidate.payload().columns().get(label), codeKnown);
-        } else if (unit.kind() == ExtractionUnitKind.HEADING_SECTION) {
-            types = ContractTypeApplicability.statedIn(unit.contentText())
-                    .map(text -> ContractTypeApplicability.contractTypes(text, true))
-                    .orElse(Set.of());
-        }
+            KnowledgeCandidate candidate, ExtractionUnit unit) {
+        var types = SourceApplicabilityDerivation.derive(
+                candidate.payload(), unit.kind(), unit.contentText());
         return types.isEmpty() ? candidate
                 : candidate.withScope(candidate.scope().withSourceContractTypes(types));
     }

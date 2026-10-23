@@ -427,6 +427,28 @@ class KnowledgeReviewConcurrencyIT {
         }
 
         @Override
+        public List<CandidateUnit> listCandidateUnitsForMigration() {
+            return delegate.listCandidateUnitsForMigration();
+        }
+
+        @Override
+        public boolean updateSourceContractTypes(
+                UUID candidateId, UUID organizationId, Set<String> types) {
+            return delegate.updateSourceContractTypes(candidateId, organizationId, types);
+        }
+
+        @Override
+        public boolean dataMigrationCompleted(String migrationKey) {
+            return delegate.dataMigrationCompleted(migrationKey);
+        }
+
+        @Override
+        public void recordDataMigration(
+                String migrationKey, String detail, java.time.Instant completedAt) {
+            delegate.recordDataMigration(migrationKey, detail, completedAt);
+        }
+
+        @Override
         public Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId) {
             return delegate.findCandidate(candidateId, organizationId);
         }
