@@ -61,6 +61,14 @@ public record ClauseSemantics(
         return classification.primaryConcept();
     }
 
+    /**
+     * The single passed topic the section heading names. It is not a primary and only
+     * presence coverage reads it.
+     */
+    public java.util.Optional<ConceptKey> headingTopic() {
+        return java.util.Optional.ofNullable(classification.headingTopic());
+    }
+
     public List<ConceptKey> secondaryConcepts() {
         return classification.secondaryConcepts();
     }

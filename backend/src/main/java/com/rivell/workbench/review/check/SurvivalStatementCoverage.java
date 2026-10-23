@@ -15,11 +15,13 @@ import com.rivell.workbench.contracts.ContractRegionSegmenter;
 
 /**
  * DW-100: deterministic survival coverage written into the contract itself. A statement
- * covers a confidentiality clause when it uses a survival verb and either names that clause
- * by number, names confidentiality, or says that the obligations in this Agreement survive.
- * This is deliberately a small pattern set, not a model call: negated or conditional
- * survival ("shall not survive", "may survive"), "surviving" as in "surviving entity",
- * "survival" as a heading noun, and bare "the parties survive" cover nothing.
+ * covers a confidentiality clause when it uses a survival verb, says termination does not
+ * affect confidential-information obligations, or says confidentiality obligations continue
+ * for a period or after termination. It must also name that clause by number, name
+ * confidentiality, or say that the obligations in this Agreement survive. This is
+ * deliberately a small pattern set, not a model call: negated or conditional survival
+ * ("shall not survive", "may survive", "do not continue"), "surviving" as in "surviving
+ * entity", "survival" as a heading noun, and bare "the parties survive" cover nothing.
  */
 final class SurvivalStatementCoverage {
 
@@ -33,6 +35,54 @@ final class SurvivalStatementCoverage {
                     + "|\\b(?:may|might|could|would)\\s+survive\\b"
                     + "|\\bsurvive\\s+only\\s+(?:if|to the extent)\\b"
                     + "|\\bonly\\s+survive\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern TERMINATION_NO_AFFECT = Pattern.compile(
+            "\\b(?:termination|expiry|expiration|end of (?:this|the) agreement"
+                    + "|after (?:this|the) agreement ends)\\b"
+                    + "[^.;]{0,100}?\\b(?:does|shall|will)\\s+not\\s+affect\\b"
+                    + "|\\b(?:termination|expiry|expiration|end of (?:this|the) agreement"
+                    + "|after (?:this|the) agreement ends)\\b"
+                    + "[^.;]{0,100}?\\b(?:is|are)\\s+without\\s+prejudice\\s+to\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern CONFIDENTIAL_INFORMATION_OBLIGATIONS = Pattern.compile(
+            "\\bobligations?\\b[^.;]{0,80}?"
+                    + "\\b(?:in respect of|with respect to|relating to|regarding)\\b"
+                    + "[^.;]{0,80}?\\bconfidential(?:ity)?\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern CONFIDENTIALITY_OBLIGATIONS = Pattern.compile(
+            "\\b(?:obligations?\\s+of\\s+(?:confidentiality|restricted\\s+use)"
+                    + "(?:[\\s,]+(?:and|or)?\\s*(?:confidentiality|restricted\\s+use))?"
+                    + "|confidentiality\\s+obligations)\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern CONTINUATION_VERB = Pattern.compile(
+            "\\b(?:continue|continues|continued|remain|remains|remained|apply|applies|applied)\\b"
+                    + "(?:\\s+in\\s+(?:full\\s+)?(?:force|effect))?",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern NOT_CONTINUATION = Pattern.compile(
+            "\\b(?:not|never|no longer)\\s+"
+                    + "(?:(?:be\\s+)?(?:required|permitted|allowed)\\s+to\\s+)?"
+                    + "(?:be\\s+)?(?:(?:obligated|obliged)\\s+to\\s+)?"
+                    + "(?:continue|continues|continued|remain|remains|remained"
+                    + "|apply|applies|applied)\\b"
+                    + "|\\b(?:is|are|have|has|had)\\s+(?:under\\s+)?no\\s+"
+                    + "(?:obligation|requirement|duty)\\s+to\\s+"
+                    + "(?:continue|continues|continued|remain|remains|remained"
+                    + "|apply|applies|applied)\\b"
+                    + "|\\b(?:may|might|could|would)\\s+"
+                    + "(?:continue|continues|continued|remain|remains|remained"
+                    + "|apply|applies|applied)\\b"
+                    + "|\\b(?:continue|continues|continued|remain|remains|remained"
+                    + "|apply|applies|applied)\\s+only\\s+(?:if|to the extent|while)\\b"
+                    + "|\\bonly\\s+(?:continue|continues|continued|remain|remains|remained"
+                    + "|apply|applies|applied)\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern CONTINUATION_PERIOD = Pattern.compile(
+            "\\bfor\\s+(?:a\\s+period\\s+of\\s+)?"
+                    + "(?:\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+                    + "(?:\\s*\\([^)]*\\))?\\s+(?:years?|months?|days?)\\b"
+                    + "|\\bindefinitely\\b"
+                    + "|\\b(?:after|following|upon|beyond)\\s+"
+                    + "(?:termination|expiry|expiration|the\\s+termination)\\b",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern OTHER_TRANSFER_EVENT = Pattern.compile(
             "\\bsurviv(?:e|es|ed)\\s+(?:the\\s+)?"
@@ -105,12 +155,47 @@ final class SurvivalStatementCoverage {
     }
 
     private static boolean isSurvivalStatement(String statement) {
-        if (!SURVIVAL_VERB.matcher(statement).find() || NOT_SURVIVAL.matcher(statement).find()) {
+        if (SURVIVAL_VERB.matcher(statement).find()) {
+            return isSurviveStatement(statement);
+        }
+        return isNoAffectStatement(statement) || isContinuationStatement(statement);
+    }
+
+    private static boolean isSurviveStatement(String statement) {
+        if (NOT_SURVIVAL.matcher(statement).find()) {
             return false;
         }
         // "survive assignment" is a transfer rule, not a termination survival rule.
         return !OTHER_TRANSFER_EVENT.matcher(statement).find()
                 || TERMINATION_EVENT.matcher(statement).find();
+    }
+
+    /**
+     * "Termination does not affect obligations in respect of Confidential Information" states
+     * survival without the word survive. The confidentiality object, or a clause reference
+     * resolved later against the candidates, keeps unrelated no-affect statements out.
+     */
+    private static boolean isNoAffectStatement(String statement) {
+        if (!TERMINATION_NO_AFFECT.matcher(statement).find()) {
+            return false;
+        }
+        return CONFIDENTIAL_INFORMATION_OBLIGATIONS.matcher(statement).find()
+                || CONFIDENTIALITY_OBLIGATIONS.matcher(statement).find()
+                || (SURVIVAL_SUBJECT.matcher(statement).find()
+                        && REFERENCE.matcher(statement).find());
+    }
+
+    /**
+     * "The obligations of confidentiality ... continue for three years / indefinitely /
+     * after termination" states survival by continuation. Negated and conditional
+     * continuation does not count, and a continuation with no period or termination
+     * event is not a survival statement.
+     */
+    private static boolean isContinuationStatement(String statement) {
+        return CONFIDENTIALITY_OBLIGATIONS.matcher(statement).find()
+                && CONTINUATION_VERB.matcher(statement).find()
+                && CONTINUATION_PERIOD.matcher(statement).find()
+                && !NOT_CONTINUATION.matcher(statement).find();
     }
 
     private static boolean namesConfidentiality(String statement) {

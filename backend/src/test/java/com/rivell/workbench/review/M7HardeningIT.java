@@ -296,27 +296,70 @@ class M7HardeningIT {
     }
 
     @Test
-    void headingNamedSectionGivesTheTopicSubstantiveCoverage() throws Exception {
+    void headingNamedSectionIsSubstantiveCoverageWithoutBecomingPrimary() throws Exception {
         var organizationId = organizationId();
         publishMainPolicyAndLibrary(organizationId);
-        scriptedProvider.indecisivePrimaryHeadings.add("Term and Termination");
-        var review = enrichedReview("m7-msa-heading-term-conf.docx",
+        scriptedProvider.indecisivePrimaryHeadings.add("Term and Survival");
+        scriptedProvider.indecisivePrimaryHeadings.add("Governing Law");
+        var review = enrichedReview("m7-msa-term-survival-conf-period.docx",
                 ReviewPackRegistry.MSA_PACK);
 
         var run = analysisService.analyze(organizationId, review.id());
 
         assertThat(scriptedProvider.indecisivePrimaryAnswers())
-                .as("the model gave no primary, so the heading rule is the only source")
+                .as("the model gave no primary, so only the heading can carry the topic")
                 .isPositive();
         var semantics = enrichmentService.getSemantics(review.contractId(),
                 review.contractVersionNumber());
         var headingSection = semantics.clauses().stream()
-                .filter(clause -> clause.contentText().contains("Term and Termination"))
+                .filter(clause -> clause.contentText().contains("Term and Survival"))
                 .findFirst().orElseThrow();
-        assertThat(headingSection.effectivePrimaryConcept()).contains(CoreConcepts.TERM);
+        assertThat(headingSection.effectivePrimaryConcept()).isEmpty();
+        assertThat(headingSection.headingTopic()).contains(CoreConcepts.TERM);
+        var governingLaw = semantics.clauses().stream()
+                .filter(clause -> clause.contentText().contains("Governing Law"))
+                .findFirst().orElseThrow();
+        assertThat(governingLaw.effectivePrimaryConcept()).isEmpty();
+        assertThat(governingLaw.headingTopic()).contains(CoreConcepts.GOVERNING_LAW);
         var termPresence = presenceExecution(
                 organizationId, review.id(), run.id(), CoreConcepts.TERM);
         assertThat(termPresence.detail()).containsEntry("coverage", "PRESENT_PRIMARY");
+        var lawPresence = presenceExecution(
+                organizationId, review.id(), run.id(), CoreConcepts.GOVERNING_LAW);
+        assertThat(lawPresence.detail()).containsEntry("coverage", "PRESENT_PRIMARY");
+    }
+
+    @Test
+    void nonHeadingTopicWalkAwayStaysHighWhenTheHeadingNamesAnotherTopic() throws Exception {
+        var organizationId = organizationId();
+        corpusBuilder.publishAll(organizationId,
+                M6EvidenceCorpus.Fixture.POLICY_CONFIDENTIALITY_PERIOD,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        scriptedProvider.indecisivePrimaryHeadings.add("Term and Survival");
+        scriptedProvider.headingAnswers.put("Term and Survival",
+                PolicyComparisonSpecs.WALK_AWAY);
+        var review = enrichedReview("m7-msa-term-survival-conf-period.docx",
+                ReviewPackRegistry.MSA_PACK);
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        var termSection = enrichmentService.getSemantics(review.contractId(),
+                        review.contractVersionNumber()).clauses().stream()
+                .filter(clause -> clause.contentText().contains("Term and Survival"))
+                .findFirst().orElseThrow();
+        assertThat(termSection.effectivePrimaryConcept()).isEmpty();
+        var deviation = analysisRepository.findSignals(organizationId, run.id()).stream()
+                .filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
+                .filter(signal -> signal.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
+        assertThat(deviation.subjectHeadingNodeId()).isEqualTo(termSection.headingNodeId());
+        assertThat(((PositionDeviationPayload) deviation.payload()).secondaryTopic()).isFalse();
+        var finding = findingRepository.findFindings(organizationId, run.id()).stream()
+                .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_WALK_AWAY)
+                .findFirst().orElseThrow();
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.HIGH);
+        assertThat(finding.quality()).containsEntry("category", PolicyComparisonSpecs.WALK_AWAY)
+                .containsEntry("secondaryTopic", false);
     }
 
     @Test
