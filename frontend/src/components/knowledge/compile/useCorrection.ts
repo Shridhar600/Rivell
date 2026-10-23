@@ -84,7 +84,7 @@ export function useCorrection(candidate: Candidate, onSaved: () => void) {
       onSaved()
     } catch (failure) {
       const message = failure instanceof Error && failure.message ? failure.message : 'The correction could not be saved.'
-      setError(savedEdit ? `Your other corrections were saved, but the legal concept was not: ${message}` : message)
+      setError(savedEdit ? `Your other corrections were saved, but the topic was not: ${message}` : message)
     } finally {
       setPending(false)
     }

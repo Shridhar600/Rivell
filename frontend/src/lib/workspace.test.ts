@@ -223,7 +223,7 @@ describe('finalizeSummary', () => {
     const loaded = [{ type: 'REPLACE' as const }, { type: 'REPLACE' as const }, { type: 'DELETE' as const }]
     expect(finalizeSummary(review, loaded)).toEqual([
       '3 approved changes (1 accepted, 2 edited): 2 replace, 0 insert, 1 delete',
-      '1 rejected Finding; no approved change created',
+      '1 rejected finding; no approved change created',
     ])
   })
 

@@ -33,25 +33,25 @@ describe('parseApiResult', () => {
   it('rejects a response that is not enveloped', () => {
     expect(() =>
       parseApiResult({ id: 'a1' }, (data) => data, 'artifact'),
-    ).toThrow(/malformed artifact response/i)
+    ).toThrow(/could not read this response/i)
   })
 
   it('rejects an envelope without data', () => {
     expect(() =>
       parseApiResult({ status: 200 }, (data) => data, 'artifact'),
-    ).toThrow(/malformed artifact response/i)
+    ).toThrow(/could not read this response/i)
   })
 
   it('rejects an envelope without a numeric status', () => {
     expect(() =>
       parseApiResult({ data: [], status: 'ok' }, (data) => data, 'artifact'),
-    ).toThrow(/malformed artifact response/i)
+    ).toThrow(/could not read this response/i)
   })
 
   it('rejects a non-object timestamp', () => {
     expect(() =>
       parseApiResult({ data: [], status: 200, timestamp: 5 }, (data) => data, 'artifact'),
-    ).toThrow(/malformed artifact response/i)
+    ).toThrow(/could not read this response/i)
   })
 })
 
@@ -64,7 +64,7 @@ describe('guard primitives', () => {
 
   it('rejects empty required strings', () => {
     expect(() => readString({ name: '' }, 'name', 'artifact')).toThrow(
-      /malformed artifact response/i,
+      /could not read this response/i,
     )
   })
 
@@ -78,7 +78,7 @@ describe('guard primitives', () => {
 
   it('rejects missing nullable fields so contract drift is visible', () => {
     expect(() => readNullableString({}, 'note', 'artifact')).toThrow(
-      /malformed artifact response/i,
+      /could not read this response/i,
     )
   })
 
@@ -88,7 +88,7 @@ describe('guard primitives', () => {
       'B',
     ])
     expect(() => readStringArray({ warnings: [1] }, 'warnings', 'artifact')).toThrow(
-      /malformed artifact response/i,
+      /could not read this response/i,
     )
   })
 
@@ -98,7 +98,7 @@ describe('guard primitives', () => {
     })
     expect(readStringMap({ columns: null }, 'columns', 'artifact')).toEqual({})
     expect(() => readStringMap({ columns: { a: 1 } }, 'columns', 'artifact')).toThrow(
-      /malformed artifact response/i,
+      /could not read this response/i,
     )
   })
 
@@ -108,7 +108,7 @@ describe('guard primitives', () => {
     )
     expect(() =>
       readEnum({ status: 'ARCHIVED' }, 'status', 'candidate', STATUSES),
-    ).toThrow(/malformed candidate response/i)
+    ).toThrow(/could not read this response/i)
   })
 })
 

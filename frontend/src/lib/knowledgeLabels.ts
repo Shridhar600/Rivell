@@ -10,28 +10,25 @@ import type {
 export const ARTIFACT_TYPE_LABELS: Record<ArtifactType, string> = {
   PLAYBOOK: 'Contract playbook',
   CLAUSE_LIBRARY: 'Clause library',
-  TEMPLATE: 'Template / house paper',
-  EXECUTED_PRECEDENT: 'Executed precedent',
+  TEMPLATE: 'Standard template',
+  EXECUTED_PRECEDENT: 'Signed precedent',
   NEGOTIATION_HISTORY: 'Negotiation history',
   EXTERNAL_REFERENCE: 'External reference',
 }
 
 export const ARTIFACT_TYPE_DESCRIPTIONS: Record<ArtifactType, string> = {
-  PLAYBOOK:
-    'Negotiation policy: preferred, fallback, and escalation positions for a contract family.',
-  CLAUSE_LIBRARY: 'Approved reusable clause wording, preserved exactly as written.',
-  TEMPLATE: 'Standard organizational drafting and document structure.',
-  EXECUTED_PRECEDENT:
-    'Historically accepted language. Evidence for future negotiations, not policy.',
-  NEGOTIATION_HISTORY: 'How language evolved through a negotiation.',
-  EXTERNAL_REFERENCE:
-    'Informational material with lower authority than internal policy.',
+  PLAYBOOK: 'Your approved positions for a type of contract, including preferred and fallback wording.',
+  CLAUSE_LIBRARY: 'Approved clause wording your team can reuse in a contract.',
+  TEMPLATE: 'A standard document your organization starts from.',
+  EXECUTED_PRECEDENT: 'A signed agreement kept as an example of wording accepted before.',
+  NEGOTIATION_HISTORY: 'A record of how wording changed during a negotiation.',
+  EXTERNAL_REFERENCE: 'Background material that is not approved policy.',
 }
 
 export const INGEST_STATUS_LABELS: Record<IngestStatus, string> = {
   RECEIVED: 'Received',
-  EXTRACTING: 'Extracting',
-  EXTRACTED: 'Extracted',
+  EXTRACTING: 'Reading',
+  EXTRACTED: 'Read',
   FAILED: 'Failed',
 }
 
@@ -52,7 +49,7 @@ export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
 }
 
 export const UNIT_KIND_LABELS: Record<UnitKind, string> = {
-  HEADING_SECTION: 'Heading section',
+  HEADING_SECTION: 'Section',
   TABLE: 'Table',
   SPREADSHEET_ROW: 'Spreadsheet row',
 }

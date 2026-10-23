@@ -119,11 +119,11 @@ export function languageAuthority(
   if (finding.proposedLanguageSource === 'APPROVED_DRAFTING') {
     return {
       strong: 'Approved organizational drafting',
-      rest: publicationNumber === null ? 'Quoted from published wording' : `Publication ${publicationNumber} · Source: Clause library`,
+      rest: publicationNumber === null ? 'Quoted from published wording' : `Knowledge version ${publicationNumber} · Source: Clause library`,
     }
   }
   if (finding.proposedLanguageSource === 'GENERATIVE') {
-    return { strong: 'Machine-proposed', rest: 'Produced by a model; not approved organizational language' }
+    return { strong: 'Proposed by Rivell', rest: 'Rivell wrote this; it is not approved organizational language' }
   }
   return null
 }
@@ -245,7 +245,7 @@ export function finalizeSummary(
       : ''
   return [
     `${approved} approved ${approved === 1 ? 'change' : 'changes'} (${review.accepted} accepted, ${review.edited} edited)${split}`,
-    `${review.rejected} rejected ${review.rejected === 1 ? 'Finding' : 'Findings'}; no approved change created`,
+    `${review.rejected} rejected ${review.rejected === 1 ? 'finding' : 'findings'}; no approved change created`,
   ]
 }
 

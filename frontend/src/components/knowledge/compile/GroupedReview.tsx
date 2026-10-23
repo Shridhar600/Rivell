@@ -37,13 +37,13 @@ export function GroupedReview({ artifact, candidates, sourceFor, inspected, onTo
       <div className="rv-kc-scroll">
         <div className="rv-kc-wrap">
           <div className="rv-kc-head">
-            <div className="rv-kc-kicker">Grouped safe review</div>
+            <div className="rv-kc-kicker">Review together</div>
             <h1 tabIndex={-1} ref={heading}>
-              {candidates.length} routine {candidates.length === 1 ? 'candidate' : 'candidates'}
+              {candidates.length} routine {candidates.length === 1 ? 'entry' : 'entries'}
             </h1>
             <div className="rv-kc-bulkintro">
               <p>
-                Rivell accepts these for group approval: each is pending, with no conflict, duplicate, supersession or uncertainty condition. Open every row before you approve the group.
+                These entries have no conflicts or open questions. Open each one before you approve them together.
               </p>
               <Button onClick={onInspectAll} disabled={all || pending}>
                 Review all
@@ -79,7 +79,7 @@ export function GroupedReview({ artifact, candidates, sourceFor, inspected, onTo
       <div className="rv-kc-decide">
         <div className="rv-kc-kd">
           <span className="rv-kc-st" role="status">
-            Reviewed {done} of {candidates.length} routine candidates
+            Reviewed {done} of {candidates.length} routine entries
           </span>
           <Button variant="primary" disabled={!all || pending} onClick={onApproveAll}>
             <CheckIcon className="rv-icon" />

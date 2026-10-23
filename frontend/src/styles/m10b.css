@@ -11,7 +11,6 @@
   --rv-w-sidebar-collapsed: var(--w-sidebar-collapsed);
   --rv-w-inspector: var(--w-inspector);
   --rv-h-topbar: var(--h-topbar);
-  --rv-edge-w: 20px;
 }
 
 *,
@@ -60,7 +59,7 @@ a {
  */
 .rv-shell {
   display: grid;
-  grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr) var(--rv-inspector, var(--rv-w-inspector));
+  grid-template-columns: var(--rv-sidebar, var(--rv-sidebar-open, var(--rv-w-sidebar))) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
@@ -68,44 +67,87 @@ a {
   transition: grid-template-columns var(--t-panel) var(--ease);
 }
 .rv-shell[data-sidebar='collapsed'] {
-  --rv-sidebar: var(--rv-w-sidebar-collapsed);
+  --rv-sidebar: 0px;
 }
 .rv-shell[data-inspector='collapsed'] {
   --rv-inspector: 0px;
 }
 
+/*
+ * Every page renders inside the stage: the page's own column, plus the details panel when the
+ * page has one. Full-width surfaces (lists, the review workspace, a compilation) span both.
+ */
+.rv-stage {
+  /* Placed explicitly: on a phone the sidebar leaves the grid, and the stage must not slide into its column. */
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rv-inspector, var(--rv-w-inspector));
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns var(--t-panel) var(--ease);
+}
+.rv-stage > .rv-ws,
+.rv-stage > .rv-ws-gate,
+.rv-stage .rv-kc {
+  grid-column: 1 / -1;
+  height: auto;
+  min-height: 0;
+}
+
 /* ---------- sidebar ---------- */
+/*
+ * The sidebar's column animates between its width and 0. The contents keep their full width and
+ * the column clips them, so the sidebar slides away instead of reflowing its text.
+ */
 .rv-side {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--side);
+  border-right: 1px solid var(--line);
+  transition: border-color var(--t-panel) var(--ease);
+}
+.rv-side__inner {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 0;
-  min-height: 0;
+  width: var(--rv-sidebar-open, var(--rv-w-sidebar));
+  height: 100%;
   padding: 0 8px 10px;
   overflow-x: hidden;
   overflow-y: auto;
-  background: var(--side);
-  border-right: 1px solid var(--line);
+  transition:
+    opacity var(--t-panel) var(--ease),
+    transform var(--t-panel) var(--ease);
+}
+.rv-shell[data-sidebar='collapsed'] .rv-side {
+  border-right-color: transparent;
+}
+.rv-shell[data-sidebar='collapsed'] .rv-side__inner {
+  opacity: 0;
+  transform: translateX(-12px);
 }
 .rv-side__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 4px;
   flex: none;
   height: var(--rv-h-topbar);
+  /* Room for the sidebar toggle, which is fixed above this corner. */
+  padding-left: 34px;
 }
 .rv-side__brand {
   display: flex;
   align-items: center;
-  gap: 8px;
   min-width: 0;
   height: 30px;
-  padding: 0 8px;
+  padding: 0 6px;
   border-radius: var(--r-md);
   color: var(--text);
   text-decoration: none;
-  font-weight: 600;
 }
 .rv-side__brand:hover {
   background: var(--hover);
@@ -114,18 +156,68 @@ a {
   display: block;
   flex: none;
 }
-.rv-side__icon {
-  display: none;
-  flex: none;
-  border-radius: 6px;
-}
-.rv-side__toggle {
+
+/*
+ * The one sidebar toggle. It never moves: it sits in the top left corner, over the sidebar header
+ * while the sidebar is open and at the start of the top bar while it is closed.
+ */
+.rv-iconbtn.rv-side-toggle {
+  position: fixed;
+  top: calc((var(--rv-h-topbar) - 30px) / 2);
+  left: 8px;
+  z-index: 30;
   color: var(--text-3);
 }
+.rv-topbar {
+  transition: padding-left var(--t-panel) var(--ease);
+}
+.rv-shell[data-sidebar='collapsed'] .rv-topbar {
+  padding-left: 46px;
+}
+
 .rv-nav {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+.rv-nav + .rv-nav {
+  margin-top: 10px;
+}
+.rv-nav__heading {
+  padding: 4px 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Panel edges. Drag to resize, arrow keys to step, double-click to reset. */
+.rv-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--t-fast) var(--ease);
+}
+.rv-resize:hover,
+.rv-resize:focus-visible {
+  outline: none;
+  background: var(--line-2);
+}
+.rv-side__resize {
+  right: 0;
+}
+.rv-insp__resize {
+  left: 0;
+}
+/* While any panel edge is dragged, widths follow the pointer with no easing and text is not selected. */
+:root[data-resizing],
+:root[data-resizing] * {
+  cursor: col-resize !important;
+  user-select: none;
+  transition: none !important;
 }
 .rv-nav__link {
   position: relative;
@@ -172,47 +264,6 @@ a {
   text-overflow: ellipsis;
 }
 
-/*
- * Collapsed rail. Labels are visually hidden rather than removed, so each link keeps its
- * accessible name; the `title` tooltip is added by the component while collapsed.
- */
-.rv-shell[data-sidebar='collapsed'] .rv-side__head {
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 2px;
-  height: auto;
-  padding: 7px 0 4px;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-side__brand,
-.rv-shell[data-sidebar='collapsed'] .rv-nav__link {
-  justify-content: center;
-  width: 100%;
-  padding: 0;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-side__wordmark {
-  display: none;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-side__icon {
-  display: block;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-nav__text {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-nav {
-  padding-top: 6px;
-  border-top: 1px solid var(--line);
-}
-.rv-shell[data-sidebar='collapsed'] .rv-nav__link[aria-current='page']::before {
-  left: -8px;
-}
-
 /* ---------- centre column ---------- */
 .rv-main {
   display: flex;
@@ -221,8 +272,10 @@ a {
   min-height: 0;
   overflow: hidden;
 }
+/* Three columns, so search sits in the same place on every page whatever the title's length. */
 .rv-topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 300px) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   flex: none;
@@ -231,14 +284,63 @@ a {
   border-bottom: 1px solid var(--line);
   background: var(--bg);
 }
+.rv-topbar__lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .rv-topbar__title {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 500;
   letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rv-topbar__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
+}
+.rv-topbar__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  box-shadow: var(--sh-xs);
+  color: var(--text-3);
+  font: inherit;
+  cursor: pointer;
+}
+.rv-topbar__search:hover {
+  border-color: var(--text-3);
+}
+.rv-topbar__search:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+}
+.rv-topbar__search kbd,
+.rv-cmd kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--side);
+  color: var(--text-3);
+  font: 500 11px var(--font);
+  text-align: center;
+}
+.rv-topbar__search kbd {
   margin-left: auto;
 }
 /* The one scroll container for Home. It owns the vertical scroll; nothing inside it scrolls. */
@@ -337,36 +439,7 @@ a {
  * it stays reachable. It is a small divider handle, not a floating card, and its chevron points
  * the way the panel will move.
  */
-.rv-iconbtn.rv-edge {
-  position: absolute;
-  z-index: 3;
-  top: calc(var(--rv-h-topbar) + 15px);
-  left: calc(var(--rv-edge-w) / -2 - 1px);
-  width: 20px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--line-2);
-  border-radius: 6px;
-  background: var(--bg);
-  box-shadow: var(--sh-xs);
-  color: var(--text-2);
-}
-.rv-iconbtn.rv-edge:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--text-3);
-  background: var(--hover);
-}
-.rv-iconbtn.rv-edge:focus-visible {
-  outline: none;
-  box-shadow: var(--rv-focus);
-}
 /* The base chevron points left; rotation states which way the panel will move. */
-.rv-edge--inspector .rv-icon {
-  transform: rotate(180deg);
-}
-.rv-edge--inspector.rv-edge--open .rv-icon {
-  transform: rotate(0deg);
-}
 
 /* ---------- chip / badge / glyph ---------- */
 .rv-chip {
@@ -764,7 +837,6 @@ a {
 .rv-shell[data-inspector='collapsed'] .rv-insp > * {
   visibility: hidden;
 }
-.rv-shell[data-inspector='collapsed'] .rv-insp > .rv-edge--inspector,
 .rv-shell[data-inspector='collapsed'] .rv-insp > [role='status'] {
   visibility: visible;
 }
@@ -888,7 +960,7 @@ a {
 /* ---------- Reviews index (ported from rivell-reviews-v1.html: .kp, .ftabs, .klist, .rtab, .krow) ---------- */
 /* No inspector on this page, as in the canonical list view, so the page takes its column too. */
 .rv-main--wide {
-  grid-column: 2 / -1;
+  grid-column: 1 / -1;
 }
 .rv-page {
   display: flex;
@@ -1353,20 +1425,142 @@ a {
   border: 0;
 }
 
+/* ---------- motion ---------- */
+/* A page fades in when the reader arrives on it. Opacity only, so nothing shifts under the pointer. */
+@keyframes rv-enter {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes rv-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+@keyframes rv-fade {
+  from {
+    opacity: 0;
+  }
+}
+.rv-stage > .rv-main,
+.rv-stage > .rv-ws,
+.rv-stage .rv-kc,
+.rv-stage > .rv-insp {
+  animation: rv-enter var(--t-panel) var(--ease);
+}
+.rv-cmd[open] {
+  animation: rv-pop var(--t-base) var(--ease);
+}
+.rv-cmd[open]::backdrop {
+  animation: rv-fade var(--t-base) var(--ease);
+}
+
+/* ---------- tooltip (one for the whole app, see useTooltips) ---------- */
+.rv-tip {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  background: var(--text);
+  color: var(--bg);
+  font: 500 12px/1.35 var(--font);
+  letter-spacing: 0;
+  box-shadow: var(--sh-sm);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  visibility: hidden;
+  transition:
+    opacity var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease),
+    visibility 0s linear var(--t-fast);
+}
+.rv-tip[data-side='above'] {
+  transform: translateY(2px);
+}
+.rv-tip[data-open] {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition:
+    opacity var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+.rv-tip kbd {
+  flex: none;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg) 18%, transparent);
+  color: var(--bg);
+  font: 500 11px/16px var(--font);
+  text-align: center;
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 1180px) {
-  .rv-shell {
-    grid-template-columns: var(--rv-sidebar, var(--rv-w-sidebar)) minmax(0, 1fr);
+  .rv-stage {
+    grid-template-columns: minmax(0, 1fr);
   }
-  /* Hidden with its panel, so the control never promises an effect it cannot have. */
+  /* The details panel opens over the page here, from the same top bar toggle. */
+  .rv-stage {
+    position: relative;
+  }
   .rv-insp {
+    position: absolute;
+    top: var(--rv-h-topbar);
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(var(--rv-w-inspector), 92vw);
+    box-shadow: var(--sh-overlay);
+  }
+  .rv-shell[data-inspector='collapsed'] .rv-insp {
+    display: none;
+  }
+  .rv-insp__resize {
     display: none;
   }
 }
 @media (max-width: 760px) {
-  /* The sidebar stays as the icon rail (the shell forces it), so navigation never disappears. */
-  .rv-side__toggle {
+  /* On a phone the sidebar slides over the page instead of taking a column. */
+  .rv-shell,
+  .rv-shell[data-sidebar='collapsed'] {
+    grid-template-columns: 0px minmax(0, 1fr);
+  }
+  .rv-side {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 25;
+    width: min(var(--rv-sidebar-open, var(--rv-w-sidebar)), 85vw);
+    box-shadow: var(--sh-overlay);
+    transition: transform var(--t-panel) var(--ease);
+  }
+  .rv-shell[data-sidebar='collapsed'] .rv-side {
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+  .rv-side__inner {
+    width: 100%;
+  }
+  .rv-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 24;
+    background: color-mix(in srgb, var(--text) 24%, transparent);
+  }
+  .rv-side__resize {
     display: none;
+  }
+  .rv-shell .rv-topbar {
+    padding-left: 46px;
   }
   .rv-wrap,
   .rv-page {
@@ -1393,7 +1587,29 @@ a {
     display: none;
   }
 }
+@media (max-width: 980px) {
+  /* The review workspace and a knowledge draft stack their panes and grow taller than the window
+     here, so the stage scrolls them. */
+  .rv-stage:has(> .rv-ws),
+  .rv-stage:has(.rv-kc) {
+    grid-template-rows: auto;
+    overflow-y: auto;
+  }
+}
 @media (max-width: 900px) {
+  /* Search shrinks to its icon, so the title and the page's actions keep their room. */
+  .rv-topbar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .rv-topbar__search {
+    width: 30px;
+    justify-content: center;
+    padding: 0;
+  }
+  .rv-topbar__search span,
+  .rv-topbar__search kbd {
+    display: none;
+  }
   .rv-g2 {
     grid-template-columns: 1fr;
   }
@@ -1424,7 +1640,18 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .rv-stage > .rv-insp,
+  .rv-stage > .rv-main,
+  .rv-stage > .rv-ws,
+  .rv-stage .rv-kc,
+  .rv-cmd[open],
+  .rv-cmd[open]::backdrop,
+  .rv-tip,
   .rv-shell,
+  .rv-stage,
+  .rv-side,
+  .rv-side__inner,
+  .rv-topbar,
   .rv-btn,
   .rv-chev,
   .rv-glyph--spin {

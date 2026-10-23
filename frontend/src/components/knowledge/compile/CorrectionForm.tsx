@@ -59,12 +59,12 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
   }
 
   return (
-    <form id={id} className="rv-kc-edit" onSubmit={submit} aria-label="Correct the structured candidate">
+    <form id={id} className="rv-kc-edit" onSubmit={submit} aria-label="Edit this entry">
       <Field
-        label="Legal concept"
+        label="Topic"
         hint={
           <>
-            Changing it asks Rivell to compare this candidate with published knowledge again.
+            Changing the topic asks Rivell to compare this entry with published knowledge again.
             {candidate.legalConceptKey ? ` Rivell classified it as ${taxonomy.labelFor(candidate.legalConceptKey)}.` : ' Rivell did not classify it.'}
           </>
         }
@@ -77,7 +77,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
                 <option value={draft.concept}>
                   {humanizeCode(draft.concept)}
                   {!taxonomy.isPending && !taxonomy.isError && !selectedKnown
-                    ? ' (not in the current taxonomy)'
+                    ? ' (not in the current topic list)'
                     : ''}
                 </option>
               )}
@@ -91,10 +91,10 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
                 </optgroup>
               ))}
             </select>
-            {taxonomy.isPending ? <small role="status">Loading legal topics…</small> : null}
+            {taxonomy.isPending ? <small role="status">Loading topics…</small> : null}
             {taxonomy.isError ? (
               <small role="status">
-                The legal topic list could not be loaded. The concept cannot be changed right now.
+                The topic list could not be loaded. The topic cannot be changed right now.
               </small>
             ) : null}
           </>
@@ -166,8 +166,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
             </Field>
           ))}
           <small>
-            Column values are recorded with the candidate and are published as the corrected wording. Wording you
-            set above takes precedence over them.
+            Column values are saved with this entry and published as its wording. Wording set above takes precedence.
           </small>
         </fieldset>
       ) : null}
@@ -183,7 +182,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
             <input value={draft.scope.declaredContractTypes} onChange={scope('declaredContractTypes')} placeholder="MSA, NDA" />
           </label>
           <label>
-            Contract pack
+            Review pack
             <input value={draft.scope.contractPackKey} onChange={scope('contractPackKey')} />
           </label>
           <label>

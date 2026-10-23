@@ -13,7 +13,7 @@ export function ReviewReadProblem({ error, onRetry }: { error: Error; onRetry: (
   if (statusOf(error) === 403) {
     return (
       <UnavailableNotice title="View only" to="/reviews" actionLabel="Open Reviews">
-        This Rivell deployment did not grant access to review work. You can still start a review or add knowledge.
+        You can't open reviews with this account. You can still start a review or add knowledge.
       </UnavailableNotice>
     )
   }
@@ -23,7 +23,7 @@ export function ReviewReadProblem({ error, onRetry }: { error: Error; onRetry: (
 /** Says what failed, what is intact, and what the user can do next. */
 function messageFor(error: Error): string {
   if (error instanceof TransportError) {
-    return 'Rivell could not be reached, so review work is unavailable. Your work is unchanged. Check your connection and try again.'
+    return 'Rivell is offline. Your work is unchanged. Check your connection and try again.'
   }
   const MESSAGES: Record<number, string> = {
     404: 'That review work could not be found.',
@@ -41,7 +41,7 @@ export function HomeCoverageNote({ more, unplaced }: { more: boolean; unplaced: 
     <p className="rv-note">
       {more ? `Showing the newest ${HOME_PAGE_LIMIT} reviews. ` : null}
       {unplaced > 0
-        ? `${unplaced} ${unplaced === 1 ? 'review has' : 'reviews have'} no state Home can place. `
+        ? `${unplaced} ${unplaced === 1 ? 'review is' : 'reviews are'} not shown here. `
         : null}
       <Link to="/reviews">Open Reviews for the full list.</Link>
     </p>

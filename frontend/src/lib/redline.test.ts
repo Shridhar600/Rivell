@@ -120,18 +120,18 @@ describe('execution titles and labels', () => {
       ),
     ).toBe('Redline could not be generated')
     expect(redlineExecutionTitle(fixtureExecution({ status: 'UNKNOWN' }))).toBe(
-      'Execution state unknown',
+      'Redline state unknown',
     )
     expect(redlineExecutionTitle(fixtureExecution({ outcome: 'UNKNOWN' }))).toBe(
-      'Redline execution completed',
+      'Redline generated',
     )
   })
 
   it('labels change execution and verification states', () => {
     expect(redlineChangeStatusLabel('APPLIED')).toBe('Applied')
-    expect(redlineChangeStatusLabel('FAILED')).toBe('Execution failed')
+    expect(redlineChangeStatusLabel('FAILED')).toBe('Failed')
     expect(redlineChangeStatusLabel('NOT_APPLIED')).toBe('Not applied')
-    expect(redlineChangeStatusLabel('UNKNOWN')).toBe('Execution state unknown')
+    expect(redlineChangeStatusLabel('UNKNOWN')).toBe('State unknown')
     expect(redlineVerificationLabel('VERIFIED')).toBe('Verified')
     expect(redlineVerificationLabel('FAILED')).toBe('Verification failed')
     expect(redlineVerificationLabel(null)).toBeNull()
@@ -332,7 +332,7 @@ describe('change report rows', () => {
     expect(rows[0]).toMatchObject({
       actionLabel: 'Contract change',
       targetLabel: 'Target not recorded',
-      statusLabel: 'Execution state unknown',
+      statusLabel: 'State unknown',
       verificationLabel: null,
       placementLabel: null,
       paragraphSummary: null,
@@ -388,7 +388,7 @@ describe('trigger error classification', () => {
     const expansion = redlineFailureTitle('SOURCE_EXPANSION_LIMIT_EXCEEDED')
 
     expect(drift).not.toBe(redlineFailureTitle('SOURCE_INTEGRITY_MISMATCH'))
-    expect(drift).toMatch(/semantics changed after/i)
+    expect(drift).toMatch(/contract changed after/i)
     expect(drift).toMatch(/unchanged/i)
     expect(drift).not.toMatch(/recompute|re-run|run again|try again|Exception|com\.rivell/i)
 

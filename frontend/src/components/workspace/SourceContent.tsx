@@ -57,7 +57,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
     <article className="rv-ws-srcd" aria-labelledby={headingId}>
       <div className="rv-ws-kicker">
         <span>{authorityLabel(item.authorityClass)}</span>
-        {item.publicationNumber !== null ? <span className="rv-ws-chip">Published v{item.publicationNumber}</span> : null}
+        {item.publicationNumber !== null ? <span className="rv-ws-chip">Knowledge version {item.publicationNumber}</span> : null}
       </div>
       <h2 id={headingId}>{title}</h2>
 
@@ -97,7 +97,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
           <dd>{sourceTypeLabel(item.sourceType)}</dd>
         </div>
         <div>
-          <dt>Found by</dt>
+          <dt>Matched by</dt>
           <dd>{retrievalReasonLabel(item.retrievalReason)}</dd>
         </div>
       </dl>
@@ -107,7 +107,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
         <div className="rv-ws-sec-h">{TEXT_LABELS[item.authorityClass] ?? 'Text'}</div>
         <div className={item.authorityClass === 'APPROVED_DRAFTING' ? 'rv-ws-prop' : 'rv-ws-incl'}>{item.text}</div>
         {item.authorityClass === 'APPROVED_DRAFTING' && item.publicationNumber !== null ? (
-          <p className="rv-ws-caption">Approved organizational drafting · Published v{item.publicationNumber}</p>
+          <p className="rv-ws-caption">Approved organizational drafting · Knowledge version {item.publicationNumber}</p>
         ) : null}
       </div>
 

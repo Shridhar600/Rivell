@@ -341,8 +341,10 @@ export function artifactName(artifact: ArtifactSummary): string {
 }
 
 export function artifactFormat(artifact: ArtifactSummary): string {
-  const extension = /\.([a-z0-9]+)$/i.exec(artifact.filename)?.[1]
-  return extension ? extension.toUpperCase() : 'File'
+  const extension = /\.([a-z0-9]+)$/i.exec(artifact.filename)?.[1]?.toLowerCase()
+  if (extension === 'docx') return 'Word file'
+  if (extension === 'xlsx') return 'Excel file'
+  return 'File'
 }
 
 const TYPE_NOUN: Partial<Record<ArtifactType, [string, string]>> = {
@@ -352,7 +354,7 @@ const TYPE_NOUN: Partial<Record<ArtifactType, [string, string]>> = {
 
 /** "1 position", "5 positions", "3 clause variants". Other source types hold generic items. */
 export function countNoun(type: ArtifactType, count: number): string {
-  const [one, many] = TYPE_NOUN[type] ?? ['item', 'items']
+  const [one, many] = TYPE_NOUN[type] ?? ['entry', 'entries']
   return `${count} ${count === 1 ? one : many}`
 }
 
@@ -363,7 +365,7 @@ export function positionText(candidate: Candidate): string | null {
 
 export function publicationsText(publications: PublicationRef[]): string {
   const numbers = [...publications].map((publication) => publication.number).sort((a, b) => a - b)
-  return numbers.length === 1 ? `publication ${numbers[0]}` : `publications ${numbers.join(', ')}`
+  return numbers.length === 1 ? `knowledge version ${numbers[0]}` : `knowledge versions ${numbers.join(', ')}`
 }
 
 /** The same, capitalized for a heading. */
@@ -378,20 +380,20 @@ export function sourceNote(source: SourceView): string {
   const counts = source.counts
   switch (source.state) {
     case 'failed':
-      return 'Extraction failed'
+      return 'Could not read file'
     case 'compiling':
-      return 'Compiling candidates'
+      return 'Reading entries'
     case 'unreadable':
-      return 'Its candidates could not be read'
+      return 'Its entries could not be read'
     case 'review':
       if (counts && counts.published > 0) {
         return `${countNoun(type, counts.published)} published, ${source.unresolved} awaiting review`
       }
-      return counts ? `Compilation in review, ${counts.total - counts.pending} of ${counts.total} candidates reviewed` : 'Compilation in review'
+      return counts ? `Draft, ${counts.total - counts.pending} of ${counts.total} entries reviewed` : 'Draft'
     case 'published':
       return `${countNoun(type, counts?.published ?? 0)} published in ${publicationsText(source.publications)}`
     case 'none':
-      return counts && counts.total > 0 ? 'No candidate was published' : 'No candidates were produced'
+      return counts && counts.total > 0 ? 'No entry was published' : 'No entries were produced'
   }
 }
 
@@ -399,5 +401,5 @@ export function sourceNote(source: SourceView): string {
 export function reviewedText(source: SourceView): string | null {
   if (!source.counts) return null
   const { total, pending } = source.counts
-  return `${total - pending} of ${total} candidates reviewed`
+  return `${total - pending} of ${total} entries reviewed`
 }

@@ -5,7 +5,7 @@ import { changeTargetLabel } from './workflow'
 
 export function redlineExecutionTitle(execution: RedlineExecution): string {
   if (execution.status === 'FAILED') return 'Redline could not be generated'
-  if (execution.status === 'UNKNOWN') return 'Execution state unknown'
+  if (execution.status === 'UNKNOWN') return 'Redline state unknown'
   switch (execution.outcome) {
     case 'REDLINE_GENERATED':
       return 'Redline generated'
@@ -13,9 +13,9 @@ export function redlineExecutionTitle(execution: RedlineExecution): string {
       return 'No document changes'
     case 'UNKNOWN':
     case null:
-      return 'Redline execution completed'
+      return 'Redline generated'
     default:
-      return 'Redline execution completed'
+      return 'Redline generated'
   }
 }
 
@@ -24,11 +24,11 @@ export function redlineChangeStatusLabel(status: string): string {
     case 'APPLIED':
       return 'Applied'
     case 'FAILED':
-      return 'Execution failed'
+      return 'Failed'
     case 'NOT_APPLIED':
       return 'Not applied'
     default:
-      return 'Execution state unknown'
+      return 'State unknown'
   }
 }
 
@@ -46,25 +46,25 @@ export function redlineVerificationLabel(verification: string | null): string | 
 
 const FAILURE_TITLES: Record<string, string> = {
   SOURCE_DOCUMENT_UNAVAILABLE:
-    'The frozen source document is no longer available, so the redline could not be generated.',
+    'The original document is no longer available, so the redline could not be generated.',
   SOURCE_VERSION_MISMATCH:
-    'The frozen source document no longer matches this review’s contract version.',
+    'The original document no longer matches this review’s contract version.',
   SOURCE_INTEGRITY_MISMATCH:
-    'The frozen source document failed its integrity check and was not used.',
+    'The original document failed its integrity check and was not used.',
   UNSUPPORTED_SOURCE_FORMAT:
     'This document format cannot be redlined automatically.',
   SOURCE_EXPANSION_LIMIT_EXCEEDED:
     'This document expands beyond the size Rivell will process, so it was not redlined.',
   UNSUPPORTED_CHANGESET_VERSION:
-    'This approved change set version is not supported by the redline engine.',
+    'This approved change set version is not supported by Rivell.',
   PROTECTED_DOCUMENT_UNSUPPORTED:
     'The document is protected and cannot be safely redlined automatically.',
   PREEXISTING_REVISIONS_UNSUPPORTED:
     'This document already contains tracked changes and cannot be safely redlined automatically.',
   TARGET_NOT_FOUND:
-    'An approved change targets a location that could not be found in the frozen document.',
+    'An approved change targets a location that could not be found in the document.',
   TARGET_AMBIGUOUS:
-    'An approved change targets a location that is ambiguous in the frozen document.',
+    'An approved change targets a location that is ambiguous in the document.',
   UNSUPPORTED_SOURCE_STRUCTURE:
     'An approved change targets document structure that cannot be safely redlined automatically.',
   CHANGE_OVERLAP:
@@ -74,8 +74,8 @@ const FAILURE_TITLES: Record<string, string> = {
   INSERT_PLACEMENT_UNRESOLVED:
     'Rivell could not determine a safe insertion location for a missing provision.',
   APPROVED_SEMANTICS_DRIFT:
-    'The contract semantics changed after this review was approved, so Rivell placed none of the approved changes. The approved change set is unchanged.',
-  DOCX_LOAD_FAILED: 'The frozen document could not be opened for redlining.',
+    'The contract changed after this review was approved, so Rivell placed none of the approved changes. The approved change set is unchanged.',
+  DOCX_LOAD_FAILED: 'The original document could not be opened for redlining.',
   DOCX_SERIALIZATION_FAILED: 'The redlined document could not be written.',
   ROUND_TRIP_FAILED: 'The generated document could not be reopened for verification.',
   VERIFICATION_FAILED:
@@ -133,13 +133,13 @@ export function redlineVerificationOutcome(
 export function redlineVerificationSentence(outcome: RedlineVerificationOutcome): string {
   switch (outcome) {
     case 'PASSED':
-      return 'Rivell regenerated and reopened the DOCX and verified the tracked changes against the approved change set.'
+      return 'Rivell reopened the Word file and checked the tracked changes against the approved changes.'
     case 'INCOMPLETE':
       return 'Not every approved change was verified. Review the per-change report before using this document.'
     case 'NOT_APPLICABLE':
       return 'Verification applies only when approved changes are produced.'
     default:
-      return 'Verification state is not known for this execution.'
+      return 'The check result for this redline is not known.'
   }
 }
 
@@ -263,15 +263,15 @@ const TRIGGER_ERROR_NOTICES: Record<RedlineTriggerErrorKind, string> = {
   NOT_FOUND:
     'This review could not be found. It may not exist, or you may not have access to it.',
   FAILED_EXECUTION:
-    'The redline execution failed. The execution report below shows what happened; the approved change set is unchanged.',
+    'The redline failed. The report below shows what happened; the approved changes are unchanged.',
   NOT_AVAILABLE:
-    'Rivell could not generate the redline from this review’s frozen source. The approved change set is unchanged.',
+    'Rivell could not generate the redline from this review’s original document. The approved changes are unchanged.',
   UNCONFIRMED:
-    'The redline request could not be confirmed. Reopen this review to check whether an execution exists.',
+    'The redline request could not be confirmed. Reopen this review to check whether a redline was created.',
   ENGINE_UNAVAILABLE:
-    'The redline engine is unavailable right now. The approved change set is unchanged; try again later.',
+    'Rivell cannot generate a redline right now. The approved changes are unchanged; try again later.',
   STORAGE_UNAVAILABLE:
-    'The generated redline could not be stored, so no document was produced. This review and its approved change set are unchanged; you can generate the redline again once storage is available.',
+    'The generated redline could not be stored, so no document was produced. This review and its approved changes are unchanged; you can generate the redline again once storage is available.',
   TRANSPORT:
     'The redline could not be generated. Check your connection and try again.',
 }

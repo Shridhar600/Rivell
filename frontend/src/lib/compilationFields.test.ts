@@ -21,7 +21,7 @@ describe('structured interpretation', () => {
         declaredContractTypes: ['MSA'],
       }),
     )
-    expect(rows.map((entry) => entry.label)).toEqual(['Legal concept', 'Position', 'Escalate', 'Counsel approval', 'Wording', 'Applies to'])
+    expect(rows.map((entry) => entry.label)).toEqual(['Topic', 'Position', 'Escalate', 'Counsel approval', 'Wording', 'Applies to'])
     expect(row(rows, 'positions')?.value).toBe('Preferred, Fallback')
     expect(row(rows, 'escalation')?.value).toBe('Below six months')
     expect(row(rows, 'approval')?.value).toBe('Required')
@@ -34,19 +34,19 @@ describe('structured interpretation', () => {
     expect(row(rows, 'escalation')?.value).toBe('Not stated')
     expect(row(rows, 'approval')).toBeUndefined()
     expect(row(rows, 'concept')?.value).toBe('Not classified')
-    expect(row(rows, 'wording')?.value).toBe('No wording was extracted')
+    expect(row(rows, 'wording')?.value).toBe('No wording was read')
     expect(row(rows, 'scope')?.value).toBe('Not declared')
   })
 
   it('shows a clause with its role and approved wording', () => {
     const rows = interpretationRows(make({ candidateType: 'CLAUSE_VARIANT', variantRole: 'FALLBACK', positions: [], contentText: 'Liability is capped.' }))
-    expect(rows.map((entry) => entry.label)).toEqual(['Legal concept', 'Role', 'Approved wording', 'Applies to'])
+    expect(rows.map((entry) => entry.label)).toEqual(['Topic', 'Role', 'Approved wording', 'Applies to'])
     expect(row(rows, 'variantRole')?.value).toBe('Fallback')
   })
 
   it('keeps the machine wording beside a correction', () => {
     const rows = interpretationRows(make({ contentText: 'Net 90', editedContentText: 'Net 45' }))
-    expect(row(rows, 'wording')).toMatchObject({ value: 'Net 45', machine: 'Rivell extracted: Net 90', corrected: true })
+    expect(row(rows, 'wording')).toMatchObject({ value: 'Net 45', machine: 'Rivell read: Net 90', corrected: true })
   })
 
   it('shows spreadsheet columns, with the machine value only where a column changed', () => {
@@ -59,12 +59,12 @@ describe('structured interpretation', () => {
       }),
     )
     expect(row(rows, 'column:Variant')).toMatchObject({ value: 'Mutual', machine: null, corrected: false })
-    expect(row(rows, 'column:Wording')).toMatchObject({ value: 'Capped at 6 months', machine: 'Rivell extracted: Capped at 12 months', corrected: true })
+    expect(row(rows, 'column:Wording')).toMatchObject({ value: 'Capped at 6 months', machine: 'Rivell read: Capped at 12 months', corrected: true })
     // The text Rivell uses is one value resolved from wording then corrected columns, so a
     // column-only correction changes it: the corrected wording is shown with the machine row.
     expect(row(rows, 'wording')).toMatchObject({
       value: 'Mutual | Capped at 6 months',
-      machine: 'Rivell extracted: Mutual | Capped at 12 months',
+      machine: 'Rivell read: Mutual | Capped at 12 months',
       corrected: true,
     })
   })

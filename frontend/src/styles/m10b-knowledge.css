@@ -638,20 +638,6 @@ a.rv-k-lc:focus-visible {
   }
 }
 
-/* ---------- sidebar: Knowledge sections (canonical .nav-h) ---------- */
-.rv-nav__heading {
-  padding: 4px 8px;
-  color: var(--text-3);
-  font-size: 12px;
-  font-weight: 500;
-}
-.rv-nav--knowledge {
-  margin-top: 8px;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-nav__heading {
-  display: none;
-}
-
 /* ---------- Add knowledge dialog (M10B-F6) ---------- */
 .rv-k-add__field {
   margin: 0;

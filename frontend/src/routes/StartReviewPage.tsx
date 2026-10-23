@@ -1,6 +1,6 @@
 import { useId, useRef, useState, type DragEvent, type FormEvent } from 'react'
-import { Link } from 'react-router'
 import { useReviewPacksQuery } from '../api/reviews'
+import { Breadcrumbs } from '../components/shell/Breadcrumbs'
 import { Inspector, TopBar } from '../components/shell/TopBar'
 import { Button, LinkButton } from '../components/ui/Button'
 import { CautionIcon, CheckIcon, FileIcon, UploadIcon } from '../components/ui/Icon'
@@ -55,7 +55,7 @@ export function StartReviewPage() {
   function choose(candidate: File | undefined) {
     if (!candidate) return
     if (!isDocx(candidate)) {
-      setFileError('Only .docx files are supported.')
+      setFileError('Choose a Word document.')
       return
     }
     setFileError(null)
@@ -88,22 +88,14 @@ export function StartReviewPage() {
     <>
       <div className="rv-main">
         <TopBar
-          title={
-            <nav className="rv-crumbs" aria-label="Breadcrumb">
-              <Link to="/reviews">Contract reviews</Link>
-              <span className="rv-crumbs__sep" aria-hidden="true">
-                /
-              </span>
-              <b aria-current="page">Start review</b>
-            </nav>
-          }
+          title={<Breadcrumbs crumbs={[{ label: 'Reviews', to: '/reviews' }, { label: 'Start review' }]} />}
         />
         <div className="rv-scroll">
           <div className="rv-page rv-page--form">
             <div className="rv-page__head">
               <div>
                 <h1 className="rv-page__title">Start a contract review</h1>
-                <p className="rv-page__lede">Upload a DOCX, then confirm the authority-bearing review context.</p>
+                <p className="rv-page__lede">Upload a contract, then confirm the details for this review.</p>
               </div>
             </div>
 
@@ -115,7 +107,7 @@ export function StartReviewPage() {
                     ref={input}
                     type="file"
                     accept={ACCEPT}
-                    aria-label="Contract file (.docx)"
+                    aria-label="Contract file (Word)"
                     hidden
                     onChange={(event) => choose(event.target.files?.[0])}
                   />
@@ -127,7 +119,7 @@ export function StartReviewPage() {
                       <div className="rv-fsel__text">
                         <b>{file.name}</b>
                         <div className="rv-hint">
-                          DOCX, {fileSizeLabel(file.size)}. Stored unchanged as the source contract version.
+                          Word file, {fileSizeLabel(file.size)}. Kept unchanged.
                         </div>
                       </div>
                       <button type="button" className="rv-lnk" onClick={clear} disabled={running}>
@@ -152,9 +144,9 @@ export function StartReviewPage() {
                     >
                       <UploadIcon className="rv-icon" />
                       <div>
-                        <b>Choose a DOCX</b> or drop it here
+                        <b>Choose a Word file</b> or drop it here
                       </div>
-                      <div className="rv-hint">Reviewed contract input is DOCX. The original is never modified.</div>
+                      <div className="rv-hint">Word files only. The original is never changed.</div>
                     </button>
                   )}
                   {fileError ? (
@@ -169,8 +161,7 @@ export function StartReviewPage() {
                 <div className="rv-cb">
                   <h2 className="rv-lb">2. Review context</h2>
                   <p className="rv-cb__lede">
-                    These values are authoritative for this review. Rivell may warn about a mismatch, but it does not
-                    silently replace your choices.
+                    These details guide this review. Rivell may warn about a mismatch but will not change your choices.
                   </p>
                   <div className="rv-g2">
                     <div className="rv-fld">
@@ -230,7 +221,7 @@ export function StartReviewPage() {
 
                   <div className="rv-fld">
                     <label className="rv-lb rv-lb--field" htmlFor={packId}>
-                      Contract Pack <span className="rv-lb__opt">optional</span>
+                      Review pack <span className="rv-lb__opt">optional</span>
                     </label>
                     <select
                       id={packId}
@@ -248,9 +239,8 @@ export function StartReviewPage() {
                       ))}
                     </select>
                     <div className="rv-hint" id={packHintId}>
-                      Choose a pack only when you explicitly want that bounded rule set applied. A pack-less review is
-                      allowed.
-                      {pack ? ` ${pack.summary} (catalog version ${pack.version}).` : ''}
+                      Choose a pack to apply its rules to this review. Packs are optional.
+                      {pack ? ` ${pack.summary} (version ${pack.version}).` : ''}
                       {packs.isError ? ' The pack catalog could not be loaded, so only a pack-less review is available.' : ''}
                     </div>
                   </div>
@@ -259,9 +249,9 @@ export function StartReviewPage() {
                     <div className="rv-mm" role="note">
                       <CautionIcon className="rv-icon" />
                       <div>
-                        <b>The filename suggests a different contract type.</b> Rivell will still review it as{' '}
-                        {CONTRACT_TYPE_LABELS[context.contractType] ?? context.contractType}, as you declared. Change the
-                        type if that is a mistake.
+                        <b>The file name suggests a different contract type.</b> Rivell will review it as{' '}
+                        {CONTRACT_TYPE_LABELS[context.contractType] ?? context.contractType}. Change the type if that is
+                        wrong.
                       </div>
                     </div>
                   ) : null}
@@ -290,19 +280,19 @@ export function StartReviewPage() {
       <Inspector status="">
         <div className="rv-rail">
           <div>
-            <h3>Frozen review context</h3>
+            <h3>Review details</h3>
             <div className="rv-chk">
-              <Kept>Contract version stays immutable</Kept>
-              <Kept>Your declared review context is frozen</Kept>
-              <Kept>Published knowledge state is snapshotted for the review</Kept>
+              <Kept>The contract version stays the same</Kept>
+              <Kept>These details are fixed for this review</Kept>
+              <Kept>The review uses the knowledge published at the time</Kept>
             </div>
           </div>
           <div>
             <h3>What happens next</h3>
             <div className="rv-chk">
-              <Kept>Analysis runs asynchronously</Kept>
-              <Kept>Findings appear for human decision</Kept>
-              <Kept>No contract change is authorized until human decisions are finalized</Kept>
+              <Kept>Analysis runs in the background</Kept>
+              <Kept>Findings appear for your decision</Kept>
+              <Kept>Nothing changes in the contract until you finalize your decisions</Kept>
             </div>
           </div>
         </div>

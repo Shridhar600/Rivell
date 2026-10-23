@@ -74,11 +74,11 @@ describe('workflow labels', () => {
   })
 
   it('names human review statuses distinctly from machine analysis', () => {
-    expect(humanStatusLabel('NOT_STARTED')).toBe('Human review not started')
-    expect(humanStatusLabel('IN_PROGRESS')).toBe('Human review in progress')
+    expect(humanStatusLabel('NOT_STARTED')).toBe('Review not started')
+    expect(humanStatusLabel('IN_PROGRESS')).toBe('Review in progress')
     expect(humanStatusLabel('READY_FOR_COMPLETION')).toBe('Ready to finalize')
-    expect(humanStatusLabel('COMPLETED')).toBe('Human review completed')
-    expect(humanStatusLabel('UNKNOWN')).toBe('Human review state unknown')
+    expect(humanStatusLabel('COMPLETED')).toBe('Review completed')
+    expect(humanStatusLabel('UNKNOWN')).toBe('Review state unknown')
   })
 
   it('explains finalization blockers with safe product copy', () => {
@@ -97,9 +97,9 @@ describe('workflow labels', () => {
       'Approved organizational language',
     )
     expect(changeLanguageProvenanceLabel('GENERATIVE')).toBe(
-      'AI-proposed, human-approved for this contract',
+      'Proposed by Rivell, approved by you',
     )
-    expect(changeLanguageProvenanceLabel('HUMAN_EDIT')).toBe('Human-authored')
+    expect(changeLanguageProvenanceLabel('HUMAN_EDIT')).toBe('Written by you')
     expect(changeLanguageProvenanceLabel('NONE')).toBe('No replacement text')
     expect(changeLanguageProvenanceLabel('UNKNOWN')).toBe('Language source unavailable')
   })
@@ -344,7 +344,7 @@ describe('change set view-model', () => {
     const rows = humanReviewCountRows(
       humanReview({ actionableFindings: 3, resolvedFindings: 2, remainingFindings: 1 }),
     )
-    expect(rows).toContainEqual({ label: 'Findings needing a decision', value: 3 })
+    expect(rows).toContainEqual({ label: 'Needing a decision', value: 3 })
     expect(rows).toContainEqual({ label: 'Decided', value: 2 })
     expect(rows).toContainEqual({ label: 'Still open', value: 1 })
   })

@@ -8,6 +8,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { appRoutes } from '../../app/router'
+import { stubContractApi } from '../contract/testFixtures'
+import { fixtureCompletedReviewSummary, fixtureFindingList } from '../review/testFixtures'
+import { fixtureHumanReview } from '../review/workflowFixtures'
 import { LIFECYCLE_ROWS, reviewWire } from '../../test/reviewListFixtures'
 
 function envelope(data: unknown) {
@@ -31,11 +34,12 @@ function stubApi(reviews: unknown[] = []) {
 function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } })
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   )
+  return { ...view, router }
 }
 
 afterEach(() => {
@@ -56,12 +60,14 @@ describe('M10B shell', () => {
     expect(screen.queryByRole('heading', { name: /^reviews$/i })).not.toBeInTheDocument()
   })
 
-  it('exposes exactly the three M10B destinations', () => {
+  it('exposes Home and Reviews at the top level and the four Knowledge areas below', () => {
     stubApi()
     renderAt('/')
     const nav = screen.getByRole('navigation', { name: 'Primary' })
     const links = within(nav).getAllByRole('link').map((l) => l.textContent?.trim())
-    expect(links).toEqual(['Home', 'Reviews', 'Knowledge'])
+    expect(links).toEqual(['Home', 'Reviews'])
+    const knowledge = screen.getByRole('navigation', { name: 'Knowledge' })
+    expect(within(knowledge).getAllByRole('link').map((l) => l.textContent?.trim())).toEqual(['Overview', 'Playbooks', 'Clause library', 'Sources'])
   })
 
   it('has no Contracts, Inbox, Tasks or Admin destination', () => {
@@ -91,16 +97,20 @@ describe('M10B shell', () => {
 })
 
 describe('sidebar owns its own collapse control', () => {
-  it('puts the control in the sidebar header, not in the top bar', () => {
+  it('keeps one toggle in a fixed place, outside both the sidebar and the top bar', async () => {
     stubApi()
     renderAt('/')
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
     const topbar = document.querySelector('.rv-topbar') as HTMLElement
-    const toggle = within(sidebar).getByRole('button', { name: 'Sidebar' })
-    expect(toggle).toHaveClass('rv-side__toggle')
-    expect(toggle.closest('.rv-side__head')).not.toBeNull()
-    expect(toggle).toHaveAttribute('title', expect.stringContaining('Collapse sidebar'))
-    expect(within(topbar).queryByRole('button')).not.toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: 'Sidebar' })
+    expect(toggle).toHaveClass('rv-side-toggle')
+    expect(sidebar).not.toContainElement(toggle)
+    expect(topbar).not.toContainElement(toggle)
+    expect(toggle).toHaveAttribute('title', expect.stringContaining('Hide sidebar'))
+    await userEvent.click(toggle)
+    // The same control stays where it was, so the reader finds it again to reopen the sidebar.
+    expect(screen.getByRole('button', { name: 'Sidebar' })).toBe(toggle)
+    expect(within(topbar).getByRole('button', { name: 'Search' })).toBeInTheDocument()
   })
 
   it('keeps a stable accessible name and uses aria-expanded, not aria-pressed', () => {
@@ -115,14 +125,36 @@ describe('sidebar owns its own collapse control', () => {
   it('keeps the selection status line in the tree when the inspector is collapsed', async () => {
     stubApi([LIFECYCLE_ROWS.unresolved])
     renderAt('/')
-    const details = screen.getByRole('complementary', { name: 'Details' })
-    await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
+    await userEvent.click(await screen.findByRole('option', { name: /Unresolved MSA\.docx/i }))
+    expect(screen.getByRole('complementary', { name: 'Details' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
-    await userEvent.click(await screen.findByRole('option', { name: /Unresolved MSA\.docx/i }))
     const status = screen.getByRole('status')
     expect(status).toHaveTextContent(/Unresolved MSA\.docx/)
+  })
+
+  it('shows no details panel on Home until a row is chosen, and opens a closed panel on choice', async () => {
+    globalThis.localStorage?.setItem('rv-inspector', 'c')
+    stubApi([LIFECYCLE_ROWS.unresolved])
+    renderAt('/')
+    const row = await screen.findByRole('option', { name: /Unresolved MSA\.docx/i })
+    expect(screen.queryByRole('complementary', { name: 'Details' })).not.toBeInTheDocument()
+    await userEvent.click(row)
+    expect(screen.getByRole('complementary', { name: 'Details' })).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('.rv-shell')).not.toHaveAttribute('data-inspector', 'collapsed'))
+  })
+
+  it('resizes the details panel from its left edge and remembers the width', async () => {
+    stubApi()
+    renderAt('/reviews/new')
+    const handle = screen.getByRole('separator', { name: 'Resize details panel' })
+    expect(handle).toHaveAttribute('aria-valuenow', '340')
+    handle.focus()
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(handle).toHaveAttribute('aria-valuenow', '356')
+    expect(globalThis.localStorage?.getItem('rv-inspector-width')).toBe('356')
   })
 
   it('is reachable by Tab and operable from the keyboard', async () => {
@@ -156,8 +188,8 @@ describe('sidebar owns its own collapse control', () => {
     const sidebar = screen.getByRole('complementary', { name: 'Sidebar' })
     const nav = within(sidebar).getByRole('navigation', { name: 'Primary' })
     const expected = [
+      screen.getByRole('button', { name: 'Sidebar' }),
       within(sidebar).getByRole('link', { name: 'Rivell' }),
-      within(sidebar).getByRole('button', { name: 'Sidebar' }),
       ...within(nav).getAllByRole('link'),
     ]
 
@@ -180,17 +212,25 @@ describe('sidebar owns its own collapse control', () => {
     )
   })
 
-  it('keeps a tooltip on collapsed navigation items', async () => {
+  it('gives focus to the toggle when the sidebar closes around it', async () => {
+    stubApi()
+    renderAt('/')
+    const home = within(screen.getByRole('navigation', { name: 'Primary' })).getByRole('link', { name: 'Home' })
+    home.focus()
+    await userEvent.keyboard('[[')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Sidebar' })).toHaveFocus())
+  })
+
+  it('takes a closed sidebar out of the tab order and the accessibility tree', async () => {
     stubApi()
     const { container } = renderAt('/')
+    const side = container.querySelector('#rv-sidebar') as HTMLElement
+    expect(side).not.toHaveAttribute('inert')
     await userEvent.keyboard('[[')
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-sidebar', 'collapsed'),
     )
-    const nav = screen.getByRole('navigation', { name: 'Primary' })
-    for (const name of ['Home', 'Reviews', 'Knowledge']) {
-      expect(within(nav).getByRole('link', { name })).toHaveAttribute('title', name)
-    }
+    expect(side).toHaveAttribute('inert')
   })
 
   it('remembers the collapsed state per browser', async () => {
@@ -203,13 +243,49 @@ describe('sidebar owns its own collapse control', () => {
   })
 })
 
-describe('inspector panel', () => {
-  it('toggles from its own panel edge and keeps its grid column', async () => {
-    stubApi([LIFECYCLE_ROWS.unresolved])
+describe('sidebar width', () => {
+  const handle = () => screen.getByRole('separator', { name: 'Resize sidebar' })
+  const width = (container: HTMLElement) => (container.querySelector('.rv-shell') as HTMLElement).style.getPropertyValue('--rv-sidebar-open')
+
+  it('steps with the arrow keys, stays within its limits and is remembered', async () => {
+    stubApi()
     const { container } = renderAt('/')
-    const details = screen.getByRole('complementary', { name: 'Details' })
-    const toggle = within(details).getByRole('button', { name: 'Details panel' })
-    expect(toggle).toHaveClass('rv-edge--inspector')
+    expect(handle()).toHaveAttribute('aria-valuenow', '220')
+    handle().focus()
+    await userEvent.keyboard('{ArrowRight}')
+    expect(handle()).toHaveAttribute('aria-valuenow', '236')
+    expect(width(container)).toBe('236px')
+    expect(globalThis.localStorage?.getItem('rv-sidebar-width')).toBe('236')
+    await userEvent.keyboard('{End}{ArrowRight}')
+    expect(handle()).toHaveAttribute('aria-valuenow', '320')
+    await userEvent.keyboard('{Home}{ArrowLeft}')
+    expect(handle()).toHaveAttribute('aria-valuenow', '184')
+  })
+
+  it('opens at the saved width, clamped, and resets on double-click', async () => {
+    globalThis.localStorage?.setItem('rv-sidebar-width', '900')
+    stubApi()
+    renderAt('/')
+    expect(handle()).toHaveAttribute('aria-valuenow', '320')
+    await userEvent.dblClick(handle())
+    expect(handle()).toHaveAttribute('aria-valuenow', '220')
+  })
+
+  it('has no resize handle while the sidebar is the icon rail', () => {
+    globalThis.localStorage?.setItem('rv-sidebar', 'c')
+    stubApi()
+    renderAt('/')
+    expect(screen.queryByRole('separator', { name: 'Resize sidebar' })).not.toBeInTheDocument()
+  })
+})
+
+describe('inspector panel', () => {
+  it('toggles from the end of the top bar and keeps its grid column', async () => {
+    stubApi()
+    const { container } = renderAt('/reviews/new')
+    const topbar = document.querySelector('.rv-topbar') as HTMLElement
+    const toggle = screen.getByRole('button', { name: 'Details panel' })
+    expect(topbar).toContainElement(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(toggle).toHaveAttribute('aria-controls', 'rv-inspector')
     expect(toggle).not.toHaveAttribute('aria-pressed')
@@ -219,14 +295,70 @@ describe('inspector panel', () => {
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
     // Still reachable, otherwise the panel could never be reopened.
-    expect(within(details).getByRole('button', { name: 'Details panel' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Details panel' })).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('is not in the top bar', () => {
+  it('offers no details toggle on a page without a details panel', () => {
     stubApi()
     renderAt('/')
     const topbar = document.querySelector('.rv-topbar') as HTMLElement
-    expect(within(topbar).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(topbar).queryByRole('button', { name: 'Details panel' })).not.toBeInTheDocument()
+    expect(within(topbar).getByRole('button', { name: 'Search' })).toBeInTheDocument()
+  })
+})
+
+describe('one search menu for the whole app', () => {
+  it.each(['/', '/knowledge'])('%s opens the Search dialog with ⌘K', async (path) => {
+    stubApi()
+    renderAt(path)
+    expect(await screen.findByRole('banner')).toBeInTheDocument()
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    const dialog = await screen.findByRole('dialog', { name: 'Search' })
+    expect(within(dialog).getByRole('textbox', { name: 'Search' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('listbox', { name: 'Results' })).toBeInTheDocument()
+  })
+
+  it('opens the Search dialog from the top bar button', async () => {
+    stubApi()
+    renderAt('/')
+    await userEvent.click(await screen.findByRole('button', { name: 'Search' }))
+    expect(await screen.findByRole('dialog', { name: 'Search' })).toBeInTheDocument()
+  })
+
+  it('lists a review by filename under Reviews and opens its overview', async () => {
+    stubApi([reviewWire('r-1', 'COMPLETED', 'Acme MSA.docx', { contractId: 'c9' })])
+    const { router } = renderAt('/')
+    await screen.findByRole('heading', { name: 'Rivell' })
+    await userEvent.keyboard('{Meta>}k{/Meta}')
+    const dialog = await screen.findByRole('dialog', { name: 'Search' })
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Search' }), 'Acme')
+    const heading = await within(dialog).findByText('Reviews', { selector: '.rv-ws-pal-h' })
+    const group = heading.parentElement as HTMLElement
+    await userEvent.click(within(group).getByRole('option', { name: /Acme MSA/ }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/reviews/c9/overview/r-1'))
+  })
+})
+
+describe('the workspace starts from the icon rail', () => {
+  it('rails the app sidebar without changing the saved preference, and expands it on this page only', async () => {
+    globalThis.localStorage?.setItem('rv-sidebar', '')
+    stubContractApi({
+      reviewSummary: fixtureCompletedReviewSummary,
+      findings: fixtureFindingList,
+      humanReview: fixtureHumanReview(),
+    })
+    const { container } = renderAt('/reviews/c1/analysis/r-1')
+    await screen.findByRole('banner')
+
+    const shell = container.querySelector('.rv-shell') as HTMLElement
+    expect(shell).toHaveAttribute('data-sidebar', 'collapsed')
+    expect(globalThis.localStorage?.getItem('rv-sidebar')).toBe('')
+    const toggle = screen.getByRole('button', { name: 'Sidebar' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    await userEvent.click(toggle)
+    await waitFor(() => expect(shell).not.toHaveAttribute('data-sidebar', 'collapsed'))
+    expect(globalThis.localStorage?.getItem('rv-sidebar')).toBe('')
   })
 })
 
@@ -296,10 +428,10 @@ describe('the retired contract page address', () => {
 describe('responsive shell structure', () => {
   it('keeps the collapsed inspector in the grid rather than removing the column', async () => {
     stubApi()
-    const { container } = renderAt('/')
+    const { container } = renderAt('/reviews/new')
     expect(container.querySelector('.rv-insp')).toBeInTheDocument()
-    const details = screen.getByRole('complementary', { name: 'Details' })
-    await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
+    expect(screen.getByRole('complementary', { name: 'Details' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(container.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
@@ -309,15 +441,15 @@ describe('responsive shell structure', () => {
 
   it('keeps the collapsed panel handle operable', async () => {
     stubApi()
-    renderAt('/')
-    const details = screen.getByRole('complementary', { name: 'Details' })
-    const handle = within(details).getByRole('button', { name: 'Details panel' })
+    renderAt('/reviews/new')
+    expect(screen.getByRole('complementary', { name: 'Details' })).toBeInTheDocument()
+    const handle = screen.getByRole('button', { name: 'Details panel' })
     await userEvent.click(handle)
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).toHaveAttribute('data-inspector', 'collapsed'),
     )
     // Still operable after collapsing, so the panel can always be reopened.
-    await userEvent.click(within(details).getByRole('button', { name: 'Details panel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Details panel' }))
     await waitFor(() =>
       expect(document.querySelector('.rv-shell')).not.toHaveAttribute('data-inspector', 'collapsed'),
     )
@@ -340,9 +472,10 @@ describe('stylesheet contract (documentation only)', () => {
     // The inspector's own handle lives inside the panel, so hiding the panel hides the handle.
     const wide = css.slice(css.indexOf('max-width: 1180px'), css.indexOf('max-width: 760px'))
     expect(wide).toContain('.rv-insp')
-    // The sidebar stays as the icon rail at this width, so only its expand control goes.
+    // On a phone the sidebar slides over the page and leaves the screen when closed.
     const narrow = css.slice(css.indexOf('max-width: 760px'))
-    expect(narrow).toContain('.rv-side__toggle')
+    expect(narrow).toContain('.rv-side {')
+    expect(narrow).toContain('translateX(-100%)')
   })
 
   it('honours prefers-reduced-motion for every animated property', () => {
@@ -374,20 +507,30 @@ describe('panel toggles', () => {
     )
     const after = screen.getByRole('button', { name: 'Sidebar' })
     expect(after).toHaveAttribute('aria-expanded', 'false')
-    expect(after).toHaveAttribute('title', expect.stringContaining('Expand sidebar'))
+    expect(after).toHaveAttribute('title', expect.stringContaining('Show sidebar'))
+  })
+})
+
+describe('narrow layouts (stylesheet contract)', () => {
+  const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
+  const workspace = readFileSync(resolve(process.cwd(), 'src/styles/m10b-workspace.css'), 'utf8')
+
+  it('lets the stacked workspace and draft scroll inside the stage', () => {
+    const narrow = css.slice(css.indexOf('@media (max-width: 980px)'))
+    expect(narrow.slice(0, 400)).toContain('.rv-stage:has(> .rv-ws)')
+    expect(narrow.slice(0, 400)).toContain('overflow-y: auto')
   })
 
-  it('styles the inspector handle once, so no stale duplicate rule can win on order', () => {
-    const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
-    expect(css.match(/^\.rv-iconbtn\.rv-edge \{/gm) ?? []).toHaveLength(1)
+  it('keeps a dragged workspace panel width at medium widths', () => {
+    const medium = workspace.slice(workspace.indexOf('@media (max-width: 1240px)'))
+    expect(medium.slice(0, 300)).toContain('var(--lw-open, 240px)')
+    expect(medium.slice(0, 300)).toContain('var(--rw-open, 340px)')
   })
 
-  it('derives the handle offset from its own width, never a percentage', () => {
-    const css = readFileSync(resolve(process.cwd(), 'src/styles/m10b.css'), 'utf8')
-    const handle = css.slice(css.indexOf('.rv-iconbtn.rv-edge {'))
-    expect(handle.slice(0, 400)).toContain('calc(var(--rv-edge-w) / -2 - 1px)')
-    // A percentage here resolves against the 340px panel, not the 20px handle.
-    expect(handle.slice(0, 400)).not.toMatch(/-1 \* \(50%/)
+  it('opens the details panel over the page below 1180px instead of hiding it', () => {
+    const medium = css.slice(css.indexOf('@media (max-width: 1180px)'))
+    expect(medium.slice(0, 900)).toContain('position: absolute')
+    expect(medium.slice(0, 900)).not.toMatch(/\.rv-topbar__insp\s*\{\s*display: none/)
   })
 })
 

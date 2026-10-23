@@ -11,7 +11,7 @@ async function openEdit(id: string, world: Fake = reviewWorld()) {
   const view = renderApp(`/knowledge/compilations/${SRC}?candidate=${id}`)
   await screen.findByRole('heading', { level: 1 })
   await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
-  const form = await screen.findByRole('form', { name: 'Correct the structured candidate' })
+  const form = await screen.findByRole('form', { name: 'Edit this entry' })
   return { world, form, ...view }
 }
 const decisionBar = () => document.querySelector('.rv-kc-decide') as HTMLElement
@@ -22,7 +22,7 @@ const conceptCalls = (world: Fake) => requests(world, 'POST', /\/concept$/)
 describe('candidate correction', () => {
   it('offers only the fields the backend lets a reviewer change', async () => {
     const { form } = await openEdit('uncertain')
-    for (const label of ['Legal concept', 'Escalate', 'Counsel approval', 'Wording', 'Contract types', 'Jurisdiction', 'Effective from', 'Review note, optional']) {
+    for (const label of ['Topic', 'Escalate', 'Counsel approval', 'Wording', 'Contract types', 'Jurisdiction', 'Effective from', 'Review note, optional']) {
       expect(within(form).getByLabelText(label)).toBeInTheDocument()
     }
     expect(within(form).getByRole('group', { name: 'Position' })).toBeInTheDocument()
@@ -47,15 +47,15 @@ describe('candidate correction', () => {
     await userEvent.clear(wording)
     await userEvent.type(wording, 'Mutual, capped.')
     await save()
-    const card = await screen.findByRole('region', { name: 'Structured interpretation' })
+    const card = await screen.findByRole('region', { name: 'What Rivell read' })
     await within(card).findByText('Corrected by you')
     expect(within(card).getByText('Mutual, capped.')).toBeInTheDocument()
-    expect(within(card).getByText('Rivell extracted: Mutual and capped.')).toBeInTheDocument()
-    expect(within(card).getByText(/extracted values remain in history/)).toBeInTheDocument()
+    expect(within(card).getByText('Rivell read: Mutual and capped.')).toBeInTheDocument()
+    expect(within(card).getByText(/original reading is kept/)).toBeInTheDocument()
     // A correction is not an approval: the corrected value still has to be approved.
-    expect(screen.getByText(/Corrected. Approve the corrected value to include it in the publication/)).toBeInTheDocument()
+    expect(screen.getByText(/Corrected. Approve the corrected value to include it in the new version/)).toBeInTheDocument()
     expect(within(decisionBar()).getByRole('button', { name: 'Approve correction' })).toBeEnabled()
-    expect(within(screen.getByRole('navigation', { name: 'Candidate list' })).getByRole('button', { name: /Indemnification/ })).toHaveTextContent('Corrected')
+    expect(within(screen.getByRole('navigation', { name: 'Entry list' })).getByRole('button', { name: /Indemnification/ })).toHaveTextContent('Corrected')
   })
 
   it('does not change the uploaded source when a candidate is corrected', async () => {
@@ -98,7 +98,7 @@ describe('candidate correction', () => {
     const { world, form } = await openEdit('uncertain')
     const group = await within(form).findByRole('group', { name: 'Liability and indemnity' })
     expect(within(group).getByRole('option', { name: 'Indemnification' })).toBeInTheDocument()
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), 'INDEMNIFICATION')
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), 'INDEMNIFICATION')
     await save()
     await waitFor(() => expect(conceptCalls(world)).toHaveLength(1))
     expect(conceptCalls(world)[0]?.body).toEqual({ primary: 'INDEMNIFICATION' })
@@ -112,7 +112,7 @@ describe('candidate correction', () => {
       entry.id === 'uncertain' ? { ...entry, legalConceptKey: 'GOVERNING_LAW', effectiveConceptKey: 'GOVERNING_LAW' } : entry,
     )
     const { form } = await openEdit('uncertain', world)
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), '')
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), '')
     await save()
     await waitFor(() => expect(conceptCalls(world)).toHaveLength(1))
     expect(conceptCalls(world)[0]?.body).toEqual({ primary: '' })
@@ -124,10 +124,10 @@ describe('candidate correction', () => {
     world.fail['POST concept uncertain'] = 400
     const { form } = await openEdit('uncertain', world)
     await userEvent.type(within(form).getByLabelText('Wording'), ' Edited.')
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), 'INDEMNIFICATION')
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), 'INDEMNIFICATION')
     await save()
     const alert = await within(form).findByRole('alert')
-    expect(alert).toHaveTextContent(/Your other corrections were saved, but the legal concept was not/)
+    expect(alert).toHaveTextContent(/Your other corrections were saved, but the topic was not/)
     expect(alert).toHaveTextContent(/not one Rivell knows/)
     expect(editCalls(world)).toHaveLength(1)
     expect(conceptCalls(world)).toHaveLength(1)
@@ -145,7 +145,7 @@ describe('candidate correction', () => {
     const { world, form } = await openEdit('uncertain')
     await userEvent.type(within(form).getByLabelText('Wording'), ' Edited.')
     await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('form', { name: 'Correct the structured candidate' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Edit this entry' })).not.toBeInTheDocument()
     expect(editCalls(world)).toHaveLength(0)
   })
 
@@ -156,7 +156,7 @@ describe('candidate correction', () => {
     await userEvent.type(within(form).getByLabelText('Wording'), ' Edited.')
     await save()
     expect(await within(form).findByRole('alert')).toHaveTextContent(/does not apply in the current state/i)
-    expect(screen.getByRole('form', { name: 'Correct the structured candidate' })).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Edit this entry' })).toBeInTheDocument()
   })
 
   it('brings a rejected candidate back for review only by correcting it', async () => {
@@ -166,7 +166,7 @@ describe('candidate correction', () => {
     await userEvent.type(within(form).getByLabelText('Wording'), ' Reconsidered.')
     await save()
     await screen.findByText(/Corrected. Approve the corrected value/)
-    expect(within(screen.getByRole('navigation', { name: 'Candidate list' })).getByRole('button', { name: /Indemnification/ })).toHaveTextContent('Corrected')
+    expect(within(screen.getByRole('navigation', { name: 'Entry list' })).getByRole('button', { name: /Indemnification/ })).toHaveTextContent('Corrected')
   })
 
   it('edits a clause variant by its role and its wording, and shows the spreadsheet columns', async () => {
@@ -191,7 +191,7 @@ describe('candidate correction', () => {
     const { form } = await openEdit('v1', world)
     expect(within(form).getByLabelText('Role')).toHaveValue('PREFERRED')
     expect(within(form).getByLabelText('Variant')).toHaveValue('Mutual, standard')
-    expect(within(form).getByText(/are published as the corrected wording/)).toBeInTheDocument()
+    expect(within(form).getByText(/published as its wording/)).toBeInTheDocument()
     await userEvent.selectOptions(within(form).getByLabelText('Role'), 'FALLBACK')
     await save()
     await waitFor(() => expect(editCalls(world)).toHaveLength(1))

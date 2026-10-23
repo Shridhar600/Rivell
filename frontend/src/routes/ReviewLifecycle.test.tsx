@@ -91,6 +91,7 @@ describe('analysis states', () => {
     renderAt(PATH)
     expect(await screen.findByRole('heading', { name: 'Waiting for analysis to start' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('you can leave this page')
+    expect(screen.queryByText('Queued')).not.toBeInTheDocument()
     expect(screen.queryByText(/%/)).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Review Workspace/ })).not.toBeInTheDocument()
     expect(calls(api, '/human-review')).toHaveLength(0)
@@ -122,6 +123,27 @@ describe('analysis states', () => {
     expect(screen.queryByText(/ANALYSIS_INTERNAL_ERROR/)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Review progress')).toHaveTextContent('Failed')
   })
+
+  it('incomplete: the explanation moved to the status line tooltip, and nothing is decided', async () => {
+    stubContractApi({
+      reviewSummary: fixtureCompletedReviewSummary,
+      findings: fixtureFindingList,
+      humanReview: fixtureHumanReview({
+        status: 'IN_PROGRESS',
+        blockers: [{ code: 'ANALYSIS_NOT_COMPLETE', message: 'x', findingIds: [] }],
+      }),
+    })
+    renderAt(PATH)
+    const line = await screen.findByText('Analysis is still running.')
+    expect(line).toHaveAttribute(
+      'title',
+      'The analysis is not finished yet, so you cannot decide on findings. This page shows the current state.',
+    )
+    // The removed sentence is no longer visible prose.
+    expect(screen.queryByText(/no human review is offered/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Open review' })).not.toBeInTheDocument()
+  })
 })
 
 describe('human-review states lead to the Workspace and decide nothing', () => {
@@ -132,11 +154,14 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
   it('ready for review: orients the reviewer and opens the real Workspace route', async () => {
     const api = completed(fixtureHumanReview({ status: 'NOT_STARTED' }))
     const router = renderAt(PATH)
-    expect(await screen.findByRole('heading', { name: '2 Findings are ready for human review' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '2 findings are ready for your review' })).toBeInTheDocument()
     expect(screen.getByText('Ready for review', { selector: '.rv-stb' })).toBeInTheDocument()
-    const link = screen.getAllByRole('link', { name: 'Open Review Workspace' })[0]
+    const link = screen.getAllByRole('link', { name: 'Open review' })[0]
     expect(link).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
-    expect(screen.getByLabelText('Findings by classification')).toBeInTheDocument()
+    // The next step sits in the top bar, where every page keeps its actions.
+    const topbar = document.querySelector('.rv-topbar') as HTMLElement
+    expect(within(topbar).getByRole('link', { name: 'Open review' })).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
+    expect(screen.getByLabelText('By classification')).toBeInTheDocument()
     // Rivell's own proposals are orientation only, and the kinds are not interchangeable.
     const proposals = screen.getByLabelText('What Rivell proposes')
     expect(proposals).toHaveTextContent('1Replacement wording')
@@ -156,18 +181,20 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
       reviewSummary: { ...fixtureCompletedReviewSummary, proposedChanges: { replace: 0, insert: 0, delete: 0 } },
     })
     renderAt(PATH)
-    await screen.findByRole('heading', { name: '2 Findings are ready for human review' })
+    await screen.findByRole('heading', { name: '2 findings are ready for your review' })
     expect(screen.queryByLabelText('What Rivell proposes')).not.toBeInTheDocument()
   })
 
   it('in review: shows the server decided count and a bar of real segments, not a percentage', async () => {
     completed(fixtureHumanReview({ actionableFindings: 8, resolvedFindings: 5, remainingFindings: 3 }))
     renderAt(PATH)
-    expect(await screen.findByRole('heading', { name: '5 of 8 Findings decided' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '5 of 8 findings decided' })).toBeInTheDocument()
     expect(screen.getByText('In review', { selector: '.rv-stb' })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: '5 of 8 Findings decided' }).querySelectorAll('i')).toHaveLength(8)
-    expect(screen.getByText(/Next unresolved: Limitation of liability/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Continue in Review Workspace' })).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
+    expect(screen.getByRole('img', { name: '5 of 8 findings decided' }).querySelectorAll('i')).toHaveLength(8)
+    expect(screen.getByText(/Next open: Limitation of liability/)).toBeInTheDocument()
+    // The removed "Finalize readiness is server-owned." note is gone from the footer.
+    expect(screen.queryByText(/Finalize readiness is server-owned/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Continue review' })).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
     expect(screen.queryByText(/%/)).not.toBeInTheDocument()
   })
 
@@ -181,9 +208,9 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
       }),
     )
     renderAt(PATH)
-    expect(await screen.findByRole('heading', { name: 'An escalated Finding is still unresolved' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'An escalated finding is still unresolved' })).toBeInTheDocument()
     expect(screen.getByText('Escalation blocking', { selector: '.rv-stb' })).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: 'Open Review Workspace' })[0]).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
+    expect(screen.getAllByRole('link', { name: 'Open review' })[0]).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
     expect(screen.queryByRole('heading', { name: 'Ready to finalize' })).not.toBeInTheDocument()
   })
 
@@ -193,10 +220,10 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
     )
     renderAt(PATH)
     expect(await screen.findByRole('heading', { name: 'Ready to finalize' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open Review Workspace to finalize' })).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
+    expect(screen.getByRole('link', { name: 'Open review to finalize' })).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
     expect(screen.queryByRole('button', { name: /finalize/i })).not.toBeInTheDocument()
     expect(calls(api, '/finalize', 'POST')).toHaveLength(0)
-    expect(screen.getByLabelText('Human decisions')).toHaveTextContent('Accepted')
+    expect(screen.getByLabelText('Your decisions')).toHaveTextContent('Accepted')
   })
 
   it('does not decide readiness itself: every Finding decided but a blocker listed is still in review', async () => {
@@ -229,9 +256,9 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
     stubContractApi({ reviewSummary: fixtureCompletedReviewSummary, findings: fixtureFindingList, humanReview: null, humanReviewStatus: 500 })
     renderAt(PATH)
     // The read is retried once before it is reported, so the failure takes a moment to appear.
-    expect(await screen.findByText(/Human review state could not be loaded/, {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(await screen.findByText(/Could not load this review's progress/, {}, { timeout: 4000 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: /Findings are ready/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /findings are ready/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Review Workspace/ })).not.toBeInTheDocument()
   })
 })
@@ -289,7 +316,7 @@ describe('finalized: the frozen change set and the redline', () => {
     expect(screen.getByText('1 verified')).toBeInTheDocument()
     expect(screen.getByText('acme-msa-v1-redline.docx')).toBeInTheDocument()
     expect(screen.getByText(/produced from msa\.docx v1/)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Download tracked DOCX' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Download Word file' }))
     await waitFor(() => expect(calls(api, '/redline/download')).toHaveLength(1))
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled())
   })
@@ -302,7 +329,7 @@ describe('finalized: the frozen change set and the redline', () => {
       }),
     )
     renderAt(PATH)
-    await userEvent.click(await screen.findByRole('button', { name: 'Download tracked DOCX' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Download Word file' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('could not be downloaded')
     expect(screen.getByRole('heading', { name: 'Verified redline' })).toBeInTheDocument()
   })
@@ -322,7 +349,7 @@ describe('finalized: the frozen change set and the redline', () => {
       }),
     )
     renderAt(PATH)
-    await userEvent.click(await screen.findByRole('button', { name: 'Download tracked DOCX' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Download Word file' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('could not be downloaded')
     expect(URL.createObjectURL).not.toHaveBeenCalled()
   })
@@ -332,12 +359,14 @@ describe('finalized: the frozen change set and the redline', () => {
     renderAt(PATH)
     expect(await screen.findByRole('heading', { name: 'Redline failed' })).toBeInTheDocument()
     expect(screen.getByText('Redline failed', { selector: '.rv-stb' })).toBeInTheDocument()
-    expect(screen.getByText('No verified DOCX is available to download')).toBeInTheDocument()
-    expect(screen.getByText('Approved changes remain frozen and intact')).toBeInTheDocument()
+    expect(screen.getByText('No verified Word file is available to download')).toBeInTheDocument()
+    expect(screen.getByText('Approved changes cannot be changed')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Download/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Generate redline' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Verified redline' })).not.toBeInTheDocument()
+    expect(screen.getByText('Running the same changes again would give the same result.')).toBeInTheDocument()
+    expect(screen.queryByText(/determined by the frozen inputs/)).not.toBeInTheDocument()
     expect(calls(api, '/redline', 'POST')).toHaveLength(0)
   })
 
@@ -435,15 +464,15 @@ describe('tabs: approved changes and reports', () => {
   it('approved changes are read-only and link back to the Workspace for the Finding', async () => {
     stubContractApi(finalizedOptions({ redline: fixtureRedlineExecution() }))
     const router = renderAt(`${PATH}/changes`)
-    expect(await screen.findByText(/Approved change set is frozen/)).toBeInTheDocument()
+    expect(await screen.findByText(/Approved changes are final/)).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Approved changes' })).toHaveAttribute('aria-selected', 'true')
     const list = screen.getByRole('list', { name: 'Approved changes' })
     expect(within(list).getByText('Limitation of liability')).toBeInTheDocument()
     expect(within(list).getAllByText('Edited').length).toBeGreaterThan(0)
-    expect(within(list).getByText(/Decision revision/)).toBeInTheDocument()
+    expect(within(list).getByText(/Decision version/)).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /accept|reject|escalate|save|delete|remove|edit change/i })).not.toBeInTheDocument()
-    const link = within(list).getByRole('link', { name: /Open Review Workspace/ })
+    const link = within(list).getByRole('link', { name: /Open review/ })
     expect(link).toHaveAttribute('href', '/reviews/c1/analysis/r-1?finding=f-1')
     await userEvent.click(link)
     expect(router.state.location.pathname).toBe('/reviews/c1/analysis/r-1')
@@ -465,17 +494,18 @@ describe('tabs: approved changes and reports', () => {
       }),
     )
     renderAt(`${PATH}/changes`)
-    await screen.findByText(/Approved change set is frozen/)
+    await screen.findByText(/Approved changes are final/)
     const rows = screen.getAllByRole('button', { expanded: false }).concat(screen.getAllByRole('button', { expanded: true }))
     for (const row of rows.filter((row) => row.textContent?.includes('Missing'))) await userEvent.click(row)
-    expect(screen.getAllByText('Placement resolved during redline execution').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Physical DOCX placement was not chosen by the reviewer/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Rivell places this when it builds the redline').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Rivell will place this provision when it builds the redline/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/deterministic redline execution/)).not.toBeInTheDocument()
   })
 
   it('an empty change set says so, and offers nothing to inspect', async () => {
     stubContractApi(finalizedOptions({ changeSet: fixtureChangeSet({ changes: [] }) }))
     renderAt(`${PATH}/changes`)
-    expect(await screen.findByText(/0 executable changes/)).toBeInTheDocument()
+    expect(await screen.findByText(/0 changes/)).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Approved changes' })).not.toBeInTheDocument()
   })
 
@@ -485,7 +515,7 @@ describe('tabs: approved changes and reports', () => {
     expect(await screen.findByRole('heading', { name: 'Change report' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Change report' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('Applied · Verified')).toBeInTheDocument()
-    expect(screen.getByText(/Overall result: VERIFIED/)).toBeInTheDocument()
+    expect(screen.getByText(/Overall result: Verified/)).toBeInTheDocument()
   })
 
   it('diagnostic report: top level FAILED, and no applied change is dressed up as success', async () => {
@@ -497,12 +527,12 @@ describe('tabs: approved changes and reports', () => {
     stubContractApi(finalizedOptions({ changeSet: fixtureMixedChangeSet(), redline: failed }))
     renderAt(`${PATH}/report`)
     expect(await screen.findByRole('heading', { name: 'Diagnostic report' })).toBeInTheDocument()
-    expect(screen.getByText(/Overall result: FAILED/)).toBeInTheDocument()
+    expect(screen.getByText(/Overall result: Failed/)).toBeInTheDocument()
     const applied = screen.getByText('Applied before overall failure')
     expect(applied).not.toHaveClass('rv-stb--ok')
     expect(screen.queryByText('Applied · Verified')).not.toBeInTheDocument()
-    expect(screen.getByText('Execution failed')).toBeInTheDocument()
-    expect(screen.getByText(/could not be found in the frozen document/)).toBeInTheDocument()
+    expect(screen.getByText('Failed', { selector: '.rv-stb' })).toBeInTheDocument()
+    expect(screen.getByText(/could not be found in the document/)).toBeInTheDocument()
   })
 
   it('a report tab the state does not have falls back to the redline tab', async () => {
@@ -543,10 +573,10 @@ describe('the pinned version', () => {
       humanReview: fixtureHumanReview({ status: 'NOT_STARTED' }),
     })
     renderAt(PATH)
-    await screen.findByRole('heading', { name: '2 Findings are ready for human review' })
+    await screen.findByRole('heading', { name: '2 findings are ready for your review' })
     await waitFor(() => expect(calls(api, '/versions/2/semantics').length).toBeGreaterThan(0))
     expect(calls(api, '/versions/1/')).toHaveLength(0)
-    expect(screen.getByText('v2, immutable')).toBeInTheDocument()
+    expect(screen.getByText('v2, cannot be changed')).toBeInTheDocument()
   })
 
   it('names the document the Review itself reports, never the contract’s latest', async () => {
@@ -577,7 +607,7 @@ describe('the pinned version', () => {
     const rail = screen.getByRole('complementary', { name: 'Details' })
     expect(within(rail).getByText('Counterparty paper')).toBeInTheDocument()
     expect(within(rail).getByText('United Kingdom')).toBeInTheDocument()
-    expect(within(rail).getByText('Publication 6')).toBeInTheDocument()
+    expect(within(rail).getByText('Knowledge version 6')).toBeInTheDocument()
   })
 })
 
@@ -607,6 +637,9 @@ describe('identity and errors', () => {
     renderAt(PATH)
     await screen.findByRole('heading', { name: 'Waiting for analysis to start' })
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
-    expect(within(crumbs).getByRole('link', { name: 'Contract reviews' })).toHaveAttribute('href', '/reviews')
+    expect(within(crumbs).getByRole('link', { name: 'Reviews' })).toHaveAttribute('href', '/reviews')
+    // A review page offers its own next step, never a new review.
+    const topbar = document.querySelector('.rv-topbar') as HTMLElement
+    expect(within(topbar).queryByRole('link', { name: 'Start review' })).not.toBeInTheDocument()
   })
 })

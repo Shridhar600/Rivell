@@ -62,7 +62,7 @@ describe('evidenceLanesFor', () => {
     const precedent = lanes.find((entry) => entry.lane.authority === 'PRECEDENT')
     expect(precedent?.items.map((entry) => entry.evidenceId)).toEqual(['e-p2', 'e-p3'])
     expect(precedent?.lane.prominence).toBe('historical')
-    expect(precedent?.lane.description).toMatch(/lower authority/i)
+    expect(precedent?.lane.description).toMatch(/less weight/i)
   })
 
   it('keeps policy visible when empty and drafting visible only when missing', () => {
@@ -153,7 +153,7 @@ describe('applicability scope presentation', () => {
       applicabilityDimensions(scope).map((d) => `${d.label}: ${d.value}`),
     ).toEqual([
       'Contract types: MSA',
-      'Contract pack: MSA pack',
+      'Review pack: MSA pack',
       'Perspective: Customer',
       'Paper source: Third-party paper',
       'Jurisdiction: United States',
@@ -174,10 +174,10 @@ describe('applicability scope presentation', () => {
     }
 
     expect(applicabilityDimensions(scope)).toEqual([
-      { key: 'pack', label: 'Contract pack', value: 'MSA pack' },
+      { key: 'pack', label: 'Review pack', value: 'MSA pack' },
     ])
     expect(applicabilityNote(scope)).toBe(
-      'Unlisted dimensions are not constrained by this source.',
+      'Fields not listed do not limit this source.',
     )
 
     const empty = { ...scope, contractPackKey: null }
@@ -263,9 +263,9 @@ describe('sufficiencyPresentation', () => {
     expect(staleClassificationNote(null, 'TERM', humanizeCode)).toBeNull()
     expect(staleClassificationNote('TERM', 'TERM', humanizeCode)).toBeNull()
     expect(staleClassificationNote('TERM', 'CONFIDENTIALITY_OBLIGATIONS', humanizeCode)).toBe(
-      "This evidence was built with the classification Term. The contract's current classification is Confidentiality obligations; rebuild to refresh the evidence.",
+      'This source was compared as Term. The contract is now classified as Confidentiality obligations. Rebuild to update.',
     )
-    expect(staleClassificationNote('TERM', null, humanizeCode)).toMatch(/is not set/)
+    expect(staleClassificationNote('TERM', null, humanizeCode)).toMatch(/classified as not set/)
   })
 })
 
@@ -296,27 +296,27 @@ describe('labels', () => {
   it('labels source types and retrieval reasons, including relationship reasons', () => {
     expect(sourceTypeLabel('PUBLISHED_PLAYBOOK_RULE')).toBe('Playbook rule')
     expect(sourceTypeLabel('PUBLISHED_CLAUSE_VARIANT')).toBe('Clause library variant')
-    expect(sourceTypeLabel('PUBLISHED_PRECEDENT')).toBe('Executed precedent')
+    expect(sourceTypeLabel('PUBLISHED_PRECEDENT')).toBe('Signed precedent')
     expect(sourceTypeLabel('CURRENT_CONTRACT_DEFINED_TERM')).toBe('Defined term')
     expect(sourceTypeLabel('FUTURE_SOURCE')).toBe('Future source')
 
     expect(retrievalReasonLabel('CANONICAL_STRUCTURE')).toBe('Contract structure')
-    expect(retrievalReasonLabel('FUSION')).toBe('Lexical + semantic match')
+    expect(retrievalReasonLabel('FUSION')).toBe('Lexical + similarity match')
     expect(retrievalReasonLabel('RESOLVED_REFERENCE')).toMatch(/cross-reference/i)
     expect(retrievalReasonLabel('SIBLING_CONCEPT')).toMatch(/related clause/i)
     expect(retrievalReasonLabel('SEMANTIC_RELATIONSHIP:DEPENDS_ON')).toBe(
-      'Semantic relationship: depends on',
+      'Related clause: depends on',
     )
     expect(retrievalReasonLabel('FUTURE_REASON')).toBe('Future reason')
   })
 
   it('labels trace stages and timings with a fallback', () => {
     expect(traceStageLabel('fusion')).toBe('Rank fusion')
-    expect(traceStageLabel('rerank')).toBe('Semantic reranking')
+    expect(traceStageLabel('rerank')).toBe('Similarity ranking')
     expect(traceStageLabel('policy')).toBe('Policy lookup')
     expect(traceStageLabel('currentContract')).toBe('Current contract')
     expect(traceStageLabel('futureStage')).toBe('Future stage')
-    expect(traceTimingLabel('pinResolution')).toBe('Knowledge pin resolution')
+    expect(traceTimingLabel('pinResolution')).toBe('Knowledge version lookup')
     expect(traceTimingLabel('currentContract')).toBe('Current contract')
     expect(traceTimingLabel('totalMs')).toBe('Total')
     expect(traceTimingLabel('futureTiming')).toBe('Future timing')
@@ -343,13 +343,13 @@ describe('traceRequestEntries', () => {
     }, humanizeCode)
 
     const labels = entries.map((entry) => entry.label)
-    expect(labels).toContain('Legal concept')
+    expect(labels).toContain('Topic')
     expect(labels).toContain('Effective on')
     expect(labels).toContain('Contract type')
     expect(labels).toContain('Our side')
-    expect(labels).toContain('Knowledge pin')
-    expect(labels).toContain('Resolved publication')
-    expect(entries.find((entry) => entry.label === 'Legal concept')?.value).toBe(
+    expect(labels).toContain('Knowledge version')
+    expect(labels).toContain('Knowledge version used')
+    expect(entries.find((entry) => entry.label === 'Topic')?.value).toBe(
       'Limitation of liability',
     )
     expect(entries.find((entry) => entry.label === 'Purpose')?.value).toBe('Clause review')

@@ -28,11 +28,11 @@ export function PublishedCompilation({ artifact, candidates, publications }: { a
         <span className="rv-kc-stb rv-kc-stb--ok">Published{text ? `, ${text}` : ''}</span>
         <h1 tabIndex={-1}>{artifactName(artifact)}</h1>
         <p>
-          This human-reviewed snapshot is published organizational knowledge for future reviews. The uploaded source remains immutable, and earlier publications remain reproducible.
+          This reviewed version is published knowledge for future reviews. The source cannot be changed and earlier versions remain available.
         </p>
         <dl className="rv-kc-snapshot">
           <div>
-            <dt>Published candidates</dt>
+            <dt>Published entries</dt>
             <dd>{published.length}</dd>
           </div>
           <div>
@@ -40,7 +40,7 @@ export function PublishedCompilation({ artifact, candidates, publications }: { a
             <dd>{corrected}</dd>
           </div>
           <div>
-            <dt>Rejected candidates</dt>
+            <dt>Rejected entries</dt>
             <dd>{rejected}</dd>
           </div>
         </dl>
@@ -50,7 +50,7 @@ export function PublishedCompilation({ artifact, candidates, publications }: { a
           </LinkButton>
           <LinkButton to={`/knowledge/sources/${artifact.id}`}>View retained source</LinkButton>
         </div>
-        <p className="rv-kc-note">Publishing created a new immutable publication. It does not rewrite older publications or reviews pinned to an earlier knowledge snapshot.</p>
+        <p className="rv-kc-note">Publishing created a new version. It does not change earlier versions or reviews that used them.</p>
       </div>
     </div>
   )

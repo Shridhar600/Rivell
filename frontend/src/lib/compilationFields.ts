@@ -47,7 +47,7 @@ function supportNote(interpretation: Interpretation | null): string | null {
   const note = SUPPORT_NOTES[interpretation.verification]
   if (note) return note
   return interpretation.verification === 'NOT_VERIFIED' && interpretation.kind === 'GENERATIVE_EXTRACTION'
-    ? 'Not independently verified'
+    ? 'Not checked against a second source'
     : null
 }
 
@@ -87,10 +87,10 @@ export function interpretationRows(candidate: Candidate, label: ConceptLabel): F
   const classified = machine ? label(machine) : null
   rows.push({
     key: 'concept',
-    label: 'Legal concept',
+    label: 'Topic',
     value: concept ?? 'Not classified',
     machine: conceptCorrected(candidate) && classified !== concept ? `Rivell classified: ${classified ?? 'not classified'}` : null,
-    support: concept ? null : 'Rivell could not place this under a legal concept',
+    support: concept ? null : 'Rivell could not place this under a topic',
     corrected: conceptCorrected(candidate),
   })
 
@@ -151,8 +151,8 @@ export function interpretationRows(candidate: Candidate, label: ConceptLabel): F
   rows.push({
     key: 'wording',
     label: isClause ? 'Approved wording' : 'Wording',
-    value: textOrNull(text) ?? 'No wording was extracted',
-    machine: textChanged ? `Rivell extracted: ${candidate.contentText ?? ''}` : null,
+    value: textOrNull(text) ?? 'No wording was read',
+    machine: textChanged ? `Rivell read: ${candidate.contentText ?? ''}` : null,
     support: null,
     corrected: textChanged,
   })
@@ -164,7 +164,7 @@ export function interpretationRows(candidate: Candidate, label: ConceptLabel): F
       key: `column:${name}`,
       label: name,
       value: columns[name] ?? '',
-      machine: changed ? `Rivell extracted: ${candidate.payloadColumns[name] ?? ''}` : null,
+      machine: changed ? `Rivell read: ${candidate.payloadColumns[name] ?? ''}` : null,
       support: null,
       corrected: changed,
     })

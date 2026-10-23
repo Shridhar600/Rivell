@@ -165,8 +165,8 @@ const CONTRACT_MESSAGES: Partial<Record<number, string>> = {
 }
 
 const STRUCTURE_MESSAGES: Partial<Record<number, string>> = {
-  404: 'This contract version has no parsed document structure.',
-  409: 'This contract version is not parsed yet, so its structure is not available.',
+  404: 'This contract version has no document structure yet.',
+  409: 'This contract version has not been read yet, so its structure is not available.',
   500: 'The document structure could not be loaded.',
   503: 'Document storage is unavailable right now.',
 }

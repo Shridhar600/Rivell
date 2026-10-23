@@ -43,13 +43,3 @@ function Property({ label, value }: { label: string; value: string }) {
     </>
   )
 }
-
-/** Shown until a row is chosen. Nothing is auto-selected, so the panel says how to fill it. */
-export function WorkDetailsHint() {
-  return (
-    <div className="rv-insp__empty">
-      <p className="rv-insp__kind">Details</p>
-      <p className="rv-insp__note">Select work to see what it is and what to do next.</p>
-    </div>
-  )
-}

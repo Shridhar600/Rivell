@@ -254,7 +254,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
     return (
       <CompileLayout top={top}>
         <div className="rv-kc-center">
-          <LoadingState label="Loading candidates" />
+          <LoadingState label="Loading entries" />
         </div>
       </CompileLayout>
     )
@@ -266,8 +266,8 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
         <div className="rv-kc-center">
           <ErrorState
             tone={forbidden ? 'neutral' : 'danger'}
-            title={forbidden ? 'Knowledge is not available to you' : 'The candidates could not be loaded'}
-            message={forbidden ? 'Your account does not have permission to review Knowledge. Ask an administrator for access.' : candidatesQuery.error.message}
+            title={forbidden ? 'Knowledge is not available to you' : 'The entries could not be loaded'}
+            message={forbidden ? 'Your account does not have permission to review knowledge. Ask an administrator for access.' : candidatesQuery.error.message}
             onRetry={forbidden ? undefined : () => void candidatesQuery.refetch()}
           />
         </div>
@@ -297,8 +297,8 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       <CompileLayout top={top} rail={notPosition.length + missed.length > 0 ? rail : undefined} railOpen={railOpen}>
         <div className="rv-kc-center">
           <EmptyState
-            title="No candidates were compiled"
-            message="Rivell extracted this file but found nothing to turn into knowledge, so there is nothing to review or publish. The original is stored unchanged."
+            title="No entries were produced"
+            message="Rivell read this file but found nothing to turn into knowledge, so there is nothing to review or publish. The original is stored unchanged."
             action={<LinkButton to={`/knowledge/sources/${artifact.id}`}>Open the source</LinkButton>}
           />
         </div>
@@ -314,14 +314,14 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
         {bulkResult ? (
           <div className="rv-kc-result" role="status">
             <p>
-              <b>{bulkResult.approved.length}</b> {bulkResult.approved.length === 1 ? 'candidate' : 'candidates'} approved by the server.
+              <b>{bulkResult.approved.length}</b> {bulkResult.approved.length === 1 ? 'entry' : 'entries'} approved.
               <button type="button" className="rv-lnk rv-kc-result__x" onClick={() => setBulkResult(null)}>
                 Dismiss
               </button>
             </p>
             {bulkResult.skipped.length > 0 ? (
               <>
-                <p>The server did not approve {bulkResult.skipped.length}:</p>
+                <p>Rivell did not approve {bulkResult.skipped.length}:</p>
                 <ul>
                   {bulkResult.skipped.map((entry) => (
                     <li key={entry.label}>
@@ -335,7 +335,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
         ) : null}
         {requestedId && !requested && open?.kind !== 'group' ? (
           <p className="rv-kc-banner" role="status">
-            That candidate is not part of this source. Showing the next one to review.
+            That entry is not part of this source. Showing the next one to review.
           </p>
         ) : null}
         {open?.kind === 'candidate' ? (

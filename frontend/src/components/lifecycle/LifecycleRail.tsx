@@ -28,7 +28,7 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
     snapshot?.knowledgePinNumber == null
       ? 'Not recorded'
       : snapshot.knowledgePinNumber > 0
-        ? `Publication ${snapshot.knowledgePinNumber}`
+        ? `Knowledge version ${snapshot.knowledgePinNumber}`
         : 'None published at creation'
   return (
     <div className="rv-lc-rail">
@@ -43,7 +43,7 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
           ) : null}
           <div>
             <dt>Version</dt>
-            <dd>{version !== null ? `v${version}, immutable` : 'Not recorded'}</dd>
+            <dd>{version !== null ? `v${version}, cannot be changed` : 'Not recorded'}</dd>
           </div>
           {document ? (
             <div>
@@ -71,12 +71,12 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
             ))}
           </dl>
         ) : (
-          <p className="rv-lc-quiet">The frozen review context is not available for this review.</p>
+          <p className="rv-lc-quiet">The review details are not available for this review.</p>
         )}
       </div>
       <div>
-        <h3>Frozen review snapshot</h3>
-        <p className="rv-lc-quiet">Knowledge and review context are pinned to this review.</p>
+        <h3>Knowledge used</h3>
+        <p className="rv-lc-quiet">The knowledge and review details are fixed for this review.</p>
         <dl className="rv-lc-fdl rv-lc-fdl--rail">
           <div>
             <dt>Knowledge</dt>
@@ -84,7 +84,7 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
           </div>
           {snapshot?.packVersion ? (
             <div>
-              <dt>Pack version</dt>
+              <dt>Review pack version</dt>
               <dd>{snapshot.packVersion}</dd>
             </div>
           ) : null}
@@ -100,8 +100,8 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
         </Link>
       </div>
       <div>
-        <h3>Lifecycle activity</h3>
-        <ol className="rv-lc-ev" aria-label={`Lifecycle activity, ${pluralise(events.length, 'event')}`}>
+        <h3>Activity</h3>
+        <ol className="rv-lc-ev" aria-label={`Activity, ${pluralise(events.length, 'event')}`}>
           {events.map((event) => (
             <li key={`${event.label}-${event.time}`}>
               <i className={event.failed ? 'rv-lc-ev__x' : undefined} aria-hidden="true" />

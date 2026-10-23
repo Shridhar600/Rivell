@@ -42,17 +42,16 @@ export function ReviewsPage() {
 
   return (
     <div className="rv-main rv-main--wide">
-      <TopBar title="Contract reviews" actions={startButton} />
+      <TopBar title="Reviews" actions={startButton} />
       <div className="rv-scroll">
         <div className="rv-page">
           <div className="rv-page__head">
             <div>
-              <h1 className="rv-page__title">Contract reviews</h1>
+              <h1 className="rv-page__title">Reviews</h1>
               <p className="rv-page__lede">
-                Every review is tied to one immutable contract version and frozen review context.
+                Each review keeps the contract version it started with.
               </p>
             </div>
-            {startButton}
           </div>
 
           {history.isPending ? <LoadingState label="Loading reviews" /> : null}
@@ -110,7 +109,7 @@ export function ReviewsPage() {
           ) : null}
           {history.hasNextPage && !history.isFetchNextPageError ? (
             <div className="rv-more">
-              <p className="rv-note">Showing the newest {rows.length} reviews. Counts cover these only.</p>
+              <p className="rv-note">Showing the newest {rows.length} reviews. Counts include these reviews only.</p>
               <Button compact disabled={history.isFetchingNextPage} onClick={() => void history.fetchNextPage()}>
                 {history.isFetchingNextPage ? 'Loading…' : 'Load more reviews'}
               </Button>

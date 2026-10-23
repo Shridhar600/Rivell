@@ -12,7 +12,7 @@ const SIGNAL_LABELS: Partial<Record<ConflictType, string>> = {
   SUPERSEDES_EXISTING: 'Possible supersession',
   OVERLAPPING_EFFECTIVE_PERIOD: 'Overlapping effective period',
   JURISDICTION_MISMATCH: 'Jurisdiction differs',
-  AUTHORITY_CONFLICT: 'Authority conflict',
+  AUTHORITY_CONFLICT: 'Conflict with other published knowledge',
 }
 
 function PublishedPeer({ candidateId }: { candidateId: string }) {
@@ -177,22 +177,22 @@ export function ConditionChoices({ candidate, acknowledged, onAcknowledge, repla
             <label key={peerId} className="rv-kc-choice">
               <input type="radio" name={`replace-${candidate.id}`} checked={replaces === peerId} onChange={() => onReplace(peerId)} />
               <span>
-                Replace <PeerLabel candidateId={peerId} />. It is not deleted: earlier publications still show it.
+                Replace <PeerLabel candidateId={peerId} />. It is not deleted: earlier versions still show it.
               </span>
             </label>
           ))}
-          <small>A candidate can replace only one published candidate.</small>
+          <small>An entry can replace only one published entry.</small>
         </fieldset>
       ) : null}
 
       {mustAcknowledge ? (
         <div className="rv-kc-ack">
           <p>
-            Rivell does not block approving a possible conflict, so a person must choose to. Correct it or reject it, or compare it with the published knowledge and confirm below.
+            Correct or reject it, or compare it with published knowledge and confirm below.
           </p>
           <label className="rv-kc-choice">
             <input type="checkbox" checked={acknowledged} onChange={(event) => onAcknowledge(event.target.checked)} />
-            <span>I compared this with the published knowledge and I want to approve it anyway.</span>
+            <span>I compared this with published knowledge and still want to approve it.</span>
           </label>
         </div>
       ) : null}

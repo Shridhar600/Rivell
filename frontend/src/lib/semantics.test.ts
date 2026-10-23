@@ -84,9 +84,9 @@ describe('semantic display helpers', () => {
   })
 
   it('labels verification states', () => {
-    expect(VERIFICATION_LABELS.VERIFIED).toMatch(/supported by source/i)
+    expect(VERIFICATION_LABELS.VERIFIED).toMatch(/matches the source/i)
     expect(VERIFICATION_LABELS.DISPUTED).toMatch(/disputed/i)
-    expect(VERIFICATION_LABELS.NOT_VERIFIED).toMatch(/not independently verified/i)
+    expect(VERIFICATION_LABELS.NOT_VERIFIED).toMatch(/not checked against a second source/i)
   })
 
   it('finds an interpretation by field', () => {

@@ -9,7 +9,7 @@ const PER_CANDIDATE_LIMIT = 30
 function Segments({ candidates }: { candidates: Candidate[] }) {
   const state = readiness(candidates)
   const done = state.approved + state.published
-  const label = `${reviewedCount(candidates)} of ${candidates.length} candidates reviewed, ${state.rejected} rejected`
+  const label = `${reviewedCount(candidates)} of ${candidates.length} entries reviewed, ${state.rejected} rejected`
   if (candidates.length <= PER_CANDIDATE_LIMIT) {
     const cells = [
       ...Array.from({ length: done }, () => 'd'),

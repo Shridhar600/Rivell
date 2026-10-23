@@ -43,7 +43,7 @@ import { CheckIcon, EditIcon, EscalateIcon, CloseIcon, LockIcon } from './Worksp
 const SOURCES_SHOWN = 3
 
 /** How a position the clause's topics did not bring was found (engine v2 SEARCH route). */
-const SEARCH_CAPTION = 'Found by searching your playbook for this clause. No position matched by topic addressed it.'
+const SEARCH_CAPTION = 'Found by searching your playbook. No position on this topic matched.'
 
 /** Where focus lands after Finalize, so it is not lost when the Finalize button becomes disabled. */
 export const SUMMARY_LINK_ID = 'rv-ws-summary-link'
@@ -132,11 +132,11 @@ function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'summar
       <div className="rv-ws-phase-head">
         <LockIcon />
         <div>
-          <b>Approved changes frozen</b>
+          <b>Approved changes are final</b>
           <p>
             {props.frozenChanges === null
-              ? 'The approved change set is immutable.'
-              : `${plural(props.frozenChanges, 'executable change', 'executable changes')} in the immutable approved change set.`}
+              ? 'The approved changes cannot be changed.'
+              : `${plural(props.frozenChanges, 'approved change', 'approved changes')} fixed for this review.`}
           </p>
         </div>
       </div>
@@ -239,8 +239,8 @@ export function FindingPanel(props: Props) {
         ) : null}
         {related ? (
           <p className="rv-ws-note rv-ws-note--related">
-            <b>Related position, not a breach.</b> This position governs a topic the clause only
-            touches, so it is context for review rather than a defect in the clause.
+            <b>Related position, not a breach.</b> It covers a topic this clause touches but does not
+            govern.
           </p>
         ) : null}
 
@@ -290,7 +290,7 @@ export function FindingPanel(props: Props) {
             )}
             {note ? <p>{note}</p> : null}
             {missingEvidence ? (
-              <p className="rv-ws-warn">Some statements cite evidence this response does not include. They are not shown as grounded.</p>
+              <p className="rv-ws-warn">Some supporting sources are missing from this view.</p>
             ) : null}
           </div>
         </div>
@@ -304,8 +304,8 @@ export function FindingPanel(props: Props) {
           <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
             {approvalNeeded ? (
               <>
-                <b>Approval is needed.</b> This position names an approver, so a human must approve
-                the clause before it can be accepted.
+                <b>Approval is needed.</b> This position names an approver, so approve it before
+                accepting.
                 {escalationTriggers.length > 0 ? ` Escalate when: ${escalationTriggers.join('; ')}.` : ''}
               </>
             ) : (
@@ -337,7 +337,7 @@ export function FindingPanel(props: Props) {
           </div>
           <div className="rv-ws-incl">
             {finding.subjectKind === 'ABSENCE'
-              ? 'No source passage. This provision appears absent in this contract version.'
+              ? 'This provision is not in this contract version.'
               : (excerpt ?? 'The clause text for this version is not available.')}
           </div>
         </div>
@@ -354,7 +354,7 @@ export function FindingPanel(props: Props) {
                 <span>{authority.rest}</span>
               </div>
             ) : null}
-            {edited ? <div className="rv-ws-src">Current human edit differs from the proposed wording.</div> : null}
+            {edited ? <div className="rv-ws-src">Your edit differs from the proposed wording.</div> : null}
           </div>
         ) : null}
 
@@ -399,7 +399,7 @@ export function FindingPanel(props: Props) {
             <div className="rv-ws-meta-top">
               <strong>{state.label}</strong>
               <small>
-                Revision {decision.revision} · {dateTime(decision.decidedAt) || 'Saved'}
+                Version {decision.revision} · {dateTime(decision.decidedAt) || 'Saved'}
               </small>
             </div>
             {decision.comment ? <p>{decision.comment}</p> : null}
@@ -422,7 +422,7 @@ export function FindingPanel(props: Props) {
           </div>
         ) : null}
         {props.decisionsTruncated ? (
-          <p className="rv-ws-caption">Only the most recent decisions are loaded, so an earlier decision may not be shown.</p>
+          <p className="rv-ws-caption">Earlier decisions may not be shown.</p>
         ) : null}
 
         {flow.compose ? (
@@ -451,14 +451,14 @@ export function FindingPanel(props: Props) {
           <div className="rv-ws-lock">
             <LockIcon />
             <div>
-              <b>Decision frozen: {decision ? state.label : 'None'}</b>
-              <div>This review is finalized. Approved changes are immutable.</div>
+              <b>Decision final: {decision ? state.label : 'None'}</b>
+              <div>This review is finalized. Approved changes cannot be changed.</div>
             </div>
           </div>
         ) : !props.analysisComplete ? (
           <p className="rv-ws-caption">Decisions open when the automated analysis completes.</p>
         ) : !props.canDecide || !props.decisionsLoaded ? (
-          <p className="rv-ws-caption">Decision controls are unavailable until the review workflow state is available.</p>
+          <p className="rv-ws-caption">Decisions are unavailable right now.</p>
         ) : flow.readOnly ? (
           <p className="rv-ws-caption">Decision controls are read-only for this account.</p>
         ) : (
@@ -502,7 +502,9 @@ export function FindingPanel(props: Props) {
                 Escalate
               </Button>
             </div>
-            {!eligible && !decision ? <div className="rv-ws-caption">Accept unavailable: {reason}</div> : null}
+            {!eligible && !decision ? (
+              <div className="rv-ws-caption">Accept unavailable. Edit the wording, or reject or escalate this finding.</div>
+            ) : null}
           </>
         )}
       </div>
@@ -516,7 +518,7 @@ function SecondOpinionViews({ quality }: { quality: FindingQuality }) {
     quality.flagProbability === null ? '' : ` (issue estimate ${Math.round(quality.flagProbability * 100)}%)`
   return (
     <div className="rv-ws-sec" data-testid="second-opinion-views">
-      <div className="rv-ws-sec-h">Two views: you decide</div>
+      <div className="rv-ws-sec-h">The two checks disagree</div>
       <dl className="rv-ws-views">
         <div>
           <dt>First review</dt>
@@ -554,16 +556,16 @@ function PlaybookSilentViews({ quality }: { quality: FindingQuality }) {
     quality.uncoveredProbability === null ? '' : ` (estimate ${Math.round(quality.uncoveredProbability * 100)}%)`
   return (
     <div className="rv-ws-sec" data-testid="playbook-silent-views">
-      <div className="rv-ws-sec-h">Two views: you decide</div>
+      <div className="rv-ws-sec-h">The two checks disagree</div>
       <dl className="rv-ws-views">
         <div>
           <dt>First review</dt>
           <dd>
-            No position in your playbook addresses this clause. Not flagged as unusual{estimate}.
+            No position in your playbook covers this clause. Rivell did not flag it as unusual{estimate}.
           </dd>
         </div>
         <div>
-          <dt>Whole-contract read</dt>
+          <dt>Full-contract read</dt>
           <dd>
             {SPOTTED_SEVERITY_LABELS[quality.spottedSeverity ?? ''] ?? 'Picked for a look'}
             {quality.spottedReason ? <p>{quality.spottedReason}</p> : null}

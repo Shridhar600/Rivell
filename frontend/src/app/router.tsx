@@ -51,14 +51,11 @@ export const appRoutes = [
       { path: 'reviews/:contractId/analysis', element: <Navigate replace to="/reviews" /> },
       { path: 'knowledge/publications', element: <Navigate replace to="/knowledge" /> },
       { path: 'knowledge/publications/:publicationId', element: <Navigate replace to="/knowledge" /> },
+      // Full-width work surfaces. They keep the sidebar like every other page and bring their own panels.
+      { path: 'reviews/:contractId/analysis/:reviewId', element: <ReviewWorkspacePage /> },
+      { path: 'knowledge/compilations/:artifactId', element: <CompilationPage /> },
     ],
   },
-  // The workspace is full-bleed and carries its own top bar, as in the canonical design, so it
-  // renders outside the sidebar shell.
-  { path: '/reviews/:contractId/analysis/:reviewId', element: <ReviewWorkspacePage /> },
-  // The compilation workspace is full-bleed and carries its own top bar, as in the canonical design,
-  // so it renders outside the sidebar shell.
-  { path: '/knowledge/compilations/:artifactId', element: <CompilationPage /> },
 ]
 
 export const router = createBrowserRouter(appRoutes)

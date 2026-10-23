@@ -105,7 +105,7 @@ export function changeLocation(
   regionLabels: Map<string, string>,
   label: ConceptLabel,
 ): string {
-  if (change.actionType === 'INSERT') return 'Placement resolved during redline execution'
+  if (change.actionType === 'INSERT') return 'Rivell places this when it builds the redline'
   return changeTargetLabel(change, regionLabels, label)
 }
 
@@ -128,20 +128,20 @@ export function reportResult(execution: RedlineExecution, change: RedlineExecuti
   if (change.status === 'APPLIED' && change.verification === 'VERIFIED' && execution.status === 'COMPLETED') {
     return { label: 'Applied · Verified', variant: 'ok' }
   }
-  if (change.status === 'FAILED') return { label: 'Execution failed', variant: 'red' }
+  if (change.status === 'FAILED') return { label: 'Failed', variant: 'red' }
   if (change.status === 'NOT_APPLIED') return { label: 'Not applied', variant: 'neutral' }
   if (change.status === 'APPLIED' && execution.status === 'FAILED') {
     return { label: 'Applied before overall failure', variant: 'neutral' }
   }
   if (change.status === 'APPLIED' && change.verification === 'FAILED') {
-    return { label: 'Applied · Verification failed', variant: 'red' }
+    return { label: 'Applied · Check failed', variant: 'red' }
   }
-  if (change.status === 'APPLIED') return { label: 'Applied · Not verified', variant: 'neutral' }
+  if (change.status === 'APPLIED') return { label: 'Applied · Not checked', variant: 'neutral' }
   return { label: 'State unknown', variant: 'neutral' }
 }
 
 export interface OverallResult {
-  word: 'VERIFIED' | 'FAILED' | 'NOT VERIFIED'
+  word: 'Verified' | 'Failed' | 'Not verified'
   sentence: string
   tone: 'ok' | 'red'
 }
@@ -149,17 +149,17 @@ export interface OverallResult {
 export function overallResult(execution: RedlineExecution): OverallResult {
   if (execution.status === 'FAILED') {
     return {
-      word: 'FAILED',
-      sentence: 'Per-change statuses are diagnostic only; no partial-success artifact is offered.',
+      word: 'Failed',
+      sentence: 'Not every change could be applied. No file is offered.',
       tone: 'red',
     }
   }
   if (redlineVerificationOutcome(execution) === 'PASSED') {
-    return { word: 'VERIFIED', sentence: 'All approved changes executed and verified.', tone: 'ok' }
+    return { word: 'Verified', sentence: 'All approved changes applied and checked.', tone: 'ok' }
   }
   return {
-    word: 'NOT VERIFIED',
-    sentence: 'Not every approved change was applied and verified; no artifact is offered.',
+    word: 'Not verified',
+    sentence: 'Not every approved change was applied and checked. No file is offered.',
     tone: 'red',
   }
 }

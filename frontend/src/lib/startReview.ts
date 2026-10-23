@@ -78,7 +78,7 @@ export function isDocx(file: File): boolean {
 export type StartStage = 'upload' | 'confirm' | 'create'
 
 export const STAGE_LABELS: Record<StartStage, string> = {
-  upload: 'Uploading and parsing the contract…',
-  confirm: 'Confirming the review context…',
+  upload: 'Uploading and reading the contract…',
+  confirm: 'Saving the review details…',
   create: 'Starting analysis…',
 }

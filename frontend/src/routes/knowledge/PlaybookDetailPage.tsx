@@ -122,7 +122,7 @@ function PlaybookDetail({
             <span className={`rv-stb${isCurrent && positions.length > 0 ? ' rv-stb--ok' : ''}`}>
               {isCurrent && positions.length > 0 ? 'Current' : 'Superseded'}
             </span>
-            <Chip>Publication {viewing.publication.number}</Chip>
+            <Chip>Knowledge version {viewing.publication.number}</Chip>
             {scope ? <Chip>{scope}</Chip> : null}
             <span className="rv-k-meta__text">Published {longDate(viewing.publication.createdAt)}</span>
           </>
@@ -139,7 +139,6 @@ function PlaybookDetail({
           <VersionBanner
             viewing={viewing.publication.number}
             current={current.publication.number}
-            what="This is the playbook"
             onBack={() => view(null)}
           />
         )}
@@ -167,8 +166,8 @@ function PlaybookDetail({
             />
           ) : positions.length === 0 ? (
             <EmptyState
-              title="No positions in this publication"
-              message="Every position this source published was superseded by a later publication. Choose another publication in Version history."
+              title="No positions in this version"
+              message="This version was replaced. Choose another version in Version history."
             />
           ) : (
             <PositionList

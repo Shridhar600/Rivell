@@ -88,10 +88,10 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
   useImperativeHandle(actions, () => ({ approve: doApprove, reject: doReject, edit: doEdit }))
 
   const statusText = (() => {
-    if (published) return `Published${publishedIn ? ` in publication ${publishedIn.number}` : ''}. Published knowledge is immutable.`
-    if (outcome === 'approved') return 'Approved. The outcome can still change before publication.'
-    if (outcome === 'rejected') return 'Rejected. A rejected candidate can be brought back only by correcting it.'
-    if (outcome === 'corrected') return 'Corrected. Approve the corrected value to include it in the publication.'
+    if (published) return `Published${publishedIn ? ` in knowledge version ${publishedIn.number}` : ''}. Published knowledge cannot be changed.`
+    if (outcome === 'approved') return 'Approved. The outcome can still change before it is published.'
+    if (outcome === 'rejected') return 'Rejected. A rejected entry can be brought back only by correcting it.'
+    if (outcome === 'corrected') return 'Corrected. Approve the corrected value to include it in the new version.'
     return `Does this match the ${kindLabel(artifact.artifactType).toLowerCase()} source?`
   })()
 
@@ -101,7 +101,7 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
         <div className="rv-kc-wrap">
           <div className="rv-kc-head">
             <div className="rv-kc-kicker">
-              Candidate {index} of {total}
+              Entry {index} of {total}
             </div>
             <h1 tabIndex={-1} ref={headingRef}>
               {candidate.rawLabel}
@@ -123,8 +123,8 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
             <div className="rv-kc-pubready" role="status">
               <CheckIcon className="rv-icon" />
               <div>
-                <b>Compilation review complete</b>
-                Every candidate has a human review outcome. This {kindLabel(artifact.artifactType).toLowerCase()} is ready for explicit publication.
+                <b>Draft review complete</b>
+                Every entry has been reviewed. This {kindLabel(artifact.artifactType).toLowerCase()} is ready to publish.
               </div>
             </div>
           ) : null}
@@ -149,7 +149,7 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
         <div className="rv-kc-kd">
           {editing ? (
             <>
-              <span className="rv-kc-st">Correct the structured candidate. The machine interpretation stays in history and the source remains unchanged.</span>
+              <span className="rv-kc-st">Edit this entry. Rivell&apos;s original reading is kept and the source stays unchanged.</span>
               <Button disabled={correction.pending} onClick={() => setEditing(false)}>
                 Cancel
               </Button>

@@ -242,14 +242,14 @@ describe('publication history isolation', () => {
 describe('presentation helpers', () => {
   it('names a source by its filename without the extension and nothing else', () => {
     expect(artifactName(pb)).toBe('Commercial MSA Playbook')
-    expect(artifactFormat(cl)).toBe('XLSX')
+    expect(artifactFormat(cl)).toBe('Excel file')
   })
 
   it('counts with the right noun and number', () => {
     expect(countNoun('PLAYBOOK', 1)).toBe('1 position')
     expect(countNoun('PLAYBOOK', 5)).toBe('5 positions')
     expect(countNoun('CLAUSE_LIBRARY', 3)).toBe('3 clause variants')
-    expect(countNoun('TEMPLATE', 2)).toBe('2 items')
+    expect(countNoun('TEMPLATE', 2)).toBe('2 entries')
   })
 
   it('describes a source from real counts only', () => {
@@ -258,6 +258,6 @@ describe('presentation helpers', () => {
       publications: [publication(1, [{ candidateId: 'p1' }])],
       candidates: new Map([['pb', [candidate({ id: 'p1', artifactId: 'pb' })]]]),
     })
-    expect(sourceNote(view.sources[0]!)).toBe('1 position published in publication 1')
+    expect(sourceNote(view.sources[0]!)).toBe('1 position published in knowledge version 1')
   })
 })

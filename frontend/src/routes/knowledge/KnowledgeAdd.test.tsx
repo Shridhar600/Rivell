@@ -24,16 +24,16 @@ describe('Add knowledge', () => {
     const clauses = within(group).getByRole('radio', { name: /Clause library/ })
     expect(playbook).not.toBeChecked()
     expect(clauses).not.toBeChecked()
-    expect(within(dialog).getByText(/You choose the type\. Rivell will not reinterpret it as something else\./)).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'Start compilation' })).toBeDisabled()
+    expect(within(dialog).getByText(/Rivell uses the type you choose\./)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeDisabled()
   })
 
   it('needs both a type and a file before it can start', async () => {
     const { dialog } = await openDialog()
     await choose(dialog, docx())
-    expect(within(dialog).getByRole('button', { name: 'Start compilation' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeDisabled()
     await userEvent.click(within(dialog).getByRole('radio', { name: /Playbook/ }))
-    expect(within(dialog).getByRole('button', { name: 'Start compilation' })).toBeEnabled()
+    expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeEnabled()
   })
 
   it('offers the type the page is about, and still lets the reviewer change it', async () => {
@@ -53,13 +53,13 @@ describe('Add knowledge', () => {
     const { dialog, world } = await openDialog()
     const input = within(dialog).getByLabelText('Source file') as HTMLInputElement
     expect(input.accept).toBe('.docx,.xlsx')
-    expect(within(dialog).getByText('File, DOCX or XLSX')).toBeInTheDocument()
+    expect(within(dialog).getByText('File (Word or Excel)')).toBeInTheDocument()
     expect(dialog.textContent).not.toMatch(/DOCX or PDF|PDF or DOCX/i)
 
     await choose(dialog, new File(['x'], 'Playbook.pdf', { type: 'application/pdf' }))
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Only .docx and .xlsx files are supported. PDF is not supported.')
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Choose a Word or Excel file. PDF is not supported.')
     await userEvent.click(within(dialog).getByRole('radio', { name: /Playbook/ }))
-    expect(within(dialog).getByRole('button', { name: 'Start compilation' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Continue to draft' })).toBeDisabled()
     expect(world.uploads).toHaveLength(0)
 
     await choose(dialog, xlsx())
@@ -79,7 +79,7 @@ describe('Add knowledge', () => {
     // The file name says clause library. The choice stays Playbook, and no warning second-guesses it.
     expect(within(dialog).getByRole('radio', { name: /Playbook/ })).toBeChecked()
     expect(within(dialog).queryByText(/looks like/i)).not.toBeInTheDocument()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Start compilation' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
     await waitFor(() => expect(world.uploads).toHaveLength(1))
     expect(world.uploads[0]?.artifactType).toBe('PLAYBOOK')
   })
@@ -92,7 +92,7 @@ describe('Add knowledge', () => {
     const { dialog, router } = await openDialog('/knowledge/sources?add=1', world)
     await userEvent.click(within(dialog).getByRole('radio', { name: /Playbook/ }))
     await choose(dialog, docx())
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Start compilation' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/compilations/created-7'))
     expect(world.uploads).toHaveLength(1)
     expect(world.uploads[0]?.artifactType).toBe('PLAYBOOK')
@@ -100,22 +100,22 @@ describe('Add knowledge', () => {
 
   it('sends the optional applicability with the upload', async () => {
     const { dialog, world } = await openDialog('/knowledge/playbooks?add=playbook')
-    await userEvent.click(within(dialog).getByText('Applicability, optional'))
+    await userEvent.click(within(dialog).getByText('Where this applies (optional)'))
     await userEvent.type(within(dialog).getByLabelText('Contract types'), 'MSA, NDA')
     await userEvent.type(within(dialog).getByLabelText('Jurisdiction'), 'ENGLAND_WALES')
     await choose(dialog, docx())
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Start compilation' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
     await waitFor(() => expect(world.uploads).toHaveLength(1))
     expect(world.uploads[0]?.query).toMatchObject({ artifactType: 'PLAYBOOK', declaredContractTypes: 'MSA,NDA', jurisdiction: 'ENGLAND_WALES' })
   })
 
   it('refuses an effective period that ends before it starts', async () => {
     const { dialog, world } = await openDialog('/knowledge/playbooks?add=playbook')
-    await userEvent.click(within(dialog).getByText('Applicability, optional'))
+    await userEvent.click(within(dialog).getByText('Where this applies (optional)'))
     await userEvent.type(within(dialog).getByLabelText('Effective from'), '2026-12-01')
     await userEvent.type(within(dialog).getByLabelText('Effective to'), '2026-01-01')
     await choose(dialog, docx())
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Start compilation' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Effective from must not be after effective to.')
     expect(world.uploads).toHaveLength(0)
   })
@@ -129,10 +129,10 @@ describe('Add knowledge', () => {
     world.candidates['created-8'] = []
     const { dialog } = await openDialog('/knowledge/playbooks?add=playbook', world)
     await choose(dialog, docx())
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Start compilation' }))
-    expect(await within(dialog).findByRole('status')).toHaveTextContent('Storing the original and extracting it. This can take a moment.')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
+    expect(await within(dialog).findByRole('status')).toHaveTextContent('Saving and reading the file. This can take a moment.')
     expect(dialog.textContent).not.toMatch(/\d+\s?%|ETA|remaining|step \d/i)
-    expect(within(dialog).getByRole('button', { name: 'Compiling…' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Reading…' })).toBeDisabled()
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled()
     await userEvent.keyboard('{Escape}')
     expect(screen.getByRole('dialog', { name: 'Add knowledge' })).toBeInTheDocument()
@@ -145,7 +145,7 @@ describe('Add knowledge', () => {
     world.uploadResult = { status: 500 }
     const { dialog, router } = await openDialog('/knowledge/playbooks?add=playbook', world)
     await choose(dialog, docx())
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Start compilation' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
     const alert = await within(dialog).findByRole('alert')
     expect(alert).toHaveTextContent(/Rivell could not process this file/)
     expect(alert).toHaveTextContent(/appears in Sources as a failed source/)
@@ -161,9 +161,9 @@ describe('Add knowledge', () => {
     world.uploadResult = { id: 'bad-1', status: 'FAILED' }
     const { dialog, router } = await openDialog('/knowledge/playbooks?add=playbook', world)
     await choose(dialog, docx())
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Start compilation' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to draft' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/knowledge/compilations/bad-1'))
-    expect(await screen.findByRole('heading', { name: 'Rivell could not extract this file' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Rivell could not read this file' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Publish/ })).not.toBeInTheDocument()
   })
 
