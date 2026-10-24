@@ -66,11 +66,14 @@ public record ReviewEngineProperties(
         }
     }
 
-    /** P3: the condition-by-condition check; at most {@code maxChecks} calls per analysis run. */
+    /**
+     * P3: the condition-by-condition check; at most {@code maxChecks} calls per analysis run. Off by
+     * default: on gpt-6-luna it raised more compliant clauses than planted issues.
+     */
     public record FallbackConditions(Boolean enabled, Integer maxChecks) {
 
         public FallbackConditions {
-            enabled = enabled == null ? Boolean.TRUE : enabled;
+            enabled = enabled == null ? Boolean.FALSE : enabled;
             maxChecks = maxChecks == null ? 40 : maxChecks;
             if (maxChecks < 0) {
                 throw new IllegalArgumentException(
