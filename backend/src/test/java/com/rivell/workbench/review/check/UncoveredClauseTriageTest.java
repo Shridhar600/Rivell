@@ -1,6 +1,7 @@
 package com.rivell.workbench.review.check;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.util.LinkedHashMap;
@@ -13,6 +14,7 @@ import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.DecisionExecutionRequest;
 import com.rivell.workbench.intelligence.ModelBinding;
 import com.rivell.workbench.intelligence.ProviderExecutionResult;
+import com.rivell.workbench.intelligence.ProviderOutOfCreditException;
 import com.rivell.workbench.intelligence.ProviderUnavailableException;
 import com.rivell.workbench.intelligence.SemanticDecisionProvider;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
@@ -55,6 +57,24 @@ class UncoveredClauseTriageTest {
         var noVerdict = unusable.assess(state());
         assertThat(noVerdict.unavailable()).isFalse();
         assertThat(noVerdict.verdict()).isEmpty();
+    }
+
+    @Test
+    void outOfCreditIsNotRecordedAsAFailedTriage() {
+        var triage = new UncoveredClauseTriage(service(new SemanticDecisionProvider() {
+            @Override
+            public String id() {
+                return "fake";
+            }
+
+            @Override
+            public ProviderExecutionResult execute(DecisionExecutionRequest request) {
+                throw new ProviderOutOfCreditException("Provider account has no credits");
+            }
+        }));
+
+        assertThatThrownBy(() -> triage.assess(state()))
+                .isInstanceOf(ProviderOutOfCreditException.class);
     }
 
     private static SemanticDecisionService service(SemanticDecisionProvider provider) {

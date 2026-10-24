@@ -21,7 +21,7 @@ import pathlib
 import sys
 from collections import Counter
 
-from scoring import score_contract, section_locator
+from scoring import ABSENCE_CREDIT, score_contract, section_locator
 
 FLAGGING = ("WALK_AWAY", "BEYOND_FALLBACK", "UNCLEAR", "WITHIN_FALLBACK")
 POLICY_CHECK = "CLAUSE:POLICY_COMPARISON:"
@@ -49,13 +49,18 @@ def addresses(row):
     return row["probabilities"].get("MEETS_PREFERRED", 0.0) + row["flagMass"] >= ADDRESSED
 
 
-def build_records(run, contract, answer, raw):
+def build_records(run, contract, answer, raw, score=None):
     clauses = raw["semantics"].get("clauses", [])
     section_of, _ = section_locator(answer, raw["nodes"], clauses)
-    score = score_contract(answer, raw["nodes"], clauses, raw["findings"])
-    common = {"run": run, "contract": contract}
+    score = score_contract(answer, raw["nodes"], clauses, raw["findings"]) if score is None else score
+    expected = answer.get("expectedIssues", [])
+    if len(expected) != len(score["issues"]):
+        # a zip would silently drop the tail (DW-059): refuse a score that cannot be joined
+        raise ValueError(f"{contract}: {len(expected)} expectedIssues but "
+                         f"{len(score['issues'])} scored issues")
+    common = {"run": run, "contract": contract, "absenceCredit": ABSENCE_CREDIT}
     records = []
-    for key, scored in zip(answer.get("expectedIssues", []), score["issues"]):
+    for key, scored in zip(expected, score["issues"]):
         records.append(dict(common, kind="issue", issue=scored["id"], category=scored["category"],
                             severity=scored["severity"], detected=scored["detected"],
                             detectedSerious=scored["detectedSerious"], sections=key.get("sectionIds", [])))
@@ -83,7 +88,9 @@ def build_records(run, contract, answer, raw):
             row = dict(base, positionKey=position["positionKey"],
                        positionCandidateId=position.get("positionCandidateId"),
                        category=position.get("category"), flagged=bool(position.get("flagged")),
-                       route=position.get("route"), secondOpinionOutcome=position.get("secondOpinionOutcome"),
+                       route=position.get("route"),
+                       probeCategory=position.get("probeCategory") or None,
+                       secondOpinionOutcome=position.get("secondOpinionOutcome"),
                        secondOpinionCategory=position.get("secondOpinionCategory"),
                        probabilities=probabilities, **shape(probabilities))
             if position.get("probeProbabilities"):
@@ -94,16 +101,70 @@ def build_records(run, contract, answer, raw):
     return records
 
 
-def build(corpus, runs):
-    if "holdout" in str(corpus).lower():
+def resolve_run(run_dir):
+    """The directory that holds a run's raw/ and results.json. The owner names the run root
+    (eval/runs/<run>); its newest timestamped child is the run."""
+    run_dir = pathlib.Path(run_dir)
+    if (run_dir / "raw").is_dir():
+        return run_dir
+    children = sorted((p for p in run_dir.iterdir() if (p / "raw").is_dir()),
+                      key=lambda p: p.name) if run_dir.is_dir() else []
+    if not children:
+        sys.exit(f"{run_dir} has no raw/: pass the timestamped run directory")
+    return children[-1]
+
+
+def recorded_corpus(run_dir):
+    """The corpus a run recorded in its own results.json, or None when it has no meta."""
+    path = pathlib.Path(run_dir) / "results.json"
+    if not path.exists():
+        return None
+    try:
+        return (json.loads(path.read_text()).get("meta") or {}).get("corpus")
+    except ValueError:
+        return None
+
+
+def _is_holdout(text):
+    return "holdout" in str(text or "").lower()
+
+
+def refuse_holdout(corpus, runs, roots=None):
+    """Refuse a holdout corpus or a run whose own meta names one (DW-059).
+
+    The --corpus path alone is not enough: a run made on a holdout can be passed with a train
+    corpus path, and the thresholds would be fitted on it. A run that records no corpus at all
+    cannot prove where it came from, so it is refused too.
+    """
+    if _is_holdout(corpus):
         sys.exit(f"refusing {corpus}: routing thresholds are never fitted on a holdout")
+    for index, run_dir in enumerate(runs):
+        recorded = recorded_corpus(run_dir)
+        if recorded is None and roots and index < len(roots):
+            recorded = recorded_corpus(roots[index])
+        if recorded is None:
+            sys.exit(f"refusing {run_dir}: the run records no corpus, so a holdout cannot be "
+                     "ruled out")
+        if _is_holdout(recorded):
+            sys.exit(f"refusing {run_dir}: its run recorded corpus {recorded}, a holdout")
+
+
+def build(corpus, runs):
+    roots = [pathlib.Path(run_dir) for run_dir in runs]
+    runs = [resolve_run(run_dir) for run_dir in roots]
+    refuse_holdout(corpus, runs, roots)
     records = []
     for run_dir in runs:
         raws = [p for p in sorted((run_dir / "raw").glob("*.json"))
                 if (corpus / "answers" / p.name).exists()]
         loaded = [(p, json.loads(p.read_text())) for p in raws]
-        if not any("judgedPositions" in c for _, r in loaded for c in r.get("checks", [])):
-            sys.exit(f"{run_dir} has no judgedPositions: it ran before P0 (diagnostics change)")
+        policy = [check for _, raw in loaded for check in raw.get("checks", [])
+                  if check.get("key", "").startswith(POLICY_CHECK)]
+        if not policy or any(not isinstance(check.get("judgedPositions"), list)
+                             for check in policy):
+            # DW-059: any() let a partly-P0 run through; every policy check must carry the field
+            sys.exit(f"{run_dir} is not a P0 run: every policy-comparison check must carry "
+                     "judgedPositions")
         for path, raw in loaded:
             answer = json.loads((corpus / "answers" / path.name).read_text())
             records += build_records(run_dir.name, path.stem, answer, raw)
@@ -249,7 +310,9 @@ def _table(header, rows):
 
 
 def report(records):
+    credit = next((row.get("absenceCredit") for row in records if row.get("absenceCredit")), None)
     lines = ["# P0 calibration", "",
+             f"Absence credit: {credit or 'not recorded (rows predate DW-069; concept stems)'}", "",
              f"Confident band (spec §6 initial): pMax ≥ {CONFIDENT_P} and top-2 margin ≥ {CONFIDENT_MARGIN}.", ""]
     for run in sorted({r["run"] for r in records}):
         rs = [r for r in records if r["run"] == run]

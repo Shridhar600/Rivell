@@ -15,6 +15,7 @@ import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.DecisionExecution;
 import com.rivell.workbench.intelligence.GenerativeReasoningService;
 import com.rivell.workbench.intelligence.NoProviderConfiguredException;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.SpecStateMismatchException;
@@ -219,9 +220,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     return CheckOutcome.failed(
                             "decision_contract_error:" + e.getClass().getSimpleName());
                 } catch (SemanticDecisionException e) {
-                    if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
-                        throw e;
-                    }
+                    ProviderFailures.rethrowIfOutOfCredit(e);
                     // never an invented "not addressed": nobody judged the found positions
                     searchFailed = true;
                     search.put("outcome", "FAILED");
@@ -710,9 +709,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     PolicyPositionQuestions.build(positions, clause, conceptRegistry,
                             mode == PolicyComparisonProperties.OrderProbe.REVERSED)), state);
         } catch (SemanticDecisionException e) {
-            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
-                throw e;
-            }
+            ProviderFailures.rethrowIfOutOfCredit(e);
             detail.put("probe", "UNAVAILABLE");
             return Map.of();
         }
@@ -777,7 +774,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
 
     private CheckOutcome providerUnavailable(
             ReviewCheckContext context, ClauseSemantics clause, EvidenceBundle bundle,
-            List<EvidenceItem> positions, Map<String, Object> detail, SemanticDecisionException e) {        var signals = new ArrayList<RawReviewSignal>();
+            List<EvidenceItem> positions, Map<String, Object> detail, SemanticDecisionException e) {
+        var signals = new ArrayList<RawReviewSignal>();
         for (int index = 0; index < positions.size(); index++) {
             var item = positions.get(index);
             var positionKey = PolicyPositionQuestions.key(index);
@@ -792,9 +790,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     .quality(Map.of("uncertaintyReason", "bounded_decision_unavailable"))
                     .dedupeSuffix(positionKey)));
         }
-        var reason = e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException
-                ? "provider_out_of_credit"
-                : "provider_unavailable:" + e.getClass().getSimpleName();
+        var reason = ProviderFailures.degradedReason(e);
         detail.put("uncertaintyReason", "bounded_decision_unavailable");
         return CheckOutcome.degraded(reason, signals, detail, bundle.traceId())
                 .withCitedEvidence(List.of(bundle));

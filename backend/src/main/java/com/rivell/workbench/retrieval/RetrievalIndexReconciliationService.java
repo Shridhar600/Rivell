@@ -59,6 +59,9 @@ public class RetrievalIndexReconciliationService {
      * looped).
      */
     public ReconciliationResult reconcile(int maxCandidates) {
+        // an index creation that failed on the publication pass is retried even when every row
+        // already has its vector and no text needs embedding
+        indexService.retryPendingVectorIndexes();
         var examined = 0;
         var indexed = 0;
         var embedded = 0;

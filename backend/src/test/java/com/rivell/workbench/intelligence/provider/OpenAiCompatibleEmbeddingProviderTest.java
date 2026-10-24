@@ -51,8 +51,9 @@ class OpenAiCompatibleEmbeddingProviderTest {
     }
 
     @Test
-    void aBatchRejectedAsTooLargeIsSplitAndTheGoodInputsStillEmbed() {
+    void aRejectedBatchIsSplitUntilTheFailingInputIsIsolated() {
         var posted = new ArrayList<List<String>>();
+        var embedded = new ArrayList<List<String>>();
         var provider = new OpenAiCompatibleEmbeddingProvider((path, payload) -> {
             var batch = inputs(payload);
             posted.add(batch);
@@ -62,6 +63,7 @@ class OpenAiCompatibleEmbeddingProviderTest {
                         "{\"error\":{\"code\":\"invalid_input\"}}"
                                 .getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
             }
+            embedded.add(batch);
             return responseFor(batch.size());
         }, MAPPER, properties());
 
@@ -69,8 +71,13 @@ class OpenAiCompatibleEmbeddingProviderTest {
                 new EmbeddingRequest("embed-test", List.of("one", "bad", "two"), 2)))
                 .isInstanceOf(ProviderRejectedException.class);
 
-        assertThat(posted).contains(
-                List.of("one", "bad", "two"), List.of("one"), List.of("two"));
+        assertThat(posted).containsExactly(
+                List.of("one", "bad", "two"),
+                List.of("one"),
+                List.of("bad", "two"),
+                List.of("bad"),
+                List.of("two"));
+        assertThat(embedded).containsExactly(List.of("one"), List.of("two"));
     }
 
     @Test

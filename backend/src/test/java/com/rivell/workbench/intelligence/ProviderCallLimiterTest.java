@@ -43,8 +43,17 @@ class ProviderCallLimiterTest {
     @Test
     void anUnknownProviderUsesTheDefaultAllowance() {
         var limiter = new ProviderCallLimiter(Map.of());
+        var held = new java.util.ArrayList<ProviderCallLimiter.Permit>();
         for (int index = 0; index < ProviderCallLimiter.DEFAULT_PERMITS; index++) {
-            limiter.acquire("other", Duration.ZERO).close();
+            held.add(limiter.acquire("other", Duration.ZERO));
+        }
+
+        assertThatThrownBy(() -> limiter.acquire("other", Duration.ofMillis(100)))
+                .isInstanceOf(ProviderUnavailableException.class)
+                .hasMessage("provider busy");
+
+        for (var permit : held) {
+            permit.close();
         }
         try (var ignored = limiter.acquire("other", Duration.ZERO)) {
             assertThat(ignored).isNotNull();
