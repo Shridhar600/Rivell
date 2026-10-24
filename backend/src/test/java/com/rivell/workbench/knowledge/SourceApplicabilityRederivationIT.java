@@ -96,9 +96,14 @@ class SourceApplicabilityRederivationIT {
         var unchangedVersionBefore = rowVersion(unchangedCandidate);
         var staleScopeVersionBefore = rowVersion(staleScopeCandidate);
 
-        assertThat(publishedFor(organizationId, "SUPPLY")).isEmpty();
+        assertThat(publishedFor(organizationId, "SUPPLY"))
+                .as("the MSA half of the old scope already reaches supply through the area rule")
+                .extracting(published -> published.candidate().id())
+                .containsExactly(payloadCandidate);
         assertThat(publishedFor(organizationId, "NDA")).isEmpty();
-        assertThat(applicableFor(organizationId, "SUPPLY")).isEmpty();
+        assertThat(applicableFor(organizationId, "SUPPLY"))
+                .extracting(ApplicableKnowledge::artifactId)
+                .containsExactly(artifactId);
         assertThat(applicableFor(organizationId, "NDA")).isEmpty();
 
         var first = rederivation.rederiveOnce();

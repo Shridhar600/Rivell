@@ -70,4 +70,42 @@ class ContractTypeTest {
                 PartyRole.DISCLOSING_PARTY, PartyRole.RECEIVING_PARTY,
                 PartyRole.PARTY_A, PartyRole.PARTY_B);
     }
+
+    @Test
+    void everyModelledTypeBelongsToOneAreaAndOtherBelongsToNone() {
+        assertThat(List.of(ContractType.MSA, ContractType.SAAS, ContractType.SWL,
+                ContractType.SUPPLY, ContractType.SERVICES, ContractType.RESELLER,
+                ContractType.ORDER_FORM, ContractType.SOW, ContractType.AMENDMENT))
+                .allSatisfy(type -> assertThat(type.area())
+                        .contains(ContractType.Area.COMMERCIAL));
+        assertThat(List.of(ContractType.NDA, ContractType.MNDA, ContractType.ONDA))
+                .allSatisfy(type -> assertThat(type.area())
+                        .contains(ContractType.Area.CONFIDENTIALITY));
+        assertThat(ContractType.DPA.area()).contains(ContractType.Area.DATA_PROTECTION);
+        assertThat(ContractType.OTHER.area()).isEmpty();
+    }
+
+    @Test
+    void aPositionStatedForOneCommercialTypeAlsoGovernsTheRestOfTheArea() {
+        assertThat(ContractType.RESELLER.positionApplicableCodes())
+                .containsExactlyInAnyOrder("MSA", "SAAS", "SWL", "SUPPLY", "SERVICES",
+                        "RESELLER", "ORDER_FORM", "SOW", "AMENDMENT");
+        assertThat(ContractType.RESELLER.positionApplicableCodes())
+                .contains("MSA")
+                .doesNotContain("NDA", "MNDA", "ONDA", "DPA", "OTHER");
+    }
+
+    @Test
+    void aDataProcessingAgreementKeepsItsMsaParentButNotTheRestOfTheCommercialArea() {
+        assertThat(ContractType.DPA.positionApplicableCodes())
+                .containsExactlyInAnyOrder("DPA", "MSA")
+                .doesNotContain("SUPPLY");
+    }
+
+    @Test
+    void aConfidentialityPositionNeverReachesACommercialContract() {
+        assertThat(ContractType.NDA.positionApplicableCodes())
+                .containsExactlyInAnyOrder("NDA", "MNDA", "ONDA")
+                .doesNotContain("MSA");
+    }
 }

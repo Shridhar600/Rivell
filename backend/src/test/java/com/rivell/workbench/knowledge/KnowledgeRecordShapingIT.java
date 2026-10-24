@@ -893,6 +893,172 @@ class KnowledgeRecordShapingIT {
     }
 
     @Test
+    void positionsFollowTheContractAreaWhileLiteralWordingFollowsItsOwnType() throws Exception {
+        provider.reset();
+        // its own organization keeps this knowledge away from the other tests
+        var shared = identityProvider.current;
+        var identity = new UserIdentity(UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN"));
+        identityProvider.use(identity);
+        try {
+            var positions = ingestRows("area-positions.xlsx", ArtifactType.PLAYBOOK, "Positions",
+                    new String[][] {
+                            {"Topic", "Which deals", "Our position"},
+                            {"Payment terms", "MSA",
+                                    "Our position: net 30 days from a valid invoice."},
+                            {"Licence grant", "SWL",
+                                    "Our position: a non-exclusive, non-transferable licence."}});
+            var licensedWording = ingestRows("area-licensed-wording.xlsx",
+                    ArtifactType.CLAUSE_LIBRARY, "Clauses",
+                    new String[][] {
+                            {"Ref", "Clause topic", "Which deals", "Approved language"},
+                            {"C01", "Software licence", "SWL, SAAS",
+                                    "The Supplier grants the Customer a non-exclusive licence to use the Software."}});
+            var generalWording = ingestRows("area-general-wording.xlsx",
+                    ArtifactType.CLAUSE_LIBRARY, "Clauses",
+                    new String[][] {
+                            {"Ref", "Clause topic", "Approved language"},
+                            {"C02", "Governing law",
+                                    "This Agreement is governed by the laws of England and Wales."}});
+
+            var candidates = new java.util.ArrayList<KnowledgeCandidate>();
+            for (var artifact : List.of(positions, licensedWording, generalWording)) {
+                candidates.addAll(queryService.getCandidates(artifact.id()));
+            }
+            assertThat(candidates).extracting(KnowledgeCandidate::rawLabel)
+                    .containsExactlyInAnyOrder("Payment terms", "Licence grant",
+                            "Software licence", "Governing law");
+            assertThat(candidates).allSatisfy(candidate ->
+                    assertThat(candidate.scope().declaredContractTypes()).isEmpty());
+
+            var publication = publicationService.publish(candidates.stream()
+                    .map(candidate -> reviewService.approve(candidate.id(), null).id()).toList(),
+                    Map.of(), "area scope");
+            var organizationId = identity.organizationId();
+            var artifactIds = Set.of(positions.id(), licensedWording.id(), generalWording.id());
+
+            var reseller = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "RESELLER");
+            assertThat(recordKeys(reseller))
+                    .as("an MSA payment position governs a reseller agreement too")
+                    .containsExactlyInAnyOrder("MSA position", "SWL position", "unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "RESELLER", reseller);
+            assertThat(recordKeys(publishedKnowledge(organizationId,
+                    publication.publicationNumber(), artifactIds, "reseller")))
+                    .as("a contract type code is matched without regard to case, like record codes")
+                    .isEqualTo(recordKeys(reseller));
+
+            var nda = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "NDA");
+            assertThat(recordKeys(nda))
+                    .as("a commercial position never reaches a confidentiality agreement")
+                    .containsExactly("unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "NDA", nda);
+
+            var supply = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "SUPPLY");
+            assertThat(recordKeys(supply))
+                    .as("wording written for software licence and SaaS is not offered for supply")
+                    .containsExactlyInAnyOrder("MSA position", "SWL position", "unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "SUPPLY", supply);
+
+            var saas = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "SAAS");
+            assertThat(recordKeys(saas))
+                    .as("the same wording is offered for SaaS")
+                    .containsExactlyInAnyOrder("MSA position", "SWL position",
+                            "SWL+SAAS wording", "unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "SAAS", saas);
+
+            var other = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "OTHER");
+            assertThat(recordKeys(other))
+                    .as("an unmodelled contract keeps positions but gets only unscoped wording")
+                    .containsExactlyInAnyOrder("MSA position", "SWL position", "unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "OTHER", other);
+        } finally {
+            identityProvider.use(shared);
+        }
+    }
+
+    private List<PublishedCandidate> publishedKnowledge(
+            UUID organizationId, long publicationNumber, Set<UUID> artifactIds,
+            String contractType) {
+        return queryService.listPublishedCandidatesForOrganization(
+                        PublishedKnowledgeQuery.unpublishedNever(organizationId, publicationNumber,
+                                Set.of(), null, null, contractType, null, null, null, null))
+                .stream()
+                .filter(row -> artifactIds.contains(row.candidate().artifactId()))
+                .toList();
+    }
+
+    private void assertApplicableAgrees(
+            UUID organizationId, long publicationNumber, Set<UUID> artifactIds,
+            String contractType, List<PublishedCandidate> retrieved) {
+        assertThat(queryService.applicableKnowledgeForOrganization(new ApplicableKnowledgeQuery(
+                        organizationId, publicationNumber, contractType, null, null, null, null,
+                        java.time.LocalDate.of(2026, 1, 1)))
+                .stream()
+                .map(ApplicableKnowledge::artifactId)
+                .filter(artifactIds::contains)
+                .collect(java.util.stream.Collectors.toSet()))
+                .as("the applicable-knowledge preview agrees with retrieval for " + contractType)
+                .isEqualTo(retrieved.stream()
+                        .map(row -> row.candidate().artifactId())
+                        .collect(java.util.stream.Collectors.toSet()));
+    }
+
+    private static Set<String> recordKeys(List<PublishedCandidate> retrieved) {
+        return retrieved.stream()
+                .map(row -> recordKey(row.candidate()))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private static String recordKey(KnowledgeCandidate candidate) {
+        var text = candidate.effectiveContentText();
+        if (text.contains("net 30 days")) {
+            return "MSA position";
+        }
+        if (text.contains("non-transferable licence")) {
+            return "SWL position";
+        }
+        if (text.contains("licence to use the Software")) {
+            return "SWL+SAAS wording";
+        }
+        if (text.contains("England and Wales")) {
+            return "unscoped wording";
+        }
+        throw new AssertionError("Unexpected knowledge record: " + text);
+    }
+
+    private KnowledgeArtifact ingestRows(
+            String filename, ArtifactType type, String sheetName, String[][] rows)
+            throws Exception {
+        byte[] workbook;
+        try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
+            var sheet = xssf.createSheet(sheetName);
+            for (int r = 0; r < rows.length; r++) {
+                var row = sheet.createRow(r);
+                for (int c = 0; c < rows[r].length; c++) {
+                    if (rows[r][c] != null) {
+                        row.createCell(c).setCellValue(rows[r][c]);
+                    }
+                }
+            }
+            xssf.write(out);
+            workbook = out.toByteArray();
+        }
+        var manifest = new ArtifactManifest(
+                Set.of(), null, null, null, null, "en", null, null, null);
+        return ingestionService.ingest(filename, "application/octet-stream", type, manifest,
+                new ByteArrayInputStream(workbook));
+    }
+
+    @Test
     void labelsTheModelResolvedStillTagThePositionAfterPersistence() throws Exception {
         provider.reset();
         byte[] workbook;
