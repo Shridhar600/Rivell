@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.rivell.workbench.intelligence.GenerativeReasoningService;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.review.AdjudicationSpecs;
 import com.rivell.workbench.review.PolicyComparisonSpecs;
@@ -84,9 +85,7 @@ final class LlmAdjudicator {
         } catch (ProviderProtocolException e) {
             return SecondOpinion.failed(SecondOpinion.INVALID);
         } catch (RuntimeException e) {
-            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
-                throw e;
-            }
+            ProviderFailures.rethrowIfOutOfCredit(e);
             return SecondOpinion.failed(SecondOpinion.UNAVAILABLE);
         }
     }

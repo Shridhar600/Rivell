@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 
 import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.intelligence.GenerativeReasoningService;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.retrieval.EvidenceRequest;
 import com.rivell.workbench.retrieval.EvidenceService;
@@ -63,10 +64,7 @@ final class ContractIssueSpotter {
             Thread.currentThread().interrupt();
             return Spots.failed();
         } catch (ExecutionException e) {
-            if (e.getCause() instanceof com.rivell.workbench.intelligence
-                    .ProviderOutOfCreditException outOfCredit) {
-                throw outOfCredit;
-            }
+            ProviderFailures.rethrowIfOutOfCredit(e.getCause());
             return Spots.failed();
         }
     }
@@ -104,9 +102,7 @@ final class ContractIssueSpotter {
             }
             return new Spots(Map.copyOf(spots), false);
         } catch (SemanticDecisionException e) {
-            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
-                throw e;
-            }
+            ProviderFailures.rethrowIfOutOfCredit(e);
             return Spots.failed();
         }
     }

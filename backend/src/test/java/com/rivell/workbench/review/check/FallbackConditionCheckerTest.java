@@ -1,6 +1,7 @@
 package com.rivell.workbench.review.check;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import com.rivell.workbench.intelligence.GenerativeProviderRegistry;
 import com.rivell.workbench.intelligence.GenerativeReasoningProvider;
 import com.rivell.workbench.intelligence.GenerativeReasoningService;
 import com.rivell.workbench.intelligence.ModelBinding;
+import com.rivell.workbench.intelligence.ProviderOutOfCreditException;
 import com.rivell.workbench.intelligence.ProviderUnavailableException;
 import com.rivell.workbench.intelligence.TokenUsage;
 import com.rivell.workbench.review.FallbackConditionSpecs;
@@ -218,6 +220,27 @@ class FallbackConditionCheckerTest {
 
         assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.UNAVAILABLE);
         assertThat(result.raises()).isFalse();
+    }
+
+    @Test
+    void anOutOfCreditGenerationIsNotRecordedAsAnOrdinaryProviderFailure() {
+        GenerativeReasoningProvider dry = new GenerativeReasoningProvider() {
+            @Override
+            public String id() {
+                return "fake";
+            }
+
+            @Override
+            public GenerationResult generate(GenerationRequest request) {
+                throw new ProviderOutOfCreditException("Provider account has no credits");
+            }
+        };
+        var checker = new FallbackConditionChecker(new GenerativeReasoningService(
+                asset -> new ModelBinding("fake", "alias"),
+                (GenerativeProviderRegistry) id -> Optional.of(dry), Clock.systemUTC()));
+
+        assertThatThrownBy(() -> checker.check(ask(true)))
+                .isInstanceOf(ProviderOutOfCreditException.class);
     }
 
     @Test

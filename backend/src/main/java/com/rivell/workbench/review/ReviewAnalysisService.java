@@ -28,6 +28,7 @@ import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.intelligence.ClauseEmbeddingCache;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.retrieval.EvidenceService;
 import com.rivell.workbench.retrieval.RetrievalProperties;
 import com.rivell.workbench.review.check.AnalysisEnvironment;
@@ -582,13 +583,10 @@ public class ReviewAnalysisService {
                     .map(executor -> executor.execute(context))
                     .orElseGet(() -> CheckOutcome.degraded(
                             "mechanism_not_available:" + check.mechanism()));
-        } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
-            return CheckOutcome.degraded("provider_out_of_credit");
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
             return isDecisionContractError(e)
                     ? CheckOutcome.failed("decision_contract_error:" + e.getClass().getSimpleName())
-                    : CheckOutcome.degraded(
-                            "provider_unavailable:" + e.getClass().getSimpleName());
+                    : CheckOutcome.degraded(ProviderFailures.degradedReason(e));
         } catch (RuntimeException e) {
             if (isTransientFailure(e)) {
                 // Infrastructure, not a legal verdict: let analyze count it and JobRunr retry the

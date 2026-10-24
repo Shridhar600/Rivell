@@ -16,6 +16,13 @@ import java.util.Map;
  */
 public final class ClauseEmbeddingCache implements EmbeddingLookup {
 
+    /**
+     * After a rejected prefetch batch, only this many texts are retried alone. A provider that
+     * rejects the batch for size is likely to reject many inputs too, and the callers already
+     * tolerate a cold cache; the rest stay uncached and embed on their own later use.
+     */
+    static final int MAX_FALLBACK_TEXTS = 8;
+
     private final EmbeddingService embeddingService;
     private final Map<String, float[]> vectors = new HashMap<>();
 
@@ -26,6 +33,7 @@ public final class ClauseEmbeddingCache implements EmbeddingLookup {
     /**
      * Embeds every text not already cached in one batch. A failure leaves the cache empty and
      * is not fatal: the first later use retries through the ordinary path and degrades honestly.
+     * A rejected batch retries at most {@link #MAX_FALLBACK_TEXTS} inputs alone.
      */
     public void prefetch(List<String> texts) {
         if (!embeddingService.isConfigured()) {
@@ -46,16 +54,25 @@ public final class ClauseEmbeddingCache implements EmbeddingLookup {
             for (int index = 0; index < textsInOrder.size(); index++) {
                 vectors.put(textsInOrder.get(index), execution.vectors().get(index));
             }
-        } catch (ProviderOutOfCreditException e) {
-            // a dry account fails every text the same way; the short circuit keeps it cheap
         } catch (SemanticDecisionException e) {
-            // the batch failed: retry each text alone so one bad input only loses its own vector
+            if (ProviderFailures.isOutOfCredit(e)) {
+                // a dry account fails every text the same way; the short circuit keeps it cheap
+                return;
+            }
+            // the batch failed: retry a bounded number of texts alone so one bad input only
+            // loses its own vector and the rest stay cold for their own later use
+            var attempted = 0;
             for (var text : missing) {
+                if (attempted == MAX_FALLBACK_TEXTS) {
+                    return;
+                }
+                attempted++;
                 try {
                     vectors.put(text, embeddingService.embed(List.of(text)).vectors().get(0));
-                } catch (ProviderOutOfCreditException dry) {
-                    return;
                 } catch (SemanticDecisionException ignored) {
+                    if (ProviderFailures.isOutOfCredit(ignored)) {
+                        return;
+                    }
                     // this text degrades on its own when a caller asks for it
                 }
             }

@@ -3,6 +3,7 @@ package com.rivell.workbench.review.check;
 import java.util.Optional;
 
 import com.rivell.workbench.intelligence.DecisionExecution;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
@@ -48,9 +49,7 @@ final class UncoveredClauseTriage {
                     ? new Assessment(Optional.of(new Verdict(yesNo.probability(), execution)), false)
                     : Assessment.noVerdict();
         } catch (SemanticDecisionException e) {
-            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
-                throw e;
-            }
+            ProviderFailures.rethrowIfOutOfCredit(e);
             return Assessment.failed();
         }
     }
