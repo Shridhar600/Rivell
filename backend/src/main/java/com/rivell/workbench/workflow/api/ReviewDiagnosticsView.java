@@ -59,6 +59,10 @@ public record ReviewDiagnosticsView(
                     + "environment: the contract semantics digest, retrieval index version, "
                     + "embedding model identity and model policy bindings")
             Boolean environmentMatchesSnapshot,
+            @Schema(description = "Issues the whole-contract read named whose quote could not be "
+                    + "found in the contract, or that were not one issue in one line; absent "
+                    + "when the read was not used in this run")
+            Integer spottingDropped,
             List<CheckView> checks) {
     }
 

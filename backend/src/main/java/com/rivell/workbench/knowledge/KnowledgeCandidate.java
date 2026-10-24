@@ -298,6 +298,37 @@ public record KnowledgeCandidate(
     }
 
     /**
+     * Structured fields a person corrected and saved, one name per field, when the saved value
+     * differs from the machine proposal. A machine proposal that was stored only as an
+     * interpretation (the source did not support it) is not a correction: it never reached the
+     * effective values, and no person edited anything.
+     */
+    public Set<String> correctedFields() {
+        if (editedSemanticFields == null) {
+            return Set.of();
+        }
+        var edited = editedSemanticFields;
+        var fields = new java.util.LinkedHashSet<String>();
+        if (!edited.positions().isEmpty() && !edited.positions().equals(semanticFields.positions())) {
+            fields.add("positions");
+        }
+        if (edited.variantRole() != null
+                && edited.variantRole() != semanticFields.effectiveVariantRole()) {
+            fields.add("variantRole");
+        }
+        if (edited.escalationTrigger() != null
+                && !edited.escalationTrigger().equals(semanticFields.escalationTrigger())) {
+            fields.add("escalationTrigger");
+        }
+        if ((edited.requiresApproval() != null
+                        && !edited.requiresApproval().equals(semanticFields.requiresApproval()))
+                || (edited.requiresApprovalCleared() && semanticFields.requiresApproval() != null)) {
+            fields.add("requiresApproval");
+        }
+        return Set.copyOf(fields);
+    }
+
+    /**
      * The payload a reader sees: the human's corrected columns when there are any, else the
      * machine payload. Review classification must read the same values the API shows.
      */

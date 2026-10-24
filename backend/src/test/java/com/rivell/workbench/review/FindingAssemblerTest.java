@@ -66,6 +66,18 @@ class FindingAssemblerTest {
     }
 
     @Test
+    void twoGroundedReadIssuesOnOneClauseAreTwoFindings() {
+        var first = signal(SignalType.POLICY_UNAVAILABLE, IssueFamily.POLICY_UNAVAILABLE,
+                new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED),
+                List.of(UUID.randomUUID()), null, Map.of("spottedReason", "first issue"));
+        var second = signal(SignalType.POLICY_UNAVAILABLE, IssueFamily.POLICY_UNAVAILABLE,
+                new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED),
+                List.of(UUID.randomUUID()), null, Map.of("spottedReason", "second issue"));
+
+        assertThat(assembler.assemble(run(), List.of(first, second), NOW)).hasSize(2);
+    }
+
+    @Test
     void draftingOnAnUncertainIssueDoesNotProposeLanguage() {
         var uncertain = signal(SignalType.DEVIATION_UNCERTAIN,
                 IssueFamily.POSITION_UNCERTAIN,

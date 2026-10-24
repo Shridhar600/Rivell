@@ -7,6 +7,7 @@ import java.util.regex.Pattern;
 
 import com.rivell.workbench.intelligence.DecisionExecutionMetadata;
 import com.rivell.workbench.intelligence.GenerativeReasoningService;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.SemanticAnswer;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
@@ -98,9 +99,8 @@ final class PositionLanguageGenerator {
             return Result.proposed(new Proposal(proposed, explanation,
                     generation.executionId(), generation.metadata(),
                     verify(proposed, draft)));
-        } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
-            throw e;
         } catch (com.rivell.workbench.intelligence.ProviderRejectedException e) {
+            ProviderFailures.rethrowIfOutOfCredit(e);
             return Result.failed("REJECTED");
         } catch (com.rivell.workbench.intelligence.ProviderProtocolException e) {
             return Result.failed("INVALID");
@@ -125,6 +125,7 @@ final class PositionLanguageGenerator {
                     : satisfies > TRUE_BAND ? "VERIFIED" : "UNCERTAIN";
             return new Verification(outcome, execution.executionId(), satisfies, removal, addition);
         } catch (SemanticDecisionException e) {
+            ProviderFailures.rethrowIfOutOfCredit(e);
             return new Verification("UNCERTAIN", null, 0.5, 0.5, 0.5);
         }
     }

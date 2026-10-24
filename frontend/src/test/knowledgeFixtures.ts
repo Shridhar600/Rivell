@@ -40,6 +40,7 @@ export function candidate(over: Partial<Candidate> & { id: string; artifactId: s
     variantRole: null,
     escalationTrigger: null,
     requiresApproval: null,
+    correctedFields: [],
     interpretations: [],
     editedContentText: null,
     editedPayloadColumns: {},

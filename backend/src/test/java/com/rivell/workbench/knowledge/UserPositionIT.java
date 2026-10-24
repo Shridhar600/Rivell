@@ -150,6 +150,9 @@ class UserPositionIT {
         assertThat(created.get(0).path("reviewStatus").asText()).isEqualTo("PENDING");
         assertThat(created.get(0).path("extractionUnitId").asText())
                 .isEqualTo(guidance.id().toString());
+        assertThat(created.get(0).path("correctedFields").isArray())
+                .as("the wire view carries the saved-correction marker")
+                .isTrue();
         assertThat(provider.kindDecisions.get())
                 .as("the person decided the kind: Rivell does not ask again")
                 .isEqualTo(kindDecisionsBefore);

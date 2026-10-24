@@ -97,15 +97,65 @@ export function sourceBlocks(nodes: KnowledgeNode[], highlights: ReadonlyMap<str
 }
 
 /**
- * Where a position sits in its source, only as far as the extraction recorded it: the sheet name
- * for a workbook, the numbering label for a document. Page numbers are not extracted, so none is
- * shown.
+ * The heading each node sits under, from that heading outwards, by document order and heading
+ * level. A Word parse records heading levels and paragraph indexes but often no numbering label,
+ * so this is the path a reader can follow. A title is the document's own name, not a section.
  */
-export function sourceLocation(sourceNodes: KnowledgeNode[]): string | null {
+export function headingPaths(nodes: KnowledgeNode[]): Map<string, string> {
+  const ordered = [...nodes].sort((a, b) => a.bodyIndex - b.bodyIndex || a.ordinal - b.ordinal)
+  const open: KnowledgeNode[] = []
+  const paths = new Map<string, string>()
+  for (const node of ordered) {
+    if (node.nodeType === 'TITLE') continue
+    if (node.nodeType === 'HEADING') {
+      const level = node.headingLevel ?? 1
+      while (open.length > 0 && (open[open.length - 1]?.headingLevel ?? 1) >= level) open.pop()
+      open.push(node)
+      const path = headingPathText(open)
+      if (path) paths.set(node.id, path)
+      continue
+    }
+    const path = headingPathText(open)
+    if (path) paths.set(node.id, path)
+  }
+  return paths
+}
+
+function headingPathText(headings: KnowledgeNode[]): string {
+  return headings
+    .map((heading) => {
+      const text = heading.text?.trim()
+      if (!text) return ''
+      return heading.numberingLabel ? `${heading.numberingLabel.trim()} ${text}` : text
+    })
+    .filter((entry) => entry.length > 0)
+    .join(' > ')
+}
+
+/**
+ * Where a position sits in its source, only as far as the extraction recorded it: the sheet name
+ * for a workbook, the numbering label for a document, else its heading path and paragraph. Page
+ * numbers are not extracted, so none is shown.
+ */
+export function sourceLocation(
+  sourceNodes: KnowledgeNode[],
+  paths?: ReadonlyMap<string, string>,
+): string | null {
   const sheet = sourceNodes.find((node) => node.sheetName)?.sheetName
   if (sheet) return `Sheet "${sheet}"`
   const numbering = sourceNodes.find((node) => node.numberingLabel)?.numberingLabel
-  return numbering ?? null
+  if (numbering) return numbering
+  const first = sourceNodes.find(
+    (node) => paths?.get(node.id) !== undefined || node.paragraphIndex !== null,
+  )
+  if (first) {
+    const located = passageLocation(first, new Map(), paths)
+    if (located) return located
+  }
+  const heading = sourceNodes.find(
+    (node) => node.nodeType === 'HEADING' && node.text?.trim(),
+  )
+  return heading?.text ? `Heading "${heading.text.trim()}"` : null
 }
 
 export interface SourcePassage {
@@ -116,7 +166,11 @@ export interface SourcePassage {
   location: string | null
 }
 
-function passageLocation(node: KnowledgeNode | undefined, byId: ReadonlyMap<string, KnowledgeNode>): string | null {
+function passageLocation(
+  node: KnowledgeNode | undefined,
+  byId: ReadonlyMap<string, KnowledgeNode>,
+  paths?: ReadonlyMap<string, string>,
+): string | null {
   if (!node) return null
   if (node.nodeType === 'TABLE_ROW' || node.nodeType === 'SPREADSHEET_ROW') {
     let sheet: string | null = node.sheetName
@@ -130,7 +184,15 @@ function passageLocation(node: KnowledgeNode | undefined, byId: ReadonlyMap<stri
     const row = node.rowIndex !== null ? `${rowLabel} ${node.rowIndex + 1}` : null
     return [sheet ? `Sheet "${sheet}"` : null, row].filter(Boolean).join(', ') || null
   }
-  return node.numberingLabel
+  if (node.numberingLabel) return node.numberingLabel
+  const path = paths?.get(node.id)
+  const paragraph = node.paragraphIndex !== null ? node.paragraphIndex + 1 : null
+  if (path) {
+    return [`Heading "${path}"`, paragraph !== null ? `paragraph ${paragraph}` : null]
+      .filter(Boolean)
+      .join(', ')
+  }
+  return paragraph !== null ? `Paragraph ${paragraph}` : null
 }
 
 export function indexNodes(nodes: KnowledgeNode[]): Map<string, KnowledgeNode> {
@@ -138,10 +200,20 @@ export function indexNodes(nodes: KnowledgeNode[]): Map<string, KnowledgeNode> {
 }
 
 /** The passages of one candidate within already-built blocks, so a list does not rebuild the structure per row. */
-export function passagesIn(blocks: SourceBlock[], byId: ReadonlyMap<string, KnowledgeNode>, candidateId: string): SourcePassage[] {
+export function passagesIn(
+  blocks: SourceBlock[],
+  byId: ReadonlyMap<string, KnowledgeNode>,
+  candidateId: string,
+  paths?: ReadonlyMap<string, string>,
+): SourcePassage[] {
   return blocks
     .filter((block) => block.candidateIds.includes(candidateId))
-    .map((block) => ({ id: block.id, kind: block.kind, text: block.text, location: passageLocation(byId.get(block.id), byId) }))
+    .map((block) => ({
+      id: block.id,
+      kind: block.kind,
+      text: block.text,
+      location: passageLocation(byId.get(block.id), byId, paths),
+    }))
 }
 
 /**
@@ -150,7 +222,12 @@ export function passagesIn(blocks: SourceBlock[], byId: ReadonlyMap<string, Know
  * extraction records neither.
  */
 export function candidatePassages(candidate: Candidate, units: ExtractionUnit[], nodes: KnowledgeNode[]): SourcePassage[] {
-  return passagesIn(sourceBlocks(nodes, highlightMap([candidate], units)), indexNodes(nodes), candidate.id)
+  return passagesIn(
+    sourceBlocks(nodes, highlightMap([candidate], units)),
+    indexNodes(nodes),
+    candidate.id,
+    headingPaths(nodes),
+  )
 }
 
 export interface ContextWindow {
@@ -189,13 +266,14 @@ export function contextWindow(blocks: SourceBlock[], candidateId: string, radius
 export function candidateLocations(candidates: Candidate[], units: ExtractionUnit[], nodes: KnowledgeNode[]): Map<string, string | null> {
   const unitById = new Map(units.map((unit) => [unit.id, unit]))
   const byId = new Map(nodes.map((node) => [node.id, node]))
+  const paths = headingPaths(nodes)
   const found = new Map<string, string | null>()
   for (const candidate of candidates) {
     const unit = unitById.get(candidate.extractionUnitId)
     const sourceNodes = (unit?.sourceNodeIds ?? []).map((id) => byId.get(id)).filter((node): node is KnowledgeNode => node !== undefined)
     const first = sourceNodes[0]
-    // A row keeps its sheet and row; anything else falls back to the numbering label.
-    const label = passageLocation(first, byId) ?? sourceLocation(sourceNodes)
+    // A row keeps its sheet and row; anything else falls back to its heading path and paragraph.
+    const label = passageLocation(first, byId, paths) ?? sourceLocation(sourceNodes, paths)
     found.set(candidate.id, label ?? null)
   }
   return found

@@ -32,9 +32,12 @@ class EvidenceIndexDimensionGuardTest {
 
             @Override
             public EmbeddingBatch embed(EmbeddingRequest request) {
+                var vectors = new java.util.ArrayList<float[]>();
+                for (int index = 0; index < request.inputs().size(); index++) {
+                    vectors.add(new float[dims]);
+                }
                 return new EmbeddingBatch(
-                        List.of(new float[dims], new float[dims]),
-                        "oversize-model", new TokenUsage(10, 1));
+                        List.copyOf(vectors), "oversize-model", new TokenUsage(10, 1));
             }
         };
         var properties = new EmbeddingProperties("openai-compatible",
@@ -46,6 +49,17 @@ class EvidenceIndexDimensionGuardTest {
 
     private static RetrievalRepository recordingRepository(
             List<Integer> persistedDims) {
+        return recordingRepository(persistedDims, new java.util.HashSet<>(), dims -> { });
+    }
+
+    private static RetrievalRepository recordingRepository(
+            List<Integer> persistedDims, java.util.function.IntConsumer onCreateIndex) {
+        return recordingRepository(persistedDims, new java.util.HashSet<>(), onCreateIndex);
+    }
+
+    private static RetrievalRepository recordingRepository(
+            List<Integer> persistedDims, Set<UUID> readyIds,
+            java.util.function.IntConsumer onCreateIndex) {
         return new RetrievalRepository() {
             @Override
             public void upsertIndexRow(EvidenceIndexRow row) {
@@ -54,7 +68,13 @@ class EvidenceIndexDimensionGuardTest {
             @Override
             public java.util.Set<UUID> findEmbeddingReadyIds(
                     UUID organizationId, List<UUID> candidateIds, String indexVersion) {
-                return java.util.Set.of();
+                var ready = new java.util.HashSet<UUID>();
+                for (var candidateId : candidateIds) {
+                    if (readyIds.contains(candidateId)) {
+                        ready.add(candidateId);
+                    }
+                }
+                return ready;
             }
 
             @Override
@@ -68,6 +88,7 @@ class EvidenceIndexDimensionGuardTest {
                     String contentHash, String indexVersion, String embeddingModel,
                     int embeddingDims, String vectorLiteral) {
                 persistedDims.add(embeddingDims);
+                readyIds.add(candidateId);
             }
 
             @Override
@@ -97,6 +118,7 @@ class EvidenceIndexDimensionGuardTest {
             @Override
             public void createVectorIndexIfAbsent(
                     String indexName, String embeddingModel, int dims) {
+                onCreateIndex.accept(dims);
             }
         };
     }
@@ -126,5 +148,49 @@ class EvidenceIndexDimensionGuardTest {
                 Map.of(UUID.randomUUID(), "text one", UUID.randomUUID(), "text two"));
 
         assertThat(persistedDims).containsExactly(768, 768);
+    }
+
+    @Test
+    void aFailedIndexCreationIsAttemptedOncePerPassNotPerVector() {
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        var service = new EvidenceIndexService(null,
+                embeddingServiceReturning(768),
+                recordingRepository(new java.util.ArrayList<>(), dims -> {
+                    attempts.incrementAndGet();
+                    throw new IllegalStateException("create index failed");
+                }),
+                new RetrievalProperties(true, null, 20, 10, 20, 2, "", 100));
+
+        service.embedBatch(UUID.randomUUID(),
+                Map.of(UUID.randomUUID(), "text one", UUID.randomUUID(), "text two"));
+        assertThat(attempts).hasValue(1);
+
+        service.embedBatch(UUID.randomUUID(),
+                Map.of(UUID.randomUUID(), "text three", UUID.randomUUID(), "text four"));
+        assertThat(attempts).hasValue(2);
+    }
+
+    @Test
+    void aFailedVectorIndexCreationIsRetriedOnTheNextPass() {
+        var attempts = new java.util.concurrent.atomic.AtomicInteger();
+        var readyIds = new java.util.HashSet<UUID>();
+        var candidateId = UUID.randomUUID();
+        var service = new EvidenceIndexService(null,
+                embeddingServiceReturning(768),
+                recordingRepository(new java.util.ArrayList<>(), readyIds, dims -> {
+                    if (attempts.incrementAndGet() == 1) {
+                        throw new IllegalStateException("create index failed");
+                    }
+                }),
+                new RetrievalProperties(true, null, 20, 10, 20, 2, "", 100));
+
+        service.embedBatch(UUID.randomUUID(), Map.of(candidateId, "text one"));
+        // the same row is already embedding-ready, so only the pending index retry can run
+        service.embedBatch(UUID.randomUUID(), Map.of(candidateId, "text one"));
+        assertThat(attempts).hasValue(2);
+
+        // once the index exists, a later vector of the same dimension does not recreate it
+        service.embedBatch(UUID.randomUUID(), Map.of(UUID.randomUUID(), "text two"));
+        assertThat(attempts).hasValue(2);
     }
 }

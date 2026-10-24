@@ -57,6 +57,54 @@ describe('source lineage', () => {
     expect(sourceLocation([node({ id: 'x', nodeType: 'PARAGRAPH' })])).toBeNull()
     expect(sourceLocation([])).toBeNull()
   })
+
+  it('locates a Word paragraph by its heading path and paragraph when the heading is not numbered', () => {
+    const nodes = [
+      node({ id: 'body', nodeType: 'BODY', bodyIndex: 0 }),
+      node({ id: 'title', nodeType: 'TITLE', parentId: 'body', bodyIndex: 0, text: 'Procurement playbook' }),
+      node({ id: 'h1', nodeType: 'HEADING', parentId: 'body', bodyIndex: 1, paragraphIndex: 1, headingLevel: 1, text: 'Negotiation positions' }),
+      node({ id: 'h2', nodeType: 'HEADING', parentId: 'body', bodyIndex: 2, paragraphIndex: 2, headingLevel: 2, text: 'Scope and exclusions' }),
+      node({ id: 'p1', nodeType: 'PARAGRAPH', parentId: 'body', bodyIndex: 3, paragraphIndex: 3, text: 'Use a definition that covers marked information.' }),
+    ]
+    const passages = candidatePassages(
+      candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'u' }),
+      [unit({ id: 'u', artifactId: 'a1', sourceNodeIds: ['h2', 'p1'] })],
+      nodes,
+    )
+
+    expect(passages.map((entry) => entry.location)).toEqual([
+      'Heading "Negotiation positions > Scope and exclusions", paragraph 3',
+      'Heading "Negotiation positions > Scope and exclusions", paragraph 4',
+    ])
+  })
+
+  it('locates a Word paragraph with no heading by its document paragraph', () => {
+    const nodes = [
+      node({ id: 'body', nodeType: 'BODY' }),
+      node({ id: 'p1', nodeType: 'PARAGRAPH', parentId: 'body', bodyIndex: 1, paragraphIndex: 4, text: 'Owner: Nadia Petrov.' }),
+    ]
+    const found = candidateLocations(
+      [candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'u' })],
+      [unit({ id: 'u', artifactId: 'a1', sourceNodeIds: ['p1'] })],
+      nodes,
+    )
+    expect(found.get('c')).toBe('Paragraph 5')
+  })
+
+  it('keeps the Excel sheet and row locator unchanged', () => {
+    const sheet = [
+      node({ id: 'wb', nodeType: 'WORKBOOK' }),
+      node({ id: 'sh', nodeType: 'SHEET', parentId: 'wb', sheetName: 'Clauses' }),
+      node({ id: 'row', nodeType: 'SPREADSHEET_ROW', parentId: 'sh', rowIndex: 13 }),
+      node({ id: 'cell', nodeType: 'SPREADSHEET_CELL', parentId: 'row', text: 'Mutual' }),
+    ]
+    const found = candidateLocations(
+      [candidate({ id: 'c', artifactId: 'a1', extractionUnitId: 'u' })],
+      [unit({ id: 'u', artifactId: 'a1', sourceNodeIds: ['row'] })],
+      sheet,
+    )
+    expect(found.get('c')).toBe('Sheet "Clauses", row 14')
+  })
 })
 
 describe('candidate passages and context', () => {
@@ -75,7 +123,8 @@ describe('candidate passages and context', () => {
     const passages = candidatePassages(target, units, nodes)
     expect(passages.map((entry) => [entry.id, entry.text, entry.location])).toEqual([
       ['h1', 'Liability', '4.2'],
-      ['p1', 'Cap at twelve months.', null],
+      // The paragraph sits under the numbered heading, so it can name that heading too.
+      ['p1', 'Cap at twelve months.', 'Heading "4.2 Liability"'],
     ])
   })
 

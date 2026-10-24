@@ -41,6 +41,12 @@ public final class FindingAssembler {
         if (signal.payload() instanceof OmissionPayload omission) {
             key = key + ":" + omission.candidateId();
         }
+        // The whole-contract read names one finding per issue. Two grounded issues on one clause
+        // are two findings, not one finding that holds both.
+        if (signal.payload() instanceof PolicyUnavailablePayload unavailable
+                && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())) {
+            key = key + ":spotted:" + signal.dedupeKey();
+        }
         return key;
     }
 

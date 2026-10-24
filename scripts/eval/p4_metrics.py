@@ -4,7 +4,7 @@ The eval's checks are the diagnostics CheckViews and the findings are the list s
 with the quality subset run_contract attaches (one detail read per finding). Every function
 takes what it needs and returns plain values, so the report and its tests can rely on them.
 """
-from scoring import _content_words, _overlap, _topic_matches, section_locator
+from scoring import absence_matches, section_locator
 
 NEEDS_LOOK = "NEEDS_YOUR_LOOK"
 SEARCH = "SEARCH"
@@ -21,7 +21,8 @@ QUALITY_KEYS = ("route", "foundBy", "uncertaintyReason", "spottedSeverity",
                 "positionLabel", "jevCategory", "secondOpinionCategory", "levers",
                 "severityWithoutLevers", "secondOpinionQuote", "secondOpinionReason",
                 "categoryBeforeLevers", "wordingFitVerdict", "wordingFitReason",
-                "wordingFitReasons", "wordingFitQuote", "fitVerdict", "fitReason", "fitReasons")
+                "wordingFitReasons", "wordingFitQuote", "fitVerdict", "fitReason", "fitReasons",
+                "escalationTrigger", "requiresApproval", "approvers", "approver")
 
 FIT_VERDICTS = ("FITS", "DOES_NOT_FIT", "UNKNOWN")
 
@@ -121,10 +122,10 @@ def advisory_metrics(answer, nodes, clauses, findings):
 
 
 def _matches_issue(finding, issue):
-    if _topic_matches(finding.get("absenceConcept") or "", issue.get("playbookRef")):
-        return True
-    words = _content_words(quality(finding).get("positionLabel"))
-    return bool(words) and _overlap(words, _content_words(issue.get("playbookRef"))) >= 0.5
+    # DW-069: the same whole-word label/reference rule score_contract uses, so the two agree on a
+    # given finding. The omission lane counts only MISSING_POSITION findings; score_contract also
+    # credits v1 MISSING_REQUIRED_CONCEPT absences (lane breadth, not a matcher difference).
+    return absence_matches(finding, issue)
 
 
 def omission_metrics(answer, findings):

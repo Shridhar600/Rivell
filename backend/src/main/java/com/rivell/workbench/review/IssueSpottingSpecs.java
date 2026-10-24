@@ -15,7 +15,8 @@ import com.rivell.workbench.intelligence.SemanticState;
 public final class IssueSpottingSpecs {
 
     public static final String SPEC_ID = "contract-issue-spotting";
-    public static final int VERSION = 1;
+    /** Version 2 asks for one issue per line with a verbatim quote; version 1 named clauses only. */
+    public static final int VERSION = 2;
     public static final int STATE_SCHEMA = 1;
     public static final String ISSUES = "issues";
     public static final String NONE = "NONE";
@@ -26,15 +27,17 @@ public final class IssueSpottingSpecs {
     public static ReasoningSpec spec() {
         return new ReasoningSpec(SPEC_ID, VERSION,
                 "Review the whole contract for our side (ourSide) against our playbook positions. "
-                        + "Name each clause a lawyer on our side must act on before signing: it "
+                        + "Name each issue a lawyer on our side must act on before signing: it "
                         + "breaches or departs from a position, is ambiguous, conflicts with another "
                         + "clause or schedule, or is unusual and against us although no position "
                         + "covers it. Do not name clauses that meet our positions or are standard "
-                        + "terms. Use the clause numbers given in the input.",
+                        + "terms. Use the clause numbers given in the input, one issue per line, and "
+                        + "quote the clause words that show the issue exactly.",
                 STATE_SCHEMA,
-                Map.of(ISSUES, "One line per clause that needs action, at most 20 lines, each "
-                        + "'clause number | HIGH or MEDIUM | reason in at most 15 words'. Write NONE "
-                        + "when no clause needs action."));
+                Map.of(ISSUES, "One line per issue (a clause may have more than one), at most 20 "
+                        + "lines, each 'clause number | HIGH or MEDIUM | quote from the clause, at "
+                        + "most 20 words | reason in at most 15 words'. Write NONE when no clause "
+                        + "needs action."));
     }
 
     /** One clause as the model sees it: its number in the input, heading and text. */

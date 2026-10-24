@@ -666,6 +666,9 @@ public class LiabilityReviewIT {
         final java.util.Set<String> spottedHighHeadings =
                 java.util.concurrent.ConcurrentHashMap.newKeySet();
         final AtomicInteger spottingCalls = new AtomicInteger();
+        /** Overrides the whole-contract read's raw issue lines, when a test needs a malformed one. */
+        volatile java.util.function.Function<IssueSpottingSpecs.SpottingState, String>
+                spottingOutput;
         /** The whole-contract read fails as if the provider were down. */
         volatile boolean failSpotting;
         /** The whole-contract read fails as if the analysis account had no credit. */
@@ -711,6 +714,7 @@ public class LiabilityReviewIT {
             spottedHeadings.clear();
             spottedHighHeadings.clear();
             spottingCalls.set(0);
+            spottingOutput = null;
             failSpotting = false;
             spottingOutOfCredit = false;
             secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
@@ -768,15 +772,27 @@ public class LiabilityReviewIT {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                             "whole-contract spotting unavailable");
                 }
+                if (spottingOutput != null) {
+                    return new GenerationResult(Map.of("issues", spottingOutput.apply(spotting)),
+                            "fake-gen-v1", new TokenUsage(900, 30));
+                }
                 var lines = spotting.clauses().stream()
                         .map(clause -> {
-                            if (spottedHighHeadings.stream().anyMatch(clause.heading()::contains)) {
-                                return clause.number() + " | HIGH | one-sided term against us";
+                            var severity = spottedHighHeadings.stream().anyMatch(clause.heading()::contains)
+                                    ? "HIGH"
+                                    : spottedHeadings.stream().anyMatch(clause.heading()::contains)
+                                            ? "MEDIUM" : null;
+                            if (severity == null) {
+                                return null;
                             }
-                            if (spottedHeadings.stream().anyMatch(clause.heading()::contains)) {
-                                return clause.number() + " | MEDIUM | one-sided term against us";
+                            var quote = clause.text().strip().lines().findFirst()
+                                    .filter(line -> !line.isBlank())
+                                    .orElse(clause.heading());
+                            if (quote.length() > 160) {
+                                quote = quote.substring(0, 160);
                             }
-                            return null;
+                            return clause.number() + " | " + severity + " | " + quote
+                                    + " | one-sided term against us";
                         })
                         .filter(java.util.Objects::nonNull)
                         .collect(java.util.stream.Collectors.joining("\n"));

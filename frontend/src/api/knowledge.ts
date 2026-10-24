@@ -285,6 +285,8 @@ export interface Candidate {
   variantRole: PositionRole | null
   escalationTrigger: string | null
   requiresApproval: boolean | null
+  /** Structured fields a person corrected and saved. A machine proposal that was not applied is not one. */
+  correctedFields: string[]
   interpretations: Interpretation[]
   editedContentText: string | null
   editedPayloadColumns: Record<string, string>
@@ -515,6 +517,10 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     variantRole: readNullableEnum(record, 'variantRole', what, POSITION_ROLES),
     escalationTrigger: readNullableString(record, 'escalationTrigger', what),
     requiresApproval: readNullableBoolean(record, 'requiresApproval', what),
+    correctedFields:
+      record.correctedFields === undefined
+        ? []
+        : readStringArray(record, 'correctedFields', what),
     interpretations: readArray(record, 'interpretations', what, parseInterpretation),
     editedContentText: readNullableString(record, 'editedContentText', what),
     editedPayloadColumns: readStringMap(record, 'editedPayloadColumns', what),

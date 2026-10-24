@@ -18,7 +18,7 @@ import { useAllPublicationsQuery } from '../../../api/knowledgeRead'
 import type { PublishedCompilation as PublishedResult } from '../../../api/knowledgeCompile'
 import { groupCandidates, isPublishedCompilation, nextTarget, publishedDestination, readiness } from '../../../lib/compilation'
 import { artifactName, buildPublicationIndex } from '../../../lib/knowledgeCatalog'
-import { candidateLocations, highlightMap, indexNodes, passagesIn, sourceBlocks } from '../../../lib/knowledgeSource'
+import { candidateLocations, headingPaths, highlightMap, indexNodes, passagesIn, sourceBlocks } from '../../../lib/knowledgeSource'
 import { unitMark } from '../../../lib/knowledgeMarks'
 import { publishedState } from '../../../lib/publishedNotice'
 import { EmptyState, ErrorState, LoadingState } from '../../ui/State'
@@ -105,6 +105,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
 
   const blocks = useMemo(() => (structureReady ? sourceBlocks(nodes, highlightMap(candidates, units)) : null), [structureReady, nodes, units, candidates])
   const byId = useMemo(() => (nodes ? indexNodes(nodes) : null), [nodes])
+  const paths = useMemo(() => (nodes ? headingPaths(nodes) : null), [nodes])
   const locations = useMemo(() => (structureReady ? candidateLocations(candidates, units, nodes) : new Map<string, string | null>()), [structureReady, candidates, units, nodes])
   const unitsById = useMemo(() => new Map((units ?? []).map((entry) => [entry.id, entry])), [units])
   // Parts the compiler kept as units, by what Rivell read them as. Only kind-assessed parts with text
@@ -256,7 +257,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
   function sourceFor(candidate: Candidate): SourceState {
     const unit = units?.find((entry) => entry.id === candidate.extractionUnitId) ?? null
     if (unitsQuery.isPending || structureQuery.isPending) return { passages: null, unitText: unit?.contentText ?? null }
-    return { passages: blocks && byId ? passagesIn(blocks, byId, candidate.id) : [], unitText: unit?.contentText ?? null }
+    return { passages: blocks && byId ? passagesIn(blocks, byId, candidate.id, paths ?? undefined) : [], unitText: unit?.contentText ?? null }
   }
 
   // ---------------------------------------------------------------- publish

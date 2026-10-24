@@ -508,6 +508,7 @@ class KnowledgeController {
                 candidate.effectiveVariantRole(),
                 candidate.effectiveEscalationTrigger(),
                 candidate.effectiveRequiresApproval(),
+                candidate.correctedFields(),
                 candidate.interpretations().stream()
                         .map(interpretation -> new CandidateView.InterpretationView(
                                 interpretation.field(), interpretation.proposedValue(),

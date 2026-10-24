@@ -37,6 +37,7 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     variantRole: null,
     escalationTrigger: null,
     requiresApproval: false,
+    correctedFields: [],
     interpretations: [],
     editedContentText: null,
     editedPayloadColumns: {},
