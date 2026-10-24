@@ -50,15 +50,35 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
     private static final int MAX_FIELD_LENGTH = 8000;
 
     private final RestClientAccessor restClient;
+    private final RestClientAccessor longRestClient;
     private final ObjectMapper objectMapper;
     private final GenerativeProperties properties;
+    private final com.rivell.workbench.intelligence.ProviderCreditGuard creditGuard;
 
     public OpenAiCompatibleGenerativeProvider(
             RestClientAccessor restClient, ObjectMapper objectMapper,
             GenerativeProperties properties) {
+        this(restClient, restClient, objectMapper, properties,
+                new com.rivell.workbench.intelligence.ProviderCreditGuard(
+                        java.time.Clock.systemUTC()));
+    }
+
+    public OpenAiCompatibleGenerativeProvider(
+            RestClientAccessor restClient, ObjectMapper objectMapper,
+            GenerativeProperties properties,
+            com.rivell.workbench.intelligence.ProviderCreditGuard creditGuard) {
+        this(restClient, restClient, objectMapper, properties, creditGuard);
+    }
+
+    public OpenAiCompatibleGenerativeProvider(
+            RestClientAccessor restClient, RestClientAccessor longRestClient,
+            ObjectMapper objectMapper, GenerativeProperties properties,
+            com.rivell.workbench.intelligence.ProviderCreditGuard creditGuard) {
         this.restClient = restClient;
+        this.longRestClient = longRestClient == null ? restClient : longRestClient;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.creditGuard = creditGuard;
     }
 
     @Override
@@ -72,9 +92,14 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
             throw new NoProviderConfiguredException(
                     "Generative provider has no API key configured");
         }
+        creditGuard.check(creditKey());
         var payload = serialize(request);
-        var response = postChatCompletions(payload);
+        var response = postChatCompletions(payload, request.longRead());
         return toResult(request, response);
+    }
+
+    private String creditKey() {
+        return "generative|" + id() + "|" + properties.baseUrl();
     }
 
     private String serialize(GenerationRequest request) {
@@ -175,12 +200,17 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
         }
     }
 
-    private OpenAiCompatibleDtos.ChatResponse postChatCompletions(String payload) {
+    private OpenAiCompatibleDtos.ChatResponse postChatCompletions(
+            String payload, boolean longRead) {
         String body;
         try {
-            body = restClient.post(CHAT_COMPLETIONS_PATH, payload);
+            body = (longRead ? longRestClient : restClient).post(CHAT_COMPLETIONS_PATH, payload);
         } catch (RestClientResponseException e) {
-            throw mapHttpFailure(e.getStatusCode().value(), e.getResponseBodyAsString());
+            var failure = OpenAiCompatibleErrors.httpFailure(
+                    e.getStatusCode().value(), e.getResponseBodyAsString(),
+                    e.getResponseHeaders(), "generative");
+            recordOutOfCredit(failure);
+            throw failure;
         } catch (RestClientException e) {
             throw translateTransportFailure(e);
         }
@@ -194,23 +224,10 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
         }
     }
 
-    private RuntimeException mapHttpFailure(int status, String body) {
-        // OpenAI answers an exhausted account with 429 too; waiting does not help, so fail fast
-        // (only the error code is read, never logged)
-        if (status == 429 && body != null && body.contains("insufficient_quota")) {
-            return new ProviderRejectedException("Provider account has no credits (HTTP 429 insufficient_quota)");
+    private void recordOutOfCredit(RuntimeException failure) {
+        if (failure instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
+            creditGuard.record(creditKey());
         }
-        if (status == 429) {
-            return new ProviderUnavailableException("Provider rate limited (HTTP 429)");
-        }
-        if (status >= 400 && status < 500) {
-            return new ProviderRejectedException(
-                    "Provider rejected the generative request (HTTP " + status + ")");
-        }
-        if (status >= 500) {
-            return new ProviderUnavailableException("Provider unavailable (HTTP " + status + ")");
-        }
-        return new ProviderProtocolException("Provider returned unexpected HTTP status " + status);
     }
 
     private ProviderUnavailableException translateTransportFailure(RestClientException e) {
@@ -230,6 +247,13 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
     private GenerationResult toResult(
             GenerationRequest request, OpenAiCompatibleDtos.ChatResponse response) {
         if (response.error() != null) {
+            var error = new OpenAiCompatibleErrors.Error(
+                    response.error().code(), response.error().type());
+            if (OpenAiCompatibleErrors.outOfCredit(error.code(), error.type())) {
+                creditGuard.record(creditKey());
+                throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
+                        "Provider account has no credits (error response)");
+            }
             throw new ProviderUnavailableException(
                     "Provider returned an error response (type="
                             + response.error().type() + ", code=" + response.error().code() + ")");

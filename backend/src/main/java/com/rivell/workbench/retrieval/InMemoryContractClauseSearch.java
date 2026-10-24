@@ -49,14 +49,9 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
         List<float[]> clauseVectors = null;
         List<float[]> queryVectors = null;
         if (embeddingService.isConfigured()) {
-            try {
-                clauseVectors = embeddingService.embed(clauses.stream()
-                        .map(Clause::text).toList()).vectors();
-                queryVectors = embeddingService.embed(queries).vectors();
-            } catch (SemanticDecisionException e) {
-                clauseVectors = null;
-                queryVectors = null;
-                degradation.add("VECTOR_LANE_UNAVAILABLE");
+            clauseVectors = embedEach(clauses.stream().map(Clause::text).toList(), degradation);
+            if (clauseVectors != null) {
+                queryVectors = embedEach(queries, degradation);
             }
         } else {
             degradation.add("VECTOR_LANE_UNCONFIGURED");
@@ -64,7 +59,7 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
         var result = new ArrayList<List<Hit>>(queries.size());
         for (int index = 0; index < queries.size(); index++) {
             var lexical = lexicalLane(queries.get(index), clauses);
-            var vector = queryVectors == null
+            var vector = queryVectors == null || queryVectors.get(index) == null
                     ? List.<RankFusion.LaneHit>of()
                     : vectorLane(queryVectors.get(index), clauseVectors, clauses);
             var lanes = new LinkedHashMap<String, List<RankFusion.LaneHit>>();
@@ -73,6 +68,40 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
             result.add(hits(RankFusion.fuse(lanes), lexical, vector, limit));
         }
         return new Result(List.copyOf(result), List.copyOf(degradation));
+    }
+
+    /**
+     * One batch for this side; if the provider rejects the batch, each text is retried alone so a
+     * single bad input does not switch the vector lane off for every clause. A failed input keeps
+     * a null slot (excluded from the lane) and the partial degradation is named.
+     */
+    private List<float[]> embedEach(List<String> texts, List<String> degradation) {
+        try {
+            return embeddingService.embed(texts).vectors();
+        } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
+            degradation.add("VECTOR_LANE_UNAVAILABLE");
+            return null;
+        } catch (SemanticDecisionException batchFailure) {
+            var vectors = new ArrayList<float[]>(texts.size());
+            var failed = false;
+            for (var text : texts) {
+                try {
+                    vectors.add(embeddingService.embed(List.of(text)).vectors().get(0));
+                } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
+                    degradation.add("VECTOR_LANE_UNAVAILABLE");
+                    return null;
+                } catch (SemanticDecisionException e) {
+                    vectors.add(null);
+                    failed = true;
+                }
+            }
+            if (failed) {
+                var any = vectors.stream().anyMatch(java.util.Objects::nonNull);
+                degradation.add(any ? "VECTOR_LANE_PARTIAL" : "VECTOR_LANE_UNAVAILABLE");
+                return any ? java.util.Collections.unmodifiableList(vectors) : null;
+            }
+            return List.copyOf(vectors);
+        }
     }
 
     /** Ranks the clauses that share at least one word with the query; ties keep clause order. */
@@ -98,7 +127,9 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
             float[] query, List<float[]> vectors, List<Clause> clauses) {
         var scored = new ArrayList<Scored>();
         for (int index = 0; index < clauses.size(); index++) {
-            scored.add(new Scored(index, cosine(query, vectors.get(index))));
+            if (vectors.get(index) != null) {
+                scored.add(new Scored(index, cosine(query, vectors.get(index))));
+            }
         }
         scored.sort(Comparator.comparingDouble(Scored::score).reversed());
         return laneHits(scored, clauses);

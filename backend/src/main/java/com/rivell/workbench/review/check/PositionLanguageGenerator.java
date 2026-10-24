@@ -61,8 +61,28 @@ final class PositionLanguageGenerator {
             double removalHurtsProbability, double additionHurtsProbability) {
     }
 
+    /**
+     * Why no wording was proposed, when none was: {@code REJECTED} the provider refused,
+     * {@code INVALID} the generated text failed validation, {@code UNAVAILABLE} the call failed.
+     * Null when a proposal exists.
+     */
+    record Result(Optional<Proposal> proposal, String failure) {
+
+        static Result proposed(Proposal proposal) {
+            return new Result(Optional.of(proposal), null);
+        }
+
+        static Result failed(String failure) {
+            return new Result(Optional.empty(), failure);
+        }
+
+        boolean available() {
+            return proposal.isPresent();
+        }
+    }
+
     /** Empty when generation fails, the output fails validation, or the model is down. */
-    Optional<Proposal> propose(Draft draft) {
+    Result propose(Draft draft) {
         try {
             var generation = reasoningService.generate(M7ReasoningSpecs.openEndedPosition(),
                     new M7ReasoningSpecs.OpenEndedPositionState(
@@ -73,12 +93,19 @@ final class PositionLanguageGenerator {
                     generation.fields().get(M7ReasoningSpecs.PROPOSED_LANGUAGE), draft.heading());
             var explanation = generation.fields().get(M7ReasoningSpecs.EXPLANATION);
             if (!valid(proposed, explanation, draft.body())) {
-                return Optional.empty();
+                return Result.failed("INVALID");
             }
-            return Optional.of(new Proposal(proposed, explanation, generation.executionId(),
-                    generation.metadata(), verify(proposed, draft)));
+            return Result.proposed(new Proposal(proposed, explanation,
+                    generation.executionId(), generation.metadata(),
+                    verify(proposed, draft)));
+        } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
+            throw e;
+        } catch (com.rivell.workbench.intelligence.ProviderRejectedException e) {
+            return Result.failed("REJECTED");
+        } catch (com.rivell.workbench.intelligence.ProviderProtocolException e) {
+            return Result.failed("INVALID");
         } catch (RuntimeException e) {
-            return Optional.empty();
+            return Result.failed("UNAVAILABLE");
         }
     }
 

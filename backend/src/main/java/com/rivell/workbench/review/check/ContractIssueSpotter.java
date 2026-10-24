@@ -25,6 +25,22 @@ final class ContractIssueSpotter {
     record Spot(String severity, String reason, UUID executionId) {
     }
 
+    /**
+     * {@code unavailable}: the spotting call failed (or was interrupted), so the whole-contract
+     * recall lane is missing and the check says so. A successful call that named nothing is a
+     * real empty result.
+     */
+    record Spots(Map<UUID, Spot> spots, boolean unavailable) {
+
+        static Spots empty() {
+            return new Spots(Map.of(), false);
+        }
+
+        static Spots failed() {
+            return new Spots(Map.of(), true);
+        }
+    }
+
     private static final int MAX_RUNS = 16;
     private static final int MAX_POSITIONS = 120;
     private static final int MAX_CLAUSE_TEXT = 3000;
@@ -33,25 +49,29 @@ final class ContractIssueSpotter {
 
     private final GenerativeReasoningService generation;
     private final EvidenceService evidenceService;
-    private final RunMemo<Map<UUID, Spot>> runs = new RunMemo<>(MAX_RUNS);
+    private final RunMemo<Spots> runs = new RunMemo<>(MAX_RUNS);
 
     ContractIssueSpotter(GenerativeReasoningService generation, EvidenceService evidenceService) {
         this.generation = generation;
         this.evidenceService = evidenceService;
     }
 
-    Map<UUID, Spot> spots(ReviewCheckContext context, EvidenceRequest anyClauseRequest) {
+    Spots spots(ReviewCheckContext context, EvidenceRequest anyClauseRequest) {
         try {
             return runs.get(context.runId(), () -> spot(context, anyClauseRequest));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return Map.of();
+            return Spots.failed();
         } catch (ExecutionException e) {
-            return Map.of();
+            if (e.getCause() instanceof com.rivell.workbench.intelligence
+                    .ProviderOutOfCreditException outOfCredit) {
+                throw outOfCredit;
+            }
+            return Spots.failed();
         }
     }
 
-    private Map<UUID, Spot> spot(ReviewCheckContext context, EvidenceRequest anyClauseRequest) {
+    private Spots spot(ReviewCheckContext context, EvidenceRequest anyClauseRequest) {
         var clauses = new ArrayList<IssueSpottingSpecs.SpottingClause>();
         var byNumber = new LinkedHashMap<Integer, ClauseSemantics>();
         for (var clause : context.semantics().clauses()) {
@@ -68,7 +88,7 @@ final class ContractIssueSpotter {
                 snapshot.ourSideRole() == null ? "" : snapshot.ourSideRole().name(),
                 evidenceService.applicablePositionTexts(anyClauseRequest, MAX_POSITIONS), clauses);
         try {
-            var execution = generation.generate(IssueSpottingSpecs.spec(), state);
+            var execution = generation.generateLong(IssueSpottingSpecs.spec(), state);
             var spots = new LinkedHashMap<UUID, Spot>();
             for (var line : execution.fields().get(IssueSpottingSpecs.ISSUES).split("\\R")) {
                 var matcher = LINE.matcher(line);
@@ -82,9 +102,12 @@ final class ContractIssueSpotter {
                             execution.executionId()));
                 }
             }
-            return Map.copyOf(spots);
+            return new Spots(Map.copyOf(spots), false);
         } catch (SemanticDecisionException e) {
-            return Map.of();
+            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
+                throw e;
+            }
+            return Spots.failed();
         }
     }
 }

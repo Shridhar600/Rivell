@@ -125,11 +125,13 @@ class ReviewConfiguration {
             FindingRepository findingRepository,
             FindingAssembler findingAssembler,
             TransactionTemplate transactionTemplate,
-            Clock clock) {
+            Clock clock,
+            ReviewEngineProperties reviewEngineProperties) {
         return new ReviewAnalysisService(reviewRepository, reviewAnalysisRepository,
                 reviewCheckExecutors, contractEnrichmentService, contractQueryService,
                 retrievalProperties, embeddingService, evidenceService, modelBindingCatalog,
-                findingRepository, findingAssembler, transactionTemplate, clock);
+                findingRepository, findingAssembler, transactionTemplate, clock,
+                reviewEngineProperties.analysisBudget());
     }
 
     @Bean

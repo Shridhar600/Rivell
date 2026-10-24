@@ -209,6 +209,9 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
                 | NoProviderConfiguredException e) {
             return CheckOutcome.failed("decision_contract_error:" + e.getClass().getSimpleName());
         } catch (SemanticDecisionException e) {
+            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
+                throw e;
+            }
             detail.put("addressedBySearch",
                     addressedBySearch.stream().map(UUID::toString).toList());
             detail.put("flaggedBySearch", flaggedBySearch);
@@ -240,6 +243,9 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
                 return CheckOutcome.failed(
                         "decision_contract_error:" + e.getClass().getSimpleName());
             } catch (SemanticDecisionException e) {
+                if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
+                    throw e;
+                }
                 detail.put("presence", presence);
                 return providerUnavailable(detail, applicable);
             }

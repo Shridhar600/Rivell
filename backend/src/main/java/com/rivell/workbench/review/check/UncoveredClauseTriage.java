@@ -10,8 +10,9 @@ import com.rivell.workbench.review.PolicyComparisonSpecs;
 
 /**
  * Asks whether a clause that no published position addresses is unusual and against our
- * side (design §6c). The code owns the threshold; a provider failure yields no verdict,
- * because the playbook was silent and silence is not itself a finding.
+ * side (design §6c). The code owns the threshold; a provider failure is told apart from a
+ * genuine "no verdict", because silence from the playbook is not itself a finding and a
+ * failed call must not read as a clean clause.
  */
 final class UncoveredClauseTriage {
 
@@ -24,15 +25,33 @@ final class UncoveredClauseTriage {
     record Verdict(double probability, DecisionExecution execution) {
     }
 
-    Optional<Verdict> assess(PolicyComparisonSpecs.PolicyComparisonState state) {
+    /**
+     * {@code unavailable}: the call failed, so no verdict exists. {@code verdict}: empty when
+     * the provider answered but not in a usable shape.
+     */
+    record Assessment(Optional<Verdict> verdict, boolean unavailable) {
+
+        static Assessment failed() {
+            return new Assessment(Optional.empty(), true);
+        }
+
+        static Assessment noVerdict() {
+            return new Assessment(Optional.empty(), false);
+        }
+    }
+
+    Assessment assess(PolicyComparisonSpecs.PolicyComparisonState state) {
         try {
             var execution = decisionService.evaluate(PolicyComparisonSpecs.uncoveredClause(), state);
             var answer = execution.answers().get(PolicyComparisonSpecs.NEEDS_REVIEW);
             return answer instanceof YesNoAnswer yesNo
-                    ? Optional.of(new Verdict(yesNo.probability(), execution))
-                    : Optional.empty();
+                    ? new Assessment(Optional.of(new Verdict(yesNo.probability(), execution)), false)
+                    : Assessment.noVerdict();
         } catch (SemanticDecisionException e) {
-            return Optional.empty();
+            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
+                throw e;
+            }
+            return Assessment.failed();
         }
     }
 }

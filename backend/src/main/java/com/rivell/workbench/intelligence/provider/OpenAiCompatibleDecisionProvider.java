@@ -49,13 +49,24 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
     private final OpenAiCompatibleGenerativeProvider.RestClientAccessor restClient;
     private final ObjectMapper objectMapper;
     private final GenerativeProperties properties;
+    private final com.rivell.workbench.intelligence.ProviderCreditGuard creditGuard;
 
     public OpenAiCompatibleDecisionProvider(
             OpenAiCompatibleGenerativeProvider.RestClientAccessor restClient, ObjectMapper objectMapper,
             GenerativeProperties properties) {
+        this(restClient, objectMapper, properties,
+                new com.rivell.workbench.intelligence.ProviderCreditGuard(
+                        java.time.Clock.systemUTC()));
+    }
+
+    public OpenAiCompatibleDecisionProvider(
+            OpenAiCompatibleGenerativeProvider.RestClientAccessor restClient, ObjectMapper objectMapper,
+            GenerativeProperties properties,
+            com.rivell.workbench.intelligence.ProviderCreditGuard creditGuard) {
         this.restClient = restClient;
         this.objectMapper = objectMapper;
         this.properties = properties;
+        this.creditGuard = creditGuard;
     }
 
     @Override
@@ -68,11 +79,18 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
         if (!properties.isConfigured()) {
             throw new NoProviderConfiguredException("LLM decision provider has no API key configured");
         }
+        creditGuard.check(creditKey());
         String body;
         try {
             body = restClient.post(CHAT_COMPLETIONS_PATH, serialize(request));
         } catch (RestClientResponseException e) {
-            throw mapHttpFailure(e.getStatusCode().value(), e.getResponseBodyAsString());
+            var failure = OpenAiCompatibleErrors.httpFailure(
+                    e.getStatusCode().value(), e.getResponseBodyAsString(),
+                    e.getResponseHeaders(), "decision");
+            if (failure instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
+                creditGuard.record(creditKey());
+            }
+            throw failure;
         } catch (RestClientException e) {
             throw translateTransportFailure(e);
         }
@@ -202,22 +220,8 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
         return answers;
     }
 
-    private RuntimeException mapHttpFailure(int status, String body) {
-        // OpenAI answers an exhausted account with 429 too; waiting does not help, so fail fast
-        // (only the error code is read, never logged)
-        if (status == 429 && body != null && body.contains("insufficient_quota")) {
-            return new ProviderRejectedException("Provider account has no credits (HTTP 429 insufficient_quota)");
-        }
-        if (status == 429) {
-            return new ProviderUnavailableException("Provider rate limited (HTTP 429)");
-        }
-        if (status >= 400 && status < 500) {
-            return new ProviderRejectedException("Provider rejected the decision request (HTTP " + status + ")");
-        }
-        if (status >= 500) {
-            return new ProviderUnavailableException("Provider unavailable (HTTP " + status + ")");
-        }
-        return new ProviderProtocolException("Provider returned unexpected HTTP status " + status);
+    private String creditKey() {
+        return "decision|" + id() + "|" + properties.baseUrl();
     }
 
     private RuntimeException translateTransportFailure(RestClientException e) {

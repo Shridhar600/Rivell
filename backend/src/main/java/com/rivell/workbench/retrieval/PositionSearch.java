@@ -43,6 +43,12 @@ final class PositionSearch {
 
     Found search(EvidenceRequest request, long asOfPublication, Set<UUID> exclude,
             Set<String> excludedTopics, int limit) {
+        return search(request, asOfPublication, exclude, excludedTopics, limit, null);
+    }
+
+    Found search(EvidenceRequest request, long asOfPublication, Set<UUID> exclude,
+            Set<String> excludedTopics, int limit,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
         var narrowed = resolver.resolveAll(request, Set.of(CandidateType.PLAYBOOK_RULE),
                 asOfPublication, NARROWING_CAP);
         var byId = new LinkedHashMap<UUID, PublishedCandidate>();
@@ -87,7 +93,7 @@ final class PositionSearch {
                         properties.indexVersion());
         var vector = ids.isEmpty() ? List.<RetrievalRepository.CandidateHit>of()
                 : PrecedentLane.vectorHits(embeddingService, repository, properties, request, ids,
-                        degradation);
+                        degradation, embeddingLookup);
         var lanes = new LinkedHashMap<String, List<RankFusion.LaneHit>>();
         lanes.put("lexical", PrecedentLane.lanesOf(lexical));
         lanes.put("vector", PrecedentLane.lanesOf(vector));

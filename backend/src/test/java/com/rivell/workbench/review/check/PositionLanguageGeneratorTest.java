@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+
 /** Shape checks on machine wording, with cases taken from real generated proposals. */
 class PositionLanguageGeneratorTest {
 
@@ -53,6 +54,28 @@ class PositionLanguageGeneratorTest {
         assertThat(PositionLanguageGenerator.body(paragraph, paragraph, "5. Residual Knowledge."))
                 .isEqualTo("The Recipient may use information retained in unaided memory.");
         assertThat(PositionLanguageGenerator.body("Term\n" + TERM, "Term", null)).isEqualTo(TERM);
+    }
+
+    @Test
+    void outOfCreditIsNotRecordedAsAnOrdinaryRejection() {
+        var generation = new com.rivell.workbench.intelligence.GenerativeReasoningService(
+                asset -> null, id -> java.util.Optional.empty(), java.time.Clock.systemUTC()) {
+            @Override
+            public com.rivell.workbench.intelligence.GenerativeReasoningService.GenerativeExecution generate(
+                    com.rivell.workbench.intelligence.ReasoningSpec spec,
+                    com.rivell.workbench.intelligence.SemanticState state) {
+                throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
+                        "Provider account has no credits");
+            }
+        };
+        var decisions = new com.rivell.workbench.intelligence.SemanticDecisionService(
+                asset -> null, id -> java.util.Optional.empty(), java.time.Clock.systemUTC());
+        var generator = new PositionLanguageGenerator(generation, decisions);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> generator.propose(
+                new PositionLanguageGenerator.Draft("CUSTOMER", "MSA", "Term",
+                        "Either party may terminate on notice.", "Termination on notice.")))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
     }
 
     @Test

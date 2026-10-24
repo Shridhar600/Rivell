@@ -1,5 +1,7 @@
 package com.rivell.workbench.review;
 
+import java.time.Duration;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -20,8 +22,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("rivell.review")
 public record ReviewEngineProperties(
         Routing routing, Boolean omissions, Boolean definitions, Severity severity,
-        FallbackConditions fallbackConditions) {
+        FallbackConditions fallbackConditions, Duration analysisBudget) {
 
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
     public ReviewEngineProperties {
         routing = routing == null ? new Routing(null, null, null, null) : routing;
         omissions = omissions == null ? Boolean.FALSE : omissions;
@@ -29,6 +32,15 @@ public record ReviewEngineProperties(
         severity = severity == null ? new Severity(null) : severity;
         fallbackConditions = fallbackConditions == null
                 ? new FallbackConditions(null, null) : fallbackConditions;
+        analysisBudget = analysisBudget == null ? Duration.ofMinutes(30) : analysisBudget;
+        if (analysisBudget.isZero() || analysisBudget.isNegative()) {
+            throw new IllegalArgumentException("rivell.review.analysis-budget must be positive");
+        }
+    }
+
+    public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
+            Severity severity, FallbackConditions fallbackConditions) {
+        this(routing, omissions, definitions, severity, fallbackConditions, null);
     }
 
     /** P1: on an agreed second opinion the finding takes the worse of the two categories. */

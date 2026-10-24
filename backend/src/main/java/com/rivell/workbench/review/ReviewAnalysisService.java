@@ -1,16 +1,21 @@
 package com.rivell.workbench.review;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.slf4j.MDC;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractSemantics;
 import com.rivell.workbench.contracts.SemanticsDigest;
+import com.rivell.workbench.intelligence.ClauseEmbeddingCache;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
 import com.rivell.workbench.retrieval.EvidenceService;
@@ -41,6 +46,7 @@ public class ReviewAnalysisService {
     private final FindingAssembler findingAssembler;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    private final Duration analysisBudget;
 
     public ReviewAnalysisService(
             ReviewRepository reviewRepository,
@@ -55,7 +61,8 @@ public class ReviewAnalysisService {
             FindingRepository findingRepository,
             FindingAssembler findingAssembler,
             TransactionTemplate transactionTemplate,
-            Clock clock) {
+            Clock clock,
+            Duration analysisBudget) {
         this.reviewRepository = reviewRepository;
         this.analysisRepository = analysisRepository;
         this.executors = executors;
@@ -69,6 +76,7 @@ public class ReviewAnalysisService {
         this.findingAssembler = findingAssembler;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
+        this.analysisBudget = analysisBudget == null ? Duration.ofMinutes(30) : analysisBudget;
     }
 
     public ReviewAnalysisRun analyze(UUID organizationId, UUID reviewId) {
@@ -261,9 +269,117 @@ public class ReviewAnalysisService {
     private void executePlannedChecks(
             Review review, ReviewSnapshot snapshot, ReviewAnalysisRun run,
             ContractSemantics semantics, AnalysisEnvironment environment) {
-        var evidenceCache = new ReviewEvidenceCache(evidenceService);
+        var checks = reviewRepository.findPlanChecks(review.organizationId(), review.id());
+        var deadline = run.startedAt().plus(analysisBudget);
+        if (!clock.instant().isBefore(deadline)) {
+            degradeRemaining(review, run, checks, 0);
+            return;
+        }
+        var embeddings = new ClauseEmbeddingCache(embeddingService);
+        MDC.put("reviewId", review.id().toString());
+        MDC.put("runId", run.id().toString());
+        try {
+            prefetchClauseEmbeddings(checks, semantics, embeddings);
+        } finally {
+            MDC.remove("reviewId");
+            MDC.remove("runId");
+        }
+        var evidenceCache = new ReviewEvidenceCache(evidenceService, embeddings);
         var structure = structure(snapshot);
-        for (var check : reviewRepository.findPlanChecks(review.organizationId(), review.id())) {
+        for (int index = 0; index < checks.size(); index++) {
+            var check = checks.get(index);
+            var existing = analysisRepository.findExecution(
+                    review.organizationId(), run.id(), check.id());
+            if (existing.isPresent() && existing.get().status().terminal()) {
+                continue;
+            }
+            if (!clock.instant().isBefore(deadline)) {
+                degradeRemaining(review, run, checks, index);
+                return;
+            }
+            if (existing.isEmpty()) {
+                analysisRepository.insertExecutionIfAbsent(ReviewCheckExecution.pending(
+                        UUID.randomUUID(), review.organizationId(), review.id(),
+                        run.id(), check.id()));
+            }
+            var execution = analysisRepository.findExecution(
+                    review.organizationId(), run.id(), check.id()).orElseThrow();
+            var lease = analysisRepository.claimExecution(
+                    review.organizationId(), execution.id());
+            if (lease.isEmpty()) {
+                continue;
+            }
+            MDC.put("reviewId", review.id().toString());
+            MDC.put("runId", run.id().toString());
+            MDC.put("checkId", check.id().toString());
+            try {
+                var context = new ReviewCheckContext(review, snapshot, check, run.id(),
+                        semantics, environment, evidenceCache, structure.headingTexts(),
+                        structure.runInHeadings(), structure.untrackableHeadings(), clock.instant());
+                var outcome = runCheck(check, context, environment);
+                var leaseId = lease.get();
+                try {
+                    transactionTemplate.executeWithoutResult(status -> {
+                        if (!analysisRepository.completeExecution(review.organizationId(),
+                                execution.id(), leaseId, outcome.status(), outcome.evidenceTraceId(),
+                                outcome.detail(), outcome.signals().size(), clock.instant())) {
+                            throw new LeaseLostException(execution.id());
+                        }
+                        findingRepository.deleteFindings(review.organizationId(), run.id());
+                        analysisRepository.deleteSignals(
+                                review.organizationId(), run.id(), check.id());
+                        analysisRepository.insertSignals(outcome.signals());
+                        analysisRepository.replaceEvidenceItems(review.organizationId(),
+                                review.id(), run.id(), check.id(), outcome.evidenceItems());
+                    });
+                } catch (LeaseLostException e) {
+                    // another worker reclaimed this execution; it owns the terminal write
+                    continue;
+                }
+            } finally {
+                MDC.remove("reviewId");
+                MDC.remove("runId");
+                MDC.remove("checkId");
+            }
+        }
+    }
+
+    /**
+     * Embeds every clause text the precedent lane and position search can ask for in one batch,
+     * so both lanes read the same run-scoped vectors instead of one request per clause.
+     */
+    private void prefetchClauseEmbeddings(
+            List<ReviewPlanCheck> checks, ContractSemantics semantics,
+            ClauseEmbeddingCache embeddings) {
+        if (!embeddingService.isConfigured()) {
+            return;
+        }
+        var subjectIds = checks.stream()
+                .filter(check -> check.mechanism() == CheckMechanism.POLICY_COMPARISON)
+                .map(ReviewPlanCheck::subjectHeadingNodeId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(java.util.stream.Collectors.toSet());
+        var texts = new ArrayList<String>();
+        for (var clause : semantics.clauses()) {
+            if (subjectIds.contains(clause.headingNodeId())
+                    && clause.contentText() != null && !clause.contentText().isBlank()) {
+                texts.add(clause.contentText());
+            }
+        }
+        embeddings.prefetch(texts);
+    }
+
+    /**
+     * The review's time budget is spent: every check not yet terminal becomes DEGRADED for the
+     * same code-owned reason, so the run still reaches {@link #completeIfDone} and the existing
+     * all-degraded finalisation rule applies.
+     */
+    private void degradeRemaining(Review review, ReviewAnalysisRun run,
+            List<ReviewPlanCheck> checks, int fromIndex) {
+        var outcome = CheckOutcome.degraded("review_deadline_exceeded");
+        for (int index = fromIndex; index < checks.size(); index++) {
+            var check = checks.get(index);
             var existing = analysisRepository.findExecution(
                     review.organizationId(), run.id(), check.id());
             if (existing.isPresent() && existing.get().status().terminal()) {
@@ -281,28 +397,16 @@ public class ReviewAnalysisService {
             if (lease.isEmpty()) {
                 continue;
             }
-            var context = new ReviewCheckContext(review, snapshot, check, run.id(),
-                    semantics, environment, evidenceCache, structure.headingTexts(),
-                    structure.runInHeadings(), structure.untrackableHeadings(), clock.instant());
-            var outcome = runCheck(check, context, environment);
-            var leaseId = lease.get();
             try {
                 transactionTemplate.executeWithoutResult(status -> {
                     if (!analysisRepository.completeExecution(review.organizationId(),
-                            execution.id(), leaseId, outcome.status(), outcome.evidenceTraceId(),
-                            outcome.detail(), outcome.signals().size(), clock.instant())) {
+                            execution.id(), lease.get(), outcome.status(), null,
+                            outcome.detail(), 0, clock.instant())) {
                         throw new LeaseLostException(execution.id());
                     }
-                    findingRepository.deleteFindings(review.organizationId(), run.id());
-                    analysisRepository.deleteSignals(
-                            review.organizationId(), run.id(), check.id());
-                    analysisRepository.insertSignals(outcome.signals());
-                    analysisRepository.replaceEvidenceItems(review.organizationId(),
-                            review.id(), run.id(), check.id(), outcome.evidenceItems());
                 });
             } catch (LeaseLostException e) {
                 // another worker reclaimed this execution; it owns the terminal write
-                continue;
             }
         }
     }
@@ -371,6 +475,8 @@ public class ReviewAnalysisService {
                     .map(executor -> executor.execute(context))
                     .orElseGet(() -> CheckOutcome.degraded(
                             "mechanism_not_available:" + check.mechanism()));
+        } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
+            return CheckOutcome.degraded("provider_out_of_credit");
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
             return isDecisionContractError(e)
                     ? CheckOutcome.failed("decision_contract_error:" + e.getClass().getSimpleName())

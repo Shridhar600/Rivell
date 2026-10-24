@@ -40,10 +40,21 @@ final class KnowledgeRecordSemantics {
 
     /**
      * One decision per artifact: a Choice question per distinct unknown label over the
-     * field roles plus OTHER. Provider failure returns an empty map; unknown labels then
-     * simply contribute no role.
+     * field roles plus OTHER. Provider failure is reported as unavailable; unknown labels then
+     * simply contribute no role, and the caller records the semantic gap.
      */
-    Map<String, RecordFieldRole> resolveUnknownLabels(
+    record LabelRoles(Map<String, RecordFieldRole> roles, boolean available) {
+
+        static LabelRoles none() {
+            return new LabelRoles(Map.of(), true);
+        }
+
+        static LabelRoles failed() {
+            return new LabelRoles(Map.of(), false);
+        }
+    }
+
+    LabelRoles resolveUnknownLabels(
             KnowledgeArtifact artifact, List<KnowledgeCandidate> candidates) {
         var unknown = new LinkedHashMap<String, String>();
         for (var candidate : candidates) {
@@ -60,7 +71,7 @@ final class KnowledgeRecordSemantics {
             }
         }
         if (unknown.isEmpty()) {
-            return Map.of();
+            return LabelRoles.none();
         }
         var labels = new ArrayList<LabelSample>(unknown.size());
         for (var entry : unknown.entrySet()) {
@@ -79,12 +90,12 @@ final class KnowledgeRecordSemantics {
                 resolved.put(RecordLabelRoles.normalize(labels.get(index).label()),
                         roleOf(choice.selected()));
             }
-            return resolved;
+            return new LabelRoles(Map.copyOf(resolved), true);
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
             org.slf4j.LoggerFactory.getLogger(KnowledgeRecordSemantics.class)
                     .warn("Field role decision unavailable for artifact {} ({} {})",
                             artifact.id(), e.getClass().getSimpleName(), e.getMessage());
-            return Map.of();
+            return LabelRoles.failed();
         }
     }
 

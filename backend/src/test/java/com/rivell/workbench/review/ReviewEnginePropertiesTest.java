@@ -52,4 +52,14 @@ class ReviewEnginePropertiesTest {
         assertThatThrownBy(() -> new ReviewEngineProperties.FallbackConditions(true, -1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void theWholeReviewBudgetDefaultsToThirtyMinutesAndMustBePositive() {
+        assertThat(new ReviewEngineProperties(null, null, null, null, null).analysisBudget())
+                .isEqualTo(java.time.Duration.ofMinutes(30));
+        assertThatThrownBy(() -> new ReviewEngineProperties(null, null, null, null, null,
+                java.time.Duration.ZERO))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("analysis-budget");
+    }
 }

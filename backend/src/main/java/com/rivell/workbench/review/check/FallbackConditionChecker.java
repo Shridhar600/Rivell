@@ -122,6 +122,9 @@ final class FallbackConditionChecker {
         } catch (ProviderProtocolException e) {
             return Result.failed(Result.INVALID);
         } catch (RuntimeException e) {
+            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
+                throw e;
+            }
             return Result.failed(Result.UNAVAILABLE);
         }
     }

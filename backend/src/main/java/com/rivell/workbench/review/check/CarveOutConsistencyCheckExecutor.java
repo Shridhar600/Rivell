@@ -99,6 +99,9 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
             return CheckOutcome.failed(
                     "decision_contract_error:" + e.getClass().getSimpleName());
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
+            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
+                throw e;
+            }
             return boundedUncertainOutcome(context, detail, bundle,
                     union(subjectEvidence, counterpartEvidence),
                     "cross_clause_decision_unavailable",

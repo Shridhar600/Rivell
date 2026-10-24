@@ -8,6 +8,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.function.Function;
 
+import org.slf4j.MDC;
+
 /**
  * Runs independent decisions (one per record or clause) concurrently, at most {@code limit} at a time, and
  * returns one outcome per input in input order. A failed item carries its exception so the
@@ -26,15 +28,23 @@ public final class BoundedParallel {
             return List.of();
         }
         var permits = new Semaphore(Math.max(1, limit));
+        var context = MDC.getCopyOfContextMap();
         var futures = new ArrayList<Future<R>>(items.size());
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             for (var item : items) {
                 futures.add(executor.submit(() -> {
-                    permits.acquire();
+                    if (context != null) {
+                        MDC.setContextMap(context);
+                    }
                     try {
-                        return work.apply(item);
+                        permits.acquire();
+                        try {
+                            return work.apply(item);
+                        } finally {
+                            permits.release();
+                        }
                     } finally {
-                        permits.release();
+                        MDC.clear();
                     }
                 }));
             }

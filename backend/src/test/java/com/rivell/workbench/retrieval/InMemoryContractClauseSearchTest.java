@@ -115,6 +115,46 @@ class InMemoryContractClauseSearchTest {
     }
 
     @Test
+    void oneBadInputOnlyLosesItsOwnVectorLaneSlot() {
+        var fake = new FakeEmbeddingProvider();
+        var bad = clause("bad clause text");
+        var good = clause("Customer records stay secret between us.");
+        var query = "Personal information must be kept confidential.";
+        fake.anchor(good.text(), basis(4));
+        fake.anchor(query, basis(4));
+        EmbeddingProvider partial = new EmbeddingProvider() {
+            @Override
+            public String id() {
+                return FakeEmbeddingProvider.PROVIDER_ID;
+            }
+
+            @Override
+            public EmbeddingBatch embed(EmbeddingRequest request) {
+                if (request.inputs().size() > 1) {
+                    throw new com.rivell.workbench.intelligence.ProviderRejectedException(
+                            "batch rejected");
+                }
+                if (request.inputs().get(0).equals(bad.text())) {
+                    throw new com.rivell.workbench.intelligence.ProviderRejectedException(
+                            "input rejected");
+                }
+                return fake.embed(request);
+            }
+        };
+        var search = new InMemoryContractClauseSearch(embeddings(partial, true));
+
+        var result = search.search(List.of(query), List.of(bad, good), 2);
+
+        assertThat(result.degradation()).containsExactly("VECTOR_LANE_PARTIAL");
+        var goodHit = result.hits().getFirst().stream()
+                .filter(hit -> hit.headingNodeId().equals(good.headingNodeId()))
+                .findFirst().orElseThrow();
+        assertThat(goodHit.vectorRank()).isEqualTo(1);
+        assertThat(result.hits().getFirst()).noneMatch(
+                hit -> hit.headingNodeId().equals(bad.headingNodeId()) && hit.vectorRank() != null);
+    }
+
+    @Test
     void eachQueryGetsItsOwnRankingFromOneEmbeddingCallPerSide() {
         var calls = new java.util.concurrent.atomic.AtomicInteger();
         var fake = new FakeEmbeddingProvider();

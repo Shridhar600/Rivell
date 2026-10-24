@@ -163,6 +163,13 @@ public class KnowledgeIngestionService {
     private KnowledgeArtifact complete(Staged staged) {
         var artifact = staged.artifact();
         var artifactId = artifact.id();
+        try (var ignored = org.slf4j.MDC.putCloseable("artifactId", artifactId.toString())) {
+            return completeInScope(staged, artifact, artifactId);
+        }
+    }
+
+    private KnowledgeArtifact completeInScope(Staged staged, KnowledgeArtifact artifact,
+            UUID artifactId) {
         var organizationId = artifact.organizationId();
         var extraction = staged.extraction();
         var documentTitle = staged.documentTitle();

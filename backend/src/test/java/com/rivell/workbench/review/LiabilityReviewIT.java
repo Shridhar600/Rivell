@@ -161,9 +161,13 @@ public class LiabilityReviewIT {
         volatile Double verificationRiskProbability;
         volatile double policyComparisonTopProbability = 0.9;
         volatile boolean failPolicyComparisonDecision;
+        /** Every policy comparison fails as if the analysis account had no credit. */
+        volatile boolean failPolicyComparisonOutOfCredit;
         volatile String policyComparisonAnswerOverride;
         /** Probability the uncovered-clause triage answers for every clause it sees. */
         volatile double uncoveredProbability = 0.05;
+        /** The uncovered-clause triage fails as if the provider were down. */
+        volatile boolean failUncoveredTriage;
         final java.util.List<String> uncoveredHeadings =
                 java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         volatile Map<String, Double> policyComparisonProbabilities;
@@ -321,6 +325,10 @@ public class LiabilityReviewIT {
                         new TokenUsage(140, 6));
             }
             if (request.pack().questions().containsKey(PolicyComparisonSpecs.NEEDS_REVIEW)) {
+                if (failUncoveredTriage) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "uncovered triage provider unavailable");
+                }
                 var state = (PolicyComparisonSpecs.PolicyComparisonState) request.state().payload();
                 uncoveredHeadings.add(state.heading());
                 return new ProviderExecutionResult(new LinkedHashMap<>(Map.of(
@@ -342,6 +350,10 @@ public class LiabilityReviewIT {
 
         private ProviderExecutionResult policyComparison(DecisionExecutionRequest request) {
             policyComparisonDecisions.incrementAndGet();
+            if (failPolicyComparisonOutOfCredit) {
+                throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
+                        "Provider account has no credits (HTTP 429)");
+            }
             if (failPolicyComparisonDecision) {
                 throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                         "policy comparison provider unavailable");
@@ -536,6 +548,7 @@ public class LiabilityReviewIT {
             verificationRiskProbability = null;
             policyComparisonTopProbability = 0.9;
             failPolicyComparisonDecision = false;
+            failPolicyComparisonOutOfCredit = false;
             policyComparisonAnswerOverride = null;
             positionAnswers.clear();
             headingAnswers.clear();
@@ -555,6 +568,7 @@ public class LiabilityReviewIT {
             topiclessHeadings.clear();
             uncoveredProbability = 0.05;
             uncoveredHeadings.clear();
+            failUncoveredTriage = false;
             failConsistencyDecision = false;
             consistencyAnswerOverride = null;
             consistencyTopProbability = 0.9;
@@ -567,6 +581,8 @@ public class LiabilityReviewIT {
                 new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();
         private final AtomicInteger calls = new AtomicInteger();
         volatile boolean failOpenEnded;
+        /** The wording call fails as if the analysis account had no credit. */
+        volatile boolean openEndedOutOfCredit;
         volatile String openEndedProposed;
         volatile String openEndedExplanation;
         /** Headings the whole-contract spotting read names (MEDIUM); every other clause is fine. */
@@ -575,6 +591,10 @@ public class LiabilityReviewIT {
         final java.util.Set<String> spottedHighHeadings =
                 java.util.concurrent.ConcurrentHashMap.newKeySet();
         final AtomicInteger spottingCalls = new AtomicInteger();
+        /** The whole-contract read fails as if the provider were down. */
+        volatile boolean failSpotting;
+        /** The whole-contract read fails as if the analysis account had no credit. */
+        volatile boolean spottingOutOfCredit;
         /** The second opinion's answer (engine v2). Its quote is the clause's first words unless set. */
         volatile String secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
         volatile String secondOpinionQuote;
@@ -610,11 +630,14 @@ public class LiabilityReviewIT {
         public void reset() {
             calls.set(0);
             failOpenEnded = false;
+            openEndedOutOfCredit = false;
             openEndedProposed = null;
             openEndedExplanation = null;
             spottedHeadings.clear();
             spottedHighHeadings.clear();
             spottingCalls.set(0);
+            failSpotting = false;
+            spottingOutOfCredit = false;
             secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
             secondOpinionQuote = null;
             failSecondOpinion = false;
@@ -662,6 +685,14 @@ public class LiabilityReviewIT {
             }
             if (request.state() instanceof IssueSpottingSpecs.SpottingState spotting) {
                 spottingCalls.incrementAndGet();
+                if (spottingOutOfCredit) {
+                    throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
+                            "Provider account has no credits (HTTP 429)");
+                }
+                if (failSpotting) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "whole-contract spotting unavailable");
+                }
                 var lines = spotting.clauses().stream()
                         .map(clause -> {
                             if (spottedHighHeadings.stream().anyMatch(clause.heading()::contains)) {
@@ -678,6 +709,10 @@ public class LiabilityReviewIT {
                         "fake-gen-v1", new TokenUsage(900, 30));
             }
             if (request.spec().fields().containsKey("proposedLanguage")) {
+                if (openEndedOutOfCredit) {
+                    throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
+                            "Provider account has no credits (HTTP 429)");
+                }
                 if (failOpenEnded) {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                             "generative provider unavailable");

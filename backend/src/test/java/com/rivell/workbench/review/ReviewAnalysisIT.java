@@ -801,4 +801,42 @@ class ReviewAnalysisIT {
         assertThat(reviewRepository.find(organizationId, review.id())
                 .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
     }
+
+    @Test
+    void modelExecutionEventsCarryTheReviewRunAndCheckIds() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory
+                .getLogger("rivell.model-execution");
+        var appender = new ch.qos.logback.core.read.ListAppender<
+                ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            var run = analysisService.analyze(organizationId, review.id());
+
+            var event = appender.list.stream()
+                    .filter(candidate -> "decision".equals(field(candidate, "kind")))
+                    .findFirst().orElseThrow();
+            assertThat(event.getMDCPropertyMap())
+                    .containsEntry("reviewId", review.id().toString())
+                    .containsEntry("runId", run.id().toString())
+                    .containsKey("checkId");
+            assertThat(event.getMDCPropertyMap().get("checkId")).isNotBlank();
+            assertThat(org.slf4j.MDC.get("reviewId")).isNull();
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    private static String field(
+            ch.qos.logback.classic.spi.ILoggingEvent event, String key) {
+        return event.getKeyValuePairs().stream()
+                .filter(pair -> key.equals(pair.key))
+                .map(pair -> String.valueOf(pair.value))
+                .findFirst().orElse(null);
+    }
 }

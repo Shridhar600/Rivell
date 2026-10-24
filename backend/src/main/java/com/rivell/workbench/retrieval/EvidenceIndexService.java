@@ -97,35 +97,63 @@ public class EvidenceIndexService {
             var candidates = List.copyOf(textsToEmbed.keySet());
             var model = embeddingService.modelIdentity();
             for (int i = 0; i < candidates.size(); i++) {
-                var vector = execution.vectors().get(i);
-                if (vector.length > com.rivell.workbench.intelligence.provider.EmbeddingProperties
-                        .MAX_INDEXABLE_DIMENSIONS) {
-                    // fail fast before any persist: rows beyond the pgvector
-                    // regular-vector/HNSW capability could never be indexed
-                    throw new IllegalStateException(
-                            "Provider returned " + vector.length + "-dimension embeddings exceeding "
-                                    + "the pgvector HNSW index capability; configure explicit "
-                                    + "supported embedding dimensions");
-                }
-                if (i == 0) {
-                    ensureVectorIndex(vector.length);
-                }
-                try {
-                    repository.persistEmbedding(organizationId, candidates.get(i),
-                            sha256Hex(textsToEmbed.get(candidates.get(i))),
-                            properties.indexVersion(), model, vector.length,
-                            VectorLiterals.of(vector));
+                if (persistVector(organizationId, candidates.get(i),
+                        textsToEmbed.get(candidates.get(i)), model, execution.vectors().get(i))) {
                     persisted++;
-                } catch (RuntimeException e) {
-                    log.warn("Embedding persistence failed for candidate {}: {}",
-                            candidates.get(i), e.toString());
                 }
             }
+        } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
+            log.warn("Embedding generation degraded for organization {} (no credit)", organizationId);
         } catch (SemanticDecisionException e) {
-            // honest degradation: lexical stays searchable, vector stays not-ready
-            log.warn("Embedding generation degraded for organization {}", organizationId);
+            // one bad input must not leave the entire batch unindexed: retry each alone
+            var model = embeddingService.modelIdentity();
+            for (var entry : textsToEmbed.entrySet()) {
+                try {
+                    var vector = embeddingService.embed(List.of(entry.getValue()))
+                            .vectors().get(0);
+                    if (persistVector(organizationId, entry.getKey(), entry.getValue(),
+                            model, vector)) {
+                        persisted++;
+                    }
+                } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException dry) {
+                    log.warn("Embedding generation degraded for organization {} (no credit)",
+                            organizationId);
+                    break;
+                } catch (SemanticDecisionException ignored) {
+                    // this input stays unindexed; the other inputs were still persisted
+                }
+            }
         }
         return persisted;
+    }
+
+    private final java.util.Set<Integer> ensuredDimensions =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    private boolean persistVector(UUID organizationId, UUID candidateId, String text,
+            String model, float[] vector) {
+        if (vector.length > com.rivell.workbench.intelligence.provider.EmbeddingProperties
+                .MAX_INDEXABLE_DIMENSIONS) {
+            // fail fast before any persist: rows beyond the pgvector
+            // regular-vector/HNSW capability could never be indexed
+            throw new IllegalStateException(
+                    "Provider returned " + vector.length + "-dimension embeddings exceeding "
+                            + "the pgvector HNSW index capability; configure explicit "
+                            + "supported embedding dimensions");
+        }
+        if (ensuredDimensions.add(vector.length)) {
+            ensureVectorIndex(vector.length);
+        }
+        try {
+            repository.persistEmbedding(organizationId, candidateId,
+                    sha256Hex(text), properties.indexVersion(), model, vector.length,
+                    VectorLiterals.of(vector));
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("Embedding persistence failed for candidate {}: {}",
+                    candidateId, e.toString());
+            return false;
+        }
     }
 
     KnowledgeCandidate indexCandidate(

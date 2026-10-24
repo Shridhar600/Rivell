@@ -84,6 +84,9 @@ final class LlmAdjudicator {
         } catch (ProviderProtocolException e) {
             return SecondOpinion.failed(SecondOpinion.INVALID);
         } catch (RuntimeException e) {
+            if (e instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
+                throw e;
+            }
             return SecondOpinion.failed(SecondOpinion.UNAVAILABLE);
         }
     }

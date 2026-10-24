@@ -81,7 +81,12 @@ public class SemanticCompilationService {
         }
 
         var semanticAvailable = assessment != null;
-        var labelRoles = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var labelResolution = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var labelRoles = labelResolution.roles();
+        if (!labelResolution.available()) {
+            semanticAvailable = false;
+        }
+        var labelRolesUnavailable = !labelResolution.available();
         var recordKinds = new LinkedHashMap<UUID, KnowledgeRecordKind>();
         var kindUnavailable = new LinkedHashSet<UUID>();
         var eligible = new ArrayList<KnowledgeCandidate>(candidates.size());
@@ -139,7 +144,7 @@ public class SemanticCompilationService {
             }
             var roles = rolesByCandidate.getOrDefault(candidate.id(), Map.<String, RecordFieldRole>of());
             compiled.add(finish(enriched, unit, roles, publishedCandidates, assessment,
-                    kindUnavailable.contains(unit.id())));
+                    kindUnavailable.contains(unit.id()) || labelRolesUnavailable));
         }
 
         var compiledUnits = units.stream()
@@ -159,12 +164,14 @@ public class SemanticCompilationService {
     public List<KnowledgeCandidate> compileUserPosition(
             KnowledgeArtifact artifact, ExtractionUnit unit, List<KnowledgeCandidate> candidates,
             List<KnowledgeCandidate> publishedCandidates) {
-        var labelRoles = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var labelResolution = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var labelRoles = labelResolution.roles();
+        var labelRolesUnavailable = !labelResolution.available();
         var compiled = new ArrayList<KnowledgeCandidate>(candidates.size());
         for (var candidate : candidates) {
             var roles = fieldRoles(candidate, labelRoles);
             var enriched = candidate;
-            var unavailable = false;
+            var unavailable = labelRolesUnavailable;
             try {
                 enriched = interpret(candidate, artifact, unit, roles);
             } catch (SemanticDecisionException e) {

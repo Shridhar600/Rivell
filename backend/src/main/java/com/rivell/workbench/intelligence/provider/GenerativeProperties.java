@@ -19,7 +19,8 @@ public record GenerativeProperties(
         String responseMode,
         Double temperature,
         Duration connectTimeout,
-        Duration readTimeout) {
+        Duration readTimeout,
+        Duration longReadTimeout) {
 
     public static final String RESPONSE_MODE_STRICT_SCHEMA = "strict-schema";
     public static final String RESPONSE_MODE_JSON_OBJECT = "json-object";
@@ -49,12 +50,27 @@ public record GenerativeProperties(
         if (readTimeout == null) {
             readTimeout = Duration.ofSeconds(45);
         }
+        if (longReadTimeout == null) {
+            longReadTimeout = Duration.ofSeconds(180);
+        }
     }
 
     public GenerativeProperties(
             String provider, String baseUrl, String apiKey, String model,
             Duration connectTimeout, Duration readTimeout) {
-        this(provider, baseUrl, apiKey, model, null, null, connectTimeout, readTimeout);
+        this(provider, baseUrl, apiKey, model, null, null, connectTimeout, readTimeout, null);
+    }
+
+    /**
+     * The six-argument form plus an explicit long-call read timeout (the whole-contract
+     * spotter); every other call keeps the ordinary read timeout.
+     */
+    public GenerativeProperties(
+            String provider, String baseUrl, String apiKey, String model,
+            String responseMode, Double temperature, Duration connectTimeout,
+            Duration readTimeout) {
+        this(provider, baseUrl, apiKey, model, responseMode, temperature,
+                connectTimeout, readTimeout, null);
     }
 
     public boolean isConfigured() {

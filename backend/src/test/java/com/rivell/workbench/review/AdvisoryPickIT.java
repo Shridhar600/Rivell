@@ -159,8 +159,7 @@ class AdvisoryPickIT {
     }
 
     @Test
-    void aPlaybookSilentClauseTheReadPicksIsALowNeedsYourLookItem() throws Exception {
-        var reviewId = reviewedContract();
+    void aPlaybookSilentClauseTheReadPicksIsALowNeedsYourLookItem() throws Exception {        var reviewId = reviewedContract();
         // Governing Law is playbook-silent: no position addresses it, the triage finds it normal
         scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
         generativeProvider.spottedHighHeadings.add(GOVERNING_LAW);
@@ -267,6 +266,59 @@ class AdvisoryPickIT {
                 .containsEntry("uncertaintyReason", "playbook_silent")
                 .containsEntry("spottedSeverity", "HIGH")
                 .containsEntry("uncoveredProbability", 0.05);
+    }
+
+    @Test
+    void aFailedTriageDegradesTheClauseCheckInsteadOfReadingAsClean() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
+        scriptedProvider.failUncoveredTriage = true;
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var execution = analysisRepository.findExecutions(organizationId(), run.id()).stream()
+                .filter(candidate -> Boolean.TRUE.equals(
+                        candidate.detail().get("uncoveredTriageUnavailable")))
+                .findFirst().orElseThrow();
+        assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+        assertThat(execution.detail()).containsEntry(
+                "degradedReason", "uncovered_triage_unavailable");
+        assertThat(reviewRepository.find(organizationId(), reviewId).orElseThrow().status())
+                .isEqualTo(ReviewStatus.COMPLETED);
+    }
+
+    @Test
+    void outOfCreditOnTheWholeContractReadDegradesWithItsOwnReason() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
+        generativeProvider.spottingOutOfCredit = true;
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        assertThat(analysisRepository.findExecutions(organizationId(), run.id()))
+                .anySatisfy(execution -> assertThat(execution.detail())
+                        .containsEntry("degradedReason", "provider_out_of_credit"));
+        assertThat(spottedFindings(findings(run.id()))).isEmpty();
+        assertThat(reviewRepository.find(organizationId(), reviewId).orElseThrow().status())
+                .isEqualTo(ReviewStatus.COMPLETED);
+    }
+
+    @Test
+    void aFailedWholeContractReadIsRecordedOnTheClauseCheck() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
+        generativeProvider.failSpotting = true;
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        assertThat(analysisRepository.findExecutions(organizationId(), run.id()))
+                .anySatisfy(execution -> {
+                    assertThat(execution.detail()).containsEntry("addressed", false);
+                    assertThat(execution.detail()).containsEntry("spottingUnavailable", true);
+                });
+        assertThat(spottedFindings(findings(run.id()))).isEmpty();
+        assertThat(reviewRepository.find(organizationId(), reviewId).orElseThrow().status())
+                .isEqualTo(ReviewStatus.COMPLETED);
     }
 
     @Test

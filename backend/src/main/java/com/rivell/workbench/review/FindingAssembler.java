@@ -482,7 +482,7 @@ public final class FindingAssembler {
             "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
             "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
             "positionLabel", "levers", "categoryBeforeLevers", "routeReason", "fallbackListed",
-            "fallbackConditionsOutcome", "fallbackConditionsUnknown", "fallbackConditionsUnmet", "fallbackConditionsExecutionId", "secondOpinionExecutionId");
+            "fallbackConditionsOutcome", "fallbackConditionsUnknown", "fallbackConditionsUnmet", "fallbackConditionsExecutionId", "secondOpinionExecutionId", "openEndedOutcome");
 
     private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
