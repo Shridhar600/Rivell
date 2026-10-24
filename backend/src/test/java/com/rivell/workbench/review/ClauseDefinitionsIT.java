@@ -163,7 +163,7 @@ class ClauseDefinitionsIT {
                 + "the Fees, however arising.");
         body.addStyledParagraphOfText("Heading1", "2. Aggregate Cap");
         body.addParagraphOfText("Supplier's total liability shall not exceed two times the "
-                + "fees paid in the preceding 12 months.");
+                + "Fees paid in the preceding 12 months.");
         body.addStyledParagraphOfText("Heading1", "3. Confidentiality");
         body.addParagraphOfText("Each Party shall protect the other Party's confidential "
                 + "information with reasonable care. The obligations in this Section survive "
@@ -295,6 +295,33 @@ class ClauseDefinitionsIT {
                 .flatMap(finding -> finding.evidenceItemIds().stream())
                 .toList();
         assertThat(cited).isNotEmpty();
+        assertThat(analysisRepository.findEvidenceItems(organizationId(), run.id(), cited))
+                .anySatisfy(item -> {
+                    assertThat(item.sourceType()).isEqualTo("CURRENT_CONTRACT_DEFINED_TERM");
+                    assertThat(item.text()).startsWith("Fees means");
+                });
+    }
+
+    @Test
+    void aSearchFoundFindingCitesTheDefinitionsOfItsOwnSearchBundle() throws Exception {
+        // DW-075: the aggregate-cap clause gets no topic, so only the position search can pair a
+        // rule with it; the search bundle's current-contract lane must carry the defined term, and
+        // the finding must cite it. A change that stops running that lane for the search route
+        // fails here.
+        scriptedProvider.topiclessHeadings.add("Aggregate Cap");
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put("Aggregate Cap", PolicyComparisonSpecs.NOT_ADDRESSED);
+        scriptedProvider.positionAnswers.put("two times the fees paid",
+                PolicyComparisonSpecs.BEYOND_FALLBACK);
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var cited = findingRepository.findFindings(organizationId(), run.id()).stream()
+                .filter(finding -> "SEARCH".equals(finding.quality().get("foundBy")))
+                .flatMap(finding -> finding.evidenceItemIds().stream())
+                .toList();
+        assertThat(cited).as("a search-found finding must cite its search bundle's evidence")
+                .isNotEmpty();
         assertThat(analysisRepository.findEvidenceItems(organizationId(), run.id(), cited))
                 .anySatisfy(item -> {
                     assertThat(item.sourceType()).isEqualTo("CURRENT_CONTRACT_DEFINED_TERM");
