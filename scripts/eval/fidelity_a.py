@@ -19,7 +19,6 @@ Usage:
 """
 import argparse
 import pathlib
-import re
 import sys
 
 import fidelity_common as common
@@ -56,22 +55,16 @@ def raised(finding):
             or bool(quality.get("escalationTrigger")))
 
 
-def _names(value):
-    if isinstance(value, str):
-        value = [value]
-    if not isinstance(value, (list, tuple, set)):
-        return []
-    return [name.strip() for name in value if isinstance(name, str) and name.strip()]
-
-
 def approvers_of(finding):
-    """Names a finding carries. Today's only authority field is the escalation trigger."""
-    quality = _quality(finding)
-    raw = (quality.get("approvers") or quality.get("approver")
-           or finding.get("approvers") or finding.get("approver")
-           or quality.get("escalationTrigger"))
-    return [part.strip() for name in _names(raw)
-            for part in re.split(r"\s*;\s*", name) if part.strip()]
+    """The approver a finding names, from the escalation authority the comparison recorded.
+
+    The escalation trigger is the condition ("escalate above net 90"), not a person, so it never
+    counts as an approver.
+    """
+    name = _quality(finding).get("escalationApprover")
+    if not isinstance(name, str) or not name.strip():
+        return []
+    return [part.strip() for part in name.split(";") if part.strip()]
 
 
 def findings_for(issue, contract, raw):

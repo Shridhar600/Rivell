@@ -188,6 +188,9 @@ class ReviewDeadlineIT {
     @Autowired
     M6EvidenceCorpus corpusBuilder;
 
+    @Autowired
+    com.rivell.workbench.workflow.HumanReviewService humanReviewService;
+
     @BeforeEach
     void freshOrganization() {
         identityProvider.use(new UserIdentity(
@@ -228,5 +231,19 @@ class ReviewDeadlineIT {
         assertThat(run.status()).isEqualTo(RunStatus.COMPLETED);
         assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
                 .isEqualTo(ReviewStatus.COMPLETED);
+
+        // Final review C3: a partly unrun analysis must not be finalizable as if the whole
+        // contract had been reviewed.
+        var progress = humanReviewService.state(organizationId, review.id())
+                .assessment().progress();
+        assertThat(progress.readyToFinalize()).isFalse();
+        var partial = progress.blockers().stream()
+                .filter(blocker -> blocker.code()
+                        == com.rivell.workbench.workflow.FinalizationBlockerCode.ANALYSIS_PARTIAL)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "No ANALYSIS_PARTIAL blocker in " + progress.blockers()));
+        var count = degraded == 1 ? "1 check did not finish" : degraded + " checks did not finish";
+        assertThat(partial.message()).contains(count).contains("Start a new review");
     }
 }

@@ -50,6 +50,9 @@ import com.rivell.workbench.review.check.ReviewEvidenceCache;
  */
 public class ReviewAnalysisService {
 
+    /** Code-owned reason for a check the analysis budget left unrun. */
+    public static final String DEADLINE_DEGRADED_REASON = "review_deadline_exceeded";
+
     private static final Logger LOG = LoggerFactory.getLogger(ReviewAnalysisService.class);
 
     private final ReviewRepository reviewRepository;
@@ -482,7 +485,7 @@ public class ReviewAnalysisService {
      */
     private void degradeRemaining(Review review, ReviewAnalysisRun run,
             List<ReviewPlanCheck> checks, int fromIndex, Attempt attempt) {
-        var outcome = CheckOutcome.degraded("review_deadline_exceeded");
+        var outcome = CheckOutcome.degraded(DEADLINE_DEGRADED_REASON);
         for (int index = fromIndex; index < checks.size(); index++) {
             var check = checks.get(index);
             var existing = analysisRepository.findExecution(

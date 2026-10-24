@@ -672,8 +672,8 @@ def p4_lines(results):
              f"issue-section hits {pct(hits, picks)} (HIGH {pct(high_hits, high)})",
              f"- Omissions: MEDIUM {medium} ({medium / n:.1f}/contract), LOW {low} "
              f"({low / n:.1f}/contract); alarms (MEDIUM matching no MISSING_PROVISION issue) {alarms}",
-             f"- Fit: {fit_calls} calls, {fit_questions} questions, {fit_skipped} calls saved by "
-             f"the skip rule; search FITS {fit_search['FITS']}, DOES_NOT_FIT "
+             f"- Fit: {fit_calls} calls, {fit_questions} questions, saved calls: {fit_skipped} "
+             f"by the skip rule; search FITS {fit_search['FITS']}, DOES_NOT_FIT "
              f"{fit_search['DOES_NOT_FIT']}, UNKNOWN {fit_search['UNKNOWN']}, not covered "
              f"{fit_not_covered}; wording FITS {fit_wording['FITS']}, DOES_NOT_FIT "
              f"{fit_wording['DOES_NOT_FIT']}, UNKNOWN {fit_wording['UNKNOWN']}"]

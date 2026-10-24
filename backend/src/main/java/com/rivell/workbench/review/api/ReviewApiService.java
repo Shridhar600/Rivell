@@ -278,6 +278,9 @@ public class ReviewApiService {
                 analysisComplete,
                 plannedChecks,
                 counts == null ? 0 : counts.completed(),
+                // Same rule as the single-review read: only a completed analysis can be blocked
+                // for checks that did not run, so an in-progress row cannot disagree with it.
+                analysisComplete && counts != null ? counts.didNotRun() : 0,
                 finalized,
                 row.contractId(),
                 row.contractVersionNumber());

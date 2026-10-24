@@ -15,6 +15,8 @@ import com.rivell.workbench.review.FindingRepository;
 import com.rivell.workbench.review.Review;
 import com.rivell.workbench.review.CheckExecutionStatus;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
+import com.rivell.workbench.review.ReviewAnalysisService;
+import com.rivell.workbench.review.ReviewCheckExecution;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewStatus;
@@ -64,12 +66,12 @@ public class HumanReviewService {
                 .orElse(Map.of());
         var headings = contractQueryService.headingNodeIdsForOrganization(
                 organizationId, review.contractId(), review.contractVersionNumber());
-        // DEGRADED is overloaded: it covers both a check that could not trust its inputs (the
-        // analysis environment no longer matches the review snapshot, so every check degrades and
-        // the run reports COMPLETED with nothing to show) and a check that ran fine and honestly
-        // reported partial coverage. Only the first is a finalization hazard, and it is
-        // distinguishable by whether any check completed at all. Counting every DEGRADED as a
-        // blocker would make an ordinary partially-covered review impossible to finalize.
+        // DEGRADED is overloaded: it covers a check that could not trust its inputs (the analysis
+        // environment no longer matches the review snapshot, so every check degrades and the run
+        // reports COMPLETED with nothing to show), a check that ran fine and honestly reported
+        // partial coverage, and a check the analysis budget left unrun. The first and last are
+        // finalization hazards; an honest partial result still covers its clause and must stay
+        // finalizable.
         var checkOutcomes = activeRun
                 .map(run -> analysisRepository.findExecutions(organizationId, run.id()))
                 .orElse(List.of());
@@ -81,14 +83,29 @@ public class HumanReviewService {
         // completed. Before that there are no executions at all, so "none completed" was true for
         // every freshly created review and the review was told its analysis environment was broken
         // when nothing had run yet. Only a completed run can have produced no trustworthy result.
+        var analysisComplete = review.status() == ReviewStatus.COMPLETED && activeRun.isPresent();
         var producedNoTrustworthyResult = activeRun.isPresent()
                 && plannedChecks > 0
                 && completedChecks == 0;
-        var assessment = HumanReviewResolver.resolve(findings, decisions,
-                review.status() == ReviewStatus.COMPLETED && activeRun.isPresent(),
-                producedNoTrustworthyResult, changeSet.isPresent(), headings);
+        // A completed run can still have checks that failed, were skipped, or ran out of the
+        // analysis budget. Those clauses were never really reviewed, so the run is not finalizable
+        // even when the check counts look mostly healthy. Before completion the count is not a
+        // finalization fact, and the list read must agree, so it stays zero.
+        var checksDidNotRun = analysisComplete
+                ? (int) checkOutcomes.stream().filter(HumanReviewService::didNotRun).count()
+                : 0;
+        var assessment = HumanReviewResolver.resolve(findings, decisions, analysisComplete,
+                producedNoTrustworthyResult, checksDidNotRun, changeSet.isPresent(), headings);
         return new HumanReviewState(review, activeRun.map(run -> run.id()).orElse(null),
                 findings, decisions, changeSet, assessment);
+    }
+
+    private static boolean didNotRun(ReviewCheckExecution execution) {
+        return execution.status() == CheckExecutionStatus.FAILED
+                || execution.status() == CheckExecutionStatus.SKIPPED
+                || (execution.status() == CheckExecutionStatus.DEGRADED
+                        && ReviewAnalysisService.DEADLINE_DEGRADED_REASON
+                                .equals(execution.detail().get("degradedReason")));
     }
 
     public List<HumanDecision> currentDecisions(

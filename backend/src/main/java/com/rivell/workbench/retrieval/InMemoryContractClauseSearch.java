@@ -11,6 +11,7 @@ import java.util.UUID;
 
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ProviderFailures;
+import com.rivell.workbench.intelligence.ProviderRejectedException;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 
 /**
@@ -74,13 +75,16 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
     /**
      * One batch for this side; if the provider rejects the batch, each text is retried alone so a
      * single bad input does not switch the vector lane off for every clause. A failed input keeps
-     * a null slot (excluded from the lane) and the partial degradation is named.
+     * a null slot (excluded from the lane) and the partial degradation is named. A timeout or an
+     * outage turns the vector lane off at once: one call per text would spend the review's budget
+     * on an endpoint that is not answering.
      */
     private List<float[]> embedEach(List<String> texts, List<String> degradation) {
         try {
             return embeddingService.embed(texts).vectors();
         } catch (SemanticDecisionException batchFailure) {
-            if (ProviderFailures.isOutOfCredit(batchFailure)) {
+            if (ProviderFailures.isOutOfCredit(batchFailure)
+                    || !(batchFailure instanceof ProviderRejectedException)) {
                 degradation.add("VECTOR_LANE_UNAVAILABLE");
                 return null;
             }

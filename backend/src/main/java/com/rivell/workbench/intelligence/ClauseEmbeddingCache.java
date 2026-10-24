@@ -25,15 +25,23 @@ public final class ClauseEmbeddingCache implements EmbeddingLookup {
 
     private final EmbeddingService embeddingService;
     private final Map<String, float[]> vectors = new HashMap<>();
+    /**
+     * Set when the prefetch failed for a reason that is not about one input. Replayed to every
+     * later caller instead of one fresh provider call per clause: an endpoint that timed out or is
+     * down would otherwise spend the review's budget once per clause.
+     */
+    private SemanticDecisionException laneFailure;
 
     public ClauseEmbeddingCache(EmbeddingService embeddingService) {
         this.embeddingService = embeddingService;
     }
 
     /**
-     * Embeds every text not already cached in one batch. A failure leaves the cache empty and
-     * is not fatal: the first later use retries through the ordinary path and degrades honestly.
-     * A rejected batch retries at most {@link #MAX_FALLBACK_TEXTS} inputs alone.
+     * Embeds every text not already cached in one batch. Only a rejected batch (the provider
+     * refused the request itself) retries at most {@link #MAX_FALLBACK_TEXTS} inputs alone; a
+     * timeout or outage stops here and is replayed to every later caller, because one more call per
+     * text would spend the review's budget on an endpoint that is not answering. The callers
+     * already tolerate a failed lane and degrade their own.
      */
     public void prefetch(List<String> texts) {
         if (!embeddingService.isConfigured()) {
@@ -57,9 +65,16 @@ public final class ClauseEmbeddingCache implements EmbeddingLookup {
         } catch (SemanticDecisionException e) {
             if (ProviderFailures.isOutOfCredit(e)) {
                 // a dry account fails every text the same way; the short circuit keeps it cheap
+                laneFailure = e;
                 return;
             }
-            // the batch failed: retry a bounded number of texts alone so one bad input only
+            if (!(e instanceof ProviderRejectedException)) {
+                // a timeout or outage is not about one input: retrying each text would spend the
+                // review's budget on the same failing endpoint, so the lane fails for this run
+                laneFailure = e;
+                return;
+            }
+            // the batch was rejected: retry a bounded number of texts alone so one bad input only
             // loses its own vector and the rest stay cold for their own later use
             var attempted = 0;
             for (var text : missing) {
@@ -71,6 +86,7 @@ public final class ClauseEmbeddingCache implements EmbeddingLookup {
                     vectors.put(text, embeddingService.embed(List.of(text)).vectors().get(0));
                 } catch (SemanticDecisionException ignored) {
                     if (ProviderFailures.isOutOfCredit(ignored)) {
+                        laneFailure = ignored;
                         return;
                     }
                     // this text degrades on its own when a caller asks for it
@@ -84,6 +100,9 @@ public final class ClauseEmbeddingCache implements EmbeddingLookup {
         var cached = vectors.get(text);
         if (cached != null) {
             return cached;
+        }
+        if (laneFailure != null) {
+            throw laneFailure;
         }
         var execution = embeddingService.embed(List.of(text));
         var vector = execution.vectors().get(0);

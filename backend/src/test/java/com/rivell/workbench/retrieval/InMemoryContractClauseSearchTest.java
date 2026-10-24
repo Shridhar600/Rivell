@@ -114,6 +114,36 @@ class InMemoryContractClauseSearchTest {
         assertThat(ids(result).getFirst()).isEqualTo(DATA.headingNodeId());
     }
 
+    /**
+     * Final review I1: the per-text fallback is for a rejected batch, not for a timeout. Retrying
+     * every clause one call at a time while the endpoint is not answering is what blew the review
+     * budget.
+     */
+    @Test
+    void aTimedOutBatchIsNotRetriedPerText() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        EmbeddingProvider down = new EmbeddingProvider() {
+            @Override
+            public String id() {
+                return FakeEmbeddingProvider.PROVIDER_ID;
+            }
+
+            @Override
+            public EmbeddingBatch embed(EmbeddingRequest request) {
+                calls.incrementAndGet();
+                throw new com.rivell.workbench.intelligence.ProviderTimeoutException(
+                        "provider did not respond in time");
+            }
+        };
+        var search = new InMemoryContractClauseSearch(embeddings(down, true));
+
+        var result = search.search(List.of(DPA_POSITION), List.of(GOVERNING_LAW, DATA, FEES), 3);
+
+        assertThat(calls).as("one batch call, no per-text retry").hasValue(1);
+        assertThat(result.degradation()).containsExactly("VECTOR_LANE_UNAVAILABLE");
+        assertThat(ids(result).getFirst()).isEqualTo(DATA.headingNodeId());
+    }
+
     @Test
     void oneBadInputOnlyLosesItsOwnVectorLaneSlot() {
         var fake = new FakeEmbeddingProvider();

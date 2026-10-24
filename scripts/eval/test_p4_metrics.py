@@ -61,11 +61,18 @@ NODES = [
 
 class FitMetricsTest(unittest.TestCase):
 
-    def test_the_quality_filter_keeps_the_council_required_keys(self):
+    def test_the_quality_filter_keeps_the_keys_the_findings_carry(self):
         for key in ("secondOpinionQuote", "secondOpinionReason", "categoryBeforeLevers",
                     "wordingFitVerdict", "wordingFitReason", "wordingFitReasons",
-                    "wordingFitQuote", "fitVerdict", "fitReason", "fitReasons"):
+                    "wordingFitQuote", "fitVerdict", "fitReason", "fitReasons",
+                    # FindingAssembler's ESCALATION_KEYS: the eval lost the approver when the
+                    # merge kept two names nothing writes instead of these.
+                    "escalationApprover", "escalationCondition", "escalationSource",
+                    "escalationStance", "escalationConflictApprover",
+                    "escalationConflictSource"):
             self.assertIn(key, p4_metrics.QUALITY_KEYS)
+        self.assertNotIn("approvers", p4_metrics.QUALITY_KEYS)
+        self.assertNotIn("approver", p4_metrics.QUALITY_KEYS)
 
     def test_counts_search_hits_wording_offers_calls_and_savings(self):
         checks = [

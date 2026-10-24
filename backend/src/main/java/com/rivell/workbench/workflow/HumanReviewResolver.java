@@ -30,6 +30,7 @@ public final class HumanReviewResolver {
             Map<UUID, HumanDecision> currentDecisions,
             boolean analysisComplete,
             boolean analysisProducedNoTrustworthyResult,
+            int checksDidNotRun,
             boolean finalized,
             Set<UUID> headingNodeIds) {
         var planned = new ArrayList<PlannedChange>();
@@ -110,15 +111,27 @@ public final class HumanReviewResolver {
                     "The analysis is not finished. You can decide on findings and finalize "
                             + "once it completes.", List.of()));
         }
-        if (analysisProducedNoTrustworthyResult) {
-            // No planned check completed. The run still reports COMPLETED, so finalizing here would
-            // turn an analysis that never really ran into a clean-looking zero-change artifact.
-            // Block until the environment matches the review snapshot and the review is re-analyzed.
+        if (analysisProducedNoTrustworthyResult && checksDidNotRun == 0) {
+            // No planned check completed, and none of them failed or ran out of time: the run had
+            // nothing it could trust. The run still reports COMPLETED, so finalizing here would turn
+            // an analysis that never really ran into a clean-looking zero-change artifact. Block
+            // until the environment matches the review snapshot and the review is re-analyzed.
             blockers.add(blocker(FinalizationBlockerCode.ANALYSIS_DEGRADED,
                     "Rivell could not complete a trustworthy check of this contract, so there "
                             + "are no findings to decide on and you cannot finalize. The contract "
                             + "analysis or the review settings changed after this review started. "
                             + "Start a new review to continue.", List.of()));
+        } else if (checksDidNotRun > 0) {
+            // Part of the plan produced no result, whether or not anything completed. Finalizing
+            // here would present an unchecked contract as reviewed, and the count is the useful
+            // fact. There is no rerun endpoint, so the honest next step is a new review.
+            blockers.add(blocker(FinalizationBlockerCode.ANALYSIS_PARTIAL,
+                    (checksDidNotRun == 1
+                            ? "1 check did not finish"
+                            : checksDidNotRun + " checks did not finish")
+                            + ", so this review does not cover the whole contract. "
+                            + "Start a new review to analyze the contract again.",
+                    List.of()));
         }
         if (!unresolvedBlocking.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.UNRESOLVED_BLOCKING_FINDINGS,
