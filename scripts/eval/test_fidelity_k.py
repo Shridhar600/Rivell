@@ -151,6 +151,23 @@ class MatchTest(unittest.TestCase):
         self.assertEqual(matched["matches"]["p-001"]["entryId"], "exact")
         self.assertEqual([row["entryId"] for row in matched["unmatchedDrafts"]], ["summary"])
 
+    def test_an_unmatched_label_inside_a_longer_draft_is_reported_as_merged_not_missing(self):
+        # one draft holds two labels' text: one label matches it, the other is merged into it
+        labels = [label("p-001"), label("p-002", title="Liability fallback", lines=(3, 3),
+                                        stances={"fallback": stance("Cap fallback: AUD 1,000,000.",
+                                                                    "AUD 1,000,000")},
+                                        effective={"fallback": {"approval": "NONE"}})]
+        drafts = [fidelity_k.adapt_candidate(candidate(FULL))]
+        matched = fidelity_k.match_entries(labels, drafts, SOURCE)
+        self.assertEqual(len(matched["unmatched"]), 1)
+        self.assertEqual(matched["mergedInto"], {matched["unmatched"][0]: "c1"})
+
+    def test_a_label_whose_text_no_draft_holds_is_not_merged(self):
+        labels = [label("p-001", title="Liability")]
+        drafts = [fidelity_k.adapt_candidate(candidate("A cap applies.", title="Liability"))]
+        matched = fidelity_k.match_entries(labels, drafts, SOURCE)
+        self.assertEqual(matched["mergedInto"], {})
+
     def test_a_title_alone_does_not_match_a_label_whose_source_text_is_missing(self):
         labels = [label("p-001", title="Liability")]
         drafts = [fidelity_k.adapt_candidate(candidate("A cap applies.", title="Liability"))]

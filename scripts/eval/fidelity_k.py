@@ -37,6 +37,7 @@ STANCES = ("preferred", "fallback", "walkAway")
 COMPARATOR_ROLES = {"PREFERRED", "FALLBACK", "WALK_AWAY", "PROHIBITED", "ESCALATION"}
 STANCE_BY_ROLE = {"PREFERRED": "preferred", "FALLBACK": "fallback", "WALK_AWAY": "walkAway"}
 MIN_MATCH = 0.6   # Jaccard overlap of the label's source words and the draft entry's words
+MERGED_MIN = 0.8  # share of an unmatched label's source words one draft holds: merged, not missing
 MIN_SHARED = 3    # ... and at least this many (or all, for a tiny label) whole words
 
 # The user-test NDA playbook is labelled under its own file name and lives in the seed corpus.
@@ -192,7 +193,21 @@ def match_entries(entries, drafts, source_lines, min_match=MIN_MATCH):
                           "entryTitle": drafts[draft_index]["title"],
                           "score": round(score, 3)}
         used.add(draft_index)
+    # an unmatched label whose text sits inside a longer draft was compiled as part of another
+    # entry (a compound unit): report it apart from a label the compile lost
+    merged = {}
+    for index, entry in enumerate(entries):
+        if index in matches:
+            continue
+        wanted = common.content_words(label_source_text(entry, source_lines))
+        if not wanted:
+            continue
+        best = max(((len(wanted & common.content_words(draft["text"])) / len(wanted),
+                     draft["entryId"]) for draft in drafts), default=(0.0, None))
+        if best[0] >= MERGED_MIN:
+            merged[entry["id"]] = best[1]
     return {"matches": {entries[index]["id"]: match for index, match in matches.items()},
+            "mergedInto": merged,
             "unmatched": [entry["id"] for index, entry in enumerate(entries)
                           if index not in matches],
             "unmatchedDrafts": [{"entryId": draft["entryId"], "title": draft["title"]}
@@ -351,7 +366,9 @@ def score_document(label_data, candidates, source_text):
         "source": label_data.get("source"),
         "labels": len(entries),
         "drafts": len(candidates),
-        "k1": {"labels": len(entries), "matched": len(matching["matches"]), "byKind": kinds},
+        "k1": {"labels": len(entries), "matched": len(matching["matches"]),
+               "merged": len(matching["mergedInto"]), "byKind": kinds},
+        "mergedInto": matching["mergedInto"],
         "k2": {"contextLabels": sum(1 for entry in entries if entry.get("kind") == "CONTEXT"),
                "matchedContext": matched_context,
                "violations": len(violations),
@@ -400,7 +417,8 @@ def totals(results):
         "labels": sum(row["k1"]["labels"] for row in scored),
         "drafts": sum(row["drafts"] for row in scored),
         "k1": {"labels": sum(row["k1"]["labels"] for row in scored),
-               "matched": sum(row["k1"]["matched"] for row in scored), "byKind": by_kind},
+               "matched": sum(row["k1"]["matched"] for row in scored),
+               "merged": sum(row["k1"].get("merged", 0) for row in scored), "byKind": by_kind},
         "k2": {key: sum(row["k2"][key] for row in scored)
                for key in ("contextLabels", "matchedContext", "violations", "safe")},
         "k3": {"keyFacts": sum(row["k3"]["keyFacts"] for row in scored),
@@ -439,6 +457,8 @@ def report_lines(results, total, meta):
          for row in scored])
     lines += ["", "## Totals", "",
               f"- K1 entry coverage: {common.pct(total['k1']['matched'], total['k1']['labels'])}",
+              f"- K1 unmatched labels held inside a longer draft (compound unit, not lost): "
+              f"{total['k1'].get('merged', 0)}",
               "- K1 by kind: " + ", ".join(
                   f"{kind} {common.pct(value['matched'], value['labels'])}"
                   for kind, value in sorted(total["k1"]["byKind"].items())),
