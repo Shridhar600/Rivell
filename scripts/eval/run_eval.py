@@ -30,7 +30,7 @@ import prices
 from provider_guard import LogWatch, ProviderFatal, preflight
 from redline_flow import run_redline
 from rivell_api import ApiError, RivellApi, items
-from scoring import score_contract, score_knowledge
+from scoring import ABSENCE_CREDIT, score_contract, score_knowledge
 import p3_metrics
 import p4_metrics
 
@@ -52,6 +52,20 @@ def guard():
 
 # ---------- backend process ----------
 
+# DW-059(4): a measurement-only probe call that only succeeds on a retry waited the provider's
+# full 2 s + 8 s + 30 s backoff before every check (~40 s). A probe run is bounded unless the
+# operator set the budget; the report header records which budget scored it.
+PROBE_RETRY_BACKOFF = "2s,4s"
+
+
+def probe_retry_backoff(environ=None):
+    """The retry budget a backend should start with, or None to leave the provider default."""
+    env = os.environ if environ is None else environ
+    if env.get("RIVELL_ORDER_PROBE", "off").lower() == "off":
+        return None
+    return env.get("RIVELL_INTELLIGENCE_RETRY_BACKOFF") or PROBE_RETRY_BACKOFF
+
+
 def build_jar():
     subprocess.run(["./mvnw", "-q", "-DskipTests", "package"], cwd=BACKEND, check=True)
 
@@ -67,6 +81,9 @@ def start_backend(jar, org_id, log_path):
     java = pathlib.Path(os.environ["JAVA_HOME"], "bin", "java") if "JAVA_HOME" in os.environ else "java"
     env = dict(os.environ, RIVELL_DEV_ORGANIZATION_ID=org_id, RIVELL_JOB_WORKER_ENABLED="true",
                SERVER_PORT=PORT)
+    backoff = probe_retry_backoff(env)
+    if backoff:
+        env["RIVELL_INTELLIGENCE_RETRY_BACKOFF"] = backoff
     log = open(log_path, "w")
     proc = subprocess.Popen([str(java), "-jar", str(jar)], cwd=BACKEND, env=env,
                             stdout=log, stderr=subprocess.STDOUT)
@@ -161,16 +178,18 @@ def review_profile(answer):
 
 # ---------- pipeline ----------
 
-def wait_candidates(api, artifact_id, timeout_s=600):
+def wait_candidates(api, artifact_id, timeout_s=600, with_status=False):
+    """The artifact's candidates once the list has settled; with_status also says whether it did."""
     deadline, last = time.time() + timeout_s, -1
     while time.time() < deadline:
         guard()
         cands = items(api.get(f"/api/knowledge/artifacts/{artifact_id}/candidates"))
         if cands and len(cands) == last and all(c.get("reviewStatus") for c in cands):
-            return cands
+            return (cands, True) if with_status else cands
         last = len(cands)
         time.sleep(5)
-    return items(api.get(f"/api/knowledge/artifacts/{artifact_id}/candidates"))
+    cands = items(api.get(f"/api/knowledge/artifacts/{artifact_id}/candidates"))
+    return (cands, False) if with_status else cands
 
 
 def run_knowledge(api, corpus, entry, kind, contract_types, errors):
@@ -745,8 +764,11 @@ def header_lines(meta):
     return [f"# Eval run {meta['runId']}", "",
             f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
             + (f" · decisions `{meta['decisions']}`" if meta.get("decisions") else "")
-            + (f" · order probe `{meta['orderProbe']}` (measurement only)"
+            + (f" · order probe `{meta['orderProbe']}` (measurement only"
+               + (f"; retry budget {meta['probeRetryBackoff']}" if meta.get("probeRetryBackoff") else "")
+               + ")"
                if meta.get("orderProbe", "off") != "off" else "")
+            + (f" · absence credit {meta['absenceCredit']}" if meta.get("absenceCredit") else "")
             + (f" · engine `{meta['engine']}`" if meta.get("engine", "v2") != "v2" else "")
             + (" · omissions on" if meta.get("omissions") == "true" else "")
             + (" · definitions on" if meta.get("definitions") == "true" else "")
@@ -845,7 +867,9 @@ def main():
     meta = {"runId": run_id, "corpus": str(args.corpus), "git": git,
             "started": time.strftime("%Y-%m-%d %H:%M"), "decisions": decisions,
             "orderProbe": os.environ.get("RIVELL_ORDER_PROBE", "off").lower(),
-            **engine_meta()}
+            "absenceCredit": ABSENCE_CREDIT, **engine_meta()}
+    if probe_retry_backoff():
+        meta["probeRetryBackoff"] = probe_retry_backoff()
     started = time.monotonic()
 
     if not args.no_build:

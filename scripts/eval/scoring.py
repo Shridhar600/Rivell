@@ -114,6 +114,59 @@ def _topic_matches(concept_key, playbook_ref):
     return bool(_stems(concept_key) & _stems(ref))
 
 
+# ---------- DW-069: absence credit by position label or reference, whole words only ----------
+# Stem overlap credited the wrong provision ("regulat" is not a rule) and missed the right one
+# when the extracted concept was odd. A position code ("G-03") or the position's own words decide
+# the credit; words must match whole, never by stem.
+ABSENCE_CREDIT = "label/reference whole-word (DW-069)"
+
+_CODE = re.compile(r"\b([A-Za-z]{1,3})-(\d{1,3})\b")
+
+
+def position_code(text):
+    """The position code a label or playbook reference carries ("G-03"), canonicalised."""
+    match = _CODE.search(text or "")
+    return f"{match.group(1).upper()}-{int(match.group(2))}" if match else None
+
+
+def _match_words(text):
+    """Content words for a whole-word comparison: punctuation and underscores separate words."""
+    cleaned = re.sub(r"[_/]", " ", text or "")
+    return {w for w in _WORD.findall(cleaned.lower()) if w not in _STOP and len(w) > 2}
+
+
+def _carried_label(finding):
+    quality = finding.get("quality") or {}
+    return finding.get("positionLabel") or quality.get("positionLabel") or ""
+
+
+def absence_findings(findings):
+    """The absence findings of a contract (v1 and v2 carry subjectKind ABSENCE)."""
+    return [finding for finding in findings if finding.get("subjectKind") == "ABSENCE"]
+
+
+def absence_matches(finding, issue):
+    """Whether an absence finding is the issue's missing provision (DW-069).
+
+    A finding's position label or reference is authoritative when it carries a position code: the
+    codes must match. Without a carried code, every content word of the issue's playbook reference
+    must appear in the finding's label, carried reference or absence concept as a whole word.
+    """
+    reference = issue.get("playbookRef") or ""
+    label = _carried_label(finding)
+    carried = finding.get("positionReference") or finding.get("playbookRef") or ""
+    reference_code = position_code(reference)
+    carried_codes = [code for code in (position_code(label), position_code(carried)) if code]
+    if reference_code and carried_codes:
+        return reference_code in carried_codes
+    want = _match_words(reference)
+    if not want:
+        return False
+    return any(want <= _match_words(text)
+               for text in (label, carried, finding.get("absenceConcept")))
+
+
+
 def _detected_headings(structure_nodes, clauses):
     detected = [(n["id"], n.get("text") or "") for n in structure_nodes
                 if n.get("nodeType") == "HEADING"]
@@ -139,7 +192,7 @@ def score_contract(answer, structure_nodes, clauses, findings):
     node_to_section = {v: k for k, v in section_to_node.items()}
 
     classified = [c for c in clauses if c.get("correctedPrimaryConcept") or c.get("primaryConcept")]
-    absence = [f for f in findings if f.get("subjectKind") == "ABSENCE"]
+    absence = absence_findings(findings)
     located = [f for f in findings if f.get("subjectHeadingNodeId")]
     finding_sections = {}
     for f in located:
@@ -147,13 +200,30 @@ def score_contract(answer, structure_nodes, clauses, findings):
         if sid:
             finding_sections.setdefault(sid, []).append(f)
 
+    expected_issues = answer.get("expectedIssues", [])
+    # one absence finding explains one missing provision: claim it for the issue whose reference
+    # it matches most specifically, so two similar provisions cannot both take the same finding
+    absence_claim, absence_hit = {}, set()
+    for index, issue in enumerate(expected_issues):
+        if issue["category"] != "MISSING_PROVISION":
+            continue
+        for finding in absence:
+            if not absence_matches(finding, issue):
+                continue
+            key = finding.get("id") or id(finding)
+            specificity = len(_match_words(issue.get("playbookRef") or ""))
+            if key not in absence_claim or specificity > absence_claim[key][0]:
+                absence_claim[key] = (specificity, index)
+    for _, index in absence_claim.values():
+        absence_hit.add(index)
+
     issues = []
-    for issue in answer.get("expectedIssues", []):
+    for index, issue in enumerate(expected_issues):
         hit = any(sid in finding_sections for sid in issue.get("sectionIds", []))
         if issue["category"] == "MISSING_PROVISION" and not hit:
-            # an absence finding counts only when its topic is the provision the key names
-            hit = any(_topic_matches(f.get("absenceConcept"), issue.get("playbookRef"))
-                      for f in absence)
+            # DW-069: an absence finding counts only when its position label or reference names
+            # the provision the key names (whole words, never stems); each finding counts once
+            hit = index in absence_hit
         # stricter: a HIGH/MEDIUM planted issue caught by a MEDIUM/HIGH finding in its section
         serious = any(f.get("severity") in ("MEDIUM", "HIGH")
                       for sid in issue.get("sectionIds", []) for f in finding_sections.get(sid, []))
