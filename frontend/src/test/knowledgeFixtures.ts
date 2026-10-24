@@ -23,6 +23,7 @@ export function artifact(over: Partial<ArtifactSummary> & { id: string }): Artif
 
 export function candidate(over: Partial<Candidate> & { id: string; artifactId: string }): Candidate {
   const rawLabel = over.rawLabel ?? `Label ${over.id}`
+  const authorityRules = over.authorityRules ?? []
   return {
     extractionUnitId: `unit-${over.id}`,
     candidateType: 'PLAYBOOK_RULE',
@@ -43,7 +44,8 @@ export function candidate(over: Partial<Candidate> & { id: string; artifactId: s
     preferredText: null,
     fallbackTexts: [],
     prohibitedText: null,
-    authorityRules: [],
+    authorityRules,
+    storedAuthorityRules: over.storedAuthorityRules ?? authorityRules,
     authorityConflicts: [],
     unmappedAuthority: [],
     needsAttention: false,

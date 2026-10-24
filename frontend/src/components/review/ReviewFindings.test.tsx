@@ -1529,6 +1529,39 @@ describe('wording fit labels', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('never offers library wording for a related position', async () => {
+    const related = {
+      ...fixtureRelatedPositionFindingDetail,
+      proposedLanguage: 'The aggregate liability of each party shall not exceed the fees paid.',
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      approvedDraftingEvidenceId: 'e-drafting',
+      quality: {
+        ...fixtureRelatedPositionFindingDetail.quality,
+        wordingFitVerdict: 'DOES_NOT_FIT',
+      },
+    }
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-9', {
+      humanReview: fixtureHumanReview(),
+      findings: {
+        items: [fixtureRelatedPositionFindingSummary],
+        truncated: false,
+      },
+      findingDetail: related,
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    expect(within(detailPane()).queryByText('Suggested change')).not.toBeInTheDocument()
+    expect(
+      within(detailPane()).queryByRole('button', { name: 'Use the library wording' }),
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(within(detailPane()).getByRole('button', { name: 'Edit' }))
+    expect(await screen.findByLabelText('Approved language')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Use proposed language' }),
+    ).not.toBeInTheDocument()
+  })
+
   it('asks for a person when no wording fits and none can be proposed', async () => {
     const escalated = {
       ...libraryFinding('f-20', { wordingFitVerdict: 'DOES_NOT_FIT' }),

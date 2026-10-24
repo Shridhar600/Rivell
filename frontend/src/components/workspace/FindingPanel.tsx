@@ -209,11 +209,14 @@ export function FindingPanel(props: Props) {
   }
 
   const items = new Map(finding.evidenceItems.map((item) => [item.evidenceId, item]))
+  // A position on a topic the clause only touches is a related note, never a defect in the clause.
+  const related = isRelatedPosition(finding)
   // A wording that did not fit, or was not checked, is still offered as a source; the person can
-  // take it from here when it did not fit.
+  // take it from here when it did not fit. A related position never offers library wording.
   const libraryWording =
-    finding.proposedLanguageSource === 'APPROVED_DRAFTING' ||
-    finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT'
+    !related &&
+    (finding.proposedLanguageSource === 'APPROVED_DRAFTING' ||
+      finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT')
       ? (finding.evidenceItems.find((item) => item.authorityClass === 'APPROVED_DRAFTING') ?? null)
       : null
   const canTakeLibraryWording =
@@ -261,8 +264,6 @@ export function FindingPanel(props: Props) {
   const dismissed = decision?.action === 'REJECT' && decision.rejectReason === 'FINDING_WRONG'
   const missingEvidence = finding.claims.some((claim) => claim.evidenceItemIds.some((id) => !items.has(id)))
   const title = findingSubjectLabel(finding, props.regionLabels, labelFor)
-  // A position on a topic the clause only touches is a related note, never a defect in the clause.
-  const related = isRelatedPosition(finding)
   // The four things a reader needs first: the words, the rule, the gap and the fix. Everything
   // else is one closed disclosure away.
   const gapText = findingGapText(finding, labelFor)
@@ -365,7 +366,7 @@ export function FindingPanel(props: Props) {
             </div>
           ) : null}
 
-          {finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT' && !proposedLanguage ? (
+          {finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT' && !proposedLanguage && !related ? (
             <p className="rv-ws-note">
               The clause library wording for this position did not fit this clause. No replacement
               wording is proposed; please check it yourself.
@@ -391,7 +392,7 @@ export function FindingPanel(props: Props) {
             </p>
           ) : null}
 
-          {proposedLanguage && grounded ? (
+          {proposedLanguage && grounded && !related ? (
             <div className="rv-ws-sec">
               <div className="rv-ws-sec-h">Suggested change</div>
               <div className="rv-ws-prop">

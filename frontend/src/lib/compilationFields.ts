@@ -4,16 +4,12 @@ import { effectiveContentText, effectivePayloadColumns, isWordingHeader } from '
 import { contractTypesText, scopeRows } from './knowledgePosition'
 import {
   approvalDiverge,
-  authorityRulesDiverge,
   escalationDiverge,
-  fallbackTextsDiverge,
   fieldCorrected,
   formatBoolean,
   formatPositions,
   interpretationFor,
   positionsDiverge,
-  preferredTextDiverge,
-  prohibitedTextDiverge,
   proposedApproval,
   proposedEscalationTrigger,
   proposedPositions,
@@ -121,15 +117,11 @@ export function hasHumanCorrection(candidate: Candidate, artifact?: ArtifactDeta
     fieldCorrected(candidate, 'positions') ||
     fieldCorrected(candidate, 'variantRole') ||
     fieldCorrected(candidate, 'escalationTrigger') ||
-    fieldCorrected(candidate, 'requiresApproval')
-  ) {
-    return true
-  }
-  if (
-    preferredTextDiverge(candidate) ||
-    fallbackTextsDiverge(candidate) ||
-    prohibitedTextDiverge(candidate) ||
-    authorityRulesDiverge(candidate)
+    fieldCorrected(candidate, 'requiresApproval') ||
+    fieldCorrected(candidate, 'preferredText') ||
+    fieldCorrected(candidate, 'fallbackTexts') ||
+    fieldCorrected(candidate, 'prohibitedText') ||
+    fieldCorrected(candidate, 'authorityRules')
   ) {
     return true
   }
@@ -217,11 +209,11 @@ export function interpretationRows(
         key: 'preferredText',
         label: 'Preferred wording',
         value: textOrNull(candidate.preferredText) ?? 'Not stated',
-        machine: preferredTextDiverge(candidate)
+        machine: fieldCorrected(candidate, 'preferredText')
           ? `Rivell read: ${interpretationFor(candidate, 'preferredText')?.proposedValue ?? 'not stated'}`
           : null,
         support: supportNote(interpretationFor(candidate, 'preferredText')),
-        corrected: preferredTextDiverge(candidate),
+        corrected: fieldCorrected(candidate, 'preferredText'),
       })
     }
     if (candidate.fallbackTexts.length > 0 || interpretationFor(candidate, 'fallbackTexts')) {
@@ -229,11 +221,11 @@ export function interpretationRows(
         key: 'fallbackTexts',
         label: 'Fallback wording',
         value: candidate.fallbackTexts.length > 0 ? candidate.fallbackTexts.join('; ') : 'Not stated',
-        machine: fallbackTextsDiverge(candidate)
+        machine: fieldCorrected(candidate, 'fallbackTexts')
           ? `Rivell read: ${interpretationFor(candidate, 'fallbackTexts')?.proposedValue ?? 'not stated'}`
           : null,
         support: supportNote(interpretationFor(candidate, 'fallbackTexts')),
-        corrected: fallbackTextsDiverge(candidate),
+        corrected: fieldCorrected(candidate, 'fallbackTexts'),
       })
     }
     if (candidate.prohibitedText !== null || interpretationFor(candidate, 'prohibitedText')) {
@@ -241,11 +233,11 @@ export function interpretationRows(
         key: 'prohibitedText',
         label: 'Walk-away wording',
         value: textOrNull(candidate.prohibitedText) ?? 'Not stated',
-        machine: prohibitedTextDiverge(candidate)
+        machine: fieldCorrected(candidate, 'prohibitedText')
           ? `Rivell read: ${interpretationFor(candidate, 'prohibitedText')?.proposedValue ?? 'not stated'}`
           : null,
         support: supportNote(interpretationFor(candidate, 'prohibitedText')),
-        corrected: prohibitedTextDiverge(candidate),
+        corrected: fieldCorrected(candidate, 'prohibitedText'),
       })
     }
     if (candidate.authorityRules.length > 0 || interpretationFor(candidate, 'authorityRules')) {
@@ -253,11 +245,11 @@ export function interpretationRows(
         key: 'authorityRules',
         label: 'Approvals',
         value: authorityText(candidate),
-        machine: authorityRulesDiverge(candidate)
+        machine: fieldCorrected(candidate, 'authorityRules')
           ? `Rivell read: ${interpretationFor(candidate, 'authorityRules')?.proposedValue ?? 'not stated'}`
           : null,
         support: supportNote(interpretationFor(candidate, 'authorityRules')),
-        corrected: authorityRulesDiverge(candidate),
+        corrected: fieldCorrected(candidate, 'authorityRules'),
       })
     }
     if (candidate.unmappedAuthority.length > 0) {

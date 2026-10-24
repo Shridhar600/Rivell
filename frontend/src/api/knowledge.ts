@@ -319,6 +319,8 @@ export interface Candidate {
   prohibitedText: string | null
   /** Typed approval rules, one per stance, with their source level and quote. */
   authorityRules: AuthorityRule[]
+  /** The rules the edit form starts from: the saved list, else the machine rules. */
+  storedAuthorityRules: AuthorityRule[]
   /** Lower-level rules naming a different approver for the same stance. */
   authorityConflicts: AuthorityConflict[]
   /** Label-shaped walk-away or approver words the stage could not map. */
@@ -572,6 +574,11 @@ export function parseAuthorityConflict(
 
 export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
   const record = asRecord(value, what)
+  // An older server has only the effective list; it is also the list the form starts from.
+  const authorityRules =
+    record.authorityRules === undefined
+      ? []
+      : readArray(record, 'authorityRules', what, parseAuthorityRule)
   return {
     id: readString(record, 'id', what),
     artifactId: readString(record, 'artifactId', what),
@@ -597,9 +604,10 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
       ? []
       : readStringArray(record, 'fallbackTexts', what),
     prohibitedText: optionalString(record, 'prohibitedText', what),
-    authorityRules: record.authorityRules === undefined
-      ? []
-      : readArray(record, 'authorityRules', what, parseAuthorityRule),
+    authorityRules,
+    storedAuthorityRules: record.storedAuthorityRules === undefined
+      ? authorityRules
+      : readArray(record, 'storedAuthorityRules', what, parseAuthorityRule),
     authorityConflicts: record.authorityConflicts === undefined
       ? []
       : readArray(record, 'authorityConflicts', what, parseAuthorityConflict),

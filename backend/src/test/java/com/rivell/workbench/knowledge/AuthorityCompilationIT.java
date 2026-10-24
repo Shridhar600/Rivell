@@ -296,11 +296,44 @@ class AuthorityCompilationIT {
         assertThat(reloaded.effectivePreferredText()).isEqualTo("Corrected preferred text");
         assertThat(reloaded.effectiveFallbackTexts()).containsExactly("Corrected fallback text");
         assertThat(reloaded.effectiveProhibitedText()).isNull();
-        assertThat(reloaded.effectiveAuthorityRules()).containsExactly(correctedRule);
+        // the corrected fallback rule is read with the catalog's covering expansion, so the
+        // compile view shows the walk-away approval the review will apply
+        assertThat(reloaded.effectiveAuthorityRules()).anySatisfy(rule -> {
+            assertThat(rule.approver()).isEqualTo("Head of Legal");
+            assertThat(rule.stances()).containsExactly(PositionRole.FALLBACK);
+        });
+        assertThat(reloaded.effectiveAuthorityRules()).anySatisfy(rule -> {
+            assertThat(rule.approver()).isEqualTo("Head of Legal");
+            assertThat(rule.stances()).containsExactly(PositionRole.PROHIBITED);
+        });
+        // the form starts from the saved list, so the derived walk-away is never saved back
+        assertThat(reloaded.storedAuthorityRules()).containsExactly(correctedRule);
         // the machine reading stays beside the correction
         assertThat(reloaded.semanticFields().preferredText())
                 .isEqualTo("Cap at the fees paid in the preceding 12 months.");
         assertThat(reloaded.semanticFields().authorityRules()).isNotEmpty();
+
+        // the form sends the saved list back, so a changed fallback approver also changes the
+        // walk-away coverage the review applies
+        var changedRule = new AuthorityRule("Commercial Manager",
+                java.util.Set.of(PositionRole.FALLBACK),
+                "if the cap is below twelve months", AuthorityLevel.ENTRY, "corrected again");
+        reviewService.edit(entry.id(), null, null, null, null,
+                new SemanticFields(java.util.Set.of(PositionRole.PREFERRED), null, null, null,
+                        Map.of(), false, "Corrected preferred text", List.of("Corrected fallback text"),
+                        "", List.of(changedRule), List.of(), false, List.of(), false),
+                "second human correction");
+
+        var changed = queryService.getCandidate(entry.id());
+        assertThat(changed.storedAuthorityRules()).containsExactly(changedRule);
+        assertThat(changed.effectiveAuthorityRules()).anySatisfy(rule -> {
+            assertThat(rule.approver()).isEqualTo("Commercial Manager");
+            assertThat(rule.stances()).containsExactly(PositionRole.PROHIBITED);
+        });
+        assertThat(changed.effectiveAuthorityRules()).noneSatisfy(rule -> {
+            assertThat(rule.approver()).isEqualTo("Head of Legal");
+            assertThat(rule.stances()).contains(PositionRole.PROHIBITED);
+        });
     }
 
     @Test

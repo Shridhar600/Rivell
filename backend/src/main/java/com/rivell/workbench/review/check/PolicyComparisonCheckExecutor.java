@@ -664,7 +664,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                         opinion == null ? JEV : SECOND_OPINION, resolution, opinion,
                         attempt == null ? null : attempt.failure(), fit))
                 .dedupeSuffix(judged.key())));
-        if (drafting != null) {
+        if (drafting != null && !secondaryTopic) {
             var quality = new LinkedHashMap<String, Object>();
             quality.put("draftingAvailable", true);
             quality.put("wordingFitVerdict", fitVerdict.name());

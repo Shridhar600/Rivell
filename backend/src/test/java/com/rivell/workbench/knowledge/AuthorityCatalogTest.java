@@ -142,6 +142,43 @@ class AuthorityCatalogTest {
     }
 
     @Test
+    void aCatchAllScopeAppliesToEveryEntry() {
+        for (var scope : List.of("All", "All positions", "Any issue", "Every term",
+                "Global terms")) {
+            var catalog = AuthorityCatalog.of(List.of(
+                    new AuthoritySourceRule(rule("General Counsel", Set.of(PositionRole.FALLBACK),
+                            null, AuthorityLevel.TABLE), scope)));
+
+            var effective = catalog.merge("Term and survival", "", List.of());
+
+            assertThat(effective.rule(PositionRole.FALLBACK).approver()).as(scope)
+                    .isEqualTo("General Counsel");
+            assertThat(effective.rule(PositionRole.PROHIBITED).approver()).as(scope)
+                    .isEqualTo("General Counsel");
+        }
+
+        // a short or singular specific scope is not catch-all just because the matcher drops it
+        for (var scope : List.of("IP", "Term")) {
+            var specific = AuthorityCatalog.of(List.of(
+                    new AuthoritySourceRule(rule("General Counsel", Set.of(PositionRole.FALLBACK),
+                            null, AuthorityLevel.TABLE), scope)));
+            assertThat(specific.merge("Confidentiality", "", List.of()).rules()).as(scope).isEmpty();
+        }
+    }
+
+    @Test
+    void theCoveringExpansionIsStableWhenAReadListIsSavedAgain() {
+        var fallback = rule("General Counsel", Set.of(PositionRole.FALLBACK), null,
+                AuthorityLevel.ENTRY);
+
+        var expanded = AuthorityCatalog.withCoveringStances(List.of(fallback));
+
+        assertThat(expanded).containsExactly(fallback, fallback.forStance(PositionRole.PROHIBITED));
+        // the compile form seeds its draft from this list and sends it back on the next save
+        assertThat(AuthorityCatalog.withCoveringStances(expanded)).containsExactlyElementsOf(expanded);
+    }
+
+    @Test
     void noRuleMeansNoApproval() {
         var effective = AuthorityCatalog.of(List.of()).merge("Limitation of liability", "", List.of());
 

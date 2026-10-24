@@ -39,6 +39,7 @@ function candidate(
     fallbackTexts: [],
     prohibitedText: null,
     authorityRules: [],
+    storedAuthorityRules: [],
     authorityConflicts: [],
     unmappedAuthority: [],
     needsAttention: false,

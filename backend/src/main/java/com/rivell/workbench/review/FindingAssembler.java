@@ -59,32 +59,32 @@ public final class FindingAssembler {
                     "Clause-subject signal without evidence: " + primary.signalType()
                             + " for " + primary.concept());
         }
-        ApprovedDraftingPayload drafting = firstPayload(group,
-                SignalType.APPROVED_DRAFTING_AVAILABLE);
-        EscalationPayload escalation = firstPayload(group, SignalType.ESCALATION_REQUIRED);
-        OpenEndedAnalysisPayload openEnded = firstPayload(group,
-                SignalType.OPEN_ENDED_ANALYSIS_RESULT);
+        var draftingSignal = positionSignal(primary, group, SignalType.APPROVED_DRAFTING_AVAILABLE);
+        ApprovedDraftingPayload drafting = draftingSignal == null
+                ? null : (ApprovedDraftingPayload) draftingSignal.payload();
+        var escalationSignal = positionSignal(primary, group, SignalType.ESCALATION_REQUIRED);
+        EscalationPayload escalation = escalationSignal == null
+                ? null : (EscalationPayload) escalationSignal.payload();
+        var openEndedSignal = positionSignal(primary, group, SignalType.OPEN_ENDED_ANALYSIS_RESULT);
+        OpenEndedAnalysisPayload openEnded = openEndedSignal == null
+                ? null : (OpenEndedAnalysisPayload) openEndedSignal.payload();
 
         var observation = observation(primary);
         var action = action(primary, drafting, openEnded, escalation);
         var severity = severity(primary);
-        var quality = quality(primary, group);
+        var quality = quality(primary, escalationSignal, group);
         if (drafting != null && drafting.fitVerdict() != null) {
             // the fit verdict lives on the drafting signal, which is never the primary one
             quality.put("wordingFitVerdict", drafting.fitVerdict());
-            var draftingSignal = firstSignal(group, SignalType.APPROVED_DRAFTING_AVAILABLE);
-            var fitReason = draftingSignal == null
-                    ? null : draftingSignal.quality().get("wordingFitReason");
+            var fitReason = draftingSignal.quality().get("wordingFitReason");
             if (fitReason != null) {
                 quality.put("wordingFitReason", fitReason.toString());
             }
-            var fitReasons = draftingSignal == null
-                    ? null : draftingSignal.quality().get("wordingFitReasons");
+            var fitReasons = draftingSignal.quality().get("wordingFitReasons");
             if (fitReasons != null) {
                 quality.put("wordingFitReasons", fitReasons);
             }
-            var fitQuote = draftingSignal == null
-                    ? null : draftingSignal.quality().get("wordingFitQuote");
+            var fitQuote = draftingSignal.quality().get("wordingFitQuote");
             if (fitQuote != null) {
                 quality.put("wordingFitQuote", fitQuote.toString());
             }
@@ -288,6 +288,12 @@ public final class FindingAssembler {
         if (primary.signalType() == SignalType.POLICY_DEVIATION
                 && primary.payload() instanceof PositionDeviationPayload deviation) {
             var category = deviation.category();
+            // a position on a topic the clause only touches is a note: it never proposes or
+            // applies library wording, even when the library has wording for its own topic
+            if (deviation.secondaryTopic()) {
+                return escalation != null
+                        ? ProposedAction.ESCALATE_TO_HUMAN : ProposedAction.NO_ACTION;
+            }
             if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(category)) {
                 return escalation != null
                         ? ProposedAction.ESCALATE_TO_HUMAN : ProposedAction.NO_ACTION;
@@ -529,7 +535,8 @@ public final class FindingAssembler {
             "requiresApproval", "escalationApprover", "escalationCondition", "escalationSource",
             "escalationStance", "escalationConflictApprover", "escalationConflictSource");
 
-    private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
+    private static Map<String, Object> quality(
+            RawReviewSignal primary, RawReviewSignal escalation, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
         for (var key : ASSESSMENT_KEYS) {
             var value = primary.quality().get(key);
@@ -537,14 +544,11 @@ public final class FindingAssembler {
                 quality.put(key, value);
             }
         }
-        // the typed approval rule travels on its own signal; the finding must carry it, because
-        // the panel names the approver, the condition and the other level from here
-        for (var signal : group) {
-            if (signal.signalType() != SignalType.ESCALATION_REQUIRED) {
-                continue;
-            }
+        // the typed approval rule of the position the action uses travels on its own signal; the
+        // panel names that approver, never one from another position merged into the same finding
+        if (escalation != null) {
             for (var key : ESCALATION_KEYS) {
-                var value = signal.quality().get(key);
+                var value = escalation.quality().get(key);
                 if (value != null) {
                     quality.put(key, value);
                 }
@@ -613,14 +617,18 @@ public final class FindingAssembler {
         return List.copyOf(ids);
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> T firstPayload(List<RawReviewSignal> group, SignalType type) {
-        return (T) group.stream().filter(signal -> signal.signalType() == type)
-                .map(RawReviewSignal::payload).findFirst().orElse(null);
-    }
-
-    private static RawReviewSignal firstSignal(List<RawReviewSignal> group, SignalType type) {
-        return group.stream().filter(signal -> signal.signalType() == type)
+    /**
+     * A support signal of the position the finding's action uses. A group can hold several
+     * positions of one issue family; the deciding deviation's dedupe suffix names its own
+     * escalation, drafting and generated-language signals, never another position's. No own
+     * signal means the deciding position has no rule or wording, so the finding claims none.
+     */
+    private static RawReviewSignal positionSignal(
+            RawReviewSignal primary, List<RawReviewSignal> group, SignalType type) {
+        var suffix = primary.dedupeSuffix();
+        return group.stream()
+                .filter(signal -> signal.signalType() == type)
+                .filter(signal -> signal.dedupeSuffix().equals(suffix))
                 .findFirst().orElse(null);
     }
 }

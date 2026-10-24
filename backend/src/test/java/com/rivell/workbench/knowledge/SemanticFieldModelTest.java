@@ -96,6 +96,40 @@ class SemanticFieldModelTest {
     }
 
     @Test
+    void savedTypedWordingAndApprovalRuleChangesAreCorrectedFields() {
+        var machineRule = new AuthorityRule("Commercial Manager", Set.of(PositionRole.FALLBACK),
+                null, AuthorityLevel.MATRIX, "the Commercial Manager approves fallbacks");
+        var machine = typed("Machine preferred", List.of("Machine fallback"),
+                "Machine prohibited", List.of(machineRule));
+        var sameValues = typed("Machine preferred", List.of("Machine fallback"),
+                "Machine prohibited", List.of(machineRule));
+
+        // the form sends the complete set back: equal values are not a correction
+        assertThat(candidate(machine, sameValues).correctedFields()).isEmpty();
+
+        var changes = Map.of(
+                "preferredText", typed("Corrected preferred", machine.fallbackTexts(),
+                        machine.prohibitedText(), machine.authorityRules()),
+                "fallbackTexts", typed(machine.preferredText(), List.of("Corrected fallback"),
+                        machine.prohibitedText(), machine.authorityRules()),
+                "prohibitedText", typed(machine.preferredText(), machine.fallbackTexts(),
+                        "Corrected prohibited", machine.authorityRules()),
+                "authorityRules", typed(machine.preferredText(), machine.fallbackTexts(),
+                        machine.prohibitedText(), List.of(new AuthorityRule("Head of Legal",
+                                Set.of(PositionRole.FALLBACK), null, AuthorityLevel.ENTRY, null))));
+        changes.forEach((field, edited) -> assertThat(candidate(machine, edited).correctedFields())
+                .as(field).containsExactly(field));
+    }
+
+    private static SemanticFields typed(
+            String preferred, List<String> fallbacks, String prohibited,
+            List<AuthorityRule> rules) {
+        return new SemanticFields(Set.of(PositionRole.FALLBACK), null, null, null, Map.of(),
+                false, preferred, fallbacks, prohibited, rules, List.of(), false, List.of(),
+                false);
+    }
+
+    @Test
     void interpretationRequiresSpecAndKind() {
         var interpretation = interpretation("position", "BOUNDED_CLASSIFICATION");
 
@@ -156,7 +190,9 @@ class SemanticFieldModelTest {
         var legacyEdit = new SemanticFields(Set.of(PositionRole.FALLBACK), null, null, null, Map.of());
 
         assertThat(candidate(machine, cleared).effectiveAuthorityRules()).isEmpty();
-        assertThat(candidate(machine, legacyEdit).effectiveAuthorityRules()).containsExactly(rule);
+        assertThat(candidate(machine, legacyEdit).storedAuthorityRules()).containsExactly(rule);
+        assertThat(candidate(machine, legacyEdit).effectiveAuthorityRules())
+                .containsExactly(rule, rule.forStance(PositionRole.PROHIBITED));
     }
 
     @Test

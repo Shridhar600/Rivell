@@ -112,10 +112,10 @@ public record ReviewDiagnosticsView(
             @Schema(description = "Engine v2: defined terms whose definitions the judge read for "
                     + "this clause; absent when none")
             List<String> definitionTerms,
-            @Schema(description = "Part 4: fit questions asked for this clause; null when no fit "
+            @Schema(description = "Fit questions asked for this clause; null when no fit "
                     + "question was asked")
             Integer fitQuestions,
-            @Schema(description = "Part 4: fit calls saved by the exact-metadata skip rule for "
+            @Schema(description = "Fit calls saved by the exact-metadata skip rule for "
                     + "this clause")
             Integer fitSkipped) {
     }

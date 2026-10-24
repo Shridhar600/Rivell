@@ -345,8 +345,9 @@ public record KnowledgeCandidate(
     /**
      * The typed approval rules that count: the person's corrected list when one exists, else
      * the machine rules. A cleared list is a deliberate "no rule", not a fallback to the machine.
+     * The edit form starts from this list, so a derived walk-away entry is never saved back.
      */
-    public List<AuthorityRule> effectiveAuthorityRules() {
+    public List<AuthorityRule> storedAuthorityRules() {
         if (editedSemanticFields != null) {
             if (!editedSemanticFields.authorityRules().isEmpty()) {
                 return editedSemanticFields.authorityRules();
@@ -356,6 +357,14 @@ public record KnowledgeCandidate(
             }
         }
         return semanticFields.authorityRules();
+    }
+
+    /**
+     * The rules a reader sees: the stored rules with the catalog's covering expansion, so the
+     * compile view shows the walk-away coverage the review acts on.
+     */
+    public List<AuthorityRule> effectiveAuthorityRules() {
+        return AuthorityCatalog.withCoveringStances(storedAuthorityRules());
     }
 
     /** Lower-level rules that name a different approver for the same stance. */
@@ -445,6 +454,24 @@ public record KnowledgeCandidate(
                         && !edited.requiresApproval().equals(semanticFields.requiresApproval()))
                 || (edited.requiresApprovalCleared() && semanticFields.requiresApproval() != null)) {
             fields.add("requiresApproval");
+        }
+        var machinePreferred = semanticFields.preferredText() == null
+                ? "" : semanticFields.preferredText();
+        if (edited.preferredText() != null && !edited.preferredText().equals(machinePreferred)) {
+            fields.add("preferredText");
+        }
+        if ((!edited.fallbackTexts().isEmpty() || edited.fallbackTextsCleared())
+                && !edited.fallbackTexts().equals(semanticFields.fallbackTexts())) {
+            fields.add("fallbackTexts");
+        }
+        var machineProhibited = semanticFields.prohibitedText() == null
+                ? "" : semanticFields.prohibitedText();
+        if (edited.prohibitedText() != null && !edited.prohibitedText().equals(machineProhibited)) {
+            fields.add("prohibitedText");
+        }
+        if ((!edited.authorityRules().isEmpty() || edited.authorityRulesCleared())
+                && !edited.authorityRules().equals(semanticFields.authorityRules())) {
+            fields.add("authorityRules");
         }
         return Set.copyOf(fields);
     }

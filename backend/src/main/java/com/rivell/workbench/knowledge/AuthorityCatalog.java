@@ -25,6 +25,14 @@ final class AuthorityCatalog {
             "under", "not", "its", "their", "our", "your", "per", "a", "an", "of", "to", "in",
             "on", "by", "as", "is", "be", "at");
 
+    /** Scope words that name every entry rather than one. */
+    private static final Set<String> QUANTIFIER_SCOPE_WORDS = Set.of(
+            "all", "any", "every", "global");
+    private static final Set<String> PLURAL_GENERIC_SCOPE_WORDS = Set.of(
+            "positions", "issues", "terms");
+    private static final Set<String> SINGULAR_GENERIC_SCOPE_WORDS = Set.of(
+            "position", "issue", "term");
+
     private final List<AuthoritySourceRule> documentRules;
 
     private AuthorityCatalog(List<AuthoritySourceRule> documentRules) {
@@ -138,18 +146,44 @@ final class AuthorityCatalog {
                 && rule.stances().contains(PositionRole.FALLBACK);
     }
 
+    /**
+     * The rules a reader sees, with the same covering expansion {@link #merge} applies. A rule
+     * that names no stance or only the fallback also covers the walk-away, so it is read with
+     * that stance too. Implied entries are appended after the rules that name a stance, so a
+     * rule the source names for the stance still wins.
+     */
+    static List<AuthorityRule> withCoveringStances(List<AuthorityRule> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return List.of();
+        }
+        var expanded = new ArrayList<>(rules);
+        for (var stance : ALL_STANCES) {
+            for (var rule : rules) {
+                if (!rule.stances().contains(stance) && covers(rule, stance)) {
+                    var implied = rule.forStance(stance);
+                    // the form sends the effective list back: a clone already present is not added twice
+                    if (!expanded.contains(implied)) {
+                        expanded.add(implied);
+                    }
+                }
+            }
+        }
+        return List.copyOf(expanded);
+    }
+
     private static boolean sameApprover(String left, String right) {
         return RecordLabelRoles.normalize(left).equals(RecordLabelRoles.normalize(right));
     }
 
     /**
      * A document rule applies to the entry its own words name; when it names no entry but names
-     * a stance, it applies to every entry. A rule that names neither is not applied: no match
-     * means no approval, never a guessed one.
+     * a stance, it applies to every entry. A catch-all scope ("All", "All positions", "Every
+     * term") names no single entry either, so it also applies to every entry. A rule that names
+     * none of these is not applied: no match means no approval, never a guessed one.
      */
     private static boolean appliesTo(AuthoritySourceRule source, String entryTitle, String entryText) {
         var scope = source.scope();
-        if (scope == null) {
+        if (scope == null || namesEveryEntry(scope)) {
             return true;
         }
         var titleWords = words(entryTitle);
@@ -161,6 +195,34 @@ final class AuthorityCatalog {
             }
         }
         return namesStance(scope);
+    }
+
+    /**
+     * A scope that names no particular entry: empty, only stopwords, a generic plural
+     * ("positions"), or a quantifier with a generic noun ("All positions", "Every term").
+     * A bare singular noun such as "Term" or a short word such as "IP" is specific, so it is
+     * not catch-all just because {@link #words} drops it.
+     */
+    private static boolean namesEveryEntry(String scope) {
+        var normalized = RecordLabelRoles.normalize(scope);
+        if (normalized.isEmpty()) {
+            return true;
+        }
+        var quantified = false;
+        for (var word : normalized.split(" ")) {
+            if (QUANTIFIER_SCOPE_WORDS.contains(word)) {
+                quantified = true;
+                continue;
+            }
+            if (SCOPE_STOPWORDS.contains(word) || PLURAL_GENERIC_SCOPE_WORDS.contains(word)) {
+                continue;
+            }
+            if (quantified && SINGULAR_GENERIC_SCOPE_WORDS.contains(word)) {
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
 
     private static boolean namesStance(String text) {

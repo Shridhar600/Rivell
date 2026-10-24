@@ -297,6 +297,7 @@ function changeFor(findings: FindingSummary[], ctx: Ctx) {
     selected &&
     findings.some((finding) => finding.id === selected.id) &&
     !ctx.decisions.get(selected.id) &&
+    !selected.relatedPosition &&
     selected.proposedLanguage &&
     proposedChangeType(selected) === 'REPLACE'
   ) {

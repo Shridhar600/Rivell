@@ -56,6 +56,11 @@ public record CandidateView(
         String prohibitedText,
         /** Typed approval rules, one per stance, with their source level and quote. */
         List<AuthorityRule> authorityRules,
+        /**
+         * The rules the edit form starts from: the person's saved list when there is one, else
+         * the machine rules. {@code authorityRules} adds coverage implied by another rule.
+         */
+        List<AuthorityRule> storedAuthorityRules,
         /** Lower-level rules naming a different approver for the same stance. */
         List<AuthorityConflict> authorityConflicts,
         /** Label-shaped walk-away or approver words the stage could not map. */

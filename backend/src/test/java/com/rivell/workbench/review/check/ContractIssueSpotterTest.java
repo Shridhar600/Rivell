@@ -200,6 +200,20 @@ class ContractIssueSpotterTest {
     }
 
     @Test
+    void aClauseNumberTooLargeToParseIsDroppedAndTheGoodLinesSurvive() {
+        var output = String.join("\n",
+                "999999999999999999999 | HIGH | " + PAYMENT + " | payment is slow",
+                "2 | HIGH | " + TERMINATION + " | termination is one-sided");
+
+        var parsed = ContractIssueSpotter.parse(output, CLAUSES, EXECUTION);
+
+        assertThat(parsed.spots()).containsOnlyKeys(2);
+        assertThat(parsed.spots().get(2)).singleElement()
+                .satisfies(spot -> assertThat(spot.reason()).isEqualTo("termination is one-sided"));
+        assertThat(parsed.dropped()).isEqualTo(1);
+    }
+
+    @Test
     void anIssueWhoseQuoteIsNotFoundIsDroppedAndCounted() {
         var output = String.join("\n",
                 "1 | HIGH | " + PAYMENT + " | payment is slow",

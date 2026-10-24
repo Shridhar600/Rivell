@@ -73,27 +73,14 @@ final class EscalationAuthority {
     }
 
     /**
-     * The highest rule that names the stance is the winner; a rule that only implies the stance
-     * (a fallback approver covers a walk-away) is used only when no rule names it. This keeps a
-     * matrix fallback rule from displacing the entry's own walk-away approver (council §A.1).
+     * The highest rule that names the stance is the winner. The catalog's covering expansion is
+     * applied where a candidate's rules are read, so a fallback approver has already become an
+     * explicit walk-away rule; this check never re-derives that coverage.
      */
     private static AuthorityRule rule(EvidenceItem.PolicyFacts facts, PositionRole stance) {
         return facts.authorityRules().stream()
                 .filter(candidate -> candidate.stances().contains(stance))
                 .findFirst()
-                .orElseGet(() -> facts.authorityRules().stream()
-                        .filter(candidate -> covers(candidate, stance))
-                        .findFirst().orElse(null));
-    }
-
-    private static boolean covers(AuthorityRule rule, PositionRole stance) {
-        if (stance == PositionRole.PREFERRED) {
-            return rule.stances().contains(PositionRole.PREFERRED);
-        }
-        if (rule.stances().isEmpty() || rule.stances().contains(stance)) {
-            return true;
-        }
-        return stance == PositionRole.PROHIBITED
-                && rule.stances().contains(PositionRole.FALLBACK);
+                .orElse(null);
     }
 }

@@ -1269,6 +1269,7 @@ export interface components {
             fallbackTexts?: string[];
             prohibitedText?: string;
             authorityRules?: components["schemas"]["AuthorityRule"][];
+            storedAuthorityRules?: components["schemas"]["AuthorityRule"][];
             authorityConflicts?: components["schemas"]["AuthorityConflict"][];
             unmappedAuthority?: string[];
             needsAttention?: boolean;
@@ -2207,12 +2208,12 @@ export interface components {
             definitionTerms?: string[];
             /**
              * Format: int32
-             * @description Part 4: fit questions asked for this clause; null when no fit question was asked
+             * @description Fit questions asked for this clause; null when no fit question was asked
              */
             fitQuestions?: number;
             /**
              * Format: int32
-             * @description Part 4: fit calls saved by the exact-metadata skip rule for this clause
+             * @description Fit calls saved by the exact-metadata skip rule for this clause
              */
             fitSkipped?: number;
         };

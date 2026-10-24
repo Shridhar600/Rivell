@@ -329,4 +329,55 @@ describe('human correction', () => {
     expect(row(interpretationRows(make({ correctedFields: ['escalationTrigger'] })), 'escalation')?.corrected).toBe(true)
     expect(row(interpretationRows(make({ requiresApproval: true, correctedFields: ['requiresApproval'] })), 'approval')?.corrected).toBe(true)
   })
+
+  it('reads typed wording and approval rule corrections from the API, not a value comparison', () => {
+    const interpretation = (field: string, proposedValue: string) => ({
+      field,
+      proposedValue,
+      kind: 'DETERMINISTIC' as const,
+      specId: 's',
+      specVersion: 1,
+      supportingSourceNodes: 1,
+      verification: 'VERIFIED' as const,
+    })
+    const machine = make({
+      preferredText: 'Net 45.',
+      fallbackTexts: ['Net 30.'],
+      prohibitedText: 'Payment in advance.',
+      authorityRules: [
+        {
+          approver: 'Commercial Manager',
+          stances: ['FALLBACK'],
+          condition: null,
+          source: 'MATRIX',
+          quote: null,
+        },
+      ],
+      interpretations: [
+        interpretation('preferredText', 'Net 45.'),
+        interpretation('fallbackTexts', 'Net 30.'),
+        interpretation('prohibitedText', 'Payment in advance.'),
+        interpretation('authorityRules', 'MATRIX: Commercial Manager [FALLBACK]'),
+      ],
+    })
+
+    // a stored machine rendering is not a correction, even when it does not match the signature
+    expect(hasHumanCorrection(machine)).toBe(false)
+    const staleRendering = make({
+      ...machine,
+      interpretations: [
+        ...machine.interpretations.filter((entry) => entry.field !== 'authorityRules'),
+        interpretation('authorityRules', 'TABLE: Someone else [FALLBACK]'),
+      ],
+    })
+    expect(hasHumanCorrection(staleRendering)).toBe(false)
+    expect(row(interpretationRows(staleRendering), 'authorityRules')?.corrected).toBe(false)
+
+    const keys = ['preferredText', 'fallbackTexts', 'prohibitedText', 'authorityRules'] as const
+    for (const field of keys) {
+      const corrected = make({ ...machine, correctedFields: [field] })
+      expect(hasHumanCorrection(corrected)).toBe(true)
+      expect(row(interpretationRows(corrected), field)?.corrected).toBe(true)
+    }
+  })
 })

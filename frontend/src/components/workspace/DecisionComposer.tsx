@@ -12,6 +12,7 @@ import {
   editLanguageRequired,
   validateDecisionForm,
 } from '../../lib/workflow'
+import { isRelatedPosition } from '../../lib/reviews'
 import { Button } from '../ui/Button'
 
 export type ComposeKind = 'EDIT' | 'KEEP_AS_DRAFTED' | 'FINDING_WRONG' | 'ESCALATE' | 'RESOLVE'
@@ -175,7 +176,7 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
                 aria-invalid={errors.approvedLanguage ? true : undefined}
                 onChange={(event) => setLanguage(event.target.value)}
               />
-              {finding.proposedLanguage ? (
+              {finding.proposedLanguage && !isRelatedPosition(finding) ? (
                 <div style={{ marginTop: 7 }}>
                   <button type="button" className="rv-ws-link" onClick={() => setLanguage(finding.proposedLanguage ?? '')}>
                     Use proposed language

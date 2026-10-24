@@ -2,15 +2,24 @@ package com.rivell.workbench.review.check;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+import com.rivell.workbench.knowledge.ApplicabilityScope;
 import com.rivell.workbench.knowledge.AuthorityConflict;
 import com.rivell.workbench.knowledge.AuthorityLevel;
 import com.rivell.workbench.knowledge.AuthorityRule;
+import com.rivell.workbench.knowledge.CandidatePayload;
+import com.rivell.workbench.knowledge.CandidateType;
+import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.knowledge.PositionRole;
+import com.rivell.workbench.knowledge.ReviewStatus;
+import com.rivell.workbench.knowledge.SemanticFields;
 import com.rivell.workbench.review.PolicyComparisonSpecs;
 import com.rivell.workbench.retrieval.EvidenceItem;
 
@@ -125,9 +134,16 @@ class EscalationAuthorityTest {
 
     @Test
     void anEmptyStanceSetRuleCoversTheFallbackAndTheWalkAway() {
-        var facts = facts(List.of(new AuthorityRule("General Counsel", Set.of(), null,
-                AuthorityLevel.ENTRY, "the entry names General Counsel")), List.of(), null);
+        // the catalog's covering expansion is applied when a corrected rule is read, so the
+        // compile view and the review decision see the same stances
+        var rules = correctedRules(new AuthorityRule("General Counsel", Set.of(), null,
+                AuthorityLevel.ENTRY, "the entry names General Counsel"));
+        var facts = facts(rules, List.of(), null);
 
+        assertThat(rules).anySatisfy(rule -> {
+            assertThat(rule.approver()).isEqualTo("General Counsel");
+            assertThat(rule.stances()).contains(PositionRole.PROHIBITED);
+        });
         assertThat(EscalationAuthority.decide(facts, PolicyComparisonSpecs.WITHIN_FALLBACK)
                 .rule().approver()).isEqualTo("General Counsel");
         assertThat(EscalationAuthority.decide(facts, PolicyComparisonSpecs.WALK_AWAY)
@@ -136,13 +152,35 @@ class EscalationAuthorityTest {
 
     @Test
     void aFallbackOnlyRuleCoversTheWalkAway() {
-        var facts = facts(List.of(rule("The lawyer handling the NDA",
-                PositionRole.FALLBACK, null, AuthorityLevel.ENTRY)), List.of(), null);
+        var rules = correctedRules(rule("The lawyer handling the NDA",
+                PositionRole.FALLBACK, null, AuthorityLevel.ENTRY));
+        var facts = facts(rules, List.of(), null);
 
+        assertThat(rules).anySatisfy(rule -> {
+            assertThat(rule.approver()).isEqualTo("The lawyer handling the NDA");
+            assertThat(rule.stances()).contains(PositionRole.PROHIBITED);
+        });
         assertThat(EscalationAuthority.decide(facts, PolicyComparisonSpecs.WITHIN_FALLBACK)
                 .rule().approver()).isEqualTo("The lawyer handling the NDA");
         assertThat(EscalationAuthority.decide(facts, PolicyComparisonSpecs.WALK_AWAY)
                 .rule().approver()).isEqualTo("The lawyer handling the NDA");
+    }
+
+    /** The rules a corrected candidate is read with, the same list review receives. */
+    private static List<AuthorityRule> correctedRules(AuthorityRule... corrected) {
+        var machine = new SemanticFields(Set.of(PositionRole.FALLBACK), null, null, null, Map.of());
+        var edited = new SemanticFields(Set.of(PositionRole.FALLBACK), null, null, null, Map.of(),
+                false, null, List.of(), null, List.of(corrected), List.of(), false, List.of(), false);
+        var now = Instant.parse("2026-10-25T10:00:00Z");
+        var candidate = new KnowledgeCandidate(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                CandidateType.PLAYBOOK_RULE, ReviewStatus.PENDING, "G-LIAB-01", "wording",
+                new CandidatePayload(Map.of("Position", "Fallback")),
+                "LIMITATION_OF_LIABILITY", List.of("LIMITATION_OF_LIABILITY"),
+                null, null, null, machine, edited, List.of(), null, null, null,
+                new ApplicabilityScope(null, Set.of(), null, null, null, null, null),
+                List.of(), null, null, null, null, now, now, null);
+        return candidate.effectiveAuthorityRules();
     }
 
     @Test

@@ -19,6 +19,8 @@ class FindingAssemblerTest {
     private static final UUID REVIEW_ID = UUID.randomUUID();
     private static final UUID RUN_ID = UUID.randomUUID();
     private static final UUID HEADING_ID = UUID.randomUUID();
+    private static final UUID POSITION_CHECK_ID = UUID.randomUUID();
+    private static final String POSITION_KEY = "position_1";
     private static final Instant NOW = Instant.parse("2026-09-25T10:00:00Z");
 
     private final FindingAssembler assembler = new FindingAssembler();
@@ -47,14 +49,17 @@ class FindingAssemblerTest {
 
     @Test
     void aTypedApprovalRuleReachesTheFindingQuality() {
-        var deviation = deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
+        var planCheckId = UUID.randomUUID();
+        var deviation = clauseSignal(SignalType.POLICY_DEVIATION,
+                IssueFamily.POSITION_ACCEPTABLE_FALLBACK, planCheckId, "position_1",
+                new PositionDeviationPayload(UUID.randomUUID(), PolicyComparisonSpecs.WITHIN_FALLBACK,
+                        0.9, Map.of(), false),
                 Map.of("category", PolicyComparisonSpecs.WITHIN_FALLBACK));
-        var escalation = signal(SignalType.ESCALATION_REQUIRED,
-                IssueFamily.POSITION_ACCEPTABLE_FALLBACK,
+        var escalation = clauseSignal(SignalType.ESCALATION_REQUIRED,
+                IssueFamily.POSITION_ACCEPTABLE_FALLBACK, planCheckId, "position_1",
                 new EscalationPayload("the cap is above the preferred position", true,
                         "Commercial Manager", "the cap is above the preferred position", "MATRIX",
                         "General Counsel", "ENTRY", "FALLBACK"),
-                List.of(UUID.randomUUID()), null,
                 Map.of("escalationApprover", "Commercial Manager",
                         "escalationCondition", "the cap is above the preferred position",
                         "escalationSource", "MATRIX",
@@ -153,10 +158,11 @@ class FindingAssemblerTest {
     }
 
     private static RawReviewSignal walkAway(boolean secondaryTopic) {
-        return signal(SignalType.POLICY_DEVIATION, IssueFamily.POSITION_WALK_AWAY,
+        return clauseSignal(SignalType.POLICY_DEVIATION, IssueFamily.POSITION_WALK_AWAY,
+                POSITION_CHECK_ID, POSITION_KEY,
                 new PositionDeviationPayload(UUID.randomUUID(), PolicyComparisonSpecs.WALK_AWAY,
                         0.9, Map.of(PolicyComparisonSpecs.WALK_AWAY, 0.9), secondaryTopic),
-                List.of(UUID.randomUUID()), null);
+                Map.of());
     }
 
     @Test
@@ -401,21 +407,24 @@ class FindingAssemblerTest {
             "The total liability of Supplier shall not exceed two times the fees paid.";
 
     private static RawReviewSignal drafting(String verdict) {
+        return clauseDrafting(POSITION_CHECK_ID, POSITION_KEY, verdict);
+    }
+
+    private static RawReviewSignal clauseDrafting(
+            UUID planCheckId, String suffix, String verdict) {
         var evidenceId = UUID.randomUUID();
-        return new RawReviewSignal(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, RUN_ID,
-                UUID.randomUUID(), SignalType.APPROVED_DRAFTING_AVAILABLE,
-                FindingSubjectKind.CLAUSE, HEADING_ID, null,
-                CoreConcepts.LIMITATION_OF_LIABILITY, null, IssueFamily.POSITION_WALK_AWAY,
+        return clauseSignal(SignalType.APPROVED_DRAFTING_AVAILABLE,
+                IssueFamily.POSITION_WALK_AWAY, planCheckId, suffix,
                 new ApprovedDraftingPayload(evidenceId, LIBRARY_WORDING, "FALLBACK", verdict),
-                List.of(evidenceId), null, null, null, null, null, null, null,
-                verdict == null ? Map.of() : Map.of("wordingFitVerdict", verdict),
-                "APPROVED_DRAFTING_AVAILABLE:" + UUID.randomUUID(), NOW);
+                List.of(evidenceId),
+                verdict == null ? Map.of() : Map.of("wordingFitVerdict", verdict));
     }
 
     private static RawReviewSignal generatedWording() {
-        return signal(SignalType.OPEN_ENDED_ANALYSIS_RESULT, IssueFamily.POSITION_WALK_AWAY,
+        return clauseSignal(SignalType.OPEN_ENDED_ANALYSIS_RESULT,
+                IssueFamily.POSITION_WALK_AWAY, POSITION_CHECK_ID, POSITION_KEY,
                 new OpenEndedAnalysisPayload("Rivell's own wording.", "what changed", "VERIFIED"),
-                List.of(UUID.randomUUID()), "VERIFIED");
+                Map.of());
     }
 
     @Test
@@ -484,5 +493,114 @@ class FindingAssemblerTest {
 
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
         assertThat(finding.quality()).containsEntry("wordingFitVerdict", "FITS");
+    }
+
+    @Test
+    void aRelatedPositionNeverProposesLibraryWording() {
+        var note = assembler.assemble(run(),
+                List.of(walkAway(true), drafting("FITS")), NOW).get(0);
+
+        assertThat(note.proposedAction()).isEqualTo(ProposedAction.NO_ACTION);
+        assertThat(note.proposedLanguage()).isNull();
+        assertThat(note.proposedLanguageSource()).isEqualTo(ProposedLanguageSource.NONE);
+        assertThat(note.claims()).filteredOn(claim -> claim.claimKind() == ClaimKind.EVIDENCE_BASIS)
+                .isEmpty();
+
+        // a typed approval rule still asks for the approver, but it never carries library wording
+        var planCheckId = UUID.randomUUID();
+        var related = clauseSignal(SignalType.POLICY_DEVIATION,
+                IssueFamily.POSITION_WALK_AWAY, planCheckId, "position_1",
+                new PositionDeviationPayload(UUID.randomUUID(), PolicyComparisonSpecs.WALK_AWAY,
+                        0.9, Map.of(), true), Map.of());
+        var escalation = clauseSignal(SignalType.ESCALATION_REQUIRED,
+                IssueFamily.POSITION_WALK_AWAY, planCheckId, "position_1",
+                new EscalationPayload("walk-away breach", true, "General Counsel", null, "ENTRY",
+                        null, null, "PROHIBITED"),
+                Map.of("escalationApprover", "General Counsel", "escalationSource", "ENTRY",
+                        "escalationStance", "PROHIBITED"));
+        var escalated = assembler.assemble(run(),
+                List.of(related, clauseDrafting(planCheckId, "position_1", "FITS"), escalation),
+                NOW).get(0);
+
+        assertThat(escalated.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+        assertThat(escalated.proposedLanguage()).isNull();
+        assertThat(escalated.proposedLanguageSource()).isEqualTo(ProposedLanguageSource.NONE);
+    }
+
+    @Test
+    void aMergedFindingNamesTheApproverOfThePrimaryPosition() {
+        var planCheckId = UUID.randomUUID();
+        var facts = Map.<String, Object>of("escalationSource", "ENTRY",
+                "escalationStance", "PROHIBITED");
+        var primary = clauseSignal(SignalType.POLICY_DEVIATION, IssueFamily.POSITION_WALK_AWAY,
+                planCheckId, "position_1",
+                new PositionDeviationPayload(UUID.randomUUID(), PolicyComparisonSpecs.WALK_AWAY,
+                        0.9, Map.of(), false), Map.of());
+        var primaryEscalation = clauseSignal(SignalType.ESCALATION_REQUIRED,
+                IssueFamily.POSITION_WALK_AWAY, planCheckId, "position_1",
+                new EscalationPayload("walk-away breach", true, "General Counsel",
+                        null, "ENTRY", null, null, "PROHIBITED"),
+                with(facts, "escalationApprover", "General Counsel"));
+        var other = clauseSignal(SignalType.POLICY_DEVIATION, IssueFamily.POSITION_WALK_AWAY,
+                planCheckId, "position_2",
+                new PositionDeviationPayload(UUID.randomUUID(), PolicyComparisonSpecs.WALK_AWAY,
+                        0.8, Map.of(), false), Map.of());
+        var otherEscalation = clauseSignal(SignalType.ESCALATION_REQUIRED,
+                IssueFamily.POSITION_WALK_AWAY, planCheckId, "position_2",
+                new EscalationPayload("walk-away breach", true, "Commercial Manager",
+                        null, "MATRIX", null, null, "PROHIBITED"),
+                with(facts, "escalationApprover", "Commercial Manager"));
+
+        var finding = assembler.assemble(run(),
+                List.of(primary, primaryEscalation, other, otherEscalation), NOW).get(0);
+
+        assertThat(finding.quality())
+                .containsEntry("escalationApprover", "General Counsel")
+                .containsEntry("escalationSource", "ENTRY");
+    }
+
+    private static Map<String, Object> with(Map<String, Object> base, String key, Object value) {
+        var quality = new java.util.LinkedHashMap<>(base);
+        quality.put(key, value);
+        return quality;
+    }
+
+    @Test
+    void aMergedFindingDoesNotTakeWordingFromANonPrimaryPosition() {
+        var planCheckId = UUID.randomUUID();
+        var primary = clauseSignal(SignalType.POLICY_DEVIATION, IssueFamily.POSITION_WALK_AWAY,
+                planCheckId, "position_1",
+                new PositionDeviationPayload(UUID.randomUUID(), PolicyComparisonSpecs.WALK_AWAY,
+                        0.9, Map.of(), false), Map.of());
+        var other = clauseSignal(SignalType.POLICY_DEVIATION, IssueFamily.POSITION_WALK_AWAY,
+                planCheckId, "position_2",
+                new PositionDeviationPayload(UUID.randomUUID(), PolicyComparisonSpecs.WALK_AWAY,
+                        0.8, Map.of(), false), Map.of());
+        var otherWording = clauseDrafting(planCheckId, "position_2", "FITS");
+
+        var finding = assembler.assemble(run(), List.of(primary, other, otherWording), NOW).get(0);
+
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+        assertThat(finding.proposedLanguage()).isNull();
+        assertThat(finding.proposedLanguageSource()).isEqualTo(ProposedLanguageSource.NONE);
+        assertThat(finding.quality()).doesNotContainKey("wordingFitVerdict");
+    }
+
+    /** A signal from a named plan check, so a position's signals can share a dedupe suffix. */
+    private static RawReviewSignal clauseSignal(
+            SignalType type, IssueFamily family, UUID planCheckId, String suffix,
+            SignalPayload payload, Map<String, Object> quality) {
+        return clauseSignal(type, family, planCheckId, suffix, payload,
+                List.of(UUID.randomUUID()), quality);
+    }
+
+    private static RawReviewSignal clauseSignal(
+            SignalType type, IssueFamily family, UUID planCheckId, String suffix,
+            SignalPayload payload, List<UUID> evidence, Map<String, Object> quality) {
+        return new RawReviewSignal(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, RUN_ID,
+                planCheckId, type, FindingSubjectKind.CLAUSE, HEADING_ID, null,
+                CoreConcepts.LIMITATION_OF_LIABILITY, null, family,
+                payload, evidence, null, null, null, null, null, null, null,
+                quality, type.name() + ":" + planCheckId + ":" + suffix, NOW);
     }
 }

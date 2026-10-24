@@ -526,6 +526,7 @@ class KnowledgeController {
                 candidate.effectiveFallbackTexts(),
                 candidate.effectiveProhibitedText(),
                 candidate.effectiveAuthorityRules(),
+                candidate.storedAuthorityRules(),
                 candidate.effectiveAuthorityConflicts(),
                 candidate.effectiveUnmappedAuthority(),
                 candidate.reviewReasons().contains(ReviewReason.UNMAPPED_AUTHORITY_WORDS),

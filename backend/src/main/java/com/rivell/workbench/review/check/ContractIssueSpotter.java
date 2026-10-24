@@ -160,7 +160,15 @@ final class ContractIssueSpotter {
                 // Prose before or after the issue list is not an issue.
                 continue;
             }
-            var number = Integer.parseInt(matcher.group(1));
+            int number;
+            try {
+                number = Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException e) {
+                // A number the read printed that no clause check can hold is a malformed line,
+                // not a reason to fail the clause check; drop it and count it like any other.
+                dropped += Math.max(1, severityTokens(trimmed));
+                continue;
+            }
             var severity = matcher.group(2).toUpperCase(Locale.ROOT);
             var fields = FIELD_SEPARATOR.split(matcher.group(3), -1);
             if (fields.length != 2) {

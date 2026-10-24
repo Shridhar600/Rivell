@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ArtifactDetail, Candidate } from '../api/knowledge'
+import type { ArtifactDetail, AuthorityRule, Candidate } from '../api/knowledge'
 import {
   escalationDiverge,
   formatBoolean,
@@ -18,6 +18,7 @@ import {
 } from './semantics'
 
 function candidate(partial: Partial<Candidate> = {}): Candidate {
+  const authorityRules = partial.authorityRules ?? []
   return {
     id: 'c1',
     artifactId: 'a1',
@@ -40,7 +41,8 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     preferredText: null,
     fallbackTexts: [],
     prohibitedText: null,
-    authorityRules: [],
+    authorityRules,
+    storedAuthorityRules: authorityRules,
     authorityConflicts: [],
     unmappedAuthority: [],
     needsAttention: false,
@@ -351,6 +353,43 @@ describe('semantic display helpers', () => {
         },
       ],
     })
+  })
+
+  it('seeds the approval rule draft from the saved list, not the display coverage', () => {
+    const fallback: AuthorityRule = {
+      approver: 'Head of Finance',
+      stances: ['FALLBACK'],
+      condition: null,
+      source: 'ENTRY',
+      quote: null,
+    }
+    const walkAway: AuthorityRule = { ...fallback, stances: ['PROHIBITED'] }
+    const current = candidate({
+      authorityRules: [fallback, walkAway],
+      storedAuthorityRules: [fallback],
+    })
+
+    const draft = semanticDraftFrom(current)
+    expect(draft.authorityRules).toEqual([
+      {
+        approver: 'Head of Finance',
+        stances: ['FALLBACK'],
+        condition: '',
+        source: 'ENTRY',
+        quote: null,
+      },
+    ])
+
+    const input = semanticInputFrom({ ...draft, preferredText: 'Net 60' }, current)
+    expect(input?.authorityRules).toEqual([
+      {
+        approver: 'Head of Finance',
+        stances: ['FALLBACK'],
+        condition: null,
+        source: 'ENTRY',
+        quote: null,
+      },
+    ])
   })
 
   it('sends an explicit null when counsel approval is set back to not specified', () => {

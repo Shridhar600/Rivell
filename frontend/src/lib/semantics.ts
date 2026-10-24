@@ -111,6 +111,10 @@ export type CorrectedField =
   | 'variantRole'
   | 'escalationTrigger'
   | 'requiresApproval'
+  | 'preferredText'
+  | 'fallbackTexts'
+  | 'prohibitedText'
+  | 'authorityRules'
 
 export function fieldCorrected(candidate: Candidate, field: CorrectedField): boolean {
   return candidate.correctedFields.includes(field)
@@ -164,50 +168,21 @@ export function proposedEscalationTrigger(candidate: Candidate): string | null {
   return machineProposalValue(interpretationFor(candidate, 'escalationTrigger'))
 }
 
-/** Whether the typed preferred wording is a person's correction. */
-export function preferredTextDiverge(candidate: Candidate): boolean {
-  const interpretation = interpretationFor(candidate, 'preferredText')
-  if (!interpretation) return candidate.preferredText !== null
-  return (candidate.preferredText ?? '') !== (machineProposalValue(interpretation) ?? '')
-}
-
-/** Whether the typed fallback list is a person's correction. */
-export function fallbackTextsDiverge(candidate: Candidate): boolean {
-  const interpretation = interpretationFor(candidate, 'fallbackTexts')
-  if (!interpretation) return candidate.fallbackTexts.length > 0
-  return candidate.fallbackTexts.join('\n') !== (machineProposalValue(interpretation) ?? '')
-}
-
-/** Whether the typed walk-away wording is a person's correction. */
-export function prohibitedTextDiverge(candidate: Candidate): boolean {
-  const interpretation = interpretationFor(candidate, 'prohibitedText')
-  if (!interpretation) return candidate.prohibitedText !== null
-  return (candidate.prohibitedText ?? '') !== (machineProposalValue(interpretation) ?? '')
-}
-
-/**
- * A stable rendering of the approval rules, the same words the compile records as its own
- * proposal: source level, approver, stances and condition. It is what a correction compares.
- */
-export function authorityRulesSignature(rules: readonly AuthorityRule[]): string {
-  return rules
-    .map(
-      (rule) =>
-        `${rule.source}: ${rule.approver}` +
-        (rule.stances.length > 0 ? ` [${[...rule.stances].sort().join(',')}]` : '') +
-        (rule.condition ? ` if ${rule.condition}` : ''),
+/** The same approval rules, in the order the person saved them; conditions and stances compare by value. */
+function sameAuthorityRules(
+  left: readonly AuthorityRule[],
+  right: readonly AuthorityRule[],
+): boolean {
+  if (left.length !== right.length) return false
+  return left.every((rule, index) => {
+    const other = right[index]
+    return (
+      rule.approver === other.approver &&
+      rule.source === other.source &&
+      (rule.condition ?? '') === (other.condition ?? '') &&
+      [...rule.stances].sort().join(',') === [...other.stances].sort().join(',')
     )
-    .join('; ')
-}
-
-/** Whether the typed approval rules are a person's correction. */
-export function authorityRulesDiverge(candidate: Candidate): boolean {
-  const interpretation = interpretationFor(candidate, 'authorityRules')
-  if (!interpretation) return candidate.authorityRules.length > 0
-  return (
-    authorityRulesSignature(candidate.authorityRules) !==
-    (machineProposalValue(interpretation) ?? '')
-  )
+  })
 }
 
 export interface ScopeDifference {
@@ -398,7 +373,7 @@ export function semanticDraftFrom(candidate: Candidate): SemanticDraft {
     preferredText: candidate.preferredText ?? '',
     fallbackTexts: candidate.fallbackTexts.join('\n'),
     prohibitedText: candidate.prohibitedText ?? '',
-    authorityRules: candidate.authorityRules.map((rule) => ({
+    authorityRules: candidate.storedAuthorityRules.map((rule) => ({
       approver: rule.approver,
       stances: [...rule.stances],
       condition: rule.condition ?? '',
@@ -455,9 +430,7 @@ export function semanticInputFrom(
   const prohibitedTextChanged =
     isPlaybook && draft.prohibitedText.trim() !== (candidate.prohibitedText ?? '')
   const rulesChanged =
-    isPlaybook &&
-    authorityRulesSignature(draftRules(draft.authorityRules)) !==
-      authorityRulesSignature(candidate.authorityRules)
+    isPlaybook && !sameAuthorityRules(draftRules(draft.authorityRules), candidate.storedAuthorityRules)
 
   if (
     !positionsChanged &&
