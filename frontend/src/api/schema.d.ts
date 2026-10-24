@@ -1081,6 +1081,21 @@ export interface components {
             /** Format: date */
             effectiveTo?: string;
         };
+        AuthorityConflict: {
+            approver?: string;
+            /** @enum {string} */
+            source?: "ENTRY" | "MATRIX" | "TABLE";
+            /** @enum {string} */
+            stance?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
+        };
+        AuthorityRule: {
+            approver?: string;
+            stances?: ("PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED")[];
+            condition?: string;
+            /** @enum {string} */
+            source?: "ENTRY" | "MATRIX" | "TABLE";
+            quote?: string;
+        };
         EvidenceBundleResponse: {
             /** Format: uuid */
             bundleId?: string;
@@ -1157,6 +1172,8 @@ export interface components {
             preferred?: string;
             fallbacks?: string[];
             prohibited?: string;
+            authorityRules?: components["schemas"]["AuthorityRule"][];
+            authorityConflicts?: components["schemas"]["AuthorityConflict"][];
         };
         SemanticAssessmentResponse: {
             judgments?: {
@@ -1255,6 +1272,7 @@ export interface components {
             authorityConflicts?: components["schemas"]["AuthorityConflict"][];
             unmappedAuthority?: string[];
             needsAttention?: boolean;
+            correctedFields?: string[];
             interpretations?: components["schemas"]["InterpretationView"][];
             editedContentText?: string;
             editedPayloadColumns?: {
@@ -1334,21 +1352,6 @@ export interface components {
             fallbackTexts?: string[];
             prohibitedText?: string;
             authorityRules?: components["schemas"]["AuthorityRule"][];
-        };
-        AuthorityRule: {
-            approver?: string;
-            stances?: ("PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED")[];
-            condition?: string | null;
-            /** @enum {string} */
-            source?: "ENTRY" | "MATRIX" | "TABLE";
-            quote?: string | null;
-        };
-        AuthorityConflict: {
-            approver?: string;
-            /** @enum {string} */
-            source?: "ENTRY" | "MATRIX" | "TABLE";
-            /** @enum {string} */
-            stance?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
         };
         ConceptCorrectionRequest: {
             primary: string;
@@ -2111,8 +2114,20 @@ export interface components {
             /** Format: int64 */
             ageSeconds?: number;
             failureReason?: string;
+            /**
+             * Format: int32
+             * @description Transient infrastructure failures this run has survived. A running run with a positive count is being retried by JobRunr, not dead.
+             */
+            transientFailures?: number;
+            /** @description Code-owned reason of the last transient failure, if any */
+            lastTransientReason?: string;
             /** @description Whether the snapshot the review froze still matches the live environment: the contract semantics digest, retrieval index version, embedding model identity and model policy bindings */
             environmentMatchesSnapshot?: boolean;
+            /**
+             * Format: int32
+             * @description Issues the whole-contract read named whose quote could not be found in the contract, or that were not one issue in one line; absent when the read was not used in this run
+             */
+            spottingDropped?: number;
             checks?: components["schemas"]["CheckView"][];
         };
         ApiResultReviewDiagnosticsView: {

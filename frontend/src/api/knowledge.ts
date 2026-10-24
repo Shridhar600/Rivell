@@ -1046,14 +1046,14 @@ type GeneratedEditRequestBody = NonNullable<
 >['content']['application/json']
 
 /**
- * The contract accepts an explicit null for counsel approval ("not specified"), but the generated
- * schema types it as boolean only.
+ * The contract accepts an explicit null for counsel approval ("not specified") and for a rule's
+ * condition and quote, but the generated schema types them as non-null only.
  */
 type EditRequestBody = Omit<GeneratedEditRequestBody, 'semanticFields'> & {
   semanticFields?: Omit<
     NonNullable<GeneratedEditRequestBody['semanticFields']>,
-    'requiresApproval'
-  > & { requiresApproval?: boolean | null }
+    'requiresApproval' | 'authorityRules'
+  > & { requiresApproval?: boolean | null; authorityRules?: AuthorityRule[] }
 }
 
 async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
