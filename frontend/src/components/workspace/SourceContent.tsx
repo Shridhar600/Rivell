@@ -104,7 +104,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
       {scopeNote ? <p className="rv-ws-caption">{scopeNote}</p> : null}
 
       <div className="rv-ws-sec">
-        <div className="rv-ws-sec-h">{TEXT_LABELS[item.authorityClass] ?? 'Text'}</div>
+        <h3 className="rv-ws-sec-h">{TEXT_LABELS[item.authorityClass] ?? 'Text'}</h3>
         <div className={item.authorityClass === 'APPROVED_DRAFTING' ? 'rv-ws-prop' : 'rv-ws-incl'}>{item.text}</div>
         {item.authorityClass === 'APPROVED_DRAFTING' && item.publicationNumber !== null ? (
           <p className="rv-ws-caption">Approved organizational drafting · Knowledge version {item.publicationNumber}</p>
@@ -113,7 +113,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
 
       {item.contractFacts.map((fact) => (
         <div className="rv-ws-sec" key={`${fact.factSchema}-${fact.schemaVersion}`}>
-          <div className="rv-ws-sec-h">{factSchemaLabel(fact.factSchema)}</div>
+          <h3 className="rv-ws-sec-h">{factSchemaLabel(fact.factSchema)}</h3>
           <dl className="rv-ws-props">
             {describeFact({ ...fact, sourceNodeIds: [] }).map((row) => (
               <div key={row.field}>
@@ -127,7 +127,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
 
       {onNavigateToNode && regions.length > 0 ? (
         <div className="rv-ws-sec">
-          <div className="rv-ws-sec-h">View in document</div>
+          <h3 className="rv-ws-sec-h">View in document</h3>
           <div className="rv-ws-srcd-acts">
             {regions.map((nodeId) => (
               <button key={nodeId} type="button" className="rv-ws-link" onClick={() => onNavigateToNode(nodeId)}>

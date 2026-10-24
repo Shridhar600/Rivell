@@ -14,25 +14,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.rivell.workbench.contracts.ContractEnrichmentService;
-import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
-import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
 import com.rivell.workbench.redline.RedlineExecutionRepository;
-import com.rivell.workbench.review.Finding;
 import com.rivell.workbench.review.FindingClassification;
 import com.rivell.workbench.review.FindingRepository;
 import com.rivell.workbench.review.Review;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
 import com.rivell.workbench.review.ReviewAnalysisRun;
+import com.rivell.workbench.review.ReviewAnalysisService;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewSnapshot;
 import com.rivell.workbench.workflow.DecisionAction;
 import com.rivell.workbench.workflow.HumanDecisionRepository;
-import com.rivell.workbench.workflow.ReviewFinalizationService;
 import com.rivell.workbench.workflow.UnauthorizedWorkflowAccessException;
 
 /**
@@ -66,6 +63,7 @@ public class ReviewDiagnosticsService {
     private final ApprovedChangeSetRepository changeSetRepository;
     private final RedlineExecutionRepository redlineExecutionRepository;
     private final ContractEnrichmentService contractEnrichmentService;
+    private final ReviewAnalysisService analysisService;
     private final Clock clock;
     private final boolean backgroundWorkerEnabled;
 
@@ -79,6 +77,7 @@ public class ReviewDiagnosticsService {
             ApprovedChangeSetRepository changeSetRepository,
             RedlineExecutionRepository redlineExecutionRepository,
             ContractEnrichmentService contractEnrichmentService,
+            ReviewAnalysisService analysisService,
             Clock clock,
             @Value("${jobrunr.background-job-server.enabled:false}")
             boolean backgroundWorkerEnabled) {
@@ -91,6 +90,7 @@ public class ReviewDiagnosticsService {
         this.changeSetRepository = changeSetRepository;
         this.redlineExecutionRepository = redlineExecutionRepository;
         this.contractEnrichmentService = contractEnrichmentService;
+        this.analysisService = analysisService;
         this.clock = clock;
         this.backgroundWorkerEnabled = backgroundWorkerEnabled;
     }
@@ -194,7 +194,9 @@ public class ReviewDiagnosticsService {
     /**
      * Whether the frozen snapshot still describes the live world. This is the same comparison the
      * analysis itself makes, reported rather than acted on, so an operator can see drift before it
-     * turns into a degraded run.
+     * turns into a degraded run. It covers all four inputs, not only the semantics digest (DW-019):
+     * a changed retrieval index or model binding degrades checks even when the contract text has
+     * not moved.
      */
     private Boolean environmentMatches(UUID organizationId, UUID reviewId) {
         var snapshot = reviewRepository.findSnapshot(organizationId, reviewId);
@@ -207,10 +209,8 @@ public class ReviewDiagnosticsService {
     private Boolean environmentMatches(ReviewSnapshot snapshot) {
         try {
             var semantics = contractEnrichmentService.getSemanticsForOrganization(
-                    snapshot.organizationId(), snapshot.contractId(),
-                    snapshot.contractVersionNumber());
-            return semantics != null
-                    && SemanticsDigest.of(semantics).equals(snapshot.semanticsDigest());
+                    snapshot.organizationId(), snapshot.contractVersionId());
+            return analysisService.environmentFullyMatches(snapshot, semantics);
         } catch (RuntimeException e) {
             return null;
         }

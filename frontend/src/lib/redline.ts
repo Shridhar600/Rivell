@@ -1,5 +1,5 @@
 import type { ApprovedChange, ChangeActionType } from '../api/workflow'
-import type { RedlineExecution, RedlineExecutionChange } from '../api/redline'
+import type { RedlineExecution, RedlineExecutionChange, RedlineFailureCode } from '../api/redline'
 import type { ConceptLabel } from '../api/taxonomy'
 import { changeTargetLabel } from './workflow'
 
@@ -236,24 +236,42 @@ export type RedlineTriggerErrorKind =
   | 'NOT_FOUND'
   | 'FAILED_EXECUTION'
   | 'NOT_AVAILABLE'
+  | 'SOURCE_UNAVAILABLE'
   | 'UNCONFIRMED'
   | 'ENGINE_UNAVAILABLE'
+  | 'BUSY'
   | 'STORAGE_UNAVAILABLE'
   | 'TRANSPORT'
+
+/** The 409 codes that say the frozen source itself cannot be used. */
+const SOURCE_FAILURE_CODES: ReadonlySet<RedlineFailureCode> = new Set([
+  'SOURCE_DOCUMENT_UNAVAILABLE',
+  'SOURCE_VERSION_MISMATCH',
+  'SOURCE_INTEGRITY_MISMATCH',
+])
 
 export function classifyTriggerError(input: {
   status: number | null
   execution: RedlineExecution | null
   executionStateKnown: boolean
+  /** The typed code from the error body, when the server sent one. */
+  failureCode?: RedlineFailureCode | null
+  /** A 503 carries this only when the document-work limit refused the request. */
+  retryAfter?: string | null
 }): RedlineTriggerErrorKind {
   if (input.status === 403) return 'FORBIDDEN'
   if (input.status === 404) return 'NOT_FOUND'
   if (input.status === 409) {
+    // The server's typed source failure is the most specific fact on the wire; a stale execution
+    // state or a still-loading read must not hide it.
+    if (input.failureCode && SOURCE_FAILURE_CODES.has(input.failureCode)) {
+      return 'SOURCE_UNAVAILABLE'
+    }
     if (!input.executionStateKnown) return 'UNCONFIRMED'
     if (input.execution?.status === 'FAILED') return 'FAILED_EXECUTION'
     return 'NOT_AVAILABLE'
   }
-  if (input.status === 503) return 'STORAGE_UNAVAILABLE'
+  if (input.status === 503) return input.retryAfter ? 'BUSY' : 'STORAGE_UNAVAILABLE'
   if (input.status === 500) return 'ENGINE_UNAVAILABLE'
   return 'TRANSPORT'
 }
@@ -266,16 +284,28 @@ const TRIGGER_ERROR_NOTICES: Record<RedlineTriggerErrorKind, string> = {
     'The redline failed. The report below shows what happened; the approved changes are unchanged.',
   NOT_AVAILABLE:
     'Rivell could not generate the redline from this review’s original document. The approved changes are unchanged.',
+  SOURCE_UNAVAILABLE:
+    'The original document could not be opened, so the redline was not generated. The approved changes are unchanged.',
   UNCONFIRMED:
     'The redline request could not be confirmed. Reopen this review to check whether a redline was created.',
   ENGINE_UNAVAILABLE:
     'Rivell cannot generate a redline right now. The approved changes are unchanged; try again later.',
+  BUSY:
+    'Rivell is handling as many files as it can right now. The redline was not generated; try again in a moment.',
   STORAGE_UNAVAILABLE:
     'The generated redline could not be stored, so no document was produced. This review and its approved changes are unchanged; you can generate the redline again once storage is available.',
   TRANSPORT:
     'The redline could not be generated. Check your connection and try again.',
 }
 
-export function redlineTriggerErrorNotice(kind: RedlineTriggerErrorKind): string {
+/**
+ * The sentence for a failed request. A typed source code has its own exact wording; every other
+ * kind uses its fixed notice.
+ */
+export function redlineTriggerErrorNotice(
+  kind: RedlineTriggerErrorKind,
+  failureCode: RedlineFailureCode | null = null,
+): string {
+  if (kind === 'SOURCE_UNAVAILABLE' && failureCode) return redlineFailureTitle(failureCode)
   return TRIGGER_ERROR_NOTICES[kind]
 }

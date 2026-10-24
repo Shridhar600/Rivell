@@ -386,6 +386,26 @@ class FinalizationIT {
                 .andExpect(jsonPath("$.data.decisions.accepted").value(0));
     }
 
+    @Test
+    void diagnosticsReportTheWholeEnvironmentNotOnlyTheSemanticsDigest() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var reviewId = fixture.review().id();
+
+        mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.analysis.environmentMatchesSnapshot").value(true));
+
+        // The digest and the semantics are untouched; only the frozen retrieval index version
+        // drifts from the live one. Diagnostics must report the drift the analysis itself acts on.
+        jdbcClient.sql("update review_snapshot set embedding_index_version = 'drifted-index' "
+                        + "where review_id = ?")
+                .param(reviewId).update();
+
+        mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.analysis.environmentMatchesSnapshot").value(false));
+    }
+
     /**
      * M10: a run whose checks all degraded produced a COMPLETED review with zero Findings, which
      * was then finalizable into a zero-change ApprovedChangeSet and a NO_CHANGES redline. That is

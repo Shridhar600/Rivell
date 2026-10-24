@@ -7,10 +7,10 @@ import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractSemantics;
+import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
 import com.rivell.workbench.retrieval.EvidenceService;
@@ -222,6 +222,14 @@ public class ReviewAnalysisService {
                         .equals(live.generativeProvider().modelAlias());
         return new AnalysisEnvironment(digestMatches, indexMatches, modelMatches,
                 bindingsMatch);
+    }
+
+    /**
+     * Whether the frozen snapshot still matches every live input. Exposed as a boolean so callers
+     * outside the review module do not depend on the check-package environment type.
+     */
+    public boolean environmentFullyMatches(ReviewSnapshot snapshot, ContractSemantics semantics) {
+        return evaluateEnvironment(snapshot, semantics).fullyMatches();
     }
 
     private ReviewAnalysisRun resolveRun(

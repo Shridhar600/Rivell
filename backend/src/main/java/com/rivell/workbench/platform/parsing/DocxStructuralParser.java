@@ -1,5 +1,7 @@
 package com.rivell.workbench.platform.parsing;
 
+
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -34,8 +36,9 @@ import com.rivell.workbench.contracts.ParseCoverage;
 import com.rivell.workbench.contracts.ParseResult;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.platform.docx.DocxPackageRepair;
-import java.io.ByteArrayInputStream;
+
 
 /**
  * Deterministic DOCX structural parser.

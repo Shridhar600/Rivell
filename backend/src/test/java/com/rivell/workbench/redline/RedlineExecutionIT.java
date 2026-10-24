@@ -599,7 +599,8 @@ class RedlineExecutionIT {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(
                         org.hamcrest.Matchers.containsString(
-                                "no longer matches the file that was reviewed")));
+                                "no longer matches the file that was reviewed")))
+                .andExpect(jsonPath("$.failureCode").value("SOURCE_INTEGRITY_MISMATCH"));
         mockMvc.perform(get("/api/reviews/{id}/redline", fixture.review().id()))
                 .andExpect(status().isNotFound());
         assertThat(countExecutions(fixture.review().id())).isZero();
@@ -627,7 +628,8 @@ class RedlineExecutionIT {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(
                         org.hamcrest.Matchers.containsString(
-                                "no longer matches the version these changes were approved on")));
+                                "no longer matches the version these changes were approved on")))
+                .andExpect(jsonPath("$.failureCode").value("SOURCE_VERSION_MISMATCH"));
         mockMvc.perform(get("/api/reviews/{id}/redline", fixture.review().id()))
                 .andExpect(status().isNotFound());
         assertThat(countExecutions(fixture.review().id())).isZero();

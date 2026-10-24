@@ -201,8 +201,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             search.put("traceId", searchBundle.traceId() == null
                     ? "" : searchBundle.traceId().toString());
             detail.put("search", search);
+            // the route records that the search ran, whatever it found (DW-071)
+            detail.put("route", SEARCH);
             if (!found.isEmpty()) {
-                detail.put("route", SEARCH);
                 try {
                     var execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
                             PolicyPositionQuestions.build(found, clause, conceptRegistry)), judgeState);

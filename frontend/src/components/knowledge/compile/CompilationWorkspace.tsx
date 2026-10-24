@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQueryClient } from '@tanstack/react-query'
 import {
+  fetchCandidate,
   isKnowledgeForbiddenError,
   knowledgeKeys,
+  knowledgeRetry,
   useBulkApproveCandidates,
   useCandidatesQuery,
   useExtractionUnitsQuery,
@@ -64,6 +66,33 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
 
   const candidates = useMemo(() => candidatesQuery.data ?? [], [candidatesQuery.data])
   const units = unitsQuery.data
+  // Titles for the published candidates this draft was compared with. One map is loaded in one
+  // place for the whole workspace, so no row issues its own candidate read (DW-043).
+  const peerIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const entry of candidates) {
+      for (const signal of entry.conflictSignals) {
+        if (signal.publishedCandidateId) ids.add(signal.publishedCandidateId)
+      }
+    }
+    for (const id of Object.values(supersede)) ids.add(id)
+    return [...ids]
+  }, [candidates, supersede])
+  const peerQueries = useQueries({
+    queries: peerIds.map((id) => ({
+      queryKey: knowledgeKeys.candidate(id),
+      queryFn: () => fetchCandidate(id),
+      retry: knowledgeRetry,
+    })),
+  })
+  const candidateTitles = useMemo(() => {
+    const titles = new Map(candidates.map((entry) => [entry.id, entry.title]))
+    peerQueries.forEach((query, position) => {
+      const id = peerIds[position]
+      if (id && query.data) titles.set(id, query.data.title)
+    })
+    return titles
+  }, [candidates, peerIds, peerQueries])
   // A position a person made is always reviewed on its own, never inside the straightforward group.
   const reviewAlone = useMemo(() => {
     const made = new Set((units ?? []).filter((entry) => entry.recordKindOverride !== null).map((entry) => entry.id))
@@ -254,7 +283,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
     return (
       <CompileLayout top={top}>
         <div className="rv-kc-center">
-          <LoadingState label="Loading entries" />
+          <LoadingState label="Loading entries" focus />
         </div>
       </CompileLayout>
     )
@@ -265,6 +294,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       <CompileLayout top={top}>
         <div className="rv-kc-center">
           <ErrorState
+            focus
             tone={forbidden ? 'neutral' : 'danger'}
             title={forbidden ? 'Knowledge is not available to you' : 'The entries could not be loaded'}
             message={forbidden ? 'Your account does not have permission to review knowledge. Ask an administrator for access.' : candidatesQuery.error.message}
@@ -297,6 +327,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
       <CompileLayout top={top} rail={notPosition.length + missed.length > 0 ? rail : undefined} railOpen={railOpen}>
         <div className="rv-kc-center">
           <EmptyState
+            focus
             title="No entries were produced"
             message="Rivell read this file but found nothing to turn into knowledge, so there is nothing to review or publish. The original is stored unchanged."
             action={<LinkButton to={`/knowledge/sources/${artifact.id}`}>Open the source</LinkButton>}
@@ -358,6 +389,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
               })
             }
             publishedIn={index?.added.get(open.candidate.id) ?? null}
+            candidateTitles={candidateTitles}
             actions={actions}
             onDecided={(id) => goNext(id)}
             onNext={() => goNext(open.candidate.id)}
@@ -413,6 +445,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
           artifact={artifact}
           candidates={candidates}
           supersede={supersede}
+          candidateTitles={candidateTitles}
           onClose={() => setPublishing(false)}
           onPublished={published}
           onStale={reread}

@@ -67,17 +67,27 @@ public class EvidenceIndexService {
         embedBatch(event.organizationId(), embeddings);
     }
 
-    /** One batched provider call per publication; failures degrade to lexical-only. */
-    void embedBatch(UUID organizationId, java.util.Map<UUID, String> texts) {
+    /** Whether the vector lane can run at all. Without a provider there is no vector gap to heal. */
+    boolean embeddingsConfigured() {
+        return embeddingService.isConfigured();
+    }
+
+    /**
+     * One batched provider call per publication; failures degrade to lexical-only. Returns how
+     * many rows were actually persisted, so a caller's counters cannot claim vectors that were
+     * never written.
+     */
+    int embedBatch(UUID organizationId, java.util.Map<UUID, String> texts) {
         if (texts.isEmpty() || !embeddingService.isConfigured()) {
-            return;
+            return 0;
         }
         var pendingIds = new java.util.ArrayList<>(texts.keySet());
         pendingIds.removeAll(repository.findEmbeddingReadyIds(
                 organizationId, pendingIds, properties.indexVersion()));
         if (pendingIds.isEmpty()) {
-            return;
+            return 0;
         }
+        var persisted = 0;
         var textsToEmbed = new java.util.LinkedHashMap<UUID, String>();
         for (var candidateId : pendingIds) {
             textsToEmbed.put(candidateId, texts.get(candidateId));
@@ -105,6 +115,7 @@ public class EvidenceIndexService {
                             sha256Hex(textsToEmbed.get(candidates.get(i))),
                             properties.indexVersion(), model, vector.length,
                             VectorLiterals.of(vector));
+                    persisted++;
                 } catch (RuntimeException e) {
                     log.warn("Embedding persistence failed for candidate {}: {}",
                             candidates.get(i), e.toString());
@@ -114,6 +125,7 @@ public class EvidenceIndexService {
             // honest degradation: lexical stays searchable, vector stays not-ready
             log.warn("Embedding generation degraded for organization {}", organizationId);
         }
+        return persisted;
     }
 
     KnowledgeCandidate indexCandidate(

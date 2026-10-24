@@ -45,7 +45,7 @@ seed runtime. No document body is logged.
 | R09 | Initech NDA - Retry succeeded | R08 path, correction reverted, retry attempt 2 COMPLETED | m5 NDA absence body, MSA pack | as R08 | read-only | done | attempt 1 FAILED preserved, attempt 2 COMPLETED, download yes | the only recoverable redline failure; no generic retry promise |
 | R10 | Umbrella MSA - Analysis failed | analysis genuinely FAILED at a demo-only injected service boundary | MSA body, MSA pack | 0 (failed) | unavailable | no | no | the seam exists only while demo seeding is enabled |
 | R11 | Soylent MSA - Limited analysis | COMPLETED with every check DEGRADED after a semantics correction | MSA body, MSA pack | 0 (all checks degraded) | yes | no (ANALYSIS_DEGRADED) | no | partial degradation is not modelled; this fixture degrades every check |
-| R12 | Vandelay MSA - Analysis queued | ANALYSIS_QUEUED, no analysis run | MSA body, MSA pack | none yet | no | no | no | only truthful while the worker is off |
+| R12 | Vandelay MSA - Waiting to start | ANALYSIS_QUEUED, no analysis run | MSA body, MSA pack | none yet | no | no | no | only truthful while the worker is off |
 
 ### R13 - Analyzing (omitted)
 

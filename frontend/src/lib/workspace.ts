@@ -311,15 +311,26 @@ export function isNeedsYourLook(finding: Pick<FindingSummary, 'decidedBy'>): boo
   return finding.decidedBy === 'NEEDS_YOUR_LOOK'
 }
 
-type Ordered = Pick<FindingSummary, 'decidedBy'> & { firstReviewCategory?: string | null }
+type Ordered = Pick<FindingSummary, 'decidedBy'> & {
+  subjectKind?: FindingSummary['subjectKind']
+  firstReviewCategory?: string | null
+}
 
 /**
  * "Needs your look" items with the first review's walk-away answer first: a possible walk-away
- * breach is the one to look at before the rest. Each part keeps the server's order.
+ * breach is the one to look at before the rest. Disagreements about a clause then come before
+ * absence findings, whose subject is a provision the contract does not have. Each part keeps
+ * the server's order.
  */
 export function orderNeedsYourLook<T extends Ordered>(look: readonly T[]): T[] {
   const walkAway = (finding: T) => finding.firstReviewCategory === 'WALK_AWAY'
-  return [...look.filter(walkAway), ...look.filter((finding) => !walkAway(finding))]
+  const absence = (finding: T) => finding.subjectKind === 'ABSENCE'
+  const rest = look.filter((finding) => !walkAway(finding))
+  return [
+    ...look.filter(walkAway),
+    ...rest.filter((finding) => !absence(finding)),
+    ...rest.filter(absence),
+  ]
 }
 
 /** Findings in review order: "needs your look" items after the others, each group in server order. */

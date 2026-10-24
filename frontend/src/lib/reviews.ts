@@ -619,12 +619,20 @@ export function isRelatedPosition(
 
 /**
  * The issue line a finding is listed under. A clause no playbook position addresses is its own
- * kind: the family alone would read as the older "policy unavailable" case.
+ * kind: the family alone would read as the older "policy unavailable" case. The whole-contract
+ * read's advisory is the same gap said in different words, so it uses the same line (DW-070).
  */
 export function findingIssueLabel(
   finding: Pick<FindingSummary, 'issueFamily' | 'observationKind'>,
 ): string {
-  if (finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK') return observationKindLabel(finding.observationKind)
+  if (finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK') {
+    return observationKindLabel(finding.observationKind)
+  }
+  if (finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ') {
+    // The whole-contract read picks the same gap a clause mark calls "Not covered by your
+    // playbook"; the header says the same, never the older "Policy unavailable" (DW-070).
+    return 'Not covered by your playbook'
+  }
   if (finding.observationKind.startsWith('UNCERTAINTY:second_opinion_')) {
     return observationKindLabel(finding.observationKind)
   }

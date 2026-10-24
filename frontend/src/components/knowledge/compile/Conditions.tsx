@@ -43,9 +43,8 @@ function PublishedPeer({ candidateId }: { candidateId: string }) {
   )
 }
 
-function PeerLabel({ candidateId }: { candidateId: string }) {
-  const peer = useCandidateQuery(candidateId)
-  return <strong>{peer.data ? peer.data.title : 'earlier published knowledge'}</strong>
+function PeerLabel({ candidateId, titles }: { candidateId: string; titles: ReadonlyMap<string, string> }) {
+  return <strong>{titles.get(candidateId) ?? 'earlier published knowledge'}</strong>
 }
 
 interface PeerRelation {
@@ -66,13 +65,13 @@ function relations(signals: ConflictSignal[]): PeerRelation[] {
   return [...byPeer.entries()].map(([peerId, types]) => ({ peerId, types }))
 }
 
-function Relation({ relation }: { relation: PeerRelation }) {
+function Relation({ relation, peerTitles }: { relation: PeerRelation; peerTitles: ReadonlyMap<string, string> }) {
   const [open, setOpen] = useState(false)
   return (
     <li className="rv-kc-rel">
       <div className="rv-kc-rel__h">
         <span>
-          <PeerLabel candidateId={relation.peerId} />
+          <PeerLabel candidateId={relation.peerId} titles={peerTitles} />
           <span className="rv-kc-rel__t">{relation.types.map((type) => SIGNAL_LABELS[type] ?? 'Relationship not determined').join(', ')}</span>
         </span>
         <button type="button" className="rv-lnk" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
@@ -133,6 +132,8 @@ interface ChoicesProps extends Props {
   /** The published candidate this one will replace on publication, if the reviewer chose that. */
   replaces: string | null
   onReplace: (published: string | null) => void
+  /** Titles of the candidates this compilation was compared with, loaded once by the workspace. */
+  peerTitles: ReadonlyMap<string, string>
 }
 
 /**
@@ -140,7 +141,7 @@ interface ChoicesProps extends Props {
  * named, choose whether this replaces one of them when it is published, and confirm a conflict
  * knowingly. None of it changes a candidate. It is all read from the server's answer.
  */
-export function ConditionChoices({ candidate, acknowledged, onAcknowledge, replaces, onReplace }: ChoicesProps) {
+export function ConditionChoices({ candidate, acknowledged, onAcknowledge, replaces, onReplace, peerTitles }: ChoicesProps) {
   const [all, setAll] = useState(false)
   const related = relations(candidate.conflictSignals)
   const replaceable = related.filter((relation) => relation.types.includes('SUPERSEDES_EXISTING')).map((relation) => relation.peerId)
@@ -155,7 +156,7 @@ export function ConditionChoices({ candidate, acknowledged, onAcknowledge, repla
           <h2 className="rv-kc-sech">Compared with published knowledge</h2>
           <ul>
             {shown.map((relation) => (
-              <Relation key={relation.peerId} relation={relation} />
+              <Relation key={relation.peerId} relation={relation} peerTitles={peerTitles} />
             ))}
           </ul>
           {related.length > SHOWN_AT_FIRST ? (
@@ -177,7 +178,7 @@ export function ConditionChoices({ candidate, acknowledged, onAcknowledge, repla
             <label key={peerId} className="rv-kc-choice">
               <input type="radio" name={`replace-${candidate.id}`} checked={replaces === peerId} onChange={() => onReplace(peerId)} />
               <span>
-                Replace <PeerLabel candidateId={peerId} />. It is not deleted: earlier versions still show it.
+                Replace <PeerLabel candidateId={peerId} titles={peerTitles} />. It is not deleted: earlier versions still show it.
               </span>
             </label>
           ))}

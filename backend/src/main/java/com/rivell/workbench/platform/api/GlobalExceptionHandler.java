@@ -3,6 +3,7 @@ package com.rivell.workbench.platform.api;
 import java.io.IOException;
 import java.util.NoSuchElementException;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -18,6 +19,8 @@ import com.rivell.workbench.contracts.InvalidCorrectionException;
 import com.rivell.workbench.contracts.SemanticsNotFoundException;
 import com.rivell.workbench.contracts.UnauthorizedContractAccessException;
 import com.rivell.workbench.contracts.UploadLimitExceededException;
+import com.rivell.workbench.foundation.DocumentWorkBusyException;
+import com.rivell.workbench.foundation.ErrorResponse;
 import com.rivell.workbench.knowledge.ConceptClassificationUnavailableException;
 import com.rivell.workbench.knowledge.InvalidCandidateReviewStateException;
 import com.rivell.workbench.knowledge.InvalidPublicationException;
@@ -53,7 +56,6 @@ import com.rivell.workbench.workflow.InvalidDecisionException;
 import com.rivell.workbench.workflow.ReviewAlreadyFinalizedException;
 import com.rivell.workbench.workflow.ReviewNotFinalizableException;
 import com.rivell.workbench.workflow.UnauthorizedWorkflowAccessException;
-import com.rivell.workbench.foundation.ErrorResponse;
 
 /**
  * Global API error mapping for all controllers. Domain exceptions map to explicit,
@@ -67,7 +69,20 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ErrorResponse> badRequest(IllegalArgumentException e) {
-        return error(HttpStatus.BAD_REQUEST, "400", "Request not accepted", e.getMessage());
+        // The message is the exception's own, and several of them name identifiers, classes or
+        // internal locations. The client gets a code-owned sentence; the type is all it needs (DW-094).
+        return error(HttpStatus.BAD_REQUEST, "400", "Request not accepted",
+                "Rivell could not accept this request. Check the values and try again.");
+    }
+
+    @ExceptionHandler(DocumentWorkBusyException.class)
+    ResponseEntity<ErrorResponse> documentWorkBusy(DocumentWorkBusyException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER,
+                        String.valueOf(DocumentWorkBusyException.RETRY_AFTER_SECONDS))
+                .body(new ErrorResponse("503", "Service busy",
+                        "Rivell is handling as many files as it can right now. Nothing was changed; "
+                                + "try again in a moment."));
     }
 
     @ExceptionHandler({ContractNotFoundException.class, ContractVersionNotFoundException.class,
@@ -170,11 +185,18 @@ public class GlobalExceptionHandler {
                 "No redline has been generated for this review yet.");
     }
 
+    @ExceptionHandler(RedlineSourceUnavailableException.class)
+    ResponseEntity<ErrorResponse> redlineSourceUnavailable(RedlineSourceUnavailableException e) {
+        // The source failure is typed: the client maps it to plain copy without reading the message.
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("409", "Action not available", e.getMessage(),
+                        e.code().name()));
+    }
+
     @ExceptionHandler({RedlineNotAvailableException.class,
             RedlineRetryNotAvailableException.class,
             RedlineArtifactUnavailableException.class,
-            RedlineExecutionFailedException.class,
-            RedlineSourceUnavailableException.class})
+            RedlineExecutionFailedException.class})
     ResponseEntity<ErrorResponse> redlineConflict(RuntimeException e) {
         return error(HttpStatus.CONFLICT, "409", "Action not available", e.getMessage());
     }

@@ -35,6 +35,8 @@ export interface Fake {
   uploads: { name: string; artifactType: string | null; query: Record<string, string> }[]
   /** An upload waits for this before it answers. */
   holdUpload?: Promise<void>
+  /** A source's candidate read waits for this before it answers. */
+  holdCandidates?: Promise<void>
   /** What a successful upload returns. */
   uploadResult: { id: string; status: ArtifactSummary['ingestStatus'] } | { status: number }
 }
@@ -394,6 +396,7 @@ export function startFakeServer(fake: Fake) {
         const source = fake.artifacts.find((entry) => entry.id === id)
         if (!source) return refuse(404)
         if (read[2] === 'candidates') {
+          if (fake.holdCandidates) await fake.holdCandidates
           if (fake.fail[`GET candidates ${id}`]) return refuse(fake.fail[`GET candidates ${id}`] as number)
           fake.beforeRead[id]?.()
           return envelope(fake.candidates[id] ?? [])

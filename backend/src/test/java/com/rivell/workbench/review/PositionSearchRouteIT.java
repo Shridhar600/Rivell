@@ -158,6 +158,41 @@ class PositionSearchRouteIT {
                 .findFirst().orElseThrow().id();
     }
 
+    /**
+     * DW-071 item 1: the route records that the search ran, not that it found something. A
+     * review with no published playbook still searches every clause; a reader who counts SEARCH
+     * checks must see those searches even though every result set was empty.
+     */
+    @Test
+    void theSearchRouteIsRecordedWhenTheSearchFindsNothing() throws Exception {
+        var reviewId = reviewedContractWithoutKnowledge();
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var searched = analysisRepository.findExecutions(organizationId(), run.id()).stream()
+                .filter(execution -> execution.detail() != null
+                        && execution.detail().get("search") instanceof Map<?, ?>)
+                .toList();
+        assertThat(searched).as("the searches ran, so they must be in the run").isNotEmpty();
+        assertThat(searched).allSatisfy(execution -> {
+            assertThat(execution.detail()).containsEntry("route", "SEARCH");
+            assertThat(((Map<?, ?>) execution.detail().get("search")).get("found"))
+                    .isEqualTo(0);
+        });
+    }
+
+    /** The same contract, reviewed with no published playbook: every search has nothing to find. */
+    private UUID reviewedContractWithoutKnowledge() throws Exception {
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/pc-contract.docx"));
+        var ingested = contractIngestionService.ingest("pc-contract.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        return reviewService.create(ingested.contractId(), 1, null).id();
+    }
+
     /** The termination clause's check: the only one whose comparison was found by search. */
     @SuppressWarnings("unchecked")
     private ReviewCheckExecution terminationCheck(UUID runId) {
@@ -219,11 +254,13 @@ class PositionSearchRouteIT {
         assertThat(trace.degradation()).contains("VECTOR_LANE_UNCONFIGURED");
         assertThat(trace.stages()).containsKeys("structured", "lexical", "vector", "fusion");
 
-        // diagnostics expose the search route's own numbers and the per-position foundBy
+        // diagnostics expose the search route's own numbers and the per-position foundBy. Other
+        // clauses may also have searched and found nothing, so pick the search with results.
         JsonNode searched = null;
         for (var view : json("/api/reviews/{id}/diagnostics", reviewId)
                 .at("/data/analysis/checks")) {
-            if ("SEARCH".equals(view.path("route").asText())) {
+            if ("SEARCH".equals(view.path("route").asText())
+                    && view.path("searchFound").asInt() >= 1) {
                 searched = view;
             }
         }

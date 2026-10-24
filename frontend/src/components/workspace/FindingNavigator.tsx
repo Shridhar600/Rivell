@@ -69,9 +69,6 @@ export function FindingNavigator({
     if (isNeedsYourLook(finding) && finding.firstReviewCategory) {
       return `First review: ${comparisonCategoryLabel(finding.firstReviewCategory)}`
     }
-    if (isNeedsYourLook(finding) && finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ') {
-      return 'Not covered by your playbook'
-    }
     return findingIssueLabel(finding)
   }
 

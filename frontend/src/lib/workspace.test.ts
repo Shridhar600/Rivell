@@ -320,4 +320,19 @@ describe('orderForReview', () => {
     ]
     expect(orderForReview(findings).map((finding) => finding.id)).toEqual(['b', 'd', 'e', 'a', 'c'])
   })
+
+  it('puts absence findings after the disagreements inside "needs your look"', () => {
+    const findings = [
+      { id: 'absence', decidedBy: 'NEEDS_YOUR_LOOK', subjectKind: 'ABSENCE' as const },
+      { id: 'disagreement', decidedBy: 'NEEDS_YOUR_LOOK', subjectKind: 'CLAUSE' as const },
+      { id: 'walk-away', decidedBy: 'NEEDS_YOUR_LOOK', firstReviewCategory: 'WALK_AWAY', subjectKind: 'ABSENCE' as const },
+      { id: 'second', decidedBy: 'NEEDS_YOUR_LOOK', subjectKind: 'CLAUSE' as const },
+    ]
+    expect(orderForReview(findings).map((finding) => finding.id)).toEqual([
+      'walk-away',
+      'disagreement',
+      'second',
+      'absence',
+    ])
+  })
 })

@@ -754,6 +754,20 @@ describe('finding evidence amendment', () => {
     expect(card).not.toHaveTextContent('Found by')
   })
 
+  it('gives the source sheet a heading outline, not plain labels', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
+
+    await findDetailTitle('6. Limitation of Liability')
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Policy/ }))
+
+    const sheet = screen.getByRole('dialog', { name: 'Source' })
+    expect(within(sheet).getByRole('heading', { level: 3, name: 'Position text' })).toBeInTheDocument()
+
+    await userEvent.click(within(section('Sources')).getByRole('button', { name: /^Current contract/ }))
+    const contract = screen.getByRole('dialog', { name: 'Source' })
+    expect(within(contract).getByRole('heading', { level: 3, name: 'View in document' })).toBeInTheDocument()
+  })
+
   it('links a cited source to its published knowledge page, never to the old publication record', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1')
 
@@ -1207,6 +1221,9 @@ describe('engine v2: the items P4 adds', () => {
     expect(views.getByText(/estimate 12%/)).toBeInTheDocument()
     expect(views.getByText(/Picked as high risk/)).toBeInTheDocument()
     expect(views.getByText('Only damages are available to us for a breach.')).toBeInTheDocument()
+    // The header names the playbook gap once; it does not also say "Policy unavailable".
+    expect(within(detailPane()).queryByText('Policy unavailable')).not.toBeInTheDocument()
+    expect(within(detailPane()).getAllByText(/Not covered by your playbook/).length).toBeGreaterThan(0)
     // not a disagreement between two reviews, and not a failure
     expect(screen.queryByTestId('second-opinion-views')).not.toBeInTheDocument()
     expect(detailPane()).not.toHaveTextContent(/degraded mode/)

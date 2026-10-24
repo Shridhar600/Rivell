@@ -173,15 +173,21 @@ export function ReviewLifecyclePage() {
   const redlineForbidden = redlineQuery.isError && isRedlineForbiddenError(redlineQuery.error)
 
   const failedTrigger = trigger.isError ? trigger : retry.isError ? retry : null
+  const triggerFailureCode =
+    failedTrigger?.error instanceof RedlineApiError ? failedTrigger.error.failureCode : null
+  const triggerRetryAfter =
+    failedTrigger?.error instanceof RedlineApiError ? failedTrigger.error.retryAfter : null
   const triggerKind = failedTrigger
     ? classifyTriggerError({
         status: failedTrigger.error instanceof RedlineApiError ? failedTrigger.error.status : null,
+        failureCode: triggerFailureCode,
+        retryAfter: triggerRetryAfter,
         execution,
         executionStateKnown: redlineNotStarted || redlineQuery.isSuccess,
       })
     : null
   // A recorded failure is shown by the failed-redline card itself, so it needs no second notice.
-  const triggerNotice = triggerKind && triggerKind !== 'FAILED_EXECUTION' ? redlineTriggerErrorNotice(triggerKind) : null
+  const triggerNotice = triggerKind && triggerKind !== 'FAILED_EXECUTION' ? redlineTriggerErrorNotice(triggerKind, triggerFailureCode) : null
 
   const findings = findingsQuery.data?.items ?? []
   const findingsById = new Map(findings.map((finding) => [finding.id, finding]))

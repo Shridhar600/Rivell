@@ -74,6 +74,9 @@ final class PositionSearch {
             var withoutVectors = new ArrayList<>(ids);
             withoutVectors.removeAll(repository.findEmbeddingReadyIds(
                     request.organizationId(), ids, properties.indexVersion()));
+            // A position with no index row is already reported as INDEX_INCOMPLETE; it has no
+            // vector row to call incomplete.
+            withoutVectors.removeAll(unindexed);
             if (!withoutVectors.isEmpty()) {
                 degradation.add("VECTOR_INDEX_INCOMPLETE");
             }

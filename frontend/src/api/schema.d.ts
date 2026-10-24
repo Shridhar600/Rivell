@@ -888,6 +888,8 @@ export interface components {
             code: string;
             title: string;
             detail: string;
+            /** @description Typed failure code, when the error carries one; absent otherwise */
+            failureCode?: string;
         };
         ApiResultDecisionView: {
             data?: components["schemas"]["DecisionView"];
@@ -933,11 +935,16 @@ export interface components {
             approvedChangeId?: string;
             /** Format: int32 */
             ordinal?: number;
-            actionType?: string;
-            targetKind?: string;
-            status?: string;
-            verification?: string;
-            failureCode?: string;
+            /** @enum {string} */
+            actionType: "REPLACE" | "INSERT" | "DELETE";
+            /** @enum {string} */
+            targetKind: "CLAUSE" | "ABSENCE";
+            /** @enum {string} */
+            status: "APPLIED" | "FAILED" | "NOT_APPLIED";
+            /** @enum {string|null} */
+            verification: "VERIFIED" | "FAILED" | null;
+            /** @enum {string|null} */
+            failureCode: "SOURCE_DOCUMENT_UNAVAILABLE" | "SOURCE_VERSION_MISMATCH" | "SOURCE_INTEGRITY_MISMATCH" | "UNSUPPORTED_SOURCE_FORMAT" | "SOURCE_EXPANSION_LIMIT_EXCEEDED" | "UNSUPPORTED_CHANGESET_VERSION" | "PROTECTED_DOCUMENT_UNSUPPORTED" | "PREEXISTING_REVISIONS_UNSUPPORTED" | "TARGET_NOT_FOUND" | "TARGET_AMBIGUOUS" | "UNSUPPORTED_SOURCE_STRUCTURE" | "CHANGE_OVERLAP" | "MISSING_APPROVED_LANGUAGE" | "INSERT_PLACEMENT_UNRESOLVED" | "APPROVED_SEMANTICS_DRIFT" | "DOCX_LOAD_FAILED" | "DOCX_SERIALIZATION_FAILED" | "ROUND_TRIP_FAILED" | "VERIFICATION_FAILED" | null;
             placement?: string;
             resolvedTarget?: string;
             /** Format: int32 */
@@ -960,9 +967,12 @@ export interface components {
             changeSetVersion?: number;
             /** Format: int32 */
             attempt?: number;
-            status?: string;
-            outcome?: string;
-            failureCode?: string;
+            /** @enum {string} */
+            status: "COMPLETED" | "FAILED";
+            /** @enum {string|null} */
+            outcome: "REDLINE_GENERATED" | "NO_CHANGES" | null;
+            /** @enum {string|null} */
+            failureCode: "SOURCE_DOCUMENT_UNAVAILABLE" | "SOURCE_VERSION_MISMATCH" | "SOURCE_INTEGRITY_MISMATCH" | "UNSUPPORTED_SOURCE_FORMAT" | "SOURCE_EXPANSION_LIMIT_EXCEEDED" | "UNSUPPORTED_CHANGESET_VERSION" | "PROTECTED_DOCUMENT_UNSUPPORTED" | "PREEXISTING_REVISIONS_UNSUPPORTED" | "TARGET_NOT_FOUND" | "TARGET_AMBIGUOUS" | "UNSUPPORTED_SOURCE_STRUCTURE" | "CHANGE_OVERLAP" | "MISSING_APPROVED_LANGUAGE" | "INSERT_PLACEMENT_UNRESOLVED" | "APPROVED_SEMANTICS_DRIFT" | "DOCX_LOAD_FAILED" | "DOCX_SERIALIZATION_FAILED" | "ROUND_TRIP_FAILED" | "VERIFICATION_FAILED" | null;
             failureDetail?: string;
             rendererVersion?: string;
             placementStrategyVersion?: string;
@@ -2075,7 +2085,7 @@ export interface components {
             /** Format: int64 */
             ageSeconds?: number;
             failureReason?: string;
-            /** @description Whether the snapshot the review froze still matches the live contract semantics and model configuration */
+            /** @description Whether the snapshot the review froze still matches the live environment: the contract semantics digest, retrieval index version, embedding model identity and model policy bindings */
             environmentMatchesSnapshot?: boolean;
             checks?: components["schemas"]["CheckView"][];
         };

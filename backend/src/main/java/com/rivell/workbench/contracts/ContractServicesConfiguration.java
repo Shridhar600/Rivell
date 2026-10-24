@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.rivell.workbench.foundation.DocumentStorage;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.intelligence.GenerativeReasoningService;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.organization.AuthorizationService;
@@ -23,6 +24,7 @@ class ContractServicesConfiguration {
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
+            DocumentWorkLimiter documentWorkLimiter,
             UploadProperties uploadProperties) {
         return new ContractIngestionService(
                 documentStorage,
@@ -31,6 +33,7 @@ class ContractServicesConfiguration {
                 transactionTemplate,
                 identityProvider,
                 authorizationService,
+                documentWorkLimiter,
                 uploadProperties.maxFileSize());
     }
 

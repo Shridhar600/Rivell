@@ -449,6 +449,15 @@ describe('findingPlaybookRule', () => {
       ),
     ).toBeNull()
   })
+
+  it('never labels a playbook-silent advisory "Policy unavailable"', () => {
+    expect(
+      findingIssueLabel({
+        issueFamily: 'POLICY_UNAVAILABLE',
+        observationKind: 'SPOTTED_IN_WHOLE_CONTRACT_READ',
+      }),
+    ).toBe('Not covered by your playbook')
+  })
 })
 
 describe('coverage notes and check labels', () => {

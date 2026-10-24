@@ -38,6 +38,8 @@ interface Props {
   onReplace: (published: string | null) => void
   /** The publication this candidate is part of, once it is published. */
   publishedIn: PublicationRef | null
+  /** Titles of the candidates this compilation was compared with, loaded once by the workspace. */
+  candidateTitles: ReadonlyMap<string, string>
   actions: RefObject<ReviewActions | null>
   onDecided: (candidateId: string) => void
   onNext: () => void
@@ -50,7 +52,7 @@ interface Props {
  * One candidate in review: where it came from, what Rivell made of it, why it needs attention,
  * and the reviewer's own decision. Every outcome shown is the one the server returned.
  */
-export function CandidateReview({ artifact, candidate, index, total, source, location, readiness, replaces, onReplace, publishedIn, actions, onDecided, onNext, onContext, onFailed }: Props) {
+export function CandidateReview({ artifact, candidate, index, total, source, location, readiness, replaces, onReplace, publishedIn, candidateTitles, actions, onDecided, onNext, onContext, onFailed }: Props) {
   const approve = useApproveCandidate()
   const reject = useRejectCandidate()
   const [wantsEdit, setEditing] = useState(false)
@@ -139,7 +141,7 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
             editing={editing ? <CorrectionForm id={formId} candidate={candidate} artifact={artifact} correction={correction} onSubmit={() => void correction.save()} /> : null}
           />
 
-          {open ? <ConditionChoices candidate={candidate} acknowledged={acknowledged} onAcknowledge={setAcknowledged} replaces={replaces} onReplace={onReplace} /> : null}
+          {open ? <ConditionChoices candidate={candidate} acknowledged={acknowledged} onAcknowledge={setAcknowledged} replaces={replaces} onReplace={onReplace} peerTitles={candidateTitles} /> : null}
 
           {candidate.reviewNote && !editing ? <p className="rv-kc-note">Review note: {candidate.reviewNote}</p> : null}
         </div>

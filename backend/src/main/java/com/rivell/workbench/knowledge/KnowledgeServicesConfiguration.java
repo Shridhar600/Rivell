@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.rivell.workbench.foundation.DocumentStorage;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
@@ -63,6 +64,7 @@ class KnowledgeServicesConfiguration {
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
+            DocumentWorkLimiter documentWorkLimiter,
             KnowledgeUploadProperties uploadProperties) {
         return new KnowledgeIngestionService(
                 documentStorage,
@@ -72,6 +74,7 @@ class KnowledgeServicesConfiguration {
                 transactionTemplate,
                 identityProvider,
                 authorizationService,
+                documentWorkLimiter,
                 uploadProperties.maxFileSize());
     }
 

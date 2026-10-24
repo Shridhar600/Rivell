@@ -219,9 +219,14 @@ describe('publish readiness and confirmation', () => {
     decided(same, ['duplicate'])
     await client.invalidateQueries()
     await waitFor(() => expect(publishButton()).toBeEnabled())
+    const peerReads = () => world.calls.filter(
+      (call) => call.path === '/api/knowledge/candidates/peer1').length
+    const readsBeforeDialog = peerReads()
     await userEvent.click(publishButton())
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(/Replaces earlier published knowledge/)).toHaveTextContent('Published Liability Cap')
+    // Opening the dialog adds no candidate read per row: the workspace's map already has it.
+    expect(peerReads()).toBe(readsBeforeDialog)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Publish' }))
     await waitFor(() => expect(requests(world, 'POST', /publications/)).toHaveLength(1))
     const sent = requests(world, 'POST', /publications/)[0]

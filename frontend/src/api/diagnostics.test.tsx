@@ -133,7 +133,7 @@ describe('parseReviewDiagnostics against recorded backend responses', () => {
     expect(parsed.analysis?.trigger).toBe('INITIAL')
     expect(parsed.analysis?.pipelineVersion).toBe('rivell-review-pipeline-1')
     expect(parsed.analysis?.runDurationSeconds).toBe(0)
-    expect(parsed.analysis?.semanticsMatchFrozenSnapshot).toBe(true)
+    expect(parsed.analysis?.environmentMatchesSnapshot).toBe(true)
     expect(parsed.analysis?.checks).toHaveLength(8)
     expect(parsed.analysis?.checks[0].key).toMatch(/^PRESENCE:/)
     expect(parsed.findings.total).toBe(2)
@@ -193,13 +193,12 @@ describe('parseReviewDiagnostics', () => {
     expect(parsed.stalled).toEqual([])
   })
 
-  it('renames the misleading server fields rather than passing them through', () => {
+  it('renames the misleading duration field and keeps the environment flag as the server names it', () => {
     const parsed = parseReviewDiagnostics(completedPayload)
 
     expect(parsed.analysis?.runDurationSeconds).toBe(120)
     expect(parsed.analysis).not.toHaveProperty('ageSeconds')
-    expect(parsed.analysis?.semanticsMatchFrozenSnapshot).toBe(true)
-    expect(parsed.analysis).not.toHaveProperty('environmentMatchesSnapshot')
+    expect(parsed.analysis?.environmentMatchesSnapshot).toBe(true)
   })
 
   it('keeps only a presence flag for every internal string', () => {

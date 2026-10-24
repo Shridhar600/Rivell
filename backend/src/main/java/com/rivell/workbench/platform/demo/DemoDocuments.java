@@ -22,7 +22,7 @@ final class DemoDocuments {
     static final String INITECH_NDA = "Initech NDA - Retry succeeded.docx";
     static final String UMBRELLA_MSA = "Umbrella MSA - Analysis failed.docx";
     static final String SOYLENT_MSA = "Soylent MSA - Limited analysis.docx";
-    static final String VANDELAY_MSA = "Vandelay MSA - Analysis queued.docx";
+    static final String VANDELAY_MSA = "Vandelay MSA - Waiting to start.docx";
     static final String CORRUPT_UPLOAD = "Corrupt Upload - Parse failed.docx";
     static final String SPARSE = "Minimal Sparse - Empty structure.docx";
 

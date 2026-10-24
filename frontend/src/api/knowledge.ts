@@ -875,7 +875,7 @@ export async function uploadKnowledge(
     bodySerializer: () => formData,
   })
 
-  if (!data) throw new UploadApiError(response.status, KNOWLEDGE_UPLOAD_MESSAGES)
+  if (!data) throw new UploadApiError(response.status, KNOWLEDGE_UPLOAD_MESSAGES, response.headers.get('Retry-After'))
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
 }
 

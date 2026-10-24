@@ -51,7 +51,8 @@ public record ReviewDiagnosticsView(
             Long ageSeconds,
             String failureReason,
             @Schema(description = "Whether the snapshot the review froze still matches the live "
-                    + "contract semantics and model configuration")
+                    + "environment: the contract semantics digest, retrieval index version, "
+                    + "embedding model identity and model policy bindings")
             Boolean environmentMatchesSnapshot,
             List<CheckView> checks) {
     }

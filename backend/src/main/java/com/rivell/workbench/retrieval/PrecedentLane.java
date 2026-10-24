@@ -80,6 +80,17 @@ public class PrecedentLane {
         if (!unindexed.isEmpty()) {
             degradation.add("INDEX_INCOMPLETE");
         }
+        // a row whose embedding failed is searchable by text only: the vector lane cannot see it
+        if (embeddingService.isConfigured() && !ids.isEmpty()) {
+            var withoutVectors = new ArrayList<>(ids);
+            withoutVectors.removeAll(repository.findEmbeddingReadyIds(
+                    request.organizationId(), ids, properties.indexVersion()));
+            // A row with no index entry has no vector to report; INDEX_INCOMPLETE already says it.
+            withoutVectors.removeAll(unindexed);
+            if (!withoutVectors.isEmpty()) {
+                degradation.add("VECTOR_INDEX_INCOMPLETE");
+            }
+        }
 
         var lexicalHits = repository.findLexicalCandidates(
                 request.organizationId(), ids,

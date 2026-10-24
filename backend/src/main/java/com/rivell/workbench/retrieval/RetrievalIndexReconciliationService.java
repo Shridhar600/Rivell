@@ -12,7 +12,8 @@ import com.rivell.workbench.knowledge.PublishedKnowledgeQuery;
 /**
  * Index reconciliation (DW-012, retrieval-owned): discover published, indexable
  * evidence that should exist in the CURRENT index/model version but has no index
- * row, and heal it in bounded batches. Idempotent by construction (upsert
+ * row or has one without a persisted vector, and heal it in bounded batches.
+ * Idempotent by construction (upsert
  * on-conflict-do-nothing keyed candidate+hash+version); embeddings persist outside
  * transactions; per-candidate failures never abort the run. Snapshot/source truth
  * is preserved: only the derived index state is written.
@@ -57,7 +58,8 @@ public class RetrievalIndexReconciliationService {
      * are counted and left for the next scheduled run (retries are tolerated, not
      * looped).
      */
-    public ReconciliationResult reconcile(int maxCandidates) {        var examined = 0;
+    public ReconciliationResult reconcile(int maxCandidates) {
+        var examined = 0;
         var indexed = 0;
         var embedded = 0;
         var failed = 0;
@@ -80,12 +82,25 @@ public class RetrievalIndexReconciliationService {
                     candidates = candidates.subList(0, remaining);
                 }
                 var missing = new ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>();
-                var indexedIds = repository.findIndexedIds(organizationId,
-                        candidates.stream().map(match -> match.candidate().id()).toList(),
+                var withoutVectors =
+                        new ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>();
+                var candidateIds = candidates.stream().map(match -> match.candidate().id()).toList();
+                var indexedIds = repository.findIndexedIds(organizationId, candidateIds,
                         properties.indexVersion());
+                var embeddingsConfigured = indexService.embeddingsConfigured();
+                var vectorReadyIds = embeddingsConfigured
+                        ? repository.findEmbeddingReadyIds(organizationId, candidateIds,
+                                properties.indexVersion())
+                        : java.util.Set.<UUID>of();
                 for (var match : candidates) {
                     if (!indexedIds.contains(match.candidate().id())) {
                         missing.add(match);
+                    } else if (embeddingsConfigured
+                            && !vectorReadyIds.contains(match.candidate().id())) {
+                        // DW-065: the row exists, but an earlier embedding failed. It is
+                        // searchable by text only, and no pass ever filled the gap. Without a
+                        // provider there is no vector lane to heal, so the row is left alone.
+                        withoutVectors.add(match);
                     }
                 }
                 examined += candidates.size();
@@ -104,9 +119,23 @@ public class RetrievalIndexReconciliationService {
                                 match.candidate().id(), organizationId, e.toString());
                     }
                 }
+                for (var match : withoutVectors) {
+                    try {
+                        // With an unchanged content hash the upsert adds no row; the read is what
+                        // is needed. A changed hash is treated as a new index row.
+                        var candidate = indexService.indexCandidate(organizationId,
+                                match.candidate().id(), match.publicationNumber());
+                        if (candidate != null) {
+                            texts.put(candidate.id(), candidate.effectiveContentText());
+                        }
+                    } catch (RuntimeException e) {
+                        failed++;
+                        log.warn("Re-embedding failed for candidate {} in org {}: {}",
+                                match.candidate().id(), organizationId, e.toString());
+                    }
+                }
                 if (!texts.isEmpty()) {
-                    indexService.embedBatch(organizationId, texts);
-                    embedded += texts.size();
+                    embedded += indexService.embedBatch(organizationId, texts);
                 }
             } catch (RuntimeException e) {
                 failed++;

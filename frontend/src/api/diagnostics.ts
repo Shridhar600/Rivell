@@ -84,12 +84,11 @@ export type DiagnosticsRun = {
   runDurationSeconds: number | null
   failureDetail: InternalDetail
   /**
-   * Renamed from `environmentMatchesSnapshot`. It compares **only** the semantics digest, while the
-   * analysis itself checks four environment inputs, so `true` does not mean the analysis ran on
-   * fully matching inputs. A changed embedding index or model binding still degrades every check
-   * while this reports `true`.
+   * The same comparison the analysis makes before it runs: the frozen contract semantics digest,
+   * retrieval index version, embedding model identity and model policy bindings. `true` means the
+   * review's inputs still match; any one of the four drifting reports `false`.
    */
-  semanticsMatchFrozenSnapshot: boolean | null
+  environmentMatchesSnapshot: boolean | null
   /**
    * Execution rows, not plan rows. The backend seeds a PENDING execution per plan check before
    * running any, so a started run is normally complete — but a run with no executions has a full
@@ -212,7 +211,7 @@ function parseRun(value: unknown, what: string): DiagnosticsRun {
     completedAt: readOptionalNullableString(run, 'completedAt', what),
     runDurationSeconds: readOptionalNullableNumber(run, 'ageSeconds', what),
     failureDetail: readInternalDetail(run, 'failureReason', what),
-    semanticsMatchFrozenSnapshot: readOptionalNullableBoolean(
+    environmentMatchesSnapshot: readOptionalNullableBoolean(
       run,
       'environmentMatchesSnapshot',
       what,
