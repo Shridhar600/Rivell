@@ -143,9 +143,9 @@ public class ReviewDiagnosticsService {
     private ReviewDiagnosticsView.AnalysisRunView analysisView(
             UUID organizationId, ReviewAnalysisRun run, List<String> stalled) {
         var now = clock.instant();
+        var endedAt = run.completedAt() == null ? now : run.completedAt();
         var age = run.startedAt() == null ? null
-                : Duration.between(run.startedAt(), completion(run.startedAt(),
-                        run.completedAt())).toSeconds();
+                : Duration.between(run.startedAt(), endedAt).toSeconds();
         if (run.completedAt() == null && run.startedAt() != null
                 && Duration.between(run.startedAt(), now).compareTo(STUCK_RUN_THRESHOLD) > 0) {
             stalled.add("The analysis has been running for " + age
@@ -188,6 +188,7 @@ public class ReviewDiagnosticsService {
         return new ReviewDiagnosticsView.AnalysisRunView(run.id(), run.runNumber(),
                 run.status().name(), run.trigger().name(), run.pipelineVersion(),
                 run.startedAt(), run.completedAt(), age, run.failureReason(),
+                run.transientFailures(), run.lastTransientReason(),
                 environmentMatches(organizationId, run.reviewId()), checks);
     }
 

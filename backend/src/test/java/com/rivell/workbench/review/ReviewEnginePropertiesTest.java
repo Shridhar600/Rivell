@@ -62,4 +62,13 @@ class ReviewEnginePropertiesTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("analysis-budget");
     }
+
+    @Test
+    void theTransientFailureLimitDefaultsToThreeAndMustNotBeNegative() {
+        assertThat(new ReviewEngineProperties(null, null, null, null, null).maxTransientFailures())
+                .isEqualTo(3);
+        assertThatThrownBy(() -> new ReviewEngineProperties(null, null, null, null, null, null, -1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("max-transient-failures");
+    }
 }

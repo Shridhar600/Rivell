@@ -50,6 +50,11 @@ public record ReviewDiagnosticsView(
             Instant completedAt,
             Long ageSeconds,
             String failureReason,
+            @Schema(description = "Transient infrastructure failures this run has survived. A "
+                    + "running run with a positive count is being retried by JobRunr, not dead.")
+            int transientFailures,
+            @Schema(description = "Code-owned reason of the last transient failure, if any")
+            String lastTransientReason,
             @Schema(description = "Whether the snapshot the review froze still matches the live "
                     + "environment: the contract semantics digest, retrieval index version, "
                     + "embedding model identity and model policy bindings")

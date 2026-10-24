@@ -26,7 +26,7 @@ class FindingAssemblerTest {
     private static ReviewAnalysisRun run() {
         return new ReviewAnalysisRun(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, 1,
                 RunStatus.COMPLETED, RunTrigger.INITIAL, "rivell-review-pipeline-1",
-                NOW, NOW, null);
+                NOW, NOW, null, 0, null);
     }
 
     private static RawReviewSignal signal(

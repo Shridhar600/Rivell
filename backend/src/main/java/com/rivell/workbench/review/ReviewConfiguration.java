@@ -125,13 +125,15 @@ class ReviewConfiguration {
             FindingRepository findingRepository,
             FindingAssembler findingAssembler,
             TransactionTemplate transactionTemplate,
+            org.springframework.transaction.PlatformTransactionManager transactionManager,
             Clock clock,
             ReviewEngineProperties reviewEngineProperties) {
         return new ReviewAnalysisService(reviewRepository, reviewAnalysisRepository,
                 reviewCheckExecutors, contractEnrichmentService, contractQueryService,
                 retrievalProperties, embeddingService, evidenceService, modelBindingCatalog,
-                findingRepository, findingAssembler, transactionTemplate, clock,
-                reviewEngineProperties.analysisBudget());
+                findingRepository, findingAssembler, transactionTemplate, transactionManager,
+                clock, reviewEngineProperties.analysisBudget(),
+                reviewEngineProperties.maxTransientFailures());
     }
 
     @Bean
