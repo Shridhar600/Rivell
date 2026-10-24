@@ -19,7 +19,11 @@ TRIAGE_FLAGGED = 0.5
 QUALITY_KEYS = ("route", "foundBy", "uncertaintyReason", "spottedSeverity",
                 "presenceProbability", "searchedClauses", "comparedClauses",
                 "positionLabel", "jevCategory", "secondOpinionCategory", "levers",
-                "severityWithoutLevers")
+                "severityWithoutLevers", "secondOpinionQuote", "secondOpinionReason",
+                "categoryBeforeLevers", "wordingFitVerdict", "wordingFitReason",
+                "wordingFitReasons", "wordingFitQuote", "fitVerdict", "fitReason", "fitReasons")
+
+FIT_VERDICTS = ("FITS", "DOES_NOT_FIT", "UNKNOWN")
 
 LEVER_KEYS = ("issues", "issuesDetected", "falseAlarmSections",
               "seriousFalseAlarmSections", "findings")
@@ -38,6 +42,38 @@ def _addresses(position):
 def _search_positions(check):
     return [position for position in (check.get("judgedPositions") or [])
             if (position.get("positionKey") or "").startswith("search_")]
+
+
+def fit_metrics(checks):
+    """Part 4: Rivell's fit verdicts, per search hit and per wording offer, and what it cost.
+
+    Reads what the run recorded: each judged position's {fitVerdict, fitOutcome,
+    wordingFitVerdict} in the check's judged positions, and the fit call/skip counts the check
+    keeps. A wording verdict is per judged position, so two offers in one consolidated finding
+    stay countable. The fit scorer compares these verdicts with its own labels; a run from
+    before the fit check reports zeroes, never missing keys.
+    """
+    search = {verdict: 0 for verdict in FIT_VERDICTS}
+    wording = {verdict: 0 for verdict in FIT_VERDICTS}
+    not_covered = calls = questions = skipped = 0
+    for check in checks:
+        if check.get("fitQuestions") is not None:
+            calls += 1
+        questions += check.get("fitQuestions") or 0
+        skipped += check.get("fitSkipped") or 0
+        for position in check.get("judgedPositions") or []:
+            searched = (position.get("positionKey") or "").startswith("search_")
+            if searched:
+                verdict = position.get("fitVerdict")
+                if verdict in search:
+                    search[verdict] += 1
+                if position.get("fitOutcome") == "not_covered":
+                    not_covered += 1
+            verdict = position.get("wordingFitVerdict")
+            if verdict in wording:
+                wording[verdict] += 1
+    return {"search": search, "wording": wording, "notCovered": not_covered,
+            "calls": calls, "questions": questions, "skipped": skipped}
 
 
 def search_metrics(checks):

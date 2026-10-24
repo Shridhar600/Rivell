@@ -318,6 +318,10 @@ describe('review parsers', () => {
       foundBy: null,
       spottedSeverity: null,
       spottedReason: null,
+      wordingFitVerdict: null,
+      wordingFitReason: null,
+      fitVerdict: null,
+      fitReason: null,
       presenceProbability: null,
     })
     expect(detail.claims.map((claim) => claim.claimKind)).toEqual([

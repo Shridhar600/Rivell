@@ -247,6 +247,8 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
                                                               "seriousFalseAlarmSections", "findings")}
     # engine v2 P4: the levers and the diagnostics-only measurements, pure functions of this run
     score["search"] = p4_metrics.search_metrics(checks)
+    # part 4: Rivell's fit verdicts, per search hit and per wording offer
+    score["fit"] = p4_metrics.fit_metrics(checks)
     score["advisory"] = p4_metrics.advisory_metrics(answer, nodes, clauses, findings)
     score["omissions"] = p4_metrics.omission_metrics(answer, findings)
     score["lookReasons"] = p4_metrics.look_reasons(findings)
@@ -584,7 +586,9 @@ P4_D12B_CELLS = ("flaggedPicked", "flaggedUnpicked", "clearPicked", "clearUnpick
 def p4_data(contract):
     """Any engine v2 P4 activity in one scored contract; a v1 contract has none."""
     search = contract.get("search") or {}
+    fit = contract.get("fit") or {}
     return bool(search.get("route") or search.get("found")
+                or fit.get("calls") or fit.get("skipped") or fit.get("questions")
                 or (contract.get("advisory") or {}).get("picks")
                 or (contract.get("omissions") or {}).get("list")
                 or any((contract.get("lookReasons") or {}).values()))
@@ -630,6 +634,15 @@ def p4_lines(results):
     medium = sum(o.get("medium", 0) for o in omissions)
     low = sum(o.get("low", 0) for o in omissions)
     alarms = sum(o.get("alarms", 0) for o in omissions)
+    fits = [c.get("fit") or {} for c in contracts]
+    fit_calls = sum(f.get("calls", 0) for f in fits)
+    fit_questions = sum(f.get("questions", 0) for f in fits)
+    fit_skipped = sum(f.get("skipped", 0) for f in fits)
+    fit_not_covered = sum(f.get("notCovered", 0) for f in fits)
+    fit_search = {key: sum((f.get("search") or {}).get(key, 0) for f in fits)
+                  for key in ("FITS", "DOES_NOT_FIT", "UNKNOWN")}
+    fit_wording = {key: sum((f.get("wording") or {}).get(key, 0) for f in fits)
+                   for key in ("FITS", "DOES_NOT_FIT", "UNKNOWN")}
     reasons = {key: sum((c.get("lookReasons") or {}).get(key, 0) for c in contracts)
                for key in P4_LOOK_REASONS}
     lines = ["", "## Engine v2 P4", "",
@@ -639,7 +652,12 @@ def p4_lines(results):
              f"- Advisory picks: {picks} ({picks / n:.1f}/contract; as if all were HIGH: {high}); "
              f"issue-section hits {pct(hits, picks)} (HIGH {pct(high_hits, high)})",
              f"- Omissions: MEDIUM {medium} ({medium / n:.1f}/contract), LOW {low} "
-             f"({low / n:.1f}/contract); alarms (MEDIUM matching no MISSING_PROVISION issue) {alarms}"]
+             f"({low / n:.1f}/contract); alarms (MEDIUM matching no MISSING_PROVISION issue) {alarms}",
+             f"- Fit: {fit_calls} calls, {fit_questions} questions, {fit_skipped} calls saved by "
+             f"the skip rule; search FITS {fit_search['FITS']}, DOES_NOT_FIT "
+             f"{fit_search['DOES_NOT_FIT']}, UNKNOWN {fit_search['UNKNOWN']}, not covered "
+             f"{fit_not_covered}; wording FITS {fit_wording['FITS']}, DOES_NOT_FIT "
+             f"{fit_wording['DOES_NOT_FIT']}, UNKNOWN {fit_wording['UNKNOWN']}"]
     for contract in contracts:
         for omission in (contract.get("omissions") or {}).get("list", []):
             presence = omission.get("presence")

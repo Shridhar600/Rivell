@@ -2164,6 +2164,16 @@ export interface components {
             flaggedBySearch?: number;
             /** @description Engine v2: defined terms whose definitions the judge read for this clause; absent when none */
             definitionTerms?: string[];
+            /**
+             * Format: int32
+             * @description Part 4: fit questions asked for this clause; null when no fit question was asked
+             */
+            fitQuestions?: number;
+            /**
+             * Format: int32
+             * @description Part 4: fit calls saved by the exact-metadata skip rule for this clause
+             */
+            fitSkipped?: number;
         };
         /** @description Finding counts, no finding content */
         CountsView: {
@@ -2218,6 +2228,16 @@ export interface components {
             secondOpinionCategory?: string;
             /** @description SEARCH when the text search, not a topic, found this position; absent otherwise */
             foundBy?: string;
+            /** @description The fit check's verdict for a searched position: FITS, DOES_NOT_FIT or UNKNOWN; null when no fit question was asked */
+            fitVerdict?: string;
+            /** @description The fit check's code-owned reason, such as GOVERNS or DIFFERENT_SUBJECT */
+            fitReason?: string;
+            /** @description not_covered when the position did not govern and was not applied; null otherwise */
+            fitOutcome?: string;
+            /** @description The fit check's verdict on the library wording offered for this position: FITS, DOES_NOT_FIT or UNKNOWN; null when no wording was offered */
+            wordingFitVerdict?: string;
+            /** @description Why the wording offer has its verdict: MEETS_POSITION_YES/NO/UNKNOWN, CURES_GAP_YES/NO/UNKNOWN, UNAVAILABLE */
+            wordingFitReasons?: string[];
         };
         /** @description Deterministic redline state */
         RedlineView: {

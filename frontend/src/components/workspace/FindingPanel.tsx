@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { EvidenceItem } from '../../api/retrieval'
 import type { FindingClaim, FindingDetail, FindingQuality, PlaybookUsed } from '../../api/reviews'
@@ -120,11 +120,26 @@ function ClaimEvidence({ claim, items, onOpen }: { claim: FindingClaim; items: M
   )
 }
 
-function sourceRow(item: EvidenceItem, regionLabels: Map<string, string>, label: ConceptLabel): { title: string; detail: string } {
+function sourceRow(
+  item: EvidenceItem,
+  regionLabels: Map<string, string>,
+  label: ConceptLabel,
+  wordingFitVerdict: string | null = null,
+): { title: string; detail: string } {
   const region = item.provenanceNodeIds.map((id) => regionLabels.get(id)).find(Boolean)
   const subject = region ?? (item.legalConcept ? label(item.legalConcept) : '')
   const snippet = item.text.replace(/\s+/g, ' ').trim()
-  return { title: authorityLabel(item.authorityClass), detail: [subject, snippet].filter(Boolean).join(' · ') }
+  const title =
+    item.authorityClass === 'APPROVED_DRAFTING'
+      ? wordingFitVerdict === 'DOES_NOT_FIT'
+        ? 'Library wording (did not fit this position)'
+        : wordingFitVerdict === 'UNKNOWN'
+          ? 'Library wording (not checked against this position)'
+          : wordingFitVerdict === 'FITS'
+            ? authorityLabel(item.authorityClass)
+            : 'Library wording'
+      : authorityLabel(item.authorityClass)
+  return { title, detail: [subject, snippet].filter(Boolean).join(' · ') }
 }
 
 /**
@@ -161,6 +176,12 @@ export function FindingPanel(props: Props) {
   const { finding, flow, decision } = props
   const { labelFor } = useTaxonomy()
   const [showAll, setShowAll] = useState(false)
+  // A library wording that did not fit is still the person's to take: this opens Edit with it.
+  const [libraryPrefill, setLibraryPrefill] = useState<{ text: string; seq: number } | null>(null)
+  const prefillSeq = useRef(0)
+  useEffect(() => {
+    setLibraryPrefill(null)
+  }, [props.finding?.id])
 
   // The loading, empty and error states share the host elements of the full panel, and the frozen
   // card is keyed, so the card is never remounted as the finding arrives.
@@ -183,6 +204,27 @@ export function FindingPanel(props: Props) {
   }
 
   const items = new Map(finding.evidenceItems.map((item) => [item.evidenceId, item]))
+  // A wording that did not fit, or was not checked, is still offered as a source; the person can
+  // take it from here when it did not fit.
+  const libraryWording =
+    finding.proposedLanguageSource === 'APPROVED_DRAFTING' ||
+    finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT'
+      ? (finding.evidenceItems.find((item) => item.authorityClass === 'APPROVED_DRAFTING') ?? null)
+      : null
+  const canTakeLibraryWording =
+    !props.isFinalized &&
+    props.analysisComplete &&
+    props.canDecide &&
+    props.decisionsLoaded &&
+    !flow.readOnly &&
+    !flow.isSubmitting
+  const editBaseline = props.replacementText ?? props.currentText ?? ''
+  const takeLibraryWording = (text: string) => {
+    if (!canTakeLibraryWording) return
+    prefillSeq.current += 1
+    setLibraryPrefill({ text, seq: prefillSeq.current })
+    flow.decide('EDIT')
+  }
   const why = whyClaims(finding.claims)
   const recommendations = recommendationClaims(finding.claims)
   const absences = absenceClaims(finding.claims)
@@ -309,6 +351,32 @@ export function FindingPanel(props: Props) {
             </div>
           ) : null}
 
+          {finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT' && !proposedLanguage ? (
+            <p className="rv-ws-note">
+              The clause library wording for this position did not fit this clause. No replacement
+              wording is proposed; please check it yourself.
+              {canTakeLibraryWording && libraryWording ? (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    className="rv-ws-link"
+                    onClick={() => takeLibraryWording(libraryWording.text)}
+                  >
+                    Use the library wording
+                  </button>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+
+          {finding.quality?.foundBy === 'SEARCH' && finding.quality?.fitVerdict === 'UNKNOWN' ? (
+            <p className="rv-ws-note">
+              Rivell could not check that this rule governs this clause. Read it before you rely on
+              it.
+            </p>
+          ) : null}
+
           {proposedLanguage && grounded ? (
             <div className="rv-ws-sec">
               <div className="rv-ws-sec-h">Suggested change</div>
@@ -320,6 +388,24 @@ export function FindingPanel(props: Props) {
                   <b>{authority.strong}</b>
                   <span>{authority.rest}</span>
                 </div>
+              ) : null}
+              {finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT' ? (
+                <p className="rv-ws-caption">
+                  The clause library wording for this position did not fit this clause, so Rivell's proposal is
+                  shown instead. Check it before you use it.
+                  {canTakeLibraryWording && libraryWording ? (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="rv-ws-link"
+                        onClick={() => takeLibraryWording(libraryWording.text)}
+                      >
+                        Use the library wording
+                      </button>
+                    </>
+                  ) : null}
+                </p>
               ) : null}
               {edited ? <div className="rv-ws-src">Your edit differs from the proposed wording.</div> : null}
             </div>
@@ -386,7 +472,7 @@ export function FindingPanel(props: Props) {
                     </p>
                   ))}
                   <p>
-                    <b>Recommendation:</b> {proposedActionLabel(finding.proposedAction)}.
+                    <b>Recommendation:</b> {proposedActionLabel(finding.proposedAction, finding)}.
                     {recommendations.map((claim) => (
                       <span key={claim.ordinal}>
                         {' '}
@@ -426,7 +512,14 @@ export function FindingPanel(props: Props) {
                   <small>{finding.evidenceItems.length}</small>
                 </summary>
                 {sources.map((item) => {
-                  const row = sourceRow(item, props.regionLabels, labelFor)
+                  const row = sourceRow(
+                    item,
+                    props.regionLabels,
+                    labelFor,
+                    item.evidenceId === libraryWording?.evidenceId
+                      ? (finding.quality?.wordingFitVerdict ?? 'UNKNOWN')
+                      : null,
+                  )
                   return (
                     <button key={item.evidenceId} type="button" className="rv-ws-srow" onClick={() => props.onOpenSource(item.evidenceId)}>
                       <span className="rv-ws-sico">
@@ -497,15 +590,25 @@ export function FindingPanel(props: Props) {
 
         {flow.compose ? (
           <DecisionComposer
-            key={`${finding.id}-${flow.compose}`}
+            key={`${finding.id}-${flow.compose}-${libraryPrefill?.seq ?? 0}`}
             kind={flow.compose}
             finding={finding}
             currentText={props.currentText}
-            initialLanguage={decision?.action === 'EDIT' ? (decision.approvedLanguage ?? '') : (props.replacementText ?? props.currentText ?? '')}
+            initialLanguage={
+              libraryPrefill?.text ??
+              (decision?.action === 'EDIT' ? (decision.approvedLanguage ?? '') : editBaseline)
+            }
+            baselineLanguage={editBaseline}
             isSubmitting={flow.isSubmitting}
             error={flow.error}
-            onSubmit={flow.submit}
-            onCancel={flow.cancel}
+            onSubmit={(submission) => {
+              setLibraryPrefill(null)
+              flow.submit(submission)
+            }}
+            onCancel={() => {
+              setLibraryPrefill(null)
+              flow.cancel()
+            }}
           />
         ) : flow.error ? (
           <p className="rv-ws-error" role="alert">

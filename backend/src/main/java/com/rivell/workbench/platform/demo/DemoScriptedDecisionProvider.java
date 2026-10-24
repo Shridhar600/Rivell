@@ -234,6 +234,10 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
     }
 
     private double cueProbability(String questionName, Object state) {
+        // the part-4 fit check: the demo shows fitted playbook wording, never a replacement
+        if (questionName.startsWith("fit_")) {
+            return CONFIDENT;
+        }
         if (isConflictPair(state)) {
             return conflictRelationshipCue(questionName, state);
         }

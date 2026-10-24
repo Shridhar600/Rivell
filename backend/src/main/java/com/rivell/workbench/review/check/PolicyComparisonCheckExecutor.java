@@ -49,9 +49,11 @@ import com.rivell.workbench.taxonomy.ConceptRegistry;
  * against every published position that shares a topic with it — one Choice per
  * position. The code owns the outcome: a position flags by summed probability of the
  * four issue-bearing options, and the category is their argmax. Flagged positions
- * become findings with approved fallback wording when the clause library carries it,
- * verified machine language otherwise, and escalation whenever the position names an
- * approver. Provider failure is recorded per position, never a silent pass.
+ * become findings with approved fallback wording when the clause library carries it and
+ * it fits the position, verified machine language otherwise, and escalation whenever the
+ * position names an approver. A search-found position is applied only when it governs the
+ * clause's subject; anything else stays in the diagnostics as "not covered". Provider
+ * failure is recorded per position, never a silent pass.
  */
 public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor {
 
@@ -88,6 +90,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private final AdjudicationBudget conditionBudget;
     /** P2's own second-opinion budget, so its extra calls never use up the one the doubt band needs. */
     private final AdjudicationBudget splitBudget;
+    /** The one fit check both lanes use: search hits must govern, library wording must meet and cure. */
+    private final ClauseFitCheck fitCheck;
 
     public PolicyComparisonCheckExecutor(
             SemanticDecisionService decisionService,
@@ -113,6 +117,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         this.splitBudget = new AdjudicationBudget(routing.maxAdjudications());
         this.conditionChecker = new FallbackConditionChecker(reasoningService);
         this.conditionBudget = new AdjudicationBudget(engineProperties.fallbackConditions().maxChecks());
+        this.fitCheck = new ClauseFitCheck(decisionService);
     }
 
     @Override
@@ -190,6 +195,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         // playbook is searched by the clause's text once; Jev judges what is found the same way
         EvidenceBundle searchBundle = null;
         var searchFailed = false;
+        Map<String, Object> searchDetail = null;
         if (judgedPositions.stream().noneMatch(PolicyComparisonCheckExecutor::addresses)) {
             searchBundle = context.evidenceCache().buildForPositionSearch(bundle.request(),
                     judgedPositions.stream().map(judged -> judged.position().sourceCandidateId())
@@ -201,6 +207,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             search.put("found", found.size());
             search.put("traceId", searchBundle.traceId() == null
                     ? "" : searchBundle.traceId().toString());
+            searchDetail = search;
             detail.put("search", search);
             // the route records that the search ran, whatever it found (DW-071)
             detail.put("route", SEARCH);
@@ -228,9 +235,6 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 }
             }
         }
-        // the clause marks read this: a clause a position addresses was checked against the playbook
-        var addressed = judgedPositions.stream().anyMatch(PolicyComparisonCheckExecutor::addresses);
-        detail.put("addressed", addressed);
         var opinions = secondOpinions(context, clause, judgeState, judgedPositions,
                 definitions.texts(), definitionsUsed);
         var resolutions = new LinkedHashMap<String, Resolution>();
@@ -239,23 +243,42 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             resolutions.put(judged.key(), resolve(context, clause, judgeState, judged, opinions,
                     contractFacts));
         }
+        // one fit pack for the clause: the positions the text search found and the library
+        // wording a flagged position would offer (engine decision §B.1)
+        var wordingByKey = wordingFor(judgedPositions, resolutions);
+        var fit = fit(context, clause, judgedPositions, wordingByKey);
+        putFitSummary(detail, fit);
+        if (searchDetail != null) {
+            searchDetail.put("notCovered", (int) judgedPositions.stream()
+                    .filter(judged -> judged.searched() && !applied(judged, fit)).count());
+        }
+        // the clause marks read this: a clause a position addresses was checked against the playbook
+        var addressed = judgedPositions.stream()
+                .anyMatch(judged -> addresses(judged) && applied(judged, fit));
+        detail.put("addressed", addressed);
         if (!judgedPositions.isEmpty()) {
             var probeAnswers = probe;
             detail.put("positions", judgedPositions.stream()
                     .map(judged -> detailEntry(judged, probeAnswers.get(judged.key()),
-                            opinions.byKey().get(judged.key()), resolutions.get(judged.key())))
+                            opinions.byKey().get(judged.key()), resolutions.get(judged.key()), fit,
+                            wordingByKey))
                     .toList());
         }
         var signals = new ArrayList<RawReviewSignal>();
         var definitionsCarried = !definitions.isEmpty();
         for (var judged : judgedPositions) {
+            if (!applied(judged, fit)) {
+                // a search hit that does not govern the clause is not applied; the detail keeps it
+                continue;
+            }
             var opinion = opinions.effective(judged.key());
             var resolution = resolutions.get(judged.key());
             if (opinion != null && !opinion.agreed()) {
-                signals.add(needsYourLook(context, clause, judged, opinion, definitionsCarried, resolution));
+                signals.add(needsYourLook(context, clause, judged, opinion, definitionsCarried,
+                        resolution, fit));
             } else if (judged.judgement().flagged()) {
                 signals.addAll(flaggedSignals(context, clause, judged, opinion, detail,
-                        definitionsCarried, resolution));
+                        definitionsCarried, resolution, wordingByKey, fit));
             }
         }
         if (definitionsUsed[0]) {
@@ -499,7 +522,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
      */
     private RawReviewSignal needsYourLook(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
-            LlmAdjudicator.SecondOpinion opinion, boolean definitionsCarried, Resolution resolution) {
+            LlmAdjudicator.SecondOpinion opinion, boolean definitionsCarried, Resolution resolution,
+            ClauseFitCheck.Outcome fit) {
         var bundle = judged.bundle();
         var execution = judged.execution();
         // when the judge read this position's own bundle's definitions, the finding cites them
@@ -522,6 +546,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         }
         if (judged.searched()) {
             quality.put("foundBy", SEARCH);
+            putFit(quality, fit, judged);
         }
         quality.put("jevCategory", jevView(jev));
         quality.put("flagProbability", jev.flagProbability());
@@ -550,6 +575,18 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 .dedupeSuffix(judged.key()));
     }
 
+    /** The fit verdict of a searched position, written where the finding and the eval read it. */
+    private static void putFit(Map<String, Object> quality, ClauseFitCheck.Outcome fit,
+            JudgedPosition judged) {
+        var judgment = fit.judgments().get(judged.key());
+        if (judgment == null) {
+            return;
+        }
+        quality.put("fitVerdict", judgment.verdict().name());
+        quality.put("fitReason", judgment.reasons().getFirst().name());
+        quality.put("fitReasons", judgment.reasons().stream().map(Enum::name).toList());
+    }
+
     /** Jev's own answer: its flagging category, else "meets" or "not addressed", whichever is likelier. */
     private static String jevView(PolicyComparisonOutcome.Judgement jev) {
         if (jev.flagged()) {
@@ -564,7 +601,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private List<RawReviewSignal> flaggedSignals(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
             LlmAdjudicator.SecondOpinion opinion, Map<String, Object> detail,
-            boolean definitionsCarried, Resolution resolution) {
+            boolean definitionsCarried, Resolution resolution,
+            Map<String, Wording> wordingByKey, ClauseFitCheck.Outcome fit) {
         var bundle = judged.bundle();
         var execution = judged.execution();
         var category = resolution.category();
@@ -582,10 +620,16 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var secondaryTopic = !judged.searched()
                 && governsOnlySecondaryTopic(clause, judged.position());
         var wantsLanguage = wantsLanguage(category);
-        var drafting = wantsLanguage ? chooseDrafting(bundle.approvedDraftingItems(), judged.position()) : null;
-        LanguageAttempt attempt = wantsLanguage && drafting == null && !secondaryTopic
-                ? generate(context, clause, judged, family, evidence, detail)
-                : null;
+        var wording = wantsLanguage ? wordingByKey.get(judged.key()) : null;
+        var drafting = wording == null ? null : wording.item();
+        var wordingFit = drafting == null ? null : fit.judgments().get(wordingKey(judged.key()));
+        var fitVerdict = wordingFit == null ? ClauseFitCheck.Verdict.UNKNOWN : wordingFit.verdict();
+        // a wording that does not fit is replaced by Rivell's own proposal, never offered as
+        // approved; an unchecked one is still offered, labelled as unchecked
+        LanguageAttempt attempt = wantsLanguage && !secondaryTopic
+                && (drafting == null || fitVerdict == ClauseFitCheck.Verdict.DOES_NOT_FIT)
+                        ? generate(context, clause, judged, family, evidence, detail)
+                        : null;
         var signals = new ArrayList<RawReviewSignal>();
         signals.add(signal(context, b -> b
                 .signalType(SignalType.POLICY_DEVIATION).issueFamily(family)
@@ -603,18 +647,31 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                         : opinion == null ? null : opinion.executionId())
                 .quality(flaggedQuality(judged, secondaryTopic,
                         opinion == null ? JEV : SECOND_OPINION, resolution, opinion,
-                        attempt == null ? null : attempt.failure()))
+                        attempt == null ? null : attempt.failure(), fit))
                 .dedupeSuffix(judged.key())));
         if (drafting != null) {
+            var quality = new LinkedHashMap<String, Object>();
+            quality.put("draftingAvailable", true);
+            quality.put("wordingFitVerdict", fitVerdict.name());
+            if (wordingFit != null) {
+                quality.put("wordingFitReasons",
+                        wordingFit.reasons().stream().map(Enum::name).toList());
+                quality.put("wordingFitReason", wordingFit.reasons().getFirst().name());
+                if (wordingFit.quote() != null) {
+                    quality.put("wordingFitQuote", wordingFit.quote());
+                }
+            }
             signals.add(signal(context, b -> b
                     .signalType(SignalType.APPROVED_DRAFTING_AVAILABLE).issueFamily(family)
                     .payload(new ApprovedDraftingPayload(drafting.evidenceId(), drafting.text(),
                             drafting.variantRole() == null
-                                    ? null : drafting.variantRole().name()))
+                                    ? null : drafting.variantRole().name(),
+                            fitVerdict.name()))
                     .evidence(List.of(drafting.evidenceId()))
-                    .quality(Map.of("draftingAvailable", true))
+                    .quality(quality)
                     .dedupeSuffix(judged.key())));
-        } else if (attempt != null && attempt.signal() != null) {
+        }
+        if (attempt != null && attempt.signal() != null) {
             signals.add(attempt.signal());
         }
         var facts = judged.position().policyFacts();
@@ -811,6 +868,112 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 .map(ConceptKey::value).collect(java.util.stream.Collectors.toSet());
     }
 
+    /**
+     * The fit work this clause cost and the calls the skip rule saved, in the check detail. A
+     * clause with no fit question writes neither key, so its detail is unchanged.
+     */
+    static void putFitSummary(Map<String, Object> detail, ClauseFitCheck.Outcome fit) {
+        if (fit.called()) {
+            detail.put("fitQuestions", fit.questions());
+        }
+        if (fit.skipped() > 0) {
+            detail.put("fitSkipped", fit.skipped());
+        }
+    }
+
+    /**
+     * The library wording each flagged position would offer, and the gap that wording must cure.
+     * Selection is the same one {@code flaggedSignals} uses, so the fit question is asked about
+     * exactly the variant that would be proposed.
+     */
+    private Map<String, Wording> wordingFor(List<JudgedPosition> judgedPositions,
+            Map<String, Resolution> resolutions) {
+        var wording = new LinkedHashMap<String, Wording>();
+        for (var judged : judgedPositions) {
+            var resolution = resolutions.get(judged.key());
+            if (resolution == null || resolution.category() == null
+                    || !wantsLanguage(resolution.category())) {
+                continue;
+            }
+            // the bundle that judged the position carries its drafting: the search bundle for a
+            // search hit, the topic bundle for a paired position
+            var item = chooseDrafting(judged.bundle().approvedDraftingItems(), judged.position());
+            if (item != null) {
+                wording.put(judged.key(), new Wording(item, gapText(resolution.category())));
+            }
+        }
+        return wording;
+    }
+
+    /**
+     * One fit pack for the clause (engine decision 2026-10-24 §B.1): the search hits that must
+     * govern its subject and the library wording offers that must meet their position and cure the
+     * gap. The type and side scope already ran in the structured lookup, so a candidate is never
+     * dropped here by topic. A single candidate whose own concept is the exact concept it serves
+     * skips the question: metadata already proves its subject.
+     */
+    private ClauseFitCheck.Outcome fit(ReviewCheckContext context, ClauseSemantics clause,
+            List<JudgedPosition> judgedPositions, Map<String, Wording> wordingByKey) {
+        var candidates = new ArrayList<ClauseFitCheck.Candidate>();
+        var primary = clause.effectivePrimaryConcept().orElse(null);
+        for (var judged : judgedPositions) {
+            if (!judged.searched()) {
+                continue;
+            }
+            var position = judged.position();
+            candidates.add(new ClauseFitCheck.Candidate(judged.key(), ClauseFitCheck.Kind.RULE,
+                    position.text(),
+                    null,
+                    null,
+                    primary != null && primary.equals(position.legalConcept())));
+        }
+        for (var entry : wordingByKey.entrySet()) {
+            var judged = judgedPositions.stream()
+                    .filter(candidate -> candidate.key().equals(entry.getKey()))
+                    .findFirst().orElseThrow();
+            var position = judged.position();
+            var wording = entry.getValue().item();
+            candidates.add(new ClauseFitCheck.Candidate(wordingKey(entry.getKey()),
+                    ClauseFitCheck.Kind.WORDING, wording.text(),
+                    PolicyPositionQuestions.instructions(position, clause, conceptRegistry),
+                    entry.getValue().gap(),
+                    // metadata never proves meets-and-cures, so a wording is always asked
+                    false));
+        }
+        if (candidates.isEmpty()) {
+            return ClauseFitCheck.Outcome.none();
+        }
+        return fitCheck.judge(new ClauseFitCheck.Clause(
+                OurSide.describe(context.snapshot().ourSideRole()),
+                context.snapshot().contractType().label(),
+                context.headingTexts().getOrDefault(clause.headingNodeId(), ""),
+                truncate(clause.contentText(), MAX_CLAUSE_LENGTH)), candidates);
+    }
+
+    /** A search hit that does not govern the clause is not applied; UNKNOWN keeps today's behaviour. */
+    private static boolean applied(JudgedPosition judged, ClauseFitCheck.Outcome fit) {
+        if (!judged.searched()) {
+            return true;
+        }
+        var judgment = fit.judgments().get(judged.key());
+        return judgment == null || judgment.verdict() != ClauseFitCheck.Verdict.DOES_NOT_FIT;
+    }
+
+    private static String wordingKey(String judgedKey) {
+        return judgedKey + "/wording";
+    }
+
+    /** What the wording must cure, in the comparison's own words for the category. */
+    private static String gapText(String category) {
+        return switch (category) {
+            case PolicyComparisonSpecs.WALK_AWAY ->
+                    "the clause contains or permits what the position's walk-away forbids";
+            case PolicyComparisonSpecs.BEYOND_FALLBACK ->
+                    "the clause is worse for us than every fallback the position lists";
+            default -> "the clause departs from the position";
+        };
+    }
+
     private static boolean wantsLanguage(String category) {
         return PolicyComparisonSpecs.WALK_AWAY.equals(category)
                 || PolicyComparisonSpecs.BEYOND_FALLBACK.equals(category);
@@ -831,7 +994,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
 
     private static Map<String, Object> flaggedQuality(
             JudgedPosition judged, boolean secondaryTopic, String route, Resolution resolution,
-            LlmAdjudicator.SecondOpinion opinion, String openEndedOutcome) {
+            LlmAdjudicator.SecondOpinion opinion, String openEndedOutcome,
+            ClauseFitCheck.Outcome fit) {
         var quality = new LinkedHashMap<String, Object>();
         quality.put("flagged", true);
         quality.put("category", resolution.category());
@@ -845,6 +1009,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         }
         if (judged.searched()) {
             quality.put("foundBy", SEARCH);
+            putFit(quality, fit, judged);
         }
         if (resolution.secondOpinionCategory() != null) {
             quality.put("secondOpinionCategory", resolution.secondOpinionCategory());
@@ -893,9 +1058,14 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             boolean searched) {
     }
 
+    /** The library variant a flagged position would offer, and the gap it must cure. */
+    private record Wording(EvidenceItem item, String gap) {
+    }
+
     private static Map<String, Object> detailEntry(
             JudgedPosition judged, PolicyComparisonOutcome.Judgement probe,
-            LlmAdjudicator.SecondOpinion opinion, Resolution resolution) {
+            LlmAdjudicator.SecondOpinion opinion, Resolution resolution,
+            ClauseFitCheck.Outcome fit, Map<String, Wording> wordingByKey) {
         var entry = new LinkedHashMap<String, Object>();
         entry.put("positionKey", judged.key());
         entry.put("positionCandidateId", judged.position().sourceCandidateId() == null
@@ -926,6 +1096,27 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             }
             entry.put("foundBy", SEARCH);
             entry.put("lanes", lanes);
+            var judgment = fit.judgments().get(judged.key());
+            if (judgment != null) {
+                entry.put("fitVerdict", judgment.verdict().name());
+                entry.put("fitReason", judgment.reasons().getFirst().name());
+                entry.put("fitReasons", judgment.reasons().stream().map(Enum::name).toList());
+            }
+            if (!applied(judged, fit)) {
+                // the hit does not govern the clause: not applied, kept visible for diagnostics
+                entry.put("fitOutcome", "not_covered");
+            }
+        }
+        // a wording offer is recorded per position, so two offers in one finding stay countable;
+        // a position the fit dropped has no offer, so its fit questions are not counted as one
+        var wording = wordingByKey.get(judged.key());
+        if (wording != null && applied(judged, fit)) {
+            var judgment = fit.judgments().get(wordingKey(judged.key()));
+            if (judgment != null) {
+                entry.put("wordingFitVerdict", judgment.verdict().name());
+                entry.put("wordingFitReasons",
+                        judgment.reasons().stream().map(Enum::name).toList());
+            }
         }
         if (opinion != null) {
             entry.put("secondOpinionOutcome", opinion.outcome());

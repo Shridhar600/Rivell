@@ -128,11 +128,25 @@ export function defaultFinding(
 
 /** Where the approved wording came from, in the canonical authority line. */
 export function languageAuthority(
-  finding: Pick<FindingDetail, 'proposedLanguageSource'>,
+  finding: Pick<FindingDetail, 'proposedLanguageSource' | 'quality'>,
   /** The publication the approved wording was quoted from, when its evidence names one. */
   publicationNumber: number | null = null,
 ): { strong: string; rest: string } | null {
   if (finding.proposedLanguageSource === 'APPROVED_DRAFTING') {
+    // A search hit or a library variant is offered as approved only when the fit check passed.
+    // UNKNOWN, a missing verdict and DOES_NOT_FIT are never shown as approved.
+    if (finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT') {
+      return {
+        strong: 'Library wording that does not fit this position',
+        rest: 'Rivell did not propose this wording for the clause.',
+      }
+    }
+    if (finding.quality?.wordingFitVerdict !== 'FITS') {
+      return {
+        strong: 'Library wording, not checked against this position',
+        rest: 'Rivell could not confirm that it meets this position and cures the gap. Read it before you use it.',
+      }
+    }
     return {
       strong: 'Approved organizational drafting',
       rest: publicationNumber === null ? 'Quoted from published wording' : `Knowledge version ${publicationNumber} · Source: Clause library`,

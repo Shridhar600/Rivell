@@ -312,9 +312,17 @@ export type FindingQuality = {
   uncertaintyReason: string | null
   /** 'SEARCH' when the position was found by searching the playbook for the clause's text. */
   foundBy: string | null
+  /** The fit check's verdict on a search-found rule: FITS, DOES_NOT_FIT or UNKNOWN. */
+  fitVerdict: string | null
+  /** The fit check's code-owned reason for a search-found rule. */
+  fitReason: string | null
   /** The whole-contract read's own severity (HIGH or MEDIUM) and reason for a playbook-silent pick. */
   spottedSeverity: string | null
   spottedReason: string | null
+  /** The fit check's verdict on the library wording offered: FITS, DOES_NOT_FIT or UNKNOWN. */
+  wordingFitVerdict: string | null
+  /** The fit check's code-owned reason for that verdict. */
+  wordingFitReason: string | null
   /** Omission check: the estimate that the playbook position requires the provision, 0–1. */
   presenceProbability: number | null
 }
@@ -786,8 +794,12 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
     secondOpinionReason: readOptionalNullableString(quality, 'secondOpinionReason', what),
     uncertaintyReason: readOptionalNullableString(quality, 'uncertaintyReason', what),
     foundBy: readOptionalNullableString(quality, 'foundBy', what),
+    fitVerdict: readOptionalNullableString(quality, 'fitVerdict', what),
+    fitReason: readOptionalNullableString(quality, 'fitReason', what),
     spottedSeverity: readOptionalNullableString(quality, 'spottedSeverity', what),
     spottedReason: readOptionalNullableString(quality, 'spottedReason', what),
+    wordingFitVerdict: readOptionalNullableString(quality, 'wordingFitVerdict', what),
+    wordingFitReason: readOptionalNullableString(quality, 'wordingFitReason', what),
     presenceProbability:
       presenceProbability !== null && presenceProbability >= 0 && presenceProbability <= 1
         ? presenceProbability

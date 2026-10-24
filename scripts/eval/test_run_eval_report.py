@@ -74,8 +74,29 @@ class NeedsLookLineTest(unittest.TestCase):
         self.assertEqual(run_eval.needs_look_line([{"contracts": [contract(3, 0, {"JEV": 3})]}]), [])
 
 
-class EngineMetaTest(unittest.TestCase):
+class FitReportTest(unittest.TestCase):
 
+    def test_a_run_with_only_fit_activity_still_gets_the_p4_section(self):
+        self.assertTrue(run_eval.p4_data({"fit": {"calls": 1}}))
+        self.assertTrue(run_eval.p4_data({"fit": {"skipped": 1}}))
+        self.assertFalse(run_eval.p4_data({"fit": {"calls": 0, "skipped": 0}}))
+
+    def test_the_fit_line_reports_calls_questions_savings_and_verdicts(self):
+        result = {"contracts": [{"fit": {
+            "calls": 2, "questions": 5, "skipped": 1, "notCovered": 1,
+            "search": {"FITS": 2, "DOES_NOT_FIT": 1, "UNKNOWN": 1},
+            "wording": {"FITS": 1, "DOES_NOT_FIT": 0, "UNKNOWN": 2},
+        }}]}
+        line = [line for line in run_eval.p4_lines([result]) if line.startswith("- Fit:")]
+        self.assertEqual(len(line), 1)
+        self.assertIn("2 calls", line[0])
+        self.assertIn("5 questions", line[0])
+        self.assertIn("1 calls saved", line[0])
+        self.assertIn("search FITS 2", line[0])
+        self.assertIn("wording FITS 1, DOES_NOT_FIT 0, UNKNOWN 2", line[0])
+
+
+class EngineMetaTest(unittest.TestCase):
     def test_the_defaults_describe_the_engine_the_backend_now_uses(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(run_eval.engine_meta(),

@@ -268,6 +268,9 @@ class PositionSearchRouteIT {
         assertThat(searched.path("addressed").asBoolean()).isTrue();
         assertThat(searched.path("searchFound").asInt()).isGreaterThanOrEqualTo(1);
         assertThat(searched.path("searchFailed").asBoolean()).isFalse();
+        // the fit question count reaches diagnostics; the skip count stays absent when none skipped
+        assertThat(searched.path("fitQuestions").asInt()).isGreaterThanOrEqualTo(1);
+        assertThat(searched.path("fitSkipped").isNull()).isTrue();
         JsonNode judgedView = null;
         for (var position : searched.path("judgedPositions")) {
             if (terminationPositionId().toString()
@@ -279,6 +282,54 @@ class PositionSearchRouteIT {
         assertThat(judgedView).as("the searched termination position must be listed").isNotNull();
         assertThat(judgedView.path("foundBy").asText()).isEqualTo("SEARCH");
         assertThat(judgedView.has("foundBy")).isTrue();
+        // the fit verdict reaches diagnostics without any clause text
+        assertThat(judgedView.path("fitVerdict").asText()).isEqualTo("FITS");
+        assertThat(judgedView.path("fitReason").asText()).isEqualTo("GOVERNS");
+        assertThat(judgedView.path("fitOutcome").isNull()).isTrue();
+    }
+
+    /**
+     * R2-006: a search-found position that does not govern the clause is not applied. The check
+     * records it as "not covered" and the diagnostics keep it visible, with no finding resting on it.
+     */
+    @Test
+    void aSearchHitThatDoesNotGovernIsReportedNotCoveredInDiagnostics() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(TERMINATION, PolicyComparisonSpecs.NOT_ADDRESSED);
+        scriptedProvider.positionAnswers.put(TERMINATION_POSITION,
+                PolicyComparisonSpecs.BEYOND_FALLBACK);
+        scriptedProvider.ruleFitProbability = 0.05;
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var check = terminationCheck(run.id());
+        assertThat(entryFor(check, terminationPositionId()))
+                .containsEntry("fitVerdict", "DOES_NOT_FIT")
+                .containsEntry("fitReason", "DIFFERENT_SUBJECT")
+                .containsEntry("fitOutcome", "not_covered");
+        assertThat(check.detail()).containsEntry("addressed", false);
+        assertThat(signalsCiting(run.id(), terminationPositionId())).isEmpty();
+
+        JsonNode searched = null;
+        for (var view : json("/api/reviews/{id}/diagnostics", reviewId)
+                .at("/data/analysis/checks")) {
+            if ("SEARCH".equals(view.path("route").asText())
+                    && view.path("searchFound").asInt() >= 1) {
+                searched = view;
+            }
+        }
+        assertThat(searched).isNotNull();
+        JsonNode judgedView = null;
+        for (var position : searched.path("judgedPositions")) {
+            if (terminationPositionId().toString()
+                    .equals(position.path("positionCandidateId").asText())) {
+                judgedView = position;
+            }
+        }
+        assertThat(judgedView).isNotNull();
+        assertThat(judgedView.path("fitVerdict").asText()).isEqualTo("DOES_NOT_FIT");
+        assertThat(judgedView.path("fitReason").asText()).isEqualTo("DIFFERENT_SUBJECT");
+        assertThat(judgedView.path("fitOutcome").asText()).isEqualTo("not_covered");
     }
 
     /**

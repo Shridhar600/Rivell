@@ -107,7 +107,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
         <h3 className="rv-ws-sec-h">{TEXT_LABELS[item.authorityClass] ?? 'Text'}</h3>
         <div className={item.authorityClass === 'APPROVED_DRAFTING' ? 'rv-ws-prop' : 'rv-ws-incl'}>{item.text}</div>
         {item.authorityClass === 'APPROVED_DRAFTING' && item.publicationNumber !== null ? (
-          <p className="rv-ws-caption">Approved organizational drafting · Knowledge version {item.publicationNumber}</p>
+          <p className="rv-ws-caption">Published clause-library wording · Knowledge version {item.publicationNumber}</p>
         ) : null}
       </div>
 
