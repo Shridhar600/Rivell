@@ -90,10 +90,12 @@ export function reviewWorld(): Fake {
     flagged('uncertain', {
       rawLabel: 'Indemnification',
       contentText: 'Mutual and capped.',
-      reviewReasons: ['UNVERIFIED_GENERATIVE_FIELD'],
-      escalationTrigger: 'Any uncapped indemnity',
+      reviewReasons: ['UNVERIFIED_GENERATIVE_FIELD', 'VERIFICATION_DISPUTED'],
+      // The read proposed a trigger, but the source check disputed it, so it was stored as a
+      // proposal only and never became an effective value.
+      escalationTrigger: null,
       interpretations: [
-        { field: 'escalationTrigger', proposedValue: 'Any uncapped indemnity', kind: 'GENERATIVE_EXTRACTION', specId: 's', specVersion: 1, supportingSourceNodes: 1, verification: 'UNCERTAIN' },
+        { field: 'escalationTrigger', proposedValue: 'Any uncapped indemnity', kind: 'GENERATIVE_EXTRACTION', specId: 's', specVersion: 1, supportingSourceNodes: 1, verification: 'DISPUTED' },
       ],
     }),
     flagged('duplicate', {
@@ -357,6 +359,24 @@ export function startFakeServer(fake: Fake) {
           return envelope(
             update(fake, id, (entry) => {
               const editedTitle = input.title === undefined ? entry.editedTitle : input.title.trim()
+              const semantic = input.semanticFields
+              const samePositions = (
+                left: Candidate['positions'],
+                right: Candidate['positions'],
+              ) => left.length === right.length && left.every((role) => right.includes(role))
+              // Only a value that differs from the machine value is a correction, as the backend decides.
+              const correctedFields =
+                semantic === undefined
+                  ? entry.correctedFields
+                  : [
+                      ...new Set([
+                        ...entry.correctedFields,
+                        ...(semantic.positions !== undefined && !samePositions(semantic.positions, entry.positions) ? ['positions'] : []),
+                        ...('escalationTrigger' in semantic && semantic.escalationTrigger !== entry.escalationTrigger ? ['escalationTrigger'] : []),
+                        ...('requiresApproval' in semantic && semantic.requiresApproval !== entry.requiresApproval ? ['requiresApproval'] : []),
+                        ...(semantic.variantRole !== undefined && semantic.variantRole !== entry.variantRole ? ['variantRole'] : []),
+                      ]),
+                    ]
               return {
                 ...entry,
                 reviewStatus: 'EDITED',
@@ -368,6 +388,7 @@ export function startFakeServer(fake: Fake) {
                 escalationTrigger: input.semanticFields?.escalationTrigger ?? entry.escalationTrigger,
                 requiresApproval: approvalSent ? input.semanticFields?.requiresApproval ?? null : entry.requiresApproval,
                 variantRole: input.semanticFields?.variantRole ?? entry.variantRole,
+                correctedFields,
                 jurisdiction: typeof input.scope?.jurisdiction === 'string' ? input.scope.jurisdiction : entry.jurisdiction,
                 declaredContractTypes: Array.isArray(input.scope?.declaredContractTypes) ? (input.scope.declaredContractTypes as string[]) : entry.declaredContractTypes,
                 reviewNote: input.note ?? entry.reviewNote,

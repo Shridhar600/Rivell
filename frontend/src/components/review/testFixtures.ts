@@ -298,6 +298,8 @@ export const fixtureClauseFindingDetail = {
     category: 'BEYOND_FALLBACK',
     flagProbability: 0.87,
     probabilities: { BEYOND_FALLBACK: 0.87, WALK_AWAY: 0.05 },
+    wordingFitVerdict: 'FITS',
+    wordingFitReason: 'MEETS_POSITION_YES',
   },
   claims: clauseClaims,
   evidenceItems: [

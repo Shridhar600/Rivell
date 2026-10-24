@@ -325,6 +325,8 @@ export interface Candidate {
   unmappedAuthority: string[]
   /** True while this entry needs attention for an unmapped walk-away or approver word. */
   needsAttention: boolean
+  /** Structured fields a person corrected and saved. A machine proposal that was not applied is not one. */
+  correctedFields: string[]
   interpretations: Interpretation[]
   editedContentText: string | null
   editedPayloadColumns: Record<string, string>
@@ -607,6 +609,10 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     needsAttention: record.needsAttention === undefined
       ? false
       : readBoolean(record, 'needsAttention', what),
+    correctedFields:
+      record.correctedFields === undefined
+        ? []
+        : readStringArray(record, 'correctedFields', what),
     interpretations: readArray(record, 'interpretations', what, parseInterpretation),
     editedContentText: readNullableString(record, 'editedContentText', what),
     editedPayloadColumns: readStringMap(record, 'editedPayloadColumns', what),

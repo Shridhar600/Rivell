@@ -8,7 +8,8 @@ import scoring
 
 def check(subject="n1", route=None, addressed=None, search_found=None, search_failed=None,
           uncovered=None, spotted=None, positions=(), omission_candidates=None,
-          searched=None, presence=None, addressed_by=None, flagged_by=None):
+          searched=None, presence=None, addressed_by=None, flagged_by=None,
+          fit_questions=None, fit_skipped=None):
     return {
         "subjectHeadingNodeId": subject,
         "route": route,
@@ -23,6 +24,8 @@ def check(subject="n1", route=None, addressed=None, search_found=None, search_fa
         "presenceProbabilities": presence,
         "addressedBySearch": addressed_by,
         "flaggedBySearch": flagged_by,
+        "fitQuestions": fit_questions,
+        "fitSkipped": fit_skipped,
     }
 
 
@@ -56,8 +59,55 @@ NODES = [
 ]
 
 
-class SearchMetricsTest(unittest.TestCase):
+class FitMetricsTest(unittest.TestCase):
 
+    def test_the_quality_filter_keeps_the_council_required_keys(self):
+        for key in ("secondOpinionQuote", "secondOpinionReason", "categoryBeforeLevers",
+                    "wordingFitVerdict", "wordingFitReason", "wordingFitReasons",
+                    "wordingFitQuote", "fitVerdict", "fitReason", "fitReasons"):
+            self.assertIn(key, p4_metrics.QUALITY_KEYS)
+
+    def test_counts_search_hits_wording_offers_calls_and_savings(self):
+        checks = [
+            check(route="SEARCH", fit_questions=3, fit_skipped=0, positions=[
+                {**position("search_position_1"), "fitVerdict": "DOES_NOT_FIT",
+                 "fitOutcome": "not_covered"},
+                {**position("search_position_2"), "fitVerdict": "FITS"},
+                {**position("search_position_3"), "fitVerdict": "UNKNOWN"},
+                # a topic-matched position is not a search hit
+                {**position("position_1"), "fitVerdict": "FITS"},
+                # two wording offers on positions of one clause stay countable
+                {**position("position_1"), "wordingFitVerdict": "UNKNOWN"},
+                {**position("position_2"), "wordingFitVerdict": "FITS"},
+            ]),
+            # the skip rule: no fit call, one question saved
+            check(route="SEARCH", fit_skipped=1, positions=[]),
+        ]
+
+        metrics = p4_metrics.fit_metrics(checks)
+
+        self.assertEqual(metrics["search"],
+                         {"FITS": 1, "DOES_NOT_FIT": 1, "UNKNOWN": 1})
+        self.assertEqual(metrics["wording"],
+                         {"FITS": 1, "DOES_NOT_FIT": 0, "UNKNOWN": 1})
+        self.assertEqual(metrics["notCovered"], 1)
+        self.assertEqual(metrics["calls"], 1)
+        self.assertEqual(metrics["questions"], 3)
+        self.assertEqual(metrics["skipped"], 1)
+
+    def test_an_engine_v1_run_reports_zeroes_rather_than_missing_keys(self):
+        metrics = p4_metrics.fit_metrics([])
+        self.assertEqual(metrics["search"],
+                         {"FITS": 0, "DOES_NOT_FIT": 0, "UNKNOWN": 0})
+        self.assertEqual(metrics["wording"],
+                         {"FITS": 0, "DOES_NOT_FIT": 0, "UNKNOWN": 0})
+        self.assertEqual(metrics["notCovered"], 0)
+        self.assertEqual(metrics["calls"], 0)
+        self.assertEqual(metrics["questions"], 0)
+        self.assertEqual(metrics["skipped"], 0)
+
+
+class SearchMetricsTest(unittest.TestCase):
     def test_counts_routes_found_addressing_and_top1(self):
         checks = [
             check(subject="n1", route="SEARCH", addressed=True, search_found=2,

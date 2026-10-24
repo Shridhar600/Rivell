@@ -180,7 +180,17 @@ const PROPOSED_ACTION_LABELS: Record<string, string> = {
   UNKNOWN: 'Recommended action',
 }
 
-export function proposedActionLabel(action: string): string {
+export function proposedActionLabel(
+  action: string,
+  wording?: Pick<FindingDetail, 'proposedLanguageSource' | 'quality'> | null,
+): string {
+  if (
+    action === 'USE_APPROVED_FALLBACK' &&
+    wording?.proposedLanguageSource === 'APPROVED_DRAFTING' &&
+    wording.quality?.wordingFitVerdict !== 'FITS'
+  ) {
+    return 'Use the library wording (not checked against this position)'
+  }
   return PROPOSED_ACTION_LABELS[action] ?? humanizeCode(action)
 }
 

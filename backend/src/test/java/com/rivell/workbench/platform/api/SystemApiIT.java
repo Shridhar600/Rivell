@@ -151,6 +151,10 @@ class SystemApiIT {
             assertThat(openApi.at("/components/schemas/CheckView/properties/" + field)
                     .isMissingNode()).as("CheckView." + field).isFalse();
         }
+        assertThat(openApi.at("/components/schemas/AnalysisRunView/properties/spottingDropped")
+                .isMissingNode()).as("AnalysisRunView.spottingDropped").isFalse();
+        assertThat(openApi.at("/components/schemas/CandidateView/properties/correctedFields")
+                .isMissingNode()).as("CandidateView.correctedFields").isFalse();
         assertThat(openApi.at("/components/schemas/JudgedPositionView/properties/foundBy")
                 .isMissingNode()).as("JudgedPositionView.foundBy").isFalse();
 

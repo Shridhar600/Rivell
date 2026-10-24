@@ -62,6 +62,8 @@ public record CandidateView(
         List<String> unmappedAuthority,
         /** True while the entry needs attention for an unmapped walk-away or approver word. */
         boolean needsAttention,
+        /** Structured fields a person corrected and saved; an unapplied machine proposal is not one. */
+        Set<String> correctedFields,
         List<InterpretationView> interpretations,
         String editedContentText,
         Map<String, String> editedPayloadColumns,

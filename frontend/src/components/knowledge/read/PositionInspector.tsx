@@ -7,7 +7,7 @@ import { longDate } from '../../../lib/dates'
 import { resolveCandidateSource } from '../../../lib/candidates'
 import { positionText, type PublicationRef } from '../../../lib/knowledgeCatalog'
 import { conceptName, displayScopeRows, positionRoles, POSITION_ROLE_LABELS } from '../../../lib/knowledgePosition'
-import { sourceLocation } from '../../../lib/knowledgeSource'
+import { headingPaths, sourceLocation } from '../../../lib/knowledgeSource'
 import { AUTHORITY_SOURCE_LABELS } from '../../../lib/compilationFields'
 import { ArrowRightIcon } from '../../ui/Icon'
 
@@ -29,7 +29,9 @@ export function PositionInspector({ candidate, artifact, publication }: Position
   const structure = useKnowledgeStructureQuery(artifact.id)
   const located =
     units.data && structure.data ? resolveCandidateSource(candidate, units.data, structure.data) : null
-  const location = located ? sourceLocation(located.nodes) : null
+  const location = located
+    ? sourceLocation(located.nodes, structure.data ? headingPaths(structure.data) : undefined)
+    : null
   const roles = positionRoles(candidate)
   const concept = conceptName(candidate, labelFor)
   const text = positionText(candidate)

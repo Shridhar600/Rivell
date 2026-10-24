@@ -42,6 +42,7 @@ function candidate(
     authorityConflicts: [],
     unmappedAuthority: [],
     needsAttention: false,
+    correctedFields: [],
     interpretations: [],
     reviewCategory: null,
     reviewReasons: [],

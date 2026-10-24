@@ -59,6 +59,7 @@ class SeverityR3LeversIT {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("rivell.review.fallback-conditions.enabled", () -> "true");
         registry.add("rivell.storage.local.root",
                 () -> "target/test-documents/" + UUID.randomUUID());
     }

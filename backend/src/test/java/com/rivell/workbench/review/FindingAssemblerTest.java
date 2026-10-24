@@ -89,7 +89,7 @@ class FindingAssemblerTest {
     void supportOnlyGroupYieldsNoFinding() {
         var support = signal(SignalType.APPROVED_DRAFTING_AVAILABLE,
                 IssueFamily.POSITION_WALK_AWAY,
-                new ApprovedDraftingPayload(UUID.randomUUID(), "fallback wording", "FALLBACK"),
+                new ApprovedDraftingPayload(UUID.randomUUID(), "fallback wording", "FALLBACK", null),
                 List.of(UUID.randomUUID()), null);
 
         assertThat(assembler.assemble(run(), List.of(support), NOW)).isEmpty();
@@ -106,6 +106,18 @@ class FindingAssemblerTest {
     }
 
     @Test
+    void twoGroundedReadIssuesOnOneClauseAreTwoFindings() {
+        var first = signal(SignalType.POLICY_UNAVAILABLE, IssueFamily.POLICY_UNAVAILABLE,
+                new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED),
+                List.of(UUID.randomUUID()), null, Map.of("spottedReason", "first issue"));
+        var second = signal(SignalType.POLICY_UNAVAILABLE, IssueFamily.POLICY_UNAVAILABLE,
+                new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED),
+                List.of(UUID.randomUUID()), null, Map.of("spottedReason", "second issue"));
+
+        assertThat(assembler.assemble(run(), List.of(first, second), NOW)).hasSize(2);
+    }
+
+    @Test
     void draftingOnAnUncertainIssueDoesNotProposeLanguage() {
         var uncertain = signal(SignalType.DEVIATION_UNCERTAIN,
                 IssueFamily.POSITION_UNCERTAIN,
@@ -113,7 +125,7 @@ class FindingAssemblerTest {
                 List.of(UUID.randomUUID()), null);
         var drafting = signal(SignalType.APPROVED_DRAFTING_AVAILABLE,
                 IssueFamily.POSITION_UNCERTAIN,
-                new ApprovedDraftingPayload(UUID.randomUUID(), "fallback wording", "FALLBACK"),
+                new ApprovedDraftingPayload(UUID.randomUUID(), "fallback wording", "FALLBACK", null),
                 List.of(UUID.randomUUID()), null);
 
         var finding = assembler.assemble(run(), List.of(uncertain, drafting), NOW).get(0);
@@ -383,5 +395,94 @@ class FindingAssemblerTest {
         assertThat(finding.claims()).anySatisfy(claim -> assertThat(claim.text())
                 .contains("could not be checked").contains("the work is delivered from our UK studio"));
         assertThat(finding.quality()).doesNotContainKey("levers");
+    }
+
+    private static final String LIBRARY_WORDING =
+            "The total liability of Supplier shall not exceed two times the fees paid.";
+
+    private static RawReviewSignal drafting(String verdict) {
+        var evidenceId = UUID.randomUUID();
+        return new RawReviewSignal(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, RUN_ID,
+                UUID.randomUUID(), SignalType.APPROVED_DRAFTING_AVAILABLE,
+                FindingSubjectKind.CLAUSE, HEADING_ID, null,
+                CoreConcepts.LIMITATION_OF_LIABILITY, null, IssueFamily.POSITION_WALK_AWAY,
+                new ApprovedDraftingPayload(evidenceId, LIBRARY_WORDING, "FALLBACK", verdict),
+                List.of(evidenceId), null, null, null, null, null, null, null,
+                verdict == null ? Map.of() : Map.of("wordingFitVerdict", verdict),
+                "APPROVED_DRAFTING_AVAILABLE:" + UUID.randomUUID(), NOW);
+    }
+
+    private static RawReviewSignal generatedWording() {
+        return signal(SignalType.OPEN_ENDED_ANALYSIS_RESULT, IssueFamily.POSITION_WALK_AWAY,
+                new OpenEndedAnalysisPayload("Rivell's own wording.", "what changed", "VERIFIED"),
+                List.of(UUID.randomUUID()), "VERIFIED");
+    }
+
+    @Test
+    void aLibraryWordingThatDoesNotFitIsNotProposedAsApproved() {
+        var library = drafting("DOES_NOT_FIT");
+        var libraryId = ((ApprovedDraftingPayload) library.payload()).draftingEvidenceId();
+        var finding = assembler.assemble(run(),
+                List.of(walkAway(false), library, generatedWording()), NOW).get(0);
+
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.CONSIDER_GENERATED_LANGUAGE);
+        assertThat(finding.proposedLanguageSource()).isEqualTo(ProposedLanguageSource.GENERATIVE);
+        assertThat(finding.proposedLanguage()).isEqualTo("Rivell's own wording.");
+        assertThat(finding.quality()).containsEntry("wordingFitVerdict", "DOES_NOT_FIT");
+        // the library wording stays a source the person can read and take
+        assertThat(finding.evidenceItemIds()).contains(libraryId);
+    }
+
+    @Test
+    void aLibraryWordingThatDoesNotFitAndNoMachineProposalEscalates() {
+        var finding = assembler.assemble(run(),
+                List.of(walkAway(false), drafting("DOES_NOT_FIT")), NOW).get(0);
+
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+        assertThat(finding.proposedLanguageSource()).isEqualTo(ProposedLanguageSource.NONE);
+        assertThat(finding.quality()).containsEntry("wordingFitVerdict", "DOES_NOT_FIT");
+    }
+
+    @Test
+    void anUncheckedLibraryWordingIsStillProposedWithItsVerdict() {
+        var finding = assembler.assemble(run(),
+                List.of(walkAway(false), drafting("UNKNOWN")), NOW).get(0);
+
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
+        assertThat(finding.proposedLanguageSource())
+                .isEqualTo(ProposedLanguageSource.APPROVED_DRAFTING);
+        assertThat(finding.proposedLanguage()).isEqualTo(LIBRARY_WORDING);
+        assertThat(finding.quality()).containsEntry("wordingFitVerdict", "UNKNOWN");
+        // not checked is never said as approved, in the basis or the recommendation
+        assertThat(finding.claims()).noneSatisfy(claim -> assertThat(claim.text())
+                .contains("Approved drafting is available"));
+        assertThat(finding.claims()).anySatisfy(claim -> {
+            assertThat(claim.claimKind()).isEqualTo(ClaimKind.EVIDENCE_BASIS);
+            assertThat(claim.text()).contains("not checked against this position");
+        });
+        assertThat(finding.claims()).filteredOn(claim -> claim.claimKind() == ClaimKind.RECOMMENDATION)
+                .allSatisfy(claim -> assertThat(claim.text()).doesNotContain("approved"));
+    }
+
+    @Test
+    void aWordingThatDoesNotFitAndNoMachineProposalAsksForAPersonWithoutApprovalCopy() {
+        var finding = assembler.assemble(run(),
+                List.of(walkAway(false), drafting("DOES_NOT_FIT")), NOW).get(0);
+
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+        // no escalation signal: the playbook did not say this needs approval
+        assertThat(finding.claims()).filteredOn(claim -> claim.claimKind() == ClaimKind.RECOMMENDATION)
+                .allSatisfy(claim -> assertThat(claim.text())
+                        .contains("Check it yourself")
+                        .doesNotContain("needs approval"));
+    }
+
+    @Test
+    void aFittedLibraryWordingIsProposedAsApproved() {
+        var finding = assembler.assemble(run(),
+                List.of(walkAway(false), drafting("FITS")), NOW).get(0);
+
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
+        assertThat(finding.quality()).containsEntry("wordingFitVerdict", "FITS");
     }
 }

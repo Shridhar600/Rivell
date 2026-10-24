@@ -1410,3 +1410,152 @@ describe('finding detail: contract words, rule, gap, change', () => {
     expect(section('Your playbook')).not.toHaveTextContent('Based on:')
   })
 })
+
+describe('wording fit labels', () => {
+  const libraryFinding = (id: string, quality: Record<string, unknown>) => ({
+    ...fixtureClauseFindingDetail,
+    id,
+    quality: { ...fixtureClauseFindingDetail.quality, ...quality },
+  })
+
+  it('does not call library wording approved when the fit check gave no answer', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-18', {
+      findings: {
+        items: [{ ...fixtureClauseFindingSummary, id: 'f-18' }],
+        truncated: false,
+      },
+      findingDetail: libraryFinding('f-18', { wordingFitVerdict: 'UNKNOWN' }),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const proposed = section('Suggested change')
+    expect(proposed).toHaveTextContent('Library wording, not checked against this position')
+    expect(proposed).not.toHaveTextContent('Approved organizational drafting')
+    // The person is still offered the library wording as the proposal.
+    expect(proposed).toHaveTextContent(/two times the fees paid in the twelve months/)
+    // The recommendation and the wording label agree: not checked, never approved.
+    expect(
+      within(detailPane()).getByText(/Use the library wording \(not checked against this position\)/),
+    ).toHaveTextContent('Use the library wording (not checked against this position)')
+    // The source row does not call it approved either.
+    expect(
+      within(section('Sources')).getByRole('button', {
+        name: /^Library wording \(not checked against this position\)/,
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('says when a library wording did not fit and Rivell proposed its own', async () => {
+    const replaced = {
+      ...libraryFinding('f-19', { wordingFitVerdict: 'DOES_NOT_FIT' }),
+      proposedLanguageSource: 'GENERATIVE',
+      proposedAction: 'CONSIDER_GENERATED_LANGUAGE',
+      proposedLanguage: 'Rivell wording that meets the position.',
+      approvedDraftingEvidenceId: null,
+    }
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-19', {
+      humanReview: fixtureHumanReview(),
+      findings: {
+        items: [
+          {
+            ...fixtureClauseFindingSummary,
+            id: 'f-19',
+            proposedLanguageSource: 'GENERATIVE',
+            proposedAction: 'CONSIDER_GENERATED_LANGUAGE',
+          },
+        ],
+        truncated: false,
+      },
+      findingDetail: replaced,
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const proposed = section('Suggested change')
+    expect(proposed).toHaveTextContent('Proposed by Rivell')
+    expect(proposed).toHaveTextContent('did not fit this clause')
+    expect(proposed).not.toHaveTextContent('Approved organizational drafting')
+    // The library wording is still the person's to take: Edit opens with it, and it can be saved.
+    await userEvent.click(within(proposed).getByRole('button', { name: 'Use the library wording' }))
+    expect(await screen.findByLabelText('Approved language')).toHaveValue(
+      'The aggregate liability of each party shall not exceed the fees paid in the twelve months preceding the claim.',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Save decision' }))
+    expect(screen.queryByText('Change the wording before you save.')).not.toBeInTheDocument()
+  })
+
+  it('says when a search-found rule could not be checked against the clause', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-21', {
+      findings: {
+        items: [{ ...fixtureClauseFindingSummary, id: 'f-21' }],
+        truncated: false,
+      },
+      findingDetail: libraryFinding('f-21', {
+        foundBy: 'SEARCH',
+        fitVerdict: 'UNKNOWN',
+        fitReason: 'UNAVAILABLE',
+      }),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    expect(within(detailPane()).getByText(/could not check that this rule governs/)).toBeVisible()
+  })
+
+  it('does not offer to take the library wording once the review is final', async () => {
+    const replaced = {
+      ...libraryFinding('f-22', { wordingFitVerdict: 'DOES_NOT_FIT' }),
+      proposedLanguageSource: 'GENERATIVE',
+      proposedAction: 'CONSIDER_GENERATED_LANGUAGE',
+      approvedDraftingEvidenceId: null,
+    }
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-22', {
+      humanReview: fixtureHumanReview({ status: 'COMPLETED' }),
+      findings: {
+        items: [
+          {
+            ...fixtureClauseFindingSummary,
+            id: 'f-22',
+            proposedLanguageSource: 'GENERATIVE',
+            proposedAction: 'CONSIDER_GENERATED_LANGUAGE',
+          },
+        ],
+        truncated: false,
+      },
+      findingDetail: replaced,
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    expect(
+      within(detailPane()).queryByRole('button', { name: 'Use the library wording' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('asks for a person when no wording fits and none can be proposed', async () => {
+    const escalated = {
+      ...libraryFinding('f-20', { wordingFitVerdict: 'DOES_NOT_FIT' }),
+      proposedLanguage: null,
+      proposedLanguageSource: 'NONE',
+      proposedAction: 'ESCALATE_TO_HUMAN',
+      approvedDraftingEvidenceId: null,
+    }
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-20', {
+      findings: {
+        items: [
+          {
+            ...fixtureClauseFindingSummary,
+            id: 'f-20',
+            proposedLanguageSource: 'NONE',
+            proposedAction: 'ESCALATE_TO_HUMAN',
+          },
+        ],
+        truncated: false,
+      },
+      findingDetail: escalated,
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    expect(within(detailPane()).getByText(/did not fit this clause/)).toHaveTextContent(
+      'No replacement wording is proposed',
+    )
+    expect(within(detailPane()).queryByText('Suggested change')).not.toBeInTheDocument()
+  })
+})

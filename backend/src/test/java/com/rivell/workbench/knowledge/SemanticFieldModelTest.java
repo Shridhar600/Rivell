@@ -67,6 +67,35 @@ class SemanticFieldModelTest {
     }
 
     @Test
+    void aStoredProposalThatWasNotAppliedIsNotACorrectedField() {
+        var machine = new SemanticFields(Set.of(), null, null, null, Map.of());
+
+        assertThat(candidate(machine, null).correctedFields()).isEmpty();
+    }
+
+    @Test
+    void savedStructuredChangesAreReportedAsCorrectedFields() {
+        var machine = new SemanticFields(
+                Set.of(PositionRole.PREFERRED), false, null, null, Map.of());
+        var edited = new SemanticFields(
+                Set.of(PositionRole.PREFERRED, PositionRole.FALLBACK), null,
+                "Any uncapped indemnity", null, Map.of()).withRequiresApprovalCleared();
+
+        assertThat(candidate(machine, edited).correctedFields())
+                .containsExactlyInAnyOrder("positions", "escalationTrigger", "requiresApproval");
+    }
+
+    @Test
+    void anEditedValueThatMatchesTheMachineValueIsNotACorrection() {
+        var machine = new SemanticFields(
+                Set.of(PositionRole.PREFERRED), true, "Below twelve months", null, Map.of());
+        var edited = new SemanticFields(
+                Set.of(PositionRole.PREFERRED), true, "Below twelve months", null, Map.of());
+
+        assertThat(candidate(machine, edited).correctedFields()).isEmpty();
+    }
+
+    @Test
     void interpretationRequiresSpecAndKind() {
         var interpretation = interpretation("position", "BOUNDED_CLASSIFICATION");
 

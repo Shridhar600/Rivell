@@ -343,6 +343,24 @@ describe('approve and reject', () => {
   })
 })
 
+describe('corrections', () => {
+  it('shows the correction badge only after a person saves an edit', async () => {
+    const { world } = await open(reviewWorld(), '?candidate=uncertain')
+    const interpretation = screen.getByRole('region', { name: 'What Rivell read' })
+    expect(within(interpretation).queryByText('Corrected by you')).not.toBeInTheDocument()
+    expect(within(interpretation).getByText('Rivell proposed: Any uncapped indemnity')).toBeInTheDocument()
+    expect(within(interpretation).getByText('Not stated')).toBeInTheDocument()
+
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
+    const trigger = await screen.findByLabelText('Escalate')
+    await userEvent.type(trigger, 'Over AUD 1,000,000')
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Save correction' }))
+
+    await waitFor(() => expect(requests(world, 'POST', /\/candidates\/uncertain\/edit$/)).toHaveLength(1))
+    expect(await screen.findByText('Corrected by you')).toBeInTheDocument()
+  })
+})
+
 describe('conflict', () => {
   it('does not let one click make a possible conflict publishable', async () => {
     const { world } = await open()

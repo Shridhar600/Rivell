@@ -47,6 +47,7 @@ export function candidate(over: Partial<Candidate> & { id: string; artifactId: s
     authorityConflicts: [],
     unmappedAuthority: [],
     needsAttention: false,
+    correctedFields: [],
     interpretations: [],
     editedContentText: null,
     editedPayloadColumns: {},

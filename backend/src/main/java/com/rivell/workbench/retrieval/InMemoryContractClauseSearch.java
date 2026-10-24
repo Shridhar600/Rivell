@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.rivell.workbench.intelligence.EmbeddingService;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 
 /**
@@ -78,19 +79,21 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
     private List<float[]> embedEach(List<String> texts, List<String> degradation) {
         try {
             return embeddingService.embed(texts).vectors();
-        } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
-            degradation.add("VECTOR_LANE_UNAVAILABLE");
-            return null;
         } catch (SemanticDecisionException batchFailure) {
+            if (ProviderFailures.isOutOfCredit(batchFailure)) {
+                degradation.add("VECTOR_LANE_UNAVAILABLE");
+                return null;
+            }
             var vectors = new ArrayList<float[]>(texts.size());
             var failed = false;
             for (var text : texts) {
                 try {
                     vectors.add(embeddingService.embed(List.of(text)).vectors().get(0));
-                } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
-                    degradation.add("VECTOR_LANE_UNAVAILABLE");
-                    return null;
                 } catch (SemanticDecisionException e) {
+                    if (ProviderFailures.isOutOfCredit(e)) {
+                        degradation.add("VECTOR_LANE_UNAVAILABLE");
+                        return null;
+                    }
                     vectors.add(null);
                     failed = true;
                 }

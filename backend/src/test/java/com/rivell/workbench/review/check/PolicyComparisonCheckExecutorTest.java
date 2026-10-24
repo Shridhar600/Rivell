@@ -35,4 +35,23 @@ class PolicyComparisonCheckExecutorTest {
         assertThat(PolicyComparisonCheckExecutor.escalationQuality("Escalate", Boolean.FALSE))
                 .containsEntry("requiresApproval", false);
     }
+
+    @Test
+    void theFitSummaryKeepsTheQuestionCountAndTheCallsTheSkipRuleSaved() {
+        var detail = new java.util.LinkedHashMap<String, Object>();
+
+        PolicyComparisonCheckExecutor.putFitSummary(detail,
+                new ClauseFitCheck.Outcome(java.util.Map.of(), 3, 1, true, null));
+
+        assertThat(detail).containsEntry("fitQuestions", 3).containsEntry("fitSkipped", 1);
+    }
+
+    @Test
+    void aClauseWithNoFitQuestionWritesNoFitSummary() {
+        var detail = new java.util.LinkedHashMap<String, Object>();
+
+        PolicyComparisonCheckExecutor.putFitSummary(detail, ClauseFitCheck.Outcome.none());
+
+        assertThat(detail).isEmpty();
+    }
 }

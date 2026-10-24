@@ -257,4 +257,76 @@ describe('human correction', () => {
     expect(hasHumanCorrection(make({ editedPayloadColumns: { A: 'b' } }))).toBe(true)
     expect(hasHumanCorrection(make({ editedTitle: 'A shorter title' }))).toBe(true)
   })
+
+  it('is false for a machine proposal the source did not support, in every field type', () => {
+    const proposal = (field: string, proposedValue: string) => ({
+      field,
+      proposedValue,
+      kind: 'GENERATIVE_EXTRACTION',
+      specId: 's',
+      specVersion: 1,
+      supportingSourceNodes: 1,
+      verification: 'DISPUTED' as const,
+    })
+    const unresolved = (field: string, proposedValue: string) =>
+      make({
+        positions: [],
+        variantRole: null,
+        escalationTrigger: null,
+        requiresApproval: null,
+        interpretations: [proposal(field, proposedValue)],
+      })
+
+    const rowsFor = (field: string, proposedValue: string) => {
+      const entry = unresolved(field, proposedValue)
+      return interpretationRows(
+        field === 'variantRole' ? { ...entry, candidateType: 'CLAUSE_VARIANT' } : entry,
+      )
+    }
+
+    // A stored proposal is not a saved correction: the effective value stays empty and no
+    // "Corrected by you" badge appears.
+    expect(hasHumanCorrection(unresolved('positions', 'PREFERRED'))).toBe(false)
+    expect(hasHumanCorrection(unresolved('variantRole', 'FALLBACK'))).toBe(false)
+    expect(hasHumanCorrection(unresolved('escalationTrigger', 'Any uncapped indemnity'))).toBe(false)
+    expect(hasHumanCorrection(unresolved('requiresApproval', 'true'))).toBe(false)
+
+    expect(row(rowsFor('positions', 'PREFERRED'), 'positions')).toMatchObject({
+      value: 'Not specified',
+      machine: 'Rivell proposed: Preferred',
+      corrected: false,
+    })
+    expect(row(rowsFor('variantRole', 'FALLBACK'), 'variantRole')).toMatchObject({
+      value: 'Unspecified',
+      machine: 'Rivell proposed: Fallback',
+      corrected: false,
+    })
+    expect(row(rowsFor('escalationTrigger', 'Any uncapped indemnity'), 'escalation')).toMatchObject({
+      value: 'Not stated',
+      machine: 'Rivell proposed: Any uncapped indemnity',
+      corrected: false,
+    })
+    expect(row(rowsFor('requiresApproval', 'true'), 'approval')).toMatchObject({
+      value: 'Not specified',
+      machine: 'Rivell proposed: Required',
+      corrected: false,
+    })
+  })
+
+  it('is true for a structured field a person saved, in every field type', () => {
+    expect(hasHumanCorrection(make({ correctedFields: ['positions'] }))).toBe(true)
+    expect(hasHumanCorrection(make({ correctedFields: ['variantRole'] }))).toBe(true)
+    expect(hasHumanCorrection(make({ correctedFields: ['escalationTrigger'] }))).toBe(true)
+    expect(hasHumanCorrection(make({ correctedFields: ['requiresApproval'] }))).toBe(true)
+
+    expect(row(interpretationRows(make({ correctedFields: ['positions'] })), 'positions')?.corrected).toBe(true)
+    expect(
+      row(
+        interpretationRows(make({ candidateType: 'CLAUSE_VARIANT', correctedFields: ['variantRole'] })),
+        'variantRole',
+      )?.corrected,
+    ).toBe(true)
+    expect(row(interpretationRows(make({ correctedFields: ['escalationTrigger'] })), 'escalation')?.corrected).toBe(true)
+    expect(row(interpretationRows(make({ requiresApproval: true, correctedFields: ['requiresApproval'] })), 'approval')?.corrected).toBe(true)
+  })
 })

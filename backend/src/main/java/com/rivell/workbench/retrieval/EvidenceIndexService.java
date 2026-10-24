@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.rivell.workbench.intelligence.EmbeddingService;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
@@ -78,12 +79,20 @@ public class EvidenceIndexService {
      * never written.
      */
     int embedBatch(UUID organizationId, java.util.Map<UUID, String> texts) {
-        if (texts.isEmpty() || !embeddingService.isConfigured()) {
+        if (texts.isEmpty()) {
+            retryPendingVectorIndexes();
+            return 0;
+        }
+        if (!embeddingService.isConfigured()) {
             return 0;
         }
         var pendingIds = new java.util.ArrayList<>(texts.keySet());
         pendingIds.removeAll(repository.findEmbeddingReadyIds(
                 organizationId, pendingIds, properties.indexVersion()));
+        // Retry after the readiness read: publication calls this inside an AFTER_COMMIT listener,
+        // where a failed CREATE INDEX can abort the connection's implicit transaction. The read
+        // must happen first; the persistence failures that follow are contained per candidate.
+        retryPendingVectorIndexes();
         if (pendingIds.isEmpty()) {
             return 0;
         }
@@ -102,25 +111,29 @@ public class EvidenceIndexService {
                     persisted++;
                 }
             }
-        } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException e) {
-            log.warn("Embedding generation degraded for organization {} (no credit)", organizationId);
         } catch (SemanticDecisionException e) {
-            // one bad input must not leave the entire batch unindexed: retry each alone
-            var model = embeddingService.modelIdentity();
-            for (var entry : textsToEmbed.entrySet()) {
-                try {
-                    var vector = embeddingService.embed(List.of(entry.getValue()))
-                            .vectors().get(0);
-                    if (persistVector(organizationId, entry.getKey(), entry.getValue(),
-                            model, vector)) {
-                        persisted++;
+            if (ProviderFailures.isOutOfCredit(e)) {
+                log.warn("Embedding generation degraded for organization {} (no credit)",
+                        organizationId);
+            } else {
+                // one bad input must not leave the entire batch unindexed: retry each alone
+                var model = embeddingService.modelIdentity();
+                for (var entry : textsToEmbed.entrySet()) {
+                    try {
+                        var vector = embeddingService.embed(List.of(entry.getValue()))
+                                .vectors().get(0);
+                        if (persistVector(organizationId, entry.getKey(), entry.getValue(),
+                                model, vector)) {
+                            persisted++;
+                        }
+                    } catch (SemanticDecisionException ignored) {
+                        if (ProviderFailures.isOutOfCredit(ignored)) {
+                            log.warn("Embedding generation degraded for organization {} (no credit)",
+                                    organizationId);
+                            break;
+                        }
+                        // this input stays unindexed; the other inputs were still persisted
                     }
-                } catch (com.rivell.workbench.intelligence.ProviderOutOfCreditException dry) {
-                    log.warn("Embedding generation degraded for organization {} (no credit)",
-                            organizationId);
-                    break;
-                } catch (SemanticDecisionException ignored) {
-                    // this input stays unindexed; the other inputs were still persisted
                 }
             }
         }
@@ -129,6 +142,45 @@ public class EvidenceIndexService {
 
     private final java.util.Set<Integer> ensuredDimensions =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Set<Integer> pendingDimensions =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Object vectorIndexLock = new Object();
+
+    /**
+     * Retries dimensions whose last index creation failed. Called at the start of every embedding
+     * pass, including one where every row already has a vector, so a failed {@code CREATE INDEX}
+     * cannot silence the vector lane until the JVM restarts.
+     */
+    int retryPendingVectorIndexes() {
+        if (!embeddingService.isConfigured()) {
+            return 0;
+        }
+        synchronized (vectorIndexLock) {
+            var retried = 0;
+            for (var dims : List.copyOf(pendingDimensions)) {
+                if (ensureVectorIndex(dims)) {
+                    pendingDimensions.remove(dims);
+                    ensuredDimensions.add(dims);
+                    retried++;
+                }
+            }
+            return retried;
+        }
+    }
+
+    /** Creates the index once per dimension, and never more than once per pass after a failure. */
+    private void ensureVectorIndexOnce(int dims) {
+        synchronized (vectorIndexLock) {
+            if (ensuredDimensions.contains(dims) || pendingDimensions.contains(dims)) {
+                return;
+            }
+            if (ensureVectorIndex(dims)) {
+                ensuredDimensions.add(dims);
+            } else {
+                pendingDimensions.add(dims);
+            }
+        }
+    }
 
     private boolean persistVector(UUID organizationId, UUID candidateId, String text,
             String model, float[] vector) {
@@ -141,9 +193,7 @@ public class EvidenceIndexService {
                             + "the pgvector HNSW index capability; configure explicit "
                             + "supported embedding dimensions");
         }
-        if (ensuredDimensions.add(vector.length)) {
-            ensureVectorIndex(vector.length);
-        }
+        ensureVectorIndexOnce(vector.length);
         try {
             repository.persistEmbedding(organizationId, candidateId,
                     sha256Hex(text), properties.indexVersion(), model, vector.length,
@@ -187,15 +237,18 @@ public class EvidenceIndexService {
      * (created on demand, idempotent DDL — the real provider dimension is unknown
      * at migration time, Architecture Decision #8 / research conclusions).
      */
-    private void ensureVectorIndex(int dims) {
+    private boolean ensureVectorIndex(int dims) {
         var model = embeddingService.modelIdentity();
         var indexName = "idx_retrieval_vector_"
                 + sha256Hex(model + ":" + dims).substring(0, 16);
         try {
             repository.createVectorIndexIfAbsent(indexName, model, dims);
+            return true;
         } catch (RuntimeException e) {
-            // index creation is an optimization; a failure must not break indexing
-            log.warn("Vector index creation skipped for {}", model);
+            // index creation is an optimization; a failure must not break indexing, and the
+            // dimension is not remembered so the next pass retries it
+            log.warn("Vector index creation deferred for {}; will retry on the next pass", model);
+            return false;
         }
     }
 

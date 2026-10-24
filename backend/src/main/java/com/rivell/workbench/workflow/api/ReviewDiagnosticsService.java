@@ -155,7 +155,11 @@ public class ReviewDiagnosticsService {
         // whole plan for every execution.
         var planChecks = planChecks(organizationId, run.reviewId());
         var checks = new ArrayList<ReviewDiagnosticsView.CheckView>();
+        Integer spottingDropped = null;
         for (var execution : analysisRepository.findExecutions(organizationId, run.id())) {
+            if (spottingDropped == null) {
+                spottingDropped = integer(execution.detail(), "spottingDropped");
+            }
             var degraded = execution.detail() == null ? null
                     : (String) execution.detail().get("degradedReason");
             var plan = planChecks.get(execution.planCheckId());
@@ -183,13 +187,15 @@ public class ReviewDiagnosticsService {
                     presenceProbabilities(execution.detail()),
                     count(execution.detail(), "addressedBySearch"),
                     count(execution.detail(), "flaggedBySearch"),
-                    strings(execution.detail(), "definitionTerms")));
+                    strings(execution.detail(), "definitionTerms"),
+                    integer(execution.detail(), "fitQuestions"),
+                    integer(execution.detail(), "fitSkipped")));
         }
         return new ReviewDiagnosticsView.AnalysisRunView(run.id(), run.runNumber(),
                 run.status().name(), run.trigger().name(), run.pipelineVersion(),
                 run.startedAt(), run.completedAt(), age, run.failureReason(),
                 run.transientFailures(), run.lastTransientReason(),
-                environmentMatches(organizationId, run.reviewId()), checks);
+                environmentMatches(organizationId, run.reviewId()), spottingDropped, checks);
     }
 
     /**
@@ -227,8 +233,9 @@ public class ReviewDiagnosticsService {
 
     /**
      * A policy comparison's judged positions as the check stored them: keys, categories,
-     * probabilities and, on engine v2, the route and the second opinion's outcome and category.
-     * Clause and position text, and the second opinion's words, never reach the check detail.
+     * probabilities and, on engine v2, the route, the second opinion's outcome and category, and
+     * (part 4) the fit verdict of a searched position. Clause and position text, and the second
+     * opinion's words, never reach the check detail.
      */
     static List<ReviewDiagnosticsView.JudgedPositionView> judgedPositions(Map<String, Object> detail) {
         if (detail == null || !(detail.get("positions") instanceof List<?> positions)) {
@@ -248,7 +255,12 @@ public class ReviewDiagnosticsService {
                         text(entry.get("route")),
                         text(entry.get("secondOpinionOutcome")),
                         text(entry.get("secondOpinionCategory")),
-                        text(entry.get("foundBy"))));
+                        text(entry.get("foundBy")),
+                        text(entry.get("fitVerdict")),
+                        text(entry.get("fitReason")),
+                        text(entry.get("fitOutcome")),
+                        text(entry.get("wordingFitVerdict")),
+                        strings(entry, "wordingFitReasons")));
             }
         }
         return views;
@@ -285,7 +297,7 @@ public class ReviewDiagnosticsService {
     }
 
     /** The detail's string list under one key; null when the detail does not carry it. */
-    private static List<String> strings(Map<String, Object> detail, String key) {
+    private static List<String> strings(Map<?, ?> detail, String key) {
         if (detail == null || !(detail.get(key) instanceof List<?> entries)) {
             return null;
         }

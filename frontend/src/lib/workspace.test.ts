@@ -10,6 +10,7 @@ import {
   executableChange,
   finalizeSummary,
   findingState,
+  languageAuthority,
   nextOpenFinding,
   orderForReview,
   profileLine,
@@ -296,6 +297,49 @@ describe('approved wording', () => {
 
   it('leaves machine-proposed wording to the ordinary eligibility rule', () => {
     expect(acceptEligibilityFor(detail({ proposedLanguageSource: 'GENERATIVE', proposedAction: 'CONSIDER_GENERATED_LANGUAGE', approvedDraftingEvidenceId: null })).eligible).toBe(true)
+  })
+})
+
+describe('where proposed wording came from', () => {
+  it('calls library wording approved only when the fit check passed', () => {
+    const fits = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: { wordingFitVerdict: 'FITS' },
+    } as never)
+    expect(fits?.strong).toBe('Approved organizational drafting')
+  })
+
+  it('does not call library wording approved without a fit verdict', () => {
+    const unchecked = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: null,
+    } as never)
+    expect(unchecked?.strong).toBe('Library wording, not checked against this position')
+  })
+
+  it('says library wording was not checked when the fit call gave no answer', () => {
+    const unchecked = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: { wordingFitVerdict: 'UNKNOWN' },
+    } as never)
+    expect(unchecked?.strong).toBe('Library wording, not checked against this position')
+    expect(unchecked?.rest).not.toMatch(/approved/i)
+  })
+
+  it('never calls wording that did not fit approved', () => {
+    const checked = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: { wordingFitVerdict: 'DOES_NOT_FIT' },
+    } as never)
+    expect(checked?.strong).toBe('Library wording that does not fit this position')
+  })
+
+  it('keeps machine wording labelled as Rivell\'s', () => {
+    const generated = languageAuthority({
+      proposedLanguageSource: 'GENERATIVE',
+      quality: { wordingFitVerdict: 'DOES_NOT_FIT' },
+    } as never)
+    expect(generated?.strong).toBe('Proposed by Rivell')
   })
 })
 

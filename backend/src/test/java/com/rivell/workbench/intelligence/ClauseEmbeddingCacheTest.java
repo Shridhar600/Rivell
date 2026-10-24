@@ -1,6 +1,7 @@
 package com.rivell.workbench.intelligence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -94,6 +95,71 @@ class ClauseEmbeddingCacheTest {
         assertThat(cache.vector("other")).containsExactly(5f);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> cache.vector("bad"))
                 .isInstanceOf(ProviderRejectedException.class);
+    }
+
+    @Test
+    void aRejectedHundredTextBatchMakesAtMostTheBoundedNumberOfFallbackCalls() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var provider = new EmbeddingProvider() {
+            @Override
+            public String id() {
+                return "fake";
+            }
+
+            @Override
+            public EmbeddingBatch embed(EmbeddingRequest request) {
+                calls.incrementAndGet();
+                if (request.inputs().size() > 1) {
+                    throw new ProviderRejectedException("batch too large");
+                }
+                throw new ProviderRejectedException("input too large");
+            }
+        };
+        var properties = new EmbeddingProperties("fake", "https://embed.test/v1", "key",
+                "embed-model", null, 64, Duration.ofSeconds(1), Duration.ofSeconds(1));
+        EmbeddingProviderRegistry registry = id -> id.equals("fake")
+                ? Optional.of(provider) : Optional.empty();
+        var cache = new ClauseEmbeddingCache(
+                new EmbeddingService(registry, properties, Clock.systemUTC()));
+        var texts = java.util.stream.IntStream.range(0, 100)
+                .mapToObj(index -> "clause " + index).toList();
+
+        cache.prefetch(texts);
+
+        assertThat(calls).hasValue(ClauseEmbeddingCache.MAX_FALLBACK_TEXTS + 1);
+        // the texts beyond the bound stay cold; a later use embeds its own text as before
+        assertThatThrownBy(() -> cache.vector("clause 99"))
+                .isInstanceOf(ProviderRejectedException.class);
+        assertThat(calls).hasValue(ClauseEmbeddingCache.MAX_FALLBACK_TEXTS + 2);
+    }
+
+    @Test
+    void anOutOfCreditBatchStopsThePrefetchWithoutPerTextCalls() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var provider = new EmbeddingProvider() {
+            @Override
+            public String id() {
+                return "fake";
+            }
+
+            @Override
+            public EmbeddingBatch embed(EmbeddingRequest request) {
+                calls.incrementAndGet();
+                throw new ProviderOutOfCreditException("Provider account has no credits");
+            }
+        };
+        var properties = new EmbeddingProperties("fake", "https://embed.test/v1", "key",
+                "embed-model", null, 64, Duration.ofSeconds(1), Duration.ofSeconds(1));
+        EmbeddingProviderRegistry registry = id -> id.equals("fake")
+                ? Optional.of(provider) : Optional.empty();
+        var cache = new ClauseEmbeddingCache(
+                new EmbeddingService(registry, properties, Clock.systemUTC()));
+
+        cache.prefetch(List.of("clause one", "clause two", "clause three"));
+
+        assertThat(calls).hasValue(1);
+        assertThatThrownBy(() -> cache.vector("clause one"))
+                .isInstanceOf(ProviderOutOfCreditException.class);
     }
 
     @Test

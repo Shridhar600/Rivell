@@ -6,6 +6,11 @@ import unittest
 
 import calibration
 
+# scratch lives inside the project (never /tmp or $TMPDIR)
+SCRATCH = pathlib.Path(__file__).resolve().parents[2] / ".superpowers" / "sdd" / "r4-part2-scorers" / "tmp"
+SCRATCH.mkdir(parents=True, exist_ok=True)
+TMP = tempfile.TemporaryDirectory(dir=SCRATCH)
+
 UNIFORM = {"MEETS_PREFERRED": 0.02, "WITHIN_FALLBACK": 0.02, "BEYOND_FALLBACK": 0.02,
            "WALK_AWAY": 0.02, "UNCLEAR": 0.02, "NOT_ADDRESSED": 0.02}
 
@@ -133,7 +138,7 @@ class GuardTest(unittest.TestCase):
             calibration.build(pathlib.Path("/x/eval/corpus/holdout2-fixed"), [])
 
     def test_a_run_from_before_p0_is_refused(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as tmp:
             corpus, run = pathlib.Path(tmp, "dev2"), pathlib.Path(tmp, "run1")
             (corpus / "answers").mkdir(parents=True)
             (run / "raw").mkdir(parents=True)
@@ -145,5 +150,112 @@ class GuardTest(unittest.TestCase):
                 calibration.build(corpus, [run])
 
 
+class Dw059Test(unittest.TestCase):
+    """Pack D, DW-059: the four eval-tooling minors."""
+
+    def setUp(self):
+        self.root = pathlib.Path(TMP.name, f"dw059-{self._testMethodName}")
+        if self.root.exists():
+            import shutil
+            shutil.rmtree(self.root)
+        (self.root / "corpus" / "answers").mkdir(parents=True)
+        (self.root / "corpus" / "answers" / "c.json").write_text(json.dumps(ANSWER))
+
+    def run_dir(self, name, checks, meta=None):
+        run = self.root / "runs" / name
+        (run / "raw").mkdir(parents=True)
+        (run / "raw" / "c.json").write_text(json.dumps(raw(checks)))
+        if meta is not None:
+            (run / "results.json").write_text(json.dumps({"meta": meta}))
+        return run
+
+    def test_a_run_whose_own_meta_names_a_holdout_is_refused(self):
+        # DW-059(1): the --corpus path said dev2, but the run recorded a holdout in its meta
+        run = self.run_dir("holdout-run", [check("h1", [position(probs(MEETS_PREFERRED=0.9))])],
+                           meta={"corpus": "/x/eval/corpus/holdout3"})
+        with self.assertRaises(SystemExit) as raised:
+            calibration.build(self.root / "corpus", [run])
+        self.assertIn("holdout", str(raised.exception))
+
+    def test_a_run_whose_meta_names_train_data_is_accepted(self):
+        run = self.run_dir("dev2-run", [check("h1", [position(probs(MEETS_PREFERRED=0.9))])],
+                           meta={"corpus": "/x/eval/corpus/dev2"})
+        records = calibration.build(self.root / "corpus", [run])
+        self.assertTrue(records)
+
+    def test_a_run_root_resolves_to_its_latest_timestamped_run(self):
+        # the owner passes eval/runs/<run>; the data sits in eval/runs/<run>/<ts>
+        older = self.run_dir("root/20260101-000000", [check("h1", [position(probs(MEETS_PREFERRED=0.9))])])
+        newer = self.run_dir("root/20260102-000000", [check("h1", [position(probs(MEETS_PREFERRED=0.9))])])
+        # the run's own corpus may be recorded at the root instead of the timestamped child
+        (self.root / "runs" / "root" / "results.json").write_text(
+            json.dumps({"meta": {"corpus": "/x/eval/corpus/dev2"}}))
+        records = calibration.build(self.root / "corpus", [self.root / "runs" / "root"])
+        self.assertTrue(records)
+        self.assertEqual({r["run"] for r in records}, {newer.name})
+        self.assertEqual(older.name, "20260101-000000")
+
+    def test_a_run_with_no_recorded_corpus_is_refused(self):
+        # no meta: a holdout run with its meta stripped would otherwise pass
+        run = self.run_dir("no-meta", [check("h1", [position(probs(MEETS_PREFERRED=0.9))])])
+        with self.assertRaises(SystemExit) as raised:
+            calibration.build(self.root / "corpus", [run])
+        self.assertIn("records no corpus", str(raised.exception))
+
+    def test_a_score_with_a_different_issue_count_is_refused(self):
+        # DW-059(2): build_records zipped the key and the score without checking the lengths
+        with self.assertRaises(ValueError) as raised:
+            calibration.build_records("r", "c", ANSWER, raw([]), score={"issues": []})
+        self.assertIn("expectedIssues", str(raised.exception))
+
+    def test_one_policy_check_without_judged_positions_refuses_the_run(self):
+        # DW-059(3): any() let a partially P0 run through; every policy check must carry the field
+        run = self.run_dir("partial", [
+            check("h1", [position(probs(MEETS_PREFERRED=0.9))]),
+            {"key": "CLAUSE:POLICY_COMPARISON:TOPIC:h2", "subjectHeadingNodeId": "h2",
+             "status": "COMPLETED"},
+        ], meta={"corpus": "/x/eval/corpus/dev2"})
+        with self.assertRaises(SystemExit) as raised:
+            calibration.build(self.root / "corpus", [run])
+        self.assertIn("judgedPositions", str(raised.exception))
+
+    def test_a_run_with_no_policy_check_is_refused(self):
+        run = self.run_dir("no-policy", [{"key": "CLAUSE:OTHER:h1", "status": "COMPLETED",
+                                          "judgedPositions": []}],
+                           meta={"corpus": "/x/eval/corpus/dev2"})
+        with self.assertRaises(SystemExit):
+            calibration.build(self.root / "corpus", [run])
+
+    def test_a_null_judged_positions_is_not_a_p0_check(self):
+        run = self.run_dir("null-positions", [
+            {"key": "CLAUSE:POLICY_COMPARISON:TOPIC:h1", "subjectHeadingNodeId": "h1",
+             "status": "COMPLETED", "judgedPositions": None}],
+            meta={"corpus": "/x/eval/corpus/dev2"})
+        with self.assertRaises(SystemExit):
+            calibration.build(self.root / "corpus", [run])
+
+    def test_every_calibration_row_carries_the_absence_credit_rule(self):
+        records = calibration.build_records("r", "c", ANSWER, standard_raw())
+        self.assertEqual({row["absenceCredit"] for row in records},
+                         {calibration.ABSENCE_CREDIT})
+        text = calibration.report(records)
+        self.assertIn("Absence credit: label/reference whole-word", text)
+
+    def test_old_rows_without_the_marker_say_so(self):
+        records = calibration.build_records("r", "c", ANSWER, standard_raw())
+        for row in records:
+            row.pop("absenceCredit")
+        self.assertIn("Absence credit: not recorded", calibration.report(records))
+
+    def test_a_blank_probe_category_reads_as_null_like_the_api(self):
+        # DW-059(5): the check detail writes "" while the diagnostics API writes null
+        records = calibration.build_records("r", "c", ANSWER, standard_raw(
+            probe=probs(BEYOND_FALLBACK=0.7), probe_flagged=True))
+        judged = [r for r in records if r["kind"] == "judged" and r.get("positionKey")]
+        self.assertEqual(judged[0]["probeCategory"], None)
+        self.assertTrue(judged[0]["probeFlagged"])
+
+
 if __name__ == "__main__":
     unittest.main()
+

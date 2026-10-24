@@ -44,6 +44,7 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     authorityConflicts: [],
     unmappedAuthority: [],
     needsAttention: false,
+    correctedFields: [],
     interpretations: [],
     editedContentText: null,
     editedPayloadColumns: {},

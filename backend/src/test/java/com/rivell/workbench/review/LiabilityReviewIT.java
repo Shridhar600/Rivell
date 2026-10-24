@@ -215,6 +215,24 @@ public class LiabilityReviewIT {
         /** The reversed-order (probe) call fails as if the provider were down. */
         volatile boolean failReversedOrder;
 
+        /** The fit check's answer for a search-found rule; null = 0.95 (fits). */
+        volatile Double ruleFitProbability;
+        /** The fit check's answer for a library wording offer; null = 0.95 (fits). */
+        volatile Double wordingFitProbability;
+        /** The fit check's answer for the meets-position question; null = wordingFitProbability. */
+        volatile Double wordingMeetsProbability;
+        /** The fit check's answer for the cures-gap question; null = wordingFitProbability. */
+        volatile Double wordingCuresProbability;
+        /** The fit check fails as if the provider were down. */
+        volatile boolean failFitDecision;
+        private final AtomicInteger fitCalls = new AtomicInteger();
+        /** One fit call: the clause heading and the question keys, in call order. */
+        public record FitCall(String heading, java.util.List<String> questionKeys) {
+        }
+
+        final java.util.List<FitCall> fitCallsMade =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
+
         /**
          * One policy-comparison call: the subject heading, the question keys, the first option offered,
          * the definitions the state carried and the state itself (serialized by the test's mapper).
@@ -340,6 +358,10 @@ public class LiabilityReviewIT {
                     .anyMatch(name -> name.startsWith("presence_"))) {
                 return presenceDecision(request);
             }
+            if (request.pack().questions().keySet().stream()
+                    .anyMatch(name -> name.startsWith("fit_"))) {
+                return fitDecision(request);
+            }
             var firstQuestion = request.pack().questions().values().iterator().next();
             if (firstQuestion instanceof ChoiceQuestion firstChoice
                     && firstChoice.criteria().containsKey(PolicyComparisonSpecs.WALK_AWAY)) {
@@ -426,6 +448,44 @@ public class LiabilityReviewIT {
                 }
             }
             return null;
+        }
+
+        /**
+         * The part-4 fit check: one yes/no per candidate, all of one clause's candidates in one
+         * call. Rules and wording can be scripted apart, so one test can fit a hit and reject the
+         * wording offered for it.
+         */
+        private ProviderExecutionResult fitDecision(DecisionExecutionRequest request) {
+            fitCalls.incrementAndGet();
+            if (failFitDecision) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "fit decision provider unavailable");
+            }
+            var answers = new LinkedHashMap<String, SemanticAnswer>();
+            var keys = new java.util.ArrayList<String>();
+            for (var entry : request.pack().questions().entrySet()) {
+                var question = (com.rivell.workbench.intelligence.YesNoQuestion) entry.getValue();
+                answers.put(entry.getKey(),
+                        new com.rivell.workbench.intelligence.YesNoAnswer(
+                                fitProbability(question.instructions())));
+                keys.add(entry.getKey());
+            }
+            java.util.Collections.sort(keys);
+            var state = (com.rivell.workbench.review.check.ClauseFitSpecs.FitState)
+                    request.state().payload();
+            fitCallsMade.add(new FitCall(state.heading(), List.copyOf(keys)));
+            return new ProviderExecutionResult(answers, "fake-review-v1", new TokenUsage(80, 2));
+        }
+
+        private double fitProbability(String instructions) {
+            if (!instructions.contains("clause-library wording")) {
+                return ruleFitProbability != null ? ruleFitProbability : 0.95;
+            }
+            var wordingDefault = wordingFitProbability != null ? wordingFitProbability : 0.95;
+            if (instructions.contains("meet the playbook position")) {
+                return wordingMeetsProbability != null ? wordingMeetsProbability : wordingDefault;
+            }
+            return wordingCuresProbability != null ? wordingCuresProbability : wordingDefault;
         }
 
         /** Engine v2 omissions lane: one yes/no per candidate position, scripted by its text. */
@@ -529,6 +589,14 @@ public class LiabilityReviewIT {
             return presenceCalls.get();
         }
 
+        public int fitCalls() {
+            return fitCalls.get();
+        }
+
+        public java.util.List<FitCall> fitCallsMade() {
+            return java.util.List.copyOf(fitCallsMade);
+        }
+
         int consistencyDecisions() {
             return consistencyDecisions.get();
         }
@@ -563,6 +631,13 @@ public class LiabilityReviewIT {
             probabilityHeadings.clear();
             reversedOrderAnswer = null;
             failReversedOrder = false;
+            ruleFitProbability = null;
+            wordingFitProbability = null;
+            wordingMeetsProbability = null;
+            wordingCuresProbability = null;
+            failFitDecision = false;
+            fitCalls.set(0);
+            fitCallsMade.clear();
             indecisivePrimaryHeadings.clear();
             indecisivePrimaryAnswers.set(0);
             topiclessHeadings.clear();
@@ -591,6 +666,9 @@ public class LiabilityReviewIT {
         final java.util.Set<String> spottedHighHeadings =
                 java.util.concurrent.ConcurrentHashMap.newKeySet();
         final AtomicInteger spottingCalls = new AtomicInteger();
+        /** Overrides the whole-contract read's raw issue lines, when a test needs a malformed one. */
+        volatile java.util.function.Function<IssueSpottingSpecs.SpottingState, String>
+                spottingOutput;
         /** The whole-contract read fails as if the provider were down. */
         volatile boolean failSpotting;
         /** The whole-contract read fails as if the analysis account had no credit. */
@@ -636,6 +714,7 @@ public class LiabilityReviewIT {
             spottedHeadings.clear();
             spottedHighHeadings.clear();
             spottingCalls.set(0);
+            spottingOutput = null;
             failSpotting = false;
             spottingOutOfCredit = false;
             secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
@@ -693,15 +772,27 @@ public class LiabilityReviewIT {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                             "whole-contract spotting unavailable");
                 }
+                if (spottingOutput != null) {
+                    return new GenerationResult(Map.of("issues", spottingOutput.apply(spotting)),
+                            "fake-gen-v1", new TokenUsage(900, 30));
+                }
                 var lines = spotting.clauses().stream()
                         .map(clause -> {
-                            if (spottedHighHeadings.stream().anyMatch(clause.heading()::contains)) {
-                                return clause.number() + " | HIGH | one-sided term against us";
+                            var severity = spottedHighHeadings.stream().anyMatch(clause.heading()::contains)
+                                    ? "HIGH"
+                                    : spottedHeadings.stream().anyMatch(clause.heading()::contains)
+                                            ? "MEDIUM" : null;
+                            if (severity == null) {
+                                return null;
                             }
-                            if (spottedHeadings.stream().anyMatch(clause.heading()::contains)) {
-                                return clause.number() + " | MEDIUM | one-sided term against us";
+                            var quote = clause.text().strip().lines().findFirst()
+                                    .filter(line -> !line.isBlank())
+                                    .orElse(clause.heading());
+                            if (quote.length() > 160) {
+                                quote = quote.substring(0, 160);
                             }
-                            return null;
+                            return clause.number() + " | " + severity + " | " + quote
+                                    + " | one-sided term against us";
                         })
                         .filter(java.util.Objects::nonNull)
                         .collect(java.util.stream.Collectors.joining("\n"));
