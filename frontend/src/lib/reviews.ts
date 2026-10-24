@@ -691,7 +691,8 @@ export function approvalSummary(quality: FindingQuality | null): ApprovalSummary
       ? quality.escalationStance
       : null
   return {
-    approver,
+    // the panel opens a sentence with the approver ("General counsel approves this fallback")
+    approver: approver.charAt(0).toUpperCase() + approver.slice(1),
     condition: quality.escalationCondition?.trim() || null,
     source: quality.escalationSource?.trim() || null,
     stance,

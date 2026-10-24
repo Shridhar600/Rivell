@@ -513,6 +513,12 @@ describe('coverage notes and check labels', () => {
     expect(observationKindLabel('UNCERTAINTY:second_opinion_unavailable')).toBe('Not double-checked')
   })
 
+  it('starts the approver with a capital, since the panel opens a sentence with it', () => {
+    expect(approvalSummary(quality({ escalationApprover: 'general counsel' }))?.approver).toBe(
+      'General counsel',
+    )
+  })
+
   it('shows an approval only when a typed rule names an approver', () => {
     // a trigger text alone is not an approval
     expect(
