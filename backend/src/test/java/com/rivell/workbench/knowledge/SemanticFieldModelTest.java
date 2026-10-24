@@ -196,23 +196,6 @@ class SemanticFieldModelTest {
     }
 
     @Test
-    void aRecordWithNoRoleIsNotAPosition() {
-        var noRole = candidate(new SemanticFields(Set.of(), null, null, null, Map.of()), null);
-        var escalationOnly = candidate(new SemanticFields(
-                Set.of(PositionRole.ESCALATION), null, "Escalate to counsel", null, Map.of()), null);
-        var statedPreferred = candidate(new SemanticFields(
-                Set.of(PositionRole.PREFERRED), null, null, null, Map.of()), null);
-        var roleTaggedValue = candidateWithColumns(
-                new SemanticFields(Set.of(), null, null, null, Map.of()),
-                Map.of("Preferred", "Cap at fees paid."));
-
-        assertThat(noRole.carriesPosition()).isFalse();
-        assertThat(escalationOnly.carriesPosition()).isFalse();
-        assertThat(statedPreferred.carriesPosition()).isTrue();
-        assertThat(roleTaggedValue.carriesPosition()).isTrue();
-    }
-
-    @Test
     void aClearedFallbackListStaysClearedButAnOlderEditFallsBackToTheMachineList() {
         var machine = new SemanticFields(Set.of(PositionRole.FALLBACK), null, null, null, Map.of(),
                 false, null, List.of("Machine fallback"), null, List.of(), List.of(), false,

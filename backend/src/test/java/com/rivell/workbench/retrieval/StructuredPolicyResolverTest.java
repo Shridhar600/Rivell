@@ -54,10 +54,12 @@ class StructuredPolicyResolverTest {
     }
 
     @Test
-    void aPublishedRecordWithNoRoleIsNeverUsedAsAPosition() {
+    void aPublishedPlaybookRuleWithNoRoleIsStillReadAsAPosition() {
+        // prose playbooks (one rule per paragraph, no stance labels) compile with no role; the
+        // whole rule is the position. Leaving them out lost 10 dev issues (release-4 eval).
         var organizationId = UUID.randomUUID();
-        var noRole = candidate(Set.of(), java.util.Map.of(), "The deal boundary",
-                "The NDA may support evaluation. It must not create production rights.");
+        var noRole = candidate(Set.of(), java.util.Map.of(), "Indemnities",
+                "The supplier must indemnify us for third-party IP claims without a cap.");
         var position = candidate(Set.of(com.rivell.workbench.knowledge.PositionRole.PREFERRED),
                 java.util.Map.of(), "Limitation of liability",
                 "Preferred: cap at the fees paid in the preceding 12 months.");
@@ -77,7 +79,7 @@ class StructuredPolicyResolverTest {
 
         assertThat(resolution.candidates())
                 .extracting(candidate -> candidate.rawLabel())
-                .containsExactly("Limitation of liability");
+                .containsExactly("Indemnities", "Limitation of liability");
     }
 
     private static com.rivell.workbench.knowledge.KnowledgeCandidate candidate(

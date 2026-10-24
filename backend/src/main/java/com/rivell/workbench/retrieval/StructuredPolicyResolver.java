@@ -58,8 +58,7 @@ public class StructuredPolicyResolver {
         var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
         var truncated = candidates.size() > limit;
         var bounded = truncated ? candidates.subList(0, limit) : candidates;
-        return new Resolution(positionsOnly(bounded, candidateTypes), asOfPublicationNumber,
-                truncated);
+        return new Resolution(List.copyOf(bounded), asOfPublicationNumber, truncated);
     }
 
     public record Resolution(
@@ -110,8 +109,8 @@ public class StructuredPolicyResolver {
                 request.effectiveOn(), limit);
         var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
         var truncated = candidates.size() > limit;
-        return new Resolution(positionsOnly(truncated ? candidates.subList(0, limit) : candidates,
-                candidateTypes), asOfPublicationNumber, truncated);
+        return new Resolution(List.copyOf(truncated ? candidates.subList(0, limit) : candidates),
+                asOfPublicationNumber, truncated);
     }
 
     public Resolution resolve(
@@ -138,23 +137,6 @@ public class StructuredPolicyResolver {
         var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
         var truncated = candidates.size() > query.limit();
         var bounded = truncated ? candidates.subList(0, query.limit()) : candidates;
-        return new Resolution(positionsOnly(bounded, candidateTypes), asOfPublicationNumber,
-                truncated);
-    }
-
-    /**
-     * Council §A.4: a record with no role is never used as a position in review. A position is
-     * a role the compile guarantees, so a published playbook rule that carries no position role
-     * and no role-tagged stance value is left out of every position read.
-     */
-    private static List<com.rivell.workbench.knowledge.PublishedCandidate> positionsOnly(
-            List<com.rivell.workbench.knowledge.PublishedCandidate> published,
-            Set<CandidateType> candidateTypes) {
-        if (!candidateTypes.contains(CandidateType.PLAYBOOK_RULE)) {
-            return List.copyOf(published);
-        }
-        return published.stream()
-                .filter(match -> match.candidate().carriesPosition())
-                .toList();
+        return new Resolution(List.copyOf(bounded), asOfPublicationNumber, truncated);
     }
 }

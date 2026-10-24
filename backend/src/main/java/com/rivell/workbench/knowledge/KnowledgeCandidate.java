@@ -411,23 +411,6 @@ public record KnowledgeCandidate(
     }
 
     /**
-     * Whether this record is used as a position in review. A position is a role the compile
-     * guarantees: a stated position role, or a role-tagged stance value. A record with no role
-     * is never used as a position (council §A.4), so its whole text cannot become a finding.
-     */
-    public boolean carriesPosition() {
-        var statedStance = effectivePositions().stream().anyMatch(role ->
-                role == PositionRole.PREFERRED || role == PositionRole.FALLBACK
-                        || role == PositionRole.PROHIBITED);
-        if (statedStance) {
-            return true;
-        }
-        return effectivePositionFieldValues().keySet().stream().anyMatch(role ->
-                role == PositionRole.PREFERRED || role == PositionRole.FALLBACK
-                        || role == PositionRole.PROHIBITED);
-    }
-
-    /**
      * Structured fields a person corrected and saved, one name per field, when the saved value
      * differs from the machine proposal. A machine proposal that was stored only as an
      * interpretation (the source did not support it) is not a correction: it never reached the
