@@ -35,6 +35,7 @@ function candidate(
     variantRole: null,
     escalationTrigger: null,
     requiresApproval: null,
+    correctedFields: [],
     interpretations: [],
     reviewCategory: null,
     reviewReasons: [],

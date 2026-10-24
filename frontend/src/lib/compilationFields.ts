@@ -5,6 +5,7 @@ import { contractTypesText, scopeRows } from './knowledgePosition'
 import {
   approvalDiverge,
   escalationDiverge,
+  fieldCorrected,
   formatBoolean,
   formatPositions,
   interpretationFor,
@@ -65,13 +66,21 @@ export function conceptCorrected(candidate: Candidate): boolean {
   return candidate.conceptCorrection !== null
 }
 
-/** Whether a person has changed anything about this candidate's interpretation. */
+/**
+ * Whether a person has saved a correction to this candidate. A machine proposal that the source
+ * did not support is stored beside an empty effective value, so it is not a correction.
+ */
 export function hasHumanCorrection(candidate: Candidate, artifact?: ArtifactDetail): boolean {
   if (candidate.editedTitle !== null) return true
   if (candidate.editedContentText !== null && candidate.editedContentText !== candidate.contentText) return true
   if (Object.keys(candidate.editedPayloadColumns).length > 0) return true
   if (conceptCorrected(candidate)) return true
-  if (positionsDiverge(candidate) || variantRoleDiverge(candidate) || escalationDiverge(candidate) || approvalDiverge(candidate)) {
+  if (
+    fieldCorrected(candidate, 'positions') ||
+    fieldCorrected(candidate, 'variantRole') ||
+    fieldCorrected(candidate, 'escalationTrigger') ||
+    fieldCorrected(candidate, 'requiresApproval')
+  ) {
     return true
   }
   return artifact ? scopeDifferences(candidate, artifact).length > 0 : false
@@ -120,7 +129,7 @@ export function interpretationRows(
       value: POSITION_LABELS[candidate.variantRole ?? 'UNSPECIFIED'],
       machine: variantRoleDiverge(candidate) && proposed ? `Rivell proposed: ${POSITION_LABELS[proposed]}` : null,
       support: supportNote(interpretationFor(candidate, 'variantRole')),
-      corrected: variantRoleDiverge(candidate),
+      corrected: fieldCorrected(candidate, 'variantRole'),
     })
   }
 
@@ -132,7 +141,7 @@ export function interpretationRows(
       value: candidate.positions.length > 0 ? formatPositions(candidate.positions) : 'Not specified',
       machine: positionsDiverge(candidate) && proposed ? `Rivell proposed: ${formatPositions(proposed)}` : null,
       support: supportNote(interpretationFor(candidate, 'positions')),
-      corrected: positionsDiverge(candidate),
+      corrected: fieldCorrected(candidate, 'positions'),
     })
     rows.push({
       key: 'escalation',
@@ -140,7 +149,7 @@ export function interpretationRows(
       value: textOrNull(candidate.escalationTrigger) ?? 'Not stated',
       machine: escalationDiverge(candidate) ? `Rivell proposed: ${proposedEscalationTrigger(candidate) ?? 'none'}` : null,
       support: supportNote(interpretationFor(candidate, 'escalationTrigger')),
-      corrected: escalationDiverge(candidate),
+      corrected: fieldCorrected(candidate, 'escalationTrigger'),
     })
     if (candidate.requiresApproval !== null || interpretationFor(candidate, 'requiresApproval')) {
       const machine = proposedApproval(candidate)
@@ -150,7 +159,7 @@ export function interpretationRows(
         value: formatBoolean(candidate.requiresApproval),
         machine: approvalDiverge(candidate) && machine !== null ? `Rivell proposed: ${formatBoolean(machine)}` : null,
         support: supportNote(interpretationFor(candidate, 'requiresApproval')),
-        corrected: approvalDiverge(candidate),
+        corrected: fieldCorrected(candidate, 'requiresApproval'),
       })
     }
   }

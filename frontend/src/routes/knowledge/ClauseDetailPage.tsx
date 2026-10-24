@@ -20,7 +20,7 @@ import {
   type ClauseVariant,
 } from '../../lib/knowledgeCatalog'
 import { contractTypesLabel, displayScopeRows, positionRoles, POSITION_ROLE_LABELS } from '../../lib/knowledgePosition'
-import { sourceLocation } from '../../lib/knowledgeSource'
+import { headingPaths, sourceLocation } from '../../lib/knowledgeSource'
 
 export function ClauseDetailPage() {
   const { clauseKey: rawKey = '' } = useParams()
@@ -121,7 +121,9 @@ function VariantBody({ variant }: { variant: ClauseVariant }) {
   const units = useExtractionUnitsQuery(artifact.id)
   const structure = useKnowledgeStructureQuery(artifact.id)
   const located = units.data && structure.data ? resolveCandidateSource(candidate, units.data, structure.data) : null
-  const location = located ? sourceLocation(located.nodes) : null
+  const location = located
+    ? sourceLocation(located.nodes, structure.data ? headingPaths(structure.data) : undefined)
+    : null
   const text = positionText(candidate)
   const roles = positionRoles(candidate).filter((role) => role !== 'COMMENTARY')
   const [copied, setCopied] = useState<'idle' | 'done' | 'failed'>('idle')

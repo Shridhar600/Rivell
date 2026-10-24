@@ -46,6 +46,8 @@ public record CandidateView(
         PositionRole variantRole,
         String escalationTrigger,
         Boolean requiresApproval,
+        /** Structured fields a person corrected and saved; an unapplied machine proposal is not one. */
+        Set<String> correctedFields,
         List<InterpretationView> interpretations,
         String editedContentText,
         Map<String, String> editedPayloadColumns,

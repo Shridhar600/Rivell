@@ -315,32 +315,49 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             detail.put("spottingUnavailable", true);
             return List.of();
         }
-        var spot = spotResult.spots().get(clause.headingNodeId());
+        // An issue the read could not ground in the contract is dropped, and the check says how
+        // many were dropped rather than quietly guessing a clause for them.
+        detail.put("spottingDropped", spotResult.dropped());
+        var spots = spotResult.spots().get(clause.headingNodeId());
         var evidence = subjectEvidence(bundle, clause.id());
-        if (spot == null || evidence.isEmpty()) {
+        if (spots == null || spots.isEmpty() || evidence.isEmpty()) {
             return List.of();
         }
-        detail.put("spotted", spot.severity());
-        if (properties.advisorySpots() == PolicyComparisonProperties.AdvisorySpots.HIGH
-                && !"HIGH".equals(spot.severity())) {
+        detail.put("spotted", highestSeverity(spots));
+        var kept = properties.advisorySpots() == PolicyComparisonProperties.AdvisorySpots.HIGH
+                ? spots.stream().filter(spot -> "HIGH".equals(spot.severity())).toList()
+                : spots;
+        if (kept.isEmpty()) {
             // the deployment wants only the read's own HIGH picks; the detail keeps the pick
             return List.of();
         }
-        var quality = new LinkedHashMap<String, Object>();
-        quality.put("spottedSeverity", spot.severity());
-        quality.put("spottedReason", spot.reason());
-        quality.put("route", NEEDS_YOUR_LOOK);
-        quality.put("uncertaintyReason", PLAYBOOK_SILENT);
-        if (detail.get("uncoveredProbability") instanceof Double probability) {
-            quality.put("uncoveredProbability", probability);
+        var out = new ArrayList<RawReviewSignal>(kept.size());
+        for (int index = 0; index < kept.size(); index++) {
+            var spot = kept.get(index);
+            var quality = new LinkedHashMap<String, Object>();
+            quality.put("spottedSeverity", spot.severity());
+            quality.put("spottedReason", spot.reason());
+            quality.put("route", NEEDS_YOUR_LOOK);
+            quality.put("uncertaintyReason", PLAYBOOK_SILENT);
+            if (detail.get("uncoveredProbability") instanceof Double probability) {
+                quality.put("uncoveredProbability", probability);
+            }
+            var suffix = index == 0 ? "spotted" : "spotted-" + index;
+            out.add(signal(context, b -> b
+                    .signalType(SignalType.POLICY_UNAVAILABLE).issueFamily(IssueFamily.POLICY_UNAVAILABLE)
+                    .payload(new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED))
+                    .evidence(evidence)
+                    .generativeExecution(spot.executionId())
+                    .quality(quality)
+                    .dedupeSuffix(suffix)));
         }
-        return List.of(signal(context, b -> b
-                .signalType(SignalType.POLICY_UNAVAILABLE).issueFamily(IssueFamily.POLICY_UNAVAILABLE)
-                .payload(new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED))
-                .evidence(evidence)
-                .generativeExecution(spot.executionId())
-                .quality(quality)
-                .dedupeSuffix("spotted")));
+        return out;
+    }
+
+    private static String highestSeverity(List<ContractIssueSpotter.Spot> spots) {
+        return spots.stream().anyMatch(spot -> "HIGH".equals(spot.severity()))
+                ? "HIGH"
+                : spots.getFirst().severity();
     }
 
     /**

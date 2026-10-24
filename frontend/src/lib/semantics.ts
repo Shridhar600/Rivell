@@ -101,6 +101,17 @@ function samePositionSet(a: PositionRole[], b: PositionRole[]): boolean {
   return a.every((role) => setB.has(role))
 }
 
+/** A structured field a person corrected and saved. A stored proposal that was not applied is not one. */
+export type CorrectedField =
+  | 'positions'
+  | 'variantRole'
+  | 'escalationTrigger'
+  | 'requiresApproval'
+
+export function fieldCorrected(candidate: Candidate, field: CorrectedField): boolean {
+  return candidate.correctedFields.includes(field)
+}
+
 export function positionsDiverge(candidate: Candidate): boolean {
   const proposed = proposedPositions(candidate)
   if (proposed === null || proposed.length === 0) return false

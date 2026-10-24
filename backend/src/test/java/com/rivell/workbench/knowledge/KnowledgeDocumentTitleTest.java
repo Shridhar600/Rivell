@@ -86,6 +86,220 @@ class KnowledgeDocumentTitleTest {
     }
 
     @Test
+    void anAllCapsTitleIsUsedWhenOnlyCoverMetadataFollowsIt() {
+        var nodes = document(
+                node(KnowledgeNodeType.TITLE, "PROCUREMENT CONTRACT PLAYBOOK"),
+                node(KnowledgeNodeType.PARAGRAPH,
+                        "Owner: Nadia Petrov, General Counsel, Fenwick Engineering Pty Ltd."),
+                node(KnowledgeNodeType.PARAGRAPH, "Version: 2.1. Last reviewed: 15 January 2026."),
+                node(KnowledgeNodeType.PARAGRAPH,
+                        "Purpose: This playbook sets the positions Fenwick Engineering Pty Ltd takes "
+                                + "when it buys plant, equipment and specialist services on a supplier's paper."),
+                node(KnowledgeNodeType.HEADING, "Limitation of liability"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("PROCUREMENT CONTRACT PLAYBOOK");
+    }
+
+    @Test
+    void anAllCapsLeadingParagraphIsUsedWhenOnlyCoverMetadataFollowsIt() {
+        var nodes = document(
+                node(KnowledgeNodeType.PARAGRAPH, "PROCUREMENT CONTRACT PLAYBOOK"),
+                node(KnowledgeNodeType.PARAGRAPH, "Date: 15 January 2026"),
+                node(KnowledgeNodeType.HEADING, "Limitation of liability"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("PROCUREMENT CONTRACT PLAYBOOK");
+    }
+
+    @Test
+    void aMetadataLineIsNeverTheTitle() {
+        var nodes = document(
+                node(KnowledgeNodeType.PARAGRAPH, "Owner: Nadia Petrov"),
+                node(KnowledgeNodeType.PARAGRAPH, "Version: 2.1"),
+                node(KnowledgeNodeType.PARAGRAPH, "Date: 15 January 2026"),
+                node(KnowledgeNodeType.PARAGRAPH, "Mutual NDA Negotiation Guide"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("Mutual NDA Negotiation Guide");
+    }
+
+    @Test
+    void aTitleBelowCoverMetadataWinsOverAnAllCapsMasthead() {
+        var nodes = document(
+                node(KnowledgeNodeType.TITLE, "ACME LEGAL"),
+                node(KnowledgeNodeType.PARAGRAPH, "Owner: Nadia Petrov"),
+                node(KnowledgeNodeType.PARAGRAPH, "Mutual NDA Negotiation Guide"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("Mutual NDA Negotiation Guide");
+    }
+
+    @Test
+    void aSecondAllCapsTitleReplacesAShorterOrganisationMasthead() {
+        var nodes = document(
+                node(KnowledgeNodeType.TITLE, "FENWICK ENGINEERING"),
+                node(KnowledgeNodeType.TITLE, "PROCUREMENT CONTRACT PLAYBOOK"),
+                node(KnowledgeNodeType.PARAGRAPH, "Owner: Nadia Petrov"),
+                node(KnowledgeNodeType.HEADING, "Limitation of liability"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("PROCUREMENT CONTRACT PLAYBOOK");
+    }
+
+    @Test
+    void anUnnumberedHeadingAfterACapsMastheadNamesTheDocument() {
+        var nodes = document(
+                node(KnowledgeNodeType.TITLE, "ACME LEGAL"),
+                node(KnowledgeNodeType.HEADING, "Mutual NDA Negotiation Guide"),
+                node(KnowledgeNodeType.PARAGRAPH, "This guide sets our positions."));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("Mutual NDA Negotiation Guide");
+    }
+
+    @Test
+    void aLongTitleParagraphAfterACapsMastheadIsAccepted() {
+        var titleText = "Mutual NDA Negotiation Guide for Channel and Integration Partners in Europe and Asia.";
+        var nodes = document(
+                node(KnowledgeNodeType.TITLE, "ACME LEGAL"),
+                node(KnowledgeNodeType.PARAGRAPH, titleText));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo(titleText);
+    }
+
+    @Test
+    void aNumberedSectionHeadingDoesNotReplaceAnAllCapsTitle() {
+        var nodes = document(
+                node(KnowledgeNodeType.PARAGRAPH, "ACME LEGAL | INTERNAL GUIDANCE"),
+                node(KnowledgeNodeType.TITLE, "PROCUREMENT CONTRACT PLAYBOOK"),
+                node(KnowledgeNodeType.HEADING, "1. Purpose"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("PROCUREMENT CONTRACT PLAYBOOK");
+    }
+
+    @Test
+    void aWordNumberedSectionHeadingDoesNotReplaceAnAllCapsTitle() {
+        var nodes = document(
+                node(KnowledgeNodeType.TITLE, "PROCUREMENT CONTRACT PLAYBOOK"),
+                numberedHeading("Purpose", "1."));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("PROCUREMENT CONTRACT PLAYBOOK");
+    }
+
+    @Test
+    void aLeadingUnnumberedHeadingNamesTheDocument() {
+        var nodes = document(
+                node(KnowledgeNodeType.HEADING, "PROCUREMENT CONTRACT PLAYBOOK"),
+                node(KnowledgeNodeType.PARAGRAPH, "This playbook sets out the positions we take."));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("PROCUREMENT CONTRACT PLAYBOOK");
+    }
+
+    @Test
+    void aBareMetadataLabelAndItsValueAreNotTheTitle() {
+        var nodes = document(
+                node(KnowledgeNodeType.PARAGRAPH, "Owner"),
+                node(KnowledgeNodeType.PARAGRAPH, "Director, Commercial Legal"),
+                node(KnowledgeNodeType.PARAGRAPH, "Mutual NDA Negotiation Guide"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("Mutual NDA Negotiation Guide");
+    }
+
+    @Test
+    void aContactsLineIsMetadata() {
+        var nodes = document(
+                node(KnowledgeNodeType.TITLE, "PROCUREMENT CONTRACT PLAYBOOK"),
+                node(KnowledgeNodeType.PARAGRAPH, "Contacts: procurement@example.test"),
+                node(KnowledgeNodeType.HEADING, "Limitation of liability"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("PROCUREMENT CONTRACT PLAYBOOK");
+    }
+
+    @Test
+    void aMixedCaseLegendIsNotATitle() {
+        var nodes = document(
+                node(KnowledgeNodeType.PARAGRAPH, "Confidential"),
+                node(KnowledgeNodeType.PARAGRAPH, "Mutual NDA Negotiation Guide"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("Mutual NDA Negotiation Guide");
+    }
+
+    @Test
+    void anAllCapsLegendIsNotATitle() {
+        var alone = document(
+                node(KnowledgeNodeType.PARAGRAPH, "THIS DOCUMENT IS CONFIDENTIAL"));
+        assertThat(KnowledgeDocumentTitle.of(alone)).isNull();
+
+        var nodes = document(
+                node(KnowledgeNodeType.PARAGRAPH, "THIS DOCUMENT IS CONFIDENTIAL"),
+                node(KnowledgeNodeType.PARAGRAPH, "Mutual NDA Negotiation Guide"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("Mutual NDA Negotiation Guide");
+    }
+
+    @Test
+    void aLastUpdatedMetadataLineIsNeverTheTitle() {
+        var nodes = document(
+                node(KnowledgeNodeType.TITLE, "PROCUREMENT CONTRACT PLAYBOOK"),
+                node(KnowledgeNodeType.PARAGRAPH, "Last updated: 15 January 2026"),
+                node(KnowledgeNodeType.HEADING, "Limitation of liability"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("PROCUREMENT CONTRACT PLAYBOOK");
+    }
+
+    @Test
+    void anEmptyHeadingIsNeverTheTitle() {
+        var nodes = document(
+                node(KnowledgeNodeType.TITLE, "  "),
+                node(KnowledgeNodeType.PARAGRAPH, "Mutual NDA Negotiation Guide"));
+
+        var title = KnowledgeDocumentTitle.of(nodes);
+
+        assertThat(title).isNotNull();
+        assertThat(title.text()).isEqualTo("Mutual NDA Negotiation Guide");
+    }
+
+    @Test
     void aBlankLeadingParagraphDoesNotMakeTheFirstHeadingTheTitle() {
         var nodes = document(
                 node(KnowledgeNodeType.PARAGRAPH, "   "),
@@ -132,6 +346,17 @@ class KnowledgeDocumentTitleTest {
 
     private KnowledgeSourceNode node(KnowledgeNodeType type, String text) {
         return node(artifactId, root.id(), type, text, null, null);
+    }
+
+    /** A heading whose number lives in Word's numbering label, as a real Heading 1 does. */
+    private KnowledgeSourceNode numberedHeading(String text, String numberingLabel) {
+        var node = node(KnowledgeNodeType.HEADING, text);
+        return new KnowledgeSourceNode(node.id(), node.artifactId(), node.parentId(),
+                node.nodeType(), node.ordinal(), node.text(), node.headingLevel(),
+                numberingLabel, node.partPath(), node.bodyIndex(), node.paragraphIndex(),
+                node.tableIndex(), node.rowIndex(), node.cellIndex(), node.runStart(),
+                node.runEnd(), node.sheetName(), node.columnIndex(), node.mergedRegion(),
+                node.rawStyleId());
     }
 
     private List<KnowledgeSourceNode> row(

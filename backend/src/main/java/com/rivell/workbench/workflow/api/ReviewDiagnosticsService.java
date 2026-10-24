@@ -155,7 +155,11 @@ public class ReviewDiagnosticsService {
         // whole plan for every execution.
         var planChecks = planChecks(organizationId, run.reviewId());
         var checks = new ArrayList<ReviewDiagnosticsView.CheckView>();
+        Integer spottingDropped = null;
         for (var execution : analysisRepository.findExecutions(organizationId, run.id())) {
+            if (spottingDropped == null) {
+                spottingDropped = integer(execution.detail(), "spottingDropped");
+            }
             var degraded = execution.detail() == null ? null
                     : (String) execution.detail().get("degradedReason");
             var plan = planChecks.get(execution.planCheckId());
@@ -189,7 +193,7 @@ public class ReviewDiagnosticsService {
                 run.status().name(), run.trigger().name(), run.pipelineVersion(),
                 run.startedAt(), run.completedAt(), age, run.failureReason(),
                 run.transientFailures(), run.lastTransientReason(),
-                environmentMatches(organizationId, run.reviewId()), checks);
+                environmentMatches(organizationId, run.reviewId()), spottingDropped, checks);
     }
 
     /**
