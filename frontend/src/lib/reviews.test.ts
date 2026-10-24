@@ -3,11 +3,16 @@ import type { FindingDetail, FindingQuality, PlaybookUsed } from '../api/reviews
 import {
   analysisWarningCheckLabel,
   analysisWarningMessage,
+  approvalConflictLine,
+  approvalSourceLabel,
+  approvalSummary,
   checkKeyLabel,
   clauseMarkLabel,
   clauseMarksLegend,
   coverageLimitationSummary,
   decidedByLabel,
+  escalateIfLine,
+  escalateIfText,
   findingGapText,
   findingIssueLabel,
   findingPlaybookRule,
@@ -502,5 +507,73 @@ describe('coverage notes and check labels', () => {
       'Rivell is unsure',
     )
     expect(observationKindLabel('UNCERTAINTY:second_opinion_unavailable')).toBe('Not double-checked')
+  })
+
+  it('shows an approval only when a typed rule names an approver', () => {
+    // a trigger text alone is not an approval
+    expect(
+      approvalSummary(quality({ escalationCondition: 'Escalate above net 90' })),
+    ).toBeNull()
+
+    const summary = approvalSummary(
+      quality({
+        escalationApprover: 'Commercial Manager',
+        escalationCondition: 'Uncapped liability or consequential damages',
+        escalationSource: 'MATRIX',
+        escalationStance: 'FALLBACK',
+        escalationConflictApprover: 'General Counsel',
+        escalationConflictSource: 'ENTRY',
+      }),
+    )
+
+    expect(summary).toEqual({
+      approver: 'Commercial Manager',
+      condition: 'Uncapped liability or consequential damages',
+      source: 'MATRIX',
+      stance: 'FALLBACK',
+      conflict: { approver: 'General Counsel', source: 'ENTRY' },
+    })
+    expect(escalateIfLine(summary)).toBe(
+      'Escalate if: Uncapped liability or consequential damages.',
+    )
+    expect(escalateIfText('Escalate shorter periods for source code or customer data.')).toBe(
+      'shorter periods for source code or customer data',
+    )
+    expect(escalateIfText('Escalate to the named approver at a walk-away')).toBeNull()
+    expect(
+      escalateIfText('Escalate to general counsel before agreeing to any cap above the preferred position'),
+    ).toBe('agreeing to any cap above the preferred position')
+    expect(escalateIfText('  ')).toBeNull()
+    expect(escalateIfText('Escalate.')).toBeNull()
+    expect(approvalConflictLine(summary)).toBe('The entry names General Counsel for this.')
+    expect(approvalSourceLabel(summary?.source ?? null)).toBe('from the approval matrix')
+    expect(approvalConflictLine(null)).toBeNull()
+    expect(escalateIfLine(null)).toBeNull()
+  })
+
+  it('names the approval matrix or table in the conflict line, whichever is lower', () => {
+    const matrix = approvalSummary(
+      quality({
+        escalationApprover: 'The lawyer handling the NDA',
+        escalationSource: 'ENTRY',
+        escalationConflictApprover: 'Reviewing Commercial Legal counsel',
+        escalationConflictSource: 'TABLE',
+      }),
+    )
+    expect(approvalConflictLine(matrix)).toBe(
+      'The approval table names Reviewing Commercial Legal counsel for this.',
+    )
+
+    const higher = approvalSummary(
+      quality({
+        escalationApprover: 'Commercial Legal Director',
+        escalationSource: 'ENTRY',
+        escalationConflictApprover: 'Commercial Manager',
+        escalationConflictSource: 'MATRIX',
+      }),
+    )
+    expect(approvalConflictLine(higher)).toBe(
+      'The approval matrix names Commercial Manager for this.',
+    )
   })
 })

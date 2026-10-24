@@ -377,6 +377,8 @@ public class CandidateReviewService {
             case SCOPE_NARROWING_PROPOSED -> "the source narrows where it applies";
             case SEMANTIC_ANALYSIS_UNAVAILABLE -> "the conflict check was unavailable";
             case SEMANTIC_COMPILATION_UNAVAILABLE -> "Rivell could not read its meaning";
+            case UNMAPPED_AUTHORITY_WORDS ->
+                    "the source states a walk-away or an approver Rivell could not map";
         }).toList();
         return causes.isEmpty()
                 ? "This entry needs your review, so bulk approval left it for you."

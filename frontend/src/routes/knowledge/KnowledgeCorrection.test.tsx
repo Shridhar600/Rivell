@@ -172,7 +172,48 @@ describe('candidate correction', () => {
     await save()
     await waitFor(() => expect(editCalls(world)).toHaveLength(1))
     expect(editCalls(world)[0]?.body).toEqual({
-      semanticFields: { positions: ['PREFERRED', 'FALLBACK'], escalationTrigger: 'Any uncapped or unlimited indemnity', requiresApproval: true },
+      semanticFields: {
+        positions: ['PREFERRED', 'FALLBACK'],
+        escalationTrigger: 'Any uncapped or unlimited indemnity',
+        requiresApproval: true,
+        preferredText: '',
+        fallbackTexts: [],
+        prohibitedText: '',
+        authorityRules: [],
+      },
+    })
+  })
+
+  it('corrects the typed stances and an approval rule together', async () => {
+    const { world, form } = await openEdit('uncertain')
+    await userEvent.type(within(form).getByLabelText('Preferred wording'), 'Net 60 from a valid invoice.')
+    await userEvent.type(
+      within(form).getByLabelText('Fallback wording'),
+      'Net 45{enter}Net 30',
+    )
+    await userEvent.click(within(form).getByRole('button', { name: 'Add an approval' }))
+    await userEvent.type(within(form).getByLabelText('Approver'), 'Commercial Manager')
+    await userEvent.selectOptions(within(form).getByLabelText('Stated in'), 'MATRIX')
+    await userEvent.type(
+      within(form).getByLabelText('Condition, optional'),
+      'above the preferred position',
+    )
+    await save()
+    await waitFor(() => expect(editCalls(world)).toHaveLength(1))
+    expect(editCalls(world)[0]?.body).toMatchObject({
+      semanticFields: {
+        preferredText: 'Net 60 from a valid invoice.',
+        fallbackTexts: ['Net 45', 'Net 30'],
+        prohibitedText: '',
+        authorityRules: [
+          {
+            approver: 'Commercial Manager',
+            stances: ['FALLBACK'],
+            condition: 'above the preferred position',
+            source: 'MATRIX',
+          },
+        ],
+      },
     })
   })
 

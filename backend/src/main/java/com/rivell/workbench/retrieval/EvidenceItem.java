@@ -9,6 +9,8 @@ import java.util.UUID;
 import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.contracts.LegalFact;
 import com.rivell.workbench.knowledge.ApplicabilityScope;
+import com.rivell.workbench.knowledge.AuthorityConflict;
+import com.rivell.workbench.knowledge.AuthorityRule;
 import com.rivell.workbench.knowledge.PositionRole;
 
 /**
@@ -89,8 +91,9 @@ public record EvidenceItem(
 
     /**
      * Typed facts of a published playbook rule: position roles, approval requirement,
-     * escalation trigger, and the role-tagged field values a comparison question asks
-     * from. Machine + human-corrected effective values.
+     * escalation trigger, the role-tagged field values a comparison question asks from, and
+     * the typed approval rules the playbook states. A finding escalates only when one of
+     * these rules covers the finding's stance (council §A.3).
      */
     public record PolicyFacts(
             Set<PositionRole> positions,
@@ -98,16 +101,28 @@ public record EvidenceItem(
             String escalationTrigger,
             String preferred,
             List<String> fallbacks,
-            String prohibited) {
+            String prohibited,
+            List<AuthorityRule> authorityRules,
+            List<AuthorityConflict> authorityConflicts) {
 
         public PolicyFacts {
             positions = positions == null ? Set.of() : Set.copyOf(positions);
             fallbacks = fallbacks == null ? List.of() : List.copyOf(fallbacks);
+            authorityRules = authorityRules == null ? List.of() : List.copyOf(authorityRules);
+            authorityConflicts = authorityConflicts == null
+                    ? List.of() : List.copyOf(authorityConflicts);
         }
 
         public PolicyFacts(
                 Set<PositionRole> positions, Boolean requiresApproval, String escalationTrigger) {
             this(positions, requiresApproval, escalationTrigger, null, List.of(), null);
+        }
+
+        public PolicyFacts(
+                Set<PositionRole> positions, Boolean requiresApproval, String escalationTrigger,
+                String preferred, List<String> fallbacks, String prohibited) {
+            this(positions, requiresApproval, escalationTrigger, preferred, fallbacks, prohibited,
+                    List.of(), List.of());
         }
     }
 

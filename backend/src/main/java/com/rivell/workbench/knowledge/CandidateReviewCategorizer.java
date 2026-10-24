@@ -73,6 +73,10 @@ public class CandidateReviewCategorizer {
         if (scopeProposed) {
             reasons.add(ReviewReason.SCOPE_NARROWING_PROPOSED);
         }
+        if (!candidate.effectiveUnmappedAuthority().isEmpty()) {
+            // explicit words that did not map are a completeness gap, never bulk-approvable
+            reasons.add(ReviewReason.UNMAPPED_AUTHORITY_WORDS);
+        }
 
         if (reasons.contains(ReviewReason.CONFLICT_DETECTED)
                 || reasons.contains(ReviewReason.SUPERSESSION_PROPOSED)

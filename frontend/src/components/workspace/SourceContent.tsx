@@ -1,6 +1,7 @@
 import type { EvidenceItem } from '../../api/retrieval'
 import { useTaxonomy } from '../../api/taxonomy'
 import { describeFact, factSchemaLabel } from '../../lib/contractSemantics'
+import { approvalSourceLabel } from '../../lib/reviews'
 import {
   applicabilityDimensions,
   applicabilityNote,
@@ -74,10 +75,23 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
             <dd>{positions.join(', ')}</dd>
           </div>
         ) : null}
-        {item.policyFacts && item.policyFacts.requiresApproval !== null ? (
+        {item.policyFacts && item.policyFacts.authorityRules.length > 0 ? (
           <div>
             <dt>Approval</dt>
-            <dd>{item.policyFacts.requiresApproval ? 'Approval required' : 'No approval required'}</dd>
+            <dd>
+              {item.policyFacts.authorityRules
+                .map((rule) => {
+                  const stance =
+                    rule.stances.includes('PROHIBITED')
+                      ? 'walk-away'
+                      : rule.stances.includes('FALLBACK')
+                        ? 'fallback'
+                        : 'fallback and walk-away'
+                  const source = approvalSourceLabel(rule.source)
+                  return `${rule.approver} approves the ${stance}${source ? `, ${source}` : ''}`
+                })
+                .join('; ')}
+            </dd>
           </div>
         ) : null}
         {item.policyFacts?.escalationTrigger ? (

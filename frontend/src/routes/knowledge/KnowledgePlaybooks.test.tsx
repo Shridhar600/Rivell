@@ -145,6 +145,43 @@ describe('Playbook detail', () => {
     expect(within(details).queryByText('Topic')).not.toBeInTheDocument()
   })
 
+  it('shows the typed stances and the approval rule with its source level', async () => {
+    const world = buildWorld()
+    world.candidates.pb = (world.candidates.pb ?? []).map((entry) =>
+      entry.id === 'p1'
+        ? {
+            ...entry,
+            preferredText: 'Cap at twelve months of fees.',
+            fallbackTexts: ['Cap at eighteen months for Tier 1 deals.'],
+            prohibitedText: 'Unlimited liability.',
+            authorityRules: [
+              {
+                approver: 'Commercial Manager',
+                stances: ['FALLBACK'],
+                condition: 'above the preferred position',
+                source: 'MATRIX',
+                quote: 'the Commercial Manager approves fallbacks',
+              },
+            ],
+            authorityConflicts: [
+              { approver: 'General Counsel', source: 'ENTRY', stance: 'FALLBACK' },
+            ],
+          }
+        : entry,
+    )
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks/pb')
+
+    const details = await screen.findByRole('complementary', { name: 'Details' })
+    expect(details).toHaveTextContent('Cap at twelve months of fees.')
+    expect(details).toHaveTextContent('Cap at eighteen months for Tier 1 deals.')
+    expect(details).toHaveTextContent('Unlimited liability.')
+    expect(details).toHaveTextContent(
+      'Commercial Manager for fallback (approval matrix), if above the preferred position',
+    )
+    expect(details).toHaveTextContent('General Counsel (stated on this entry, fallback)')
+  })
+
   it('shows provenance from the extraction record and links to the original source position', async () => {
     await open()
     const details = screen.getByRole('complementary', { name: 'Details' })

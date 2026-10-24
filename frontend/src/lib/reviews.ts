@@ -659,6 +659,91 @@ export function decidedByLabel(quality: FindingQuality | null): string | null {
 }
 
 /**
+ * The typed approval rule behind a finding, as the panel shows it. Council §A.3: an approval
+ * exists only when a rule names an approver, so this is null when no rule applies, whatever the
+ * finding's trigger text says.
+ */
+export type ApprovalSummary = {
+  approver: string
+  /** The rule's own condition, shown after "Escalate if". */
+  condition: string | null
+  source: string | null
+  stance: 'FALLBACK' | 'PROHIBITED' | null
+  /** A lower-level rule naming a different approver for the same stance. */
+  conflict: { approver: string; source: string | null } | null
+}
+
+export function approvalSummary(quality: FindingQuality | null): ApprovalSummary | null {
+  const approver = quality?.escalationApprover?.trim()
+  if (!quality || !approver) return null
+  const stance =
+    quality.escalationStance === 'PROHIBITED' || quality.escalationStance === 'FALLBACK'
+      ? quality.escalationStance
+      : null
+  return {
+    approver,
+    condition: quality.escalationCondition?.trim() || null,
+    source: quality.escalationSource?.trim() || null,
+    stance,
+    conflict: quality.escalationConflictApprover
+      ? {
+          approver: quality.escalationConflictApprover.trim(),
+          source: quality.escalationConflictSource?.trim() || null,
+        }
+      : null,
+  }
+}
+
+/** The one line that shows a lower-level rule naming another approver (council §A.2). */
+export function approvalConflictLine(summary: ApprovalSummary | null): string | null {
+  if (!summary?.conflict) return null
+  const { approver, source } = summary.conflict
+  if (source === 'MATRIX') return `The approval matrix names ${approver} for this.`
+  if (source === 'TABLE') return `The approval table names ${approver} for this.`
+  return `The entry names ${approver} for this.`
+}
+
+/** The rule's condition, in the council's own "Escalate if" form. */
+export function escalateIfLine(summary: ApprovalSummary | null): string | null {
+  return summary?.condition ? `Escalate if: ${summary.condition}.` : null
+}
+
+/**
+ * A source condition the playbook states without naming who approves it. The panel shows it,
+ * followed by "No approver is named.", so it never reads as a broken approval (council §E).
+ * An "Escalate to <role>" route is not a condition: only the part after a boundary word is,
+ * and a route without one yields nothing.
+ */
+export function escalateIfText(trigger: string | null | undefined): string | null {
+  const text = trigger?.trim()
+  if (!text) return null
+  const routed = /^escalate\s+to\b/i.test(text)
+  const withoutVerb = text
+    .replace(/^escalate\b[\s.,;:]*/i, '')
+    .replace(/[.;,]+$/, '')
+    .trim()
+  if (!routed) {
+    return withoutVerb.length > 0 ? withoutVerb : null
+  }
+  const boundary = withoutVerb.match(/\b(before|if|when|where|unless|on|for|after|once)\b/i)
+  if (!boundary || boundary.index === undefined) return null
+  const condition = withoutVerb
+    .slice(boundary.index + boundary[0].length)
+    .replace(/^[\s,;:.]+/, '')
+    .replace(/[.;,]+$/, '')
+    .trim()
+  return condition.length > 0 ? condition : null
+}
+
+/** Where the approval rule was stated, in words a reader can check. */
+export function approvalSourceLabel(source: string | null): string | null {
+  if (source === 'ENTRY') return 'stated on this entry'
+  if (source === 'MATRIX') return 'from the approval matrix'
+  if (source === 'TABLE') return 'from the approval table'
+  return null
+}
+
+/**
  * A mark as shown: the server's mark for a planned clause, or NOT_PLANNED for a heading the review
  * plan left out (a title, the signature block). Both mean Rivell did not judge the clause, for
  * different reasons, so the user sees which.

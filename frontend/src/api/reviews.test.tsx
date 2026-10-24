@@ -295,6 +295,30 @@ describe('review parsers', () => {
     expect(detail.issueFamily).toBe('POSITION_NEEDS_FALLBACK')
   })
 
+  it('parses the typed approval rule the panel shows', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: {
+        ...clauseFindingDetail.quality,
+        escalationApprover: 'Commercial Manager',
+        escalationCondition: 'Uncapped liability or consequential damages',
+        escalationSource: 'MATRIX',
+        escalationStance: 'FALLBACK',
+        escalationConflictApprover: 'General Counsel',
+        escalationConflictSource: 'ENTRY',
+      },
+    })
+
+    expect(detail.quality).toMatchObject({
+      escalationApprover: 'Commercial Manager',
+      escalationCondition: 'Uncapped liability or consequential damages',
+      escalationSource: 'MATRIX',
+      escalationStance: 'FALLBACK',
+      escalationConflictApprover: 'General Counsel',
+      escalationConflictSource: 'ENTRY',
+    })
+  })
+
   it('parses clause finding detail including untyped quality and claims', () => {
     const detail = parseFindingDetail(clauseFindingDetail)
     expect(detail.subjectKind).toBe('CLAUSE')
@@ -319,6 +343,12 @@ describe('review parsers', () => {
       spottedSeverity: null,
       spottedReason: null,
       presenceProbability: null,
+      escalationApprover: null,
+      escalationCondition: null,
+      escalationSource: null,
+      escalationStance: null,
+      escalationConflictApprover: null,
+      escalationConflictSource: null,
     })
     expect(detail.claims.map((claim) => claim.claimKind)).toEqual([
       'OBSERVATION',

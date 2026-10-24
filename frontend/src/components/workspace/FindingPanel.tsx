@@ -8,11 +8,16 @@ import type { HumanDecision } from '../../api/workflow'
 import { authorityLabel } from '../../lib/evidence'
 import {
   absenceClaims,
+  approvalConflictLine,
+  approvalSourceLabel,
+  approvalSummary,
   assessmentSummary,
   claimKindLabel,
   classificationLabel,
   comparisonCategoryLabel,
   decidedByLabel,
+  escalateIfLine,
+  escalateIfText,
   findingGapText,
   findingIssueLabel,
   findingPlaybookRule,
@@ -195,13 +200,13 @@ export function FindingPanel(props: Props) {
   const decidedBy = added ? null : decidedByLabel(finding.quality)
   const note = policyNoteText(finding)
   const position = policyPositionView(finding.positionComparison)
-  // A within-fallback finding is a note, not a defect; a position that names an approver makes it
-  // an approval question instead.
+  // A within-fallback finding is a note, not a defect. It becomes an approval question only
+  // when a typed rule says the fallback needs approval (council §A.3), never from a trigger text.
   const withinFallback = finding.issueFamily === 'POSITION_ACCEPTABLE_FALLBACK'
-  const approvalNeeded = withinFallback && finding.proposedAction === 'ESCALATE_TO_HUMAN'
-  const escalationTriggers = (finding.positionComparison?.escalation ?? [])
-    .map((slot) => slot.trigger.trim())
-    .filter((trigger) => trigger !== '')
+  const approval = approvalSummary(finding.quality)
+  const approvalConflict = approvalConflictLine(approval)
+  const escalateIf = escalateIfLine(approval)
+  const approvalSource = approvalSourceLabel(approval?.source ?? null)
   const change = proposedChangeType(finding)
   const grounded = isWordingGrounded(finding)
   const authority = !grounded ? null : languageAuthority(finding, items.get(finding.approvedDraftingEvidenceId ?? '')?.publicationNumber ?? null)
@@ -224,6 +229,11 @@ export function FindingPanel(props: Props) {
   const quoteReason =
     quote?.source === 'second-opinion' ? (finding.quality?.secondOpinionReason?.trim() ?? null) : null
   const playbookRule = findingPlaybookRule(finding, labelFor, props.playbooksUsed)
+  const playbookCondition = escalateIfText(playbookRule?.escalation)
+  const noApproverCondition = approval ? null : playbookCondition
+  // the rule's condition and the playbook trigger can be the same words; show them once
+  const sameEscalation =
+    approval !== null && playbookCondition !== null && playbookCondition === approval.condition
   const proposedLanguage = finding.proposedLanguage
   const showDetails =
     !added ||
@@ -296,8 +306,12 @@ export function FindingPanel(props: Props) {
               {playbookRule.basedOn ? (
                 <p className="rv-ws-caption">Based on: {playbookRule.basedOn}</p>
               ) : null}
-              {playbookRule.escalation ? (
-                <p className="rv-ws-caption">Escalate when: {playbookRule.escalation}.</p>
+              {playbookRule.escalation && !sameEscalation && (approval || noApproverCondition) ? (
+                <p className="rv-ws-caption">
+                  {approval
+                    ? `Escalate when: ${playbookRule.escalation}.`
+                    : `Escalate if: ${noApproverCondition}. No approver is named.`}
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -325,20 +339,24 @@ export function FindingPanel(props: Props) {
             </div>
           ) : null}
 
-          {withinFallback ? (
-            <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
-              {approvalNeeded ? (
-                <>
-                  <b>Approval is needed.</b> This position names an approver. Escalate the finding,
-                  then resolve it with the approver's name.
-                  {escalationTriggers.length > 0 ? ` Escalate when: ${escalationTriggers.join('; ')}.` : ''}
-                </>
-              ) : (
-                <>
-                  <b>This is a note, not a problem.</b> The clause departs from the preferred position
-                  but stays within an acceptable fallback; accept and record it.
-                </>
-              )}
+          {approval ? (
+            <p className="rv-ws-note rv-ws-note--approval">
+              <b>Approval is needed.</b>{' '}
+              {approval.approver} approves{' '}
+              {approval.stance === 'PROHIBITED' ? 'this walk-away' : 'this fallback'}
+              {approvalSource ? `, ${approvalSource}` : ''}.{' '}
+              {withinFallback
+                ? 'The clause stays within an acceptable fallback, and this rule says the fallback needs approval.'
+                : 'Escalate the finding, then resolve it with the approver’s name.'}
+              {escalateIf ? ` ${escalateIf}` : ''}
+              {approvalConflict ? ` ${approvalConflict}` : ''}
+            </p>
+          ) : null}
+
+          {withinFallback && !approval ? (
+            <p className="rv-ws-note">
+              <b>This is a note, not a problem.</b> The clause departs from the preferred position
+              but stays within an acceptable fallback; accept and record it.
             </p>
           ) : null}
         </div>

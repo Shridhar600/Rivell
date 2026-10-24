@@ -485,13 +485,27 @@ public class EvidenceService {
         var fields = candidate.effectivePositionFieldValues();
         var preferred = fields.get(com.rivell.workbench.knowledge.PositionRole.PREFERRED);
         var prohibited = fields.get(com.rivell.workbench.knowledge.PositionRole.PROHIBITED);
+        // the wording the source states explicitly wins over the role-tagged column value; a
+        // deliberate human clear stays cleared rather than falling back to the old column
+        var typedPreferred = candidate.effectivePreferredText();
+        var typedFallbacks = candidate.effectiveFallbackTexts();
+        var typedProhibited = candidate.effectiveProhibitedText();
+        var fallbacks = !typedFallbacks.isEmpty() ? typedFallbacks
+                : candidate.fallbackTextsCleared() ? List.<String>of()
+                : fields.getOrDefault(com.rivell.workbench.knowledge.PositionRole.FALLBACK, List.of());
         return new EvidenceItem.PolicyFacts(
                 candidate.effectivePositions(),
                 candidate.effectiveRequiresApproval(),
                 candidate.effectiveEscalationTrigger(),
-                preferred == null || preferred.isEmpty() ? null : preferred.getFirst(),
-                fields.getOrDefault(com.rivell.workbench.knowledge.PositionRole.FALLBACK, List.of()),
-                prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst());
+                typedPreferred != null ? typedPreferred
+                        : candidate.preferredTextCleared() ? null
+                        : preferred == null || preferred.isEmpty() ? null : preferred.getFirst(),
+                fallbacks,
+                typedProhibited != null ? typedProhibited
+                        : candidate.prohibitedTextCleared() ? null
+                        : prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst(),
+                candidate.effectiveAuthorityRules(),
+                candidate.effectiveAuthorityConflicts());
     }
 
     private List<String> provenance(UUID organizationId,

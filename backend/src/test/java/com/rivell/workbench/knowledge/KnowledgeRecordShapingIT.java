@@ -403,9 +403,14 @@ class KnowledgeRecordShapingIT {
         var contentUnits = units.stream()
                 .filter(unit -> unit.contentText() != null && !unit.contentText().isBlank())
                 .count();
+        // the approval matrix is an authority source: read for its rules, never a position
+        var authorityUnits = units.stream()
+                .filter(unit -> unit.recordKind() == KnowledgeRecordKind.ESCALATION)
+                .count();
+        assertThat(authorityUnits).isPositive();
         assertThat(provider.kindDecisions.get())
-                .as("one kind decision per non-position record, never per cell")
-                .isEqualTo((int) contentUnits - 25);
+                .as("one kind decision per non-position, non-authority record, never per cell")
+                .isEqualTo((int) contentUnits - 25 - (int) authorityUnits);
     }
 
     @Test
@@ -537,16 +542,20 @@ class KnowledgeRecordShapingIT {
         long contentUnits = units.stream()
                 .filter(unit -> unit.contentText() != null && !unit.contentText().isBlank())
                 .count();
+        // an authority source is excluded by design; a kind-provider failure drops nothing else
+        long authorityUnits = units.stream()
+                .filter(unit -> unit.recordKind() == KnowledgeRecordKind.ESCALATION)
+                .count();
         var candidates = queryService.getCandidates(artifact.id());
         assertThat(candidates)
                 .as("fail open: a kind-provider failure must never drop a record")
-                .hasSize((int) contentUnits);
+                .hasSize((int) contentUnits - (int) authorityUnits);
         assertThat(candidates.stream()
                 .filter(candidate -> candidate.reviewReasons()
                         .contains(ReviewReason.SEMANTIC_ANALYSIS_UNAVAILABLE))
                 .count())
                 .as("every record whose kind could not be decided says so")
-                .isEqualTo(contentUnits - 25);
+                .isEqualTo(contentUnits - 25 - authorityUnits);
     }
 
     @Test

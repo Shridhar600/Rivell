@@ -42,7 +42,34 @@ describe('structured interpretation', () => {
     expect(row(rows, 'positions')?.value).toBe('Preferred, Fallback')
     expect(row(rows, 'escalation')?.value).toBe('Below six months')
     expect(row(rows, 'approval')?.value).toBe('Required')
+    expect(row(rows, 'preferredText')).toBeUndefined()
     expect(row(rows, 'concept')?.value).toBe('Limitation of liability')
+  })
+
+  it('shows the typed stances and approval rules it holds', () => {
+    const rows = interpretationRows(
+      make({
+        preferredText: 'Net 45 from a valid invoice.',
+        fallbackTexts: ['Net 30.', 'Net 60 for Tier 1.'],
+        prohibitedText: 'Payment in advance.',
+        authorityRules: [
+          {
+            approver: 'Commercial Manager',
+            stances: ['FALLBACK'],
+            condition: null,
+            source: 'MATRIX',
+            quote: null,
+          },
+        ],
+        authorityConflicts: [{ approver: 'General Counsel', source: 'ENTRY', stance: 'FALLBACK' }],
+      }),
+    )
+    expect(row(rows, 'preferredText')?.value).toBe('Net 45 from a valid invoice.')
+    expect(row(rows, 'fallbackTexts')?.value).toBe('Net 30.; Net 60 for Tier 1.')
+    expect(row(rows, 'prohibitedText')?.value).toBe('Payment in advance.')
+    expect(row(rows, 'authorityRules')?.value).toBe(
+      'Commercial Manager for fallback (approval matrix). Other level: General Counsel (stated on this entry, fallback)',
+    )
   })
 
   it('never invents a value that was not extracted', () => {

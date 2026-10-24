@@ -467,7 +467,7 @@ public final class FindingAssembler {
                     + "signature.";
             case REVIEW_AMBIGUITY -> "Decide which position applies before changing the "
                     + "clause.";
-            case ESCALATE_TO_HUMAN -> "Your playbook says this needs approval. Rivell "
+            case ESCALATE_TO_HUMAN -> "This needs a person to decide. Rivell "
                     + "proposes no wording.";
             case CONSIDER_GENERATED_LANGUAGE -> "Rivell suggests wording below. It is not "
                     + "from your playbook, so check it before you use it.";
@@ -484,12 +484,30 @@ public final class FindingAssembler {
             "positionLabel", "levers", "categoryBeforeLevers", "routeReason", "fallbackListed",
             "fallbackConditionsOutcome", "fallbackConditionsUnknown", "fallbackConditionsUnmet", "fallbackConditionsExecutionId", "secondOpinionExecutionId", "openEndedOutcome");
 
+    /** The typed rule behind an escalation, kept on the finding the panel reads. */
+    private static final List<String> ESCALATION_KEYS = List.of("escalationTrigger",
+            "requiresApproval", "escalationApprover", "escalationCondition", "escalationSource",
+            "escalationStance", "escalationConflictApprover", "escalationConflictSource");
+
     private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
         for (var key : ASSESSMENT_KEYS) {
             var value = primary.quality().get(key);
             if (value != null) {
                 quality.put(key, value);
+            }
+        }
+        // the typed approval rule travels on its own signal; the finding must carry it, because
+        // the panel names the approver, the condition and the other level from here
+        for (var signal : group) {
+            if (signal.signalType() != SignalType.ESCALATION_REQUIRED) {
+                continue;
+            }
+            for (var key : ESCALATION_KEYS) {
+                var value = signal.quality().get(key);
+                if (value != null) {
+                    quality.put(key, value);
+                }
             }
         }
         if (primary.quality().get("levers") instanceof List<?> levers && !levers.isEmpty()) {

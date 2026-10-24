@@ -317,6 +317,17 @@ export type FindingQuality = {
   spottedReason: string | null
   /** Omission check: the estimate that the playbook position requires the provision, 0–1. */
   presenceProbability: number | null
+  /** The typed approval rule behind an escalation; null when no rule applies. */
+  escalationApprover?: string | null
+  /** The rule's own condition, shown as "Escalate if". */
+  escalationCondition?: string | null
+  /** Where the rule was stated: ENTRY, MATRIX or TABLE. */
+  escalationSource?: string | null
+  /** The stance the rule was read for: FALLBACK or PROHIBITED. */
+  escalationStance?: string | null
+  /** A lower-level rule naming a different approver for the same stance. */
+  escalationConflictApprover?: string | null
+  escalationConflictSource?: string | null
 }
 
 export type AbsenceBasis = {
@@ -792,6 +803,20 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
       presenceProbability !== null && presenceProbability >= 0 && presenceProbability <= 1
         ? presenceProbability
         : null,
+    escalationApprover: readOptionalNullableString(quality, 'escalationApprover', what),
+    escalationCondition: readOptionalNullableString(quality, 'escalationCondition', what),
+    escalationSource: readOptionalNullableString(quality, 'escalationSource', what),
+    escalationStance: readOptionalNullableString(quality, 'escalationStance', what),
+    escalationConflictApprover: readOptionalNullableString(
+      quality,
+      'escalationConflictApprover',
+      what,
+    ),
+    escalationConflictSource: readOptionalNullableString(
+      quality,
+      'escalationConflictSource',
+      what,
+    ),
   }
 }
 

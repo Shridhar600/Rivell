@@ -821,8 +821,9 @@ public class LiabilityReviewIT {
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        // the liability, confidentiality and termination clauses share a topic with a published
-        // position; the governing-law clause pairs with none, so it reaches the text search
+        // council §A.4: the confidentiality record is a typed position again (the fake reads the
+        // imperative survival duty as preferred), so three clauses are compared from positions
+        // and the governing-law clause is searched once
         assertThat(scriptedProvider.policyComparisonDecisions()).isEqualTo(4);
         assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
         var executions = analysisRepository.findExecutions(organizationId, run.id());

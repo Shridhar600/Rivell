@@ -44,6 +44,7 @@ import {
   fixtureOmissionUnsureFindingDetail,
   fixtureOmissionUnsureFindingSummary,
   fixtureSearchFoundFindingDetail,
+  fixtureNoApproverConditionFindingDetail,
   fixtureSearchFoundFindingSummary,
 } from './testFixtures'
 import { fixtureHumanReview } from './workflowFixtures'
@@ -78,6 +79,7 @@ const detailById: Record<string, unknown> = {
   'f-15': fixtureOmissionFindingDetail,
   'f-16': fixtureOmissionUnsureFindingDetail,
   'f-17': fixtureSearchFoundFindingDetail,
+  'f-18': fixtureNoApproverConditionFindingDetail,
 }
 
 /**
@@ -682,7 +684,7 @@ describe('position findings', () => {
     ).toBeInTheDocument()
   })
 
-  it('says approval is needed and shows the escalation condition when the position names an approver', async () => {
+  it('says approval is needed and shows the escalate-if condition only when a typed rule applies', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-8', {
       findings: listWith({
         ...fixtureWithinFallbackFindingSummary,
@@ -695,11 +697,44 @@ describe('position findings', () => {
     await findDetailTitle('6. Limitation of Liability')
     const note = detailPane().querySelector('.rv-ws-note--approval')
     expect(note).not.toBeNull()
-    // The note itself is visible before the decision bar, carries the approval statement and the
-    // condition, not only the comparison grid.
+    // The note itself is visible before the decision bar, carries the approver, its source and
+    // the rule's own condition, not only the comparison grid.
     expect(note).toBeVisible()
     expect(note).toHaveTextContent('Approval is needed.')
-    expect(note).toHaveTextContent('Escalate when: Uncapped liability or consequential damages.')
+    expect(note).toHaveTextContent(
+      'Commercial Manager approves this fallback, from the approval matrix.',
+    )
+    expect(note).toHaveTextContent('Escalate if: Uncapped liability or consequential damages.')
+    expect(note).toHaveTextContent('The entry names General Counsel for this.')
+    // the rule's condition and the playbook trigger are the same words; they are shown once
+    expect(within(detailPane()).queryByText(/Escalate when:/)).toBeNull()
+  })
+
+  it('keeps a within-fallback note with no approval rule behind it as a note', async () => {
+    // f-7 has the same clause and fallback slot but no typed rule: no approval wording at all.
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-7', {
+      findings: listWith({ ...fixtureWithinFallbackFindingSummary, id: 'f-7' }),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    expect(pane.getByText(/note, not a problem/i)).toBeInTheDocument()
+    expect(detailPane().querySelector('.rv-ws-note--approval')).toBeNull()
+  })
+
+  it('shows a condition with no approver as an escalate-if line, not a broken approval', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-18', {
+      findings: listWith({ ...fixtureWithinFallbackFindingSummary, id: 'f-18' }),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    expect(
+      pane.getByText(
+        /Escalate if: Uncapped liability or consequential damages\. No approver is named\./,
+      ),
+    ).toBeInTheDocument()
+    expect(detailPane().querySelector('.rv-ws-note--approval')).toBeNull()
   })
 })
 
@@ -746,8 +781,9 @@ describe('finding evidence amendment', () => {
     const sheet = screen.getByRole('dialog', { name: 'Source' })
     const card = within(sheet).getByRole('article')
     expect(card).toHaveTextContent('Policy')
-    // The full card carries what a one-line row cannot: positions, approval and escalation.
-    expect(card).toHaveTextContent('Approval required')
+    // The full card carries what a one-line row cannot: positions, the typed approval rule
+    // and the escalation trigger. A legacy flag alone never shows an approval.
+    expect(card).toHaveTextContent('Commercial Manager approves the fallback, from the approval matrix')
     expect(card).toHaveTextContent('Uncapped liability or consequential damages')
     // The evidence card labels how it matched, not "Found by".
     expect(card).toHaveTextContent('Matched by')
@@ -1292,7 +1328,9 @@ describe('finding detail: contract words, rule, gap, change', () => {
     expect(playbook).toHaveTextContent('Limitation of liability')
     expect(playbook).toHaveTextContent('Liability must be capped at fees paid in the preceding 12 months.')
     expect(playbook).toHaveTextContent('Based on: Mutual NDA Negotiation Guide, version 2')
-    expect(playbook).toHaveTextContent('Escalate when: Uncapped liability or consequential damages.')
+    expect(playbook).toHaveTextContent(
+      'Escalate if: Uncapped liability or consequential damages. No approver is named.',
+    )
     expect(gap).toHaveTextContent('The clause is worse for us than every fallback the position lists.')
     expect(change).toHaveTextContent(/two times the fees paid in the twelve months/)
 

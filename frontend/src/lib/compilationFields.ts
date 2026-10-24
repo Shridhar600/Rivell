@@ -1,14 +1,18 @@
-import type { ArtifactDetail, Candidate, Interpretation, VerificationState } from '../api/knowledge'
+import type { ArtifactDetail, AuthorityLevel, Candidate, Interpretation, VerificationState } from '../api/knowledge'
 import type { ConceptLabel } from '../api/taxonomy'
 import { effectiveContentText, effectivePayloadColumns, isWordingHeader } from './candidates'
 import { contractTypesText, scopeRows } from './knowledgePosition'
 import {
   approvalDiverge,
+  authorityRulesDiverge,
   escalationDiverge,
+  fallbackTextsDiverge,
   formatBoolean,
   formatPositions,
   interpretationFor,
   positionsDiverge,
+  preferredTextDiverge,
+  prohibitedTextDiverge,
   proposedApproval,
   proposedEscalationTrigger,
   proposedPositions,
@@ -42,6 +46,44 @@ const SUPPORT_NOTES: Partial<Record<VerificationState, string>> = {
   DISPUTED: 'The source does not clearly support this',
 }
 
+/** Where an approval rule was stated, in words a reader can check. */
+export const AUTHORITY_SOURCE_LABELS: Record<AuthorityLevel, string> = {
+  ENTRY: 'stated on this entry',
+  MATRIX: 'approval matrix',
+  TABLE: 'approval table',
+}
+
+/**
+ * The typed approval rules as one readable line: who approves what, and where that was stated.
+ * A lower-level rule naming a different approver is shown beside it, never hidden.
+ */
+export function authorityText(candidate: Candidate): string {
+  if (candidate.authorityRules.length === 0) return 'Not stated'
+  const rules = candidate.authorityRules.map((rule) => {
+    const stances =
+      rule.stances.length > 0
+        ? rule.stances.map((role) => POSITION_LABELS[role].toLowerCase()).join(', ')
+        : 'fallback and walk-away'
+    const condition = rule.condition ? `, if ${rule.condition}` : ''
+    return `${rule.approver} for ${stances} (${AUTHORITY_SOURCE_LABELS[rule.source]})${condition}`
+  })
+  const conflicts = candidate.authorityConflicts
+    .filter(
+      (conflict) =>
+        !candidate.authorityRules.some(
+          (rule) => rule.approver === conflict.approver && rule.source === conflict.source,
+        ),
+    )
+    .map(
+      (conflict) =>
+        `${conflict.approver} (${AUTHORITY_SOURCE_LABELS[conflict.source]}, ` +
+        `${POSITION_LABELS[conflict.stance].toLowerCase()})`,
+    )
+  return conflicts.length > 0
+    ? `${rules.join('; ')}. Other level: ${conflicts.join('; ')}`
+    : rules.join('; ')
+}
+
 function supportNote(interpretation: Interpretation | null): string | null {
   if (!interpretation) return null
   const note = SUPPORT_NOTES[interpretation.verification]
@@ -72,6 +114,14 @@ export function hasHumanCorrection(candidate: Candidate, artifact?: ArtifactDeta
   if (Object.keys(candidate.editedPayloadColumns).length > 0) return true
   if (conceptCorrected(candidate)) return true
   if (positionsDiverge(candidate) || variantRoleDiverge(candidate) || escalationDiverge(candidate) || approvalDiverge(candidate)) {
+    return true
+  }
+  if (
+    preferredTextDiverge(candidate) ||
+    fallbackTextsDiverge(candidate) ||
+    prohibitedTextDiverge(candidate) ||
+    authorityRulesDiverge(candidate)
+  ) {
     return true
   }
   return artifact ? scopeDifferences(candidate, artifact).length > 0 : false
@@ -151,6 +201,64 @@ export function interpretationRows(
         machine: approvalDiverge(candidate) && machine !== null ? `Rivell proposed: ${formatBoolean(machine)}` : null,
         support: supportNote(interpretationFor(candidate, 'requiresApproval')),
         corrected: approvalDiverge(candidate),
+      })
+    }
+    if (candidate.preferredText !== null || interpretationFor(candidate, 'preferredText')) {
+      rows.push({
+        key: 'preferredText',
+        label: 'Preferred wording',
+        value: textOrNull(candidate.preferredText) ?? 'Not stated',
+        machine: preferredTextDiverge(candidate)
+          ? `Rivell read: ${interpretationFor(candidate, 'preferredText')?.proposedValue ?? 'not stated'}`
+          : null,
+        support: supportNote(interpretationFor(candidate, 'preferredText')),
+        corrected: preferredTextDiverge(candidate),
+      })
+    }
+    if (candidate.fallbackTexts.length > 0 || interpretationFor(candidate, 'fallbackTexts')) {
+      rows.push({
+        key: 'fallbackTexts',
+        label: 'Fallback wording',
+        value: candidate.fallbackTexts.length > 0 ? candidate.fallbackTexts.join('; ') : 'Not stated',
+        machine: fallbackTextsDiverge(candidate)
+          ? `Rivell read: ${interpretationFor(candidate, 'fallbackTexts')?.proposedValue ?? 'not stated'}`
+          : null,
+        support: supportNote(interpretationFor(candidate, 'fallbackTexts')),
+        corrected: fallbackTextsDiverge(candidate),
+      })
+    }
+    if (candidate.prohibitedText !== null || interpretationFor(candidate, 'prohibitedText')) {
+      rows.push({
+        key: 'prohibitedText',
+        label: 'Walk-away wording',
+        value: textOrNull(candidate.prohibitedText) ?? 'Not stated',
+        machine: prohibitedTextDiverge(candidate)
+          ? `Rivell read: ${interpretationFor(candidate, 'prohibitedText')?.proposedValue ?? 'not stated'}`
+          : null,
+        support: supportNote(interpretationFor(candidate, 'prohibitedText')),
+        corrected: prohibitedTextDiverge(candidate),
+      })
+    }
+    if (candidate.authorityRules.length > 0 || interpretationFor(candidate, 'authorityRules')) {
+      rows.push({
+        key: 'authorityRules',
+        label: 'Approvals',
+        value: authorityText(candidate),
+        machine: authorityRulesDiverge(candidate)
+          ? `Rivell read: ${interpretationFor(candidate, 'authorityRules')?.proposedValue ?? 'not stated'}`
+          : null,
+        support: supportNote(interpretationFor(candidate, 'authorityRules')),
+        corrected: authorityRulesDiverge(candidate),
+      })
+    }
+    if (candidate.unmappedAuthority.length > 0) {
+      rows.push({
+        key: 'unmappedAuthority',
+        label: 'Needs attention',
+        value: candidate.unmappedAuthority.join('; '),
+        machine: null,
+        support: 'Words that state a walk-away or an approver, not mapped to a field',
+        corrected: false,
       })
     }
   }

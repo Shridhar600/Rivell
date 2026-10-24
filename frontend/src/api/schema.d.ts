@@ -1248,6 +1248,13 @@ export interface components {
             variantRole?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
             escalationTrigger?: string;
             requiresApproval?: boolean;
+            preferredText?: string;
+            fallbackTexts?: string[];
+            prohibitedText?: string;
+            authorityRules?: components["schemas"]["AuthorityRule"][];
+            authorityConflicts?: components["schemas"]["AuthorityConflict"][];
+            unmappedAuthority?: string[];
+            needsAttention?: boolean;
             interpretations?: components["schemas"]["InterpretationView"][];
             editedContentText?: string;
             editedPayloadColumns?: {
@@ -1268,7 +1275,7 @@ export interface components {
             conflictSignals?: components["schemas"]["ConflictSignalView"][];
             /** @enum {string} */
             reviewCategory?: "ROUTINE" | "ELEVATED" | "HIGH";
-            reviewReasons?: ("DUPLICATE_DETECTED" | "CONFLICT_DETECTED" | "SUPERSESSION_PROPOSED" | "ARTIFACT_TYPE_MISMATCH" | "VERIFICATION_DISPUTED" | "UNVERIFIED_GENERATIVE_FIELD" | "LOW_CLASSIFICATION_CONFIDENCE" | "NEW_PROHIBITED_OR_ESCALATION_POSITION" | "SCOPE_NARROWING_PROPOSED" | "SEMANTIC_ANALYSIS_UNAVAILABLE" | "SEMANTIC_COMPILATION_UNAVAILABLE")[];
+            reviewReasons?: ("DUPLICATE_DETECTED" | "CONFLICT_DETECTED" | "SUPERSESSION_PROPOSED" | "ARTIFACT_TYPE_MISMATCH" | "VERIFICATION_DISPUTED" | "UNVERIFIED_GENERATIVE_FIELD" | "LOW_CLASSIFICATION_CONFIDENCE" | "NEW_PROHIBITED_OR_ESCALATION_POSITION" | "SCOPE_NARROWING_PROPOSED" | "SEMANTIC_ANALYSIS_UNAVAILABLE" | "SEMANTIC_COMPILATION_UNAVAILABLE" | "UNMAPPED_AUTHORITY_WORDS")[];
             reviewNote?: string;
             /** Format: date-time */
             reviewedAt?: string;
@@ -1323,6 +1330,25 @@ export interface components {
             escalationTrigger?: string;
             /** @enum {string} */
             variantRole?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
+            preferredText?: string;
+            fallbackTexts?: string[];
+            prohibitedText?: string;
+            authorityRules?: components["schemas"]["AuthorityRule"][];
+        };
+        AuthorityRule: {
+            approver?: string;
+            stances?: ("PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED")[];
+            condition?: string | null;
+            /** @enum {string} */
+            source?: "ENTRY" | "MATRIX" | "TABLE";
+            quote?: string | null;
+        };
+        AuthorityConflict: {
+            approver?: string;
+            /** @enum {string} */
+            source?: "ENTRY" | "MATRIX" | "TABLE";
+            /** @enum {string} */
+            stance?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
         };
         ConceptCorrectionRequest: {
             primary: string;

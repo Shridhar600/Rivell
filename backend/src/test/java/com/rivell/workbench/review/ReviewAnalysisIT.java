@@ -229,12 +229,13 @@ class ReviewAnalysisIT {
                         .isEqualTo("survival_coverage_partial");
             }
         });
-        // this configuration's published policy carries no escalation trigger; the
-        // bounded semantic path is still exercised (no zero-signal fake artefact)
+        // the published policy states the escalation rule ("escalate to general counsel before
+        // agreeing to any cap above the preferred position"), so the deviation escalates by rule
         var signals = analysisRepository.findSignals(organizationId, run.id());
         assertThat(signals).extracting(RawReviewSignal::signalType)
                 .containsExactlyInAnyOrder(SignalType.POLICY_DEVIATION,
-                        SignalType.APPROVED_DRAFTING_AVAILABLE);
+                        SignalType.APPROVED_DRAFTING_AVAILABLE,
+                        SignalType.ESCALATION_REQUIRED);
 
         var progress = analysisService.progress(organizationId, review.id());
         assertThat(progress.reviewStatus()).isEqualTo(ReviewStatus.COMPLETED);

@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.rivell.workbench.knowledge.CandidateType;
+import com.rivell.workbench.knowledge.AuthorityConflict;
+import com.rivell.workbench.knowledge.AuthorityRule;
 import com.rivell.workbench.knowledge.ConflictType;
 import com.rivell.workbench.knowledge.PositionRole;
 import com.rivell.workbench.knowledge.ReviewCategory;
@@ -46,6 +48,20 @@ public record CandidateView(
         PositionRole variantRole,
         String escalationTrigger,
         Boolean requiresApproval,
+        /** The preferred wording the source states; null when it states none. */
+        String preferredText,
+        /** Every fallback wording the source states, in source order. */
+        List<String> fallbackTexts,
+        /** The walk-away or prohibited wording the source states; null when it states none. */
+        String prohibitedText,
+        /** Typed approval rules, one per stance, with their source level and quote. */
+        List<AuthorityRule> authorityRules,
+        /** Lower-level rules naming a different approver for the same stance. */
+        List<AuthorityConflict> authorityConflicts,
+        /** Label-shaped walk-away or approver words the stage could not map. */
+        List<String> unmappedAuthority,
+        /** True while the entry needs attention for an unmapped walk-away or approver word. */
+        boolean needsAttention,
         List<InterpretationView> interpretations,
         String editedContentText,
         Map<String, String> editedPayloadColumns,

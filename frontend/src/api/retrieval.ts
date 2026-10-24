@@ -20,6 +20,12 @@ import {
   readStringMap,
 } from './envelope'
 import { boundedErrorMessage } from './errorMessage'
+import {
+  parseAuthorityConflict,
+  parseAuthorityRule,
+  type AuthorityConflict,
+  type AuthorityRule,
+} from './knowledge'
 
 export type AuthorityClass =
   | 'POLICY'
@@ -86,6 +92,9 @@ export type PolicyFacts = {
   positions: string[]
   requiresApproval: boolean | null
   escalationTrigger: string | null
+  /** Typed approval rules; the only thing that can make an approval. */
+  authorityRules: AuthorityRule[]
+  authorityConflicts: AuthorityConflict[]
 }
 
 export type EvidenceContractFact = {
@@ -203,6 +212,14 @@ function parsePolicyFacts(value: unknown, what: string): PolicyFacts | null {
     positions: readStringArray(facts, 'positions', what),
     requiresApproval: readOptionalNullableBoolean(facts, 'requiresApproval', what),
     escalationTrigger: readOptionalNullableString(facts, 'escalationTrigger', what),
+    authorityRules:
+      facts.authorityRules === undefined
+        ? []
+        : readArray(facts, 'authorityRules', what, parseAuthorityRule),
+    authorityConflicts:
+      facts.authorityConflicts === undefined
+        ? []
+        : readArray(facts, 'authorityConflicts', what, parseAuthorityConflict),
   }
 }
 

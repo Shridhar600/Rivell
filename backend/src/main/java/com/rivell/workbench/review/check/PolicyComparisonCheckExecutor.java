@@ -29,7 +29,6 @@ import com.rivell.workbench.review.ApprovedDraftingPayload;
 import com.rivell.workbench.review.CheckMechanism;
 import com.rivell.workbench.review.ClauseTopics;
 import com.rivell.workbench.review.DeviationUncertainPayload;
-import com.rivell.workbench.review.EscalationPayload;
 import com.rivell.workbench.review.FallbackConditionSpecs;
 import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.OpenEndedAnalysisPayload;
@@ -618,16 +617,14 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             signals.add(attempt.signal());
         }
         var facts = judged.position().policyFacts();
-        if (facts != null && ((facts.escalationTrigger() != null
-                && !facts.escalationTrigger().isBlank())
-                || Boolean.TRUE.equals(facts.requiresApproval()))) {
+        // council §A.3: only a typed rule that covers this finding's stance escalates it
+        var authority = EscalationAuthority.decide(facts, category);
+        if (authority != null) {
             signals.add(signal(context, b -> b
                     .signalType(SignalType.ESCALATION_REQUIRED).issueFamily(family)
-                    .payload(new EscalationPayload(facts.escalationTrigger(),
-                            facts.requiresApproval()))
+                    .payload(authority.payload(facts.escalationTrigger(), Boolean.TRUE))
                     .evidence(List.of(judged.position().evidenceId()))
-                    .quality(escalationQuality(facts.escalationTrigger(),
-                            facts.requiresApproval()))
+                    .quality(escalationQuality(authority, facts.escalationTrigger()))
                     .dedupeSuffix(judged.key())));
         }
         return signals;
@@ -825,6 +822,24 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         quality.put("escalationTrigger", trigger == null ? "" : trigger);
         if (requiresApproval != null) {
             quality.put("requiresApproval", requiresApproval);
+        }
+        return quality;
+    }
+
+    /** The typed rule behind an escalation, so the panel can name the approver and its source. */
+    static Map<String, Object> escalationQuality(
+            EscalationAuthority.Decision decision, String fallbackTrigger) {
+        var payload = decision.payload(fallbackTrigger, Boolean.TRUE);
+        var quality = escalationQuality(payload.trigger(), payload.requiresApproval());
+        quality.put("escalationApprover", payload.approver());
+        quality.put("escalationSource", payload.source());
+        quality.put("escalationStance", payload.stance());
+        if (payload.condition() != null) {
+            quality.put("escalationCondition", payload.condition());
+        }
+        if (payload.conflictingApprover() != null) {
+            quality.put("escalationConflictApprover", payload.conflictingApprover());
+            quality.put("escalationConflictSource", payload.conflictingSource());
         }
         return quality;
     }

@@ -297,6 +297,127 @@ public record KnowledgeCandidate(
         return semanticFields.requiresApproval();
     }
 
+    /** The preferred wording the source states explicitly, else null. */
+    public String effectivePreferredText() {
+        if (editedSemanticFields != null && editedSemanticFields.preferredText() != null) {
+            return editedSemanticFields.preferredText().isBlank()
+                    ? null : editedSemanticFields.preferredText();
+        }
+        return semanticFields.preferredText();
+    }
+
+    /** Every fallback wording the source states, in source order. */
+    public List<String> effectiveFallbackTexts() {
+        if (editedSemanticFields != null
+                && (!editedSemanticFields.fallbackTexts().isEmpty()
+                        || editedSemanticFields.fallbackTextsCleared())) {
+            return editedSemanticFields.fallbackTexts();
+        }
+        return semanticFields.fallbackTexts();
+    }
+
+    /** A person deliberately cleared the corrected fallback list. */
+    public boolean fallbackTextsCleared() {
+        return editedSemanticFields != null && editedSemanticFields.fallbackTextsCleared();
+    }
+
+    /** A person deliberately cleared the corrected preferred wording. */
+    public boolean preferredTextCleared() {
+        return editedSemanticFields != null && editedSemanticFields.preferredText() != null
+                && editedSemanticFields.preferredText().isBlank();
+    }
+
+    /** A person deliberately cleared the corrected walk-away wording. */
+    public boolean prohibitedTextCleared() {
+        return editedSemanticFields != null && editedSemanticFields.prohibitedText() != null
+                && editedSemanticFields.prohibitedText().isBlank();
+    }
+
+    /** The walk-away or prohibited wording the source states, else null. */
+    public String effectiveProhibitedText() {
+        if (editedSemanticFields != null && editedSemanticFields.prohibitedText() != null) {
+            return editedSemanticFields.prohibitedText().isBlank()
+                    ? null : editedSemanticFields.prohibitedText();
+        }
+        return semanticFields.prohibitedText();
+    }
+
+    /**
+     * The typed approval rules that count: the person's corrected list when one exists, else
+     * the machine rules. A cleared list is a deliberate "no rule", not a fallback to the machine.
+     */
+    public List<AuthorityRule> effectiveAuthorityRules() {
+        if (editedSemanticFields != null) {
+            if (!editedSemanticFields.authorityRules().isEmpty()) {
+                return editedSemanticFields.authorityRules();
+            }
+            if (editedSemanticFields.authorityRulesCleared()) {
+                return List.of();
+            }
+        }
+        return semanticFields.authorityRules();
+    }
+
+    /** Lower-level rules that name a different approver for the same stance. */
+    public List<AuthorityConflict> effectiveAuthorityConflicts() {
+        if (editedSemanticFields != null && editedSemanticFields.authorityRulesCleared()) {
+            return List.of();
+        }
+        if (editedSemanticFields != null && !editedSemanticFields.authorityRules().isEmpty()
+                && !editedSemanticFields.authorityRules().equals(semanticFields.authorityRules())) {
+            // a person who changed the rules chose the approvers; their list has no conflicts
+            return editedSemanticFields.authorityConflicts();
+        }
+        return semanticFields.authorityConflicts();
+    }
+
+    /**
+     * The unmapped authority words that still need attention. A person who corrected a typed
+     * stance or an approval rule has addressed the gap, so the machine note is no longer shown.
+     */
+    public List<String> effectiveUnmappedAuthority() {
+        if (editedSemanticFields == null) {
+            return semanticFields.unmappedAuthority();
+        }
+        // only a correction that actually changes a typed value addresses the gap; the edit
+        // form always sends the complete set, so "sent" is not "changed"
+        var machinePreferred = semanticFields.preferredText() == null
+                ? "" : semanticFields.preferredText();
+        var machineProhibited = semanticFields.prohibitedText() == null
+                ? "" : semanticFields.prohibitedText();
+        var preferredChanged = editedSemanticFields.preferredText() != null
+                && !editedSemanticFields.preferredText().equals(machinePreferred);
+        var prohibitedChanged = editedSemanticFields.prohibitedText() != null
+                && !editedSemanticFields.prohibitedText().equals(machineProhibited);
+        var fallbacksSent = !editedSemanticFields.fallbackTexts().isEmpty()
+                || editedSemanticFields.fallbackTextsCleared();
+        var fallbackChanged = fallbacksSent
+                && !editedSemanticFields.fallbackTexts().equals(semanticFields.fallbackTexts());
+        var rulesSent = !editedSemanticFields.authorityRules().isEmpty()
+                || editedSemanticFields.authorityRulesCleared();
+        var rulesChanged = rulesSent
+                && !editedSemanticFields.authorityRules().equals(semanticFields.authorityRules());
+        return preferredChanged || prohibitedChanged || fallbackChanged || rulesChanged
+                ? List.of() : semanticFields.unmappedAuthority();
+    }
+
+    /**
+     * Whether this record is used as a position in review. A position is a role the compile
+     * guarantees: a stated position role, or a role-tagged stance value. A record with no role
+     * is never used as a position (council §A.4), so its whole text cannot become a finding.
+     */
+    public boolean carriesPosition() {
+        var statedStance = effectivePositions().stream().anyMatch(role ->
+                role == PositionRole.PREFERRED || role == PositionRole.FALLBACK
+                        || role == PositionRole.PROHIBITED);
+        if (statedStance) {
+            return true;
+        }
+        return effectivePositionFieldValues().keySet().stream().anyMatch(role ->
+                role == PositionRole.PREFERRED || role == PositionRole.FALLBACK
+                        || role == PositionRole.PROHIBITED);
+    }
+
     /**
      * The payload a reader sees: the human's corrected columns when there are any, else the
      * machine payload. Review classification must read the same values the API shows.

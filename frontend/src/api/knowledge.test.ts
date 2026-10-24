@@ -220,6 +220,68 @@ describe('knowledge parsers', () => {
     )
   })
 
+  it('parses typed stances and approval rules, and reads an older response without them', () => {
+    const parsed = parseCandidate({
+      ...candidate,
+      preferredText: 'Net forty-five days.',
+      fallbackTexts: ['Net thirty days.'],
+      prohibitedText: 'Payment in advance.',
+      authorityRules: [
+        {
+          approver: 'Commercial Manager',
+          stances: ['FALLBACK'],
+          condition: 'above the preferred position',
+          source: 'MATRIX',
+          quote: 'the Commercial Manager approves fallbacks',
+        },
+      ],
+      authorityConflicts: [
+        { approver: 'General Counsel', source: 'ENTRY', stance: 'FALLBACK' },
+      ],
+      unmappedAuthority: ['Deal-breaker: no retainer'],
+      needsAttention: true,
+    })
+
+    expect(parsed.preferredText).toBe('Net forty-five days.')
+    expect(parsed.fallbackTexts).toEqual(['Net thirty days.'])
+    expect(parsed.prohibitedText).toBe('Payment in advance.')
+    expect(parsed.authorityRules).toEqual([
+      {
+        approver: 'Commercial Manager',
+        stances: ['FALLBACK'],
+        condition: 'above the preferred position',
+        source: 'MATRIX',
+        quote: 'the Commercial Manager approves fallbacks',
+      },
+    ])
+    expect(parsed.authorityConflicts).toEqual([
+      { approver: 'General Counsel', source: 'ENTRY', stance: 'FALLBACK' },
+    ])
+    expect(parsed.unmappedAuthority).toEqual(['Deal-breaker: no retainer'])
+    expect(parsed.needsAttention).toBe(true)
+
+    // a response written before these fields existed reads as absent, not as malformed
+    const legacy = parseCandidate(candidate)
+    expect(legacy.preferredText).toBeNull()
+    expect(legacy.fallbackTexts).toEqual([])
+    expect(legacy.prohibitedText).toBeNull()
+    expect(legacy.authorityRules).toEqual([])
+    expect(legacy.authorityConflicts).toEqual([])
+    expect(legacy.unmappedAuthority).toEqual([])
+    expect(legacy.needsAttention).toBe(false)
+  })
+
+  it('rejects an approval rule with a source level it does not know', () => {
+    expect(() =>
+      parseCandidate({
+        ...candidate,
+        authorityRules: [
+          { approver: 'Counsel', stances: ['FALLBACK'], condition: null, source: 'SLACK', quote: null },
+        ],
+      }),
+    ).toThrow(/could not read this response/i)
+  })
+
   it('normalizes unknown conflict types to UNKNOWN without hiding the message', () => {
     const parsed = parseCandidate({
       ...candidate,

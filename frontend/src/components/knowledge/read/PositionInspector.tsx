@@ -8,6 +8,7 @@ import { resolveCandidateSource } from '../../../lib/candidates'
 import { positionText, type PublicationRef } from '../../../lib/knowledgeCatalog'
 import { conceptName, displayScopeRows, positionRoles, POSITION_ROLE_LABELS } from '../../../lib/knowledgePosition'
 import { sourceLocation } from '../../../lib/knowledgeSource'
+import { AUTHORITY_SOURCE_LABELS } from '../../../lib/compilationFields'
 import { ArrowRightIcon } from '../../ui/Icon'
 
 interface PositionInspectorProps {
@@ -49,6 +50,60 @@ export function PositionInspector({ candidate, artifact, publication }: Position
           <>
             <dt>Escalate</dt>
             <dd>{escalation}</dd>
+          </>
+        ) : null}
+        {candidate.preferredText ? (
+          <>
+            <dt>Preferred</dt>
+            <dd>{candidate.preferredText}</dd>
+          </>
+        ) : null}
+        {candidate.fallbackTexts.length > 0 ? (
+          <>
+            <dt>{candidate.fallbackTexts.length > 1 ? 'Fallbacks' : 'Fallback'}</dt>
+            <dd>{candidate.fallbackTexts.join('; ')}</dd>
+          </>
+        ) : null}
+        {candidate.prohibitedText ? (
+          <>
+            <dt>Walk-away</dt>
+            <dd>{candidate.prohibitedText}</dd>
+          </>
+        ) : null}
+        {candidate.authorityRules.map((rule, index) => (
+          <Fragment key={`approval-${index}`}>
+            <dt>Approval</dt>
+            <dd>
+              {rule.approver} for{' '}
+              {rule.stances.length > 0
+                ? rule.stances.map((role) => POSITION_ROLE_LABELS[role].toLowerCase()).join(', ')
+                : 'fallback and walk-away'}{' '}
+              ({AUTHORITY_SOURCE_LABELS[rule.source]})
+              {rule.condition ? `, if ${rule.condition}` : ''}
+            </dd>
+          </Fragment>
+        ))}
+        {candidate.authorityConflicts.length > 0 ? (
+          <>
+            <dt>Other level</dt>
+            <dd>
+              {candidate.authorityConflicts
+                .map(
+                  (conflict) =>
+                    `${conflict.approver} (${AUTHORITY_SOURCE_LABELS[conflict.source]}, ` +
+                    `${POSITION_ROLE_LABELS[conflict.stance].toLowerCase()})`,
+                )
+                .join('; ')}
+            </dd>
+          </>
+        ) : null}
+        {candidate.unmappedAuthority.length > 0 ? (
+          <>
+            <dt>Needs attention</dt>
+            <dd>
+              The source states a walk-away or an approver Rivell could not map:{' '}
+              {candidate.unmappedAuthority.join('; ')}
+            </dd>
           </>
         ) : null}
         {concept ? (

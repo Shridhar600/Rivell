@@ -37,6 +37,13 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     variantRole: null,
     escalationTrigger: null,
     requiresApproval: false,
+    preferredText: null,
+    fallbackTexts: [],
+    prohibitedText: null,
+    authorityRules: [],
+    authorityConflicts: [],
+    unmappedAuthority: [],
+    needsAttention: false,
     interpretations: [],
     editedContentText: null,
     editedPayloadColumns: {},
@@ -228,6 +235,123 @@ describe('semantic display helpers', () => {
     expect(isBulkEligible(candidate({ reviewCategory: null }))).toBe(false)
   })
 
+  it('detects a change to a rule condition or stance on its own', () => {
+    const current = candidate({
+      authorityRules: [
+        {
+          approver: 'Commercial Manager',
+          stances: ['FALLBACK'],
+          condition: 'above the preferred position',
+          source: 'MATRIX',
+          quote: null,
+        },
+      ],
+    })
+
+    const conditionOnly = semanticInputFrom(
+      {
+        ...semanticDraftFrom(current),
+        authorityRules: [
+          {
+            approver: 'Commercial Manager',
+            stances: ['FALLBACK'],
+            condition: 'above the fallback',
+            source: 'MATRIX',
+            quote: null,
+          },
+        ],
+      },
+      current,
+    )
+    expect(conditionOnly?.authorityRules?.[0]?.condition).toBe('above the fallback')
+
+    const stanceOnly = semanticInputFrom(
+      {
+        ...semanticDraftFrom(current),
+        authorityRules: [
+          {
+            approver: 'Commercial Manager',
+            stances: ['PROHIBITED'],
+            condition: 'above the preferred position',
+            source: 'MATRIX',
+            quote: null,
+          },
+        ],
+      },
+      current,
+    )
+    expect(stanceOnly?.authorityRules?.[0]?.stances).toEqual(['PROHIBITED'])
+  })
+
+  it('sends the typed stances and approval rules as a complete correction', () => {
+    const current = candidate({
+      preferredText: 'Net 45',
+      fallbackTexts: ['Net 30'],
+      prohibitedText: 'Prepayment',
+      authorityRules: [
+        {
+          approver: 'Head of Finance',
+          stances: ['FALLBACK'],
+          condition: null,
+          source: 'ENTRY',
+          quote: null,
+        },
+      ],
+      interpretations: [
+        {
+          field: 'authorityRules',
+          proposedValue: 'ENTRY: Head of Finance',
+          kind: 'DETERMINISTIC',
+          specId: 'deterministic-column-extraction',
+          specVersion: 1,
+          supportingSourceNodes: 2,
+          verification: 'VERIFIED',
+        },
+      ],
+    })
+    const draft = semanticDraftFrom(current)
+    expect(draft.preferredText).toBe('Net 45')
+    expect(draft.fallbackTexts).toBe('Net 30')
+    expect(draft.prohibitedText).toBe('Prepayment')
+    expect(draft.authorityRules).toHaveLength(1)
+
+    const input = semanticInputFrom(
+      {
+        ...draft,
+        preferredText: 'Net 60',
+        fallbackTexts: 'Net 45\nNet 30',
+        prohibitedText: '',
+        authorityRules: [
+          {
+            approver: 'General Counsel',
+            stances: ['FALLBACK', 'PROHIBITED'],
+            condition: 'if the cap is below twelve months',
+            source: 'MATRIX',
+            quote: null,
+          },
+        ],
+      },
+      current,
+    )
+
+    expect(input).toEqual({
+      positions: ['PREFERRED'],
+      requiresApproval: false,
+      preferredText: 'Net 60',
+      fallbackTexts: ['Net 45', 'Net 30'],
+      prohibitedText: '',
+      authorityRules: [
+        {
+          approver: 'General Counsel',
+          stances: ['FALLBACK', 'PROHIBITED'],
+          condition: 'if the cap is below twelve months',
+          source: 'MATRIX',
+          quote: null,
+        },
+      ],
+    })
+  })
+
   it('sends an explicit null when counsel approval is set back to not specified', () => {
     const current = candidate({ requiresApproval: true, positions: ['PREFERRED'], escalationTrigger: 'Above 2x' })
     const draft = semanticDraftFrom(current)
@@ -235,7 +359,15 @@ describe('semantic display helpers', () => {
 
     const unset = semanticInputFrom({ ...draft, requiresApproval: 'unset' }, current)
 
-    expect(unset).toEqual({ positions: ['PREFERRED'], requiresApproval: null, escalationTrigger: 'Above 2x' })
+    expect(unset).toEqual({
+      positions: ['PREFERRED'],
+      requiresApproval: null,
+      escalationTrigger: 'Above 2x',
+      preferredText: '',
+      fallbackTexts: [],
+      prohibitedText: '',
+      authorityRules: [],
+    })
     expect(formatBoolean(null)).toBe('Not specified')
   })
 

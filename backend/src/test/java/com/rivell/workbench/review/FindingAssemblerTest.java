@@ -46,6 +46,46 @@ class FindingAssemblerTest {
     }
 
     @Test
+    void aTypedApprovalRuleReachesTheFindingQuality() {
+        var deviation = deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
+                Map.of("category", PolicyComparisonSpecs.WITHIN_FALLBACK));
+        var escalation = signal(SignalType.ESCALATION_REQUIRED,
+                IssueFamily.POSITION_ACCEPTABLE_FALLBACK,
+                new EscalationPayload("the cap is above the preferred position", true,
+                        "Commercial Manager", "the cap is above the preferred position", "MATRIX",
+                        "General Counsel", "ENTRY", "FALLBACK"),
+                List.of(UUID.randomUUID()), null,
+                Map.of("escalationApprover", "Commercial Manager",
+                        "escalationCondition", "the cap is above the preferred position",
+                        "escalationSource", "MATRIX",
+                        "escalationStance", "FALLBACK",
+                        "escalationConflictApprover", "General Counsel",
+                        "escalationConflictSource", "ENTRY"));
+
+        var finding = assembler.assemble(run(), List.of(deviation, escalation), NOW).get(0);
+
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+        assertThat(finding.quality())
+                .containsEntry("escalationApprover", "Commercial Manager")
+                .containsEntry("escalationCondition", "the cap is above the preferred position")
+                .containsEntry("escalationSource", "MATRIX")
+                .containsEntry("escalationConflictApprover", "General Counsel")
+                .containsEntry("escalationConflictSource", "ENTRY");
+    }
+
+    @Test
+    void aWalkAwayWithNoRuleSaysAPersonMustDecideRatherThanClaimApproval() {
+        var finding = assembler.assemble(run(),
+                List.of(deviation(PolicyComparisonSpecs.WALK_AWAY, false, Map.of())), NOW).get(0);
+
+        assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
+        assertThat(finding.claims())
+                .anySatisfy(claim -> assertThat(claim.text())
+                        .contains("needs a person to decide")
+                        .doesNotContain("playbook says this needs approval"));
+    }
+
+    @Test
     void supportOnlyGroupYieldsNoFinding() {
         var support = signal(SignalType.APPROVED_DRAFTING_AVAILABLE,
                 IssueFamily.POSITION_WALK_AWAY,
