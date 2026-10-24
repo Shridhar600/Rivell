@@ -40,4 +40,52 @@ class GenerativePropertiesBindingTest {
                 "rivell.intelligence.generative.response-mode", "yaml")))
                 .hasRootCauseMessage("responseMode must be strict-schema or json-object");
     }
+
+    @Test
+    void reasoningIsSentAsNoneWhenDisabled() {
+        var properties = bind(Map.of(
+                "rivell.intelligence.generative.api-key", "k",
+                "rivell.intelligence.generative.reasoning.enabled", "false",
+                "rivell.intelligence.generative.reasoning.effort", "high"));
+
+        assertThat(properties.reasoning().wireEffort()).isEqualTo("none");
+    }
+
+    @Test
+    void enabledReasoningSendsTheConfiguredEffort() {
+        var properties = bind(Map.of(
+                "rivell.intelligence.generative.api-key", "k",
+                "rivell.intelligence.generative.reasoning.enabled", "true",
+                "rivell.intelligence.generative.reasoning.effort", "low"));
+
+        assertThat(properties.reasoning().wireEffort()).isEqualTo("low");
+    }
+
+    @Test
+    void enabledReasoningWithoutAnEffortLeavesTheProviderDefault() {
+        var properties = bind(Map.of(
+                "rivell.intelligence.generative.api-key", "k",
+                "rivell.intelligence.generative.reasoning.enabled", "true",
+                "rivell.intelligence.generative.reasoning.effort", ""));
+
+        assertThat(properties.reasoning().wireEffort()).isNull();
+    }
+
+    @Test
+    void unsetReasoningSendsNothingForModelsWithoutTheField() {
+        var properties = bind(Map.of(
+                "rivell.intelligence.generative.api-key", "k",
+                "rivell.intelligence.generative.reasoning.enabled", ""));
+
+        assertThat(properties.reasoning().wireEffort()).isNull();
+    }
+
+    @Test
+    void enabledReasoningWithEffortNoneFailsAtBinding() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> bind(Map.of(
+                "rivell.intelligence.generative.api-key", "k",
+                "rivell.intelligence.generative.reasoning.enabled", "true",
+                "rivell.intelligence.generative.reasoning.effort", "none")))
+                .hasRootCauseMessage("reasoning.effort none contradicts reasoning.enabled=true");
+    }
 }

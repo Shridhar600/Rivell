@@ -88,6 +88,30 @@ class OpenAiCompatibleGenerativeProviderTest {
     }
 
     @Test
+    void configuredReasoningEffortIsSentAndUnsetIsOmitted() {
+        var sent = new java.util.ArrayList<String>();
+        var accessor = scripted(request -> {
+            sent.add(request);
+            return chatResponse(
+                    "{\"liabilityCapMultiple\":\"3\",\"capBasis\":\"PRECEDING_12_MONTH_FEES\"}",
+                    "stop", null);
+        });
+        var reasoningOff = new OpenAiCompatibleGenerativeProvider(accessor, MAPPER,
+                new GenerativeProperties("openai-compatible", "https://gateway.test/v1", "key",
+                        "gpt-test", null, null, null, null, null,
+                        new GenerativeProperties.Reasoning(false, null)));
+        var unset = new OpenAiCompatibleGenerativeProvider(accessor, MAPPER,
+                new GenerativeProperties("openai-compatible", "https://gateway.test/v1", "key",
+                        "gpt-test", null, null));
+
+        reasoningOff.generate(new GenerationRequest("cap-model", state("cap text"), capSpec()));
+        unset.generate(new GenerationRequest("cap-model", state("cap text"), capSpec()));
+
+        assertThat(sent.get(0)).contains("\"reasoning_effort\":\"none\"");
+        assertThat(sent.get(1)).doesNotContain("reasoning_effort");
+    }
+
+    @Test
     void aLongRedraftedClauseIsAcceptedWhileAnOverlongFieldIsRejected() {
         var spec = new ReasoningSpec("m7-open-ended-position", 2, "Redraft the clause.", 2,
                 new LinkedHashMap<>(Map.of("proposedLanguage", "new clause text")));

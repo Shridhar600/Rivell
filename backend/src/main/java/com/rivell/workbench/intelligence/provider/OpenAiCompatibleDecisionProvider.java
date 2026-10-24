@@ -166,6 +166,10 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
 
         ObjectNode root = objectMapper.createObjectNode();
         root.put("model", request.modelAlias());
+        var reasoningEffort = this.properties.reasoning().wireEffort();
+        if (reasoningEffort != null) {
+            root.put("reasoning_effort", reasoningEffort);
+        }
         var messages = root.putArray("messages");
         messages.addObject().put("role", "system").put("content", SYSTEM);
         try {

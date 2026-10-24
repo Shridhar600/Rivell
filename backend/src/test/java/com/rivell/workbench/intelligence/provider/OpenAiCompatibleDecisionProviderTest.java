@@ -87,6 +87,41 @@ class OpenAiCompatibleDecisionProviderTest {
     }
 
     @Test
+    void disabledReasoningIsSentAsEffortNone() throws Exception {
+        var sent = new AtomicReference<String>();
+        var noReasoning = new GenerativeProperties(
+                "openai-compatible", "https://api.example.test/v1", "test-key", "gpt-test",
+                null, null, Duration.ofSeconds(1), Duration.ofSeconds(1), null,
+                new GenerativeProperties.Reasoning(false, null));
+        var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> {
+            sent.set(payload);
+            return response("""
+                    {"needs_review":{"answer":"no","confidence":0.9},
+                     "position_1":{"answer":"WALK_AWAY","confidence":0.8}}""");
+        }, objectMapper, noReasoning);
+
+        provider.execute(request());
+
+        assertThat(objectMapper.readTree(sent.get()).path("reasoning_effort").asText())
+                .isEqualTo("none");
+    }
+
+    @Test
+    void unsetReasoningSendsNoEffortField() throws Exception {
+        var sent = new AtomicReference<String>();
+        var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> {
+            sent.set(payload);
+            return response("""
+                    {"needs_review":{"answer":"no","confidence":0.9},
+                     "position_1":{"answer":"WALK_AWAY","confidence":0.8}}""");
+        }, objectMapper, properties);
+
+        provider.execute(request());
+
+        assertThat(objectMapper.readTree(sent.get()).has("reasoning_effort")).isFalse();
+    }
+
+    @Test
     void anAnswerOutsideTheOfferedOptionsIsAProtocolError() {
         var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> response("""
                 {"needs_review":{"answer":"yes","confidence":0.7},

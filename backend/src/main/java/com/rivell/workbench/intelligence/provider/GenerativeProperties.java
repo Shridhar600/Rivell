@@ -20,10 +20,37 @@ public record GenerativeProperties(
         Double temperature,
         Duration connectTimeout,
         Duration readTimeout,
-        Duration longReadTimeout) {
+        Duration longReadTimeout,
+        Reasoning reasoning) {
 
     public static final String RESPONSE_MODE_STRICT_SCHEMA = "strict-schema";
     public static final String RESPONSE_MODE_JSON_OBJECT = "json-object";
+
+    /**
+     * Reasoning for models that support it, sent as the OpenAI-format {@code reasoning_effort}.
+     * {@code enabled} unset sends nothing, for models and servers that reject the field;
+     * {@code false} sends {@code none}; {@code true} sends {@code effort}, or nothing when it is
+     * blank so the provider's default applies.
+     */
+    public record Reasoning(Boolean enabled, String effort) {
+
+        public static final Reasoning UNSET = new Reasoning(null, null);
+
+        public Reasoning {
+            effort = effort == null || effort.isBlank() ? null : effort.strip();
+            if (Boolean.TRUE.equals(enabled) && "none".equals(effort)) {
+                throw new IllegalArgumentException(
+                        "reasoning.effort none contradicts reasoning.enabled=true");
+            }
+        }
+
+        public String wireEffort() {
+            if (enabled == null) {
+                return null;
+            }
+            return enabled ? effort : "none";
+        }
+    }
 
     @org.springframework.boot.context.properties.bind.ConstructorBinding
     public GenerativeProperties {
@@ -53,12 +80,23 @@ public record GenerativeProperties(
         if (longReadTimeout == null) {
             longReadTimeout = Duration.ofSeconds(180);
         }
+        if (reasoning == null) {
+            reasoning = Reasoning.UNSET;
+        }
+    }
+
+    public GenerativeProperties(
+            String provider, String baseUrl, String apiKey, String model,
+            String responseMode, Double temperature, Duration connectTimeout,
+            Duration readTimeout, Duration longReadTimeout) {
+        this(provider, baseUrl, apiKey, model, responseMode, temperature,
+                connectTimeout, readTimeout, longReadTimeout, null);
     }
 
     public GenerativeProperties(
             String provider, String baseUrl, String apiKey, String model,
             Duration connectTimeout, Duration readTimeout) {
-        this(provider, baseUrl, apiKey, model, null, null, connectTimeout, readTimeout, null);
+        this(provider, baseUrl, apiKey, model, null, null, connectTimeout, readTimeout, null, null);
     }
 
     /**
@@ -70,7 +108,7 @@ public record GenerativeProperties(
             String responseMode, Double temperature, Duration connectTimeout,
             Duration readTimeout) {
         this(provider, baseUrl, apiKey, model, responseMode, temperature,
-                connectTimeout, readTimeout, null);
+                connectTimeout, readTimeout, null, null);
     }
 
     public boolean isConfigured() {
