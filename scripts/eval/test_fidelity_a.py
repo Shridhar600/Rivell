@@ -104,12 +104,12 @@ class IssueScoreTest(unittest.TestCase):
 
     def test_an_acceptable_approver_from_a_conflict_counts_as_correct(self):
         row = self.score(issue(acceptable=("Commercial Manager", "General Counsel")),
-                         [finding("h1", approvers=["General Counsel"])])
+                         [finding("h1", escalationApprover="General Counsel")])
         self.assertEqual(row["approvers"], ["General Counsel"])
         self.assertEqual(row["correctApprovers"], ["General Counsel"])
 
     def test_an_approver_outside_the_acceptable_set_is_wrong(self):
-        row = self.score(issue(), [finding("h1", approvers=["Head of Finance"])])
+        row = self.score(issue(), [finding("h1", escalationApprover="Head of Finance")])
         self.assertEqual(row["correctApprovers"], [])
         self.assertEqual(row["wrongApprovers"], ["Head of Finance"])
 
@@ -194,19 +194,18 @@ class RunScoreTest(unittest.TestCase):
         self.assertEqual(scored["issues"], [])
         self.assertEqual(scored["issuesWithoutRun"], 1)
 
-    def test_an_escalation_trigger_names_the_approver(self):
+    def test_an_escalation_trigger_is_not_an_approver_name(self):
         scored = self.run_score([issue()], {"one.json": raw([
-            finding("h1", escalationTrigger="General Counsel; Head of Finance")])})
-        self.assertEqual(scored["issues"][0]["approvers"],
-                         ["General Counsel", "Head of Finance"])
-        self.assertEqual(scored["issues"][0]["correctApprovers"], ["General Counsel"])
+            finding("h1", escalationTrigger="Escalate above net 90")])})
+        self.assertEqual(scored["issues"][0]["approvers"], [])
+        self.assertEqual(scored["issues"][0]["correctApprovers"], [])
 
     def test_approver_accuracy_is_by_named_pair(self):
         scored = self.run_score([issue("I1"), issue("I2", sections=("S2",))], {"one.json": raw([
-            finding("h1", approvers=["General Counsel", "Head of Finance"]),
-            finding("h2", approvers=["General Counsel", "Head of Finance"])])})
+            finding("h1", escalationApprover="General Counsel"),
+            finding("h2", escalationApprover="Head of Finance")])})
         totals = scored["totals"]
-        self.assertEqual((totals["approversNamed"], totals["approversCorrect"]), (4, 2))
+        self.assertEqual((totals["approversNamed"], totals["approversCorrect"]), (2, 1))
         self.assertEqual(totals["approverAccuracy"], 0.5)
 
 

@@ -35,7 +35,8 @@ from rivell_api import RivellApi
 
 STANCES = ("preferred", "fallback", "walkAway")
 COMPARATOR_ROLES = {"PREFERRED", "FALLBACK", "WALK_AWAY", "PROHIBITED", "ESCALATION"}
-STANCE_BY_ROLE = {"PREFERRED": "preferred", "FALLBACK": "fallback", "WALK_AWAY": "walkAway"}
+# PositionRole is the API's vocabulary; the walk-away stance is PROHIBITED there.
+STANCE_BY_ROLE = {"PREFERRED": "preferred", "FALLBACK": "fallback", "PROHIBITED": "walkAway"}
 MIN_MATCH = 0.6   # Jaccard overlap of the label's source words and the draft entry's words
 MERGED_MIN = 0.8  # share of an unmatched label's source words one draft holds: merged, not missing
 MIN_SHARED = 3    # ... and at least this many (or all, for a tiny label) whole words
@@ -87,32 +88,28 @@ def split_stances(text, title=""):
     return out
 
 
-def adapt_authority(row, roles):
-    """(approver, stance) pairs the draft states. Today's drafts expose no approver at all."""
+def adapt_authority(row):
+    """(approver, stance) pairs the draft states, from its typed authority rules.
+
+    `authorityRules` is the compile's rule list (approver, stances, condition, source, quote). The
+    escalation trigger is a condition, never a name, so it is not read here. An unnamed
+    `requiresApproval` stays an unnamed approval: the source says approval is needed but not who
+    gives it.
+    """
     pairs = []
-    explicit = row.get("authority")
-    if explicit is None and row.get("approvers") is not None:
-        explicit = row.get("approvers")
-    if isinstance(explicit, list):
-        for item in explicit:
-            if isinstance(item, str) and item.strip():
-                pairs.append({"approver": item.strip(), "stances": ["UNSPECIFIED"]})
-            elif isinstance(item, dict):
-                stances = [str(stance).upper() for stance in (item.get("stances") or ["UNSPECIFIED"])]
-                pairs.append({"approver": item.get("approver"), "stances": stances})
-    elif isinstance(explicit, str) and explicit.strip():
-        pairs.append({"approver": explicit.strip(), "stances": ["UNSPECIFIED"]})
-    elif row.get("approver"):
-        pairs.append({"approver": row["approver"], "stances": ["UNSPECIFIED"]})
-    if not pairs:
-        if row.get("requiresApproval") is True:
-            pairs.append({"approver": None, "stances": ["UNSPECIFIED"]})
-        if row.get("escalationTrigger"):
-            # today the compile's only authority-bearing field is the escalation trigger, and the
-            # drafts fill it with the walk-away approver's name; a later engine that puts a
-            # condition here changes this line only
-            pairs.append({"approver": str(row["escalationTrigger"]).strip(),
-                          "stances": ["WALK_AWAY"]})
+    for rule in row.get("authorityRules") or []:
+        if not isinstance(rule, dict):
+            continue
+        approver = rule.get("approver")
+        if not isinstance(approver, str) or not approver.strip():
+            continue
+        stances = [str(stance).upper() for stance in (rule.get("stances") or [])]
+        if not stances:
+            # AuthorityRule: a rule that names no stance governs the fallback and the walk-away.
+            stances = ["FALLBACK", "PROHIBITED"]
+        pairs.append({"approver": approver.strip(), "stances": stances})
+    if not pairs and row.get("requiresApproval") is True:
+        pairs.append({"approver": None, "stances": ["UNSPECIFIED"]})
     return pairs
 
 
@@ -151,7 +148,7 @@ def adapt_candidate(row):
         "roles": [role for role in roles if role in COMPARATOR_ROLES],
         "stances": {stance: payload_stances.get(stance) or text_stances.get(stance)
                     for stance in STANCES},
-        "authority": adapt_authority(row, roles),
+        "authority": adapt_authority(row),
     }
 
 

@@ -96,7 +96,7 @@ class FitReportTest(unittest.TestCase):
         self.assertEqual(len(line), 1)
         self.assertIn("2 calls", line[0])
         self.assertIn("5 questions", line[0])
-        self.assertIn("1 calls saved", line[0])
+        self.assertIn("saved calls: 1", line[0])
         self.assertIn("search FITS 2", line[0])
         self.assertIn("wording FITS 1, DOES_NOT_FIT 0, UNKNOWN 2", line[0])
 

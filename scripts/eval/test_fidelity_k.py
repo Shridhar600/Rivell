@@ -89,11 +89,20 @@ class AdapterTest(unittest.TestCase):
         self.assertEqual(draft["kind"], "WORDING")
         self.assertFalse(draft["comparator"])
 
-    def test_a_future_approver_field_maps_to_authority_pairs(self):
+    def test_the_typed_authority_rules_map_to_approver_stance_pairs(self):
         draft = fidelity_k.adapt_candidate(candidate(
-            FULL, authority=[{"approver": "General Counsel", "stances": ["FALLBACK"]}]))
+            FULL, authorityRules=[{"approver": "General Counsel",
+                                   "stances": ["PROHIBITED"], "condition": "above net 90",
+                                   "source": "APPROVAL_MATRIX", "quote": "Route to GC"}]))
         self.assertEqual(draft["authority"],
-                         [{"approver": "General Counsel", "stances": ["FALLBACK"]}])
+                         [{"approver": "General Counsel", "stances": ["PROHIBITED"]}])
+
+    def test_a_rule_without_stances_covers_fallback_and_walk_away(self):
+        draft = fidelity_k.adapt_candidate(candidate(
+            FULL, authorityRules=[{"approver": "General Counsel", "stances": []}]))
+        self.assertEqual(draft["authority"],
+                         [{"approver": "General Counsel",
+                           "stances": ["FALLBACK", "PROHIBITED"]}])
 
     def test_requires_approval_without_a_name_is_an_unnamed_authority(self):
         draft = fidelity_k.adapt_candidate(candidate(FULL, requiresApproval=True))
@@ -107,10 +116,9 @@ class AdapterTest(unittest.TestCase):
         self.assertEqual(draft["stances"]["preferred"], "The cap is twelve (12) months.")
         self.assertEqual(draft["stances"]["fallback"], "AUD 1,000,000.")
 
-    def test_todays_escalation_trigger_is_the_walk_away_approver(self):
+    def test_an_escalation_trigger_is_a_condition_not_an_approver(self):
         draft = fidelity_k.adapt_candidate(candidate(FULL, escalationTrigger="General Counsel"))
-        self.assertEqual(draft["authority"],
-                         [{"approver": "General Counsel", "stances": ["WALK_AWAY"]}])
+        self.assertEqual(draft["authority"], [])
 
 
 class MatchTest(unittest.TestCase):
@@ -192,13 +200,20 @@ class ScoreTest(unittest.TestCase):
         self.assertEqual(scored["k4"]["predicted"], 0)
 
     def test_an_authority_conflict_accepts_any_acceptable_approver(self):
-        scored = self.score([candidate(FULL, authority=[
-            {"approver": "General Counsel", "stances": ["FALLBACK", "WALK_AWAY"]}])])
+        scored = self.score([candidate(FULL, authorityRules=[
+            {"approver": "General Counsel", "stances": ["FALLBACK", "PROHIBITED"]}])])
         self.assertEqual(scored["k4"]["hit"], 2)
         self.assertEqual(scored["k4"]["correct"], 2)
 
+    def test_a_prohibited_rule_credits_the_walk_away_approval(self):
+        # the API's walk-away role is PROHIBITED; scoring it as an unknown stance would turn a
+        # correct approval into a false positive and never credit the walk-away unit
+        scored = self.score([candidate(FULL, authorityRules=[
+            {"approver": "General Counsel", "stances": ["PROHIBITED"]}])])
+        self.assertEqual((scored["k4"]["hit"], scored["k4"]["correct"]), (1, 1))
+
     def test_naming_an_approver_outside_the_acceptable_set_is_a_miss_and_a_false_positive(self):
-        scored = self.score([candidate(FULL, authority=[
+        scored = self.score([candidate(FULL, authorityRules=[
             {"approver": "Head of Finance", "stances": ["FALLBACK"]}])])
         self.assertEqual(scored["k4"]["hit"], 0)
         self.assertEqual(scored["k4"]["predicted"], 1)
@@ -247,9 +262,9 @@ class ScoreTest(unittest.TestCase):
             self.score([candidate(FULL, cid="same"), candidate(FULL, cid="same")])
 
     def test_a_duplicate_predicted_pair_is_counted_once(self):
-        scored = self.score([candidate(FULL, authority=[
-            {"approver": "General Counsel", "stances": ["WALK_AWAY"]},
-            {"approver": "General Counsel", "stances": ["WALK_AWAY"]}])])
+        scored = self.score([candidate(FULL, authorityRules=[
+            {"approver": "General Counsel", "stances": ["PROHIBITED"]},
+            {"approver": "General Counsel", "stances": ["PROHIBITED"]}])])
         self.assertEqual(scored["k4"]["predicted"], 1)
         self.assertEqual(scored["k4"]["correct"], 1)
 
@@ -281,7 +296,7 @@ class ScoreTest(unittest.TestCase):
 
     def test_a_pair_is_matched_only_with_the_stance_it_was_raised_for(self):
         # the right person, but the wrong stance: nothing is credited
-        scored = self.score([candidate(FULL, authority=[
+        scored = self.score([candidate(FULL, authorityRules=[
             {"approver": "General Counsel", "stances": ["PREFERRED"]}])])
         self.assertEqual(scored["k4"]["hit"], 0)
         self.assertEqual(scored["k4"]["correct"], 0)

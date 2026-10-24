@@ -94,6 +94,7 @@ class JdbcReviewHumanReviewListQuery implements ReviewHumanReviewListQuery {
                     input.analysisComplete()
                             && input.plannedChecks() > 0
                             && input.completedChecks() == 0,
+                    input.checksDidNotRun(),
                     input.finalized(),
                     headings.getOrDefault(input.reviewId(), Set.of())).progress();
             summaries.put(input.reviewId(), new ReviewHumanReviewSummary(

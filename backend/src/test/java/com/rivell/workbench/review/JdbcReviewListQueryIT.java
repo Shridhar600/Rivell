@@ -234,7 +234,11 @@ class JdbcReviewListQueryIT {
         seedPlanCheck(organizationId, reviewId);
         seedPlanCheck(organizationId, reviewId);
         seedExecution(organizationId, reviewId, runId, "COMPLETED");
-        seedExecution(organizationId, reviewId, runId, "DEGRADED");
+        // A deadline-degraded check produced no result; an honestly degraded one still did.
+        seedExecution(organizationId, reviewId, runId, "DEGRADED",
+                "{\"degradedReason\":\"review_deadline_exceeded\"}");
+        seedExecution(organizationId, reviewId, runId, "DEGRADED",
+                "{\"degradedReason\":\"provider_unavailable:ProviderTimeoutException\"}");
         seedExecution(organizationId, reviewId, runId, "FAILED");
         seedSignal(organizationId, reviewId, runId);
         seedSignal(organizationId, reviewId, runId);
@@ -242,9 +246,10 @@ class JdbcReviewListQueryIT {
 
         var reviewIds = List.of(reviewId);
         assertThat(reviewListQuery.countPlannedChecks(organizationId, reviewIds))
-                .containsEntry(reviewId, 6);
+                .containsEntry(reviewId, 7);
         assertThat(reviewListQuery.countExecutions(organizationId, List.of(runId)))
-                .containsEntry(runId, new ReviewExecutionCounts(1, 1, 1));
+                .as("failed and deadline-degraded checks did not run; the honest degrade did")
+                .containsEntry(runId, new ReviewExecutionCounts(1, 2, 1, 2));
         assertThat(reviewListQuery.countSignals(organizationId, List.of(runId)))
                 .containsEntry(runId, 2);
         assertThat(reviewListQuery.countFindings(organizationId, List.of(runId)))
@@ -442,6 +447,11 @@ class JdbcReviewListQueryIT {
     }
 
     private void seedExecution(UUID organizationId, UUID reviewId, UUID runId, String status) {
+        seedExecution(organizationId, reviewId, runId, status, "{}");
+    }
+
+    private void seedExecution(
+            UUID organizationId, UUID reviewId, UUID runId, String status, String detail) {
         // Each execution needs its own plan check: review_check_execution is
         // UNIQUE (run_id, plan_check_id), so three executions sharing one check cannot
         // exist, and review_plan_check is UNIQUE (review_id, check_key) and
@@ -452,7 +462,7 @@ class JdbcReviewListQueryIT {
                   (id, organization_id, review_id, run_id, plan_check_id, status, detail,
                    signal_count, started_at, completed_at)
                 values (:id, :organizationId, :reviewId, :runId, :planCheckId, :status,
-                        '{}'::jsonb, 0, :startedAt, :completedAt)
+                        :detail::jsonb, 0, :startedAt, :completedAt)
                 """)
                 .param("id", UUID.randomUUID())
                 .param("organizationId", organizationId)
@@ -460,6 +470,7 @@ class JdbcReviewListQueryIT {
                 .param("runId", runId)
                 .param("planCheckId", planCheckId)
                 .param("status", status)
+                .param("detail", detail)
                 .param("startedAt", T0)
                 .param("completedAt", "RUNNING".equals(status) ? null : T0.plusMinutes(1))
                 .update();

@@ -162,6 +162,44 @@ class ClauseEmbeddingCacheTest {
                 .isInstanceOf(ProviderOutOfCreditException.class);
     }
 
+    /**
+     * Final review I1: the per-text fallback exists for a provider that rejects one bad input, not
+     * for an endpoint that is timing out. A timeout must stop after the batch call and fail the lane
+     * for the run, so a slow embedding endpoint cannot spend the review budget one call per clause.
+     */
+    @Test
+    void aTimedOutBatchMakesNoPerTextCallsAndFailsTheLaneForTheRun() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var provider = new EmbeddingProvider() {
+            @Override
+            public String id() {
+                return "fake";
+            }
+
+            @Override
+            public EmbeddingBatch embed(EmbeddingRequest request) {
+                calls.incrementAndGet();
+                throw new ProviderTimeoutException("provider did not respond in time");
+            }
+        };
+        var properties = new EmbeddingProperties("fake", "https://embed.test/v1", "key",
+                "embed-model", null, 64, Duration.ofSeconds(1), Duration.ofSeconds(1));
+        EmbeddingProviderRegistry registry = id -> id.equals("fake")
+                ? Optional.of(provider) : Optional.empty();
+        var cache = new ClauseEmbeddingCache(
+                new EmbeddingService(registry, properties, Clock.systemUTC()));
+
+        cache.prefetch(List.of("clause one", "clause two", "clause three"));
+
+        assertThat(calls).hasValue(1);
+        // every later clause reads the failed lane instead of paying its own provider call
+        assertThatThrownBy(() -> cache.vector("clause one"))
+                .isInstanceOf(ProviderTimeoutException.class);
+        assertThatThrownBy(() -> cache.vector("clause two"))
+                .isInstanceOf(ProviderTimeoutException.class);
+        assertThat(calls).hasValue(1);
+    }
+
     @Test
     void aFirstUseWithoutPrefetchEmbedsOnlyThatText() {
         var provider = new CountingProvider();

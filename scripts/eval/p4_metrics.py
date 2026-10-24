@@ -22,7 +22,9 @@ QUALITY_KEYS = ("route", "foundBy", "uncertaintyReason", "spottedSeverity",
                 "severityWithoutLevers", "secondOpinionQuote", "secondOpinionReason",
                 "categoryBeforeLevers", "wordingFitVerdict", "wordingFitReason",
                 "wordingFitReasons", "wordingFitQuote", "fitVerdict", "fitReason", "fitReasons",
-                "escalationTrigger", "requiresApproval", "approvers", "approver")
+                "escalationTrigger", "requiresApproval", "escalationApprover",
+                "escalationCondition", "escalationSource", "escalationStance",
+                "escalationConflictApprover", "escalationConflictSource")
 
 FIT_VERDICTS = ("FITS", "DOES_NOT_FIT", "UNKNOWN")
 

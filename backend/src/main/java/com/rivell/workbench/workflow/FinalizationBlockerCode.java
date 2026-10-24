@@ -4,6 +4,8 @@ package com.rivell.workbench.workflow;
 public enum FinalizationBlockerCode {
     ANALYSIS_NOT_COMPLETE,
     ANALYSIS_DEGRADED,
+    /** The analysis completed, but some planned checks failed or were left unrun. */
+    ANALYSIS_PARTIAL,
     UNRESOLVED_BLOCKING_FINDINGS,
     UNRESOLVED_REVIEW_REQUIRED_FINDINGS,
     ACTIVE_ESCALATION,
