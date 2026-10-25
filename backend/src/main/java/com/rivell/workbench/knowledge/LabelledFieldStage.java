@@ -17,7 +17,9 @@ import java.util.Set;
  *
  * <p>The stage never guesses. A label it does not know produces no stance; a stated label with
  * no value is unmapped; a sentence creates an authority rule only when it names an approver, so a
- * trigger text alone can never make an approval (council §A.3).
+ * trigger text alone can never make an approval (council §A.3). A grant to the person doing the
+ * review ("reviewing counsel may apply this fallback") is that person's authority, not an
+ * approval rule.
  */
 final class LabelledFieldStage {
 
@@ -890,7 +892,9 @@ final class LabelledFieldStage {
             var subject = sentence.substring(0, index).strip();
             var rest = sentence.substring(index + verb.length()).strip();
             var approver = validApprover(subject);
-            if (approver == null) {
+            if (approver == null || isReviewerAuthority(approver)) {
+                // "reviewing counsel may apply this fallback" grants the reviewer the authority
+                // to take the fallback; it does not name a second person to approve it
                 return;
             }
             var condition = conditionAfter(rest);
@@ -1055,6 +1059,19 @@ final class LabelledFieldStage {
         return NONE_VALUES.contains(RecordLabelRoles.normalize(value));
     }
 
+    /**
+     * A role that is the person doing this review ("reviewing counsel", "the lawyer handling
+     * the NDA"), not someone whose approval must be obtained. The source grants them authority
+     * to take the fallback and record why, so the grant is not an approval rule.
+     */
+    private static boolean isReviewerAuthority(String approver) {
+        var normalized = RecordLabelRoles.normalize(approver);
+        return normalized.startsWith("reviewing ")
+                || normalized.startsWith("the reviewing ")
+                || normalized.startsWith("lawyer handling ")
+                || normalized.startsWith("the lawyer handling ");
+    }
+
     private static String validApprover(String value) {
         var cleaned = cleanShortValue(value);
         if (cleaned == null || isNone(cleaned)) {
@@ -1175,10 +1192,17 @@ final class LabelledFieldStage {
         if (approver == null) {
             return null;
         }
+        var condition = cleanValue(decisionValue);
+        var withinStatedFallback = condition != null
+                && condition.toLowerCase(Locale.ROOT).contains("within stated fallback");
+        if (withinStatedFallback && isReviewerAuthority(approver)) {
+            // "Reviewing counsel ... Within stated fallback" is the reviewer's own authority,
+            // not an approval by a second person
+            return null;
+        }
         var stances = stancesOf((decisionValue == null ? "" : decisionValue) + " "
                 + (issueValue == null ? "" : issueValue));
-        var condition = cleanValue(decisionValue);
-        if (condition != null && condition.toLowerCase(Locale.ROOT).contains("within stated fallback")) {
+        if (withinStatedFallback) {
             stances = Set.of(PositionRole.FALLBACK);
         }
         if (condition != null && condition.toLowerCase(Locale.ROOT).startsWith("before ")) {

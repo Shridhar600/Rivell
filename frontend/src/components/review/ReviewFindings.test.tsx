@@ -664,7 +664,7 @@ describe('position findings', () => {
     await findDetailTitle('6. Limitation of Liability')
     const pane = within(detailPane())
     expect(pane.getByText(/note, not a problem/i)).toBeInTheDocument()
-    expect(pane.getByText(/accept and record/i)).toBeInTheDocument()
+    expect(pane.getByText(/record your reason/i)).toBeInTheDocument()
   })
 
   it('reads a secondary-topic position as related guidance, not a breach', async () => {
@@ -704,7 +704,7 @@ describe('position findings', () => {
     expect(note).toHaveTextContent(
       'Commercial Manager approves this fallback, from the approval matrix.',
     )
-    expect(note).toHaveTextContent('Escalate if: Uncapped liability or consequential damages.')
+    expect(note).toHaveTextContent('Approval applies if: Uncapped liability or consequential damages.')
     expect(note).toHaveTextContent('The entry names General Counsel for this.')
     // the rule's condition and the playbook trigger are the same words; they are shown once
     expect(within(detailPane()).queryByText(/Escalate when:/)).toBeNull()

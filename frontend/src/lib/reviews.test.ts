@@ -559,7 +559,18 @@ describe('coverage notes and check labels', () => {
       stance: 'FALLBACK',
       conflict: { approver: 'General Counsel', source: 'ENTRY' },
     })
+    // a fallback rule's condition says when the fallback may be taken, not when to escalate
     expect(escalateIfLine(summary)).toBe(
+      'Approval applies if: Uncapped liability or consequential damages.',
+    )
+    const walkAway = approvalSummary(
+      quality({
+        escalationApprover: 'General Counsel',
+        escalationCondition: 'Uncapped liability or consequential damages',
+        escalationStance: 'PROHIBITED',
+      }),
+    )
+    expect(escalateIfLine(walkAway)).toBe(
       'Escalate if: Uncapped liability or consequential damages.',
     )
     expect(escalateIfText('Escalate shorter periods for source code or customer data.')).toBe(

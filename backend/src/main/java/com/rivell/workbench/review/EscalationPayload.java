@@ -3,8 +3,8 @@ package com.rivell.workbench.review;
 /**
  * Policy facts require human escalation for this deviation. A name or a trigger text alone
  * never makes an approval (council §A.3): {@code approver} is null unless a typed rule covers
- * the finding's stance, and {@code condition} carries the rule's own condition for the
- * "Escalate if" line. {@code conflictingApprover} is a lower-level rule that names a different
+ * the finding's stance, and {@code condition} carries the rule's own condition for the panel's
+ * condition line. {@code conflictingApprover} is a lower-level rule that names a different
  * approver for the same stance, so the person can pick either (§A.2).
  */
 public record EscalationPayload(

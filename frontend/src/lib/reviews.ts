@@ -675,7 +675,10 @@ export function decidedByLabel(quality: FindingQuality | null): string | null {
  */
 export type ApprovalSummary = {
   approver: string
-  /** The rule's own condition, shown after "Escalate if". */
+  /**
+   * The rule's own condition: an escalation trigger for a walk-away, an acceptance condition
+   * for a fallback.
+   */
   condition: string | null
   source: string | null
   stance: 'FALLBACK' | 'PROHIBITED' | null
@@ -714,9 +717,16 @@ export function approvalConflictLine(summary: ApprovalSummary | null): string | 
   return `The entry names ${approver} for this.`
 }
 
-/** The rule's condition, in the council's own "Escalate if" form. */
+/**
+ * The rule's condition. A walk-away rule's condition is an escalation trigger; a fallback
+ * rule's condition is the acceptance condition the source puts on taking the fallback, so it
+ * is never labelled "Escalate if" (R3-009).
+ */
 export function escalateIfLine(summary: ApprovalSummary | null): string | null {
-  return summary?.condition ? `Escalate if: ${summary.condition}.` : null
+  if (!summary?.condition) return null
+  return summary.stance === 'FALLBACK'
+    ? `Approval applies if: ${summary.condition}.`
+    : `Escalate if: ${summary.condition}.`
 }
 
 /**

@@ -441,7 +441,7 @@ export function FindingPanel(props: Props) {
           {withinFallback && !approval ? (
             <p className="rv-ws-note">
               <b>This is a note, not a problem.</b> The clause departs from the preferred position
-              but stays within an acceptable fallback; accept and record it.
+              but stays within an acceptable fallback; you may accept it and record your reason.
             </p>
           ) : null}
         </div>
