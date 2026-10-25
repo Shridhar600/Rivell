@@ -189,7 +189,9 @@ class RetrievalIndexReconciliationIT {
                 .param(organizationA).update();
 
         var degraded = evidenceService.build(requestA);
-        assertThat(degraded.degradationWarnings()).contains("INDEX_INCOMPLETE");
+        assertThat(degraded.degradationWarnings()).contains("INDEX_INCOMPLETE")
+                // A row that is not in the index at all has no vector to report as missing.
+                .doesNotContain("VECTOR_INDEX_INCOMPLETE");
         assertThat(degraded.sufficiency()).isEqualTo(EvidenceSufficiency.PARTIAL);
         assertThat(degraded.precedentItems()).isEmpty();
 
@@ -213,6 +215,47 @@ class RetrievalIndexReconciliationIT {
         var orgBRowsBefore = indexRowCount(organizationB);
         reconciliationService.reconcile(100);
         assertThat(indexRowCount(organizationB)).isEqualTo(orgBRowsBefore);
+    }
+
+    @Test
+    void reconciliationReembedsRowsThatExistWithoutVectors() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var request = subjectRequest(corpus);
+        var healthy = evidenceService.build(request);
+        assertThat(healthy.degradationWarnings()).doesNotContain("VECTOR_INDEX_INCOMPLETE");
+        // A precedent the lane actually narrowed, so its vector gap is the lane's gap.
+        var precedent = healthy.precedentItems().getFirst().sourceCandidateId();
+        assertThat(precedent).isNotNull();
+
+        // An embedding failure leaves the row and its text searchable, but the vector lane blind.
+        jdbcClient.sql("""
+                        update retrieval_evidence_index
+                        set embedding = null, embedding_model = null,
+                            embedding_dims = null, embedding_index_ready = false
+                        where organization_id = ? and candidate_id = ?
+                        """)
+                .param(organizationId).param(precedent).update();
+        assertThat(repository.findEmbeddingReadyIds(organizationId, List.of(precedent),
+                properties.indexVersion())).isEmpty();
+        assertThat(evidenceService.build(request).degradationWarnings())
+                .contains("VECTOR_INDEX_INCOMPLETE");
+        var rowsBefore = indexRowCount(organizationId);
+
+        var result = reconciliationService.reconcile(500);
+
+        // The row already existed, so nothing is indexed; the missing vector is the work.
+        assertThat(result.rowsIndexed()).isZero();
+        assertThat(result.embeddingsPersisted()).isGreaterThan(0);
+        assertThat(indexRowCount(organizationId)).isEqualTo(rowsBefore);
+        assertThat(repository.findEmbeddingReadyIds(organizationId, List.of(precedent),
+                properties.indexVersion())).containsExactly(precedent);
+        assertThat(evidenceService.build(request).degradationWarnings())
+                .doesNotContain("VECTOR_INDEX_INCOMPLETE");
+
+        var second = reconciliationService.reconcile(500);
+        assertThat(second.rowsIndexed()).isZero();
+        assertThat(second.embeddingsPersisted()).isZero();
     }
 
     @Test

@@ -76,6 +76,9 @@ class UserPositionIT {
     KnowledgePublicationService publicationService;
 
     @Autowired
+    UserPositionService positionService;
+
+    @Autowired
     KnowledgeRecordShapingIT.CorpusDecisionProvider provider;
 
     @Autowired
@@ -147,6 +150,9 @@ class UserPositionIT {
         assertThat(created.get(0).path("reviewStatus").asText()).isEqualTo("PENDING");
         assertThat(created.get(0).path("extractionUnitId").asText())
                 .isEqualTo(guidance.id().toString());
+        assertThat(created.get(0).path("correctedFields").isArray())
+                .as("the wire view carries the saved-correction marker")
+                .isTrue();
         assertThat(provider.kindDecisions.get())
                 .as("the person decided the kind: Rivell does not ask again")
                 .isEqualTo(kindDecisionsBefore);
@@ -168,6 +174,24 @@ class UserPositionIT {
         publicationService.publish(List.of(candidateId), Map.of(), "Adds a missed position.");
         assertThat(queryService.getCandidate(candidateId).reviewStatus())
                 .isEqualTo(ReviewStatus.PUBLISHED);
+    }
+
+    /**
+     * DW-088: PostgreSQL timestamptz keeps microseconds. The candidates "make this a position"
+     * returns are the ones it wrote, so their timestamps must match a later read of them.
+     */
+    @Test
+    void aMadePositionCarriesTheTimestampPrecisionTheDatabaseKeeps() throws Exception {
+        var artifact = ingest(ArtifactType.PLAYBOOK);
+        var guidance = guidancePart(artifact);
+
+        var created = positionService.makePosition(artifact.id(), guidance.id());
+
+        assertThat(created).hasSize(1);
+        var candidate = created.getFirst();
+        assertThat(candidate.createdAt().getNano() % 1000).isZero();
+        var readBack = queryService.getCandidate(candidate.id());
+        assertThat(readBack.createdAt()).isEqualTo(candidate.createdAt());
     }
 
     @Test

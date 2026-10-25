@@ -128,7 +128,7 @@ class KnowledgeBulkApprovalFreshnessIT {
         assertThat(result.skipped()).containsKey(stale.id());
         assertThat(result.skipped().get(stale.id()))
                 .as("the refusal must name the condition that makes it ineligible")
-                .contains("DUPLICATE_DETECTED");
+                .contains("it may duplicate published knowledge");
         assertThat(queryService.getCandidate(stale.id()).reviewStatus())
                 .as("a refused candidate keeps its pending state for a human to look at")
                 .isEqualTo(ReviewStatus.PENDING);

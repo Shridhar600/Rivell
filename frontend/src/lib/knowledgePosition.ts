@@ -16,10 +16,21 @@ const ROLE_ORDER: PositionRole[] = ['PREFERRED', 'FALLBACK', 'PROHIBITED', 'ESCA
 export const POSITION_ROLE_LABELS: Record<PositionRole, string> = {
   PREFERRED: 'Preferred',
   FALLBACK: 'Fallback',
-  PROHIBITED: 'Prohibited',
+  PROHIBITED: 'Walk-away',
   ESCALATION: 'Escalation',
   COMMENTARY: 'Commentary',
   UNSPECIFIED: 'Unspecified',
+}
+
+/** The stance an approval rule covers, as the Situation column reads it. */
+export function approvalSituationLabel(stances: PositionRole[]): string {
+  const held = new Set(stances)
+  const covered = ROLE_ORDER.filter(
+    (role) => held.has(role) && role !== 'COMMENTARY' && role !== 'UNSPECIFIED',
+  )
+  return covered.length > 0
+    ? covered.map((role) => POSITION_ROLE_LABELS[role]).join(', ')
+    : 'Any departure (no stance)'
 }
 
 /** The roles the compilation recorded for a passage, in reading order. Never inferred from its wording. */
@@ -52,7 +63,7 @@ export function positionRow(candidate: Candidate): PositionRow {
   const fallback = roles.has('FALLBACK')
   const layout: CellLayout = preferred && fallback ? 'both' : preferred ? 'preferred' : fallback ? 'fallback' : 'passage'
   return {
-    title: candidate.rawLabel,
+    title: candidate.title,
     layout,
     text: positionText(candidate),
     escalation: candidate.escalationTrigger?.trim() || null,
@@ -73,16 +84,38 @@ function labelled(map: Record<string, string>, value: string): string {
   return map[value] ?? humanizeCode(value)
 }
 
+/** Contract type codes as a reader sees them, e.g. "NDA, MSA". Null when there are none. */
+export function contractTypesText(types: string[]): string | null {
+  const labels = types.map((type) => labelled(CONTRACT_TYPE_LABELS, type))
+  return labels.length > 0 ? labels.join(', ') : null
+}
+
+/** The same, with the meaning of an empty declaration stated plainly. */
+export function contractTypesLabel(types: string[]): string {
+  return contractTypesText(types) ?? 'All contract types'
+}
+
 /**
  * The applicability the source declared for this passage. Only what was actually declared is
- * listed: an unset field is absent, never "Any".
+ * listed: an unset field is absent, never "Any". `contractTypes` lets a caller show the record's
+ * own types instead of the effective ones it inherits from the file.
  */
-export function scopeRows(candidate: Candidate): ScopeRow[] {
+export function scopeRows(
+  candidate: Candidate,
+  contractTypes: string[] = candidate.sourceContractTypes.length > 0
+    ? candidate.sourceContractTypes
+    : candidate.declaredContractTypes,
+): ScopeRow[] {
   const rows: ScopeRow[] = []
-  const types = candidate.declaredContractTypes.map((type) => labelled(CONTRACT_TYPE_LABELS, type))
-  if (candidate.contractPackKey) types.push(`${humanizeCode(candidate.contractPackKey)} pack`)
-  if (types.length > 0) rows.push({ label: 'Applies to', value: types.join(', ') })
-  if (candidate.paperSource) rows.push({ label: 'Paper', value: labelled(PAPER_SOURCE_LABELS, candidate.paperSource) })
+  const types = contractTypes.map((type) => labelled(CONTRACT_TYPE_LABELS, type))
+  const pack = candidate.contractPackKey ? `${humanizeCode(candidate.contractPackKey)} pack` : null
+  if (types.length > 0) {
+    if (pack) types.push(pack)
+    rows.push({ label: 'Applies to', value: types.join(', ') })
+  } else if (pack) {
+    rows.push({ label: 'Applies to', value: `All contract types, ${pack}` })
+  }
+  if (candidate.paperSource) rows.push({ label: 'Whose template', value: labelled(PAPER_SOURCE_LABELS, candidate.paperSource) })
   if (candidate.partyPerspective) rows.push({ label: 'Perspective', value: roleLabel(candidate.partyPerspective) })
   if (candidate.jurisdiction) rows.push({ label: 'Jurisdiction', value: labelled(JURISDICTION_LABELS, candidate.jurisdiction) })
   const from = candidate.effectiveFrom ? dateOnly(candidate.effectiveFrom) : ''
@@ -91,6 +124,20 @@ export function scopeRows(candidate: Candidate): ScopeRow[] {
   else if (from) rows.push({ label: 'Effective', value: `From ${from}` })
   else if (to) rows.push({ label: 'Effective', value: `Until ${to}` })
   return rows
+}
+
+/**
+ * The same rows for a reader: a contract-type scope that was not declared is shown as what it
+ * means, not left out. Other absent dimensions stay absent.
+ */
+export function displayScopeRows(
+  candidate: Candidate,
+  contractTypes?: string[],
+): ScopeRow[] {
+  const rows = scopeRows(candidate, contractTypes)
+  return rows.some((row) => row.label === 'Applies to')
+    ? rows
+    : [{ label: 'Applies to', value: 'All contract types' }, ...rows]
 }
 
 export function conceptName(candidate: Candidate, label: ConceptLabel): string | null {

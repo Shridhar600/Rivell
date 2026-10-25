@@ -115,6 +115,7 @@ class SystemApiIT {
                         "/api/reviews/{id}/redline/download",
                         "/api/reviews/{id}/progress",
                         "/api/knowledge/artifacts",
+                        "/api/knowledge/applicable",
                         "/api/knowledge/artifacts/{id}",
                         "/api/knowledge/artifacts/{id}/structure",
                         "/api/knowledge/artifacts/{id}/coverage",
@@ -150,8 +151,36 @@ class SystemApiIT {
             assertThat(openApi.at("/components/schemas/CheckView/properties/" + field)
                     .isMissingNode()).as("CheckView." + field).isFalse();
         }
+        assertThat(openApi.at("/components/schemas/AnalysisRunView/properties/spottingDropped")
+                .isMissingNode()).as("AnalysisRunView.spottingDropped").isFalse();
+        assertThat(openApi.at("/components/schemas/CandidateView/properties/correctedFields")
+                .isMissingNode()).as("CandidateView.correctedFields").isFalse();
         assertThat(openApi.at("/components/schemas/JudgedPositionView/properties/foundBy")
                 .isMissingNode()).as("JudgedPositionView.foundBy").isFalse();
+
+        // DW-037 item 1: the redline execution views carry closed sets, not free strings.
+        assertThat(openApi.at("/components/schemas/RedlineExecutionView/properties/status/enum")
+                .toString()).contains("\"COMPLETED\"").contains("\"FAILED\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionView/properties/outcome/enum")
+                .toString()).contains("\"REDLINE_GENERATED\"").contains("\"NO_CHANGES\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionView/properties/failureCode/enum")
+                .toString()).contains("\"APPROVED_SEMANTICS_DRIFT\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionChangeView/properties/actionType/enum")
+                .toString()).contains("\"REPLACE\"").contains("\"INSERT\"").contains("\"DELETE\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionChangeView/properties/targetKind/enum")
+                .toString()).contains("\"CLAUSE\"").contains("\"ABSENCE\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionChangeView/properties/status/enum")
+                .toString()).contains("\"APPLIED\"").contains("\"NOT_APPLIED\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionChangeView/properties/verification/enum")
+                .toString()).contains("\"VERIFIED\"").contains("\"FAILED\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionView/properties/outcome/type")
+                .toString()).as("a FAILED execution sends a null outcome").contains("\"null\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionView/properties/failureCode/type")
+                .toString()).contains("\"null\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionChangeView/properties/verification/type")
+                .toString()).contains("\"null\"");
+        assertThat(openApi.at("/components/schemas/RedlineExecutionView/required").toString())
+                .contains("\"status\"").contains("\"outcome\"").contains("\"failureCode\"");
 
         var output = Path.of("target/openapi/openapi.json");
         Files.createDirectories(output.getParent());

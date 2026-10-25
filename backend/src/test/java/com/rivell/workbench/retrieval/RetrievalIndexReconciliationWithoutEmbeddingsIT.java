@@ -1,0 +1,103 @@
+package com.rivell.workbench.retrieval;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
+
+import com.rivell.workbench.intelligence.EmbeddingService;
+import com.rivell.workbench.organization.UserIdentity;
+import com.rivell.workbench.review.LiabilityReviewIT;
+
+/**
+ * DW-065 in the default deployment: embeddings are not configured. Reconciliation may add
+ * missing index rows, but it has no vector to heal and must not report, re-walk or re-upsert
+ * candidates as if it did.
+ */
+@SpringBootTest(properties = "rivell.retrieval.indexing-enabled=true")
+@Testcontainers
+@Import({LiabilityReviewIT.FakeIntelligenceConfiguration.class,
+        LiabilityReviewIT.CorpusConfiguration.class,
+        LiabilityReviewIT.MutableIdentityConfiguration.class})
+class RetrievalIndexReconciliationWithoutEmbeddingsIT {
+
+    private static final DockerImageName POSTGRES_IMAGE = DockerImageName
+            .parse("pgvector/pgvector:0.8.6-pg17-trixie")
+            .asCompatibleSubstituteFor("postgres");
+
+    @Container
+    static final PostgreSQLContainer postgres = new PostgreSQLContainer(POSTGRES_IMAGE)
+            .withDatabaseName("rivell")
+            .withUsername("rivell")
+            .withPassword("rivell");
+
+    @DynamicPropertySource
+    static void databaseProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("rivell.storage.local.root",
+                () -> "target/test-documents/" + UUID.randomUUID());
+    }
+
+    @Autowired
+    LiabilityReviewIT.MutableIdentity identityProvider;
+
+    @Autowired
+    M6EvidenceCorpus corpusBuilder;
+
+    @Autowired
+    RetrievalIndexReconciliationService reconciliationService;
+
+    @Autowired
+    EmbeddingService embeddingService;
+
+    @Autowired
+    org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
+
+    @BeforeEach
+    void freshOrganization() {
+        identityProvider.use(new UserIdentity(
+                UUID.randomUUID(), UUID.randomUUID(), java.util.Set.of("ADMIN")));
+    }
+
+    private int indexRowCount(UUID organizationId) {
+        return jdbcClient.sql("""
+                        select count(*) from retrieval_evidence_index
+                        where organization_id = ?
+                        """)
+                .param(organizationId)
+                .query(Integer.class)
+                .single();
+    }
+
+    @Test
+    void aPassReportsNoEmbeddingsAndDoesNotReWalkEveryRow() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        corpusBuilder.buildMainCorpus(organizationId);
+        assertThat(embeddingService.isConfigured())
+                .as("this test is only meaningful without an embedding provider").isFalse();
+        var rows = indexRowCount(organizationId);
+        assertThat(rows).isPositive();
+
+        var first = reconciliationService.reconcile(500);
+        assertThat(first.rowsIndexed()).isZero();
+        assertThat(first.embeddingsPersisted()).isZero();
+        assertThat(indexRowCount(organizationId)).isEqualTo(rows);
+
+        var second = reconciliationService.reconcile(500);
+        assertThat(second.rowsIndexed()).isZero();
+        assertThat(second.embeddingsPersisted()).isZero();
+    }
+}

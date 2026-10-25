@@ -352,6 +352,49 @@
   font-weight: 500;
   overflow-wrap: anywhere;
 }
+.rv-k-fullsrc summary,
+.rv-kc-fullsrc summary {
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.rv-k-fullsrc[open] q,
+.rv-kc-fullsrc[open] p {
+  display: block;
+  margin-top: 8px;
+}
+.rv-k-appr {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.rv-k-appr th,
+.rv-k-appr td {
+  padding: 6px 6px 6px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  /* the inspector's value column breaks anywhere; a table cell wraps between words only */
+  overflow-wrap: normal;
+}
+.rv-k-appr th,
+.rv-k-appr td:first-child {
+  white-space: nowrap;
+}
+.rv-k-appr th {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.rv-k-appr tbody tr:last-child td {
+  border-bottom: 0;
+}
+.rv-k-appr__cond {
+  display: block;
+  white-space: normal;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .rv-k-loc {
   color: var(--text-3);
   font-size: 12px;
@@ -638,20 +681,6 @@ a.rv-k-lc:focus-visible {
   }
 }
 
-/* ---------- sidebar: Knowledge sections (canonical .nav-h) ---------- */
-.rv-nav__heading {
-  padding: 4px 8px;
-  color: var(--text-3);
-  font-size: 12px;
-  font-weight: 500;
-}
-.rv-nav--knowledge {
-  margin-top: 8px;
-}
-.rv-shell[data-sidebar='collapsed'] .rv-nav__heading {
-  display: none;
-}
-
 /* ---------- Add knowledge dialog (M10B-F6) ---------- */
 .rv-k-add__field {
   margin: 0;
@@ -689,6 +718,31 @@ a.rv-k-lc:focus-visible {
   box-shadow: inset 0 0 0 1px var(--text);
 }
 .rv-k-add__type:has(input:focus-visible) {
+  box-shadow: inset 0 0 0 1px var(--text), var(--rv-focus);
+}
+.rv-k-add__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rv-k-add__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--text-2);
+  font: 500 13px/1 var(--font);
+  cursor: pointer;
+}
+.rv-k-add__chip:has(input:checked) {
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
+  color: var(--text);
+}
+.rv-k-add__chip:has(input:focus-visible) {
   box-shadow: inset 0 0 0 1px var(--text), var(--rv-focus);
 }
 .rv-k-add__drop {

@@ -180,6 +180,22 @@ class OpenEndedEscalationIT {
                 .findFirst().orElseThrow();
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.ESCALATE_TO_HUMAN);
         assertThat(finding.proposedLanguage()).isNull();
+        assertThat(finding.quality()).containsEntry("openEndedOutcome", "UNAVAILABLE");
+        assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
+                .isEqualTo(ReviewStatus.COMPLETED);
+    }
+
+    @Test
+    void outOfCreditOnASecondaryCallDegradesTheCheckWithItsOwnReason() throws Exception {
+        var organizationId = organizationId();
+        var review = uncappedReviewOnlyPolicy();
+        generativeProvider.openEndedOutOfCredit = true;
+
+        var run = analysisService.analyze(organizationId, review.id());
+
+        assertThat(analysisRepository.findExecutions(organizationId, run.id()))
+                .anySatisfy(execution -> assertThat(execution.detail())
+                        .containsEntry("degradedReason", "provider_out_of_credit"));
         assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
                 .isEqualTo(ReviewStatus.COMPLETED);
     }

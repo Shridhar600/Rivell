@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, matchRoutes } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { appRoutes } from '../../app/router'
-import { allNavigationTargets, CREATE_ACTIONS, isActive, openSections, TOP_LEVEL_NAVIGATION } from './navigation'
+import { allNavigationTargets, CREATE_ACTIONS, isActive, NAV_GROUPS } from './navigation'
 
 function stubApi() {
   vi.stubGlobal(
@@ -36,24 +36,24 @@ afterEach(() => {
   globalThis.localStorage?.clear()
 })
 
-describe('navigation model', () => {
-  it('defines exactly Home, Reviews and Knowledge at the top level', () => {
-    expect(TOP_LEVEL_NAVIGATION.map((item) => [item.label, item.to])).toEqual([
-      ['Home', '/'],
-      ['Reviews', '/reviews'],
-      ['Knowledge', '/knowledge'],
-    ])
-  })
+const SIDEBAR_LINKS = [
+  ['Home', '/'],
+  ['Reviews', '/reviews'],
+  ['Overview', '/knowledge'],
+  ['Playbooks', '/knowledge/playbooks'],
+  ['Clause library', '/knowledge/clauses'],
+  ['Sources', '/knowledge/sources'],
+]
 
-  it('gives only Knowledge contextual sections, and they are the four Knowledge areas', () => {
-    expect(TOP_LEVEL_NAVIGATION.filter((item) => item.children).map((item) => item.id)).toEqual(['knowledge'])
-    const knowledge = TOP_LEVEL_NAVIGATION.find((item) => item.id === 'knowledge')
-    expect(knowledge?.children?.map((child) => [child.label, child.to])).toEqual([
-      ['Overview', '/knowledge'],
-      ['Playbooks', '/knowledge/playbooks'],
-      ['Clause library', '/knowledge/clauses'],
-      ['Sources', '/knowledge/sources'],
+const navLinks = () => within(sidebar()).getAllByRole('link').filter((link) => link.className.includes('rv-nav__link'))
+
+describe('navigation model', () => {
+  it('defines a heading-less top level and one Knowledge group', () => {
+    expect(NAV_GROUPS.map((group) => [group.id, group.heading])).toEqual([
+      ['work', undefined],
+      ['knowledge', 'Knowledge'],
     ])
+    expect(NAV_GROUPS.flatMap((group) => group.items.map((item) => [item.label, item.to]))).toEqual(SIDEBAR_LINKS)
   })
 
   it('points every destination at a page the router really has', () => {
@@ -71,34 +71,26 @@ describe('navigation model', () => {
   })
 
   it('decides activity by path prefix, and by exact path where asked', () => {
-    const [home, reviews, knowledge] = TOP_LEVEL_NAVIGATION as [(typeof TOP_LEVEL_NAVIGATION)[number], ...(typeof TOP_LEVEL_NAVIGATION)[number][]]
-    expect(isActive(home, '/')).toBe(true)
-    expect(isActive(home, '/reviews')).toBe(false)
-    expect(isActive(reviews!, '/reviews/c1/overview/r1')).toBe(true)
-    expect(isActive(reviews!, '/knowledge')).toBe(false)
-    expect(isActive(knowledge!, '/knowledge/sources/a1')).toBe(true)
-    expect(isActive(knowledge!, '/knowledgebase')).toBe(false)
-  })
-
-  it('opens Knowledge sections only inside Knowledge', () => {
-    expect(openSections('/').map((item) => item.id)).toEqual([])
-    expect(openSections('/reviews').map((item) => item.id)).toEqual([])
-    expect(openSections('/knowledge/playbooks/a1').map((item) => item.id)).toEqual(['knowledge'])
+    const item = (id: string) => NAV_GROUPS.flatMap((group) => group.items).find((entry) => entry.id === id)!
+    expect(isActive(item('home'), '/')).toBe(true)
+    expect(isActive(item('home'), '/reviews')).toBe(false)
+    expect(isActive(item('reviews'), '/reviews/c1/overview/r1')).toBe(true)
+    expect(isActive(item('reviews'), '/knowledge')).toBe(false)
+    expect(isActive(item('knowledge-overview'), '/knowledge/sources/a1')).toBe(false)
+    expect(isActive(item('knowledge-sources'), '/knowledge/sources/a1')).toBe(true)
+    expect(isActive(item('knowledge-sources'), '/knowledge/sourcesx')).toBe(false)
   })
 })
 
 describe('sidebar', () => {
   it.each(['/', '/reviews', '/reviews/new', '/knowledge', '/knowledge/playbooks'])(
-    'shows the same three destinations on %s',
+    'shows the same destinations, in the same order, on %s',
     (path) => {
       stubApi()
       renderAt(path)
-      const links = primary().getAllByRole('link')
-      expect(links.map((link) => [link.textContent?.trim(), link.getAttribute('href')])).toEqual([
-        ['Home', '/'],
-        ['Reviews', '/reviews'],
-        ['Knowledge', '/knowledge'],
-      ])
+      expect(navLinks().map((link) => [link.textContent?.trim(), link.getAttribute('href')])).toEqual(SIDEBAR_LINKS)
+      expect(primary().getAllByRole('link').map((link) => link.textContent?.trim())).toEqual(['Home', 'Reviews'])
+      expect(within(knowledgeNav()!).getAllByRole('link')).toHaveLength(4)
     },
   )
 
@@ -107,45 +99,14 @@ describe('sidebar', () => {
     ['/reviews', 'Reviews'],
     ['/reviews/new', 'Reviews'],
     ['/reviews/con-1/overview/rev-1', 'Reviews'],
-    ['/knowledge', 'Knowledge'],
-    ['/knowledge/clauses/LIMITATION_OF_LIABILITY', 'Knowledge'],
-    ['/knowledge/sources/a1', 'Knowledge'],
+    ['/knowledge', 'Overview'],
+    ['/knowledge/playbooks/a1', 'Playbooks'],
+    ['/knowledge/clauses/LIMITATION_OF_LIABILITY', 'Clause library'],
+    ['/knowledge/sources/a1', 'Sources'],
   ])('marks exactly one destination current on %s: %s', (path, current) => {
     stubApi()
     renderAt(path)
-    const marked = primary().getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'page')
-    expect(marked.map((link) => link.textContent?.trim())).toEqual([current])
-  })
-
-  it.each(['/', '/reviews', '/reviews/new', '/reviews/con-1/overview/rev-1'])(
-    'carries no Knowledge sections outside Knowledge, on %s',
-    (path) => {
-      stubApi()
-      renderAt(path)
-      expect(knowledgeNav()).not.toBeInTheDocument()
-      for (const name of ['Overview', 'Playbooks', 'Clause library', 'Sources']) {
-        expect(within(sidebar()).queryByRole('link', { name })).not.toBeInTheDocument()
-      }
-    },
-  )
-
-  it.each([
-    ['/knowledge', 'Overview'],
-    ['/knowledge/playbooks', 'Playbooks'],
-    ['/knowledge/playbooks/a1', 'Playbooks'],
-    ['/knowledge/clauses', 'Clause library'],
-    ['/knowledge/sources', 'Sources'],
-  ])('shows the four Knowledge sections inside Knowledge, current on %s: %s', (path, current) => {
-    stubApi()
-    renderAt(path)
-    const section = within(knowledgeNav()!)
-    expect(section.getAllByRole('link').map((link) => [link.textContent?.trim(), link.getAttribute('href')])).toEqual([
-      ['Overview', '/knowledge'],
-      ['Playbooks', '/knowledge/playbooks'],
-      ['Clause library', '/knowledge/clauses'],
-      ['Sources', '/knowledge/sources'],
-    ])
-    const marked = section.getAllByRole('link').filter((link) => link.getAttribute('aria-current') === 'page')
+    const marked = navLinks().filter((link) => link.getAttribute('aria-current') === 'page')
     expect(marked.map((link) => link.textContent?.trim())).toEqual([current])
   })
 
@@ -178,13 +139,11 @@ describe('sidebar', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('keeps a tooltip on every destination when the sidebar is collapsed', () => {
+  it('keeps a closed sidebar out of reach until it is opened again', () => {
     globalThis.localStorage?.setItem('rv-sidebar', 'c')
     stubApi()
-    renderAt('/knowledge')
-    for (const link of within(sidebar()).getAllByRole('link').filter((entry) => entry.className.includes('rv-nav__link'))) {
-      expect(link).toHaveAttribute('title', link.textContent?.trim())
-    }
+    const { container } = renderAt('/knowledge')
+    expect(container.querySelector('#rv-sidebar')).toHaveAttribute('inert')
   })
 
   it('links the brand to Home', () => {

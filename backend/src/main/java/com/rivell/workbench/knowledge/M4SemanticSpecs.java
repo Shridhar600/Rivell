@@ -26,6 +26,13 @@ final class M4SemanticSpecs {
     static final String FIELD_VERIFICATION_SPEC = "field-verification";
 
     private static final int VERSION = 1;
+    /** The known-jurisdiction criteria widened beyond US and UK. */
+    private static final int SCOPE_NARROWING_VERSION = 2;
+    /**
+     * v2 asks only the stances the source does not state, and asks for approval only when the
+     * source states no typed approval rule.
+     */
+    static final int PLAYBOOK_POSITION_VERSION = 2;
 
     private M4SemanticSpecs() {
     }
@@ -47,21 +54,32 @@ final class M4SemanticSpecs {
     }
 
     static DecisionSpec playbookPositions() {
+        return playbookPositions(new java.util.LinkedHashSet<>(playbookRoles()), true);
+    }
+
+    /**
+     * The same decision over only the stances the source does not state, so Jev answers what the
+     * text leaves open. {@code askApproval} is false when the stage already found a typed
+     * approval rule; a label the source states is never asked again.
+     */
+    static DecisionSpec playbookPositions(java.util.Set<PositionRole> roles, boolean askApproval) {
         var questions = new LinkedHashMap<String, SemanticQuestion>();
-        for (var role : playbookRoles()) {
+        for (var role : roles) {
             questions.put(positionQuestionName(role), new YesNoQuestion(
                     "Does this playbook guidance express a " + role.name().toLowerCase()
                             + " position?",
                     roleCriterion(role),
                     "The guidance does not express a " + role.name().toLowerCase() + " position."));
         }
-        questions.put("requires_approval", new YesNoQuestion(
-                "Does this playbook guidance require a named human approval (such as general counsel) "
-                        + "before the position may be used?",
-                "The guidance explicitly requires approval by a named role before use.",
-                "No explicit approval requirement is stated."));
+        if (askApproval) {
+            questions.put("requires_approval", new YesNoQuestion(
+                    "Does this playbook guidance require a named human approval (such as general counsel) "
+                            + "before the position may be used?",
+                    "The guidance explicitly requires approval by a named role before use.",
+                    "No explicit approval requirement is stated."));
+        }
         return new DecisionSpec(
-                PLAYBOOK_POSITION_SPEC, VERSION,
+                PLAYBOOK_POSITION_SPEC, PLAYBOOK_POSITION_VERSION,
                 "Classify the negotiation position roles a playbook guidance unit expresses.",
                 M4SemanticStates.PlaybookUnitState.SCHEMA_VERSION,
                 new QuestionPack(questions));
@@ -91,7 +109,7 @@ final class M4SemanticSpecs {
             jurisdictionCriteria.put(jurisdiction.name(), jurisdiction.description());
         }
         return new DecisionSpec(
-                SCOPE_NARROWING_SPEC, VERSION,
+                SCOPE_NARROWING_SPEC, SCOPE_NARROWING_VERSION,
                 "Determine whether a source unit narrows applicability compared to the manifest "
                         + "and, if so, which known jurisdiction it names.",
                 M4SemanticStates.PlaybookUnitState.SCHEMA_VERSION,
@@ -154,7 +172,7 @@ final class M4SemanticSpecs {
     private static String roleCriterion(PositionRole role) {
         return switch (role) {
             case PREFERRED -> "The guidance states the organization's first-choice position to pursue in negotiation.";
-            case FALLBACK -> "The guidance states an acceptable second-choice position, normally requiring approval.";
+            case FALLBACK -> "The guidance states an acceptable second-choice position.";
             case PROHIBITED -> "The guidance states a position the organization must not accept.";
             case ESCALATION -> "The guidance defines when or how the matter must be escalated (for example to general counsel).";
             case COMMENTARY -> "The guidance explains context, rationale, or negotiation commentary rather than a position.";

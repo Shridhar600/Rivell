@@ -14,6 +14,8 @@ public record DecisionView(
         String languageSource,
         UUID approvedDraftingEvidenceId,
         String comment,
+        String rejectReason,
+        String approvedBy,
         UUID actorId,
         Instant decidedAt,
         UUID clientRequestId,

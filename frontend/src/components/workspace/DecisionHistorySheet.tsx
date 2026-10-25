@@ -21,11 +21,11 @@ export function DecisionHistorySheet({ reviewId, findingId, title }: { reviewId:
       ) : null}
       {query.data ? (
         <div className="rv-ws-history">
-          {query.data.items.length === 0 ? <div className="rv-ws-history-item">No decision revisions recorded.</div> : null}
+          {query.data.items.length === 0 ? <div className="rv-ws-history-item">No earlier decision versions recorded.</div> : null}
           {query.data.items.map((revision) => (
             <div key={revision.id} className="rv-ws-history-item">
               <b>
-                Revision {revision.revision} · {decisionStateLabel(revision)}
+                Decision {revision.revision} · {decisionStateLabel(revision)}
               </b>
               <small>{dateTime(revision.decidedAt) || 'Saved'}</small>
               {revision.approvedAction && revision.approvedAction !== 'UNKNOWN' ? (
@@ -38,7 +38,7 @@ export function DecisionHistorySheet({ reviewId, findingId, title }: { reviewId:
           ))}
         </div>
       ) : null}
-      {query.data?.truncated ? <p className="rv-ws-caption">Showing the most recent revisions.</p> : null}
+      {query.data?.truncated ? <p className="rv-ws-caption">Showing the most recent versions.</p> : null}
     </>
   )
 }

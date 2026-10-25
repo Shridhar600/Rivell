@@ -574,7 +574,7 @@ class OmissionLaneIT {
                 snapshot.knowledgePinNumber(), snapshot.effectiveOn(),
                 snapshot.reviewPipelineVersion(), snapshot.embeddingIndexVersion(),
                 snapshot.embeddingModelIdentity(), snapshot.modelPolicy(), ReviewEngine.V1,
-                snapshot.createdAt());
+                snapshot.applicableKnowledge(), snapshot.createdAt());
         var v1Plan = planBuilder.build(reviewId, organizationId(), v1Snapshot, semantics);
         assertThat(v1Plan.getLast().mechanism()).isEqualTo(CheckMechanism.OMISSION);
     }

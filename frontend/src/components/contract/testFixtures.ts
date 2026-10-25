@@ -131,7 +131,7 @@ export function fixtureSemantics(
       },
       {
         field: 'GOVERNING_LAW',
-        value: 'UK',
+        value: 'England and Wales',
         correctedValue: null,
         corrected: false,
         sourceNodeIds: ['node-6'],
@@ -415,6 +415,7 @@ export const fixtureStructure = {
 
 export type StubOptions = {
   contractSummary?: unknown
+  structure?: unknown
   taxonomy?: unknown
   taxonomyStatus?: number
   semantics?: SemanticContract | null
@@ -517,7 +518,7 @@ export function stubContractApi(options: StubOptions = {}) {
       return jsonResponse(envelope(options.contractSummary ?? fixtureContractSummary))
     }
     if (method === 'GET' && url.includes('/versions/1/structure')) {
-      return jsonResponse(envelope(fixtureStructure))
+      return jsonResponse(envelope(options.structure ?? fixtureStructure))
     }
     if (method === 'GET' && url.includes('/versions/1/semantics')) {
       if (semanticsStatus !== 200) {
@@ -756,6 +757,8 @@ export function stubContractApi(options: StubOptions = {}) {
                 : null,
           approvedDraftingEvidenceId: null,
           comment: requestBody.comment ?? null,
+          rejectReason: requestBody.rejectReason ?? null,
+          approvedBy: requestBody.approvedBy ?? null,
           actorId: 'u-1',
           decidedAt: '2026-09-26T09:20:00Z',
           clientRequestId: requestBody.clientRequestId ?? null,

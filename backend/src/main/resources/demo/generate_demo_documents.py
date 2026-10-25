@@ -87,7 +87,6 @@ def nda_body(title):
         ('Term and Termination', [
             'This Agreement continues for two years from the Effective Date.',
             'Either party may terminate this Agreement on thirty days written notice.',
-            'Confidentiality obligations survive termination for three years.',
         ]),
         ('Governing Law', [
             'This Agreement is governed by the laws of the State of New York.',
@@ -132,9 +131,6 @@ def msa_body(title):
         ]),
         ('Governing Law', [
             'This Agreement is governed by the laws of the State of Delaware.',
-        ]),
-        ('Survival', [
-            'Limitation of Liability, Confidentiality and Governing Law survive termination.',
         ]),
     ])
 
@@ -248,7 +244,7 @@ SCENARIO_CONTRACTS = [
      'Master Services Agreement - Umbrella'),
     ('Soylent MSA - Limited analysis.docx', msa_body,
      'Master Services Agreement - Soylent'),
-    ('Vandelay MSA - Analysis queued.docx', msa_body,
+    ('Vandelay MSA - Waiting to start.docx', msa_body,
      'Master Services Agreement - Vandelay'),
 ]
 

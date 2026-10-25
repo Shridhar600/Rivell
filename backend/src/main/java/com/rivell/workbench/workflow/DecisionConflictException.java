@@ -5,7 +5,7 @@ import java.util.UUID;
 public class DecisionConflictException extends RuntimeException {
 
     public DecisionConflictException(UUID findingId, int expectedVersion, int currentVersion) {
-        super("Finding " + findingId + " decision expected version " + expectedVersion
-                + " but the current revision is " + currentVersion);
+        super("Someone else has already decided this finding. Reload the review to see "
+                + "their decision.");
     }
 }

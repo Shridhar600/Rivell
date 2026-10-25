@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useCandidateQuery, type Candidate, type ConflictSignal, type ConflictType } from '../../../api/knowledge'
 import { conditionsOf, needsConflictAcknowledgement, reasonLines, type Condition } from '../../../lib/compilation'
 import { positionText } from '../../../lib/knowledgeCatalog'
-import { scopeRows } from '../../../lib/knowledgePosition'
+import { displayScopeRows } from '../../../lib/knowledgePosition'
 import { formatPositions } from '../../../lib/semantics'
 import { ArrowRightIcon, CautionIcon } from '../../ui/Icon'
 
@@ -12,7 +12,7 @@ const SIGNAL_LABELS: Partial<Record<ConflictType, string>> = {
   SUPERSEDES_EXISTING: 'Possible supersession',
   OVERLAPPING_EFFECTIVE_PERIOD: 'Overlapping effective period',
   JURISDICTION_MISMATCH: 'Jurisdiction differs',
-  AUTHORITY_CONFLICT: 'Authority conflict',
+  AUTHORITY_CONFLICT: 'Conflict with other published knowledge',
 }
 
 function PublishedPeer({ candidateId }: { candidateId: string }) {
@@ -21,7 +21,7 @@ function PublishedPeer({ candidateId }: { candidateId: string }) {
   if (peer.isError || !peer.data) return <p className="rv-kc-muted">The published knowledge could not be loaded.</p>
   const entry = peer.data
   const text = positionText(entry)
-  const scope = scopeRows(entry)
+  const scope = displayScopeRows(entry)
   return (
     <div className="rv-kc-peer">
       {text ? <p>{text}</p> : <p className="rv-kc-muted">It has no authored wording.</p>}
@@ -43,9 +43,8 @@ function PublishedPeer({ candidateId }: { candidateId: string }) {
   )
 }
 
-function PeerLabel({ candidateId }: { candidateId: string }) {
-  const peer = useCandidateQuery(candidateId)
-  return <strong>{peer.data ? peer.data.rawLabel : 'earlier published knowledge'}</strong>
+function PeerLabel({ candidateId, titles }: { candidateId: string; titles: ReadonlyMap<string, string> }) {
+  return <strong>{titles.get(candidateId) ?? 'earlier published knowledge'}</strong>
 }
 
 interface PeerRelation {
@@ -66,13 +65,13 @@ function relations(signals: ConflictSignal[]): PeerRelation[] {
   return [...byPeer.entries()].map(([peerId, types]) => ({ peerId, types }))
 }
 
-function Relation({ relation }: { relation: PeerRelation }) {
+function Relation({ relation, peerTitles }: { relation: PeerRelation; peerTitles: ReadonlyMap<string, string> }) {
   const [open, setOpen] = useState(false)
   return (
     <li className="rv-kc-rel">
       <div className="rv-kc-rel__h">
         <span>
-          <PeerLabel candidateId={relation.peerId} />
+          <PeerLabel candidateId={relation.peerId} titles={peerTitles} />
           <span className="rv-kc-rel__t">{relation.types.map((type) => SIGNAL_LABELS[type] ?? 'Relationship not determined').join(', ')}</span>
         </span>
         <button type="button" className="rv-lnk" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
@@ -133,6 +132,8 @@ interface ChoicesProps extends Props {
   /** The published candidate this one will replace on publication, if the reviewer chose that. */
   replaces: string | null
   onReplace: (published: string | null) => void
+  /** Titles of the candidates this compilation was compared with, loaded once by the workspace. */
+  peerTitles: ReadonlyMap<string, string>
 }
 
 /**
@@ -140,7 +141,7 @@ interface ChoicesProps extends Props {
  * named, choose whether this replaces one of them when it is published, and confirm a conflict
  * knowingly. None of it changes a candidate. It is all read from the server's answer.
  */
-export function ConditionChoices({ candidate, acknowledged, onAcknowledge, replaces, onReplace }: ChoicesProps) {
+export function ConditionChoices({ candidate, acknowledged, onAcknowledge, replaces, onReplace, peerTitles }: ChoicesProps) {
   const [all, setAll] = useState(false)
   const related = relations(candidate.conflictSignals)
   const replaceable = related.filter((relation) => relation.types.includes('SUPERSEDES_EXISTING')).map((relation) => relation.peerId)
@@ -155,7 +156,7 @@ export function ConditionChoices({ candidate, acknowledged, onAcknowledge, repla
           <h2 className="rv-kc-sech">Compared with published knowledge</h2>
           <ul>
             {shown.map((relation) => (
-              <Relation key={relation.peerId} relation={relation} />
+              <Relation key={relation.peerId} relation={relation} peerTitles={peerTitles} />
             ))}
           </ul>
           {related.length > SHOWN_AT_FIRST ? (
@@ -177,22 +178,22 @@ export function ConditionChoices({ candidate, acknowledged, onAcknowledge, repla
             <label key={peerId} className="rv-kc-choice">
               <input type="radio" name={`replace-${candidate.id}`} checked={replaces === peerId} onChange={() => onReplace(peerId)} />
               <span>
-                Replace <PeerLabel candidateId={peerId} />. It is not deleted: earlier publications still show it.
+                Replace <PeerLabel candidateId={peerId} titles={peerTitles} />. It is not deleted: earlier versions still show it.
               </span>
             </label>
           ))}
-          <small>A candidate can replace only one published candidate.</small>
+          <small>An entry can replace only one published entry.</small>
         </fieldset>
       ) : null}
 
       {mustAcknowledge ? (
         <div className="rv-kc-ack">
           <p>
-            Rivell does not block approving a possible conflict, so a person must choose to. Correct it or reject it, or compare it with the published knowledge and confirm below.
+            Correct or reject it, or compare it with published knowledge and confirm below.
           </p>
           <label className="rv-kc-choice">
             <input type="checkbox" checked={acknowledged} onChange={(event) => onAcknowledge(event.target.checked)} />
-            <span>I compared this with the published knowledge and I want to approve it anyway.</span>
+            <span>I compared this with published knowledge and still want to approve it.</span>
           </label>
         </div>
       ) : null}

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   isContractForbiddenError,
@@ -35,7 +35,7 @@ import { useSemanticsQuery } from '../api/semantics'
 import { useTaxonomy } from '../api/taxonomy'
 import { buildRegionLabelMap, CONTRACT_TYPE_LABELS } from '../lib/contractSemantics'
 import { clearResumeFor, writeResume } from '../lib/resume'
-import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun, runStatusLabel } from '../lib/reviews'
+import { NO_PLAYBOOK_NOTICE, coverageLimitationSummary, withoutPlaybook, coverageLimitations, findingSubjectLabel, hasNewerRun } from '../lib/reviews'
 import {
   defaultFinding,
   executableChange,
@@ -44,7 +44,7 @@ import {
   isActionable,
   nextOpenFinding,
   orderForReview,
-  profileLine,
+  regionBodyText,
   regionText,
 } from '../lib/workspace'
 import { AnalysisWarnings, ReviewLifecyclePanel } from '../components/review/ReviewLifecyclePanel'
@@ -52,7 +52,10 @@ import { ReviewContext } from '../components/review/ReviewContext'
 import { ReviewCoveragePanel } from '../components/review/ReviewCoveragePanel'
 import { readPanelFlag, writePanelFlag } from '../components/shell/ShellContext'
 import { ErrorState, LoadingState } from '../components/ui/State'
-import { CommandPalette, type PaletteItem } from '../components/workspace/CommandPalette'
+import type { PaletteItem } from '../components/ui/CommandPalette'
+import { PanelResizeHandle } from '../components/shell/PanelResizeHandle'
+import { usePageCommands, useShell } from '../components/shell/ShellContext'
+import { readWidth, writeWidth } from '../lib/panelWidth'
 import { ContractPane, type DocMode } from '../components/workspace/ContractPane'
 import { DecisionHistorySheet } from '../components/workspace/DecisionHistorySheet'
 import { FindingNavigator } from '../components/workspace/FindingNavigator'
@@ -63,6 +66,7 @@ import { ClauseDetails } from '../components/workspace/ClauseDetails'
 import { ContractAnalysis } from '../components/workspace/ContractAnalysis'
 import { LinkButton } from '../components/ui/Button'
 import { sourceLink } from '../lib/evidence'
+import { warningLabel } from '../lib/warnings'
 import { useDecisionFlow } from '../components/workspace/useDecisionFlow'
 import { WorkspaceSheet } from '../components/workspace/WorkspaceSheet'
 import { FROZEN_NOTE_ID, WorkspaceTopBar } from '../components/workspace/WorkspaceTopBar'
@@ -74,14 +78,34 @@ import {
   CloseIcon,
   LockIcon,
 } from '../components/workspace/WorkspaceIcons'
-import { BookIcon, DocumentIcon, HomeIcon } from '../components/ui/Icon'
+import { BookIcon, DocumentIcon } from '../components/ui/Icon'
 import '../styles/m10b-workspace.css'
 
 const LEFT_KEY = 'rv-l'
 const RIGHT_KEY = 'rv-r'
+const FINDINGS_WIDTH_KEY = 'rv-ws-findings-width'
+const FINDINGS_WIDTH = { min: 220, max: 420, initial: 272 } as const
+const DETAIL_WIDTH_KEY = 'rv-ws-detail-width'
+const DETAIL_WIDTH = { min: 320, max: 640, initial: 380 } as const
 const MODE_CYCLE: Record<DocMode, DocMode> = { changes: 'orig', orig: 'final', final: 'changes' }
 
-type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'clause'; headingNodeId: string } | { kind: 'contract' }
+type Sheet = { kind: 'source'; evidenceId: string } | { kind: 'history' } | { kind: 'notes' } | { kind: 'clause'; headingNodeId: string } | { kind: 'contract' } | { kind: 'keys' }
+
+/** Every single-key shortcut of the workspace, as the reader would say what it does. */
+const SHORTCUTS: [string, string][] = [
+  ['J or ↓', 'Next finding'],
+  ['↑', 'Previous finding'],
+  ['A', 'Accept the finding'],
+  ['E', 'Edit the wording'],
+  ['K', 'Keep the clause as drafted'],
+  ['D', 'Dismiss the finding'],
+  ['S', 'Escalate the finding'],
+  ['V', 'Switch between Changes, Original and Preview'],
+  ['/', 'Search'],
+  ['[', 'Show or hide the findings list'],
+  [']', 'Show or hide the details panel'],
+  ['?', 'Show these shortcuts'],
+]
 
 function Gate({ children }: { children: ReactNode }) {
   return (
@@ -120,7 +144,7 @@ export function ReviewWorkspacePage() {
   }, [reviewMissing, reviewId])
 
   if (!contractId || !reviewId) {
-    return <Gate><ErrorState message="Missing contract or review id." /></Gate>
+    return <Gate><ErrorState message="This review link is incomplete." /></Gate>
   }
   if (contractQuery.isPending || summaryQuery.isPending) {
     return <Gate><LoadingState label="Loading review…" /></Gate>
@@ -176,16 +200,17 @@ interface WorkspaceProps {
 
 function Workspace({ contractId, reviewId, contract, summary, onRefresh }: WorkspaceProps) {
   const { labelFor } = useTaxonomy()
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [leftOpen, setLeftOpen] = useState(() => !readPanelFlag(LEFT_KEY, true))
   const [rightOpen, setRightOpen] = useState(() => !readPanelFlag(RIGHT_KEY, true))
+  const [findingsWidth, setFindingsWidth] = useState(() => readWidth(FINDINGS_WIDTH_KEY, FINDINGS_WIDTH))
+  const [detailWidth, setDetailWidth] = useState(() => readWidth(DETAIL_WIDTH_KEY, DETAIL_WIDTH))
   const [mode, setMode] = useState<DocMode>('changes')
   const [term, setTerm] = useState('')
   const [sheet, setSheet] = useState<Sheet | null>(null)
-  const [paletteOpen, setPaletteOpen] = useState(false)
+  const { searchOpen, openSearch } = useShell()
   const [finalizeOpen, setFinalizeOpen] = useState(false)
   // An evidence jump target in this workspace's own document, so "View in document" never leaves it.
   const [docFocus, setDocFocus] = useState<{ nodeId: string } | null>(null)
@@ -282,6 +307,12 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     () => (headingNodeId && nodes ? regionText(nodes, headingNodeId) : null),
     [headingNodeId, nodes],
   )
+  // A replacement keeps the heading, so the editor starts from the body only; a run-in
+  // heading carries its clause text in the heading itself, where the full text is the body.
+  const replacementText = useMemo(
+    () => (headingNodeId && nodes ? (regionBodyText(nodes, headingNodeId) ?? regionText(nodes, headingNodeId)) : null),
+    [headingNodeId, nodes],
+  )
 
   const flow = useDecisionFlow({
     reviewId,
@@ -355,12 +386,10 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const typing = (event.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable="true"]')
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        setPaletteOpen((open) => !open)
-        return
-      }
-      if (typing || event.metaKey || event.ctrlKey || event.altKey || paletteOpen || finalizeOpen || sheet) return
+      if (typing || event.metaKey || event.ctrlKey || event.altKey || searchOpen || finalizeOpen || sheet) return
+      // Single keys act only on the workspace: never while focus is on the sidebar or the top bar.
+      const active = document.activeElement
+      if (active && active !== document.body && !active.closest('.rv-ws-work')) return
       const key = event.key.toLowerCase()
       const step = (by: number) => {
         event.preventDefault()
@@ -368,14 +397,17 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         if (target) chooseFinding(target.id)
       }
       if (key === 'j' || event.key === 'ArrowDown') step(1)
-      else if (key === 'k' || event.key === 'ArrowUp') step(-1)
+      else if (event.key === 'ArrowUp') step(-1)
       else if (key === 'a' && canDecideNow) flow.decide('ACCEPT')
       else if (key === 'e' && canDecideNow) {
         event.preventDefault()
         flow.decide('EDIT')
-      } else if (key === 'r' && canDecideNow) {
+      } else if (key === 'k' && canDecideNow) {
         event.preventDefault()
-        flow.decide('REJECT')
+        flow.decide('KEEP_AS_DRAFTED')
+      } else if (key === 'd' && canDecideNow) {
+        event.preventDefault()
+        flow.decide('FINDING_WRONG')
       } else if (key === 's' && canDecideNow) {
         event.preventDefault()
         flow.decide('ESCALATE')
@@ -386,7 +418,10 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       else if (event.key === ']') togglePanel('r')
       else if (event.key === '/') {
         event.preventDefault()
-        setPaletteOpen(true)
+        openSearch()
+      } else if (event.key === '?') {
+        event.preventDefault()
+        setSheet({ kind: 'keys' })
       }
     }
     document.addEventListener('keydown', onKeyDown)
@@ -410,15 +445,16 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
     })),
     ...(canDecideNow
       ? ([
-          ['ACCEPT', 'Accept', 'A', <CheckIcon key="a" />],
-          ['EDIT', 'Edit', 'E', <EditIcon key="e" />],
-          ['REJECT', 'Reject', 'R', <CloseIcon key="r" />],
-          ['ESCALATE', 'Escalate', 'S', <EscalateIcon key="s" />],
+          ['ACCEPT', 'Accept finding', 'A', <CheckIcon key="a" />],
+          ['EDIT', 'Edit finding', 'E', <EditIcon key="e" />],
+          ['KEEP_AS_DRAFTED', 'Keep as drafted', 'K', <CheckIcon key="k" />],
+          ['FINDING_WRONG', 'Dismiss finding', 'D', <CloseIcon key="d" />],
+          ['ESCALATE', 'Escalate finding', 'S', <EscalateIcon key="s" />],
         ] as const)
           .filter(([kind]) => kind !== 'ACCEPT' || flow.acceptEligibility.eligible)
           .map(([kind, label, key, icon]) => ({
-            group: 'This Finding',
-            label: `${label} finding`,
+            group: 'This finding',
+            label,
             key,
             icon,
             run: () => flow.decide(kind),
@@ -448,10 +484,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
       ? [{ group: 'Review', label: 'Finalize review', icon: <LockIcon />, run: startFinalize }]
       : []),
     { group: 'Review', label: 'Review context, coverage and notes', icon: <ClauseIcon />, run: () => setSheet({ kind: 'notes' }) },
-    { group: 'Review', label: 'Contract analysis: parties, defined terms, references', icon: <ClauseIcon />, run: () => setSheet({ kind: 'contract' }) },
-    { group: 'Go to', label: 'Home', icon: <HomeIcon className="rv-icon" />, run: () => void navigate('/') },
-    { group: 'Go to', label: 'Contract reviews', icon: <DocumentIcon className="rv-icon" />, run: () => void navigate('/reviews') },
-    { group: 'Go to', label: 'Knowledge', icon: <BookIcon className="rv-icon" />, run: () => void navigate('/knowledge') },
+    { group: 'Review', label: 'Contract details: parties, defined terms, references', icon: <ClauseIcon />, run: () => setSheet({ kind: 'contract' }) },
+    { group: 'Review', label: 'Keyboard shortcuts', key: '?', icon: <ClauseIcon />, run: () => setSheet({ kind: 'keys' }) },
   ]
 
   const finalizeLines = humanReview
@@ -460,35 +494,40 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         decisionsQuery.data && !decisionsQuery.data.truncated
           ? findings.flatMap((f) => executableChange(decisions.get(f.id)) ?? [])
           : null,
+        findings.filter((f) => decisions.get(f.id)?.action === 'RESOLVE').length,
       )
     : []
   const finalizeError = finalizeMutation.isError
     ? isWorkflowConflictError(finalizeMutation.error)
       ? humanReview?.readyToFinalize
-        ? 'The server did not finalize the review. Its state changed; check the summary and try again.'
-        : 'The review cannot be finalized yet. The server’s current blockers are shown above.'
+        ? 'Rivell did not finalize the review. Its state changed; check the summary and try again.'
+        : 'The review cannot be finalized yet. Use the info button next to Finalize to see what is left.'
       : workflowErrorMessage(finalizeMutation.error, 'The review could not be finalized. Check your connection and try again.')
     : null
 
   const noteLines: string[] = []
   if (pinnedVersion !== undefined && pinnedVersion !== latestVersion) {
-    noteLines.push(`This review is pinned to v${pinnedVersion}; the contract’s current version is v${latestVersion}.`)
+    noteLines.push(
+      `This review uses contract version ${pinnedVersion}. The contract is now at version ${latestVersion}.`,
+    )
   }
   const coverageNote = coverageLimitationSummary(summary.coverage, labelFor)
   if (coverageNote) noteLines.push(coverageNote)
+  // What the parser could not read or had to repair, so a miss there is not read as Rivell's judgement.
+  for (const warning of structureQuery.data?.parseWarnings ?? []) noteLines.push(warningLabel(warning))
   if (analysisCompleted && summary.failedChecks > 0) {
     noteLines.push('Some checks did not complete. Review the analysis warnings.')
   }
   if (analysisCompleted && hasNewerRun(summary)) {
     noteLines.push(
-      `A newer analysis attempt exists (${runStatusLabel(summary.latestRunStatus ?? 'UNKNOWN')}). This page shows the latest completed analysis.`,
+      'A newer analysis has run. This page shows the latest completed one.',
     )
   }
   if (summary.analysisWarnings.length > 0) {
     noteLines.push(`${summary.analysisWarnings.length} analysis ${summary.analysisWarnings.length === 1 ? 'warning' : 'warnings'}.`)
   }
   const retryNotes: [boolean, string, () => void][] = [
-    [humanReviewUnavailable, 'Human review state could not be loaded, so decisions and finalization cannot be confirmed.', () => void humanReviewQuery.refetch()],
+    [humanReviewUnavailable, 'Could not load decisions, so finalization cannot be confirmed.', () => void humanReviewQuery.refetch()],
     [analysisCompleted && humanReview !== null && decisionsQuery.isError, 'Decisions could not be loaded.', () => void decisionsQuery.refetch()],
     [changeSetReadFailed, 'The approved change set could not be loaded.', () => void changeSetQuery.refetch()],
   ]
@@ -552,11 +591,20 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         semantics?.structuralRegions.find((region) => region.headingNodeId === sheet.headingNodeId))
       : undefined
   const contractType = summary.snapshot?.profile?.contractType
-  const pin = summary.snapshot?.knowledgePinNumber
-  const context = [profileLine(summary.snapshot), pin ? `Knowledge publication ${pin}` : null].filter(Boolean).join('. ') || null
+  const noPlaybookNotice =
+    withoutPlaybook(summary.snapshot?.playbooksUsed) ? NO_PLAYBOOK_NOTICE : null
+
+  // The search menu lists this review's findings and commands first, and can find text in the contract.
+  usePageCommands(() => ({
+    items: paletteItems,
+    onSearch: (value) => {
+      setTerm(value)
+      setMode('orig')
+    },
+  }))
 
   return (
-    <div className="rv-ws">
+    <div className="rv-ws" data-panel-keys="own">
       <WorkspaceTopBar
         title={contract.title ?? 'Untitled contract'}
         chips={[
@@ -570,10 +618,40 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         rightOpen={rightOpen}
         onToggleLeft={() => togglePanel('l')}
         onToggleRight={() => togglePanel('r')}
-        onOpenPalette={() => setPaletteOpen(true)}
         onFinalize={startFinalize}
       />
-      <div className="rv-ws-work" data-l={leftOpen ? undefined : 'c'} data-r={rightOpen ? undefined : 'c'}>
+      <div
+        className="rv-ws-work"
+        style={{ '--lw-open': `${findingsWidth}px`, '--rw-open': `${detailWidth}px` } as CSSProperties}
+        data-l={leftOpen ? undefined : 'c'}
+        data-r={rightOpen ? undefined : 'c'}
+      >
+        {leftOpen ? (
+          <PanelResizeHandle
+            className="rv-ws-resize rv-ws-resize--l"
+            label="Resize findings list"
+            edge="right"
+            width={findingsWidth}
+            limits={FINDINGS_WIDTH}
+            onResize={(width) => {
+              setFindingsWidth(width)
+              writeWidth(FINDINGS_WIDTH_KEY, width)
+            }}
+          />
+        ) : null}
+        {rightOpen ? (
+          <PanelResizeHandle
+            className="rv-ws-resize rv-ws-resize--r"
+            label="Resize detail panel"
+            edge="left"
+            width={detailWidth}
+            limits={DETAIL_WIDTH}
+            onResize={(width) => {
+              setDetailWidth(width)
+              writeWidth(DETAIL_WIDTH_KEY, width)
+            }}
+          />
+        ) : null}
         <FindingNavigator
           findings={findings}
           truncated={findingsQuery.data?.truncated ?? false}
@@ -586,6 +664,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           analysisComplete={analysisCompleted}
           isPending={findingsQuery.isPending}
           isError={findingsQuery.isError}
+          noPlaybookNotice={noPlaybookNotice}
           onRetry={() => void findingsQuery.refetch()}
           onSelect={chooseFinding}
         />
@@ -609,7 +688,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           selected={finding}
           onSelect={chooseFinding}
           isFinalized={isFinalized}
-          remaining={humanReview ? humanReview.remainingFindings : null}
           notes={notes}
           focusTarget={docFocus}
           marks={clauseMarks}
@@ -625,9 +703,10 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           isError={findingQuery.isError}
           onRetry={() => void findingQuery.refetch()}
           position={index >= 0 ? { index: index + 1, total: findings.length } : null}
-          context={context}
           regionLabels={regionLabels}
+          playbooksUsed={summary.snapshot?.playbooksUsed ?? null}
           currentText={currentText}
+          replacementText={replacementText}
           decision={decision}
           decisionsLoaded={decisionsLoaded}
           decisionsTruncated={decisionsQuery.data?.truncated ?? false}
@@ -645,7 +724,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
 
       <WorkspaceSheet
         open={sheet !== null}
-        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : sheet?.kind === 'contract' ? 'Contract analysis' : 'Source'}
+        title={sheet?.kind === 'history' ? 'History' : sheet?.kind === 'notes' ? 'Review notes' : sheet?.kind === 'clause' ? 'Clause details' : sheet?.kind === 'contract' ? 'Contract details' : sheet?.kind === 'keys' ? 'Keyboard shortcuts' : 'Source'}
         onClose={() => setSheet(null)}
         actions={sourceRecord ? <LinkButton to={sourceRecord.to}>{sourceRecord.label}</LinkButton> : null}
       >
@@ -699,6 +778,18 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         {sheet?.kind === 'history' && selectedId ? (
           <DecisionHistorySheet reviewId={reviewId} findingId={selectedId} title={finding ? findingSubjectLabel(finding, regionLabels, labelFor) : ''} />
         ) : null}
+        {sheet?.kind === 'keys' ? (
+          <dl className="rv-ws-keys">
+            {SHORTCUTS.map(([keys, action]) => (
+              <div key={keys}>
+                <dt>
+                  <kbd>{keys}</kbd>
+                </dt>
+                <dd>{action}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
         {sheet?.kind === 'notes' ? (
           <>
             <ReviewContext summary={summary} findings={findings} />
@@ -708,15 +799,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         ) : null}
       </WorkspaceSheet>
 
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        items={paletteItems}
-        onSearch={(value) => {
-          setTerm(value)
-          setMode('orig')
-        }}
-      />
       <FinalizeDialog
         open={finalizeOpen}
         onClose={() => setFinalizeOpen(false)}

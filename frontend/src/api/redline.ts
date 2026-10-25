@@ -174,18 +174,49 @@ const SAFE_ERROR_MESSAGES: Record<number, string> = {
   403: 'You do not have permission to generate or download redlines for this review.',
   404: 'This review or its redline could not be found.',
   409: 'The redline is not available in its current state.',
-  500: 'The redline engine is unavailable right now.',
+  500: 'Redlining is unavailable right now.',
   503: 'Document storage is unavailable, so the redline was not produced.',
 }
 
 export class RedlineApiError extends Error {
   readonly status: number
+  /** The server's typed failure code on a 409, when it sent one (RED-SRC). */
+  readonly failureCode: RedlineFailureCode | null
+  /** A 503 from a saturated document-work limit carries this, unlike a storage outage. */
+  readonly retryAfter: string | null
 
-  constructor(status: number) {
+  constructor(
+    status: number,
+    failureCode: RedlineFailureCode | null = null,
+    retryAfter: string | null = null,
+  ) {
     super(SAFE_ERROR_MESSAGES[status] ?? 'The redline request failed.')
     this.name = 'RedlineApiError'
     this.status = status
+    this.failureCode = failureCode
+    this.retryAfter = retryAfter
   }
+}
+
+/** Reads the typed code from an error body without ever surfacing the body's text. */
+async function redlineApiError(response: Response, parsed: unknown): Promise<RedlineApiError> {
+  let body = parsed
+  if (body === undefined) {
+    try {
+      body = await response.clone().json()
+    } catch {
+      // An error body is optional; the status alone still describes the failure.
+    }
+  }
+  let failureCode: RedlineFailureCode | null = null
+  if (typeof body === 'object' && body !== null && 'failureCode' in body) {
+    const value = (body as Record<string, unknown>)['failureCode']
+    if (typeof value === 'string' && (REDLINE_FAILURE_CODES as readonly string[]).includes(value)) {
+      failureCode = value as RedlineFailureCode
+    }
+  }
+  return new RedlineApiError(response.status, failureCode,
+    response.headers.get('Retry-After'))
 }
 
 export function isRedlineForbiddenError(error: unknown): boolean {
@@ -208,19 +239,19 @@ function redlineRetry(failureCount: number, error: Error): boolean {
 
 export async function fetchRedlineExecution(reviewId: string): Promise<RedlineExecution> {
   const client = createApiClient()
-  const { data, response } = await client.GET('/api/reviews/{id}/redline', {
+  const { data, error, response } = await client.GET('/api/reviews/{id}/redline', {
     params: { path: { id: reviewId } },
   })
-  if (!data) throw new RedlineApiError(response.status)
+  if (!data) throw await redlineApiError(response, error)
   return parseApiResult(data, parseRedlineExecution, 'redline execution')
 }
 
 export async function triggerRedline(reviewId: string): Promise<RedlineExecution> {
   const client = createApiClient()
-  const { data, response } = await client.POST('/api/reviews/{id}/redline', {
+  const { data, error, response } = await client.POST('/api/reviews/{id}/redline', {
     params: { path: { id: reviewId } },
   })
-  if (!data) throw new RedlineApiError(response.status)
+  if (!data) throw await redlineApiError(response, error)
   return parseApiResult(data, parseRedlineExecution, 'redline execution')
 }
 
@@ -230,10 +261,10 @@ export async function triggerRedline(reviewId: string): Promise<RedlineExecution
  */
 export async function retryRedline(reviewId: string): Promise<RedlineExecution> {
   const client = createApiClient()
-  const { data, response } = await client.POST('/api/reviews/{id}/redline/retry', {
+  const { data, error, response } = await client.POST('/api/reviews/{id}/redline/retry', {
     params: { path: { id: reviewId } },
   })
-  if (!data) throw new RedlineApiError(response.status)
+  if (!data) throw await redlineApiError(response, error)
   return parseApiResult(data, parseRedlineExecution, 'redline execution')
 }
 
@@ -265,7 +296,7 @@ export async function downloadRedline(reviewId: string): Promise<RedlineDownload
   const response = await fetch(`${apiBaseUrl}/api/reviews/${reviewId}/redline/download`, {
     headers: { Accept: DOCX_MEDIA_TYPE },
   })
-  if (!response.ok) throw new RedlineApiError(response.status)
+  if (!response.ok) throw await redlineApiError(response, undefined)
   const contentType = response.headers.get('Content-Type')
   const blob = await response.blob()
   if (blob.size === 0) throw new RedlineDownloadIntegrityError()

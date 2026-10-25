@@ -4,8 +4,8 @@ import type { ReviewSummary } from '../../api/reviews'
 import { useReviewProgressQuery } from '../../api/reviews'
 import { useTaxonomy } from '../../api/taxonomy'
 import {
+  analysisWarningCheckLabel,
   analysisWarningMessage,
-  checkKeyLabel,
   hasNewerRun,
   progressPercent,
   reviewFailureMessage,
@@ -24,17 +24,22 @@ export function AnalysisWarnings({
     <div className="rv-ws-sec rv-ws-life-warn">
       <h3 className="rv-ws-sec-h">Analysis warnings</h3>
       <p className="rv-ws-caption">
-        These checks ran with reduced certainty. Their results may be incomplete.
+        Some checks were incomplete.
       </p>
       <ul>
-        {summary.analysisWarnings.map((warning, index) => (
-          <li key={`${warning.checkKey}-${index}`}>
-            <span className="rv-ws-cov-c">
-              {checkKeyLabel(warning.checkKey, labelFor)}
-            </span>{' '}
-            {analysisWarningMessage(warning)}
-          </li>
-        ))}
+        {summary.analysisWarnings.map((warning, index) => {
+          const heading = analysisWarningCheckLabel(warning, labelFor)
+          return (
+            <li key={`${warning.checkKey}-${index}`}>
+              {heading ? (
+                <>
+                  <span className="rv-ws-cov-c">{heading}</span>{' '}
+                </>
+              ) : null}
+              {analysisWarningMessage(warning)}
+            </li>
+          )
+        })}
       </ul>
       {summary.analysisWarningsTruncated ? (
         <p className="rv-ws-caption">Additional warnings were omitted.</p>
@@ -129,7 +134,7 @@ export function ReviewLifecyclePanel({
 
       {summary.status === 'ANALYSIS_QUEUED' ? (
         <p role="status">
-          The review is queued. Analysis starts when the review worker picks it up.
+          The review is waiting to start. Analysis has not started yet and begins on its own.
         </p>
       ) : null}
 
@@ -161,11 +166,17 @@ export function ReviewLifecyclePanel({
               : `${summary.findings} ${summary.findings === 1 ? 'finding' : 'findings'} from ${summary.completedChecks} completed checks.`}
           </p>
           {summary.findings === 0 &&
+          summary.plannedChecks > 0 &&
           summary.degradedChecks === 0 &&
           summary.failedChecks === 0 &&
           !coverageLimited ? (
             <p>
               Every planned check completed without findings.
+            </p>
+          ) : null}
+          {summary.findings === 0 && summary.plannedChecks === 0 ? (
+            <p className="rv-ws-warn">
+              No checks were planned for this contract version.
             </p>
           ) : null}
           {summary.findings === 0 && coverageLimited ? (
@@ -184,7 +195,7 @@ export function ReviewLifecyclePanel({
       {summary.status === 'FAILED' ? (
         <div className="rv-ws-life-alert" role="alert">
           <p>{reviewFailureMessage(summary.failure)}</p>
-          <p>A new review creates a fresh frozen snapshot of the current policy state.</p>
+          <p>A new review uses the knowledge published at the time.</p>
           <Link className="rv-ws-link" to="/reviews">
             Back to reviews
           </Link>
@@ -205,9 +216,9 @@ export function ReviewLifecyclePanel({
 
       {hasNewerRun(summary) ? (
         <p className="rv-ws-warn">
-          A newer analysis attempt exists (
+          A newer analysis has run (
           {runStatusLabel(summary.latestRunStatus ?? 'UNKNOWN')}). This page shows the latest
-          completed analysis.
+          completed one.
         </p>
       ) : null}
 

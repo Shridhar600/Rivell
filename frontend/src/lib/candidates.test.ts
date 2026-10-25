@@ -11,6 +11,8 @@ function candidate(
     candidateType: 'PLAYBOOK_RULE',
     reviewStatus: 'PENDING',
     rawLabel: 'Rule',
+    editedTitle: null,
+    title: 'Rule',
     contentText: 'Original text',
     payloadColumns: {},
     legalConceptKey: null,
@@ -21,6 +23,7 @@ function candidate(
     supersedingCandidateId: null,
     contractPackKey: null,
     declaredContractTypes: [],
+    sourceContractTypes: [],
     partyPerspective: null,
     paperSource: null,
     jurisdiction: null,
@@ -32,6 +35,15 @@ function candidate(
     variantRole: null,
     escalationTrigger: null,
     requiresApproval: null,
+    preferredText: null,
+    fallbackTexts: [],
+    prohibitedText: null,
+    authorityRules: [],
+    storedAuthorityRules: [],
+    authorityConflicts: [],
+    unmappedAuthority: [],
+    needsAttention: false,
+    correctedFields: [],
     interpretations: [],
     reviewCategory: null,
     reviewReasons: [],
@@ -145,6 +157,67 @@ describe('candidate review helpers', () => {
     })
 
     expect(effectiveContentText(corrected)).toBe('Liability cap | Notification within 5 days')
+  })
+
+  it('reads a corrected clause variant as its wording column, not the whole row', () => {
+    const corrected = candidate({
+      id: 'v',
+      candidateType: 'CLAUSE_VARIANT',
+      contentText: 'Mutual | Capped at 12 months | MSA',
+      payloadColumns: { Variant: 'Mutual', 'Clause text': 'Capped at 12 months', 'Applies to': 'MSA' },
+      editedPayloadColumns: { Variant: 'Mutual, standard', 'Clause text': 'Capped at 24 months', 'Applies to': 'MSA' },
+    })
+
+    expect(effectiveContentText(corrected)).toBe('Capped at 24 months')
+  })
+
+  it('recognises the wording column whatever its case or synonym', () => {
+    for (const header of ['Clause text', 'Approved wording', 'Approved language', 'Wording', 'Clause', 'Clause wording', 'Provision', 'Text', 'CLAUSE TEXT']) {
+      const corrected = candidate({
+        id: `v-${header}`,
+        candidateType: 'CLAUSE_VARIANT',
+        contentText: 'Mutual | Old wording',
+        payloadColumns: { Variant: 'Mutual', [header]: 'Old wording' },
+        editedPayloadColumns: { Variant: 'Mutual edited', [header]: 'New wording' },
+      })
+      expect(effectiveContentText(corrected)).toBe('New wording')
+    }
+  })
+
+  it('keeps the unchanged wording column when a correction touches another column', () => {
+    const corrected = candidate({
+      id: 'v',
+      candidateType: 'CLAUSE_VARIANT',
+      contentText: 'Mutual | Capped at 12 months',
+      payloadColumns: { Variant: 'Mutual', 'Clause text': 'Capped at 12 months' },
+      editedPayloadColumns: { Variant: 'Mutual, standard' },
+    })
+
+    expect(effectiveContentText(corrected)).toBe('Capped at 12 months')
+  })
+
+  it('falls back to the corrected row when the corrected wording cell is blank', () => {
+    const corrected = candidate({
+      id: 'v',
+      candidateType: 'CLAUSE_VARIANT',
+      contentText: 'Mutual | Old wording | MSA',
+      payloadColumns: { Variant: 'Mutual', 'Clause text': 'Old wording', 'Applies to': 'MSA' },
+      editedPayloadColumns: { Variant: 'Mutual edited', 'Clause text': '', 'Applies to': 'MSA' },
+    })
+
+    expect(effectiveContentText(corrected)).toBe('Mutual edited | MSA')
+  })
+
+  it('keeps the joined rendering for a clause variant with no wording column', () => {
+    const corrected = candidate({
+      id: 'v',
+      candidateType: 'CLAUSE_VARIANT',
+      contentText: 'Mutual | MSA',
+      payloadColumns: { Variant: 'Mutual', 'Applies to': 'MSA' },
+      editedPayloadColumns: { Variant: 'Mutual edited', 'Applies to': 'MSA' },
+    })
+
+    expect(effectiveContentText(corrected)).toBe('Mutual edited | MSA')
   })
 
   it('keeps explicit human wording ahead of corrected columns', () => {

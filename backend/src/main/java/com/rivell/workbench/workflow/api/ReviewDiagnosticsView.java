@@ -50,9 +50,19 @@ public record ReviewDiagnosticsView(
             Instant completedAt,
             Long ageSeconds,
             String failureReason,
+            @Schema(description = "Transient infrastructure failures this run has survived. A "
+                    + "running run with a positive count is being retried by JobRunr, not dead.")
+            int transientFailures,
+            @Schema(description = "Code-owned reason of the last transient failure, if any")
+            String lastTransientReason,
             @Schema(description = "Whether the snapshot the review froze still matches the live "
-                    + "contract semantics and model configuration")
+                    + "environment: the contract semantics digest, retrieval index version, "
+                    + "embedding model identity and model policy bindings")
             Boolean environmentMatchesSnapshot,
+            @Schema(description = "Issues the whole-contract read named whose quote could not be "
+                    + "found in the contract, or that were not one issue in one line; absent "
+                    + "when the read was not used in this run")
+            Integer spottingDropped,
             List<CheckView> checks) {
     }
 
@@ -101,7 +111,13 @@ public record ReviewDiagnosticsView(
             Integer flaggedBySearch,
             @Schema(description = "Engine v2: defined terms whose definitions the judge read for "
                     + "this clause; absent when none")
-            List<String> definitionTerms) {
+            List<String> definitionTerms,
+            @Schema(description = "Fit questions asked for this clause; null when no fit "
+                    + "question was asked")
+            Integer fitQuestions,
+            @Schema(description = "Fit calls saved by the exact-metadata skip rule for "
+                    + "this clause")
+            Integer fitSkipped) {
     }
 
     @Schema(description = "One judged playbook position: ids, categories and probabilities only")
@@ -120,7 +136,22 @@ public record ReviewDiagnosticsView(
             String secondOpinionCategory,
             @Schema(description = "SEARCH when the text search, not a topic, found this position; "
                     + "absent otherwise")
-            String foundBy) {
+            String foundBy,
+            @Schema(description = "The fit check's verdict for a searched position: FITS, "
+                    + "DOES_NOT_FIT or UNKNOWN; null when no fit question was asked")
+            String fitVerdict,
+            @Schema(description = "The fit check's code-owned reason, such as GOVERNS or "
+                    + "DIFFERENT_SUBJECT")
+            String fitReason,
+            @Schema(description = "not_covered when the position did not govern and was not "
+                    + "applied; null otherwise")
+            String fitOutcome,
+            @Schema(description = "The fit check's verdict on the library wording offered for "
+                    + "this position: FITS, DOES_NOT_FIT or UNKNOWN; null when no wording was offered")
+            String wordingFitVerdict,
+            @Schema(description = "Why the wording offer has its verdict: "
+                    + "MEETS_POSITION_YES/NO/UNKNOWN, CURES_GAP_YES/NO/UNKNOWN, UNAVAILABLE")
+            List<String> wordingFitReasons) {
     }
 
     @Schema(description = "Finding counts, no finding content")

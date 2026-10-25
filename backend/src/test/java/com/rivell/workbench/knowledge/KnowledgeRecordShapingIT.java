@@ -41,8 +41,17 @@ import com.rivell.workbench.intelligence.SemanticDecisionProvider;
 import com.rivell.workbench.intelligence.SemanticQuestion;
 import com.rivell.workbench.intelligence.TokenUsage;
 import com.rivell.workbench.intelligence.YesNoAnswer;
+import com.rivell.workbench.contracts.ContractType;
+import com.rivell.workbench.contracts.Jurisdiction;
+import com.rivell.workbench.contracts.PaperSource;
+import com.rivell.workbench.contracts.PartyRole;
+import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
+import com.rivell.workbench.retrieval.EvidenceRequest;
+import com.rivell.workbench.retrieval.KnowledgePin;
+import com.rivell.workbench.retrieval.StructuredPolicyResolver;
+import com.rivell.workbench.taxonomy.CoreConcepts;
 
 /**
  * The blind-corpus acceptance for one knowledge record per playbook position / clause
@@ -332,6 +341,9 @@ class KnowledgeRecordShapingIT {
     KnowledgeQueryService queryService;
 
     @Autowired
+    StructuredPolicyResolver policyResolver;
+
+    @Autowired
     CorpusDecisionProvider provider;
 
     @Autowired
@@ -391,9 +403,14 @@ class KnowledgeRecordShapingIT {
         var contentUnits = units.stream()
                 .filter(unit -> unit.contentText() != null && !unit.contentText().isBlank())
                 .count();
+        // the approval matrix is an authority source: read for its rules, never a position
+        var authorityUnits = units.stream()
+                .filter(unit -> unit.recordKind() == KnowledgeRecordKind.ESCALATION)
+                .count();
+        assertThat(authorityUnits).isPositive();
         assertThat(provider.kindDecisions.get())
-                .as("one kind decision per non-position record, never per cell")
-                .isEqualTo((int) contentUnits - 25);
+                .as("one kind decision per non-position, non-authority record, never per cell")
+                .isEqualTo((int) contentUnits - 25 - (int) authorityUnits);
     }
 
     @Test
@@ -525,16 +542,20 @@ class KnowledgeRecordShapingIT {
         long contentUnits = units.stream()
                 .filter(unit -> unit.contentText() != null && !unit.contentText().isBlank())
                 .count();
+        // an authority source is excluded by design; a kind-provider failure drops nothing else
+        long authorityUnits = units.stream()
+                .filter(unit -> unit.recordKind() == KnowledgeRecordKind.ESCALATION)
+                .count();
         var candidates = queryService.getCandidates(artifact.id());
         assertThat(candidates)
                 .as("fail open: a kind-provider failure must never drop a record")
-                .hasSize((int) contentUnits);
+                .hasSize((int) contentUnits - (int) authorityUnits);
         assertThat(candidates.stream()
                 .filter(candidate -> candidate.reviewReasons()
                         .contains(ReviewReason.SEMANTIC_ANALYSIS_UNAVAILABLE))
                 .count())
                 .as("every record whose kind could not be decided says so")
-                .isEqualTo(contentUnits - 25);
+                .isEqualTo(contentUnits - 25 - authorityUnits);
     }
 
     @Test
@@ -660,6 +681,141 @@ class KnowledgeRecordShapingIT {
     KnowledgePublicationService publicationService;
 
     @Test
+    void jurisdictionScopeMatchesTheDeclaredSpellingOfANewJurisdiction() throws Exception {
+        provider.reset();
+        // publishes into its own organization so the other tests' knowledge cannot match
+        var shared = identityProvider.current;
+        var identity = new UserIdentity(UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN"));
+        identityProvider.use(identity);
+        try {
+            var newZealand = ingestWithJurisdiction("nz-playbook.docx", "New Zealand");
+            var other = ingestWithJurisdiction("other-playbook.docx", "OTHER");
+            var candidates = new java.util.ArrayList<KnowledgeCandidate>();
+            candidates.addAll(queryService.getCandidates(newZealand.id()));
+            candidates.addAll(queryService.getCandidates(other.id()));
+            assertThat(candidates).isNotEmpty();
+            var publication = publicationService.publish(candidates.stream()
+                    .map(candidate -> reviewService.approve(candidate.id(), null).id())
+                    .toList(), Map.of(), "jurisdictions");
+
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "NEW_ZEALAND"))
+                    .contains(newZealand.id())
+                    .doesNotContain(other.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "OTHER"))
+                    .contains(other.id())
+                    .doesNotContain(newZealand.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), null))
+                    .as("an unspecified jurisdiction remains the wildcard")
+                    .contains(newZealand.id(), other.id());
+
+            var newZealandResolution = policyResolver.resolveAll(
+                    resolutionRequest(identity.organizationId(), Jurisdiction.NEW_ZEALAND),
+                    Set.of(), publication.publicationNumber(), 50);
+            assertThat(newZealandResolution.candidates())
+                    .as("a scope typed New Zealand matches the NEW_ZEALAND profile")
+                    .extracting(KnowledgeCandidate::artifactId)
+                    .contains(newZealand.id())
+                    .doesNotContain(other.id());
+
+            var otherResolution = policyResolver.resolveAll(
+                    resolutionRequest(identity.organizationId(), Jurisdiction.OTHER),
+                    Set.of(), publication.publicationNumber(), 50);
+            assertThat(otherResolution.candidates())
+                    .extracting(KnowledgeCandidate::artifactId)
+                    .contains(other.id())
+                    .doesNotContain(newZealand.id());
+
+            var unspecifiedResolution = policyResolver.resolveAll(
+                    resolutionRequest(identity.organizationId(), Jurisdiction.UNSPECIFIED),
+                    Set.of(), publication.publicationNumber(), 50);
+            assertThat(unspecifiedResolution.candidates())
+                    .as("an unspecified jurisdiction remains the wildcard")
+                    .extracting(KnowledgeCandidate::artifactId)
+                    .contains(newZealand.id(), other.id());
+        } finally {
+            identityProvider.use(shared);
+        }
+    }
+
+    private static EvidenceRequest resolutionRequest(UUID organizationId, Jurisdiction jurisdiction) {
+        var profile = new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                PaperSource.THIRD_PARTY, jurisdiction, "MSA_PACK");
+        return EvidenceRequest.forClauseReview(organizationId, CoreConcepts.GOVERNING_LAW,
+                UUID.randomUUID(), 1, UUID.randomUUID(),
+                "This Agreement is governed by the laws of New Zealand.", profile,
+                java.time.LocalDate.of(2026, 1, 1), KnowledgePin.LATEST);
+    }
+
+    @Test
+    void jurisdictionScopeMatchesUnitedKingdomAndUnitedStatesSpellings() throws Exception {
+        provider.reset();
+        var shared = identityProvider.current;
+        var identity = new UserIdentity(UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN"));
+        identityProvider.use(identity);
+        try {
+            var uk = ingestWithJurisdiction("uk-playbook.docx", "UK");
+            var unitedKingdom = ingestWithJurisdiction("united-kingdom-playbook.docx",
+                    "United Kingdom");
+            var us = ingestWithJurisdiction("us-playbook.docx", "US");
+            var unitedStates = ingestWithJurisdiction("united-states-playbook.docx",
+                    "United States");
+            var candidates = new java.util.ArrayList<KnowledgeCandidate>();
+            for (var artifact : List.of(uk, unitedKingdom, us, unitedStates)) {
+                candidates.addAll(queryService.getCandidates(artifact.id()));
+            }
+            var publication = publicationService.publish(candidates.stream()
+                    .map(candidate -> reviewService.approve(candidate.id(), null).id())
+                    .toList(), Map.of(), "jurisdiction-spellings");
+
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "UK"))
+                    .contains(uk.id(), unitedKingdom.id())
+                    .doesNotContain(us.id(), unitedStates.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "United Kingdom"))
+                    .contains(uk.id(), unitedKingdom.id())
+                    .doesNotContain(us.id(), unitedStates.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "US"))
+                    .contains(us.id(), unitedStates.id())
+                    .doesNotContain(uk.id(), unitedKingdom.id());
+            assertThat(publishedArtifactIds(identity.organizationId(),
+                    publication.publicationNumber(), "United States"))
+                    .contains(us.id(), unitedStates.id())
+                    .doesNotContain(uk.id(), unitedKingdom.id());
+        } finally {
+            identityProvider.use(shared);
+        }
+    }
+
+    private KnowledgeArtifact ingestWithJurisdiction(String filename, String jurisdiction)
+            throws Exception {
+        var manifest = new ArtifactManifest(
+                Set.of("MSA"), "MSA_PACK", "Customer", "Third-Party",
+                jurisdiction, "en", null, null, null);
+        try (InputStream stream = getClass().getClassLoader()
+                .getResourceAsStream("fixtures/knowledge-playbook.docx")) {
+            assertThat(stream).isNotNull();
+            return ingestionService.ingest(filename,
+                    "application/octet-stream", ArtifactType.PLAYBOOK, manifest, stream);
+        }
+    }
+
+    private List<UUID> publishedArtifactIds(
+            UUID organizationId, long publicationNumber, String jurisdiction) {
+        return queryService.listPublishedCandidatesForOrganization(
+                        PublishedKnowledgeQuery.unpublishedNever(organizationId,
+                                publicationNumber, Set.of(), null, "MSA_PACK", "MSA",
+                                "Customer", "Third-Party", jurisdiction, null))
+                .stream()
+                .map(candidate -> candidate.candidate().artifactId())
+                .toList();
+    }
+
+    @Test
     void contractTypeColumnGroupsBecomeOnePositionPerTypeThatAppliesOnlyToThatType()
             throws Exception {
         provider.reset();
@@ -746,6 +902,172 @@ class KnowledgeRecordShapingIT {
     }
 
     @Test
+    void positionsFollowTheContractAreaWhileLiteralWordingFollowsItsOwnType() throws Exception {
+        provider.reset();
+        // its own organization keeps this knowledge away from the other tests
+        var shared = identityProvider.current;
+        var identity = new UserIdentity(UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN"));
+        identityProvider.use(identity);
+        try {
+            var positions = ingestRows("area-positions.xlsx", ArtifactType.PLAYBOOK, "Positions",
+                    new String[][] {
+                            {"Topic", "Which deals", "Our position"},
+                            {"Payment terms", "MSA",
+                                    "Our position: net 30 days from a valid invoice."},
+                            {"Licence grant", "SWL",
+                                    "Our position: a non-exclusive, non-transferable licence."}});
+            var licensedWording = ingestRows("area-licensed-wording.xlsx",
+                    ArtifactType.CLAUSE_LIBRARY, "Clauses",
+                    new String[][] {
+                            {"Ref", "Clause topic", "Which deals", "Approved language"},
+                            {"C01", "Software licence", "SWL, SAAS",
+                                    "The Supplier grants the Customer a non-exclusive licence to use the Software."}});
+            var generalWording = ingestRows("area-general-wording.xlsx",
+                    ArtifactType.CLAUSE_LIBRARY, "Clauses",
+                    new String[][] {
+                            {"Ref", "Clause topic", "Approved language"},
+                            {"C02", "Governing law",
+                                    "This Agreement is governed by the laws of England and Wales."}});
+
+            var candidates = new java.util.ArrayList<KnowledgeCandidate>();
+            for (var artifact : List.of(positions, licensedWording, generalWording)) {
+                candidates.addAll(queryService.getCandidates(artifact.id()));
+            }
+            assertThat(candidates).extracting(KnowledgeCandidate::rawLabel)
+                    .containsExactlyInAnyOrder("Payment terms", "Licence grant",
+                            "Software licence", "Governing law");
+            assertThat(candidates).allSatisfy(candidate ->
+                    assertThat(candidate.scope().declaredContractTypes()).isEmpty());
+
+            var publication = publicationService.publish(candidates.stream()
+                    .map(candidate -> reviewService.approve(candidate.id(), null).id()).toList(),
+                    Map.of(), "area scope");
+            var organizationId = identity.organizationId();
+            var artifactIds = Set.of(positions.id(), licensedWording.id(), generalWording.id());
+
+            var reseller = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "RESELLER");
+            assertThat(recordKeys(reseller))
+                    .as("an MSA payment position governs a reseller agreement too")
+                    .containsExactlyInAnyOrder("MSA position", "SWL position", "unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "RESELLER", reseller);
+            assertThat(recordKeys(publishedKnowledge(organizationId,
+                    publication.publicationNumber(), artifactIds, "reseller")))
+                    .as("a contract type code is matched without regard to case, like record codes")
+                    .isEqualTo(recordKeys(reseller));
+
+            var nda = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "NDA");
+            assertThat(recordKeys(nda))
+                    .as("a commercial position never reaches a confidentiality agreement")
+                    .containsExactly("unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "NDA", nda);
+
+            var supply = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "SUPPLY");
+            assertThat(recordKeys(supply))
+                    .as("wording written for software licence and SaaS is not offered for supply")
+                    .containsExactlyInAnyOrder("MSA position", "SWL position", "unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "SUPPLY", supply);
+
+            var saas = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "SAAS");
+            assertThat(recordKeys(saas))
+                    .as("the same wording is offered for SaaS")
+                    .containsExactlyInAnyOrder("MSA position", "SWL position",
+                            "SWL+SAAS wording", "unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "SAAS", saas);
+
+            var other = publishedKnowledge(organizationId, publication.publicationNumber(),
+                    artifactIds, "OTHER");
+            assertThat(recordKeys(other))
+                    .as("an unmodelled contract keeps positions but gets only unscoped wording")
+                    .containsExactlyInAnyOrder("MSA position", "SWL position", "unscoped wording");
+            assertApplicableAgrees(organizationId, publication.publicationNumber(), artifactIds,
+                    "OTHER", other);
+        } finally {
+            identityProvider.use(shared);
+        }
+    }
+
+    private List<PublishedCandidate> publishedKnowledge(
+            UUID organizationId, long publicationNumber, Set<UUID> artifactIds,
+            String contractType) {
+        return queryService.listPublishedCandidatesForOrganization(
+                        PublishedKnowledgeQuery.unpublishedNever(organizationId, publicationNumber,
+                                Set.of(), null, null, contractType, null, null, null, null))
+                .stream()
+                .filter(row -> artifactIds.contains(row.candidate().artifactId()))
+                .toList();
+    }
+
+    private void assertApplicableAgrees(
+            UUID organizationId, long publicationNumber, Set<UUID> artifactIds,
+            String contractType, List<PublishedCandidate> retrieved) {
+        assertThat(queryService.applicableKnowledgeForOrganization(new ApplicableKnowledgeQuery(
+                        organizationId, publicationNumber, contractType, null, null, null, null,
+                        java.time.LocalDate.of(2026, 1, 1)))
+                .stream()
+                .map(ApplicableKnowledge::artifactId)
+                .filter(artifactIds::contains)
+                .collect(java.util.stream.Collectors.toSet()))
+                .as("the applicable-knowledge preview agrees with retrieval for " + contractType)
+                .isEqualTo(retrieved.stream()
+                        .map(row -> row.candidate().artifactId())
+                        .collect(java.util.stream.Collectors.toSet()));
+    }
+
+    private static Set<String> recordKeys(List<PublishedCandidate> retrieved) {
+        return retrieved.stream()
+                .map(row -> recordKey(row.candidate()))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private static String recordKey(KnowledgeCandidate candidate) {
+        var text = candidate.effectiveContentText();
+        if (text.contains("net 30 days")) {
+            return "MSA position";
+        }
+        if (text.contains("non-transferable licence")) {
+            return "SWL position";
+        }
+        if (text.contains("licence to use the Software")) {
+            return "SWL+SAAS wording";
+        }
+        if (text.contains("England and Wales")) {
+            return "unscoped wording";
+        }
+        throw new AssertionError("Unexpected knowledge record: " + text);
+    }
+
+    private KnowledgeArtifact ingestRows(
+            String filename, ArtifactType type, String sheetName, String[][] rows)
+            throws Exception {
+        byte[] workbook;
+        try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
+            var sheet = xssf.createSheet(sheetName);
+            for (int r = 0; r < rows.length; r++) {
+                var row = sheet.createRow(r);
+                for (int c = 0; c < rows[r].length; c++) {
+                    if (rows[r][c] != null) {
+                        row.createCell(c).setCellValue(rows[r][c]);
+                    }
+                }
+            }
+            xssf.write(out);
+            workbook = out.toByteArray();
+        }
+        var manifest = new ArtifactManifest(
+                Set.of(), null, null, null, null, "en", null, null, null);
+        return ingestionService.ingest(filename, "application/octet-stream", type, manifest,
+                new ByteArrayInputStream(workbook));
+    }
+
+    @Test
     void labelsTheModelResolvedStillTagThePositionAfterPersistence() throws Exception {
         provider.reset();
         byte[] workbook;
@@ -785,7 +1107,7 @@ class KnowledgeRecordShapingIT {
         try (var xssf = new XSSFWorkbook(); var out = new ByteArrayOutputStream()) {
             var sheet = xssf.createSheet("Library");
             String[][] rows = {
-                    {"Ref", "Clause topic", "Variant", "Approved language"},
+                    {"Ref", "Clause topic", "Which deals", "Approved language"},
                     {"C08", "Foreground IP", "Preferred",
                             "Our position: all deliverables vest in the Customer on creation."}};
             for (int r = 0; r < rows.length; r++) {
@@ -802,7 +1124,7 @@ class KnowledgeRecordShapingIT {
                 ArtifactType.CLAUSE_LIBRARY, manifest, new ByteArrayInputStream(workbook));
 
         var candidate = queryService.getCandidates(artifact.id()).getFirst();
-        assertThat(candidate.effectiveFieldRoles()).containsEntry("Variant", "APPLICABILITY");
+        assertThat(candidate.effectiveFieldRoles()).containsEntry("Which deals", "APPLICABILITY");
         assertThat(candidate.scope().sourceContractTypes())
                 .as("\"Preferred\" names no contract type, so the record applies wherever its source does")
                 .isEmpty();

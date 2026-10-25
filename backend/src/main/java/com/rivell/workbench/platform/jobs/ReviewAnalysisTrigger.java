@@ -3,9 +3,10 @@ package com.rivell.workbench.platform.jobs;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.rivell.workbench.review.ReviewCreatedEvent;
 
@@ -22,6 +23,13 @@ import com.rivell.workbench.review.ReviewCreatedEvent;
  * lambda's target method, so routing this through the generic port made every job an anonymous
  * {@code JobTask.run()}. With the dashboard disabled that signature is the only way an operator can
  * tell a queued or failed job from any other, and losing it would trade one blindness for another.
+ *
+ * <p>The enqueue is registered as an explicit {@code afterCommit} callback rather than a
+ * {@code @TransactionalEventListener(AFTER_COMMIT)}: Spring 6.2 runs those listeners in
+ * {@code afterCompletion}, where an exception is logged and swallowed. Creation would then report
+ * success with no job and the caller could not tell. An explicit callback keeps the post-commit
+ * timing and lets the enqueue failure reach the creation caller, who now knows the review exists
+ * but its analysis did not start (the reconciler re-enqueues it).
  */
 @Component
 class ReviewAnalysisTrigger {
@@ -36,8 +44,22 @@ class ReviewAnalysisTrigger {
         this.handler = handler;
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onReviewCreated(ReviewCreatedEvent event) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            enqueue(event);
+                        }
+                    });
+            return;
+        }
+        enqueue(event);
+    }
+
+    private void enqueue(ReviewCreatedEvent event) {
         jobScheduler.enqueue(jobIdFor(event.organizationId(), event.reviewId()),
                 () -> handler.handle(event.organizationId(), event.reviewId()));
     }

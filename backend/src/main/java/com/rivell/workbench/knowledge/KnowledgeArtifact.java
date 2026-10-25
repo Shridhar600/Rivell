@@ -25,7 +25,9 @@ public record KnowledgeArtifact(
         String parserVersion,
         List<String> parseWarnings,
         ArtifactTypeAssessment assessment,
-        Instant createdAt) {
+        Instant createdAt,
+        /** The title a Word source gives itself; null for a workbook or a document that names none. */
+        String documentTitle) {
 
     public KnowledgeArtifact {
         Objects.requireNonNull(id, "id");
@@ -52,12 +54,18 @@ public record KnowledgeArtifact(
             String parserVersion, IngestStatus status, List<String> warnings) {
         return new KnowledgeArtifact(id, organizationId, artifactType, filename, contentType,
                 sizeBytes, sha256, storageKey, manifest, status, parserVersion, warnings,
-                assessment, createdAt);
+                assessment, createdAt, documentTitle);
     }
 
     public KnowledgeArtifact withAssessment(ArtifactTypeAssessment assessed) {
         return new KnowledgeArtifact(id, organizationId, artifactType, filename, contentType,
                 sizeBytes, sha256, storageKey, manifest, ingestStatus, parserVersion,
-                parseWarnings, assessed, createdAt);
+                parseWarnings, assessed, createdAt, documentTitle);
+    }
+
+    public KnowledgeArtifact withDocumentTitle(String title) {
+        return new KnowledgeArtifact(id, organizationId, artifactType, filename, contentType,
+                sizeBytes, sha256, storageKey, manifest, ingestStatus, parserVersion,
+                parseWarnings, assessment, createdAt, title);
     }
 }

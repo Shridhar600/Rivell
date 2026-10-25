@@ -30,16 +30,17 @@ import { Journey, StatusPill } from '../components/lifecycle/parts'
 import { RedlinePanel } from '../components/lifecycle/RedlinePanel'
 import { ReportPanel } from '../components/lifecycle/ReportPanel'
 import { StateCard } from '../components/lifecycle/StateCard'
+import { Breadcrumbs } from '../components/shell/Breadcrumbs'
 import { Inspector, TopBar } from '../components/shell/TopBar'
 import { LinkButton } from '../components/ui/Button'
 import { buildRegionLabelMap } from '../lib/contractSemantics'
 import { contractPackLabel } from '../lib/evidence'
 import { dateTime } from '../lib/dates'
 import { clauseBodyText, sideChip, typeChip } from '../lib/lifecycleView'
+import { knowledgeUsedText } from '../lib/reviews'
 import { classifyTriggerError, redlineTriggerErrorNotice } from '../lib/redline'
 import {
   REVIEWS_PATH,
-  START_REVIEW_PATH,
   activityEvents,
   isPostFinalize,
   journey,
@@ -123,27 +124,13 @@ export function ReviewLifecyclePage() {
   const title = pinnedFilename ?? contractQuery.data?.title ?? 'Contract review'
   const workspaceTo = workspacePath(contractId, reviewId)
 
-  const crumbs = (
-    <nav className="rv-crumbs" aria-label="Breadcrumb">
-      <Link to={REVIEWS_PATH}>Contract reviews</Link>
-      <span className="rv-crumbs__sep" aria-hidden="true">
-        /
-      </span>
-      <b aria-current="page">{summary ? title : 'Review'}</b>
-    </nav>
-  )
+  const crumbs = <Breadcrumbs crumbs={[{ label: 'Reviews', to: REVIEWS_PATH }, { label: summary ? title : 'Review' }]} />
 
-  const shell = (content: ReactNode, rail?: ReactNode) => (
+  // The top bar carries this review's next step, not a new review: Start review is on Reviews and Home.
+  const shell = (content: ReactNode, rail?: ReactNode, actions?: ReactNode) => (
     <>
       <div className="rv-main">
-        <TopBar
-          title={crumbs}
-          actions={
-            <LinkButton to={START_REVIEW_PATH} variant="primary" compact>
-              Start review
-            </LinkButton>
-          }
-        />
+        <TopBar pageTitle={summary ? title : 'Review'} title={crumbs} actions={actions} />
         <div className="rv-scroll">
           <div className="rv-lc">{content}</div>
         </div>
@@ -153,7 +140,7 @@ export function ReviewLifecyclePage() {
   )
 
   if (!contractId || !reviewId) {
-    return shell(<Notice tone="error" message="Missing contract or review id." />)
+    return shell(<Notice tone="error" message="This review link is incomplete." />)
   }
   if (summaryQuery.isPending) return shell(<Notice message="Loading review…" />)
 
@@ -179,21 +166,28 @@ export function ReviewLifecyclePage() {
   const status = key ? lifecycleStatus(key) : null
   const type = typeChip(profile)
   const side = sideChip(profile)
+  const knowledgeUsed = knowledgeUsedText(summary.snapshot?.playbooksUsed ?? null)
   const humanReadFailed = completed && humanReviewQuery.isError
   const changeSetFailed = finalized && changeSetQuery.isError && !isWorkflowNotFoundError(changeSetQuery.error)
   const redlineFailedToLoad = finalized && redlineQuery.isError && !redlineNotStarted
   const redlineForbidden = redlineQuery.isError && isRedlineForbiddenError(redlineQuery.error)
 
   const failedTrigger = trigger.isError ? trigger : retry.isError ? retry : null
+  const triggerFailureCode =
+    failedTrigger?.error instanceof RedlineApiError ? failedTrigger.error.failureCode : null
+  const triggerRetryAfter =
+    failedTrigger?.error instanceof RedlineApiError ? failedTrigger.error.retryAfter : null
   const triggerKind = failedTrigger
     ? classifyTriggerError({
         status: failedTrigger.error instanceof RedlineApiError ? failedTrigger.error.status : null,
+        failureCode: triggerFailureCode,
+        retryAfter: triggerRetryAfter,
         execution,
         executionStateKnown: redlineNotStarted || redlineQuery.isSuccess,
       })
     : null
   // A recorded failure is shown by the failed-redline card itself, so it needs no second notice.
-  const triggerNotice = triggerKind && triggerKind !== 'FAILED_EXECUTION' ? redlineTriggerErrorNotice(triggerKind) : null
+  const triggerNotice = triggerKind && triggerKind !== 'FAILED_EXECUTION' ? redlineTriggerErrorNotice(triggerKind, triggerFailureCode) : null
 
   const findings = findingsQuery.data?.items ?? []
   const findingsById = new Map(findings.map((finding) => [finding.id, finding]))
@@ -212,7 +206,7 @@ export function ReviewLifecyclePage() {
     body = (
       <Notice
         tone="error"
-        message="Human review state could not be loaded, so this review cannot be placed in its lifecycle."
+        message="Could not load this review's progress."
         onRetry={() => void humanReviewQuery.refetch()}
       />
     )
@@ -230,12 +224,12 @@ export function ReviewLifecyclePage() {
     ) : (
       <Notice
         tone="error"
-        message="The redline execution could not be loaded."
+        message="The redline could not be loaded."
         onRetry={() => void redlineQuery.refetch()}
       />
     )
   } else if (!key) {
-    body = <Notice message="Loading review state…" />
+    body = <Notice message="Loading review…" />
   } else if (!isPostFinalize(key)) {
     body = (
       <>
@@ -333,16 +327,21 @@ export function ReviewLifecyclePage() {
             </span>
           </div>
         </div>
-        {key && opensWorkspace(key) ? (
-          <div className="rv-lc-head__actions">
-            <LinkButton to={workspaceTo}>Open Review Workspace</LinkButton>
-          </div>
-        ) : null}
       </header>
+      {knowledgeUsed !== null ? (
+        <p className="rv-lc-quiet">
+          {summary.snapshot?.playbooksUsed?.length === 0 ? knowledgeUsed : `Knowledge used: ${knowledgeUsed}`}
+        </p>
+      ) : null}
       {key ? <Journey steps={journey(key, humanReview)} /> : null}
       {body}
     </>,
     <LifecycleRail summary={summary} document={summary.document} packLabel={packLabel} events={activityEvents(facts)} />,
+    key && opensWorkspace(key) ? (
+      <LinkButton to={workspaceTo} variant="primary" compact>
+        Open review
+      </LinkButton>
+    ) : null,
   )
 }
 

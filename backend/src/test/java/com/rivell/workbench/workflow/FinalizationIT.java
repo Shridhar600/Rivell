@@ -263,6 +263,50 @@ class FinalizationIT {
         assertThat(set.get("changes").size()).isZero();
     }
 
+    /**
+     * Final review C3: a run whose plan did not fully execute can look mostly healthy and still
+     * leave clauses unreviewed. Any failed, skipped or deadline-degraded check must block
+     * finalization. An honest degraded result (the model answered, but partially) is different: it
+     * covers its clause, so it must stay finalizable exactly as before.
+     */
+    @Test
+    void aCheckThatDidNotRunBlocksFinalizationWhileAnHonestDegradeDoesNot() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+        decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "REJECT", "rejectReason": "KEEP_AS_DRAFTED"}
+                """);
+        var executionId = jdbcClient.sql("""
+                select id from review_check_execution
+                where run_id = :runId
+                order by id
+                limit 1
+                """)
+                .param("runId", fixture.run().id())
+                .query(UUID.class)
+                .single();
+
+        degrade(executionId, "provider_unavailable:ProviderTimeoutException");
+        mockMvc.perform(get("/api/reviews/{id}/human-review", fixture.review().id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.readyToFinalize").value(true))
+                .andExpect(jsonPath("$.data.blockers[?(@.code == 'ANALYSIS_PARTIAL')]")
+                        .doesNotExist());
+
+        degrade(executionId, ReviewAnalysisService.DEADLINE_DEGRADED_REASON);
+        mockMvc.perform(get("/api/reviews/{id}/human-review", fixture.review().id()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.readyToFinalize").value(false))
+                .andExpect(jsonPath("$.data.blockers[0].code").value("ANALYSIS_PARTIAL"))
+                .andExpect(jsonPath("$.data.blockers[0].message").value(
+                        "1 check did not finish, so this review does not cover the whole "
+                                + "contract. Start a new review to analyze the contract again."));
+
+        mockMvc.perform(post("/api/reviews/{id}/finalize", fixture.review().id()))
+                .andExpect(status().isConflict());
+    }
+
     @Test
     void escalationBlocksFinalizationUntilRevised() throws Exception {
         var fixture = analyzedMainCorpus();
@@ -291,6 +335,43 @@ class FinalizationIT {
         assertThat(set.get("changes").size()).isZero();
     }
 
+    @Test
+    void keptClauseCreatesNoApprovedChange() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "REJECT", "rejectReason": "KEEP_AS_DRAFTED"}
+                """);
+        var set = finalizeReview(fixture.review().id());
+        assertThat(set.get("changes").size())
+                .as("kept wording is not a redline change")
+                .isZero();
+    }
+
+    @Test
+    void resolvedEscalationUnblocksFinalizationWithNoApprovedChange() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var finding = finding(fixture, ProposedAction.USE_APPROVED_FALLBACK);
+
+        decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 0, "action": "ESCALATE",
+                 "comment": "Needs GC review."}
+                """);
+        var resolved = decide(fixture.review().id(), finding.id(),
+                """
+                {"expectedVersion": 1, "action": "RESOLVE", "approvedBy": "Jane Doe"}
+                """);
+        assertThat(resolved.get("data").get("approvedBy").asText()).isEqualTo("Jane Doe");
+
+        var set = finalizeReview(fixture.review().id());
+        assertThat(set.get("changes").size())
+                .as("a resolved escalation approves the clause as drafted and changes no wording")
+                .isZero();
+    }
+
     /**
      * M10: the product's hardest failure to diagnose is a review that stops. With the default
      * configuration there is no background worker, so an enqueued analysis is never picked up and the
@@ -312,7 +393,7 @@ class FinalizationIT {
                 .andExpect(jsonPath("$.data.backgroundWorkerEnabled").value(false))
                 .andExpect(jsonPath("$.data.analysis").doesNotExist())
                 .andExpect(jsonPath("$.data.stalled[0]")
-                        .value("No analysis run has been created for this review."))
+                        .value("The analysis has not started for this review."))
                 .andReturn();
 
         var body = result.getResponse().getContentAsString();
@@ -347,6 +428,26 @@ class FinalizationIT {
                 // passing null there returned nothing, so the field read zero for every review.
                 .andExpect(jsonPath("$.data.decisions.rejected").value(1))
                 .andExpect(jsonPath("$.data.decisions.accepted").value(0));
+    }
+
+    @Test
+    void diagnosticsReportTheWholeEnvironmentNotOnlyTheSemanticsDigest() throws Exception {
+        var fixture = analyzedMainCorpus();
+        var reviewId = fixture.review().id();
+
+        mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.analysis.environmentMatchesSnapshot").value(true));
+
+        // The digest and the semantics are untouched; only the frozen retrieval index version
+        // drifts from the live one. Diagnostics must report the drift the analysis itself acts on.
+        jdbcClient.sql("update review_snapshot set embedding_index_version = 'drifted-index' "
+                        + "where review_id = ?")
+                .param(reviewId).update();
+
+        mockMvc.perform(get("/api/reviews/{id}/diagnostics", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.analysis.environmentMatchesSnapshot").value(false));
     }
 
     /**
@@ -813,6 +914,17 @@ class FinalizationIT {
             }
         }
         return matches;
+    }
+
+    private void degrade(UUID executionId, String reason) {
+        jdbcClient.sql("""
+                update review_check_execution
+                set status = 'DEGRADED', detail = :detail::jsonb
+                where id = :id
+                """)
+                .param("detail", "{\"degradedReason\":\"" + reason + "\"}")
+                .param("id", executionId)
+                .update();
     }
 
     private int countFinalizations(UUID reviewId) {

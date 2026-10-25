@@ -1,6 +1,7 @@
 package com.rivell.workbench.workflow;
 
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
@@ -79,7 +80,8 @@ public class HumanDecisionService {
                 .findFinding(organizationId, reviewId, activeRun.id(), findingId)
                 .orElseThrow(() -> new FindingNotFoundException(findingId));
         DecisionRules.validateRequest(command.action(), command.approvedAction(),
-                command.approvedLanguage(), command.comment());
+                command.approvedLanguage(), command.comment(), command.rejectReason(),
+                command.approvedBy());
         var decisionId = UUID.randomUUID();
         var planned = command.action() == DecisionAction.ACCEPT
                 || command.action() == DecisionAction.EDIT
@@ -118,11 +120,22 @@ public class HumanDecisionService {
                 throw new DecisionConflictException(findingId, command.expectedVersion(),
                         currentRevision);
             }
+            if (command.action() == DecisionAction.RESOLVE
+                    && (current.isEmpty()
+                            || current.get().action() != DecisionAction.ESCALATE)) {
+                throw new InvalidDecisionException(
+                        "Resolve a finding that is waiting for approval.");
+            }
+            // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would
+            // be stored rounded, so the returned decision would not match a later read of it.
             var decision = new HumanDecision(decisionId, organizationId, reviewId, findingId,
                     activeRun.id(), currentRevision + 1, command.action(),
                     planned == null ? null : planned.actionType(),
                     language(planned), source(planned), draftingEvidence(planned),
-                    command.comment(), identity.userId(), clock.instant(),
+                    command.comment(), command.rejectReason(),
+                    command.approvedBy() == null ? null : command.approvedBy().strip(),
+                    identity.userId(),
+                    clock.instant().truncatedTo(ChronoUnit.MICROS),
                     command.clientRequestId(), current.map(HumanDecision::id).orElse(null));
             if (!decisionRepository.insert(decision)) {
                 throw new DecisionConflictException(findingId, command.expectedVersion(),
@@ -151,7 +164,8 @@ public class HumanDecisionService {
     private static void requireExpectedVersion(DecisionCommand command) {
         if (command.expectedVersion() == null || command.expectedVersion() < 0) {
             throw new InvalidDecisionException(
-                    "expectedVersion is required and must be >= 0 (0 when no decision exists)");
+                    "Reload the review before you decide. Rivell needs the current version of "
+                            + "this finding.");
         }
     }
 }

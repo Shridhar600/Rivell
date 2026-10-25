@@ -48,16 +48,16 @@ export interface Lifecycle {
 }
 
 const LIFECYCLE: Record<Exclude<LifecycleKey, 'unknown'>, Omit<Lifecycle, 'key'>> = {
-  queued: { label: 'Queued', variant: 'plain', glyph: 'none', group: 'running' },
+  queued: { label: 'Waiting to start', variant: 'plain', glyph: 'none', group: 'running' },
   analyzing: { label: 'Analyzing', variant: 'plain', glyph: 'spin', group: 'running' },
   failed: { label: 'Analysis failed', variant: 'red', glyph: 'none', group: 'needs' },
   completed: { label: 'Ready for review', variant: 'am', glyph: 'none', group: 'needs' },
   progress: { label: 'In review', variant: 'ok', glyph: 'none', group: 'needs' },
-  blocked: { label: 'Escalation blocking', variant: 'am', glyph: 'none', group: 'needs' },
+  blocked: { label: 'Escalated, needs resolution', variant: 'am', glyph: 'none', group: 'needs' },
   ready: { label: 'Ready to finalize', variant: 'ok', glyph: 'none', group: 'needs' },
   // Not in the canonical table: a real domain state it has no word for. The analysis finished but
   // no planned check completed, so there is nothing to review and the server blocks finalizing.
-  degraded: { label: 'Analysis degraded', variant: 'am', glyph: 'none', group: 'needs' },
+  degraded: { label: 'Analysis incomplete', variant: 'am', glyph: 'none', group: 'needs' },
   finalized: { label: 'Finalized', variant: 'dk', glyph: 'lock', group: 'done' },
   finalized_zero: { label: 'Review completed', variant: 'dk', glyph: 'lock', group: 'done' },
   rl_verified: { label: 'Verified redline', variant: 'ok', glyph: 'none', group: 'done' },
@@ -176,9 +176,9 @@ function progressFor(review: ReviewListItem, lifecycle: Lifecycle): string {
       return count === null || count === undefined ? 'Verified' : plural(count, 'change verified', 'changes verified')
     }
     case 'rl_failed':
-      return 'Execution failed'
+      return 'Redline could not be generated'
     default:
-      return plural(review.findings, 'Finding', 'Findings')
+      return plural(review.findings, 'finding', 'findings')
   }
 }
 

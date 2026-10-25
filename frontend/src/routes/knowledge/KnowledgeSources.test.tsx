@@ -22,13 +22,13 @@ describe('Sources list', () => {
       'Clause Library.xlsx',
       'Commercial MSA Playbook.docx',
     ])
-    expect(rows[0]).toHaveTextContent('Extraction failed')
+    expect(rows[0]).toHaveTextContent('Could not read file')
     expect(rows[1]).toHaveTextContent('Awaiting review')
-    expect(rows[1]).toHaveTextContent('Compilation in review, 1 of 2 candidates reviewed')
-    expect(rows[2]).toHaveTextContent('Clause library, XLSX')
-    expect(rows[2]).toHaveTextContent('3 clause variants published in publication 1')
+    expect(rows[1]).toHaveTextContent('Draft, 1 of 2 entries reviewed')
+    expect(rows[2]).toHaveTextContent('Clause library, Excel file')
+    expect(rows[2]).toHaveTextContent('3 clause variants published in knowledge version 1')
     expect(rows[3]).toHaveTextContent('Published')
-    expect(rows[3]).toHaveTextContent('4 positions published in publications 1, 2')
+    expect(rows[3]).toHaveTextContent('4 positions published in knowledge versions 1, 2')
     expect(rows[3]).toHaveAttribute('href', '/knowledge/sources/pb')
   })
 
@@ -51,8 +51,8 @@ describe('Sources list', () => {
     stubKnowledgeApi(world)
     renderKnowledge('/knowledge/sources')
     const row = (await screen.findByText('Broken.docx')).closest('a') as HTMLElement
-    expect(row).toHaveTextContent('Compiling')
-    expect(row).toHaveTextContent('Compiling candidates')
+    expect(row).toHaveTextContent('Reading')
+    expect(row).toHaveTextContent('Reading entries')
   })
 })
 
@@ -61,7 +61,7 @@ describe('Source detail and lineage', () => {
     stubKnowledgeApi(buildWorld())
     const view = renderKnowledge(`/knowledge/sources/${id}${query}`)
     await screen.findByRole('heading', { level: 1 })
-    await screen.findByLabelText('Lineage: source, compilation, published knowledge')
+    await screen.findByLabelText('Lineage: source, draft, published knowledge')
     // The extracted original loads after the lineage. Wait for it so a test never reads half a page.
     if (content) await screen.findByRole('heading', { name: 'Original content' })
     return view
@@ -69,18 +69,33 @@ describe('Source detail and lineage', () => {
 
   it('shows Source, Compilation and Published knowledge from real relationships', async () => {
     await open('pb')
-    const lineage = screen.getByLabelText('Lineage: source, compilation, published knowledge')
+    const lineage = screen.getByLabelText('Lineage: source, draft, published knowledge')
     expect(within(lineage).getByText('Commercial MSA Playbook.docx')).toBeInTheDocument()
-    expect(within(lineage).getByText('Compiled and reviewed')).toBeInTheDocument()
+    expect(within(lineage).getByText('Drafted and reviewed')).toBeInTheDocument()
     expect(within(lineage).getByText('4 published, 0 rejected')).toBeInTheDocument()
     const published = within(lineage).getByRole('link', { name: /Published knowledge/ })
     expect(published).toHaveAttribute('href', '/knowledge/playbooks/pb')
-    expect(published).toHaveTextContent('Publications 1, 2')
+    expect(published).toHaveTextContent('Knowledge versions 1, 2')
     expect(published).toHaveTextContent('3 positions in use')
-    expect(screen.getByText('Immutable original')).toBeInTheDocument()
+    expect(screen.getByText('Original cannot be changed')).toBeInTheDocument()
     // The canonical lineage has no download control, so none is offered even though the endpoint exists.
     expect(screen.queryByRole('link', { name: /Download/ })).not.toBeInTheDocument()
     expect(document.querySelector('a[href*="/original"]')).toBeNull()
+  })
+
+  it('shows a published file with no declared types as all contract types, with a narrowing hint', async () => {
+    await open('pb')
+    expect(screen.getAllByText('All contract types').length).toBeGreaterThan(0)
+    expect(
+      screen.getByText('To narrow it, add the file again and choose the contract types.'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not offer the narrowing hint for a file that is not published yet', async () => {
+    await open('draft', '', false)
+    expect(
+      screen.queryByText('To narrow it, add the file again and choose the contract types.'),
+    ).not.toBeInTheDocument()
   })
 
   it('highlights exactly the source nodes the extraction recorded for published knowledge', async () => {
@@ -101,14 +116,14 @@ describe('Source detail and lineage', () => {
     renderKnowledge('/knowledge/sources/pb')
     await screen.findByRole('heading', { name: 'Original content' })
     const passage = (await screen.findByText('Unrelated source text.')).closest('p') as HTMLElement
-    expect(await within(passage).findByText('Not a position (Rivell\u2019s reading)')).toBeInTheDocument()
+    expect(await within(passage).findByText('Not treated as a position')).toBeInTheDocument()
     // a part that became knowledge carries no such mark
-    expect(screen.getByText('Net 45.').closest('p')).not.toHaveTextContent('Not a position')
+    expect(screen.getByText('Net 45.').closest('p')).not.toHaveTextContent('Not treated as a position')
   })
 
   it('claims node-level lineage only, and no page number', async () => {
     await open('pb')
-    expect(screen.getByText('Highlights mark the exact source nodes')).toBeInTheDocument()
+    expect(screen.getByText('Highlights show where each entry came from.')).toBeInTheDocument()
     expect(screen.queryByText(/page \d/i)).not.toBeInTheDocument()
   })
 
@@ -135,18 +150,18 @@ describe('Source detail and lineage', () => {
 
   it('does not claim lineage for a source with nothing published', async () => {
     await open('draft', '', false)
-    const lineage = screen.getByLabelText('Lineage: source, compilation, published knowledge')
-    expect(within(lineage).getByText('2 candidates, 1 reviewed')).toBeInTheDocument()
+    const lineage = screen.getByLabelText('Lineage: source, draft, published knowledge')
+    expect(within(lineage).getByText('2 entries, 1 reviewed')).toBeInTheDocument()
     expect(within(lineage).getByText('None yet')).toBeInTheDocument()
-    expect(within(lineage).getByRole('link', { name: /Continue review/ })).toHaveAttribute('href', '/knowledge/compilations/draft')
+    expect(within(lineage).getByRole('link', { name: /Continue draft/ })).toHaveAttribute('href', '/knowledge/compilations/draft')
     expect(screen.queryByRole('list', { name: 'Produced positions' })).not.toBeInTheDocument()
   })
 
   it('shows a failed extraction without pretending there is content', async () => {
     await open('broken', '', false)
-    expect(screen.getByText(/could not be extracted/i)).toBeInTheDocument()
-    const lineage = screen.getByLabelText('Lineage: source, compilation, published knowledge')
-    expect(within(lineage).getAllByText('Extraction failed').length).toBeGreaterThan(0)
+    expect(screen.getByText(/could not be read/i)).toBeInTheDocument()
+    const lineage = screen.getByLabelText('Lineage: source, draft, published knowledge')
+    expect(within(lineage).getAllByText('Could not read file').length).toBeGreaterThan(0)
     expect(within(lineage).getByText('None yet')).toBeInTheDocument()
   })
 
@@ -155,7 +170,7 @@ describe('Source detail and lineage', () => {
     const produced = screen.getByRole('list', { name: 'Produced clauses' })
     expect(within(produced).getAllByRole('button')).toHaveLength(3)
     expect(screen.getByRole('link', { name: /Open clause/ })).toHaveAttribute('href', '/knowledge/clauses/LIMITATION_OF_LIABILITY?variant=c2')
-    const lineage = screen.getByLabelText('Lineage: source, compilation, published knowledge')
+    const lineage = screen.getByLabelText('Lineage: source, draft, published knowledge')
     expect(within(lineage).getByRole('link', { name: /Published knowledge/ })).toHaveAttribute('href', '/knowledge/clauses')
   })
 
@@ -175,7 +190,7 @@ describe('Source detail and lineage', () => {
     world.structure.pb = []
     stubKnowledgeApi(world)
     renderKnowledge('/knowledge/sources/pb')
-    expect(await screen.findByText(/extracted content could not be shown/i)).toBeInTheDocument()
+    expect(await screen.findByText(/content Rivell read could not be shown/i)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Original content' })).not.toBeInTheDocument()
   })
 

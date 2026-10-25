@@ -12,7 +12,7 @@ function envelope(data: unknown) {
 }
 
 /** Serves the Review list, records every path asked for, and answers Knowledge with data Home must ignore. */
-function stubApi(options: { reviews?: unknown[]; reviewsStatus?: number; nextCursor?: string | null } = {}) {
+function stubApi(options: { reviews?: unknown[]; reviewsStatus?: number; nextCursor?: string | null; publications?: unknown[] } = {}) {
   const paths: string[] = []
   vi.stubGlobal(
     'fetch',
@@ -33,23 +33,8 @@ function stubApi(options: { reviews?: unknown[]; reviewsStatus?: number; nextCur
           ),
         )
       }
-      if (url.pathname === '/api/knowledge/artifacts') {
-        return new Response(
-          JSON.stringify(
-            envelope([
-              {
-                id: 'k1',
-                artifactType: 'PLAYBOOK',
-                filename: 'Compiling Playbook.docx',
-                contentType: 'x',
-                sizeBytes: 1,
-                sha256: 's',
-                ingestStatus: 'EXTRACTING',
-                createdAt: '2026-10-04T08:00:00Z',
-              },
-            ]),
-          ),
-        )
+      if (url.pathname === '/api/knowledge/publications') {
+        return new Response(JSON.stringify(envelope(options.publications ?? [])))
       }
       return new Response(JSON.stringify(envelope([])))
     }),
@@ -82,7 +67,7 @@ describe('Home starts work', () => {
     const bar = document.querySelector('.rv-topbar') as HTMLElement
     expect(within(bar).getByRole('link', { name: 'Start review' })).toHaveAttribute('href', '/reviews/new')
     expect(within(bar).getByRole('link', { name: 'Add knowledge' })).toHaveAttribute('href', '/knowledge?add=1')
-    await screen.findByText('No reviews yet')
+    await screen.findByText('Add your company’s playbook')
   })
 
   it('goes to the Start review page', async () => {
@@ -135,7 +120,7 @@ describe('Home sections', () => {
       ['Redline Failed Vendor.docx', 'Redline failed'],
       ['Unresolved MSA.docx', 'In review'],
       ['Fresh NDA.docx', 'Ready for review'],
-      ['Escalated Order Form.docx', 'Escalation blocking'],
+      ['Escalated Order Form.docx', 'Escalated, needs resolution'],
       ['Ready SOW.docx', 'Ready to finalize'],
     ]) {
       const row = within(needs).getByRole('option', { name: new RegExp(name.replace('.', '\\.')) })
@@ -150,7 +135,7 @@ describe('Home sections', () => {
     expect(within(needs).queryByText(/Queued NDA|Analyzing MSA/)).not.toBeInTheDocument()
     const running = screen.getByRole('region', { name: 'Running' })
     await userEvent.click(within(running).getByRole('button', { name: /Running/ }))
-    expect(within(running).getByRole('option', { name: /Queued NDA\.docx/ })).toHaveTextContent('Queued')
+    expect(within(running).getByRole('option', { name: /Queued NDA\.docx/ })).toHaveTextContent('Waiting to start')
     expect(within(running).getByRole('option', { name: /Analyzing MSA\.docx/ })).toHaveTextContent('Analyzing')
   })
 
@@ -187,8 +172,8 @@ describe('Home sections', () => {
     stubApi({ reviews: [LIFECYCLE_ROWS.unresolved, LIFECYCLE_ROWS.escalated, LIFECYCLE_ROWS.analyzing] })
     renderHome()
     expect(await screen.findByRole('button', { name: '2 need you' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '1 analyzing' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /queued/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '1 In progress' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Waiting to start/ })).not.toBeInTheDocument()
   })
 
   it('opens Running from its count when it is collapsed', async () => {
@@ -197,7 +182,7 @@ describe('Home sections', () => {
     const running = await screen.findByRole('region', { name: 'Running' })
     expect(within(running).getByRole('button', { name: /Running/ })).toHaveAttribute('aria-expanded', 'false')
     Element.prototype.scrollIntoView = vi.fn()
-    await userEvent.click(screen.getByRole('button', { name: '1 queued' }))
+    await userEvent.click(screen.getByRole('button', { name: '1 Waiting to start' }))
     expect(within(running).getByRole('button', { name: /Running/ })).toHaveAttribute('aria-expanded', 'true')
   })
 
@@ -233,10 +218,38 @@ describe('Home inspector', () => {
 })
 
 describe('Home states', () => {
+  it('offers the knowledge setup first when nothing has been published', async () => {
+    stubApi({ reviews: [] })
+    renderHome()
+    expect(await screen.findByText('Add your company’s playbook')).toBeInTheDocument()
+    const card = screen.getByText('Add your company’s playbook').closest('.rv-state') as HTMLElement
+    expect(within(card).getByRole('link', { name: 'Add knowledge' })).toHaveAttribute('href', '/knowledge?add=1')
+    expect(within(card).getByRole('link', { name: 'Start review' })).toHaveAttribute('href', '/reviews/new')
+  })
+
+  it('keeps the ordinary empty state once knowledge is published', async () => {
+    stubApi({
+      reviews: [],
+      publications: [
+        {
+          id: 'p1',
+          organizationId: 'o1',
+          publicationNumber: 3,
+          note: null,
+          items: [],
+          createdAt: '2026-10-01T09:00:00Z',
+        },
+      ],
+    })
+    renderHome()
+    expect(await screen.findByText('No reviews yet')).toBeInTheDocument()
+    expect(screen.queryByText('Add your company’s playbook')).not.toBeInTheDocument()
+  })
+
   it('shows an empty state only after a successful empty read', async () => {
     stubApi({ reviews: [] })
     renderHome()
-    expect(await screen.findByText('No reviews yet')).toBeInTheDocument()
+    expect(await screen.findByText('Add your company’s playbook')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Needs you' })).not.toBeInTheDocument()
   })
 
@@ -268,7 +281,7 @@ describe('Home states', () => {
   it('does not hide a Review it cannot place', async () => {
     stubApi({ reviews: [reviewWire('p', 'COMPLETED', 'No state.docx')] })
     renderHome()
-    expect(await screen.findByText(/1 review has no state Home can place/)).toBeInTheDocument()
+    expect(await screen.findByText(/1 review is not shown here/)).toBeInTheDocument()
   })
 
   it('never leaks a raw server body', async () => {

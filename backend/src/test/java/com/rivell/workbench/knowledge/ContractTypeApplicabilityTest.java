@@ -9,14 +9,65 @@ class ContractTypeApplicabilityTest {
     @Test
     void namedTypesMapToCodesAndUnmodelledTypesToOther() {
         assertThat(ContractTypeApplicability.contractTypes("MSA, Supply, Services.", true))
-                .containsExactlyInAnyOrder("MSA", "OTHER");
+                .containsExactlyInAnyOrder("MSA", "SUPPLY", "SERVICES");
         assertThat(ContractTypeApplicability.contractTypes("Software licence, SaaS order form", true))
-                .containsExactlyInAnyOrder("SWL", "SAAS");
+                .containsExactlyInAnyOrder("SWL", "ORDER_FORM");
         assertThat(ContractTypeApplicability.contractTypes("NDAs and DPAs", true))
                 .containsExactlyInAnyOrder("NDA", "DPA");
         assertThat(ContractTypeApplicability.contractTypes("Mutual NDA / statement of work", true))
                 .containsExactlyInAnyOrder("MNDA", "SOW");
-        assertThat(ContractTypeApplicability.contractTypes("Supply", true)).containsExactly("OTHER");
+        assertThat(ContractTypeApplicability.contractTypes("Supply", true)).containsExactly("SUPPLY");
+        assertThat(ContractTypeApplicability.contractTypes("Unmodelled kind", true))
+                .containsExactly("OTHER");
+    }
+
+    @Test
+    void theCommercialTypesMapFromTheNamesPlaybooksUse() {
+        assertThat(ContractTypeApplicability.contractTypes(
+                "Supply, Purchase agreement, Procurement agreement", true))
+                .containsExactly("SUPPLY");
+        assertThat(ContractTypeApplicability.contractTypes(
+                "Services, Professional services, Consulting agreement, Consultancy agreement", true))
+                .containsExactly("SERVICES");
+        assertThat(ContractTypeApplicability.contractTypes(
+                "Reseller, Distribution agreement, Distributor, Channel partner", true))
+                .containsExactly("RESELLER");
+        assertThat(ContractTypeApplicability.contractTypes(
+                "Order form, Purchase order, Order schedule", true))
+                .containsExactly("ORDER_FORM");
+        assertThat(ContractTypeApplicability.contractTypes(
+                "Amendment, Variation, Addendum", true))
+                .containsExactly("AMENDMENT");
+    }
+
+    @Test
+    void shortCodesMapLikeTheNamesTheyStandFor() {
+        assertThat(ContractTypeApplicability.contractTypes("ONDA", true)).containsExactly("ONDA");
+        assertThat(ContractTypeApplicability.contractTypes("SWL", true)).containsExactly("SWL");
+        assertThat(ContractTypeApplicability.contractTypes("MNDA", true)).containsExactly("MNDA");
+        assertThat(ContractTypeApplicability.contractTypes("NDA", true)).containsExactly("NDA");
+    }
+
+    @Test
+    void hyphensReadAsSpacesBetweenWords() {
+        assertThat(ContractTypeApplicability.contractTypes("Master-services agreement", true))
+                .containsExactly("MSA");
+        assertThat(ContractTypeApplicability.contractTypes("Data-processing addendum", true))
+                .containsExactly("DPA");
+        assertThat(ContractTypeApplicability.contractTypes("SaaS-order-form", true))
+                .containsExactly("ORDER_FORM");
+    }
+
+    @Test
+    void specificNamesWinOverTheGenericWordsTheyContain() {
+        assertThat(ContractTypeApplicability.contractTypes("Master services agreement", true))
+                .containsExactly("MSA");
+        assertThat(ContractTypeApplicability.contractTypes("Data processing addendum", true))
+                .containsExactly("DPA");
+        assertThat(ContractTypeApplicability.contractTypes("Statement of work", true))
+                .containsExactly("SOW");
+        assertThat(ContractTypeApplicability.contractTypes("SaaS order form", true))
+                .containsExactly("ORDER_FORM");
     }
 
     @Test

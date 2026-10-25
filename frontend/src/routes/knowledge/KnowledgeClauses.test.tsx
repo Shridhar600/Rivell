@@ -33,7 +33,7 @@ describe('Clause library', () => {
     await screen.findByRole('heading', { level: 1, name: 'Clause library' })
     expect(await screen.findByRole('tab', { name: 'Clauses (2)' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('Current')).toBeInTheDocument()
-    expect(screen.getByText('Publication 1')).toBeInTheDocument()
+    expect(screen.getByText('Knowledge version 1')).toBeInTheDocument()
   })
 
   it('shows version history only from real publications and reads an older one as its own snapshot', async () => {
@@ -46,11 +46,11 @@ describe('Clause library', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Version history' }))
     const history = screen.getByRole('list', { name: 'Version history' })
     const rows = within(history).getAllByRole('listitem')
-    expect(rows.map((row) => row.querySelector('b')?.textContent)).toEqual(['Publication 3 (current)', 'Publication 1'])
+    expect(rows.map((row) => row.querySelector('b')?.textContent)).toEqual(['Knowledge version 3 (current)', 'Knowledge version 1'])
     expect(rows[0]).toHaveTextContent('1 clause variant added')
 
-    await userEvent.click(screen.getByRole('button', { name: 'View publication 1' }))
-    expect(screen.getByRole('note')).toHaveTextContent('Viewing publication 1, superseded by publication 3')
+    await userEvent.click(screen.getByRole('button', { name: 'View knowledge version 1' }))
+    expect(screen.getByRole('note')).toHaveTextContent('You are viewing knowledge version 1. Version 3 is current.')
     await userEvent.click(screen.getByRole('tab', { name: /^Clauses/ }))
     const names = within(screen.getByRole('list', { name: 'Clauses' })).getAllByRole('link').map((row) => row.querySelector('b')?.textContent)
     expect(names).toEqual(['Limitation of liability', 'Audit Rights'])
@@ -83,6 +83,18 @@ describe('Clause detail', () => {
     const variants = screen.getByRole('tablist', { name: 'Variant' })
     expect(within(variants).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Mutual, standard', 'Supplier-favorable'])
     expect(within(variants).getByRole('tab', { name: 'Mutual, standard' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('names the variant\'s own scope in the header, not the file default', async () => {
+    const world = buildWorld()
+    world.candidates.cl = (world.candidates.cl ?? []).map((entry) =>
+      entry.id === 'c1' ? { ...entry, sourceContractTypes: ['NDA'] } : entry,
+    )
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/clauses/LIMITATION_OF_LIABILITY')
+    await screen.findByRole('heading', { level: 1, name: 'Limitation of liability' })
+    expect(screen.getAllByText('NDA').length).toBeGreaterThan(0)
+    expect(screen.queryByText('All contract types')).not.toBeInTheDocument()
   })
 
   it('switches variant and shows that variant\'s own wording and provenance', async () => {
@@ -128,7 +140,7 @@ describe('Clause detail', () => {
     stubKnowledgeApi(world)
     renderKnowledge('/knowledge/clauses/GOVERNING_LAW?publication=1')
     expect(await screen.findByText('This clause is not in the published clause library')).toBeInTheDocument()
-    expect(screen.getByText('It is not part of publication 1.')).toBeInTheDocument()
+    expect(screen.getByText('It is not part of knowledge version 1.')).toBeInTheDocument()
   })
 
   it('says so for a clause that does not exist', async () => {

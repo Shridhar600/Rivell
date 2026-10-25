@@ -84,7 +84,7 @@ export function useStartReview() {
             phase: 'failed',
             failure: {
               stage,
-              message: 'Rivell could not read this file as a contract, so no review was started. Choose another .docx.',
+              message: 'Rivell could not read this file as a contract, so no review was started. Choose another Word file.',
               intact: 'The file is stored unchanged.',
               contractId,
             },
@@ -105,7 +105,7 @@ export function useStartReview() {
               phase: 'failed',
               failure: {
                 stage,
-                message: `The contract's semantic analysis is ${semantics.enrichmentStatus === 'UNKNOWN' ? 'in a state Rivell does not recognise' : `not ready (${semantics.enrichmentStatus})`}, so no review was started.`,
+                message: `The contract's analysis is not ready yet, so no review was started.`,
                 intact: UPLOADED,
                 contractId,
               },
@@ -134,6 +134,17 @@ export function useStartReview() {
     },
     [navigate, queryClient],
   )
+
+  // The three steps run in this page. Closing or reloading it midway would leave an uploaded
+  // contract with no review, so the browser asks first. Moving inside Rivell is safe: the steps
+  // carry on and the review appears in the list.
+  const starting = status.phase === 'running'
+  useEffect(() => {
+    if (!starting) return
+    const hold = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', hold)
+    return () => window.removeEventListener('beforeunload', hold)
+  }, [starting])
 
   const reset = useCallback(() => setStatus({ phase: 'idle' }), [])
 

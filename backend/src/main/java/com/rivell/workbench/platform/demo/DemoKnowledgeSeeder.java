@@ -32,7 +32,7 @@ import com.rivell.workbench.knowledge.ReviewStatus;
 final class DemoKnowledgeSeeder {
 
     private static final Logger log = LoggerFactory.getLogger(DemoKnowledgeSeeder.class);
-    private static final String NOTE = "Rivell demo scenario publication";
+    private static final String NOTE = "Rivell demo scenario knowledge version";
 
     private final KnowledgeIngestionService ingestion;
     private final KnowledgeQueryService queries;

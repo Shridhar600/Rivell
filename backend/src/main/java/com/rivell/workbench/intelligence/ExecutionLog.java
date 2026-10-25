@@ -34,13 +34,19 @@ final class ExecutionLog {
 
     /** One failed attempt that {@link ProviderRetry} will repeat; not a failed execution. */
     static void retried(String kind, String specId, int specVersion, String providerId,
-            RuntimeException failure) {
+            ProviderRetry.RetryEvent event) {
+        var failure = event.failure();
         LOG.atInfo()
                 .addKeyValue("kind", kind)
                 .addKeyValue("spec", specId)
                 .addKeyValue("specVersion", specVersion)
                 .addKeyValue("provider", providerId)
                 .addKeyValue("outcome", "RETRIED")
+                .addKeyValue("attempt", event.attempt())
+                .addKeyValue("backoffMs", event.backoff().toMillis())
+                .addKeyValue("retryAfterMs", event.retryAfter().toMillis())
+                .addKeyValue("httpStatus", failure instanceof ProviderUnavailableException unavailable
+                        ? unavailable.httpStatus() : null)
                 .addKeyValue("error", failure.getClass().getSimpleName())
                 .addKeyValue("reason", failure.getMessage())
                 .log(EVENT);

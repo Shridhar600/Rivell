@@ -70,10 +70,13 @@ public class ContractEnrichmentService {
             if (structure.nodes().isEmpty()) {
                 throw new ContractNotReadableException();
             }
-            var result = enricher.enrich(structure.nodes(), profile, structure.parseWarnings());
-            var merged = mergeCorrections(prior, result);
-            transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(
-                    ready(merged, versionId, organizationId, profile)));
+            try (var ignored = org.slf4j.MDC.putCloseable(
+                    "artifactId", versionId.toString())) {
+                var result = enricher.enrich(structure.nodes(), profile, structure.parseWarnings());
+                var merged = mergeCorrections(prior, result);
+                transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(
+                        ready(merged, versionId, organizationId, profile)));
+            }
             return getSemantics(contractId, versionNumber);
         } catch (RuntimeException e) {
             persistFailed(versionId, organizationId, profile, e);
@@ -156,7 +159,7 @@ public class ContractEnrichmentService {
      */
     private FactCorrection mergeCorrectionPatch(FactCorrection current, FactCorrection patch) {
         if (!patch.corrected()) {
-            throw new InvalidCorrectionException(null, "A correction must carry a change");
+            throw new InvalidCorrectionException(null, "Choose a change to make.");
         }
         var primary = patch.primaryConcept() == null
                 ? current.primaryConcept()
@@ -286,7 +289,8 @@ public class ContractEnrichmentService {
         var secondaries = reordered.stream()
                 .filter(concept -> !concept.equals(effective))
                 .toList();
-        return new ConceptClassification(reordered, secondaries, classification.probabilities());
+        return new ConceptClassification(reordered, secondaries,
+                classification.probabilities(), classification.headingTopic());
     }
 
     private void validateCorrection(ClauseSemantics clause, FactCorrection correction) {
@@ -294,10 +298,10 @@ public class ContractEnrichmentService {
             try {
                 var key = ConceptKey.of(correction.primaryConcept());
                 if (!conceptRegistry.contains(key)) {
-                    throw new InvalidCorrectionException(clause.id(), "Unknown concept");
+                    throw new InvalidCorrectionException(clause.id(), "That topic is not recognized.");
                 }
             } catch (IllegalArgumentException e) {
-                throw new InvalidCorrectionException(clause.id(), "Unknown concept");
+                throw new InvalidCorrectionException(clause.id(), "That topic is not recognized.");
             }
         }
         var changedValues = correction.factValues() == null ? Map.<String, String>of()
@@ -312,7 +316,7 @@ public class ContractEnrichmentService {
                             .anyMatch(field -> FactSchema.byId(schema).fields().contains(field)))
                     .findFirst()
                     .orElseThrow(() -> new InvalidCorrectionException(clause.id(),
-                            "Corrected fields do not belong to the clause's fact schemas"));
+                            "These fields do not belong to this clause."));
             var schema = FactSchema.byId(schemaId);
             var merged = new LinkedHashMap<String, String>();
             for (var fact : clause.facts()) {

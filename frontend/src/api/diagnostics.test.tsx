@@ -133,7 +133,7 @@ describe('parseReviewDiagnostics against recorded backend responses', () => {
     expect(parsed.analysis?.trigger).toBe('INITIAL')
     expect(parsed.analysis?.pipelineVersion).toBe('rivell-review-pipeline-1')
     expect(parsed.analysis?.runDurationSeconds).toBe(0)
-    expect(parsed.analysis?.semanticsMatchFrozenSnapshot).toBe(true)
+    expect(parsed.analysis?.environmentMatchesSnapshot).toBe(true)
     expect(parsed.analysis?.checks).toHaveLength(8)
     expect(parsed.analysis?.checks[0].key).toMatch(/^PRESENCE:/)
     expect(parsed.findings.total).toBe(2)
@@ -193,13 +193,12 @@ describe('parseReviewDiagnostics', () => {
     expect(parsed.stalled).toEqual([])
   })
 
-  it('renames the misleading server fields rather than passing them through', () => {
+  it('renames the misleading duration field and keeps the environment flag as the server names it', () => {
     const parsed = parseReviewDiagnostics(completedPayload)
 
     expect(parsed.analysis?.runDurationSeconds).toBe(120)
     expect(parsed.analysis).not.toHaveProperty('ageSeconds')
-    expect(parsed.analysis?.semanticsMatchFrozenSnapshot).toBe(true)
-    expect(parsed.analysis).not.toHaveProperty('environmentMatchesSnapshot')
+    expect(parsed.analysis?.environmentMatchesSnapshot).toBe(true)
   })
 
   it('keeps only a presence flag for every internal string', () => {
@@ -274,12 +273,12 @@ describe('parseReviewDiagnostics', () => {
 
   it('fails closed when the stall list is not a list', () => {
     expect(() => parseReviewDiagnostics({ ...completedPayload, stalled: 'none' })).toThrow(
-      /malformed/i,
+      /could not read this response/i,
     )
-    expect(() => parseReviewDiagnostics({ ...completedPayload, stalled: null })).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics({ ...completedPayload, stalled: null })).toThrow(/could not read this response/i)
     const { stalled, ...withoutStalled } = completedPayload
     void stalled
-    expect(() => parseReviewDiagnostics(withoutStalled)).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics(withoutStalled)).toThrow(/could not read this response/i)
   })
 
   it('marks a truncated stall line instead of cutting it mid-word', () => {
@@ -303,7 +302,7 @@ describe('parseReviewDiagnostics', () => {
   })
 
   it('rejects a payload with no review identity', () => {
-    expect(() => parseReviewDiagnostics({ contractId: 'c-1' })).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics({ contractId: 'c-1' })).toThrow(/could not read this response/i)
   })
 
   it('fails closed rather than reporting a missing count block as zero', () => {
@@ -312,23 +311,23 @@ describe('parseReviewDiagnostics', () => {
     void decisions
     void finalization
 
-    expect(() => parseReviewDiagnostics(withoutCounts)).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics(withoutCounts)).toThrow(/could not read this response/i)
     expect(() =>
       parseReviewDiagnostics({ ...completedPayload, findings: null }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
     expect(() =>
       parseReviewDiagnostics({ ...completedPayload, finalization: null }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
     expect(() =>
       parseReviewDiagnostics({ ...completedPayload, decisions: undefined }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
   })
 
   it('fails closed when the worker flag is missing rather than claiming it is off', () => {
     const { backgroundWorkerEnabled, ...withoutWorker } = completedPayload
     void backgroundWorkerEnabled
 
-    expect(() => parseReviewDiagnostics(withoutWorker)).toThrow(/malformed/i)
+    expect(() => parseReviewDiagnostics(withoutWorker)).toThrow(/could not read this response/i)
   })
 })
 

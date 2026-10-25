@@ -2,8 +2,9 @@ package com.rivell.workbench.knowledge;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
+import com.rivell.workbench.contracts.ContractType;
+import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
@@ -11,8 +12,8 @@ import com.rivell.workbench.intelligence.YesNoAnswer;
 /**
  * M4 duplicate/conflict/supersession analysis behind the M2 hook port.
  * Stage A (code) narrows plausible published peers by organization-scoped compatibility:
- * same candidate family, same primary concept, compatible declared contract types and
- * paper source, known compatible jurisdiction, and overlapping effective periods.
+ * same candidate family, same primary concept, compatible contract types (declared and record
+ * scope) and paper source, known compatible jurisdiction, and overlapping effective periods.
  * Stage B (code) detects exact duplicates. Stage C (code) resolves deterministic scope
  * overlap. Stage D (Jev) judges each narrowed peer pair for material contradiction and
  * supersession intent — machine proposals only; a human must approve any publication
@@ -42,7 +43,7 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
             if (isExactDuplicate(candidate, peer)) {
                 signals.add(new ConflictSignal(
                         ConflictType.DUPLICATE,
-                        "Matches published candidate with the same label, content, and scope",
+                        "Matches a published entry with the same label, wording and scope.",
                         peer.id()));
                 continue;
             }
@@ -82,7 +83,7 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
     private boolean isExactDuplicate(KnowledgeCandidate candidate, KnowledgeCandidate peer) {
         return sameText(peer.rawLabel(), candidate.rawLabel())
                 && sameText(peer.effectiveContentText(), candidate.effectiveContentText())
-                && sameText(peer.scope().jurisdiction(), candidate.scope().jurisdiction())
+                && Jurisdiction.same(peer.scope().jurisdiction(), candidate.scope().jurisdiction())
                 && sameText(peer.scope().paperSource(), candidate.scope().paperSource())
                 && periodBoundsEqual(peer.scope(), candidate.scope());
     }
@@ -105,16 +106,14 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
                 && yesNo.probability() >= properties.conflictProposal()) {
             signals.add(new ConflictSignal(
                     ConflictType.CONTRADICTS_EXISTING,
-                    "Materially contradicts a published position of the same concept and scope (p="
-                            + yesNo.probability() + ")",
+                    "May contradict a published position on the same topic and scope.",
                     peer.id()));
         }
         if (supersedes instanceof YesNoAnswer yesNo
                 && yesNo.probability() >= properties.supersedeProposal()) {
             signals.add(new ConflictSignal(
                     ConflictType.SUPERSEDES_EXISTING,
-                    "Appears intended to replace a published position of the same concept (p="
-                            + yesNo.probability() + ")",
+                    "Looks like it replaces a published position on the same topic.",
                     peer.id()));
         }
         return signals;
@@ -147,25 +146,21 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
     }
 
     private static boolean compatibleContractTypes(KnowledgeCandidate a, KnowledgeCandidate b) {
-        return overlap(a.scope().declaredContractTypes(), b.scope().declaredContractTypes())
-                && overlap(a.scope().sourceContractTypes(), b.scope().sourceContractTypes());
+        return ContractType.recordsMeetInAContractType(
+                literalWording(a.candidateType()),
+                a.scope().declaredContractTypes(), a.scope().sourceContractTypes(),
+                b.scope().declaredContractTypes(), b.scope().sourceContractTypes());
     }
 
-    private static boolean overlap(Set<String> aTypes, Set<String> bTypes) {
-        if (aTypes.isEmpty() || bTypes.isEmpty()) {
-            return true;
-        }
-        for (var type : aTypes) {
-            if (bTypes.contains(type)) {
-                return true;
-            }
-        }
-        return false;
+    /** A position states a general stance; literal wording is text written for one type. */
+    private static boolean literalWording(CandidateType candidateType) {
+        return candidateType == CandidateType.CLAUSE_VARIANT
+                || candidateType == CandidateType.TEMPLATE_CLAUSE;
     }
 
     private static boolean compatibleJurisdiction(KnowledgeCandidate a, KnowledgeCandidate b) {
         return a.scope().jurisdiction() == null || b.scope().jurisdiction() == null
-                || a.scope().jurisdiction().equalsIgnoreCase(b.scope().jurisdiction());
+                || Jurisdiction.same(a.scope().jurisdiction(), b.scope().jurisdiction());
     }
 
     private static boolean compatiblePaperSource(KnowledgeCandidate a, KnowledgeCandidate b) {

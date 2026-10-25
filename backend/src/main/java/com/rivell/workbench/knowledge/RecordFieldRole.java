@@ -14,7 +14,11 @@ enum RecordFieldRole {
     REFERENCE,
     APPLICABILITY,
     TOPIC,
+    /** The column that names the row itself ("Title", "Clause title", "Name"). */
+    TITLE,
     WORDING,
+    /** Which variant of a clause the record holds: Preferred, Fallback 1, and so on. */
+    VARIANT,
     OTHER;
 
     boolean isPositionBearing() {

@@ -22,8 +22,7 @@ export class AppErrorBoundary extends Component<Props, State> {
         <main role="alert" className="rv-state rv-state--error">
           <h1 className="rv-state__title">Something went wrong</h1>
           <p className="rv-state__body">
-            Rivell could not continue because of an unexpected error. Reload the page; if it keeps
-            happening, contact an administrator.
+            Reload the page. If this keeps happening, contact your administrator.
           </p>
           <button type="button" className="rv-btn rv-btn--compact" onClick={() => window.location.reload()}>
             Reload

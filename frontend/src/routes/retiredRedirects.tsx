@@ -12,7 +12,8 @@ export function ContractPageRedirect() {
   const reviews = useContractReviewsQuery(contractId)
   if (reviews.isPending) return <LoadingState label="Opening the contract's latest review" />
   const latest = (reviews.data?.items ?? [])
-    .filter((review) => review.contractId === contractId)
+    // Ids are UUIDs: a hand-typed or pasted address may differ in letter case only.
+    .filter((review) => review.contractId.toLowerCase() === contractId.toLowerCase())
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]
-  return <Navigate replace to={latest ? `/reviews/${encodeURIComponent(contractId)}/overview/${encodeURIComponent(latest.id)}` : '/reviews'} />
+  return <Navigate replace to={latest ? `/reviews/${encodeURIComponent(latest.contractId)}/overview/${encodeURIComponent(latest.id)}` : '/reviews'} />
 }

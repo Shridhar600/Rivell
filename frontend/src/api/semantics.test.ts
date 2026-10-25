@@ -343,14 +343,14 @@ describe('parseSemanticContract', () => {
 
   it('rejects malformed payloads', () => {
     expect(() => parseSemanticContract({ contractId: 'c1' })).toThrow(
-      /malformed/i,
+      /could not read this response/i,
     )
     expect(() =>
       parseSemanticContract({ ...readyContract, parties: [{ id: 'p1' }] }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
     expect(() =>
       parseSemanticContract({ ...readyContract, enrichmentStatus: 7 }),
-    ).toThrow(/malformed/i)
+    ).toThrow(/could not read this response/i)
   })
 })
 
@@ -436,7 +436,7 @@ describe('fetchSemantics', () => {
 
     expect(error).toBeInstanceOf(SemanticApiError)
     expect((error as SemanticApiError).status).toBe(500)
-    expect((error as Error).message).toBe('The semantic analysis could not be loaded.')
+    expect((error as Error).message).toBe('The analysis could not be loaded.')
     expect((error as Error).message).not.toMatch(/com\.rivell|Controller\.read/)
   })
 })

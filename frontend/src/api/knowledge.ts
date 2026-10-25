@@ -7,10 +7,12 @@ import {
 } from '@tanstack/react-query'
 import { createApiClient } from './client'
 import {
+  MALFORMED_RESPONSE_MESSAGE,
   asRecord,
   parseApiResult,
   readArray,
   readArrayValue,
+  readBoolean,
   readEnum,
   readEnumArray,
   readNullableBoolean,
@@ -135,7 +137,12 @@ export const REVIEW_REASONS = [
   'SCOPE_NARROWING_PROPOSED',
   'SEMANTIC_ANALYSIS_UNAVAILABLE',
   'SEMANTIC_COMPILATION_UNAVAILABLE',
+  'UNMAPPED_AUTHORITY_WORDS',
 ] as const satisfies readonly SchemaReviewReason[]
+
+export const AUTHORITY_LEVELS = ['ENTRY', 'MATRIX', 'TABLE'] as const
+
+export type AuthorityLevel = (typeof AUTHORITY_LEVELS)[number]
 
 export const VERIFICATION_STATES = [
   'NOT_VERIFIED',
@@ -167,6 +174,8 @@ export interface ArtifactSummary {
   id: string
   artifactType: ArtifactType
   filename: string
+  /** The title a Word file gives itself; null when it names none. */
+  documentTitle: string | null
   contentType: string
   sizeBytes: number
   sha256: string
@@ -258,13 +267,38 @@ export interface Interpretation {
   verification: VerificationState
 }
 
+/**
+ * One typed approval rule a playbook states: who approves, which stances it governs, an
+ * optional condition, where it was stated, and the source words. It is the only thing that can
+ * make an approval in review.
+ */
+export interface AuthorityRule {
+  approver: string
+  stances: PositionRole[]
+  condition: string | null
+  source: AuthorityLevel
+  quote: string | null
+}
+
+/** A lower-level rule naming a different approver for the same stance. */
+export interface AuthorityConflict {
+  approver: string
+  source: AuthorityLevel
+  stance: PositionRole
+}
+
 export interface Candidate {
   id: string
   artifactId: string
   extractionUnitId: string
   candidateType: CandidateType
   reviewStatus: ReviewStatus
+  /** What Rivell read, unchanged by a reviewer. */
   rawLabel: string
+  /** A title a person typed; null until one is given. */
+  editedTitle: string | null
+  /** The title to show: the person's when there is one, else `rawLabel`. */
+  title: string
   contentText: string | null
   payloadColumns: Record<string, string>
   legalConceptKey: string | null
@@ -277,12 +311,32 @@ export interface Candidate {
   variantRole: PositionRole | null
   escalationTrigger: string | null
   requiresApproval: boolean | null
+  /** The preferred wording the source states explicitly; null when it states none. */
+  preferredText: string | null
+  /** Every fallback wording the source states, in source order. */
+  fallbackTexts: string[]
+  /** The walk-away or prohibited wording the source states; null when it states none. */
+  prohibitedText: string | null
+  /** Typed approval rules, one per stance, with their source level and quote. */
+  authorityRules: AuthorityRule[]
+  /** The rules the edit form starts from: the saved list, else the machine rules. */
+  storedAuthorityRules: AuthorityRule[]
+  /** Lower-level rules naming a different approver for the same stance. */
+  authorityConflicts: AuthorityConflict[]
+  /** Label-shaped walk-away or approver words the stage could not map. */
+  unmappedAuthority: string[]
+  /** True while this entry needs attention for an unmapped walk-away or approver word. */
+  needsAttention: boolean
+  /** Structured fields a person corrected and saved. A machine proposal that was not applied is not one. */
+  correctedFields: string[]
   interpretations: Interpretation[]
   editedContentText: string | null
   editedPayloadColumns: Record<string, string>
   supersedingCandidateId: string | null
   contractPackKey: string | null
   declaredContractTypes: string[]
+  /** Contract types the record itself states it applies to; empty when it states none. */
+  sourceContractTypes: string[]
   partyPerspective: string | null
   paperSource: string | null
   jurisdiction: string | null
@@ -345,6 +399,7 @@ export function parseArtifactSummary(
     id: readString(record, 'id', what),
     artifactType: readEnum(record, 'artifactType', what, ARTIFACT_TYPES),
     filename: readString(record, 'filename', what),
+    documentTitle: readNullableString(record, 'documentTitle', what),
     contentType: readString(record, 'contentType', what),
     sizeBytes: readNumber(record, 'sizeBytes', what),
     sha256: readString(record, 'sha256', what),
@@ -483,8 +538,47 @@ export function parseInterpretation(
   }
 }
 
+export function parseAuthorityRule(value: unknown, what = 'approval rule'): AuthorityRule {
+  const record = asRecord(value, what)
+  return {
+    approver: readString(record, 'approver', what),
+    stances: record.stances === undefined
+      ? []
+      : readEnumArray(record, 'stances', what, POSITION_ROLES),
+    condition: optionalString(record, 'condition', what),
+    source: readEnum(record, 'source', what, AUTHORITY_LEVELS),
+    quote: optionalString(record, 'quote', what),
+  }
+}
+
+/** A key an older response does not carry reads as absent, not as malformed. */
+function optionalString(
+  record: Record<string, unknown>,
+  key: string,
+  what: string,
+): string | null {
+  return record[key] === undefined ? null : readNullableString(record, key, what)
+}
+
+export function parseAuthorityConflict(
+  value: unknown,
+  what = 'approval conflict',
+): AuthorityConflict {
+  const record = asRecord(value, what)
+  return {
+    approver: readString(record, 'approver', what),
+    source: readEnum(record, 'source', what, AUTHORITY_LEVELS),
+    stance: readEnum(record, 'stance', what, POSITION_ROLES),
+  }
+}
+
 export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
   const record = asRecord(value, what)
+  // An older server has only the effective list; it is also the list the form starts from.
+  const authorityRules =
+    record.authorityRules === undefined
+      ? []
+      : readArray(record, 'authorityRules', what, parseAuthorityRule)
   return {
     id: readString(record, 'id', what),
     artifactId: readString(record, 'artifactId', what),
@@ -492,6 +586,8 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     candidateType: readEnum(record, 'candidateType', what, CANDIDATE_TYPES),
     reviewStatus: readEnum(record, 'reviewStatus', what, REVIEW_STATUSES),
     rawLabel: readString(record, 'rawLabel', what),
+    editedTitle: readNullableString(record, 'editedTitle', what),
+    title: readString(record, 'title', what),
     contentText: readNullableString(record, 'contentText', what),
     payloadColumns: readStringMap(record, 'payloadColumns', what),
     legalConceptKey: readNullableString(record, 'legalConceptKey', what),
@@ -502,12 +598,39 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     variantRole: readNullableEnum(record, 'variantRole', what, POSITION_ROLES),
     escalationTrigger: readNullableString(record, 'escalationTrigger', what),
     requiresApproval: readNullableBoolean(record, 'requiresApproval', what),
+    // The typed stances and rules are additive: a response from an older server has no key.
+    preferredText: optionalString(record, 'preferredText', what),
+    fallbackTexts: record.fallbackTexts === undefined
+      ? []
+      : readStringArray(record, 'fallbackTexts', what),
+    prohibitedText: optionalString(record, 'prohibitedText', what),
+    authorityRules,
+    storedAuthorityRules: record.storedAuthorityRules === undefined
+      ? authorityRules
+      : readArray(record, 'storedAuthorityRules', what, parseAuthorityRule),
+    authorityConflicts: record.authorityConflicts === undefined
+      ? []
+      : readArray(record, 'authorityConflicts', what, parseAuthorityConflict),
+    unmappedAuthority: record.unmappedAuthority === undefined
+      ? []
+      : readStringArray(record, 'unmappedAuthority', what),
+    needsAttention: record.needsAttention === undefined
+      ? false
+      : readBoolean(record, 'needsAttention', what),
+    correctedFields:
+      record.correctedFields === undefined
+        ? []
+        : readStringArray(record, 'correctedFields', what),
     interpretations: readArray(record, 'interpretations', what, parseInterpretation),
     editedContentText: readNullableString(record, 'editedContentText', what),
     editedPayloadColumns: readStringMap(record, 'editedPayloadColumns', what),
     supersedingCandidateId: readNullableString(record, 'supersedingCandidateId', what),
     contractPackKey: readNullableString(record, 'contractPackKey', what),
     declaredContractTypes: readStringArray(record, 'declaredContractTypes', what),
+    sourceContractTypes:
+      record.sourceContractTypes === undefined
+        ? []
+        : readStringArray(record, 'sourceContractTypes', what),
     partyPerspective: readNullableString(record, 'partyPerspective', what),
     paperSource: readNullableString(record, 'paperSource', what),
     jurisdiction: readNullableString(record, 'jurisdiction', what),
@@ -550,7 +673,7 @@ export function parsePublication(value: unknown, what = 'publication'): Publicat
 
 const PUBLISH_MESSAGES: Partial<Record<number, string>> = {
   404: 'That knowledge source could not be found.',
-  409: 'Only candidates that have been approved can be published. Review the candidate states, then try again.',
+  409: 'Only entries that have been approved can be published. Check the entry states, then try again.',
   500: 'The knowledge version could not be published.',
   503: 'The knowledge service is unavailable right now.',
 }
@@ -580,22 +703,22 @@ export function isKnowledgeForbiddenError(error: unknown): boolean {
  * have left one behind. These do not claim that nothing was changed.
  */
 const KNOWLEDGE_UPLOAD_MESSAGES: Partial<Record<number, string>> = {
-  400: 'The file was not accepted. Use a .docx or .xlsx file.',
+  400: 'The file was not accepted. Use a Word or Excel file.',
   500: 'Rivell could not process this file. If it was stored, it appears in Sources as a failed source. Nothing was published.',
 }
 
 const CONCEPT_MESSAGES: Partial<Record<number, string>> = {
-  400: 'That legal concept is not one Rivell knows.',
-  404: 'That candidate could not be found.',
-  409: 'A published or rejected candidate cannot be corrected.',
-  500: 'The legal concept could not be corrected.',
+  400: 'That topic is not one Rivell knows.',
+  404: 'That entry could not be found.',
+  409: 'A published or rejected entry cannot be corrected.',
+  500: 'The topic could not be corrected.',
   503: 'The knowledge service is unavailable right now.',
 }
 
 const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
-  404: 'That knowledge source or candidate could not be found.',
+  404: 'That knowledge source or entry could not be found.',
   409: 'That knowledge request does not apply in the current state.',
-  413: 'The submitted content is larger than this Rivell deployment accepts.',
+  413: 'The submitted content is larger than Rivell accepts.',
   500: 'The knowledge request could not be completed.',
   503: 'The knowledge service is unavailable right now.',
 }
@@ -619,6 +742,81 @@ export const knowledgeKeys = {
   candidate: (id: string) => ['knowledge', 'candidates', id] as const,
   publications: ['knowledge', 'publications'] as const,
   publication: (id: string) => ['knowledge', 'publications', id] as const,
+  applicable: (query: ApplicableKnowledgeQuery) =>
+    [
+      'knowledge',
+      'applicable',
+      query.contractType,
+      query.jurisdiction ?? '',
+      query.partyPerspective ?? '',
+      query.paperSource ?? '',
+      query.contractPackKey ?? '',
+      query.effectiveOn ?? '',
+    ] as const,
+}
+
+/** The declared context a review will use, as the applicability preview asks about it. */
+export interface ApplicableKnowledgeQuery {
+  contractType: string
+  jurisdiction?: string
+  partyPerspective?: string
+  paperSource?: string
+  contractPackKey?: string
+  effectiveOn?: string
+}
+
+export interface ApplicableKnowledge {
+  artifactId: string
+  artifactType: ArtifactType
+  name: string
+  publicationNumber: number
+}
+
+function parseApplicableKnowledge(value: unknown, what = 'applicable knowledge'): ApplicableKnowledge {
+  const record = asRecord(value, what)
+  return {
+    artifactId: readString(record, 'artifactId', what),
+    artifactType: readEnum(record, 'artifactType', what, ARTIFACT_TYPES),
+    name: readString(record, 'name', what),
+    publicationNumber: readNumber(record, 'publicationNumber', what),
+  }
+}
+
+/**
+ * Published playbooks and clause libraries that apply to the declared context. The backend applies
+ * the same matching rule as the analysis, so the client never re-implements it.
+ */
+export async function fetchApplicableKnowledge(
+  query: ApplicableKnowledgeQuery,
+): Promise<ApplicableKnowledge[]> {
+  const client = createApiClient()
+  const { data, response } = await client.GET('/api/knowledge/applicable', {
+    params: { query },
+  })
+  if (!data) {
+    throw new KnowledgeApiError(
+      response.status,
+      boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Applicable playbooks unavailable'),
+    )
+  }
+  return parseApiResult(
+    data,
+    (raw, what) => readArrayValue(raw, what, parseApplicableKnowledge),
+    'applicable knowledge',
+  )
+}
+
+export function useApplicableKnowledgeQuery(
+  query: ApplicableKnowledgeQuery,
+  enabled = true,
+): UseQueryResult<ApplicableKnowledge[], Error> {
+  return useQuery({
+    retry: knowledgeRetry,
+    queryKey: knowledgeKeys.applicable(query),
+    queryFn: () => fetchApplicableKnowledge(query),
+    enabled: enabled && query.contractType.length > 0,
+    staleTime: 30_000,
+  })
 }
 
 export function isProcessingArtifact(status: IngestStatus): boolean {
@@ -680,7 +878,7 @@ export async function fetchExtractionUnits(
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Extraction units unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Source parts unavailable'))
   }
   return parseApiResult(
     data,
@@ -696,7 +894,7 @@ export async function fetchCandidates(artifactId: string): Promise<Candidate[]> 
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge candidates unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge entries unavailable'))
   }
   return parseApiResult(
     data,
@@ -712,7 +910,7 @@ export async function fetchCandidate(candidateId: string): Promise<Candidate> {
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Candidate unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Entry unavailable'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -724,7 +922,7 @@ export async function fetchPublications(limit = KNOWLEDGE_PAGE_LIMIT): Promise<P
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publications unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge versions unavailable'))
   }
   return parseApiResult(
     data,
@@ -740,7 +938,7 @@ export async function fetchPublication(publicationId: string): Promise<Publicati
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Publication unavailable'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'Knowledge version unavailable'))
   }
   return parseApiResult(data, parsePublication, 'publication')
 }
@@ -783,7 +981,7 @@ export async function uploadKnowledge(
     bodySerializer: () => formData,
   })
 
-  if (!data) throw new UploadApiError(response.status, KNOWLEDGE_UPLOAD_MESSAGES)
+  if (!data) throw new UploadApiError(response.status, KNOWLEDGE_UPLOAD_MESSAGES, response.headers.get('Retry-After'))
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
 }
 
@@ -797,7 +995,7 @@ async function makePosition(artifactId: string, unitId: string): Promise<Candida
     throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, KNOWLEDGE_MESSAGES, 'The part could not be made a position'))
   }
   return parseApiResult(data, (value, what) => {
-    if (!Array.isArray(value)) throw new Error(`${what} is not a list`)
+    if (!Array.isArray(value)) throw new Error(MALFORMED_RESPONSE_MESSAGE)
     return value.map((entry, index) => parseCandidate(entry, `${what}[${index}]`))
   }, 'made position')
 }
@@ -827,13 +1025,23 @@ export interface ScopeEditInput {
 
 export interface SemanticFieldsEditInput {
   positions?: PositionRole[]
-  requiresApproval?: boolean
+  /** null means "not specified", which is different from leaving the field unsent. */
+  requiresApproval?: boolean | null
   escalationTrigger?: string
   variantRole?: PositionRole
+  /** The preferred wording a person states; an empty string clears it. */
+  preferredText?: string
+  /** The full corrected fallback list; an empty list clears it. */
+  fallbackTexts?: string[]
+  /** The walk-away wording a person states; an empty string clears it. */
+  prohibitedText?: string
+  /** The full corrected rule list; an empty list clears every rule. */
+  authorityRules?: AuthorityRule[]
 }
 
 export interface EditCandidateInput {
   candidateId: string
+  title?: string
   contentText?: string
   payloadColumns?: Record<string, string>
   scope?: ScopeEditInput
@@ -841,13 +1049,25 @@ export interface EditCandidateInput {
   note?: string
 }
 
-type EditRequestBody = NonNullable<
+type GeneratedEditRequestBody = NonNullable<
   paths['/api/knowledge/candidates/{id}/edit']['post']['requestBody']
 >['content']['application/json']
+
+/**
+ * The contract accepts an explicit null for counsel approval ("not specified") and for a rule's
+ * condition and quote, but the generated schema types them as non-null only.
+ */
+type EditRequestBody = Omit<GeneratedEditRequestBody, 'semanticFields'> & {
+  semanticFields?: Omit<
+    NonNullable<GeneratedEditRequestBody['semanticFields']>,
+    'requiresApproval' | 'authorityRules'
+  > & { requiresApproval?: boolean | null; authorityRules?: AuthorityRule[] }
+}
 
 async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
   const client = createApiClient()
   const body: EditRequestBody = {}
+  if (input.title !== undefined) body.title = input.title
   if (input.contentText !== undefined) body.contentText = input.contentText
   if (input.payloadColumns !== undefined) body.payloadColumns = input.payloadColumns
   if (input.scope !== undefined) body.scope = input.scope
@@ -856,7 +1076,7 @@ async function editCandidate(input: EditCandidateInput): Promise<Candidate> {
 
   const { data, response } = await client.POST('/api/knowledge/candidates/{id}/edit', {
     params: { path: { id: input.candidateId } },
-    body,
+    body: body as GeneratedEditRequestBody,
   })
 
   if (!data) {
@@ -886,7 +1106,7 @@ async function correctConcept(candidateId: string, primary: string): Promise<Can
   })
 
   if (!data) {
-    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, CONCEPT_MESSAGES, 'The legal concept could not be corrected.'))
+    throw new KnowledgeApiError(response.status, boundedErrorMessage(response.status, CONCEPT_MESSAGES, 'The topic could not be corrected.'))
   }
   return parseApiResult(data, parseCandidate, 'candidate')
 }
@@ -1007,7 +1227,7 @@ export function useCandidateQuery(
     retry: knowledgeRetry,
     queryKey: knowledgeKeys.candidate(candidateId ?? ''),
     queryFn: () => {
-      if (!candidateId) throw new Error('Candidate id is required')
+      if (!candidateId) throw new Error('An entry is required')
       return fetchCandidate(candidateId)
     },
     enabled: Boolean(candidateId),

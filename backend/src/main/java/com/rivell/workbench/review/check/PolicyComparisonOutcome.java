@@ -54,6 +54,29 @@ public final class PolicyComparisonOutcome {
                 new LinkedHashMap<>(probabilities));
     }
 
+    /**
+     * P1: the category an agreed second opinion leaves the finding with. Severity tiers decide:
+     * WALK_AWAY (HIGH) over BEYOND_FALLBACK and UNCLEAR (both MEDIUM) over WITHIN_FALLBACK (LOW).
+     * Only a strictly worse tier wins; an equal tier keeps Jev's category, so a swap between
+     * BEYOND_FALLBACK and UNCLEAR never happens (it would change the family and action, not the severity).
+     */
+    public static String worse(String jevCategory, String secondOpinionCategory) {
+        return severityTier(secondOpinionCategory) > severityTier(jevCategory)
+                ? secondOpinionCategory : jevCategory;
+    }
+
+    private static int severityTier(String category) {
+        if (category == null) {
+            return 0;
+        }
+        return switch (category) {
+            case PolicyComparisonSpecs.WALK_AWAY -> 3;
+            case PolicyComparisonSpecs.BEYOND_FALLBACK, PolicyComparisonSpecs.UNCLEAR -> 2;
+            case PolicyComparisonSpecs.WITHIN_FALLBACK -> 1;
+            default -> 0;
+        };
+    }
+
     /** One issue family per category so different categories stay separate findings. */
     public static IssueFamily family(String category) {
         return switch (category) {

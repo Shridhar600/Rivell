@@ -2,6 +2,7 @@ package com.rivell.workbench.review;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -14,9 +15,11 @@ import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.EnrichmentFailedException;
 import com.rivell.workbench.contracts.EnrichmentInProgressException;
 import com.rivell.workbench.contracts.EnrichmentStatus;
+import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.contracts.SemanticsNotFoundException;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
+import com.rivell.workbench.knowledge.ApplicableKnowledgeQuery;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
@@ -133,10 +136,25 @@ public class ReviewService {
         requireEnrichmentReady(semantics.enrichmentStatus(), contractId, versionNumber);
         var pack = packKey == null ? null : packs.find(packKey)
                 .orElseThrow(() -> new InvalidReviewConfigurationException(
-                        "Unknown contract pack: " + packKey));
+                        "That review pack is not available."));
 
         var organizationId = identity.organizationId();
-        var now = clock.instant();
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned review would not match a later read of it.
+        var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        var effectiveOn = LocalDate.now(clock);
+        var knowledgePinNumber = knowledgeQueryService.maxPublicationNumberForOrganization(organizationId);
+        // The snapshot freezes the playbooks and clause libraries the analysis may use, resolved by
+        // the same rule retrieval applies. A review created before this freeze has no such list and
+        // must never be recomputed at read time.
+        var applicableKnowledge = knowledgeQueryService.applicableKnowledgeForOrganization(
+                new ApplicableKnowledgeQuery(
+                        organizationId, knowledgePinNumber, profile.contractType().name(), packKey,
+                        profile.ourSideRole() == null ? null : profile.ourSideRole().name(),
+                        profile.paperSource() == null ? null : profile.paperSource().name(),
+                        profile.jurisdiction() == Jurisdiction.UNSPECIFIED
+                                ? null : profile.jurisdiction().name(),
+                        effectiveOn));
         var reviewId = UUID.randomUUID();
         var bindings = modelBindingCatalog.current();
         var snapshot = new ReviewSnapshot(
@@ -145,8 +163,8 @@ public class ReviewService {
                 profile.jurisdiction(), packKey,
                 pack == null ? null : pack.version(),
                 semantics.id(), semantics.pipelineVersion(), SemanticsDigest.of(semantics),
-                knowledgeQueryService.maxPublicationNumber(),
-                LocalDate.now(clock), ReviewPipeline.VERSION,
+                knowledgePinNumber,
+                effectiveOn, ReviewPipeline.VERSION,
                 retrievalProperties.indexVersion(),
                 embeddingService.isConfigured() ? embeddingService.modelIdentity() : null,
                 new ModelPolicyIdentity(
@@ -155,14 +173,23 @@ public class ReviewService {
                         bindings.generativeProvider().providerId(),
                         bindings.generativeProvider().modelAlias()),
                 ReviewEngine.V2,
+                applicableKnowledge,
                 now);
         var review = Review.analysisQueued(
                 reviewId, organizationId, contractId, version.versionId(), versionNumber,
                 identity.userId(), now, clientRequestId);
+        var inserted = new java.util.concurrent.atomic.AtomicBoolean();
         try {
             transactionTemplate.executeWithoutResult(status -> {
                 reviewRepository.create(review, snapshot, planBuilder.build(reviewId,
                         organizationId, snapshot, semantics));
+                inserted.set(true);
+                // Published inside the creation transaction so the listener runs after its commit.
+                // `inserted` is what tells the catch below whether a DataIntegrityViolation is the
+                // review insert or this after-commit enqueue: only the insert can be an idempotency
+                // conflict, and an enqueue failure must surface rather than be read back as the
+                // winner of a race. The reconciler re-enqueues a review that was committed without
+                // a job.
                 eventPublisher.publishEvent(new ReviewCreatedEvent(organizationId, reviewId));
             });
         } catch (org.springframework.dao.DataIntegrityViolationException conflict) {
@@ -170,18 +197,17 @@ public class ReviewService {
             // simultaneous submits both missed it and the loser's insert violated the unique index.
             // The index enforces the invariant but does not return the winner, so read it back: the
             // client asked for an idempotent create and must get the original review, not a 500.
-            if (clientRequestId == null) {
-                throw conflict;
+            if (!inserted.get() && clientRequestId != null) {
+                var winner = reviewRepository.findByClientRequestId(organizationId, clientRequestId);
+                if (winner.isPresent()) {
+                    // The read-back is a replay like any other, so it goes through the same check:
+                    // two racing requests can carry different packs, and the loser must not be
+                    // handed the winner's review as if it had asked for it.
+                    return requireSameOperation(winner.get(), contractId, versionNumber, packKey,
+                            organizationId);
+                }
             }
-            var winner = reviewRepository.findByClientRequestId(organizationId, clientRequestId);
-            if (winner.isEmpty()) {
-                throw conflict;
-            }
-            // The read-back is a replay like any other, so it goes through the same check: two
-            // racing requests can carry different packs, and the loser must not be handed the
-            // winner's review as if it had asked for it.
-            return requireSameOperation(winner.get(), contractId, versionNumber, packKey,
-                    organizationId);
+            throw conflict;
         }
         return review;
     }
@@ -202,8 +228,8 @@ public class ReviewService {
         var requested = normalize(requestedPackKey);
         if (declared != null && requested != null && !declared.equals(requested)) {
             throw new InvalidReviewConfigurationException(
-                    "Review profile declares contract pack " + declared
-                            + " but the review requested " + requested);
+                    "This contract is set up for a different review pack than the one you "
+                            + "chose.");
         }
         return requested != null ? requested : declared;
     }

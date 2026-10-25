@@ -31,6 +31,19 @@ public record PolicyComparisonProperties(
 
     public PolicyComparisonProperties {
         maxPositions = maxPositions <= 0 ? 8 : maxPositions;
+        // A flag below the fixed 0.5 "addresses" line would let one position be flagged while
+        // counting as not addressing its clause (DW-071): the two judgements must agree. A
+        // negative or non-finite value is not the unset sentinel and is refused outright.
+        if (!Double.isFinite(flagThreshold) || flagThreshold < 0.0) {
+            throw new IllegalArgumentException(
+                    "rivell.review.policy-comparison.flag-threshold must be finite and not "
+                            + "negative, was " + flagThreshold);
+        }
+        if (flagThreshold > 0.0 && flagThreshold < 0.5) {
+            throw new IllegalArgumentException(
+                    "rivell.review.policy-comparison.flag-threshold must be at least 0.5, was "
+                            + flagThreshold);
+        }
         flagThreshold = flagThreshold <= 0.0 || flagThreshold > 1.0 ? 0.6 : flagThreshold;
         uncoveredThreshold = uncoveredThreshold <= 0.0 || uncoveredThreshold > 1.0
                 ? 0.5 : uncoveredThreshold;

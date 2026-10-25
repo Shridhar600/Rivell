@@ -86,7 +86,7 @@ describe('PolicyPosition', () => {
   it('opens the exact source behind an item', async () => {
     const open = vi.fn()
     render(<PolicyPosition view={view} openable={new Set(['p-2'])} onOpenSource={open} />)
-    await userEvent.click(within(screen.getByRole('group', { name: 'Fallback' })).getByRole('button', { name: 'Open source: Policy, publication 2' }))
+    await userEvent.click(within(screen.getByRole('group', { name: 'Fallback' })).getByRole('button', { name: 'Open source: Policy, knowledge version 2' }))
     expect(open).toHaveBeenCalledWith('p-2')
   })
 

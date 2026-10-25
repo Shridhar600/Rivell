@@ -278,6 +278,9 @@ public class ReviewApiService {
                 analysisComplete,
                 plannedChecks,
                 counts == null ? 0 : counts.completed(),
+                // Same rule as the single-review read: only a completed analysis can be blocked
+                // for checks that did not run, so an in-progress row cannot disagree with it.
+                analysisComplete && counts != null ? counts.didNotRun() : 0,
                 finalized,
                 row.contractId(),
                 row.contractVersionNumber());
@@ -347,7 +350,7 @@ public class ReviewApiService {
         }
         var key = ConceptKey.of(concept.trim());
         if (!conceptRegistry.contains(key)) {
-            throw new IllegalArgumentException("Unknown concept key: " + concept);
+            throw new IllegalArgumentException("That topic is not recognized.");
         }
         return key;
     }
@@ -473,7 +476,16 @@ public class ReviewApiService {
                         snapshot.packVersion(),
                         snapshot.knowledgePinNumber(),
                         snapshot.effectiveOn(),
-                        snapshot.reviewEngine().name()),
+                        snapshot.reviewEngine().name(),
+                        snapshot.applicableKnowledge() == null
+                                ? null
+                                : snapshot.applicableKnowledge().stream()
+                                        .map(knowledge -> new ReviewSummaryView.PlaybookUsedView(
+                                                knowledge.artifactId(),
+                                                knowledge.artifactType().name(),
+                                                knowledge.name(),
+                                                knowledge.publicationNumber()))
+                                        .toList()),
                 coverage(organizationId, reviewId, counted),
                 warnings.items(),
                 warnings.truncated());
@@ -519,7 +531,7 @@ public class ReviewApiService {
         if (execution.status() == CheckExecutionStatus.FAILED
                 && !"DECISION_CONTRACT_ERROR".equals(reason.code())) {
             reason = new WarningReason("CHECK_FAILED",
-                    "This check failed unexpectedly; internal diagnostics were recorded.");
+                    "This check did not finish. Look at this part of the contract yourself.");
         }
         return new AnalysisWarningView(checkKey, execution.status().name(),
                 reason.code(), reason.message());
@@ -532,37 +544,39 @@ public class ReviewApiService {
     private static WarningReason warningReason(String raw) {
         if (raw == null || raw.isBlank()) {
             return new WarningReason("CHECK_INCOMPLETE",
-                    "This check could not complete and was recorded as a limitation.");
+                    "This check did not finish, so Rivell has no result for it. Look at this part of the contract yourself.");
         }
         var text = raw.trim();
         var prefix = text.contains(":") ? text.substring(0, text.indexOf(':')) : text;
         return switch (prefix) {
             case "provider_unavailable" -> new WarningReason("PROVIDER_UNAVAILABLE",
-                    "An external analysis provider was unavailable for this check.");
+                    "The analysis service was unavailable for this check. Run the review again later.");
+            case "provider_out_of_credit" -> new WarningReason("PROVIDER_OUT_OF_CREDIT",
+                    "The analysis account is out of credit. An administrator needs to add credit, "
+                            + "then run the review again.");
             case "classification_uncertain", "cross_clause_classification_uncertain" ->
                     new WarningReason("CLASSIFICATION_UNCERTAIN",
-                            "The bounded classification was not confident enough to trust.");
+                            "Rivell was not confident enough about this clause to rely on the result.");
             case "carve_out_context_too_large" -> new WarningReason("CONTEXT_TOO_LARGE",
-                    "The clause context was too large for a bounded assessment.");
+                    "The clause and the text around it were too long for Rivell to check.");
             case "unexpected_deviation_type", "unexpected_consistency_answer" ->
                     new WarningReason("UNEXPECTED_RESULT",
-                            "The analysis returned a result the engine does not accept.");
+                            "The analysis returned a result Rivell could not use.");
             case "subject_clause_not_found" -> new WarningReason("SUBJECT_CLAUSE_MISSING",
-                    "The reviewed clause was not found in the frozen contract structure.");
+                    "Rivell could not find the clause this check covers in the reviewed contract.");
             case "counterpart_clause_not_found" -> new WarningReason(
                     "COUNTERPART_CLAUSE_MISSING",
-                    "The counterpart clause was not found in the frozen contract structure.");
+                    "Rivell could not find the related clause this check compares against in the reviewed contract.");
             case "ambiguity_without_multiple_rules" -> new WarningReason(
                     "POLICY_AMBIGUITY_INCOMPLETE",
-                    "Ambiguity was reported without multiple applicable rules.");
+                    "Rivell saw more than one way to read the playbook here but could not name the positions involved.");
             case "mechanism_not_available" -> new WarningReason("MECHANISM_UNAVAILABLE",
-                    "The planned check mechanism was not available.");
+                    "A check Rivell planned for this review was not available.");
             case "survival_coverage_partial" -> new WarningReason(
                     "SURVIVAL_COVERAGE_PARTIAL",
-                    "Survival coverage could not be established for all confidentiality "
-                            + "provisions.");
+                    "Rivell could not check whether every confidentiality obligation survives termination.");
             case "decision_contract_error" -> new WarningReason("DECISION_CONTRACT_ERROR",
-                    "The analysis decision contract could not be satisfied.");
+                    "Rivell could not get a usable answer for this check.");
             default -> environmentReason(text);
         };
     }
@@ -570,22 +584,22 @@ public class ReviewApiService {
     private static WarningReason environmentReason(String text) {
         if (text.startsWith("contract semantics changed")) {
             return new WarningReason("SEMANTICS_CHANGED",
-                    "Contract semantics changed after the review snapshot was frozen.");
+                    "The contract analysis changed after this review started, so the result may be out of date.");
         }
         if (text.startsWith("retrieval index version changed")) {
             return new WarningReason("INDEX_CHANGED",
-                    "The retrieval index version changed after the review snapshot was frozen.");
+                    "The search index changed after this review started, so the result may be out of date.");
         }
         if (text.startsWith("embedding model identity changed")) {
             return new WarningReason("EMBEDDING_MODEL_CHANGED",
-                    "The embedding model identity changed after the review snapshot was frozen.");
+                    "The search settings changed after this review started, so the result may be out of date.");
         }
         if (text.startsWith("model policy bindings changed")) {
             return new WarningReason("MODEL_BINDINGS_CHANGED",
-                    "The model policy bindings changed after the review snapshot was frozen.");
+                    "The analysis settings changed after this review started, so the result may be out of date.");
         }
         return new WarningReason("CHECK_INCOMPLETE",
-                "This check could not complete and was recorded as a limitation.");
+                "This check did not finish, so Rivell has no result for it. Look at this part of the contract yourself.");
     }
 
     private static ReviewSummaryView.FailureView failure(String internalReason) {
@@ -594,10 +608,10 @@ public class ReviewApiService {
         }
         if (internalReason.startsWith("decision_contract_error")) {
             return new ReviewSummaryView.FailureView("DECISION_CONTRACT_ERROR",
-                    "The machine analysis decision contract could not be satisfied.");
+                    "Rivell could not get usable answers from the analysis, so the review did not finish. Start a new review.");
         }
         return new ReviewSummaryView.FailureView("ANALYSIS_INTERNAL_ERROR",
-                "Machine analysis could not be completed; internal diagnostics were recorded.");
+                "Rivell could not finish the analysis of this contract. Start a new review. If it fails again, contact your administrator.");
     }
 
     /**
@@ -664,7 +678,7 @@ public class ReviewApiService {
             return DEFAULT_PAGE_LIMIT;
         }
         if (limit < 1) {
-            throw new IllegalArgumentException("limit must be >= 1");
+            throw new IllegalArgumentException("The page size must be 1 or more.");
         }
         return Math.min(limit, MAX_PAGE_LIMIT);
     }

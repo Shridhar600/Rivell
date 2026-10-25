@@ -42,8 +42,8 @@ export function KnowledgeLinkRow({ to, type, title, detail, right, accent }: Lin
 const SOURCE_STATE: Record<SourceState, { label: string; variant: string }> = {
   published: { label: 'Published', variant: ' rv-stb--ok' },
   review: { label: 'Awaiting review', variant: ' rv-stb--am' },
-  compiling: { label: 'Compiling', variant: '' },
-  failed: { label: 'Extraction failed', variant: ' rv-stb--red' },
+  compiling: { label: 'Reading', variant: '' },
+  failed: { label: 'Could not read', variant: ' rv-stb--red' },
   none: { label: 'Not published', variant: '' },
   unreadable: { label: 'Status unavailable', variant: '' },
 }

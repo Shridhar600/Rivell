@@ -1,18 +1,34 @@
 package com.rivell.workbench.review;
 
+import java.sql.SQLTransientException;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.RecoverableDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractQueryService;
 import com.rivell.workbench.contracts.ContractSemantics;
+import com.rivell.workbench.contracts.SemanticsDigest;
+import com.rivell.workbench.intelligence.ClauseEmbeddingCache;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ModelBindingCatalog;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.retrieval.EvidenceService;
 import com.rivell.workbench.retrieval.RetrievalProperties;
 import com.rivell.workbench.review.check.AnalysisEnvironment;
@@ -25,8 +41,19 @@ import com.rivell.workbench.review.check.ReviewEvidenceCache;
  * Deterministic machine-analysis orchestration. One run (generation) per attempt with a
  * lease-based check claim; terminal checks are skipped on retry; a check's signals and
  * its terminal state commit atomically; review and run complete in one transaction.
+ *
+ * <p>A transient infrastructure failure (a dropped connection, a statement timeout, a reclaimed
+ * lease) does not fail the run: it is counted in a separate transaction, the failed check's lease
+ * is released, and the exception is rethrown so JobRunr retries the same run. Only when the run's
+ * counter reaches its limit, or the cause is something a retry cannot fix, does the run become
+ * terminal.
  */
 public class ReviewAnalysisService {
+
+    /** Code-owned reason for a check the analysis budget left unrun. */
+    public static final String DEADLINE_DEGRADED_REASON = "review_deadline_exceeded";
+
+    private static final Logger LOG = LoggerFactory.getLogger(ReviewAnalysisService.class);
 
     private final ReviewRepository reviewRepository;
     private final ReviewAnalysisRepository analysisRepository;
@@ -40,7 +67,10 @@ public class ReviewAnalysisService {
     private final FindingRepository findingRepository;
     private final FindingAssembler findingAssembler;
     private final TransactionTemplate transactionTemplate;
+    private final TransactionTemplate failureTransactionTemplate;
     private final Clock clock;
+    private final Duration analysisBudget;
+    private final int maxTransientFailures;
 
     public ReviewAnalysisService(
             ReviewRepository reviewRepository,
@@ -55,7 +85,10 @@ public class ReviewAnalysisService {
             FindingRepository findingRepository,
             FindingAssembler findingAssembler,
             TransactionTemplate transactionTemplate,
-            Clock clock) {
+            PlatformTransactionManager transactionManager,
+            Clock clock,
+            Duration analysisBudget,
+            int maxTransientFailures) {
         this.reviewRepository = reviewRepository;
         this.analysisRepository = analysisRepository;
         this.executors = executors;
@@ -68,7 +101,12 @@ public class ReviewAnalysisService {
         this.findingRepository = findingRepository;
         this.findingAssembler = findingAssembler;
         this.transactionTemplate = transactionTemplate;
+        this.failureTransactionTemplate = new TransactionTemplate(transactionManager);
+        this.failureTransactionTemplate.setPropagationBehavior(
+                TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.clock = clock;
+        this.analysisBudget = analysisBudget == null ? Duration.ofMinutes(30) : analysisBudget;
+        this.maxTransientFailures = Math.max(0, maxTransientFailures);
     }
 
     public ReviewAnalysisRun analyze(UUID organizationId, UUID reviewId) {
@@ -78,6 +116,8 @@ public class ReviewAnalysisService {
             return activeOrLatestRun(organizationId, reviewId);
         }
         ReviewAnalysisRun acquiredRun = null;
+        var attempt = new Attempt();
+        var attemptStartedAt = clock.instant();
         try {
             var snapshot = reviewRepository.findSnapshot(organizationId, reviewId).orElseThrow(
                     () -> new IllegalStateException("Review snapshot missing: " + reviewId));
@@ -92,24 +132,88 @@ public class ReviewAnalysisService {
             var semantics = contractEnrichmentService.getSemanticsForOrganization(
                     organizationId, snapshot.contractVersionId());
             var environment = evaluateEnvironment(snapshot, semantics);
-            executePlannedChecks(review, snapshot, run, semantics, environment);
+            executePlannedChecks(review, snapshot, run, semantics, environment, attempt,
+                    attemptStartedAt);
             completeIfDone(organizationId, reviewId, run);
         } catch (RuntimeException e) {
-            var failedRun = acquiredRun;
-            transactionTemplate.executeWithoutResult(status -> {
-                if (failedRun != null) {
-                    analysisRepository.markRunFailed(organizationId, failedRun.id(),
-                            failureReason(e), clock.instant());
-                }
-                reviewRepository.markFailed(organizationId, reviewId,
-                        failureReason(e), clock.instant());
-            });
+            handleFailure(organizationId, reviewId, acquiredRun, attempt, e, true);
             throw e;
         }
         var fallback = acquiredRun;
         return analysisRepository.findLatestCompletedRun(organizationId, reviewId)
                 .orElseGet(() -> fallback == null
                         ? activeOrLatestRun(organizationId, reviewId) : fallback);
+    }
+
+    /**
+     * A failure that infrastructure will probably not repeat (a dropped connection, a statement
+     * timeout, a reclaimed lease) is counted against the RUNNING run and rethrown so JobRunr retries;
+     * the next attempt resumes the same run. A failure that will repeat stays terminal on the first
+     * occurrence, exactly as before. If the counter itself cannot be written the database is the
+     * problem, so the original failure is rethrown untouched and JobRunr's retries decide.
+     */
+    private void handleFailure(UUID organizationId, UUID reviewId, ReviewAnalysisRun run,
+            Attempt attempt, RuntimeException failure, boolean failReview) {
+        if (isTransientFailure(failure)) {
+            if (run != null) {
+                recordTransientFailure(organizationId, reviewId, run, attempt, failure, failReview);
+            } else {
+                // No run to count against (the failure happened before it was acquired). Failing
+                // the review here is exactly what this change exists to avoid; JobRunr retries.
+                LOG.warn("Review analysis for {} failed transiently before a run was acquired;"
+                        + " leaving it for JobRunr to retry: {}", reviewId, failureReason(failure));
+            }
+            return;
+        }
+        if (run == null && !failReview) {
+            return;
+        }
+        transactionTemplate.executeWithoutResult(status -> {
+            if (run != null) {
+                analysisRepository.markRunFailed(organizationId, run.id(),
+                        failureReason(failure), clock.instant());
+            }
+            if (failReview) {
+                reviewRepository.markFailed(organizationId, reviewId,
+                        failureReason(failure), clock.instant());
+            }
+        });
+    }
+
+    private void recordTransientFailure(UUID organizationId, UUID reviewId,
+            ReviewAnalysisRun run, Attempt attempt, RuntimeException failure, boolean failReview) {
+        var reason = transientReason(failure);
+        var detail = failureReason(failure);
+        try {
+            // A new transaction on purpose: the failed check write has rolled back, and the counter
+            // must survive it whether or not this analyze call runs inside someone else's work.
+            failureTransactionTemplate.executeWithoutResult(status -> {
+                var count = analysisRepository.recordTransientFailure(organizationId, run.id(),
+                        reason, attempt.executionId(), attempt.leaseId());
+                if (count.isEmpty()) {
+                    LOG.warn("Review analysis run {} is no longer RUNNING; transient failure not"
+                            + " counted: {}", run.id(), detail);
+                    return;
+                }
+                if (count.getAsInt() >= maxTransientFailures) {
+                    LOG.warn("Review analysis run {} reached {} transient failures; failing it"
+                            + " terminally: {}", run.id(), count.getAsInt(), detail);
+                    if (analysisRepository.markRunFailed(organizationId, run.id(), detail,
+                            clock.instant()) && failReview) {
+                        reviewRepository.markFailed(organizationId, reviewId, detail,
+                                clock.instant());
+                    }
+                } else {
+                    LOG.warn("Review analysis run {} survived transient failure {}/{}; JobRunr"
+                            + " retries the same run: {}", run.id(), count.getAsInt(),
+                            maxTransientFailures, detail);
+                }
+            });
+        } catch (RuntimeException counterFailure) {
+            LOG.warn("Unable to record the transient failure of review analysis run {}; the"
+                    + " database may be down, so JobRunr retries: {}", run.id(), detail,
+                    counterFailure);
+        }
     }
 
     private ReviewAnalysisRun activeOrLatestRun(UUID organizationId, UUID reviewId) {
@@ -132,6 +236,8 @@ public class ReviewAnalysisService {
                     "recompute requires a COMPLETED review: " + reviewId);
         }
         ReviewAnalysisRun acquiredRun = null;
+        var attempt = new Attempt();
+        var attemptStartedAt = clock.instant();
         try {
             var snapshot = reviewRepository.findSnapshot(organizationId, reviewId).orElseThrow(
                     () -> new IllegalStateException("Review snapshot missing: " + reviewId));
@@ -140,16 +246,11 @@ public class ReviewAnalysisService {
             var semantics = contractEnrichmentService.getSemanticsForOrganization(
                     organizationId, snapshot.contractVersionId());
             var environment = evaluateEnvironment(snapshot, semantics);
-            executePlannedChecks(review, snapshot, run, semantics, environment);
+            executePlannedChecks(review, snapshot, run, semantics, environment, attempt,
+                    attemptStartedAt);
             completeIfDone(organizationId, reviewId, run);
         } catch (RuntimeException e) {
-            var failedRun = acquiredRun;
-            transactionTemplate.executeWithoutResult(status -> {
-                if (failedRun != null) {
-                    analysisRepository.markRunFailed(organizationId, failedRun.id(),
-                            failureReason(e), clock.instant());
-                }
-            });
+            handleFailure(organizationId, reviewId, acquiredRun, attempt, e, false);
             throw e;
         }
         var fallback = acquiredRun;
@@ -224,6 +325,14 @@ public class ReviewAnalysisService {
                 bindingsMatch);
     }
 
+    /**
+     * Whether the frozen snapshot still matches every live input. Exposed as a boolean so callers
+     * outside the review module do not depend on the check-package environment type.
+     */
+    public boolean environmentFullyMatches(ReviewSnapshot snapshot, ContractSemantics semantics) {
+        return evaluateEnvironment(snapshot, semantics).fullyMatches();
+    }
+
     private ReviewAnalysisRun resolveRun(
             UUID organizationId, Review review, UUID reviewId) {
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -252,10 +361,133 @@ public class ReviewAnalysisService {
 
     private void executePlannedChecks(
             Review review, ReviewSnapshot snapshot, ReviewAnalysisRun run,
-            ContractSemantics semantics, AnalysisEnvironment environment) {
-        var evidenceCache = new ReviewEvidenceCache(evidenceService);
+            ContractSemantics semantics, AnalysisEnvironment environment, Attempt attempt,
+            Instant attemptStartedAt) {
+        var checks = reviewRepository.findPlanChecks(review.organizationId(), review.id());
+        var deadline = analysisDeadline(run.startedAt(), attemptStartedAt, analysisBudget,
+                maxTransientFailures);
+        if (!clock.instant().isBefore(deadline)) {
+            degradeRemaining(review, run, checks, 0, attempt);
+            return;
+        }
+        var embeddings = new ClauseEmbeddingCache(embeddingService);
+        MDC.put("reviewId", review.id().toString());
+        MDC.put("runId", run.id().toString());
+        try {
+            // A resumed run already has terminal checks; do not re-embed clause text those checks
+            // will never read again.
+            var terminalCheckIds = analysisRepository.findExecutions(
+                            review.organizationId(), run.id()).stream()
+                    .filter(execution -> execution.status().terminal())
+                    .map(ReviewCheckExecution::planCheckId)
+                    .collect(java.util.stream.Collectors.toSet());
+            var checksNeedingWork = checks.stream()
+                    .filter(check -> !terminalCheckIds.contains(check.id()))
+                    .toList();
+            prefetchClauseEmbeddings(checksNeedingWork, semantics, embeddings);
+        } finally {
+            MDC.remove("reviewId");
+            MDC.remove("runId");
+        }
+        var evidenceCache = new ReviewEvidenceCache(evidenceService, embeddings);
         var structure = structure(snapshot);
-        for (var check : reviewRepository.findPlanChecks(review.organizationId(), review.id())) {
+        for (int index = 0; index < checks.size(); index++) {
+            var check = checks.get(index);
+            var existing = analysisRepository.findExecution(
+                    review.organizationId(), run.id(), check.id());
+            if (existing.isPresent() && existing.get().status().terminal()) {
+                continue;
+            }
+            if (!clock.instant().isBefore(deadline)) {
+                degradeRemaining(review, run, checks, index, attempt);
+                return;
+            }
+            if (existing.isEmpty()) {
+                analysisRepository.insertExecutionIfAbsent(ReviewCheckExecution.pending(
+                        UUID.randomUUID(), review.organizationId(), review.id(),
+                        run.id(), check.id()));
+            }
+            var execution = analysisRepository.findExecution(
+                    review.organizationId(), run.id(), check.id()).orElseThrow();
+            var lease = analysisRepository.claimExecution(
+                    review.organizationId(), execution.id());
+            if (lease.isEmpty()) {
+                continue;
+            }
+            attempt.heldBy(execution.id(), lease.get());
+            MDC.put("reviewId", review.id().toString());
+            MDC.put("runId", run.id().toString());
+            MDC.put("checkId", check.id().toString());
+            try {
+                var context = new ReviewCheckContext(review, snapshot, check, run.id(),
+                        semantics, environment, evidenceCache, structure.headingTexts(),
+                        structure.runInHeadings(), structure.untrackableHeadings(), clock.instant());
+                var outcome = runCheck(check, context, environment);
+                var leaseId = lease.get();
+                try {
+                    transactionTemplate.executeWithoutResult(status -> {
+                        if (!analysisRepository.completeExecution(review.organizationId(),
+                                execution.id(), leaseId, outcome.status(), outcome.evidenceTraceId(),
+                                outcome.detail(), outcome.signals().size(), clock.instant())) {
+                            throw new LeaseLostException(execution.id());
+                        }
+                        findingRepository.deleteFindings(review.organizationId(), run.id());
+                        analysisRepository.deleteSignals(
+                                review.organizationId(), run.id(), check.id());
+                        analysisRepository.insertSignals(outcome.signals());
+                        analysisRepository.replaceEvidenceItems(review.organizationId(),
+                                review.id(), run.id(), check.id(), outcome.evidenceItems());
+                    });
+                    attempt.clear();
+                } catch (LeaseLostException e) {
+                    // another worker reclaimed this execution; it owns the terminal write
+                    attempt.clear();
+                    continue;
+                }
+            } finally {
+                MDC.remove("reviewId");
+                MDC.remove("runId");
+                MDC.remove("checkId");
+            }
+        }
+    }
+
+    /**
+     * Embeds every clause text the precedent lane and position search can ask for in one batch,
+     * so both lanes read the same run-scoped vectors instead of one request per clause.
+     */
+    private void prefetchClauseEmbeddings(
+            List<ReviewPlanCheck> checks, ContractSemantics semantics,
+            ClauseEmbeddingCache embeddings) {
+        if (!embeddingService.isConfigured()) {
+            return;
+        }
+        var subjectIds = checks.stream()
+                .filter(check -> check.mechanism() == CheckMechanism.POLICY_COMPARISON)
+                .map(ReviewPlanCheck::subjectHeadingNodeId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(java.util.stream.Collectors.toSet());
+        var texts = new ArrayList<String>();
+        for (var clause : semantics.clauses()) {
+            if (subjectIds.contains(clause.headingNodeId())
+                    && clause.contentText() != null && !clause.contentText().isBlank()) {
+                texts.add(clause.contentText());
+            }
+        }
+        embeddings.prefetch(texts);
+    }
+
+    /**
+     * The review's time budget is spent: every check not yet terminal becomes DEGRADED for the
+     * same code-owned reason, so the run still reaches {@link #completeIfDone} and the existing
+     * all-degraded finalisation rule applies.
+     */
+    private void degradeRemaining(Review review, ReviewAnalysisRun run,
+            List<ReviewPlanCheck> checks, int fromIndex, Attempt attempt) {
+        var outcome = CheckOutcome.degraded(DEADLINE_DEGRADED_REASON);
+        for (int index = fromIndex; index < checks.size(); index++) {
+            var check = checks.get(index);
             var existing = analysisRepository.findExecution(
                     review.organizationId(), run.id(), check.id());
             if (existing.isPresent() && existing.get().status().terminal()) {
@@ -273,28 +505,19 @@ public class ReviewAnalysisService {
             if (lease.isEmpty()) {
                 continue;
             }
-            var context = new ReviewCheckContext(review, snapshot, check, run.id(),
-                    semantics, environment, evidenceCache, structure.headingTexts(),
-                    structure.runInHeadings(), structure.untrackableHeadings(), clock.instant());
-            var outcome = runCheck(check, context, environment);
-            var leaseId = lease.get();
+            attempt.heldBy(execution.id(), lease.get());
             try {
                 transactionTemplate.executeWithoutResult(status -> {
                     if (!analysisRepository.completeExecution(review.organizationId(),
-                            execution.id(), leaseId, outcome.status(), outcome.evidenceTraceId(),
-                            outcome.detail(), outcome.signals().size(), clock.instant())) {
+                            execution.id(), lease.get(), outcome.status(), null,
+                            outcome.detail(), 0, clock.instant())) {
                         throw new LeaseLostException(execution.id());
                     }
-                    findingRepository.deleteFindings(review.organizationId(), run.id());
-                    analysisRepository.deleteSignals(
-                            review.organizationId(), run.id(), check.id());
-                    analysisRepository.insertSignals(outcome.signals());
-                    analysisRepository.replaceEvidenceItems(review.organizationId(),
-                            review.id(), run.id(), check.id(), outcome.evidenceItems());
                 });
+                attempt.clear();
             } catch (LeaseLostException e) {
                 // another worker reclaimed this execution; it owns the terminal write
-                continue;
+                attempt.clear();
             }
         }
     }
@@ -339,8 +562,8 @@ public class ReviewAnalysisService {
         var executions = analysisRepository.findExecutions(organizationId, run.id());
         if (executions.size() == checks.size()
                 && executions.stream().allMatch(execution -> execution.status().terminal())) {
-            // assemble before the completion transaction: an assembly failure fails this
-            // generation terminally instead of leaving a wedged RUNNING run
+            // assemble before the completion transaction: a non-transient assembly failure fails
+            // this generation terminally; a transient one is counted and retried by analyze
             var assembled = findingAssembler.assemble(run,
                     analysisRepository.findSignals(organizationId, run.id()), clock.instant());
             transactionTemplate.executeWithoutResult(status -> {
@@ -366,9 +589,13 @@ public class ReviewAnalysisService {
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
             return isDecisionContractError(e)
                     ? CheckOutcome.failed("decision_contract_error:" + e.getClass().getSimpleName())
-                    : CheckOutcome.degraded(
-                            "provider_unavailable:" + e.getClass().getSimpleName());
+                    : CheckOutcome.degraded(ProviderFailures.degradedReason(e));
         } catch (RuntimeException e) {
+            if (isTransientFailure(e)) {
+                // Infrastructure, not a legal verdict: let analyze count it and JobRunr retry the
+                // same run. Writing FAILED here would silently lose the check's work.
+                throw e;
+            }
             return CheckOutcome.failed(failureReason(e));
         }
     }
@@ -387,6 +614,34 @@ public class ReviewAnalysisService {
         }
     }
 
+    /**
+     * The lease this analyze call currently holds. One attempt runs one check at a time, so a
+     * failure handler can release exactly that lease without waiting for its 10-minute expiry.
+     * Cleared only after the check's terminal transaction commits (or loses the lease).
+     */
+    private static final class Attempt {
+        private UUID executionId;
+        private UUID leaseId;
+
+        void heldBy(UUID executionId, UUID leaseId) {
+            this.executionId = executionId;
+            this.leaseId = leaseId;
+        }
+
+        void clear() {
+            this.executionId = null;
+            this.leaseId = null;
+        }
+
+        UUID executionId() {
+            return executionId;
+        }
+
+        UUID leaseId() {
+            return leaseId;
+        }
+    }
+
     static String failureReason(RuntimeException e) {
         var origin = e.getStackTrace().length == 0 ? "unknown"
                 : e.getStackTrace()[0].getClassName() + "."
@@ -394,6 +649,61 @@ public class ReviewAnalysisService {
                         + ":" + e.getStackTrace()[0].getLineNumber();
         var message = e.getMessage() == null ? "" : ":" + e.getMessage();
         return e.getClass().getSimpleName() + message + "@" + origin;
+    }
+
+    /**
+     * A failure is transient when it, or anything it was caused by, is an infrastructure failure
+     * that a retry can plausibly survive. Everything else keeps the v1 rule: terminal FAILED.
+     */
+    static boolean isTransientFailure(Throwable failure) {
+        var visited = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<Throwable, Boolean>());
+        Throwable current = failure;
+        while (current != null && visited.add(current)) {
+            if (isTransientType(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    /**
+     * The code-owned reason recorded for a transient failure: the transient type that made the
+     * chain retryable, never the driver or provider message. A SQL message can quote statement or
+     * key detail, and diagnostics exposes this value to every reviewer who can read the review.
+     */
+    static String transientReason(Throwable failure) {
+        var visited = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<Throwable, Boolean>());
+        Throwable current = failure;
+        while (current != null && visited.add(current)) {
+            if (isTransientType(current)) {
+                return current.getClass().getSimpleName();
+            }
+            current = current.getCause();
+        }
+        return failure.getClass().getSimpleName();
+    }
+
+    private static boolean isTransientType(Throwable failure) {
+        return failure instanceof TransientDataAccessException
+                || failure instanceof RecoverableDataAccessException
+                || failure instanceof DataAccessResourceFailureException
+                || failure instanceof QueryTimeoutException
+                || failure instanceof SQLTransientException
+                || failure instanceof LeaseLostException;
+    }
+
+    /**
+     * The attempt's own budget, capped so one run cannot keep restarting it forever: at most one
+     * budget per attempt, and at most {@code maxTransientFailures + 1} budgets for the run.
+     */
+    static Instant analysisDeadline(Instant runStartedAt, Instant attemptStartedAt,
+            Duration budget, int maxTransientFailures) {
+        var attemptLimit = attemptStartedAt.plus(budget);
+        var runLimit = runStartedAt.plus(budget.multipliedBy(maxTransientFailures + 1L));
+        return attemptLimit.isBefore(runLimit) ? attemptLimit : runLimit;
     }
 
     private static int count(

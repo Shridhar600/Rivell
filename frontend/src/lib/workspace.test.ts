@@ -10,10 +10,12 @@ import {
   executableChange,
   finalizeSummary,
   findingState,
+  languageAuthority,
   nextOpenFinding,
   orderForReview,
   profileLine,
   proposedChangeType,
+  regionBodyText,
   regionText,
   splitOnTerm,
   topLevelNodes,
@@ -54,6 +56,8 @@ function decision(findingId: string, overrides: Partial<HumanDecision> = {}): Hu
     languageSource: 'APPROVED_DRAFTING',
     approvedDraftingEvidenceId: null,
     comment: null,
+    rejectReason: null,
+    approvedBy: null,
     actorId: 'u',
     decidedAt: '2026-10-01T00:00:00Z',
     clientRequestId: null,
@@ -82,6 +86,9 @@ describe('findingState', () => {
     expect(findingState(f, decision('a', { action: 'ACCEPT' })).label).toBe('Accepted')
     expect(findingState(f, decision('a', { action: 'EDIT' })).label).toBe('Edited')
     expect(findingState(f, decision('a', { action: 'REJECT' })).tone).toBe('rejected')
+    expect(findingState(f, decision('a', { action: 'REJECT', rejectReason: 'KEEP_AS_DRAFTED' }))).toEqual({ tone: 'resolved', label: 'Kept as drafted' })
+    expect(findingState(f, decision('a', { action: 'REJECT', rejectReason: 'FINDING_WRONG' }))).toEqual({ tone: 'rejected', label: 'Dismissed' })
+    expect(findingState(f, decision('a', { action: 'RESOLVE', approvedAction: null, approvedLanguage: null, languageSource: null, approvedBy: 'Jane Doe' }))).toEqual({ tone: 'resolved', label: 'Approved by Jane Doe' })
     expect(findingState(f, decision('a', { action: 'ESCALATE' }))).toEqual({ tone: 'escalated', label: 'Escalated · unresolved' })
   })
 
@@ -95,6 +102,7 @@ describe('executableChange', () => {
     expect(executableChange(decision('a'))).toEqual({ type: 'REPLACE', language: 'New text.' })
     expect(executableChange(decision('a', { action: 'EDIT', approvedAction: 'DELETE', approvedLanguage: null }))).toEqual({ type: 'DELETE', language: null })
     expect(executableChange(decision('a', { action: 'REJECT' }))).toBeNull()
+    expect(executableChange(decision('a', { action: 'RESOLVE', approvedBy: 'Jane Doe' }))).toBeNull()
     expect(executableChange(decision('a', { action: 'ESCALATE' }))).toBeNull()
     expect(executableChange(decision('a', { approvedAction: null }))).toBeNull()
     expect(executableChange(null)).toBeNull()
@@ -120,8 +128,10 @@ describe('profileLine', () => {
       knowledgePinNumber: null,
       effectiveOn: null,
       engine: null,
+      playbooksUsed: null,
     }
-    expect(profileLine(snapshot)).toBe('MSA, counterparty paper, our side customer')
+    expect(profileLine(snapshot)).toBe('MSA, their template, party you represent: Customer')
+    expect(profileLine({ ...snapshot, profile: { ...snapshot.profile, ourSideRole: 'PARTY_A' } })).toContain('party you represent: Party A')
     expect(profileLine({ ...snapshot, profile: null })).toBeNull()
     expect(profileLine(null)).toBeNull()
   })
@@ -178,6 +188,9 @@ describe('clauses from the real, flat structure', () => {
     expect(regionText(nodes, 'h1')).toBe('3. Fees\n3.1 Pay in thirty days.\n3.2 Late interest applies.')
     expect(regionText(nodes, 'h2')).toBe('4. Term\n4.1 Two years.')
     expect(regionText(nodes, 'missing')).toBeNull()
+    expect(regionBodyText(nodes, 'h1')).toBe('3.1 Pay in thirty days.\n3.2 Late interest applies.')
+    expect(regionBodyText(nodes, 'h2')).toBe('4.1 Two years.')
+    expect(regionBodyText(nodes, 'missing')).toBeNull()
   })
 })
 
@@ -223,7 +236,17 @@ describe('finalizeSummary', () => {
     const loaded = [{ type: 'REPLACE' as const }, { type: 'REPLACE' as const }, { type: 'DELETE' as const }]
     expect(finalizeSummary(review, loaded)).toEqual([
       '3 approved changes (1 accepted, 2 edited): 2 replace, 0 insert, 1 delete',
-      '1 rejected Finding; no approved change created',
+      '1 finding with no approved change',
+    ])
+  })
+
+  it('names resolved escalations in the final summary', () => {
+    expect(
+      finalizeSummary({ accepted: 1, edited: 1, rejected: 1 }, null, 1),
+    ).toEqual([
+      '2 approved changes (1 accepted, 1 edited)',
+      '1 finding with no approved change',
+      '1 escalation resolved with an approver name; no approved change created',
     ])
   })
 
@@ -277,6 +300,49 @@ describe('approved wording', () => {
   })
 })
 
+describe('where proposed wording came from', () => {
+  it('calls library wording approved only when the fit check passed', () => {
+    const fits = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: { wordingFitVerdict: 'FITS' },
+    } as never)
+    expect(fits?.strong).toBe('Approved organizational drafting')
+  })
+
+  it('does not call library wording approved without a fit verdict', () => {
+    const unchecked = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: null,
+    } as never)
+    expect(unchecked?.strong).toBe('Library wording, not checked against this position')
+  })
+
+  it('says library wording was not checked when the fit call gave no answer', () => {
+    const unchecked = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: { wordingFitVerdict: 'UNKNOWN' },
+    } as never)
+    expect(unchecked?.strong).toBe('Library wording, not checked against this position')
+    expect(unchecked?.rest).not.toMatch(/approved/i)
+  })
+
+  it('never calls wording that did not fit approved', () => {
+    const checked = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: { wordingFitVerdict: 'DOES_NOT_FIT' },
+    } as never)
+    expect(checked?.strong).toBe('Library wording that does not fit this position')
+  })
+
+  it('keeps machine wording labelled as Rivell\'s', () => {
+    const generated = languageAuthority({
+      proposedLanguageSource: 'GENERATIVE',
+      quality: { wordingFitVerdict: 'DOES_NOT_FIT' },
+    } as never)
+    expect(generated?.strong).toBe('Proposed by Rivell')
+  })
+})
+
 describe('orderForReview', () => {
   it('puts "needs your look" items after the others and keeps each group in server order', () => {
     const findings = [
@@ -297,5 +363,20 @@ describe('orderForReview', () => {
       { id: 'e', decidedBy: 'NEEDS_YOUR_LOOK', firstReviewCategory: 'WALK_AWAY' },
     ]
     expect(orderForReview(findings).map((finding) => finding.id)).toEqual(['b', 'd', 'e', 'a', 'c'])
+  })
+
+  it('puts absence findings after the disagreements inside "needs your look"', () => {
+    const findings = [
+      { id: 'absence', decidedBy: 'NEEDS_YOUR_LOOK', subjectKind: 'ABSENCE' as const },
+      { id: 'disagreement', decidedBy: 'NEEDS_YOUR_LOOK', subjectKind: 'CLAUSE' as const },
+      { id: 'walk-away', decidedBy: 'NEEDS_YOUR_LOOK', firstReviewCategory: 'WALK_AWAY', subjectKind: 'ABSENCE' as const },
+      { id: 'second', decidedBy: 'NEEDS_YOUR_LOOK', subjectKind: 'CLAUSE' as const },
+    ]
+    expect(orderForReview(findings).map((finding) => finding.id)).toEqual([
+      'walk-away',
+      'disagreement',
+      'second',
+      'absence',
+    ])
   })
 })

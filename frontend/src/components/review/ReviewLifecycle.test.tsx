@@ -58,7 +58,7 @@ describe('review lifecycle states', () => {
       },
     })
 
-    expect(await screen.findByText(/The review is queued/)).toBeInTheDocument()
+    expect(await screen.findByText(/The review is waiting to start/)).toBeInTheDocument()
     expect(screen.getByText('0 of 3 checks completed (0%)')).toBeInTheDocument()
     expect(progressRequests(api)).toHaveLength(0)
 
@@ -90,6 +90,46 @@ describe('review lifecycle states', () => {
     ).toBeInTheDocument()
     const check = within(sheet).getByText('Policy comparison · Limitation of liability')
     expect(check).toBeInTheDocument()
+  })
+
+  it('shows the playbooks the analysis froze in the review notes', async () => {
+    renderReview({
+      ...fixtureCompletedReviewSummary,
+      snapshot: {
+        ...fixtureCompletedReviewSummary.snapshot,
+        playbooksUsed: [
+          {
+            artifactId: 'pb-1',
+            artifactType: 'PLAYBOOK',
+            name: 'Commercial MSA Playbook',
+            publicationNumber: 6,
+          },
+          {
+            artifactId: 'cl-1',
+            artifactType: 'CLAUSE_LIBRARY',
+            name: 'Clause Library',
+            publicationNumber: 4,
+          },
+        ],
+      },
+    })
+    const sheet = await openReviewNotes()
+    expect(within(sheet).getByText('Knowledge used')).toBeInTheDocument()
+    expect(
+      within(sheet).getByText('Commercial MSA Playbook (Playbook), Clause Library (Clause library)'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not repeat the no-playbook notice in the review notes', async () => {
+    renderReview({
+      ...fixtureCompletedReviewSummary,
+      snapshot: { ...fixtureCompletedReviewSummary.snapshot, playbooksUsed: [] },
+    })
+    const sheet = await openReviewNotes()
+    expect(within(sheet).queryByText('Knowledge used')).not.toBeInTheDocument()
+    expect(
+      within(sheet).queryByText('No playbook applied. General scan only; review the full contract.'),
+    ).not.toBeInTheDocument()
   })
 
   it('renders a technical failure distinctly and never leaks the raw reason', async () => {
@@ -181,7 +221,7 @@ describe('review lifecycle states', () => {
     const findings = await screen.findByRole('complementary', { name: 'Findings' })
     expect(
       await within(findings).findByText(
-        'No findings. The automated review recorded none for this contract version.',
+        'No findings for this contract version.',
       ),
     ).toBeInTheDocument()
     // Nothing is claimed beyond what the server said, and nothing is flagged as an error.
@@ -198,7 +238,7 @@ describe('review lifecycle states', () => {
       activeRun: { id: 'run-1', runNumber: 1, status: 'COMPLETED' },
     })
 
-    expect(await screen.findByText(/A newer analysis attempt exists/)).toBeInTheDocument()
+    expect(await screen.findByText(/A newer analysis has run/)).toBeInTheDocument()
     expect(screen.getByText(/Run failed/)).toBeInTheDocument()
   })
 })

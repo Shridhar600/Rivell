@@ -1,19 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import type { ArtifactDetail, Candidate } from '../api/knowledge'
+import type { ArtifactDetail, AuthorityRule, Candidate } from '../api/knowledge'
 import {
   escalationDiverge,
+  formatBoolean,
   hasSupersessionProposal,
   interpretationFor,
   isBulkEligible,
+  normalizeJurisdiction,
   positionsDiverge,
   proposedPositions,
   reviewReasonLabel,
   scopeDifferences,
+  semanticDraftFrom,
+  semanticInputFrom,
   variantRoleDiverge,
   VERIFICATION_LABELS,
 } from './semantics'
 
 function candidate(partial: Partial<Candidate> = {}): Candidate {
+  const authorityRules = partial.authorityRules ?? []
   return {
     id: 'c1',
     artifactId: 'a1',
@@ -21,6 +26,8 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     candidateType: 'PLAYBOOK_RULE',
     reviewStatus: 'PENDING',
     rawLabel: 'Rule',
+    editedTitle: null,
+    title: 'Rule',
     contentText: 'Rule content',
     payloadColumns: {},
     legalConceptKey: 'LIMITATION_OF_LIABILITY',
@@ -31,12 +38,22 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     variantRole: null,
     escalationTrigger: null,
     requiresApproval: false,
+    preferredText: null,
+    fallbackTexts: [],
+    prohibitedText: null,
+    authorityRules,
+    storedAuthorityRules: authorityRules,
+    authorityConflicts: [],
+    unmappedAuthority: [],
+    needsAttention: false,
+    correctedFields: [],
     interpretations: [],
     editedContentText: null,
     editedPayloadColumns: {},
     supersedingCandidateId: null,
     contractPackKey: 'MSA',
     declaredContractTypes: ['MSA'],
+    sourceContractTypes: [],
     partyPerspective: 'Customer',
     paperSource: 'Third-party',
     jurisdiction: 'US',
@@ -57,6 +74,7 @@ const artifact: ArtifactDetail = {
   id: 'a1',
   artifactType: 'PLAYBOOK',
   filename: 'playbook.docx',
+  documentTitle: null,
   contentType: 'application/octet-stream',
   sizeBytes: 2048,
   sha256: 'a'.repeat(64),
@@ -84,9 +102,9 @@ describe('semantic display helpers', () => {
   })
 
   it('labels verification states', () => {
-    expect(VERIFICATION_LABELS.VERIFIED).toMatch(/supported by source/i)
+    expect(VERIFICATION_LABELS.VERIFIED).toMatch(/matches the source/i)
     expect(VERIFICATION_LABELS.DISPUTED).toMatch(/disputed/i)
-    expect(VERIFICATION_LABELS.NOT_VERIFIED).toMatch(/not independently verified/i)
+    expect(VERIFICATION_LABELS.NOT_VERIFIED).toMatch(/not checked against a second source/i)
   })
 
   it('finds an interpretation by field', () => {
@@ -176,11 +194,227 @@ describe('semantic display helpers', () => {
     expect(scopeDifferences(candidate(), artifact)).toEqual([])
   })
 
+  it('compares jurisdictions with the shared normalisation', () => {
+    expect(normalizeJurisdiction('United Kingdom')).toBe('uk')
+    expect(normalizeJurisdiction('UK')).toBe('uk')
+    expect(normalizeJurisdiction('United States')).toBe('us')
+    expect(normalizeJurisdiction('US')).toBe('us')
+    expect(normalizeJurisdiction('New Zealand')).toBe('newzealand')
+    expect(normalizeJurisdiction('NEW_ZEALAND')).toBe('newzealand')
+
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'New Zealand' }), {
+        ...artifact,
+        jurisdiction: 'NEW_ZEALAND',
+      }),
+    ).toEqual([])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'United Kingdom' }), {
+        ...artifact,
+        jurisdiction: 'UK',
+      }),
+    ).toEqual([])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'United States' }), {
+        ...artifact,
+        jurisdiction: 'US',
+      }),
+    ).toEqual([])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: 'United Kingdom' }), {
+        ...artifact,
+        jurisdiction: 'US',
+      }),
+    ).toEqual([{ label: 'Jurisdiction', candidateValue: 'United Kingdom', manifestValue: 'US' }])
+    expect(
+      scopeDifferences(candidate({ jurisdiction: '' }), { ...artifact, jurisdiction: null }),
+    ).toEqual([])
+  })
+
   it('shows bulk eligibility from server fields only', () => {
     expect(isBulkEligible(candidate())).toBe(true)
     expect(isBulkEligible(candidate({ reviewCategory: 'ELEVATED' }))).toBe(false)
     expect(isBulkEligible(candidate({ reviewStatus: 'APPROVED' }))).toBe(false)
     expect(isBulkEligible(candidate({ reviewCategory: null }))).toBe(false)
+  })
+
+  it('detects a change to a rule condition or stance on its own', () => {
+    const current = candidate({
+      authorityRules: [
+        {
+          approver: 'Commercial Manager',
+          stances: ['FALLBACK'],
+          condition: 'above the preferred position',
+          source: 'MATRIX',
+          quote: null,
+        },
+      ],
+    })
+
+    const conditionOnly = semanticInputFrom(
+      {
+        ...semanticDraftFrom(current),
+        authorityRules: [
+          {
+            approver: 'Commercial Manager',
+            stances: ['FALLBACK'],
+            condition: 'above the fallback',
+            source: 'MATRIX',
+            quote: null,
+          },
+        ],
+      },
+      current,
+    )
+    expect(conditionOnly?.authorityRules?.[0]?.condition).toBe('above the fallback')
+
+    const stanceOnly = semanticInputFrom(
+      {
+        ...semanticDraftFrom(current),
+        authorityRules: [
+          {
+            approver: 'Commercial Manager',
+            stances: ['PROHIBITED'],
+            condition: 'above the preferred position',
+            source: 'MATRIX',
+            quote: null,
+          },
+        ],
+      },
+      current,
+    )
+    expect(stanceOnly?.authorityRules?.[0]?.stances).toEqual(['PROHIBITED'])
+  })
+
+  it('sends the typed stances and approval rules as a complete correction', () => {
+    const current = candidate({
+      preferredText: 'Net 45',
+      fallbackTexts: ['Net 30'],
+      prohibitedText: 'Prepayment',
+      authorityRules: [
+        {
+          approver: 'Head of Finance',
+          stances: ['FALLBACK'],
+          condition: null,
+          source: 'ENTRY',
+          quote: null,
+        },
+      ],
+      interpretations: [
+        {
+          field: 'authorityRules',
+          proposedValue: 'ENTRY: Head of Finance',
+          kind: 'DETERMINISTIC',
+          specId: 'deterministic-column-extraction',
+          specVersion: 1,
+          supportingSourceNodes: 2,
+          verification: 'VERIFIED',
+        },
+      ],
+    })
+    const draft = semanticDraftFrom(current)
+    expect(draft.preferredText).toBe('Net 45')
+    expect(draft.fallbackTexts).toBe('Net 30')
+    expect(draft.prohibitedText).toBe('Prepayment')
+    expect(draft.authorityRules).toHaveLength(1)
+
+    const input = semanticInputFrom(
+      {
+        ...draft,
+        preferredText: 'Net 60',
+        fallbackTexts: 'Net 45\nNet 30',
+        prohibitedText: '',
+        authorityRules: [
+          {
+            approver: 'General Counsel',
+            stances: ['FALLBACK', 'PROHIBITED'],
+            condition: 'if the cap is below twelve months',
+            source: 'MATRIX',
+            quote: null,
+          },
+        ],
+      },
+      current,
+    )
+
+    expect(input).toEqual({
+      positions: ['PREFERRED'],
+      requiresApproval: false,
+      preferredText: 'Net 60',
+      fallbackTexts: ['Net 45', 'Net 30'],
+      prohibitedText: '',
+      authorityRules: [
+        {
+          approver: 'General Counsel',
+          stances: ['FALLBACK', 'PROHIBITED'],
+          condition: 'if the cap is below twelve months',
+          source: 'MATRIX',
+          quote: null,
+        },
+      ],
+    })
+  })
+
+  it('seeds the approval rule draft from the saved list, not the display coverage', () => {
+    const fallback: AuthorityRule = {
+      approver: 'Head of Finance',
+      stances: ['FALLBACK'],
+      condition: null,
+      source: 'ENTRY',
+      quote: null,
+    }
+    const walkAway: AuthorityRule = { ...fallback, stances: ['PROHIBITED'] }
+    const current = candidate({
+      authorityRules: [fallback, walkAway],
+      storedAuthorityRules: [fallback],
+    })
+
+    const draft = semanticDraftFrom(current)
+    expect(draft.authorityRules).toEqual([
+      {
+        approver: 'Head of Finance',
+        stances: ['FALLBACK'],
+        condition: '',
+        source: 'ENTRY',
+        quote: null,
+      },
+    ])
+
+    const input = semanticInputFrom({ ...draft, preferredText: 'Net 60' }, current)
+    expect(input?.authorityRules).toEqual([
+      {
+        approver: 'Head of Finance',
+        stances: ['FALLBACK'],
+        condition: null,
+        source: 'ENTRY',
+        quote: null,
+      },
+    ])
+  })
+
+  it('sends an explicit null when counsel approval is set back to not specified', () => {
+    const current = candidate({ requiresApproval: true, positions: ['PREFERRED'], escalationTrigger: 'Above 2x' })
+    const draft = semanticDraftFrom(current)
+    expect(draft.requiresApproval).toBe('true')
+
+    const unset = semanticInputFrom({ ...draft, requiresApproval: 'unset' }, current)
+
+    expect(unset).toEqual({
+      positions: ['PREFERRED'],
+      requiresApproval: null,
+      escalationTrigger: 'Above 2x',
+      preferredText: '',
+      fallbackTexts: [],
+      prohibitedText: '',
+      authorityRules: [],
+    })
+    expect(formatBoolean(null)).toBe('Not specified')
+  })
+
+  it('sends no approval field when approval did not change', () => {
+    const current = candidate({ requiresApproval: null })
+    const input = semanticInputFrom(semanticDraftFrom(current), current)
+    expect(input).toBeUndefined()
   })
 
   it('detects supersession proposals from conflict signals', () => {

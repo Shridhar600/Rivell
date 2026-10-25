@@ -72,7 +72,7 @@ export function SourceContent({ type, blocks, produced, selectedId, onSelect, op
       <div>
         <div className="rv-k-sech">
           <h2>Original content</h2>
-          <span>Highlights mark the exact source nodes</span>
+          <span>Highlights show where each entry came from.</span>
         </div>
         <div className="rv-k-srcdoc" ref={root}>
           {blocks.map((block) => (
@@ -96,7 +96,7 @@ export function SourceContent({ type, blocks, produced, selectedId, onSelect, op
                   aria-pressed={candidate.id === selectedId}
                   onClick={() => onSelect(candidate.id === selectedId ? null : candidate.id)}
                 >
-                  <span>{candidate.rawLabel}</span>
+                  <span>{candidate.title}</span>
                   <ChevronIcon className="rv-icon" />
                 </button>
               </li>

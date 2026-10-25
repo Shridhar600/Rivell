@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.rivell.workbench.intelligence.ChoiceQuestion;
 import com.rivell.workbench.intelligence.DecisionSpec;
 import com.rivell.workbench.intelligence.QuestionPack;
 import com.rivell.workbench.intelligence.SemanticQuestion;
@@ -18,7 +17,6 @@ import com.rivell.workbench.intelligence.YesNoQuestion;
 final class M5SemanticSpecs {
 
     static final String PARTY_ROLE_SPEC = "contract-party-role";
-    static final String GOVERNING_LAW_SPEC = "contract-metadata-governing-law";
     static final String FACT_VERIFICATION_SPEC = "contract-fact-verification";
     static final String RELATIONSHIP_SPEC = "contract-relationship";
 
@@ -45,21 +43,6 @@ final class M5SemanticSpecs {
                         + "declared review profile.",
                 M5SemanticStates.PartyRoleState.SCHEMA_VERSION,
                 new QuestionPack(questions));
-    }
-
-    static DecisionSpec governingLaw() {
-        var criteria = new LinkedHashMap<String, String>();
-        criteria.put("US", "The governing law is a jurisdiction of the United States.");
-        criteria.put("UK", "The governing law is a jurisdiction of the United Kingdom "
-                + "(England and Wales, Scotland, or Northern Ireland).");
-        criteria.put("UNSPECIFIED", "No governing-law jurisdiction is stated, or it is "
-                + "neither clearly US nor UK.");
-        return new DecisionSpec(
-                GOVERNING_LAW_SPEC, VERSION,
-                "Identify the governing jurisdiction named by the contract.",
-                M5SemanticStates.ClauseState.SCHEMA_VERSION,
-                new QuestionPack(Map.of("governing_law", new ChoiceQuestion(
-                        "Which jurisdiction's law governs this agreement?", criteria))));
     }
 
     static DecisionSpec factVerification() {
@@ -106,11 +89,12 @@ final class M5SemanticSpecs {
         return switch (contractType.family()) {
             case NDA, MNDA, ONDA -> List.of(PartyRole.DISCLOSING_PARTY, PartyRole.RECEIVING_PARTY,
                     PartyRole.PARTY_A, PartyRole.PARTY_B);
-            case MSA, SAAS, SOW, DPA -> List.of(PartyRole.CUSTOMER, PartyRole.SUPPLIER,
-                    PartyRole.PARTY_A, PartyRole.PARTY_B);
+            case MSA, SAAS, SOW, DPA, SUPPLY, SERVICES, ORDER_FORM, RESELLER ->
+                    List.of(PartyRole.CUSTOMER, PartyRole.SUPPLIER,
+                            PartyRole.PARTY_A, PartyRole.PARTY_B);
             case SWL -> List.of(PartyRole.LICENSOR, PartyRole.LICENSEE, PartyRole.CUSTOMER,
                     PartyRole.SUPPLIER, PartyRole.PARTY_A, PartyRole.PARTY_B);
-            case OTHER -> List.of(PartyRole.CUSTOMER, PartyRole.SUPPLIER,
+            case AMENDMENT, OTHER -> List.of(PartyRole.CUSTOMER, PartyRole.SUPPLIER,
                     PartyRole.DISCLOSING_PARTY, PartyRole.RECEIVING_PARTY,
                     PartyRole.PARTY_A, PartyRole.PARTY_B);
         };

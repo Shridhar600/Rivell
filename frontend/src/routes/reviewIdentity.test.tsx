@@ -94,7 +94,7 @@ describe('missing route identity', () => {
 
     renderPageWithoutParams(<ReviewWorkspacePage />)
 
-    expect(await screen.findByText(/missing contract or review id/i)).toBeTruthy()
+    expect(await screen.findByText(/this review link is incomplete/i)).toBeTruthy()
     // Nothing at all may be requested, including the structure and semantics reads, which are
     // version-gated rather than id-gated and are the sibling hole this guards against reopening.
     expect(api.requests).toEqual([])

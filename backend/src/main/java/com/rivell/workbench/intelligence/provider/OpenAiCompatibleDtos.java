@@ -21,6 +21,7 @@ final class OpenAiCompatibleDtos {
             String model,
             List<Message> messages,
             Double temperature,
+            @JsonProperty("reasoning_effort") String reasoningEffort,
             @JsonProperty("response_format") ResponseFormat responseFormat) {
 
         record Message(String role, String content) {

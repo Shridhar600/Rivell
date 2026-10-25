@@ -3,6 +3,7 @@ import { artifactName, buildPublicationIndex, publicationsText, type Publication
 import { hasHumanCorrection } from '../../../lib/compilationFields'
 import { kindLabel, publishedDestination } from '../../../lib/compilation'
 import { LinkButton } from '../../ui/Button'
+import { useHeadingFocus } from '../../../lib/useHeadingFocus'
 
 /**
  * A compilation that has been published, shown as the immutable record it now is. It is derived
@@ -10,6 +11,7 @@ import { LinkButton } from '../../ui/Button'
  * editing: published knowledge cannot be reopened.
  */
 export function PublishedCompilation({ artifact, candidates, publications }: { artifact: ArtifactDetail; candidates: Candidate[]; publications: Publication[] | null }) {
+  const heading = useHeadingFocus<HTMLHeadingElement>(artifact.id)
   const published = candidates.filter((candidate) => candidate.reviewStatus === 'PUBLISHED')
   const rejected = candidates.filter((candidate) => candidate.reviewStatus === 'REJECTED').length
   const corrected = published.filter((candidate) => hasHumanCorrection(candidate, artifact)).length
@@ -26,13 +28,13 @@ export function PublishedCompilation({ artifact, candidates, publications }: { a
     <div className="rv-kc-scroll">
       <div className="rv-kc-pubcard">
         <span className="rv-kc-stb rv-kc-stb--ok">Published{text ? `, ${text}` : ''}</span>
-        <h1 tabIndex={-1}>{artifactName(artifact)}</h1>
+        <h1 tabIndex={-1} ref={heading}>{artifactName(artifact)}</h1>
         <p>
-          This human-reviewed snapshot is published organizational knowledge for future reviews. The uploaded source remains immutable, and earlier publications remain reproducible.
+          This reviewed version is published knowledge for future reviews. The source cannot be changed and earlier versions remain available.
         </p>
         <dl className="rv-kc-snapshot">
           <div>
-            <dt>Published candidates</dt>
+            <dt>Published entries</dt>
             <dd>{published.length}</dd>
           </div>
           <div>
@@ -40,7 +42,7 @@ export function PublishedCompilation({ artifact, candidates, publications }: { a
             <dd>{corrected}</dd>
           </div>
           <div>
-            <dt>Rejected candidates</dt>
+            <dt>Rejected entries</dt>
             <dd>{rejected}</dd>
           </div>
         </dl>
@@ -50,7 +52,7 @@ export function PublishedCompilation({ artifact, candidates, publications }: { a
           </LinkButton>
           <LinkButton to={`/knowledge/sources/${artifact.id}`}>View retained source</LinkButton>
         </div>
-        <p className="rv-kc-note">Publishing created a new immutable publication. It does not rewrite older publications or reviews pinned to an earlier knowledge snapshot.</p>
+        <p className="rv-kc-note">Publishing created a new version. It does not change earlier versions or reviews that used them.</p>
       </div>
     </div>
   )

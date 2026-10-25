@@ -1,6 +1,7 @@
 package com.rivell.workbench.knowledge;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -54,12 +55,12 @@ public class UserPositionService {
                 .filter(found -> found.artifactId().equals(artifactId))
                 .orElseThrow(() -> new KnowledgeUnitNotFoundException(unitId));
         if (!GATED.contains(artifact.artifactType())) {
-            throw new UnitNotMarkableException("only a playbook or a clause library sorts its parts "
-                    + "into positions; every part of this file with text is already a candidate");
+            throw new UnitNotMarkableException("Only a playbook or a clause library sorts its parts "
+                    + "into positions. Every part of this file that has text is already an entry.");
         }
         if (unit.override() != null || repository.loadCandidates(artifactId, organizationId)
                 .stream().anyMatch(candidate -> candidate.extractionUnitId().equals(unitId))) {
-            throw new UnitNotMarkableException("this part already holds a position");
+            throw new UnitNotMarkableException("This part already holds a position.");
         }
         // the part is the region over exactly its source nodes, wherever the rebuild lists it;
         // stored provenance comes back as a set, so the nodes are compared as sets
@@ -70,12 +71,14 @@ public class UserPositionService {
                         .sourceNodeIds()).equals(sourceNodes))
                 .findFirst()
                 .orElseThrow(() -> new UnitNotMarkableException(
-                        "the source no longer matches this part"));
-        var now = Instant.now();
+                        "The file no longer matches this part."));
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would be
+        // stored rounded, so the returned candidate would not match a later read of it.
+        var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var raw = region.toCandidates(artifact, unit,
                 ApplicabilityScope.fromManifest(artifact.manifest()), now);
         if (raw.isEmpty()) {
-            throw new UnitNotMarkableException("this part has no text to make a position from");
+            throw new UnitNotMarkableException("This part has no text to make a position from.");
         }
         // model calls run with no open transaction, as at upload
         var compiled = semanticCompilation.compileUserPosition(artifact, unit, raw,
@@ -83,7 +86,7 @@ public class UserPositionService {
         transactionTemplate.executeWithoutResult(status -> {
             if (!repository.overrideRecordKind(unitId, organizationId,
                     KnowledgeRecordKind.POSITION, identity.userId(), now)) {
-                throw new UnitNotMarkableException("this part already holds a position");
+                throw new UnitNotMarkableException("This part already holds a position.");
             }
             repository.insertCandidates(artifactId, compiled);
         });

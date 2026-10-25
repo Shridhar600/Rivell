@@ -30,6 +30,7 @@ public final class HumanReviewResolver {
             Map<UUID, HumanDecision> currentDecisions,
             boolean analysisComplete,
             boolean analysisProducedNoTrustworthyResult,
+            int checksDidNotRun,
             boolean finalized,
             Set<UUID> headingNodeIds) {
         var planned = new ArrayList<PlannedChange>();
@@ -75,6 +76,9 @@ public final class HumanReviewResolver {
                 case EDIT -> edited++;
                 case REJECT -> rejected++;
                 case ESCALATE -> escalatedCount++;
+                case RESOLVE -> {
+                    // A resolved escalation approves the clause as drafted and adds no change.
+                }
             }
             if (decision.resolved()) {
                 if (isActionable) {
@@ -104,51 +108,77 @@ public final class HumanReviewResolver {
         var blockers = new ArrayList<FinalizationBlocker>();
         if (!analysisComplete) {
             blockers.add(blocker(FinalizationBlockerCode.ANALYSIS_NOT_COMPLETE,
-                    "Machine analysis is not complete; decisions and finalization are "
-                            + "unavailable until the review completes.", List.of()));
+                    "The analysis is not finished. You can decide on findings and finalize "
+                            + "once it completes.", List.of()));
         }
-        if (analysisProducedNoTrustworthyResult) {
-            // No planned check completed. The run still reports COMPLETED, so finalizing here would
-            // turn an analysis that never really ran into a clean-looking zero-change artifact.
-            // Block until the environment matches the review snapshot and the review is re-analyzed.
+        if (analysisProducedNoTrustworthyResult && checksDidNotRun == 0) {
+            // No planned check completed, and none of them failed or ran out of time: the run had
+            // nothing it could trust. The run still reports COMPLETED, so finalizing here would turn
+            // an analysis that never really ran into a clean-looking zero-change artifact. Block
+            // until the environment matches the review snapshot and the review is re-analyzed.
             blockers.add(blocker(FinalizationBlockerCode.ANALYSIS_DEGRADED,
-                    "No planned check completed a trustworthy analysis, so this review has no "
-                            + "machine findings to decide on and cannot be finalized. The "
-                            + "contract semantics or model configuration changed after the review "
-                            + "was created, so its analysis can no longer be trusted. Create a new "
-                            + "review against the current semantics to continue.", List.of()));
+                    "Rivell could not complete a trustworthy check of this contract, so there "
+                            + "are no findings to decide on and you cannot finalize. The contract "
+                            + "analysis or the review settings changed after this review started. "
+                            + "Start a new review to continue.", List.of()));
+        } else if (checksDidNotRun > 0) {
+            // Part of the plan produced no result, whether or not anything completed. Finalizing
+            // here would present an unchecked contract as reviewed, and the count is the useful
+            // fact. There is no rerun endpoint, so the honest next step is a new review.
+            blockers.add(blocker(FinalizationBlockerCode.ANALYSIS_PARTIAL,
+                    (checksDidNotRun == 1
+                            ? "1 check did not finish"
+                            : checksDidNotRun + " checks did not finish")
+                            + ", so this review does not cover the whole contract. "
+                            + "Start a new review to analyze the contract again.",
+                    List.of()));
         }
         if (!unresolvedBlocking.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.UNRESOLVED_BLOCKING_FINDINGS,
-                    unresolvedBlocking.size()
-                            + " blocking finding(s) have no resolved decision.",
+                    unresolvedBlocking.size() == 1
+                            ? "1 blocking finding still needs your decision."
+                            : unresolvedBlocking.size()
+                                    + " blocking findings still need your decision.",
                     unresolvedBlocking));
         }
         if (!unresolvedReviewRequired.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.UNRESOLVED_REVIEW_REQUIRED_FINDINGS,
-                    unresolvedReviewRequired.size()
-                            + " review-required finding(s) have no resolved decision.",
+                    unresolvedReviewRequired.size() == 1
+                            ? "1 finding that needs your decision is still open."
+                            : unresolvedReviewRequired.size()
+                                    + " findings that need your decision are still open.",
                     unresolvedReviewRequired));
         }
         if (!escalated.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.ACTIVE_ESCALATION,
-                    escalated.size() + " escalated finding(s) remain unresolved.",
+                    escalated.size() == 1
+                            ? "1 clause is waiting for approval."
+                            : escalated.size() + " clauses are waiting for approval.",
                     escalated));
         }
         if (!conflicts.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.APPROVED_CHANGE_CONFLICT,
-                    conflicts.size() + " approved change(s) target the same clause or "
-                            + "provision and cannot be combined.", conflicts));
+                    conflicts.size() == 1
+                            ? "1 approved change overlaps another and cannot be combined with it."
+                            : conflicts.size()
+                                    + " approved changes overlap and cannot be combined.",
+                    conflicts));
         }
         if (!missingLanguage.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.MISSING_APPROVED_LANGUAGE,
-                    missingLanguage.size() + " resolved decision(s) lack approved language.",
+                    missingLanguage.size() == 1
+                            ? "1 decision has no final wording."
+                            : missingLanguage.size() + " decisions have no final wording.",
                     missingLanguage));
         }
         if (!invalidTarget.isEmpty()) {
             blockers.add(blocker(FinalizationBlockerCode.INVALID_SOURCE_TARGET,
-                    invalidTarget.size() + " approved change(s) target a clause that is not "
-                            + "part of the frozen contract structure.", invalidTarget));
+                    invalidTarget.size() == 1
+                            ? "1 approved change targets a clause that is not in the reviewed "
+                                    + "contract."
+                            : invalidTarget.size() + " approved changes target clauses that are "
+                                    + "not in the reviewed contract.",
+                    invalidTarget));
         }
 
         var ready = analysisComplete && blockers.isEmpty() && !finalized;

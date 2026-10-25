@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 /** Persistence port for analysis runs, check executions, and raw signals. */
@@ -23,6 +24,17 @@ public interface ReviewAnalysisRepository {
     boolean markRunCompleted(UUID organizationId, UUID runId, Instant completedAt);
 
     boolean markRunFailed(UUID organizationId, UUID runId, String reason, Instant completedAt);
+
+    /**
+     * Counts one transient failure against a RUNNING run, records its code-owned reason, and
+     * releases the lease this worker held on the check (if any), so a JobRunr retry need not wait
+     * for the 10-minute lease expiry. Empty when the run is no longer RUNNING; another worker owns
+     * the terminal state. The caller runs this in its own transaction so the counter does not roll
+     * back with the failed check write.
+     */
+    OptionalInt recordTransientFailure(
+            UUID organizationId, UUID runId, String reason,
+            UUID executionId, UUID leaseId);
 
     Optional<ReviewCheckExecution> findExecution(
             UUID organizationId, UUID runId, UUID planCheckId);

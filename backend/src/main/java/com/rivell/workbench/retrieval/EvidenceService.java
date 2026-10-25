@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
+import com.rivell.workbench.knowledge.PublishedCandidate;
 
 /**
  * Orchestrates authority-aware evidence construction (AD #8): resolves the pinned
@@ -67,12 +68,17 @@ public class EvidenceService {
                 com.rivell.workbench.organization.Permissions.RETRIEVAL_READ)) {
             throw new UnauthorizedEvidenceAccessException(identity.userId());
         }
-        return buildInternal(request);
+        return buildInternal(request, null);
     }
 
     /** System-level build for background analysis (explicit organization, no identity). */
     public EvidenceBundle buildForOrganization(EvidenceRequest request) {
-        return buildInternal(request);
+        return buildInternal(request, null);
+    }
+
+    public EvidenceBundle buildForOrganization(EvidenceRequest request,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
+        return buildInternal(request, embeddingLookup);
     }
 
     /**
@@ -84,6 +90,13 @@ public class EvidenceService {
     public EvidenceBundle buildForPolicyComparison(
             EvidenceRequest request, java.util.List<ConceptKey> topics,
             ConceptKey primaryTopic, int maxPositions) {
+        return buildForPolicyComparison(request, topics, primaryTopic, maxPositions, null);
+    }
+
+    public EvidenceBundle buildForPolicyComparison(
+            EvidenceRequest request, java.util.List<ConceptKey> topics,
+            ConceptKey primaryTopic, int maxPositions,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
         if (topics.isEmpty()) {
             throw new IllegalArgumentException(
                     "Policy comparison requires at least one clause topic");
@@ -100,7 +113,8 @@ public class EvidenceService {
             // more positions matched than the cap allows; the omission is visible, not silent
             warnings.add("POLICY_POSITIONS_TRUNCATED");
         }
-        return assemble(request, asOfPublication, policy, drafting, warnings, true, null);
+        return assemble(request, asOfPublication, policy, drafting, warnings, true, null,
+                embeddingLookup);
     }
 
     /**
@@ -110,15 +124,22 @@ public class EvidenceService {
      * used to retrieve anything.
      */
     public EvidenceBundle buildForUncoveredClause(EvidenceRequest request) {
+        return buildForUncoveredClause(request, null);
+    }
+
+    public EvidenceBundle buildForUncoveredClause(EvidenceRequest request,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
         var asOfPublication = resolveAsOf(request);
         var none = new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false);
-        return assemble(request, asOfPublication, none, none, List.of(), false, null);
+        return assemble(request, asOfPublication, none, none, List.of(), false, null,
+                embeddingLookup);
     }
 
     /**
      * Engine v2 SEARCH route (spec §6): positions found by a clause's text for a clause no topic
      * paired, or whose topic-matched positions all judged it off their subject. Up to
-     * {@code limit} positions not in {@code alreadyJudged}, in fused order, each carrying its lane
+     * {@code limit} positions not in {@code alreadyJudged} and not carrying a topic a human
+     * correction removed from the clause (DW-085), in fused order, each carrying its lane
      * ranks; approved drafting for the found positions' topics, as a topic comparison would carry
      * it; no precedents. The contract lane is gathered as for any clause, for the comparison and
      * the triage to cite. The bundle's
@@ -126,9 +147,16 @@ public class EvidenceService {
      * several found positions are candidates for one clause, not conflicting policy.
      */
     public EvidenceBundle buildForPositionSearch(
-            EvidenceRequest request, Set<UUID> alreadyJudged, int limit) {
+            EvidenceRequest request, Set<UUID> alreadyJudged, Set<String> excludedTopics, int limit) {
+        return buildForPositionSearch(request, alreadyJudged, excludedTopics, limit, null);
+    }
+
+    public EvidenceBundle buildForPositionSearch(
+            EvidenceRequest request, Set<UUID> alreadyJudged, Set<String> excludedTopics, int limit,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
         var asOfPublication = resolveAsOf(request);
-        var found = positionSearch.search(request, asOfPublication, alreadyJudged, limit);
+        var found = positionSearch.search(request, asOfPublication, alreadyJudged, excludedTopics,
+                limit, embeddingLookup);
         var topics = found.resolution().candidates().stream()
                 .flatMap(candidate -> candidate.topicKeys().stream()).distinct().toList();
         var drafting = topics.isEmpty()
@@ -136,7 +164,7 @@ public class EvidenceService {
                 : resolver.resolveByTopics(request, Set.of(CandidateType.CLAUSE_VARIANT),
                         asOfPublication, topics, null, SEARCH_DRAFTING_CAP);
         return assemble(request, asOfPublication, found.resolution(), drafting,
-                found.degradation(), false, found);
+                found.degradation(), false, found, embeddingLookup);
     }
 
     /** The text of every published playbook position that applies to the request's contract. */
@@ -155,27 +183,36 @@ public class EvidenceService {
         var policy = resolver.resolveAll(request, Set.of(CandidateType.PLAYBOOK_RULE),
                 asOfPublication, limit);
         var none = new StructuredPolicyResolver.Resolution(List.of(), asOfPublication, false);
-        var bundle = assemble(request, asOfPublication, policy, none, List.of(), false, null);
-        var labels = new LinkedHashMap<UUID, String>();
-        for (var match : policy.published()) {
-            labels.put(match.candidate().id(), match.candidate().rawLabel());
-        }
-        return new ApplicablePositions(bundle, labels, policy.truncated());
+        var bundle = assemble(request, asOfPublication, policy, none, List.of(), false, null,
+                null);
+        return new ApplicablePositions(bundle, positionLabels(policy.published()),
+                policy.truncated());
     }
 
-    private EvidenceBundle buildInternal(EvidenceRequest request) {
+    /** The label a reader sees for each omission position: the person's title when there is one. */
+    static Map<UUID, String> positionLabels(List<PublishedCandidate> published) {
+        var labels = new LinkedHashMap<UUID, String>();
+        for (var match : published) {
+            labels.put(match.candidate().id(), match.candidate().effectiveTitle());
+        }
+        return labels;
+    }
+
+    private EvidenceBundle buildInternal(EvidenceRequest request,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
         var asOfPublication = resolveAsOf(request);
         return assemble(request, asOfPublication,
                 resolver.resolve(request, Set.of(CandidateType.PLAYBOOK_RULE), asOfPublication),
                 resolver.resolve(request, Set.of(CandidateType.CLAUSE_VARIANT), asOfPublication),
-                List.of(), true, null);
+                List.of(), true, null, embeddingLookup);
     }
 
     private EvidenceBundle assemble(
             EvidenceRequest request, long asOfPublication,
             StructuredPolicyResolver.Resolution policyResolution,
             StructuredPolicyResolver.Resolution draftingResolution,
-            List<String> extraWarnings, boolean withPrecedents, PositionSearch.Found search) {
+            List<String> extraWarnings, boolean withPrecedents, PositionSearch.Found search,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
         var startedAt = clock.instant();
         var stageStart = startedAt;
         var stageTimings = new LinkedHashMap<String, Long>();
@@ -191,7 +228,7 @@ public class EvidenceService {
                         .map(KnowledgeCandidate::effectiveContentText)
                         .toList());
         var precedentOutcome = withPrecedents
-                ? precedentLane.gather(request, asOfPublication, policyContext)
+                ? precedentLane.gather(request, asOfPublication, policyContext, embeddingLookup)
                 : PrecedentLane.Outcome.empty();
         stageTimings.put("precedent",
                 java.time.Duration.between(stageStart, clock.instant()).toMillis());
@@ -339,7 +376,7 @@ public class EvidenceService {
             if (!knowledgeQueries.publicationNumberExistsForOrganization(
                     request.organizationId(), pin)) {
                 throw new IllegalArgumentException(
-                        "Pinned knowledge publication does not exist: " + pin);
+                        "Knowledge version " + pin + " does not exist.");
             }
             return pin;
         }
@@ -448,13 +485,27 @@ public class EvidenceService {
         var fields = candidate.effectivePositionFieldValues();
         var preferred = fields.get(com.rivell.workbench.knowledge.PositionRole.PREFERRED);
         var prohibited = fields.get(com.rivell.workbench.knowledge.PositionRole.PROHIBITED);
+        // the wording the source states explicitly wins over the role-tagged column value; a
+        // deliberate human clear stays cleared rather than falling back to the old column
+        var typedPreferred = candidate.effectivePreferredText();
+        var typedFallbacks = candidate.effectiveFallbackTexts();
+        var typedProhibited = candidate.effectiveProhibitedText();
+        var fallbacks = !typedFallbacks.isEmpty() ? typedFallbacks
+                : candidate.fallbackTextsCleared() ? List.<String>of()
+                : fields.getOrDefault(com.rivell.workbench.knowledge.PositionRole.FALLBACK, List.of());
         return new EvidenceItem.PolicyFacts(
                 candidate.effectivePositions(),
                 candidate.effectiveRequiresApproval(),
                 candidate.effectiveEscalationTrigger(),
-                preferred == null || preferred.isEmpty() ? null : preferred.getFirst(),
-                fields.getOrDefault(com.rivell.workbench.knowledge.PositionRole.FALLBACK, List.of()),
-                prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst());
+                typedPreferred != null ? typedPreferred
+                        : candidate.preferredTextCleared() ? null
+                        : preferred == null || preferred.isEmpty() ? null : preferred.getFirst(),
+                fallbacks,
+                typedProhibited != null ? typedProhibited
+                        : candidate.prohibitedTextCleared() ? null
+                        : prohibited == null || prohibited.isEmpty() ? null : prohibited.getFirst(),
+                candidate.effectiveAuthorityRules(),
+                candidate.effectiveAuthorityConflicts());
     }
 
     private List<String> provenance(UUID organizationId,

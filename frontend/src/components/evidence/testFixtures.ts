@@ -63,6 +63,16 @@ export const fixturePolicyItem = item({
     positions: ['FALLBACK', 'PREFERRED'],
     requiresApproval: true,
     escalationTrigger: 'Uncapped liability or consequential damages',
+    authorityRules: [
+      {
+        approver: 'Commercial Manager',
+        stances: ['FALLBACK'],
+        condition: null,
+        source: 'MATRIX',
+        quote: null,
+      },
+    ],
+    authorityConflicts: [],
   },
   policyCompatibility: 'NOT_ASSESSED',
   publicationId: 'pub-2',

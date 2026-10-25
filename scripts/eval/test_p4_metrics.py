@@ -8,7 +8,8 @@ import scoring
 
 def check(subject="n1", route=None, addressed=None, search_found=None, search_failed=None,
           uncovered=None, spotted=None, positions=(), omission_candidates=None,
-          searched=None, presence=None, addressed_by=None, flagged_by=None):
+          searched=None, presence=None, addressed_by=None, flagged_by=None,
+          fit_questions=None, fit_skipped=None):
     return {
         "subjectHeadingNodeId": subject,
         "route": route,
@@ -23,6 +24,8 @@ def check(subject="n1", route=None, addressed=None, search_found=None, search_fa
         "presenceProbabilities": presence,
         "addressedBySearch": addressed_by,
         "flaggedBySearch": flagged_by,
+        "fitQuestions": fit_questions,
+        "fitSkipped": fit_skipped,
     }
 
 
@@ -56,8 +59,62 @@ NODES = [
 ]
 
 
-class SearchMetricsTest(unittest.TestCase):
+class FitMetricsTest(unittest.TestCase):
 
+    def test_the_quality_filter_keeps_the_keys_the_findings_carry(self):
+        for key in ("secondOpinionQuote", "secondOpinionReason", "categoryBeforeLevers",
+                    "wordingFitVerdict", "wordingFitReason", "wordingFitReasons",
+                    "wordingFitQuote", "fitVerdict", "fitReason", "fitReasons",
+                    # FindingAssembler's ESCALATION_KEYS: the eval lost the approver when the
+                    # merge kept two names nothing writes instead of these.
+                    "escalationApprover", "escalationCondition", "escalationSource",
+                    "escalationStance", "escalationConflictApprover",
+                    "escalationConflictSource"):
+            self.assertIn(key, p4_metrics.QUALITY_KEYS)
+        self.assertNotIn("approvers", p4_metrics.QUALITY_KEYS)
+        self.assertNotIn("approver", p4_metrics.QUALITY_KEYS)
+
+    def test_counts_search_hits_wording_offers_calls_and_savings(self):
+        checks = [
+            check(route="SEARCH", fit_questions=3, fit_skipped=0, positions=[
+                {**position("search_position_1"), "fitVerdict": "DOES_NOT_FIT",
+                 "fitOutcome": "not_covered"},
+                {**position("search_position_2"), "fitVerdict": "FITS"},
+                {**position("search_position_3"), "fitVerdict": "UNKNOWN"},
+                # a topic-matched position is not a search hit
+                {**position("position_1"), "fitVerdict": "FITS"},
+                # two wording offers on positions of one clause stay countable
+                {**position("position_1"), "wordingFitVerdict": "UNKNOWN"},
+                {**position("position_2"), "wordingFitVerdict": "FITS"},
+            ]),
+            # the skip rule: no fit call, one question saved
+            check(route="SEARCH", fit_skipped=1, positions=[]),
+        ]
+
+        metrics = p4_metrics.fit_metrics(checks)
+
+        self.assertEqual(metrics["search"],
+                         {"FITS": 1, "DOES_NOT_FIT": 1, "UNKNOWN": 1})
+        self.assertEqual(metrics["wording"],
+                         {"FITS": 1, "DOES_NOT_FIT": 0, "UNKNOWN": 1})
+        self.assertEqual(metrics["notCovered"], 1)
+        self.assertEqual(metrics["calls"], 1)
+        self.assertEqual(metrics["questions"], 3)
+        self.assertEqual(metrics["skipped"], 1)
+
+    def test_an_engine_v1_run_reports_zeroes_rather_than_missing_keys(self):
+        metrics = p4_metrics.fit_metrics([])
+        self.assertEqual(metrics["search"],
+                         {"FITS": 0, "DOES_NOT_FIT": 0, "UNKNOWN": 0})
+        self.assertEqual(metrics["wording"],
+                         {"FITS": 0, "DOES_NOT_FIT": 0, "UNKNOWN": 0})
+        self.assertEqual(metrics["notCovered"], 0)
+        self.assertEqual(metrics["calls"], 0)
+        self.assertEqual(metrics["questions"], 0)
+        self.assertEqual(metrics["skipped"], 0)
+
+
+class SearchMetricsTest(unittest.TestCase):
     def test_counts_routes_found_addressing_and_top1(self):
         checks = [
             check(subject="n1", route="SEARCH", addressed=True, search_found=2,
@@ -281,6 +338,67 @@ class SeverityRaiseTest(unittest.TestCase):
                                    "seriousFalseAlarmSections": 0})
 
 
+class SeverityLeverTest(unittest.TestCase):
+    """Severity R3 (P7): the same run re-scored with each lever's changed findings restored."""
+
+    @staticmethod
+    def leveled(node, severity, levers, without, kind="POSITION_NEEDS_FALLBACK"):
+        return finding(kind, "SECOND_OPINION", node, severity=severity,
+                       quality={"levers": levers, "severityWithoutLevers": without})
+
+    def test_a_finding_is_changed_by_a_lever_when_it_carries_the_tag_and_its_severity_moved(self):
+        raised = self.leveled("n1", "MEDIUM", ["P1", "P2"], "LOW")
+        self.assertTrue(p4_metrics.lever_changed(raised, ("P1",)))
+        self.assertTrue(p4_metrics.lever_changed(raised, ("P2",)))
+        self.assertTrue(p4_metrics.lever_changed(raised, ("P1", "P2", "P3")))
+        self.assertFalse(p4_metrics.lever_changed(raised, ("P3",)))
+        # tagged but the severity did not move (a P2 look item): tagged, not changed
+        self.assertFalse(p4_metrics.lever_changed(self.leveled("n1", "LOW", ["P2"], "LOW"), ("P2",)))
+        # no tag, no restore data, or an unknown restore value: never changed
+        self.assertFalse(p4_metrics.lever_changed(finding("X", severity="MEDIUM"), ("P1",)))
+        self.assertFalse(p4_metrics.lever_changed(
+            finding("X", severity="MEDIUM", quality={"levers": ["P1"]}), ("P1",)))
+        self.assertFalse(p4_metrics.lever_changed(
+            finding("X", severity="MEDIUM", quality={"levers": ["P1"], "severityWithoutLevers": "?"}), ("P1",)))
+
+    def test_tagged_counts_every_finding_carrying_one_of_the_levers(self):
+        findings = [self.leveled("n1", "MEDIUM", ["P1"], "LOW"), self.leveled("n2", "LOW", ["P2"], "LOW"),
+                    self.leveled("n2", "MEDIUM", ["P3"], "LOW"), finding("X")]
+        self.assertEqual(p4_metrics.lever_tagged(findings, ("P1",)), 1)
+        self.assertEqual(p4_metrics.lever_tagged(findings, ("P1", "P2", "P3")), 3)
+
+    def test_each_lever_counterfactual_restores_only_its_own_findings(self):
+        findings = [
+            # P1 catches planted issue i1 in section s1 (HIGH/MEDIUM finding on a MEDIUM issue)
+            self.leveled("n1", "MEDIUM", ["P1"], "LOW"),
+            # P3 raises a compliant section s2: a serious false alarm
+            self.leveled("n2", "MEDIUM", ["P3"], "LOW"),
+        ]
+        current = scoring.score_contract(ANSWER, NODES, [], findings)
+        self.assertEqual(p4_metrics.serious_caught(current["issues"]), 1)
+        self.assertEqual(current["seriousFalseAlarmSections"], 1)
+
+        def without(*levers):
+            return p4_metrics.lever_severity_score(
+                scoring.score_contract, ANSWER, NODES, [], findings, levers)
+
+        self.assertEqual(without("P1"), {"tagged": 1, "raised": 1, "seriousCaught": 0,
+                                         "seriousFalseAlarmSections": 1})
+        self.assertEqual(without("P3"), {"tagged": 1, "raised": 1, "seriousCaught": 1,
+                                         "seriousFalseAlarmSections": 0})
+        self.assertEqual(without("P2"), {"tagged": 0, "raised": 0, "seriousCaught": 1,
+                                         "seriousFalseAlarmSections": 1})
+        self.assertEqual(without("P1", "P2", "P3"), {"tagged": 2, "raised": 2, "seriousCaught": 0,
+                                                     "seriousFalseAlarmSections": 0})
+
+    def test_a_p1_and_p2_finding_is_restored_by_dropping_either_lever(self):
+        findings = [self.leveled("n1", "HIGH", ["P1", "P2"], "LOW")]
+        for lever in ("P1", "P2"):
+            out = p4_metrics.lever_severity_score(
+                scoring.score_contract, ANSWER, NODES, [], findings, (lever,))
+            self.assertEqual(out["seriousCaught"], 0, lever)
+
+
 class P4LinesTest(unittest.TestCase):
 
     def v2_contract(self):
@@ -308,6 +426,10 @@ class P4LinesTest(unittest.TestCase):
             "withoutSearchFound": {"issuesDetected": 4, "falseAlarmSections": 1},
             "withoutAdvisory": {"issuesDetected": 4, "falseAlarmSections": 1},
             "withoutOmissions": {"issuesDetected": 4, "falseAlarmSections": 2},
+            "withoutP1": {"tagged": 2, "raised": 1, "seriousCaught": 0, "seriousFalseAlarmSections": 1},
+            "withoutP2": {"tagged": 1, "raised": 0, "seriousCaught": 1, "seriousFalseAlarmSections": 1},
+            "withoutP3": {"tagged": 3, "raised": 2, "seriousCaught": 1, "seriousFalseAlarmSections": 0},
+            "withoutR3": {"tagged": 5, "raised": 3, "seriousCaught": 0, "seriousFalseAlarmSections": 0},
         }
 
     def test_reports_totals_per_contract_and_every_omission(self):
@@ -331,6 +453,26 @@ class P4LinesTest(unittest.TestCase):
         self.assertIn("Without omissions: issues detected 5 -> 4; false-alarm sections 2 -> 2", text)
         self.assertIn("Severity R1: 2 items raised to MEDIUM; serious caught at M+ 1 -> 0 and "
                       "M+ false-alarm sections 1 -> 0 without the raise", text)
+
+    def test_the_report_has_one_line_per_severity_r3_lever_and_one_for_all_three(self):
+        text = "\n".join(run_eval.p4_lines([{"contracts": [self.v2_contract()]}]))
+        self.assertIn("Severity P1: 2 findings tagged, 1 raised; serious caught at M+ 1 -> 0 and "
+                      "M+ false-alarm sections 1 -> 1 without it", text)
+        self.assertIn("Severity P2: 1 findings tagged, 0 raised; serious caught at M+ 1 -> 1 and "
+                      "M+ false-alarm sections 1 -> 1 without it", text)
+        self.assertIn("Severity P3: 3 findings tagged, 2 raised; serious caught at M+ 1 -> 1 and "
+                      "M+ false-alarm sections 1 -> 0 without it", text)
+        self.assertIn("Severity R3 (P1+P2+P3): 5 findings tagged, 3 raised; serious caught at M+ 1 -> 0 "
+                      "and M+ false-alarm sections 1 -> 0 without them", text)
+
+    def test_a_run_without_severity_r3_data_adds_no_r3_line(self):
+        contract = self.v2_contract()
+        for key in ("withoutP1", "withoutP2", "withoutP3", "withoutR3"):
+            del contract[key]
+        text = "\n".join(run_eval.p4_lines([{"contracts": [contract]}]))
+        self.assertNotIn("Severity P1", text)
+        self.assertNotIn("Severity R3", text)
+        self.assertIn("Severity R1", text)
 
     def test_a_v1_run_adds_no_line(self):
         v1 = {"file": "old.docx", "issuesDetected": 3, "falseAlarmSections": 0,

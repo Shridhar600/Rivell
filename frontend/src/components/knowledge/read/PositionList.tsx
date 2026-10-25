@@ -102,7 +102,7 @@ export function PositionList({ positions, selectedId, onSelect }: PositionListPr
               onClick={() => onSelect(candidate.id)}
             >
               <span className="rv-k-pos-t">
-                <b>{candidate.rawLabel}</b>
+                <b>{candidate.title}</b>
                 <Cells candidate={candidate} />
               </span>
               <ChevronIcon className="rv-icon" />

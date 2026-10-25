@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.rivell.workbench.foundation.DocumentStorage;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
@@ -29,8 +30,9 @@ class KnowledgeServicesConfiguration {
     @Bean
     CandidateReviewCategorizer candidateReviewCategorizer(
             SemanticPolicyProperties properties,
-            ConceptClassificationProperties conceptProperties) {
-        return new CandidateReviewCategorizer(properties, conceptProperties);
+            ConceptClassificationProperties conceptProperties,
+            com.rivell.workbench.taxonomy.ConceptRegistry conceptRegistry) {
+        return new CandidateReviewCategorizer(properties, conceptProperties, conceptRegistry);
     }
 
     @Bean
@@ -62,6 +64,7 @@ class KnowledgeServicesConfiguration {
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
+            DocumentWorkLimiter documentWorkLimiter,
             KnowledgeUploadProperties uploadProperties) {
         return new KnowledgeIngestionService(
                 documentStorage,
@@ -71,6 +74,7 @@ class KnowledgeServicesConfiguration {
                 transactionTemplate,
                 identityProvider,
                 authorizationService,
+                documentWorkLimiter,
                 uploadProperties.maxFileSize());
     }
 
@@ -78,9 +82,16 @@ class KnowledgeServicesConfiguration {
     KnowledgeQueryService knowledgeQueryService(
             KnowledgeRepository knowledgeRepository,
             IdentityProvider identityProvider,
-            AuthorizationService authorizationService) {
+            AuthorizationService authorizationService,
+            java.time.Clock clock) {
         return new KnowledgeQueryService(
-                knowledgeRepository, identityProvider, authorizationService);
+                knowledgeRepository, identityProvider, authorizationService, clock);
+    }
+
+    @Bean
+    SourceApplicabilityRederivationService sourceApplicabilityRederivationService(
+            KnowledgeRepository knowledgeRepository, java.time.Clock clock) {
+        return new SourceApplicabilityRederivationService(knowledgeRepository, clock);
     }
 
     @Bean

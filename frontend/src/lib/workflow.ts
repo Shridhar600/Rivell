@@ -5,6 +5,7 @@ import type {
   HumanDecision,
   HumanReview,
   HumanReviewStatus,
+  RejectReason,
 } from '../api/workflow'
 import type { ConceptLabel } from '../api/taxonomy'
 
@@ -18,6 +19,8 @@ export function decisionActionLabel(action: DecisionAction): string {
       return 'Reject recommendation'
     case 'ESCALATE':
       return 'Escalate for legal review'
+    case 'RESOLVE':
+      return 'Resolve escalation'
     default:
       return 'Unknown action'
   }
@@ -31,9 +34,13 @@ export function decisionStateLabel(decision: HumanDecision | null | undefined): 
     case 'EDIT':
       return 'Edited'
     case 'REJECT':
+      if (decision.rejectReason === 'KEEP_AS_DRAFTED') return 'Kept as drafted'
+      if (decision.rejectReason === 'FINDING_WRONG') return 'Dismissed'
       return 'Rejected'
     case 'ESCALATE':
       return 'Escalated (unresolved)'
+    case 'RESOLVE':
+      return decision.approvedBy ? `Approved by ${decision.approvedBy}` : 'Approved'
     default:
       return 'Decision recorded'
   }
@@ -42,15 +49,15 @@ export function decisionStateLabel(decision: HumanDecision | null | undefined): 
 export function humanStatusLabel(status: HumanReviewStatus): string {
   switch (status) {
     case 'NOT_STARTED':
-      return 'Human review not started'
+      return 'Review not started'
     case 'IN_PROGRESS':
-      return 'Human review in progress'
+      return 'Review in progress'
     case 'READY_FOR_COMPLETION':
       return 'Ready to finalize'
     case 'COMPLETED':
-      return 'Human review completed'
+      return 'Review completed'
     default:
-      return 'Human review state unknown'
+      return 'Review state unknown'
   }
 }
 
@@ -64,7 +71,7 @@ const BLOCKER_LABELS: Record<string, string> = {
   UNRESOLVED_BLOCKING_FINDINGS: 'Blocking findings still need a decision.',
   UNRESOLVED_REVIEW_REQUIRED_FINDINGS:
     'Findings that require review still need a decision.',
-  ACTIVE_ESCALATION: 'A finding is escalated for legal review and must be resolved.',
+  ACTIVE_ESCALATION: 'A clause is waiting for approval.',
   APPROVED_CHANGE_CONFLICT:
     'Some approved changes target the same contract location and must be resolved before finalization.',
   MISSING_APPROVED_LANGUAGE: 'An approved change is missing its final language.',
@@ -96,9 +103,9 @@ export function changeLanguageProvenanceLabel(
     case 'APPROVED_DRAFTING':
       return 'Approved organizational language'
     case 'GENERATIVE':
-      return 'AI-proposed, human-approved for this contract'
+      return 'Proposed by Rivell, approved by you'
     case 'HUMAN_EDIT':
-      return 'Human-authored'
+      return 'Written by you'
     case 'NONE':
       return 'No replacement text'
     default:
@@ -121,14 +128,14 @@ export function acceptEligibility(finding: {
     return {
       eligible: false,
       reason:
-        'This recommendation cannot be accepted as-is. Use Edit to author the change, or Reject or Escalate it.',
+        'This recommendation cannot be accepted as-is. Use Edit to author the change, or keep the clause as drafted, dismiss or escalate the finding.',
     }
   }
   if (!finding.proposedLanguage || finding.proposedLanguage.trim().length === 0) {
     return {
       eligible: false,
       reason:
-        'This recommendation carries no executable language. Use Edit to author the change, or Reject or Escalate it.',
+        'This recommendation has no wording to apply. Use Edit to author the change, or keep the clause as drafted, dismiss or escalate the finding.',
     }
   }
   return { eligible: true }
@@ -153,22 +160,28 @@ export type DecisionFormValues = {
   approvedAction?: ChangeActionType
   approvedLanguage?: string
   comment?: string
+  rejectReason?: RejectReason
+  approvedBy?: string
 }
 
 export type DecisionFormErrors = {
   comment?: string
   approvedLanguage?: string
+  approvedBy?: string
 }
 
 export function validateDecisionForm(values: DecisionFormValues): DecisionFormErrors {
   const errors: DecisionFormErrors = {}
   const comment = values.comment ?? ''
   const language = values.approvedLanguage ?? ''
-  if ((values.action === 'REJECT' || values.action === 'ESCALATE') && comment.trim() === '') {
-    errors.comment =
-      values.action === 'REJECT'
-        ? 'A comment is required to reject a recommendation.'
-        : 'A comment is required to escalate for legal review.'
+  if (
+    values.action === 'REJECT' &&
+    values.rejectReason === undefined &&
+    comment.trim() === ''
+  ) {
+    errors.comment = 'A comment is required to reject a recommendation.'
+  } else if (values.action === 'ESCALATE' && comment.trim() === '') {
+    errors.comment = 'A comment is required to escalate for legal review.'
   } else if (comment.length > 2000) {
     errors.comment = 'Keep the comment under 2000 characters.'
   }
@@ -177,6 +190,14 @@ export function validateDecisionForm(values: DecisionFormValues): DecisionFormEr
       errors.approvedLanguage = 'Enter the final approved language for this change.'
     } else if (language.length > 20000) {
       errors.approvedLanguage = 'Keep the approved language under 20000 characters.'
+    }
+  }
+  if (values.action === 'RESOLVE') {
+    const approvedBy = (values.approvedBy ?? '').trim()
+    if (approvedBy === '') {
+      errors.approvedBy = 'Add the name of the person who approved this clause.'
+    } else if (approvedBy.length > 120) {
+      errors.approvedBy = "Keep the approver's name under 120 characters."
     }
   }
   return errors
@@ -218,7 +239,7 @@ const CONFLICT_NOTICES: Record<DecisionConflictKind, string> = {
   ANALYSIS_INCOMPLETE:
     'The automated analysis is not complete yet, so decisions cannot be recorded.',
   NOT_ACTIONABLE:
-    'The recommendation cannot be accepted as-is. Use Edit to author the change, or Reject or Escalate it.',
+    'The recommendation cannot be accepted as-is. Use Edit to author the change, or keep the clause as drafted, dismiss or escalate the finding.',
   UNKNOWN:
     'Your decision was not saved. The review may have changed; the current state is shown below.',
 }
@@ -263,12 +284,12 @@ export function humanReviewCountRows(
   review: HumanReview,
 ): { label: string; value: number }[] {
   return [
-    { label: 'Findings needing a decision', value: review.actionableFindings },
+    { label: 'Needing a decision', value: review.actionableFindings },
     { label: 'Decided', value: review.resolvedFindings },
     { label: 'Still open', value: review.remainingFindings },
     { label: 'Accepted', value: review.accepted },
     { label: 'Edited', value: review.edited },
-    { label: 'Rejected', value: review.rejected },
+    { label: 'No approved change', value: review.rejected },
     { label: 'Escalated', value: review.escalated },
   ]
 }

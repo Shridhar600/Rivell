@@ -152,7 +152,7 @@ class KnowledgeReviewPublicationIT {
 
         rawRepository.updateReviewState(
                 candidate.id(), organizationId, ReviewStatus.PENDING, ReviewStatus.EDITED,
-                null, null, null, candidate.scope(), null, "ordering probe",
+                null, null, null, null, candidate.scope(), null, "ordering probe",
                 java.time.Instant.now(), java.time.Instant.now(),
                 List.of(), ReviewCategory.ELEVATED, reasons);
 
@@ -164,6 +164,33 @@ class KnowledgeReviewPublicationIT {
                 .as("reasons are stored sorted by name, whatever order the set was built in")
                 .isEqualTo(new com.fasterxml.jackson.databind.ObjectMapper().readTree(
                         "[\"CONFLICT_DETECTED\",\"DUPLICATE_DETECTED\",\"SUPERSESSION_PROPOSED\"]"));
+    }
+
+    /**
+     * DW-088: PostgreSQL timestamptz keeps microseconds. Every transition returns the candidate it
+     * wrote, so the returned timestamps must already carry the precision the database keeps. Each
+     * step is read back before the next one, because the next transition rewrites the row.
+     */
+    @Test
+    void returnedReviewTimestampsCarryTheTimestampPrecisionTheDatabaseKeeps() throws Exception {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var candidate = firstVariant(ingestClauseLibrary());
+
+        var edited = reviewService.edit(candidate.id(), "Human edited liability language.",
+                null, null, null, null);
+        assertReturnedMatchesStored(edited, organizationId);
+        var approved = reviewService.approve(edited.id(), "Looks right");
+        assertReturnedMatchesStored(approved, organizationId);
+        var rejected = reviewService.reject(approved.id(), "Changed my mind");
+        assertReturnedMatchesStored(rejected, organizationId);
+    }
+
+    private void assertReturnedMatchesStored(KnowledgeCandidate returned, UUID organizationId) {
+        assertThat(returned.reviewedAt().getNano() % 1000).isZero();
+        assertThat(returned.updatedAt().getNano() % 1000).isZero();
+        var readBack = rawRepository.findCandidate(returned.id(), organizationId).orElseThrow();
+        assertThat(readBack.reviewedAt()).isEqualTo(returned.reviewedAt());
+        assertThat(readBack.updatedAt()).isEqualTo(returned.updatedAt());
     }
 
     @Test

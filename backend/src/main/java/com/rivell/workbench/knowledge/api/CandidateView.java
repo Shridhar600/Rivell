@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.rivell.workbench.knowledge.CandidateType;
+import com.rivell.workbench.knowledge.AuthorityConflict;
+import com.rivell.workbench.knowledge.AuthorityRule;
 import com.rivell.workbench.knowledge.ConflictType;
 import com.rivell.workbench.knowledge.PositionRole;
 import com.rivell.workbench.knowledge.ReviewCategory;
@@ -28,6 +30,10 @@ public record CandidateView(
         CandidateType candidateType,
         ReviewStatus reviewStatus,
         String rawLabel,
+        /** A title a person typed; null until one is given. {@code rawLabel} stays as read. */
+        String editedTitle,
+        /** The title to show and publish: the person's when there is one, else {@code rawLabel}. */
+        String title,
         String contentText,
         Map<String, String> payloadColumns,
         /** Role of each payload label (PREFERRED, FALLBACK, APPLICABILITY, ...), known or resolved. */
@@ -42,6 +48,27 @@ public record CandidateView(
         PositionRole variantRole,
         String escalationTrigger,
         Boolean requiresApproval,
+        /** The preferred wording the source states; null when it states none. */
+        String preferredText,
+        /** Every fallback wording the source states, in source order. */
+        List<String> fallbackTexts,
+        /** The walk-away or prohibited wording the source states; null when it states none. */
+        String prohibitedText,
+        /** Typed approval rules, one per stance, with their source level and quote. */
+        List<AuthorityRule> authorityRules,
+        /**
+         * The rules the edit form starts from: the person's saved list when there is one, else
+         * the machine rules. {@code authorityRules} adds coverage implied by another rule.
+         */
+        List<AuthorityRule> storedAuthorityRules,
+        /** Lower-level rules naming a different approver for the same stance. */
+        List<AuthorityConflict> authorityConflicts,
+        /** Label-shaped walk-away or approver words the stage could not map. */
+        List<String> unmappedAuthority,
+        /** True while the entry needs attention for an unmapped walk-away or approver word. */
+        boolean needsAttention,
+        /** Structured fields a person corrected and saved; an unapplied machine proposal is not one. */
+        Set<String> correctedFields,
         List<InterpretationView> interpretations,
         String editedContentText,
         Map<String, String> editedPayloadColumns,

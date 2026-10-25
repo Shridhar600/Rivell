@@ -120,18 +120,18 @@ describe('execution titles and labels', () => {
       ),
     ).toBe('Redline could not be generated')
     expect(redlineExecutionTitle(fixtureExecution({ status: 'UNKNOWN' }))).toBe(
-      'Execution state unknown',
+      'Redline state unknown',
     )
     expect(redlineExecutionTitle(fixtureExecution({ outcome: 'UNKNOWN' }))).toBe(
-      'Redline execution completed',
+      'Redline generated',
     )
   })
 
   it('labels change execution and verification states', () => {
     expect(redlineChangeStatusLabel('APPLIED')).toBe('Applied')
-    expect(redlineChangeStatusLabel('FAILED')).toBe('Execution failed')
+    expect(redlineChangeStatusLabel('FAILED')).toBe('Failed')
     expect(redlineChangeStatusLabel('NOT_APPLIED')).toBe('Not applied')
-    expect(redlineChangeStatusLabel('UNKNOWN')).toBe('Execution state unknown')
+    expect(redlineChangeStatusLabel('UNKNOWN')).toBe('State unknown')
     expect(redlineVerificationLabel('VERIFIED')).toBe('Verified')
     expect(redlineVerificationLabel('FAILED')).toBe('Verification failed')
     expect(redlineVerificationLabel(null)).toBeNull()
@@ -332,7 +332,7 @@ describe('change report rows', () => {
     expect(rows[0]).toMatchObject({
       actionLabel: 'Contract change',
       targetLabel: 'Target not recorded',
-      statusLabel: 'Execution state unknown',
+      statusLabel: 'State unknown',
       verificationLabel: null,
       placementLabel: null,
       paragraphSummary: null,
@@ -363,14 +363,63 @@ describe('trigger error classification', () => {
       classifyTriggerError({ status: 409, execution: null, executionStateKnown: false }),
     ).toBe('UNCONFIRMED')
     expect(
+      classifyTriggerError({
+        status: 409,
+        execution: null,
+        executionStateKnown: true,
+        failureCode: 'SOURCE_INTEGRITY_MISMATCH',
+      }),
+    ).toBe('SOURCE_UNAVAILABLE')
+    expect(
+      classifyTriggerError({
+        status: 409,
+        execution: null,
+        executionStateKnown: true,
+        failureCode: 'APPROVED_SEMANTICS_DRIFT',
+      }),
+    ).toBe('NOT_AVAILABLE')
+    expect(
+      classifyTriggerError({
+        status: 409,
+        execution: fixtureExecution({ status: 'FAILED' }),
+        executionStateKnown: true,
+        failureCode: 'SOURCE_INTEGRITY_MISMATCH',
+      }),
+    ).toBe('SOURCE_UNAVAILABLE')
+    expect(
+      classifyTriggerError({
+        status: 409,
+        execution: null,
+        executionStateKnown: false,
+        failureCode: 'SOURCE_DOCUMENT_UNAVAILABLE',
+      }),
+    ).toBe('SOURCE_UNAVAILABLE')
+    expect(
       classifyTriggerError({ status: 500, execution: null, executionStateKnown: true }),
     ).toBe('ENGINE_UNAVAILABLE')
     expect(
       classifyTriggerError({ status: 503, execution: null, executionStateKnown: true }),
     ).toBe('STORAGE_UNAVAILABLE')
     expect(
+      classifyTriggerError({
+        status: 503,
+        execution: null,
+        executionStateKnown: true,
+        retryAfter: '5',
+      }),
+    ).toBe('BUSY')
+    expect(
       classifyTriggerError({ status: null, execution: null, executionStateKnown: true }),
     ).toBe('TRANSPORT')
+  })
+
+  it('uses the server source code for plain copy on a source-unavailable 409', () => {
+    const notice = redlineTriggerErrorNotice('SOURCE_UNAVAILABLE', 'SOURCE_INTEGRITY_MISMATCH')
+
+    expect(notice).toBe(redlineFailureTitle('SOURCE_INTEGRITY_MISMATCH'))
+    expect(notice).toMatch(/integrity/i)
+    expect(notice).toMatch(/original document/i)
+    expect(notice).not.toMatch(/Exception|com\.rivell|stack/i)
   })
 
   it('distinguishes artifact storage failure from an engine failure and keeps a retry honest', () => {
@@ -388,7 +437,7 @@ describe('trigger error classification', () => {
     const expansion = redlineFailureTitle('SOURCE_EXPANSION_LIMIT_EXCEEDED')
 
     expect(drift).not.toBe(redlineFailureTitle('SOURCE_INTEGRITY_MISMATCH'))
-    expect(drift).toMatch(/semantics changed after/i)
+    expect(drift).toMatch(/contract changed after/i)
     expect(drift).toMatch(/unchanged/i)
     expect(drift).not.toMatch(/recompute|re-run|run again|try again|Exception|com\.rivell/i)
 
@@ -403,8 +452,10 @@ describe('trigger error classification', () => {
       'NOT_FOUND',
       'FAILED_EXECUTION',
       'NOT_AVAILABLE',
+      'SOURCE_UNAVAILABLE',
       'UNCONFIRMED',
       'ENGINE_UNAVAILABLE',
+      'BUSY',
       'STORAGE_UNAVAILABLE',
       'TRANSPORT',
     ] as const

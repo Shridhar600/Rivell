@@ -5,10 +5,10 @@ import { KnowledgeLinkRow, SourceStateBadge } from '../../components/knowledge/r
 import { EmptyState } from '../../components/ui/State'
 import { longDate } from '../../lib/dates'
 import { artifactName, countNoun, reviewedText, type Catalog, type PlaybookView } from '../../lib/knowledgeCatalog'
-import { scopeLine } from '../../lib/knowledgePosition'
+import { contractTypesLabel, scopeLine } from '../../lib/knowledgePosition'
 
 const CRUMBS: Crumb[] = [{ label: 'Knowledge', to: '/knowledge' }, { label: 'Playbooks' }]
-const LEDE = 'Published organizational positions, scoped to the contract contexts your team uses.'
+const LEDE = "Your team's approved positions for the contract types you review."
 
 export function PlaybooksPage() {
   const state = useKnowledgeCatalog()
@@ -21,7 +21,7 @@ export function PlaybooksPage() {
 
 function playbookDetail(playbook: PlaybookView): string {
   const scope = scopeLine(playbook.published)
-  return `${scope ? `Applies to ${scope}. ` : ''}Published ${longDate(playbook.latest.createdAt)}`
+  return `Applies to ${scope || contractTypesLabel([])}. Published ${longDate(playbook.latest.createdAt)}`
 }
 
 function Playbooks({ catalog, state }: { catalog: Catalog; state: ReturnType<typeof useKnowledgeCatalog> }) {
@@ -31,7 +31,7 @@ function Playbooks({ catalog, state }: { catalog: Catalog; state: ReturnType<typ
       <CatalogNotices state={state} catalog={catalog} />
 
       {compiling.length > 0 ? (
-        <ul className="rv-k-list" aria-label="Playbooks in compilation">
+        <ul className="rv-k-list" aria-label="Playbook drafts">
           {compiling.map((source) => (
             <KnowledgeLinkRow
               key={source.artifact.id}
@@ -62,7 +62,7 @@ function Playbooks({ catalog, state }: { catalog: Catalog; state: ReturnType<typ
               detail={playbookDetail(playbook)}
               right={
                 <>
-                  <span className="rv-chip">Publication {playbook.latest.number}</span>
+                  <span className="rv-chip">Knowledge version {playbook.latest.number}</span>
                   {countNoun('PLAYBOOK', playbook.live)}
                 </>
               }

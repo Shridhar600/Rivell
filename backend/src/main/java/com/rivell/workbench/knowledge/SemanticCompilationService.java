@@ -71,6 +71,23 @@ public class SemanticCompilationService {
             List<KnowledgeCandidate> candidates, List<KnowledgeCandidate> publishedCandidates) {
         var unitsById = units.stream()
                 .collect(Collectors.toMap(ExtractionUnit::id, Function.identity()));
+        var columnsByUnit = new LinkedHashMap<UUID, Map<String, String>>();
+        for (var candidate : candidates) {
+            columnsByUnit.putIfAbsent(candidate.extractionUnitId(), candidate.payload().columns());
+        }
+        // A document's approval matrix and approval tables are authority sources, read before
+        // any record is judged and never published as positions (council §A.1, §A.4).
+        var authorityUnits = new LinkedHashSet<UUID>();
+        var authorityRules = new ArrayList<AuthoritySourceRule>();
+        for (var unit : units) {
+            var columns = columnsByUnit.getOrDefault(unit.id(), Map.of());
+            if (LabelledFieldStage.isAuthoritySection(unit.title(), unit.contentText(), columns)) {
+                authorityUnits.add(unit.id());
+                authorityRules.addAll(LabelledFieldStage.documentRules(
+                        unit.contentText(), columns));
+            }
+        }
+        var authorityCatalog = AuthorityCatalog.of(authorityRules);
 
         ArtifactTypeAssessment assessment;
         try {
@@ -81,7 +98,12 @@ public class SemanticCompilationService {
         }
 
         var semanticAvailable = assessment != null;
-        var labelRoles = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var labelResolution = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var labelRoles = labelResolution.roles();
+        if (!labelResolution.available()) {
+            semanticAvailable = false;
+        }
+        var labelRolesUnavailable = !labelResolution.available();
         var recordKinds = new LinkedHashMap<UUID, KnowledgeRecordKind>();
         var kindUnavailable = new LinkedHashSet<UUID>();
         var eligible = new ArrayList<KnowledgeCandidate>(candidates.size());
@@ -91,12 +113,20 @@ public class SemanticCompilationService {
         }
         // record decisions are independent per record: run them concurrently, keep source order
         var kinds = BoundedParallel.map(candidates, properties.compileConcurrency(),
-                candidate -> recordSemantics.decideKind(artifact,
-                        unitsById.get(candidate.extractionUnitId()), candidate,
-                        rolesByCandidate.get(candidate.id())));
+                candidate -> authorityUnits.contains(candidate.extractionUnitId())
+                        ? Optional.of(KnowledgeRecordKind.ESCALATION)
+                        : recordSemantics.decideKind(artifact,
+                                unitsById.get(candidate.extractionUnitId()), candidate,
+                                rolesByCandidate.get(candidate.id())));
         for (int index = 0; index < candidates.size(); index++) {
             var candidate = candidates.get(index);
             var unit = unitsById.get(candidate.extractionUnitId());
+            if (authorityUnits.contains(unit.id())) {
+                // the source's approval matrix or approval table: read for its rules above,
+                // never a position and never a wording candidate
+                recordKinds.put(unit.id(), KnowledgeRecordKind.ESCALATION);
+                continue;
+            }
             var kind = kindOf(kinds.get(index), unit);
             if (kind.isEmpty()) {
                 semanticAvailable = false;
@@ -115,7 +145,8 @@ public class SemanticCompilationService {
                 properties.compileConcurrency(),
                 candidate -> interpret(candidate, artifact,
                         unitsById.get(candidate.extractionUnitId()),
-                        rolesByCandidate.getOrDefault(candidate.id(), Map.of())));
+                        rolesByCandidate.getOrDefault(candidate.id(), Map.of()),
+                        authorityCatalog));
         if (interpretable < eligible.size()) {
             semanticAvailable = false;
         }
@@ -139,7 +170,7 @@ public class SemanticCompilationService {
             }
             var roles = rolesByCandidate.getOrDefault(candidate.id(), Map.<String, RecordFieldRole>of());
             compiled.add(finish(enriched, unit, roles, publishedCandidates, assessment,
-                    kindUnavailable.contains(unit.id())));
+                    kindUnavailable.contains(unit.id()) || labelRolesUnavailable));
         }
 
         var compiledUnits = units.stream()
@@ -159,14 +190,17 @@ public class SemanticCompilationService {
     public List<KnowledgeCandidate> compileUserPosition(
             KnowledgeArtifact artifact, ExtractionUnit unit, List<KnowledgeCandidate> candidates,
             List<KnowledgeCandidate> publishedCandidates) {
-        var labelRoles = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var labelResolution = recordSemantics.resolveUnknownLabels(artifact, candidates);
+        var labelRoles = labelResolution.roles();
+        var labelRolesUnavailable = !labelResolution.available();
         var compiled = new ArrayList<KnowledgeCandidate>(candidates.size());
         for (var candidate : candidates) {
             var roles = fieldRoles(candidate, labelRoles);
             var enriched = candidate;
-            var unavailable = false;
+            var unavailable = labelRolesUnavailable;
             try {
-                enriched = interpret(candidate, artifact, unit, roles);
+                enriched = interpret(candidate, artifact, unit, roles,
+                        AuthorityCatalog.of(List.of()));
             } catch (SemanticDecisionException e) {
                 LoggerFactory.getLogger(SemanticCompilationService.class)
                         .warn("Semantic interpretation degraded for candidate {} ({} {})",
@@ -184,7 +218,7 @@ public class SemanticCompilationService {
             KnowledgeCandidate enriched, ExtractionUnit unit, Map<String, RecordFieldRole> roles,
             List<KnowledgeCandidate> publishedCandidates, ArtifactTypeAssessment assessment,
             boolean semanticUnavailable) {
-        var applied = withSourceApplicability(withResolvedFieldRoles(enriched, roles), unit, roles);
+        var applied = withSourceApplicability(withResolvedFieldRoles(enriched, roles), unit);
         var withSignals = applied.withConflictSignals(
                 conflictDetector.inspect(applied, publishedCandidates));
         var categorization = categorizer.categorize(withSignals, assessment);
@@ -249,25 +283,34 @@ public class SemanticCompilationService {
 
     private KnowledgeCandidate interpret(
             KnowledgeCandidate candidate, KnowledgeArtifact artifact, ExtractionUnit unit,
-            Map<String, RecordFieldRole> roles) {
+            Map<String, RecordFieldRole> roles, AuthorityCatalog authorityCatalog) {
         var state = new M4SemanticStates.PlaybookUnitState(
                 unit.contentText(), unit.title(), unit.kind(), candidate.payload().columns());
+        var labelled = labelledFields(candidate, unit);
         var topic = topicClassifier.classify(
                 topicHeading(candidate, roles), topicText(candidate, roles, unit));
         var fields = new LinkedHashMap<String, FieldInterpretation>();
-        var builder = new SemanticFieldsBuilder(topic.probabilities());
+        // typed stances and entry rules are a playbook-rule concept, not a wording variant's
+        var typed = candidate.candidateType() == CandidateType.PLAYBOOK_RULE
+                ? labelled : LabelledFieldStage.Result.empty();
+        var builder = new SemanticFieldsBuilder(topic.probabilities()).labelled(typed);
         var provenance = unit.sourceNodeIds();
 
         if (unit.kind() == ExtractionUnitKind.HEADING_SECTION) {
             switch (artifact.artifactType()) {
-                case PLAYBOOK -> interpretPlaybook(state, provenance, builder, fields);
+                case PLAYBOOK -> interpretPlaybook(state, provenance, builder, fields, typed);
                 case CLAUSE_LIBRARY -> interpretClauseVariant(state, provenance, builder, fields);
                 default -> { }
             }
         } else {
-            interpretFieldRoles(candidate, roles, builder, fields, provenance);
+            interpretFieldRoles(candidate, roles, builder, fields, provenance, typed);
         }
         interpretScopeNarrowing(state, provenance, fields);
+        // the entry's own rules and the document rules meet here, by the council's precedence
+        var authority = authorityCatalog.merge(
+                candidate.effectiveTitle(), unit.contentText(), typed.entryRules());
+        builder.authority(authority.rules(), authority.conflicts());
+        recordTypedFields(builder, fields, provenance);
 
         var semantic = builder.build();
         var conceptKey = topic.primary() == null ? null : topic.primary().value();
@@ -280,6 +323,54 @@ public class SemanticCompilationService {
                 .forEach(key -> topicKeys.add(key.value()));
         return candidate.withSemanticOutcome(semantic, List.copyOf(fields.values()),
                 conceptKey, List.copyOf(topicKeys));
+    }
+
+    /**
+     * The labels the source states explicitly. Columns are the record's own fields; a prose
+     * record is read from its text. Reading both for a structured record would parse the same
+     * rendered row twice.
+     */
+    private static LabelledFieldStage.Result labelledFields(
+            KnowledgeCandidate candidate, ExtractionUnit unit) {
+        var columns = candidate.payload().columns();
+        if (!columns.isEmpty()) {
+            return LabelledFieldStage.parse(unit.title(), null, columns);
+        }
+        return LabelledFieldStage.parse(unit.title(), unit.contentText(), Map.of());
+    }
+
+    /** Provenance for every typed value the stage read, so review can see what came from where. */
+    private static void recordTypedFields(
+            SemanticFieldsBuilder builder, Map<String, FieldInterpretation> fields,
+            List<UUID> provenance) {
+        if (builder.preferredText != null) {
+            fields.put("preferredText", new FieldInterpretation(
+                    "preferredText", InterpretationKind.DETERMINISTIC, builder.preferredText,
+                    DETERMINISTIC_COLUMN_SPEC, 1, null, provenance, VerificationState.VERIFIED, null));
+        }
+        if (!builder.fallbackTexts.isEmpty()) {
+            fields.put("fallbackTexts", new FieldInterpretation(
+                    "fallbackTexts", InterpretationKind.DETERMINISTIC,
+                    String.join("\n", builder.fallbackTexts),
+                    DETERMINISTIC_COLUMN_SPEC, 1, null, provenance, VerificationState.VERIFIED, null));
+        }
+        if (builder.prohibitedText != null) {
+            fields.put("prohibitedText", new FieldInterpretation(
+                    "prohibitedText", InterpretationKind.DETERMINISTIC, builder.prohibitedText,
+                    DETERMINISTIC_COLUMN_SPEC, 1, null, provenance, VerificationState.VERIFIED, null));
+        }
+        if (!builder.authorityRules.isEmpty()) {
+            fields.put("authorityRules", new FieldInterpretation(
+                    "authorityRules", InterpretationKind.DETERMINISTIC,
+                    builder.authorityRules.stream()
+                            .map(rule -> rule.source().name() + ": " + rule.approver()
+                                    + (rule.stances().isEmpty() ? ""
+                                            : " [" + rule.stances().stream().map(Enum::name)
+                                                    .sorted().collect(Collectors.joining(",")) + "]")
+                                    + (rule.condition() == null ? "" : " if " + rule.condition()))
+                            .collect(Collectors.joining("; ")),
+                    DETERMINISTIC_COLUMN_SPEC, 1, null, provenance, VerificationState.VERIFIED, null));
+        }
     }
 
     /**
@@ -299,24 +390,15 @@ public class SemanticCompilationService {
     }
 
     /**
-     * The contract types the record itself says it applies to: its APPLICABILITY field, or a
-     * prose "Applies to:" line. Deterministic; a record that states nothing keeps the scope it
-     * inherited from the manifest. A label only the model resolved as applicability ("Variant",
-     * "Trigger") narrows only when its value names a contract type the product models.
+     * The contract types the record itself says it applies to. Deterministic; a record that
+     * states nothing keeps the scope it inherited from the manifest. The derivation itself lives
+     * in {@link SourceApplicabilityDerivation} because the one-time re-derivation of stored rows
+     * must read the same rule.
      */
     private static KnowledgeCandidate withSourceApplicability(
-            KnowledgeCandidate candidate, ExtractionUnit unit, Map<String, RecordFieldRole> roles) {
-        var label = firstFieldLabel(candidate, roles, RecordFieldRole.APPLICABILITY);
-        Set<String> types = Set.of();
-        if (label != null) {
-            var codeKnown = RecordLabelRoles.known(label).orElse(null) == RecordFieldRole.APPLICABILITY;
-            types = ContractTypeApplicability.contractTypes(
-                    candidate.payload().columns().get(label), codeKnown);
-        } else if (unit.kind() == ExtractionUnitKind.HEADING_SECTION) {
-            types = ContractTypeApplicability.statedIn(unit.contentText())
-                    .map(text -> ContractTypeApplicability.contractTypes(text, true))
-                    .orElse(Set.of());
-        }
+            KnowledgeCandidate candidate, ExtractionUnit unit) {
+        var types = SourceApplicabilityDerivation.derive(
+                candidate.payload(), unit.kind(), unit.contentText());
         return types.isEmpty() ? candidate
                 : candidate.withScope(candidate.scope().withSourceContractTypes(types));
     }
@@ -370,28 +452,43 @@ public class SemanticCompilationService {
     private void interpretFieldRoles(
             KnowledgeCandidate candidate, Map<String, RecordFieldRole> roles,
             SemanticFieldsBuilder builder, Map<String, FieldInterpretation> fields,
-            List<UUID> provenance) {
+            List<UUID> provenance, LabelledFieldStage.Result labelled) {
         var positions = new LinkedHashSet<PositionRole>();
-        var positionNames = new ArrayList<String>();
-        String escalationTrigger = null;
+        String escalationTrigger = labelled.escalationTrigger();
+        PositionRole variantRole = null;
         for (var key : candidate.payload().orderedKeys()) {
             var role = roles.get(key);
             if (role == null) {
                 continue;
             }
-            var position = role.toPositionRole();
-            if (position != null && positions.add(position)) {
-                positionNames.add(role.name());
+            if (role == RecordFieldRole.VARIANT && variantRole == null) {
+                variantRole = RecordLabelRoles.variantRole(candidate.payload().columns().get(key))
+                        .orElse(null);
             }
-            if (role == RecordFieldRole.ESCALATION) {
+            var position = role.toPositionRole();
+            if (position != null) {
+                positions.add(position);
+            }
+            if (role == RecordFieldRole.ESCALATION && escalationTrigger == null) {
                 escalationTrigger = candidate.payload().columns().get(key);
             }
         }
-        builder.positions(positions).escalationTrigger(escalationTrigger);
+        // A label the source states explicitly is a position without a model call.
+        if (candidate.candidateType() == CandidateType.PLAYBOOK_RULE) {
+            positions.addAll(labelled.statedRoles());
+        }
+        builder.positions(positions).escalationTrigger(escalationTrigger).variantRole(variantRole);
+        if (variantRole != null) {
+            fields.put("variantRole", new FieldInterpretation(
+                    "variantRole", InterpretationKind.DETERMINISTIC, variantRole.name(),
+                    DETERMINISTIC_COLUMN_SPEC, 1,
+                    null, provenance, VerificationState.VERIFIED, null));
+        }
         if (!positions.isEmpty()) {
             fields.put("positions", new FieldInterpretation(
                     "positions", InterpretationKind.DETERMINISTIC,
-                    String.join(",", positionNames),
+                    positions.stream().map(Enum::name)
+                            .sorted().reduce((a, b) -> a + "," + b).orElseThrow(),
                     DETERMINISTIC_COLUMN_SPEC, 1,
                     null, provenance, VerificationState.VERIFIED, null));
         }
@@ -407,37 +504,82 @@ public class SemanticCompilationService {
             M4SemanticStates.PlaybookUnitState state,
             List<UUID> provenance,
             SemanticFieldsBuilder builder,
-            Map<String, FieldInterpretation> fields) {
-        var execution = decisionService.evaluate(M4SemanticSpecs.playbookPositions(), state);
-        var positions = new LinkedHashSet<PositionRole>();
-        for (var role : M4SemanticSpecs.playbookRoles()) {
-            var answer = execution.answers().get(M4SemanticSpecs.positionQuestionName(role));
-            if (answer instanceof YesNoAnswer yesNo && yesNo.probability() >= properties.positionProposal()) {
-                positions.add(role);
+            Map<String, FieldInterpretation> fields,
+            LabelledFieldStage.Result labelled) {
+        var positions = new LinkedHashSet<PositionRole>(labelled.statedRoles());
+        var statedPositions = new LinkedHashSet<PositionRole>(positions);
+        var missing = M4SemanticSpecs.playbookRoles().stream()
+                .filter(role -> !positions.contains(role))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        // the text states its approval when the stage found a typed rule, so that is not asked
+        var askApproval = labelled.entryRules().isEmpty();
+        Boolean statedApproval = null;
+        if (!missing.isEmpty() || askApproval) {
+            var execution = decisionService.evaluate(
+                    M4SemanticSpecs.playbookPositions(missing, askApproval), state);
+            for (var role : M4SemanticSpecs.playbookRoles()) {
+                var answer = execution.answers().get(M4SemanticSpecs.positionQuestionName(role));
+                if (answer instanceof YesNoAnswer yesNo
+                        && yesNo.probability() >= properties.positionProposal()) {
+                    positions.add(role);
+                }
+            }
+            if (askApproval) {
+                statedApproval = requiresApproval(execution.answers().get("requires_approval"));
+                builder.requiresApproval(statedApproval);
+            }
+            if (!positions.isEmpty() && !positions.equals(statedPositions)) {
+                // the source stated some roles; only a role the model added makes this a
+                // bounded classification rather than a deterministic reading
+                fields.put("positions", new FieldInterpretation(
+                        "positions", InterpretationKind.BOUNDED_CLASSIFICATION,
+                        positions.stream().map(Enum::name).sorted()
+                                .reduce((a, b) -> a + "," + b).orElseThrow(),
+                        M4SemanticSpecs.PLAYBOOK_POSITION_SPEC,
+                        M4SemanticSpecs.PLAYBOOK_POSITION_VERSION,
+                        execution.metadata().executionId(), provenance,
+                        VerificationState.NOT_VERIFIED, null));
+            }
+            if (askApproval && statedApproval != null) {
+                fields.put("requiresApproval", new FieldInterpretation(
+                        "requiresApproval", InterpretationKind.BOUNDED_CLASSIFICATION,
+                        String.valueOf(statedApproval),
+                        M4SemanticSpecs.PLAYBOOK_POSITION_SPEC,
+                        M4SemanticSpecs.PLAYBOOK_POSITION_VERSION,
+                        execution.metadata().executionId(), provenance,
+                        VerificationState.NOT_VERIFIED, null));
             }
         }
-        var approval = execution.answers().get("requires_approval");
-        var requiresApproval = approval instanceof YesNoAnswer yesNo
-                ? yesNo.probability() >= properties.approvalProposal()
-                : null;
-        builder.positions(positions).requiresApproval(requiresApproval);
-        if (positions.contains(PositionRole.ESCALATION)) {
+        builder.positions(positions);
+        if (!positions.isEmpty() && !fields.containsKey("positions")) {
+            fields.put("positions", new FieldInterpretation(
+                    "positions", InterpretationKind.DETERMINISTIC,
+                    positions.stream().map(Enum::name).sorted()
+                            .reduce((a, b) -> a + "," + b).orElseThrow(),
+                    DETERMINISTIC_COLUMN_SPEC, 1, null, provenance,
+                    VerificationState.VERIFIED, null));
+        }
+        if (labelled.escalationTrigger() != null) {
+            builder.escalationTrigger(labelled.escalationTrigger());
+        } else if (positions.contains(PositionRole.ESCALATION)) {
             interpretEscalationTrigger(state, provenance, stateColumnsHasEscalation(state), builder, fields);
         }
-        if (!positions.isEmpty()) {
-            fields.put("positions", new FieldInterpretation(
-                    "positions", InterpretationKind.BOUNDED_CLASSIFICATION,
-                    positions.stream().map(Enum::name).sorted().reduce((a, b) -> a + "," + b).orElseThrow(),
-                    M4SemanticSpecs.PLAYBOOK_POSITION_SPEC, M4SemanticSpecs.playbookPositions().version(),
-                    execution.metadata().executionId(), provenance, VerificationState.NOT_VERIFIED, null));
+    }
+
+    /**
+     * Approval is proposed above the threshold and denied only as far below it; an answer between
+     * the two is not an answer, so the record states no approval requirement instead of "not
+     * required".
+     */
+    private Boolean requiresApproval(com.rivell.workbench.intelligence.SemanticAnswer answer) {
+        if (!(answer instanceof YesNoAnswer yesNo)) {
+            return null;
         }
-        if (requiresApproval != null) {
-            fields.put("requiresApproval", new FieldInterpretation(
-                    "requiresApproval", InterpretationKind.BOUNDED_CLASSIFICATION,
-                    String.valueOf(requiresApproval),
-                    M4SemanticSpecs.PLAYBOOK_POSITION_SPEC, M4SemanticSpecs.playbookPositions().version(),
-                    execution.metadata().executionId(), provenance, VerificationState.NOT_VERIFIED, null));
+        var probability = yesNo.probability();
+        if (probability >= properties.approvalProposal()) {
+            return Boolean.TRUE;
         }
+        return probability <= 1.0 - properties.approvalProposal() ? Boolean.FALSE : null;
     }
 
     /**
@@ -568,7 +710,13 @@ public class SemanticCompilationService {
         private Boolean requiresApproval;
         private String escalationTrigger;
         private PositionRole variantRole;
-        private Map<ConceptKey, Double> conceptProbabilities;
+        private final Map<ConceptKey, Double> conceptProbabilities;
+        private String preferredText;
+        private List<String> fallbackTexts = List.of();
+        private String prohibitedText;
+        private List<AuthorityRule> authorityRules = List.of();
+        private List<AuthorityConflict> authorityConflicts = List.of();
+        private List<String> unmappedAuthority = List.of();
 
         SemanticFieldsBuilder(Map<ConceptKey, Double> conceptProbabilities) {
             this.conceptProbabilities = conceptProbabilities;
@@ -594,9 +742,31 @@ public class SemanticCompilationService {
             return this;
         }
 
+        SemanticFieldsBuilder authority(
+                List<AuthorityRule> rules, List<AuthorityConflict> conflicts) {
+            this.authorityRules = rules == null ? List.of() : rules;
+            this.authorityConflicts = conflicts == null ? List.of() : conflicts;
+            return this;
+        }
+
+        SemanticFieldsBuilder labelled(LabelledFieldStage.Result labelled) {
+            if (labelled == null) {
+                return this;
+            }
+            this.preferredText = labelled.preferred();
+            this.fallbackTexts = labelled.fallbacks();
+            this.prohibitedText = labelled.prohibited();
+            if (this.escalationTrigger == null) {
+                this.escalationTrigger = labelled.escalationTrigger();
+            }
+            this.unmappedAuthority = labelled.unmapped();
+            return this;
+        }
+
         SemanticFields build() {
-            return new SemanticFields(
-                    positions, requiresApproval, escalationTrigger, variantRole, conceptProbabilities);
+            return new SemanticFields(positions, requiresApproval, escalationTrigger, variantRole,
+                    conceptProbabilities, false, preferredText, fallbackTexts, prohibitedText,
+                    authorityRules, authorityConflicts, false, unmappedAuthority, false);
         }
     }
 }

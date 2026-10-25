@@ -1,10 +1,12 @@
 package com.rivell.workbench.knowledge;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
@@ -62,6 +64,8 @@ public class CandidateReviewService {
                     && candidate.reviewStatus() != ReviewStatus.EDITED) {
                 throw new InvalidCandidateReviewStateException(candidate, "approved");
             }
+            // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would
+            // be stored rounded, so the returned candidate would not match a later read of it.
             return new KnowledgeCandidate(
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.APPROVED,
@@ -73,25 +77,58 @@ public class CandidateReviewService {
                     candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
-                    Texts.normalize(note), Instant.now(),
-                    candidate.createdAt(), Instant.now());
+                    Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.editedTitle());
         });
     }
 
     public KnowledgeCandidate edit(
             UUID candidateId, String contentText, CandidatePayload payload,
             ApplicabilityScope scope, SemanticFields semanticFields, String note) {
+        return edit(candidateId, null, contentText, payload, scope, semanticFields, note);
+    }
+
+    /** Longest title a person may give an entry; a title names an entry, it does not hold its text. */
+    static final int MAX_EDITED_TITLE_LENGTH = 200;
+
+    public KnowledgeCandidate edit(
+            UUID candidateId, String title, String contentText, CandidatePayload payload,
+            ApplicabilityScope scope, SemanticFields semanticFields, String note) {
         return transition(candidateId, "edited", candidate -> {
             if (candidate.isPublished()) {
                 throw new InvalidCandidateReviewStateException(candidate, "edited");
             }
             var editedSemantic = semanticFields == null ? SemanticFields.EMPTY : semanticFields;
+            // A playbook correction always carries the complete corrected set, so a null
+            // approval in it is a deliberate clear rather than an omitted field. Marking it
+            // keeps effectiveRequiresApproval() from resurrecting the machine answer. An
+            // empty object is therefore an explicit empty set, not a no-op.
+            if (semanticFields != null
+                    && candidate.candidateType() == CandidateType.PLAYBOOK_RULE
+                    && editedSemantic.requiresApproval() == null) {
+                editedSemantic = editedSemantic.withRequiresApprovalCleared();
+            }
             var semanticChanged = !editedSemantic.equals(SemanticFields.EMPTY);
             var scopeChanged = scope != null;
             var payloadChanged = payload != null && !payload.columns().isEmpty();
+            if (title != null && (title.contains("\n") || title.contains("\r"))) {
+                throw new IllegalArgumentException("A title must be a single line");
+            }
+            var newTitle = Texts.normalize(title);
+            if (newTitle != null && newTitle.length() > MAX_EDITED_TITLE_LENGTH) {
+                throw new IllegalArgumentException(
+                        "A title must be at most " + MAX_EDITED_TITLE_LENGTH + " characters");
+            }
+            // A present blank title is a deliberate clear of an earlier correction. An absent
+            // title leaves the correction alone, so the two must not collapse to the same null.
+            var titleChanged = title != null && newTitle == null
+                    ? candidate.editedTitle() != null
+                    : newTitle != null && !newTitle.equals(candidate.effectiveTitle());
             if ((contentText == null || contentText.isBlank()) && !payloadChanged
-                    && !semanticChanged && !scopeChanged) {
-                throw new IllegalArgumentException("An edit must change content, payload, scope, or semantic fields");
+                    && !semanticChanged && !scopeChanged && !titleChanged) {
+                throw new IllegalArgumentException(
+                        "Change the title, the wording, a value, the scope or a field before you save an edit.");
             }
             // A structured correction is a set of corrected values, not wording: it composes onto
             // the values already corrected, so a second correction does not drop the first, and its
@@ -107,7 +144,7 @@ public class CandidateReviewService {
                 // nothing a reader can see. Refuse it instead of silently keeping the machine
                 // wording behind an edit that looks like it cleared the row.
                 throw new IllegalArgumentException(
-                        "A structured correction must keep at least one non-blank column value");
+                        "Keep at least one value in the row. A correction cannot clear every cell.");
             }
             // Correction provenance, and it is a single rule: editedContentText is wording a human
             // typed, and only that. A derived rendering is never written here, because a stored
@@ -118,6 +155,8 @@ public class CandidateReviewService {
             var explicitWording = contentText != null && !contentText.isBlank()
                     ? contentText
                     : candidate.editedContentText();
+            // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would
+            // be stored rounded, so the returned candidate would not match a later read of it.
             var edited = new KnowledgeCandidate(
                     candidate.id(), candidate.artifactId(), candidate.organizationId(),
                     candidate.extractionUnitId(), candidate.candidateType(), ReviewStatus.EDITED,
@@ -134,8 +173,9 @@ public class CandidateReviewService {
                             ? scope.withSourceContractTypes(candidate.scope().sourceContractTypes())
                             : candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
-                    Texts.normalize(note), Instant.now(),
-                    candidate.createdAt(), Instant.now());
+                    Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    titleChanged ? newTitle : candidate.editedTitle());
             return recomputeConditions(edited, candidate.artifactId());
         });
     }
@@ -172,8 +212,9 @@ public class CandidateReviewService {
                     candidate.editedContentText(),
                     candidate.editedPayload(), candidate.supersedingCandidateId(), candidate.scope(),
                     candidate.conflictSignals(), candidate.reviewCategory(), candidate.reviewReasons(),
-                    Texts.normalize(note), Instant.now(),
-                    candidate.createdAt(), Instant.now());
+                    Texts.normalize(note), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.createdAt(), Instant.now().truncatedTo(ChronoUnit.MICROS),
+                    candidate.editedTitle());
         });
     }
 
@@ -195,7 +236,7 @@ public class CandidateReviewService {
         }
         if (primary == null) {
             throw new IllegalArgumentException(
-                    "A concept correction must set a taxonomy key or an empty string to clear");
+                    "Choose a topic, or clear the topic.");
         }
         var normalized = primary.strip();
         if (!normalized.isEmpty()) {
@@ -211,10 +252,13 @@ public class CandidateReviewService {
         var candidate = repository.findCandidate(candidateId, identity.organizationId())
                 .orElseThrow(() -> new KnowledgeCandidateNotFoundException(candidateId));
         if (candidate.isPublished() || candidate.reviewStatus() == ReviewStatus.REJECTED) {
-            throw new InvalidCandidateReviewStateException(candidate, "concept-corrected");
+            throw new InvalidCandidateReviewStateException(candidate, "given a different topic");
         }
-        var corrected = candidate.withConceptCorrection(normalized.isEmpty()
-                ? "" : normalized);
+        // Lowered to the precision PostgreSQL keeps for timestamptz: a nanosecond value would
+        // be stored rounded, so the returned candidate would not match a later read of it.
+        var correctedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var corrected = candidate.withConceptCorrection(
+                normalized.isEmpty() ? "" : normalized, identity.userId(), correctedAt);
         if (!java.util.Objects.equals(corrected.effectiveConceptKey(),
                 candidate.effectiveConceptKey())) {
             var signals = conflictDetector.inspect(corrected,
@@ -231,9 +275,9 @@ public class CandidateReviewService {
         corrected = corrected.withReviewStatus(status);
         boolean persisted = repository.updateConceptCorrection(corrected.id(),
                 identity.organizationId(), corrected, candidate.reviewStatus(),
-                identity.userId(), Instant.now());
+                identity.userId(), correctedAt);
         if (!persisted) {
-            throw new InvalidCandidateReviewStateException(corrected, "concept-corrected");
+            throw new InvalidCandidateReviewStateException(candidate, "given a different topic");
         }
         return corrected;
     }
@@ -250,7 +294,7 @@ public class CandidateReviewService {
         var updated = change.apply(candidate);
         var applied = repository.updateReviewState(
                 updated.id(), identity.organizationId(), candidate.reviewStatus(),
-                updated.reviewStatus(), updated.editedContentText(),
+                updated.reviewStatus(), updated.editedContentText(), updated.editedTitle(),
                 updated.editedPayload(), updated.editedSemanticFields(), updated.scope(),
                 updated.supersedingCandidateId(),
                 updated.reviewNote(), updated.reviewedAt(),
@@ -272,7 +316,7 @@ public class CandidateReviewService {
      */
     public BulkApprovalResult bulkApprove(java.util.List<UUID> candidateIds) {
         if (candidateIds == null || candidateIds.isEmpty()) {
-            throw new IllegalArgumentException("Bulk approval requires at least one candidate");
+            throw new IllegalArgumentException("Choose at least one entry to approve.");
         }
         var identity = identityProvider.currentIdentity();
         if (!authorizationService.isAuthorized(identity, Permissions.KNOWLEDGE_REVIEW)) {
@@ -284,12 +328,12 @@ public class CandidateReviewService {
             for (var candidateId : new java.util.LinkedHashSet<>(candidateIds)) {
                 var candidate = repository.findCandidate(candidateId, identity.organizationId());
                 if (candidate.isEmpty()) {
-                    skipped.put(candidateId, "not found in this organization");
+                    skipped.put(candidateId, "This entry no longer exists.");
                     continue;
                 }
                 var loaded = candidate.get();
                 if (loaded.reviewStatus() != ReviewStatus.PENDING) {
-                    skipped.put(candidateId, "not pending");
+                    skipped.put(candidateId, "This entry has already been reviewed.");
                     continue;
                 }
                 // Bulk approval is the only review path that approves without a human reading the
@@ -300,11 +344,7 @@ public class CandidateReviewService {
                 // the refusal names the condition that made the candidate ineligible.
                 var current = recomputeConditions(loaded, loaded.artifactId());
                 if (current.reviewCategory() != ReviewCategory.ROUTINE) {
-                    skipped.put(candidateId, "no longer eligible for bulk approval: "
-                            + (current.reviewCategory() == null
-                                    ? "UNSET" : current.reviewCategory())
-                            + (current.reviewReasons().isEmpty()
-                                    ? "" : " " + current.reviewReasons()));
+                    skipped.put(candidateId, needsReviewReason(current.reviewReasons()));
                     continue;
                 }
                 try {
@@ -315,11 +355,35 @@ public class CandidateReviewService {
                     // the exception escape would turn a partial success into a failure and leave
                     // the other approvals unapplied. Integrity is unchanged - the candidate that
                     // lost the race is not approved, and it stays in whatever state it now holds.
-                    skipped.put(candidateId, "changed state during approval");
+                    skipped.put(candidateId, "This entry changed while it was being approved. Review it again.");
                 }
             }
         });
         return new BulkApprovalResult(List.copyOf(approved), java.util.Map.copyOf(skipped));
+    }
+
+    /** Why bulk approval left an entry for a person, in words a reviewer can act on. */
+    private static String needsReviewReason(Set<ReviewReason> reasons) {
+        var causes = reasons.stream().sorted().map(reason -> switch (reason) {
+            case DUPLICATE_DETECTED -> "it may duplicate published knowledge";
+            case CONFLICT_DETECTED -> "it may contradict published knowledge";
+            case SUPERSESSION_PROPOSED -> "it may replace published knowledge";
+            case ARTIFACT_TYPE_MISMATCH -> "the file may not be the type you chose";
+            case VERIFICATION_DISPUTED -> "the source does not fully support a value";
+            case UNVERIFIED_GENERATIVE_FIELD -> "a value could not be checked against the source";
+            case LOW_CLASSIFICATION_CONFIDENCE -> "Rivell is not sure of its topic";
+            case NEW_PROHIBITED_OR_ESCALATION_POSITION ->
+                    "it sets a prohibited or escalation position";
+            case SCOPE_NARROWING_PROPOSED -> "the source narrows where it applies";
+            case SEMANTIC_ANALYSIS_UNAVAILABLE -> "the conflict check was unavailable";
+            case SEMANTIC_COMPILATION_UNAVAILABLE -> "Rivell could not read its meaning";
+            case UNMAPPED_AUTHORITY_WORDS ->
+                    "the source states a walk-away or an approver Rivell could not map";
+        }).toList();
+        return causes.isEmpty()
+                ? "This entry needs your review, so bulk approval left it for you."
+                : "This entry needs your review, so bulk approval left it for you: "
+                        + String.join(", ", causes) + ".";
     }
 
     public record BulkApprovalResult(java.util.List<UUID> approvedIds, java.util.Map<UUID, String> skipped) {

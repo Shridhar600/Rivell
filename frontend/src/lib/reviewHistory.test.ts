@@ -44,7 +44,7 @@ const finalization = (approvedChanges: number) => ({ finalizedAt: '2026-10-02T10
 
 describe('reviewLifecycle: the canonical states, from server facts', () => {
   const cases: [string, Partial<ReviewListItem>, string, string | null][] = [
-    ['queued', { status: 'ANALYSIS_QUEUED' }, 'Queued', 'running'],
+    ['queued', { status: 'ANALYSIS_QUEUED' }, 'Waiting to start', 'running'],
     ['analyzing', { status: 'ANALYZING' }, 'Analyzing', 'running'],
     ['failed', { status: 'FAILED' }, 'Analysis failed', 'needs'],
     ['no decisions yet', { humanReview: human({ status: 'NOT_STARTED', resolvedFindings: 0 }) }, 'Ready for review', 'needs'],
@@ -52,7 +52,7 @@ describe('reviewLifecycle: the canonical states, from server facts', () => {
     [
       'an escalation blocks',
       { humanReview: human({ escalated: 1, blockers: ['ACTIVE_ESCALATION'] }) },
-      'Escalation blocking',
+      'Escalated, needs resolution',
       'needs',
     ],
     [
@@ -111,7 +111,7 @@ describe('reviewLifecycle: the canonical states, from server facts', () => {
     const lifecycle = reviewLifecycle(
       item({ humanReview: human({ status: 'NOT_STARTED', blockers: ['ANALYSIS_DEGRADED'] }) }),
     )
-    expect(lifecycle).toMatchObject({ label: 'Analysis degraded', group: 'needs' })
+    expect(lifecycle).toMatchObject({ label: 'Analysis incomplete', group: 'needs' })
   })
 
   it('offers no verified redline without a downloadable artifact', () => {
@@ -140,7 +140,7 @@ describe('reviewRowView', () => {
     expect(reviewRowView(item()).progress).toBe('5 of 8 decided')
     expect(reviewRowView(item({ status: 'ANALYSIS_QUEUED' })).progress).toBe('—')
     expect(reviewRowView(item({ status: 'FAILED' })).progress).toBe('—')
-    expect(reviewRowView(item({ humanReview: human({ status: 'NOT_STARTED' }) })).progress).toBe('8 Findings')
+    expect(reviewRowView(item({ humanReview: human({ status: 'NOT_STARTED' }) })).progress).toBe('8 findings')
     expect(reviewRowView(item({ finalization: finalization(7) })).progress).toBe('7 approved changes')
     expect(reviewRowView(item({ finalization: finalization(1) })).progress).toBe('1 approved change')
     expect(reviewRowView(item({ finalization: finalization(0) })).progress).toBe('No approved changes')
@@ -159,7 +159,7 @@ describe('reviewRowView', () => {
           redline: { status: 'FAILED', outcome: null, verifiedChangeCount: null, downloadAvailable: false, completedAt: null },
         }),
       ).progress,
-    ).toBe('Execution failed')
+    ).toBe('Redline could not be generated')
   })
 
   it('never reports a verified count for an execution that produced none', () => {
@@ -177,7 +177,7 @@ describe('reviewRowView', () => {
     expect(row).toMatchObject({
       versionChip: 'v2',
       typeChip: 'MSA',
-      detail: 'Supplier side, counterparty paper, United Kingdom',
+      detail: 'Supplier side, their template, United Kingdom',
       title: 'Acme MSA.docx',
     })
   })

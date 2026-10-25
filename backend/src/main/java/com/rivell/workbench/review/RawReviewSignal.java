@@ -65,4 +65,13 @@ public record RawReviewSignal(
             throw new IllegalArgumentException("absence signals carry no clause subject");
         }
     }
+
+    /**
+     * The part of the dedupe key after the signal type and plan check. Signals about one judged
+     * position share it, so a finding can pair a deviation with its own escalation signal.
+     */
+    public String dedupeSuffix() {
+        var prefix = signalType.name() + ":" + planCheckId + ":";
+        return dedupeKey.startsWith(prefix) ? dedupeKey.substring(prefix.length()) : dedupeKey;
+    }
 }

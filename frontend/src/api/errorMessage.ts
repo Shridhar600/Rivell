@@ -3,7 +3,7 @@ const DEFAULT_MESSAGES: Record<number, string> = {
   403: 'You do not have permission to do that.',
   404: 'That resource could not be found.',
   409: 'That action does not apply in the current state.',
-  413: 'The submitted content is larger than this Rivell deployment accepts.',
+  413: 'The submitted content is larger than Rivell accepts.',
   500: 'Rivell could not complete that request.',
   503: 'That Rivell service is unavailable right now.',
 }

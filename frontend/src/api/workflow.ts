@@ -13,8 +13,11 @@ import {
   readString,
 } from './envelope'
 
-export const DECISION_ACTIONS = ['ACCEPT', 'EDIT', 'REJECT', 'ESCALATE'] as const
+export const DECISION_ACTIONS = ['ACCEPT', 'EDIT', 'REJECT', 'ESCALATE', 'RESOLVE'] as const
 export type DecisionAction = (typeof DECISION_ACTIONS)[number] | 'UNKNOWN'
+
+export const REJECT_REASONS = ['KEEP_AS_DRAFTED', 'FINDING_WRONG'] as const
+export type RejectReason = (typeof REJECT_REASONS)[number] | 'UNKNOWN'
 
 export const CHANGE_ACTION_TYPES = ['REPLACE', 'INSERT', 'DELETE'] as const
 export type ChangeActionType = (typeof CHANGE_ACTION_TYPES)[number] | 'UNKNOWN'
@@ -50,6 +53,8 @@ export type HumanDecision = {
   languageSource: ChangeLanguageSource | null
   approvedDraftingEvidenceId: string | null
   comment: string | null
+  rejectReason: RejectReason | null
+  approvedBy: string | null
   actorId: string
   decidedAt: string
   clientRequestId: string | null
@@ -120,6 +125,8 @@ export type DecisionInput = {
   approvedAction?: ChangeActionType
   approvedLanguage?: string
   comment?: string
+  rejectReason?: RejectReason
+  approvedBy?: string
   clientRequestId?: string
 }
 
@@ -178,6 +185,8 @@ export function parseDecision(value: unknown, what = 'decision'): HumanDecision 
       what,
     ),
     comment: readOptionalNullableString(decision, 'comment', what),
+    rejectReason: readNullableStatus(decision, 'rejectReason', REJECT_REASONS),
+    approvedBy: readOptionalNullableString(decision, 'approvedBy', what),
     actorId: readString(decision, 'actorId', what),
     decidedAt: readString(decision, 'decidedAt', what),
     clientRequestId: readOptionalNullableString(decision, 'clientRequestId', what),
@@ -378,6 +387,11 @@ export async function submitDecision(
   }
   if (input.approvedLanguage !== undefined) body.approvedLanguage = input.approvedLanguage
   if (input.comment !== undefined) body.comment = input.comment
+  if (input.rejectReason) {
+    body.rejectReason =
+      input.rejectReason as components['schemas']['DecisionRequest']['rejectReason']
+  }
+  if (input.approvedBy !== undefined) body.approvedBy = input.approvedBy
   const { data, response } = await client.PUT(
     '/api/reviews/{id}/findings/{findingId}/decision',
     {

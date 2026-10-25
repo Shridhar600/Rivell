@@ -19,17 +19,70 @@ describe('Playbooks list', () => {
     expect(row).toHaveAttribute('href', '/knowledge/playbooks/pb')
     expect(row).toHaveTextContent('Commercial MSA Playbook')
     expect(row).toHaveTextContent('Applies to MSA')
-    expect(row).toHaveTextContent('Publication 2')
+    expect(row).toHaveTextContent('Knowledge version 2')
     expect(row).toHaveTextContent('3 positions')
     // A clause library and a draft are not published playbooks.
     expect(within(list).queryByText(/Clause Library/)).not.toBeInTheDocument()
     expect(within(list).queryByText(/Draft Playbook/)).not.toBeInTheDocument()
   })
 
+  it('names a playbook by the title its document gives itself', async () => {
+    const world = buildWorld()
+    world.artifacts = world.artifacts.map((entry) =>
+      entry.id === 'pb' ? { ...entry, documentTitle: 'Mutual NDA Negotiation Guide' } : entry,
+    )
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks')
+
+    const list = await screen.findByRole('list', { name: 'Published playbooks' })
+    const row = within(list).getByRole('link')
+    expect(row).toHaveTextContent('Mutual NDA Negotiation Guide')
+    expect(row).not.toHaveTextContent('Commercial MSA Playbook')
+  })
+
+  it('shows a document title in the detail header and breadcrumb', async () => {
+    const world = buildWorld()
+    world.artifacts = world.artifacts.map((entry) =>
+      entry.id === 'pb' ? { ...entry, documentTitle: 'Mutual NDA Negotiation Guide' } : entry,
+    )
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks/pb')
+
+    await screen.findByRole('heading', { level: 1, name: 'Mutual NDA Negotiation Guide' })
+    const breadcrumbs = screen.getByRole('navigation', { name: /Breadcrumb/i })
+    expect(within(breadcrumbs).getByText('Mutual NDA Negotiation Guide')).toBeInTheDocument()
+  })
+
+  it('states an all-types playbook instead of leaving its scope out', async () => {
+    const world = buildWorld()
+    world.candidates.pb = (world.candidates.pb ?? []).map((entry) => ({
+      ...entry,
+      declaredContractTypes: [],
+    }))
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks')
+
+    const list = await screen.findByRole('list', { name: 'Published playbooks' })
+    const row = within(list).getByRole('link')
+    expect(row).toHaveTextContent('Applies to All contract types.')
+  })
+
+  it('names an all-types playbook in its detail header', async () => {
+    const world = buildWorld()
+    world.candidates.pb = (world.candidates.pb ?? []).map((entry) => ({
+      ...entry,
+      declaredContractTypes: [],
+    }))
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks/pb')
+    await screen.findByRole('heading', { level: 1, name: 'Commercial MSA Playbook' })
+    expect(screen.getAllByText('All contract types').length).toBeGreaterThan(0)
+  })
+
   it('shows a playbook that is still in compilation separately, never as published', async () => {
     stubKnowledgeApi(buildWorld())
     renderKnowledge('/knowledge/playbooks')
-    const compiling = await screen.findByRole('list', { name: 'Playbooks in compilation' })
+    const compiling = await screen.findByRole('list', { name: 'Playbook drafts' })
     const row = within(compiling).getByRole('link')
     expect(row).toHaveAttribute('href', '/knowledge/compilations/draft')
     expect(row).toHaveTextContent('Nothing is used in reviews until you publish it')
@@ -63,7 +116,7 @@ describe('Playbook detail', () => {
       'Termination for Convenience',
     ])
     expect(screen.getByText('Current')).toBeInTheDocument()
-    expect(screen.getByText('Publication 2')).toBeInTheDocument()
+    expect(screen.getByText('Knowledge version 2')).toBeInTheDocument()
     expect(screen.getAllByText('MSA').length).toBeGreaterThan(0)
   })
 
@@ -84,18 +137,60 @@ describe('Playbook detail', () => {
     const details = screen.getByRole('complementary', { name: 'Details' })
     expect(within(details).getByRole('heading', { level: 2, name: 'Limitation of Liability' })).toBeInTheDocument()
     expect(within(details).getByText('Preferred, Fallback')).toBeInTheDocument()
-    expect(within(details).getByText('Legal concept').nextElementSibling).toHaveTextContent('Limitation of liability')
-    expect(within(details).getByText(/^Publication 1, /)).toBeInTheDocument()
+    expect(within(details).getByText('Topic').nextElementSibling).toHaveTextContent('Limitation of liability')
+    expect(within(details).getByText(/^Knowledge version 1, /)).toBeInTheDocument()
 
     await userEvent.click(within(screen.getByRole('list', { name: 'Positions' })).getByRole('button', { name: /Payment Terms/ }))
     expect(within(details).getByRole('heading', { level: 2, name: 'Payment Terms' })).toBeInTheDocument()
-    expect(within(details).queryByText('Legal concept')).not.toBeInTheDocument()
+    expect(within(details).queryByText('Topic')).not.toBeInTheDocument()
+  })
+
+  it('shows the typed stances and the approval rule with its source level', async () => {
+    const world = buildWorld()
+    world.candidates.pb = (world.candidates.pb ?? []).map((entry) =>
+      entry.id === 'p1'
+        ? {
+            ...entry,
+            preferredText: 'Cap at twelve months of fees.',
+            fallbackTexts: ['Cap at eighteen months for Tier 1 deals.'],
+            prohibitedText: 'Unlimited liability.',
+            authorityRules: [
+              {
+                approver: 'Commercial Manager',
+                stances: ['FALLBACK'],
+                condition: 'above the preferred position',
+                source: 'MATRIX',
+                quote: 'the Commercial Manager approves fallbacks',
+              },
+            ],
+            authorityConflicts: [
+              { approver: 'General Counsel', source: 'ENTRY', stance: 'FALLBACK' },
+            ],
+          }
+        : entry,
+    )
+    stubKnowledgeApi(world)
+    renderKnowledge('/knowledge/playbooks/pb')
+
+    const details = await screen.findByRole('complementary', { name: 'Details' })
+    expect(details).toHaveTextContent('Cap at twelve months of fees.')
+    expect(details).toHaveTextContent('Cap at eighteen months for Tier 1 deals.')
+    expect(details).toHaveTextContent('Unlimited liability.')
+    const table = within(details).getByRole('table')
+    expect(table).toHaveTextContent('Situation')
+    expect(table).toHaveTextContent('Approver')
+    expect(table).toHaveTextContent('Source')
+    expect(table).toHaveTextContent('Fallback')
+    expect(table).toHaveTextContent('Commercial Manager')
+    expect(table).toHaveTextContent('Approval matrix')
+    expect(table).toHaveTextContent('If above the preferred position')
+    expect(details).toHaveTextContent('General Counsel (Entry, fallback)')
   })
 
   it('shows provenance from the extraction record and links to the original source position', async () => {
     await open()
     const details = screen.getByRole('complementary', { name: 'Details' })
-    expect(await within(details).findByText(/Provenance, 4\.2/)).toBeInTheDocument()
+    expect(await within(details).findByText(/Source, 4\.2/)).toBeInTheDocument()
     expect(within(details).getByText('A cap at twelve months of fees is preferred.')).toBeInTheDocument()
     expect(within(details).getByRole('link', { name: /Open in original source/ })).toHaveAttribute('href', '/knowledge/sources/pb?position=p1')
   })
@@ -122,11 +217,11 @@ describe('Playbook detail', () => {
     const history = screen.getByRole('list', { name: 'Version history' })
     const rows = within(history).getAllByRole('listitem')
     expect(rows).toHaveLength(2)
-    expect(rows[0]).toHaveTextContent('Publication 2 (current)')
+    expect(rows[0]).toHaveTextContent('Knowledge version 2 (current)')
     expect(rows[0]).toHaveTextContent('1 superseded')
     expect(rows[0]).toHaveTextContent('Termination update')
     expect(rows[0]).toHaveTextContent('Viewing')
-    expect(rows[1]).toHaveTextContent('Publication 1')
+    expect(rows[1]).toHaveTextContent('Knowledge version 1')
     expect(rows[1]).toHaveTextContent('3 positions added')
     expect(rows[1]).toHaveTextContent('Initial publication')
     expect(rows[1]).toHaveTextContent('Source: Commercial MSA Playbook.docx')
@@ -137,10 +232,10 @@ describe('Playbook detail', () => {
   it('opens an older publication as its own immutable snapshot and returns to the current one', async () => {
     await open()
     await userEvent.click(screen.getByRole('tab', { name: 'Version history' }))
-    await userEvent.click(screen.getByRole('button', { name: 'View publication 1' }))
+    await userEvent.click(screen.getByRole('button', { name: 'View knowledge version 1' }))
 
     const banner = screen.getByRole('note')
-    expect(banner).toHaveTextContent('Viewing publication 1, superseded by publication 2')
+    expect(banner).toHaveTextContent('You are viewing knowledge version 1. Version 2 is current.')
     expect(screen.getByText('Superseded')).toBeInTheDocument()
     // The snapshot has the position that publication 2 later superseded, not the one that replaced it.
     await userEvent.click(screen.getByRole('tab', { name: /^Positions/ }))
@@ -176,14 +271,14 @@ describe('Playbook detail', () => {
 
   it('opens an older publication from a link', async () => {
     await open('/knowledge/playbooks/pb?publication=1')
-    expect(screen.getByRole('note')).toHaveTextContent('Viewing publication 1')
+    expect(screen.getByRole('note')).toHaveTextContent('You are viewing knowledge version 1')
     expect(screen.getByRole('tab', { name: 'Positions (3)' })).toBeInTheDocument()
   })
 
   it('ignores a publication that never touched this playbook and shows the current one', async () => {
     await open('/knowledge/playbooks/pb?publication=99')
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
-    expect(screen.getByText('Publication 2')).toBeInTheDocument()
+    expect(screen.getByText('Knowledge version 2')).toBeInTheDocument()
   })
 
   it('says so when the source has nothing published', async () => {
@@ -220,7 +315,7 @@ describe('Playbook detail', () => {
     stubKnowledgeApi(world)
     renderKnowledge('/knowledge/playbooks/pb')
     await screen.findByRole('heading', { level: 1, name: 'Commercial MSA Playbook' })
-    expect(screen.getByText('No positions in this publication')).toBeInTheDocument()
+    expect(screen.getByText('No positions in this version')).toBeInTheDocument()
     expect(screen.getByText('Superseded')).toBeInTheDocument()
     expect(screen.queryByText('Current')).not.toBeInTheDocument()
   })

@@ -21,13 +21,21 @@ public class EmbeddingService {
     private final EmbeddingProviderRegistry providerRegistry;
     private final EmbeddingProperties properties;
     private final Clock clock;
+    private final ProviderRetry retry;
 
     public EmbeddingService(
             EmbeddingProviderRegistry providerRegistry,
             EmbeddingProperties properties, Clock clock) {
+        this(providerRegistry, properties, clock, ProviderRetry.NONE);
+    }
+
+    public EmbeddingService(
+            EmbeddingProviderRegistry providerRegistry,
+            EmbeddingProperties properties, Clock clock, ProviderRetry retry) {
         this.providerRegistry = providerRegistry;
         this.properties = properties;
         this.clock = clock;
+        this.retry = retry;
     }
 
     public EmbeddingExecution embed(List<String> inputs) {
@@ -43,20 +51,28 @@ public class EmbeddingService {
                         "No embedding provider configured with id " + properties.provider()));
         var startedAt = clock.instant();
         var request = new EmbeddingRequest(properties.model(), inputs, properties.dimensions());
-        var batch = provider.embed(request);
-        if (batch.vectors().size() != inputs.size()) {
-            throw new ProviderProtocolException(
-                    "Embedding provider returned " + batch.vectors().size()
-                            + " vectors for " + inputs.size() + " inputs");
+        try {
+            var batch = retry.call("embeddings", () -> provider.embed(request),
+                    event -> ExecutionLog.retried(
+                            "embedding", "embedding", 1, provider.id(), event));
+            if (batch.vectors().size() != inputs.size()) {
+                throw new ProviderProtocolException(
+                        "Embedding provider returned " + batch.vectors().size()
+                                + " vectors for " + inputs.size() + " inputs");
+            }
+            var metadata = new DecisionExecutionMetadata(
+                    UUID.randomUUID(), "embedding", 1, 1,
+                    properties.provider(), properties.model(), batch.resolvedModel(),
+                    startedAt, Duration.between(startedAt, clock.instant()).toMillis(),
+                    DecisionOutcome.COMPLETED, inputs.size(), batch.usage());
+            ExecutionLog.completed("embedding", metadata);
+            return new EmbeddingExecution(metadata.executionId(), batch.vectors(),
+                    batch.resolvedModel(), metadata);
+        } catch (RuntimeException e) {
+            ExecutionLog.failed("embedding", "embedding", 1, provider.id(),
+                    Duration.between(startedAt, clock.instant()).toMillis(), e);
+            throw e;
         }
-        var metadata = new DecisionExecutionMetadata(
-                UUID.randomUUID(), "embedding", 1, 1,
-                properties.provider(), properties.model(), batch.resolvedModel(),
-                startedAt, Duration.between(startedAt, clock.instant()).toMillis(),
-                DecisionOutcome.COMPLETED, inputs.size(), batch.usage());
-        ExecutionLog.completed("embedding", metadata);
-        return new EmbeddingExecution(metadata.executionId(), batch.vectors(),
-                batch.resolvedModel(), metadata);
     }
 
     /** Configured embedding model identity: retrieval pins queries to exactly this. */

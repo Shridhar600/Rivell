@@ -56,7 +56,8 @@ public class WorkflowApiService {
     public DecisionView decide(UUID reviewId, UUID findingId, DecisionRequest request) {
         var decision = decisionService.decide(reviewId, findingId, new DecisionCommand(
                 request.expectedVersion(), request.clientRequestId(), request.action(),
-                request.approvedAction(), request.approvedLanguage(), request.comment()));
+                request.approvedAction(), request.approvedLanguage(), request.comment(),
+                request.rejectReason(), request.approvedBy()));
         return toView(decision);
     }
 
@@ -133,7 +134,7 @@ public class WorkflowApiService {
             return DEFAULT_PAGE_LIMIT;
         }
         if (limit < 1) {
-            throw new IllegalArgumentException("limit must be >= 1");
+            throw new IllegalArgumentException("The page size must be 1 or more.");
         }
         return Math.min(limit, MAX_PAGE_LIMIT);
     }
@@ -144,7 +145,9 @@ public class WorkflowApiService {
                 decision.approvedAction() == null ? null : decision.approvedAction().name(),
                 decision.approvedLanguage(),
                 decision.languageSource() == null ? null : decision.languageSource().name(),
-                decision.approvedDraftingEvidenceId(), decision.comment(), decision.actorId(),
+                decision.approvedDraftingEvidenceId(), decision.comment(),
+                decision.rejectReason() == null ? null : decision.rejectReason().name(),
+                decision.approvedBy(), decision.actorId(),
                 decision.decidedAt(), decision.clientRequestId(),
                 decision.supersedesDecisionId());
     }

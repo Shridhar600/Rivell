@@ -11,6 +11,7 @@ export function artifact(over: Partial<ArtifactSummary> & { id: string }): Artif
   return {
     artifactType: 'PLAYBOOK',
     filename: `${over.id}.docx`,
+    documentTitle: null,
     contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     sizeBytes: 2048,
     sha256: 'a'.repeat(64),
@@ -21,11 +22,15 @@ export function artifact(over: Partial<ArtifactSummary> & { id: string }): Artif
 }
 
 export function candidate(over: Partial<Candidate> & { id: string; artifactId: string }): Candidate {
+  const rawLabel = over.rawLabel ?? `Label ${over.id}`
+  const authorityRules = over.authorityRules ?? []
   return {
     extractionUnitId: `unit-${over.id}`,
     candidateType: 'PLAYBOOK_RULE',
     reviewStatus: 'PUBLISHED',
-    rawLabel: `Label ${over.id}`,
+    rawLabel,
+    editedTitle: over.editedTitle ?? null,
+    title: over.title ?? over.editedTitle ?? rawLabel,
     contentText: `Wording of ${over.id}`,
     payloadColumns: {},
     legalConceptKey: null,
@@ -36,12 +41,22 @@ export function candidate(over: Partial<Candidate> & { id: string; artifactId: s
     variantRole: null,
     escalationTrigger: null,
     requiresApproval: null,
+    preferredText: null,
+    fallbackTexts: [],
+    prohibitedText: null,
+    authorityRules,
+    storedAuthorityRules: over.storedAuthorityRules ?? authorityRules,
+    authorityConflicts: [],
+    unmappedAuthority: [],
+    needsAttention: false,
+    correctedFields: [],
     interpretations: [],
     editedContentText: null,
     editedPayloadColumns: {},
     supersedingCandidateId: null,
     contractPackKey: null,
     declaredContractTypes: [],
+    sourceContractTypes: [],
     partyPerspective: null,
     paperSource: null,
     jurisdiction: null,

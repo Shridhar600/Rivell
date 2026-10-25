@@ -95,7 +95,8 @@ public final class ContractSemanticEnricher {
                 counters.decisionExecutions += topic.decisionExecutions();
                 counters.questions += topic.questions();
                 classifications.put(region.headingNodeId(), new ConceptClassification(
-                        topic.topics(), topic.secondaryTopics(), topic.probabilities()));
+                        topic.topics(), topic.secondaryTopics(), topic.probabilities(),
+                        topic.headingTopic().orElse(null)));
             } else if (outcome.failure() instanceof SemanticDecisionException) {
                 counters.providerDegraded = true;
                 classifications.put(region.headingNodeId(),
@@ -131,7 +132,9 @@ public final class ContractSemanticEnricher {
         var relationships = analyzeRelationships(clauses, references, clausesByHeading,
                 counters, quality);
 
-        metadata.addAll(governingLawFallback(metadata, clauses, counters));
+        var metadataWithGoverningLaw = applyGoverningLawFallback(metadata, clauses);
+        metadata.clear();
+        metadata.addAll(metadataWithGoverningLaw);
 
         composeQuality(quality, definedTerms, references, parties, clauses);
         if (counters.providerDegraded) {
@@ -391,49 +394,51 @@ public final class ContractSemanticEnricher {
         }
     }
 
-    private List<MetadataFact> governingLawFallback(
-            List<MetadataFact> metadata, List<ClauseSemantics> clauses,
-            ExecutionCounters counters) {
-        var declared = metadata.stream()
-                .anyMatch(fact -> fact.field() == MetadataField.GOVERNING_LAW);
-        if (declared) {
-            return List.of();
-        }
+    /**
+     * A governing-law phrase split across the nodes of one clause is still deterministic:
+     * apply the same extractors to the clause's full text. No model call, and no fact when
+     * nothing is written. A classified GOVERNING_LAW clause outranks a region-level match.
+     */
+    List<MetadataFact> governingLawFallback(
+            List<MetadataFact> metadata, List<ClauseSemantics> clauses) {
         for (var clause : clauses) {
             if (!clause.classification().concepts().contains(CoreConcepts.GOVERNING_LAW)) {
                 continue;
             }
-            try {
-                var execution = decisionService.evaluate(M5SemanticSpecs.governingLaw(),
-                        new M5SemanticStates.ClauseState(headingOf(clause),
-                                sample(clause.contentText())));
-                counters.decisionExecutions++;
-                counters.questions += 1;
-                if (execution.answers().get("governing_law")
-                        instanceof com.rivell.workbench.intelligence.ChoiceAnswer answer
-                        && answer.probabilities().getOrDefault(answer.selected(), 0.0)
-                                >= properties.governingLawThreshold()
-                        && !"UNSPECIFIED".equals(answer.selected())) {
-                    return List.of(new MetadataFact(UUID.randomUUID(),
-                            clause.contractVersionId(), MetadataField.GOVERNING_LAW,
-                            answer.selected(),
-                            new Interpretation("governingLaw",
-                                    InterpretationKind.BOUNDED_CLASSIFICATION,
-                                    answer.selected(),
-                                    M5SemanticSpecs.GOVERNING_LAW_SPEC,
-                                    M5SemanticSpecs.governingLaw().version(),
-                                    execution.metadata().executionId(),
-                                    List.of(clause.headingNodeId()),
-                                    VerificationState.NOT_VERIFIED, null),
-                            null, null));
-                }
-                return List.of();
-            } catch (SemanticDecisionException e) {
-                counters.providerDegraded = true;
-                return List.of();
+            var law = DeterministicContractExtractors.governingLawIn(clause.contentText());
+            if (law.isEmpty()) {
+                continue;
             }
+            var sources = new ArrayList<>(clause.textNodeIds());
+            if (!sources.contains(clause.headingNodeId())) {
+                sources.add(clause.headingNodeId());
+            }
+            return List.of(new MetadataFact(UUID.randomUUID(),
+                    clause.contractVersionId(), MetadataField.GOVERNING_LAW, law.get(),
+                    Interpretation.deterministic("governingLaw", law.get(), sources),
+                    null, null));
         }
         return List.of();
+    }
+
+    /**
+     * One governing-law fact at most: a clause-level value replaces any region-level value
+     * instead of being added beside it.
+     */
+    List<MetadataFact> applyGoverningLawFallback(
+            List<MetadataFact> metadata, List<ClauseSemantics> clauses) {
+        var fallback = governingLawFallback(metadata, clauses);
+        if (fallback.isEmpty()) {
+            return List.copyOf(metadata);
+        }
+        var merged = new ArrayList<MetadataFact>();
+        for (var fact : metadata) {
+            if (fact.field() != MetadataField.GOVERNING_LAW) {
+                merged.add(fact);
+            }
+        }
+        merged.addAll(fallback);
+        return List.copyOf(merged);
     }
 
     private MetadataFact contractTypeFact(UUID versionId, ReviewProfile profile) {

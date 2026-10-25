@@ -1,6 +1,8 @@
 import type {
   ArtifactDetail,
   AssessmentState,
+  AuthorityLevel,
+  AuthorityRule,
   Candidate,
   Interpretation,
   PositionRole,
@@ -14,7 +16,7 @@ export { VERIFICATION_LABELS, humanizeCode } from './domainLabels'
 export const POSITION_LABELS: Record<PositionRole, string> = {
   PREFERRED: 'Preferred',
   FALLBACK: 'Fallback',
-  PROHIBITED: 'Prohibited',
+  PROHIBITED: 'Walk-away',
   ESCALATION: 'Escalation',
   COMMENTARY: 'Commentary',
   UNSPECIFIED: 'Unspecified',
@@ -27,35 +29,37 @@ export const REVIEW_CATEGORY_LABELS: Record<ReviewCategory, string> = {
 }
 
 export const REVIEW_CATEGORY_EXPLANATION =
-  'Review attention describes how much human scrutiny Rivell suggests before publication. It is not a legal-risk rating.'
+  'Review attention describes how closely Rivell suggests you check an entry before publication. It is not a legal-risk rating.'
 
 export const REVIEW_CATEGORY_DESCRIPTIONS: Record<ReviewCategory, string> = {
   ROUTINE: 'No review concerns detected.',
-  ELEVATED: 'Some extracted values need a closer look.',
-  HIGH: 'Conflicts, supersession, or disputed extraction need a decision.',
+  ELEVATED: 'Some values need a closer look.',
+  HIGH: 'Conflicts, supersession, or a disputed reading need a decision.',
 }
 
 export const REVIEW_REASON_LABELS: Record<ReviewReason, string> = {
   DUPLICATE_DETECTED: 'Possible duplicate of published knowledge.',
-  CONFLICT_DETECTED: 'May contradict published knowledge of the same concept and scope.',
+  CONFLICT_DETECTED: 'May contradict published knowledge of the same topic and scope.',
   SUPERSESSION_PROPOSED:
-    'Rivell suggests this candidate may replace published knowledge.',
+    'Rivell suggests this entry may replace published knowledge.',
   ARTIFACT_TYPE_MISMATCH:
-    'The source may not match the declared artifact type.',
+    'The source may not match the file type you chose.',
   VERIFICATION_DISPUTED:
-    'An extracted value is not sufficiently supported by the source.',
+    'A value Rivell read is not sufficiently supported by the source.',
   UNVERIFIED_GENERATIVE_FIELD:
-    'An extracted field could not be independently verified.',
+    'A field Rivell read could not be independently verified.',
   LOW_CLASSIFICATION_CONFIDENCE:
-    'Rivell could not classify this unit against a legal concept confidently.',
+    'Rivell could not confidently place this entry under a topic.',
   NEW_PROHIBITED_OR_ESCALATION_POSITION:
     'Proposes a prohibited or escalation position.',
   SCOPE_NARROWING_PROPOSED:
     'The source narrows the applicability scope beyond the manifest.',
   SEMANTIC_ANALYSIS_UNAVAILABLE:
-    'Semantic conflict analysis was unavailable; deterministic checks still ran.',
+    'Conflict analysis was unavailable. Other checks still ran.',
   SEMANTIC_COMPILATION_UNAVAILABLE:
-    'Semantic compilation was unavailable; this candidate is deterministic extraction only.',
+    'Some checks could not run. Only basic reading was used for this entry.',
+  UNMAPPED_AUTHORITY_WORDS:
+    'The source states a walk-away or an approver Rivell could not map. Check the stances and approvals before you approve.',
 }
 
 export const ASSESSMENT_STATE_LABELS: Record<AssessmentState, string> = {
@@ -99,6 +103,21 @@ function samePositionSet(a: PositionRole[], b: PositionRole[]): boolean {
   if (a.length !== b.length) return false
   const setB = new Set(b)
   return a.every((role) => setB.has(role))
+}
+
+/** A structured field a person corrected and saved. A stored proposal that was not applied is not one. */
+export type CorrectedField =
+  | 'positions'
+  | 'variantRole'
+  | 'escalationTrigger'
+  | 'requiresApproval'
+  | 'preferredText'
+  | 'fallbackTexts'
+  | 'prohibitedText'
+  | 'authorityRules'
+
+export function fieldCorrected(candidate: Candidate, field: CorrectedField): boolean {
+  return candidate.correctedFields.includes(field)
 }
 
 export function positionsDiverge(candidate: Candidate): boolean {
@@ -149,10 +168,47 @@ export function proposedEscalationTrigger(candidate: Candidate): string | null {
   return machineProposalValue(interpretationFor(candidate, 'escalationTrigger'))
 }
 
+/** The same approval rules, in the order the person saved them; conditions and stances compare by value. */
+function sameAuthorityRules(
+  left: readonly AuthorityRule[],
+  right: readonly AuthorityRule[],
+): boolean {
+  if (left.length !== right.length) return false
+  return left.every((rule, index) => {
+    const other = right[index]
+    return (
+      rule.approver === other.approver &&
+      rule.source === other.source &&
+      (rule.condition ?? '') === (other.condition ?? '') &&
+      [...rule.stances].sort().join(',') === [...other.stances].sort().join(',')
+    )
+  })
+}
+
 export interface ScopeDifference {
   label: string
   candidateValue: string | null
   manifestValue: string | null
+}
+
+/**
+ * One equality form for jurisdiction names: lower case with non-alphanumerics removed,
+ * plus the long-form aliases the product displays. Mirrors Jurisdiction.normalize in
+ * the backend.
+ */
+export function normalizeJurisdiction(value: string | null): string | null {
+  if (value === null) return null
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (normalized === 'uk' || normalized === 'unitedkingdom') return 'uk'
+  if (
+    normalized === 'us' ||
+    normalized === 'unitedstates' ||
+    normalized === 'unitedstatesofamerica' ||
+    normalized === 'usa'
+  ) {
+    return 'us'
+  }
+  return normalized
 }
 
 export function scopeDifferences(
@@ -164,21 +220,29 @@ export function scopeDifferences(
     label: string,
     candidateValue: string | null,
     manifestValue: string | null,
+    equal: (left: string | null, right: string | null) => boolean = (left, right) =>
+      (left ?? '') === (right ?? ''),
   ) => {
-    if ((candidateValue ?? '') !== (manifestValue ?? '')) {
+    if (!equal(candidateValue, manifestValue)) {
       differences.push({ label, candidateValue, manifestValue })
     }
   }
 
-  compare('Contract pack', candidate.contractPackKey, artifact.contractPackKey)
+  compare('Review pack', candidate.contractPackKey, artifact.contractPackKey)
   compare(
     'Declared contract types',
     candidate.declaredContractTypes.join(', ') || null,
     artifact.declaredContractTypes.join(', ') || null,
   )
   compare('Party perspective', candidate.partyPerspective, artifact.partyPerspective)
-  compare('Paper source', candidate.paperSource, artifact.paperSource)
-  compare('Jurisdiction', candidate.jurisdiction, artifact.jurisdiction)
+  compare('Whose template', candidate.paperSource, artifact.paperSource)
+  compare(
+    'Jurisdiction',
+    candidate.jurisdiction,
+    artifact.jurisdiction,
+    (left, right) =>
+      (normalizeJurisdiction(left) ?? '') === (normalizeJurisdiction(right) ?? ''),
+  )
   compare('Effective from', candidate.effectiveFrom, artifact.effectiveFrom)
   compare('Effective to', candidate.effectiveTo, artifact.effectiveTo)
 
@@ -275,11 +339,24 @@ function normalizeDraftValue(value: string): string {
     .join(',')
 }
 
+export interface AuthorityDraft {
+  approver: string
+  stances: PositionRole[]
+  condition: string
+  source: AuthorityLevel
+  quote: string | null
+}
+
 export interface SemanticDraft {
   positions: PositionRole[]
   requiresApproval: 'unset' | 'true' | 'false'
   escalationTrigger: string
   variantRole: PositionRole
+  preferredText: string
+  /** One fallback per line, in source order. */
+  fallbackTexts: string
+  prohibitedText: string
+  authorityRules: AuthorityDraft[]
 }
 
 export function semanticDraftFrom(candidate: Candidate): SemanticDraft {
@@ -293,7 +370,37 @@ export function semanticDraftFrom(candidate: Candidate): SemanticDraft {
           : 'false',
     escalationTrigger: candidate.escalationTrigger ?? '',
     variantRole: candidate.variantRole ?? 'UNSPECIFIED',
+    preferredText: candidate.preferredText ?? '',
+    fallbackTexts: candidate.fallbackTexts.join('\n'),
+    prohibitedText: candidate.prohibitedText ?? '',
+    authorityRules: candidate.storedAuthorityRules.map((rule) => ({
+      approver: rule.approver,
+      stances: [...rule.stances],
+      condition: rule.condition ?? '',
+      source: rule.source,
+      quote: rule.quote,
+    })),
   }
+}
+
+/** One fallback per line; blank lines and outer spaces are not fallbacks. */
+export function fallbackLines(value: string): string[] {
+  return value
+    .split('\n')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+}
+
+function draftRules(rules: readonly AuthorityDraft[]): AuthorityRule[] {
+  return rules
+    .filter((rule) => rule.approver.trim().length > 0)
+    .map((rule) => ({
+      approver: rule.approver.trim(),
+      stances: [...rule.stances],
+      condition: rule.condition.trim().length > 0 ? rule.condition.trim() : null,
+      source: rule.source,
+      quote: rule.quote,
+    }))
 }
 
 export function semanticInputFrom(
@@ -315,19 +422,42 @@ export function semanticInputFrom(
     isPlaybook && escalationDraft !== (candidate.escalationTrigger ?? '')
   const variantRoleChanged =
     isClause && draft.variantRole !== effectiveVariantRole
+  const preferredTextChanged =
+    isPlaybook && draft.preferredText.trim() !== (candidate.preferredText ?? '')
+  const fallbackTextsChanged =
+    isPlaybook &&
+    fallbackLines(draft.fallbackTexts).join('\n') !== candidate.fallbackTexts.join('\n')
+  const prohibitedTextChanged =
+    isPlaybook && draft.prohibitedText.trim() !== (candidate.prohibitedText ?? '')
+  const rulesChanged =
+    isPlaybook && !sameAuthorityRules(draftRules(draft.authorityRules), candidate.storedAuthorityRules)
 
-  if (!positionsChanged && !approvalChanged && !escalationChanged && !variantRoleChanged) {
+  if (
+    !positionsChanged &&
+    !approvalChanged &&
+    !escalationChanged &&
+    !variantRoleChanged &&
+    !preferredTextChanged &&
+    !fallbackTextsChanged &&
+    !prohibitedTextChanged &&
+    !rulesChanged
+  ) {
     return undefined
   }
 
   // The backend replaces the whole human-corrected record, so send the complete
   // applicable set; the draft is seeded from effective values and therefore
-  // preserves earlier corrections. Empty/absent values keep the machine proposal.
+  // preserves earlier corrections. An unset approval is sent as an explicit null so
+  // "not specified" is a value, not an omitted field that keeps the old answer.
   const input: SemanticFieldsEditInput = {}
   if (isPlaybook) {
     if (draft.positions.length > 0) input.positions = draft.positions
-    if (approvalDraft !== null) input.requiresApproval = approvalDraft
+    input.requiresApproval = approvalDraft
     if (escalationDraft.length > 0) input.escalationTrigger = escalationDraft
+    input.preferredText = draft.preferredText.trim()
+    input.fallbackTexts = fallbackLines(draft.fallbackTexts)
+    input.prohibitedText = draft.prohibitedText.trim()
+    input.authorityRules = draftRules(draft.authorityRules)
   }
   if (isClause) {
     input.variantRole = draft.variantRole

@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useOrganizationReviewsQuery } from '../api/reviews'
+import { usePublicationsQuery } from '../api/knowledge'
 import { buildHomeSections, homeReview, type HomeSectionKey, type HomeSections } from '../lib/home'
 import { useHomeResume } from '../lib/useHomeResume'
 import { CREATE_ACTIONS } from '../components/shell/navigation'
+import { useShell } from '../components/shell/ShellContext'
 import { Inspector, TopBar } from '../components/shell/TopBar'
 import { LinkButton } from '../components/ui/Button'
 import { DocumentIcon, PlusIcon } from '../components/ui/Icon'
@@ -11,7 +13,7 @@ import { ContinueCard } from '../components/home/ContinueCard'
 import { HomeCoverageNote, ReviewReadProblem } from '../components/home/HomeNotices'
 import { HomeHero } from '../components/home/HomeHero'
 import { HomeSection } from '../components/home/HomeSection'
-import { WorkDetails, WorkDetailsHint } from '../components/home/WorkDetails'
+import { WorkDetails } from '../components/home/WorkDetails'
 
 const SECTION_ORDER: readonly HomeSectionKey[] = ['needs', 'running', 'done']
 
@@ -28,6 +30,13 @@ export function HomePage() {
   // One effective id drives both the row highlight and the inspector, so they cannot disagree.
   // Nothing is auto-selected, and a selection that disappears after a refetch is dropped.
   const selected = placed.find((item) => item.id === selectedId) ?? null
+  const { inspectorCollapsed, inspectorOverlay, toggleInspector } = useShell()
+  // Choosing a row is asking to see it, so a closed details panel opens. On a narrow window the
+  // details show inline under the row instead, so the panel stays closed.
+  const select = (id: string) => {
+    setSelectedId(id)
+    if (inspectorCollapsed && !inspectorOverlay) toggleInspector()
+  }
 
   // Only the reviewer's own choices are stored. Everything else follows `defaultOpen`, so a list
   // that fills in after the first render still opens or stays closed by the same rule.
@@ -46,10 +55,15 @@ export function HomePage() {
   const liveReview = resume.record ? reviews.data?.items.find((review) => review.id === resume.record?.reviewId) : undefined
   const live = liveReview ? homeReview(liveReview) : null
   const hasReviews = (reviews.data?.items.length ?? 0) > 0
+  // Only an empty Home needs to know whether there is any published knowledge to review against.
+  const publications = usePublicationsQuery(reviews.isSuccess && !hasReviews)
+  const knowledgeSettled = publications.isSuccess || publications.isError
+  const noPublishedKnowledge = publications.isSuccess && publications.data.length === 0
 
   return (
     <>
-      <div className="rv-main">
+      {/* The details panel opens only once a row is chosen, so Home never shows an empty panel. */}
+      <div className={selected ? 'rv-main' : 'rv-main rv-main--wide'}>
         <TopBar
           title="Home"
           actions={
@@ -81,17 +95,36 @@ export function HomePage() {
             {reviews.isPending ? <LoadingState label="Loading your reviews" /> : null}
             {reviews.isError ? <ReviewReadProblem error={reviews.error} onRetry={() => void reviews.refetch()} /> : null}
 
-            {reviews.isSuccess && !hasReviews ? (
-              <EmptyState
-                title="No reviews yet"
-                message="Start a review to see its progress here."
-                action={
-                  <LinkButton to={CREATE_ACTIONS.startReview} variant="primary" compact>
-                    <DocumentIcon className="rv-icon" />
-                    Start review
-                  </LinkButton>
-                }
-              />
+            {reviews.isSuccess && !hasReviews && knowledgeSettled ? (
+              noPublishedKnowledge ? (
+                <EmptyState
+                  title="Add your company’s playbook"
+                  message="Rivell reviews each contract against the playbook you publish."
+                  action={
+                    <div className="rv-state__actions">
+                      <LinkButton to={CREATE_ACTIONS.addKnowledge} variant="primary" compact>
+                        <PlusIcon className="rv-icon" />
+                        Add knowledge
+                      </LinkButton>
+                      <LinkButton to={CREATE_ACTIONS.startReview} compact>
+                        <DocumentIcon className="rv-icon" />
+                        Start review
+                      </LinkButton>
+                    </div>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  title="No reviews yet"
+                  message="Start a review to see its progress here."
+                  action={
+                    <LinkButton to={CREATE_ACTIONS.startReview} variant="primary" compact>
+                      <DocumentIcon className="rv-icon" />
+                      Start review
+                    </LinkButton>
+                  }
+                />
+              )
             ) : null}
 
             {resume.show && resume.record ? <ContinueCard record={resume.record} live={live} onDismiss={resume.dismiss} /> : null}
@@ -104,7 +137,7 @@ export function HomePage() {
                 open={isOpen(key)}
                 onToggle={() => setOpen(key, !isOpen(key))}
                 selectedId={selected?.id ?? null}
-                onSelect={setSelectedId}
+                onSelect={select}
                 footer={key === 'done' ? resultsFooter(sections) : undefined}
               />
             ))}
@@ -113,9 +146,11 @@ export function HomePage() {
           </div>
         </div>
       </div>
-      <Inspector status={selected ? `${selected.title}. ${selected.stateLabel}.` : ''}>
-        {selected ? <WorkDetails item={selected} /> : <WorkDetailsHint />}
-      </Inspector>
+      {selected ? (
+        <Inspector status={`${selected.title}. ${selected.stateLabel}.`}>
+          <WorkDetails item={selected} />
+        </Inspector>
+      ) : null}
     </>
   )
 }

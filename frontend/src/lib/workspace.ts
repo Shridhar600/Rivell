@@ -22,7 +22,12 @@ export function isActionable(finding: Pick<FindingSummary, 'reviewClassification
 }
 
 export function isResolved(decision: HumanDecision | null | undefined): boolean {
-  return decision?.action === 'ACCEPT' || decision?.action === 'EDIT' || decision?.action === 'REJECT'
+  return (
+    decision?.action === 'ACCEPT' ||
+    decision?.action === 'EDIT' ||
+    decision?.action === 'REJECT' ||
+    decision?.action === 'RESOLVE'
+  )
 }
 
 /** A decision that will become an approved change: accepted or edited, with a concrete change type. */
@@ -45,9 +50,20 @@ export function findingState(
     case 'EDIT':
       return { tone: 'resolved', label: 'Edited' }
     case 'REJECT':
+      if (decision.rejectReason === 'KEEP_AS_DRAFTED') {
+        return { tone: 'resolved', label: 'Kept as drafted' }
+      }
+      if (decision.rejectReason === 'FINDING_WRONG') {
+        return { tone: 'rejected', label: 'Dismissed' }
+      }
       return { tone: 'rejected', label: 'Rejected' }
     case 'ESCALATE':
       return { tone: 'escalated', label: 'Escalated · unresolved' }
+    case 'RESOLVE':
+      return {
+        tone: 'resolved',
+        label: decision.approvedBy ? `Approved by ${decision.approvedBy}` : 'Approved',
+      }
     default:
       return { tone: 'open', label: isActionable(finding) ? 'Needs decision' : 'Informational' }
   }
@@ -72,14 +88,14 @@ export function proposedChangeType(
   }
 }
 
-/** "MSA, counterparty paper, our side Customer", from the review's frozen profile only. */
+/** "MSA, counterparty paper, our side: Customer", from the review's frozen profile only. */
 export function profileLine(snapshot: ReviewSnapshot | null | undefined): string | null {
   const profile = snapshot?.profile
   if (!profile) return null
   const parts = [
     profile.contractType ? (CONTRACT_TYPE_LABELS[profile.contractType] ?? profile.contractType) : null,
     profile.paperSource ? (PAPER_SOURCE_LABELS[profile.paperSource] ?? profile.paperSource).toLowerCase() : null,
-    profile.ourSideRole ? `our side ${roleLabel(profile.ourSideRole).toLowerCase()}` : null,
+    profile.ourSideRole ? `party you represent: ${roleLabel(profile.ourSideRole)}` : null,
   ].filter((part): part is string => part !== null)
   return parts.length > 0 ? parts.join(', ') : null
 }
@@ -112,18 +128,32 @@ export function defaultFinding(
 
 /** Where the approved wording came from, in the canonical authority line. */
 export function languageAuthority(
-  finding: Pick<FindingDetail, 'proposedLanguageSource'>,
+  finding: Pick<FindingDetail, 'proposedLanguageSource' | 'quality'>,
   /** The publication the approved wording was quoted from, when its evidence names one. */
   publicationNumber: number | null = null,
 ): { strong: string; rest: string } | null {
   if (finding.proposedLanguageSource === 'APPROVED_DRAFTING') {
+    // A search hit or a library variant is offered as approved only when the fit check passed.
+    // UNKNOWN, a missing verdict and DOES_NOT_FIT are never shown as approved.
+    if (finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT') {
+      return {
+        strong: 'Library wording that does not fit this position',
+        rest: 'Rivell did not propose this wording for the clause.',
+      }
+    }
+    if (finding.quality?.wordingFitVerdict !== 'FITS') {
+      return {
+        strong: 'Library wording, not checked against this position',
+        rest: 'Rivell could not confirm that it meets this position and cures the gap. Read it before you use it.',
+      }
+    }
     return {
       strong: 'Approved organizational drafting',
-      rest: publicationNumber === null ? 'Quoted from published wording' : `Publication ${publicationNumber} · Source: Clause library`,
+      rest: publicationNumber === null ? 'Quoted from published wording' : `Knowledge version ${publicationNumber} · Source: Clause library`,
     }
   }
   if (finding.proposedLanguageSource === 'GENERATIVE') {
-    return { strong: 'Machine-proposed', rest: 'Produced by a model; not approved organizational language' }
+    return { strong: 'Proposed by Rivell', rest: 'Rivell wrote this; it is not approved organizational language' }
   }
   return null
 }
@@ -195,6 +225,18 @@ export function regionText(nodes: StructureNode[], headingNodeId: string): strin
   return text || null
 }
 
+/**
+ * The body of a clause, without its heading. A replacement keeps the heading, so this is
+ * what an edit starts from; see regionText for the clause as the reader sees it.
+ */
+export function regionBodyText(nodes: StructureNode[], headingNodeId: string): string | null {
+  const top = topLevelNodes(nodes)
+  const at = top.findIndex((node) => node.id === headingNodeId)
+  if (at === -1) return null
+  const text = clauseBody(top, at).map(nodeText).filter(Boolean).join('\n')
+  return text || null
+}
+
 /** How many characters of a clause the detail panel shows before it stops: about two lines. */
 export const CLAUSE_EXCERPT_CHARS = 180
 
@@ -235,6 +277,7 @@ export function clauseExcerpt(text: string, maxChars: number = CLAUSE_EXCERPT_CH
 export function finalizeSummary(
   review: Pick<HumanReview, 'accepted' | 'edited' | 'rejected'>,
   loaded: readonly { type: ChangeActionType }[] | null,
+  resolvedEscalations = 0,
 ): string[] {
   const approved = review.accepted + review.edited
   const split =
@@ -243,10 +286,16 @@ export function finalizeSummary(
           .map((type) => `${loaded.filter((change) => change.type === type).length} ${type.toLowerCase()}`)
           .join(', ')}`
       : ''
-  return [
+  const lines = [
     `${approved} approved ${approved === 1 ? 'change' : 'changes'} (${review.accepted} accepted, ${review.edited} edited)${split}`,
-    `${review.rejected} rejected ${review.rejected === 1 ? 'Finding' : 'Findings'}; no approved change created`,
+    `${review.rejected} ${review.rejected === 1 ? 'finding' : 'findings'} with no approved change`,
   ]
+  if (resolvedEscalations > 0) {
+    lines.push(
+      `${resolvedEscalations} ${resolvedEscalations === 1 ? 'escalation' : 'escalations'} resolved with an approver name; no approved change created`,
+    )
+  }
+  return lines
 }
 
 /** Approved wording is groundable only when the evidence it cites is part of the finding. */
@@ -263,7 +312,7 @@ export function acceptEligibilityFor(finding: FindingDetail): AcceptEligibility 
   if (!base.eligible || isWordingGrounded(finding)) return base
   return {
     eligible: false,
-    reason: 'The approved wording cannot be traced to its source in this review’s evidence. Use Edit to author the change, or Reject or Escalate it.',
+    reason: 'The approved wording cannot be traced to its source in this review’s evidence. Use Edit to author the change, or keep the clause as drafted, dismiss or escalate the finding.',
   }
 }
 
@@ -276,15 +325,33 @@ export function isNeedsYourLook(finding: Pick<FindingSummary, 'decidedBy'>): boo
   return finding.decidedBy === 'NEEDS_YOUR_LOOK'
 }
 
-type Ordered = Pick<FindingSummary, 'decidedBy'> & { firstReviewCategory?: string | null }
+/** A clause the whole-contract read picked out, rather than a first-review/second-opinion split. */
+export function isWholeContractSpotted(
+  finding: Pick<FindingSummary, 'observationKind'>,
+): boolean {
+  return finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ'
+}
+
+type Ordered = Pick<FindingSummary, 'decidedBy'> & {
+  subjectKind?: FindingSummary['subjectKind']
+  firstReviewCategory?: string | null
+}
 
 /**
  * "Needs your look" items with the first review's walk-away answer first: a possible walk-away
- * breach is the one to look at before the rest. Each part keeps the server's order.
+ * breach is the one to look at before the rest. Disagreements about a clause then come before
+ * absence findings, whose subject is a provision the contract does not have. Each part keeps
+ * the server's order.
  */
 export function orderNeedsYourLook<T extends Ordered>(look: readonly T[]): T[] {
   const walkAway = (finding: T) => finding.firstReviewCategory === 'WALK_AWAY'
-  return [...look.filter(walkAway), ...look.filter((finding) => !walkAway(finding))]
+  const absence = (finding: T) => finding.subjectKind === 'ABSENCE'
+  const rest = look.filter((finding) => !walkAway(finding))
+  return [
+    ...look.filter(walkAway),
+    ...rest.filter((finding) => !absence(finding)),
+    ...rest.filter(absence),
+  ]
 }
 
 /** Findings in review order: "needs your look" items after the others, each group in server order. */

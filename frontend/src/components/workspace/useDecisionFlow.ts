@@ -11,9 +11,7 @@ import {
 import { newRequestId } from '../../lib/requestId'
 import { classifyDecisionConflict, decisionConflictNotice } from '../../lib/workflow'
 import { acceptEligibilityFor } from '../../lib/workspace'
-import type { DecisionSubmission } from './DecisionComposer'
-
-export type ComposeKind = 'EDIT' | 'REJECT' | 'ESCALATE'
+import type { ComposeKind, DecisionSubmission } from './DecisionComposer'
 
 interface Input {
   reviewId: string

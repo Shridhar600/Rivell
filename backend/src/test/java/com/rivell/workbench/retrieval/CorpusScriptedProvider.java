@@ -50,7 +50,6 @@ public final class CorpusScriptedProvider implements SemanticDecisionProvider {
             case "artifact_class" -> declaredTypeCue(state, choice);
             case "variant_role" -> variantRoleCue(state, choice);
             case "primary_topic" -> primaryConceptCue(state, choice);
-            case "governing_law" -> stateText(state).contains("England") ? "UK" : "US";
             default -> choice.criteria().keySet().iterator().next();
         };
         var probabilities = new LinkedHashMap<String, Double>();
@@ -126,9 +125,16 @@ public final class CorpusScriptedProvider implements SemanticDecisionProvider {
             case "topic_term" ->
                     combined.contains("terminat") || combined.contains(" term ")
                             ? 0.95 : 0.05;
+            case "topic_confidentiality_period" ->
+                    combined.contains("confidential") && combined.contains("continue")
+                            ? 0.95 : 0.05;
             case "topic_indemnification" -> combined.contains("indemnif") ? 0.95 : 0.05;
             case "topic_governing_law" -> combined.contains("govern") ? 0.95 : 0.05;
-            case "role_preferred" -> combined.contains("preferred") ? 0.9 : 0.02;
+            // the corpus playbook states a survival duty without a label; the model reads an
+            // imperative statement of that duty as the preferred position
+            case "role_preferred" ->
+                    combined.contains("preferred") || combined.contains("must survive")
+                            ? 0.9 : 0.02;
             case "role_fallback" -> combined.contains("fallback") ? 0.9 : 0.02;
             case "role_prohibited" -> combined.contains("prohibited") ? 0.9 : 0.02;
             case "role_escalation" -> combined.contains("escalat") ? 0.9 : 0.02;

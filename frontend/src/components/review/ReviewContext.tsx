@@ -1,7 +1,7 @@
 import type { FindingSummary, ReviewSummary } from '../../api/reviews'
 import { useReviewPacksQuery } from '../../api/reviews'
 import { contractPackLabel } from '../../lib/evidence'
-import { engineLabel, routeCountsLabel } from '../../lib/reviews'
+import { engineLabel, knowledgeUsedText, routeCountsLabel } from '../../lib/reviews'
 import {
   CONTRACT_TYPE_LABELS,
   JURISDICTION_LABELS,
@@ -25,12 +25,13 @@ export function ReviewContext({
   const packLabel = packKey
     ? (packsQuery.data?.find((pack) => pack.key === packKey)?.displayName ?? contractPackLabel(packKey))
     : null
+  const playbooksUsed = knowledgeUsedText(snapshot?.playbooksUsed ?? null)
 
   return (
-      <dl className="rv-ws-props" aria-label="Frozen review context">
+      <dl className="rv-ws-props" aria-label="Review details">
         <div>
           <dt>Review state</dt>
-          <dd>Frozen when this review was created</dd>
+          <dd>Fixed when this review was created</dd>
         </div>
         {profile ? (
           <>
@@ -43,11 +44,11 @@ export function ReviewContext({
               </dd>
             </div>
             <div>
-              <dt>Our side</dt>
+              <dt>Party you represent</dt>
               <dd>{profile.ourSideRole ? roleLabel(profile.ourSideRole) : 'Not specified'}</dd>
             </div>
             <div>
-              <dt>Paper source</dt>
+              <dt>Whose template</dt>
               <dd>
                 {profile.paperSource
                   ? (PAPER_SOURCE_LABELS[profile.paperSource] ?? profile.paperSource)
@@ -66,29 +67,35 @@ export function ReviewContext({
         ) : (
           <div>
             <dt>Review profile</dt>
-            <dd>Frozen profile unavailable</dd>
+            <dd>Review details unavailable</dd>
           </div>
         )}
         <div>
-          <dt>Knowledge publication</dt>
+          <dt>Knowledge version</dt>
           <dd>
             {snapshot?.knowledgePinNumber == null
-              ? 'Knowledge pin unavailable'
+              ? 'Knowledge version unavailable'
               : snapshot.knowledgePinNumber > 0
-                ? `Publication ${snapshot.knowledgePinNumber}`
+                ? `Knowledge version ${snapshot.knowledgePinNumber}`
                 : 'No published knowledge at creation'}
           </dd>
         </div>
+        {playbooksUsed !== null && playbooksUsed !== '' && snapshot?.playbooksUsed?.length ? (
+          <div>
+            <dt>Knowledge used</dt>
+            <dd>{playbooksUsed}</dd>
+          </div>
+        ) : null}
         <div>
-          <dt>Contract pack</dt>
+          <dt>Review pack</dt>
           <dd>
             {snapshot === null
-              ? 'Pack context unavailable'
-              : (packLabel ?? 'No pack (reduced checks)')}
+              ? 'Review pack unavailable'
+              : (packLabel ?? 'No review pack (reduced checks)')}
           </dd>
         </div>
         <div>
-          <dt>Review engine</dt>
+          <dt>Review method</dt>
           <dd>
             {[engineLabel(snapshot?.engine ?? null), routeCountsLabel(findings)].filter(Boolean).join(' · ')}
           </dd>

@@ -92,12 +92,12 @@ const KIND_COPY: Record<Exclude<ConditionKind, 'other'>, { label: string; detail
   conflict: {
     label: 'Conflicts with published knowledge',
     detail:
-      'This may contradict published knowledge on the same legal concept and scope. Compare the two. Then correct it, reject it, or approve it knowingly.',
+      'This may contradict published knowledge on the same topic and scope. Compare the two. Then correct it, reject it, or approve it knowingly.',
   },
   supersession: {
     label: 'Supersession proposed',
     detail:
-      'This candidate appears to replace published knowledge. Nothing is replaced unless you choose it when you publish, and earlier publications stay reproducible.',
+      'This entry appears to replace published knowledge. Nothing is replaced unless you choose it when you publish, and earlier versions stay as they were.',
   },
   duplicate: {
     label: 'Possible duplicate',
@@ -105,24 +105,24 @@ const KIND_COPY: Record<Exclude<ConditionKind, 'other'>, { label: string; detail
       'Published knowledge already holds the same content and scope. A duplicate is not rejected for you. Decide whether to publish it again.',
   },
   uncertain: {
-    label: 'Uncertain interpretation',
-    detail: 'Rivell could not fully support this reading from the source. Check the source before you approve.',
+    label: 'Source support unclear',
+    detail: 'Verify before approval.',
   },
   type: {
     label: 'Source type may not match',
-    detail: 'The source may not be the type you chose. Rivell still compiles it as you chose.',
+    detail: 'The source may not be the type you chose. Rivell still treats it as the type you chose.',
   },
   position: {
     label: 'New prohibited or escalation position',
-    detail: 'This proposes a prohibited or escalation position, so it needs a closer look before it is published.',
+    detail: '',
   },
   scope: {
     label: 'Scope narrowed by the source',
     detail: 'The source narrows where this applies, beyond what you declared for the file.',
   },
   unavailable: {
-    label: 'Semantic analysis unavailable',
-    detail: 'Only deterministic checks ran for this candidate. Read it closely.',
+    label: 'Some checks could not run',
+    detail: 'Only basic reading was done for this entry. Read it closely.',
   },
 }
 
@@ -251,10 +251,10 @@ export function readiness(candidates: Candidate[]): Readiness {
   }
   const total = candidates.length
   let blocker: string | null = null
-  if (total === 0) blocker = 'No candidates were compiled from this source.'
-  else if (awaiting > 0) blocker = `${awaiting} ${awaiting === 1 ? 'candidate is' : 'candidates are'} still to review.`
+  if (total === 0) blocker = 'No entries were produced from this source.'
+  else if (awaiting > 0) blocker = `${awaiting} ${awaiting === 1 ? 'entry is' : 'entries are'} still to review.`
   else if (approved === 0 && published > 0) blocker = 'Everything approved here is already published.'
-  else if (approved === 0) blocker = 'Every candidate was rejected, so there is nothing to publish.'
+  else if (approved === 0) blocker = 'Every entry was rejected, so there is nothing to publish.'
   return { total, awaiting, approved, rejected, published, attention, canPublish: blocker === null, blocker }
 }
 

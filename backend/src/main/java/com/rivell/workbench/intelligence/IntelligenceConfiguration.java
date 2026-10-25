@@ -34,9 +34,8 @@ class IntelligenceConfiguration {
     @Bean
     SemanticDecisionService semanticDecisionService(
             ModelPolicy modelPolicy, ProviderRegistry providerRegistry, Clock clock,
-            IntelligenceProperties properties) {
-        return new SemanticDecisionService(modelPolicy, providerRegistry, clock,
-                new ProviderRetry(properties.retryBackoff()));
+            ProviderRetry providerRetry) {
+        return new SemanticDecisionService(modelPolicy, providerRegistry, clock, providerRetry);
     }
 
     @Bean
@@ -82,9 +81,25 @@ class IntelligenceConfiguration {
     @Bean
     GenerativeReasoningService generativeReasoningService(
             ModelPolicy modelPolicy, GenerativeProviderRegistry providerRegistry, Clock clock,
-            IntelligenceProperties properties) {
-        return new GenerativeReasoningService(modelPolicy, providerRegistry, clock,
-                new ProviderRetry(properties.retryBackoff()));
+            ProviderRetry providerRetry) {
+        return new GenerativeReasoningService(modelPolicy, providerRegistry, clock, providerRetry);
+    }
+
+    @Bean
+    ProviderCallLimiter providerCallLimiter(IntelligenceProperties properties) {
+        return new ProviderCallLimiter(properties.maxConcurrent());
+    }
+
+    @Bean
+    ProviderRetry providerRetry(IntelligenceProperties properties, Clock clock,
+            ProviderCallLimiter providerCallLimiter) {
+        return new ProviderRetry(properties.retryBackoff(), properties.retryMaxElapsed(), clock,
+                Thread::sleep, new java.util.Random(), providerCallLimiter);
+    }
+
+    @Bean
+    ProviderCreditGuard providerCreditGuard(Clock clock) {
+        return new ProviderCreditGuard(clock);
     }
 
     @Bean
@@ -100,7 +115,7 @@ class IntelligenceConfiguration {
     @Bean
     com.rivell.workbench.intelligence.GenerativeReasoningProvider openAiCompatibleGenerativeProvider(
             com.rivell.workbench.intelligence.provider.GenerativeProperties properties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper, ProviderCreditGuard creditGuard) {
         var httpClient = java.net.http.HttpClient.newBuilder()
                 .connectTimeout(properties.connectTimeout())
                 .build();
@@ -111,6 +126,16 @@ class IntelligenceConfiguration {
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
                 .build();
+        var longHttpClient = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(properties.connectTimeout())
+                .build();
+        var longRequestFactory = new org.springframework.http.client.JdkClientHttpRequestFactory(longHttpClient);
+        longRequestFactory.setReadTimeout(properties.longReadTimeout());
+        var longRestClient = RestClient.builder()
+                .baseUrl(properties.baseUrl())
+                .requestFactory(longRequestFactory)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
+                .build();
         return new com.rivell.workbench.intelligence.provider.OpenAiCompatibleGenerativeProvider(
                 (path, payload) -> restClient.post()
                         .uri(path)
@@ -118,13 +143,19 @@ class IntelligenceConfiguration {
                         .body(payload)
                         .retrieve()
                         .body(String.class),
-                objectMapper, properties);
+                (path, payload) -> longRestClient.post()
+                        .uri(path)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(payload)
+                        .retrieve()
+                        .body(String.class),
+                objectMapper, properties, creditGuard);
     }
 
     @Bean
     SemanticDecisionProvider openAiCompatibleDecisionProvider(
             com.rivell.workbench.intelligence.provider.GenerativeProperties properties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper, ProviderCreditGuard creditGuard) {
         var httpClient = java.net.http.HttpClient.newBuilder()
                 .connectTimeout(properties.connectTimeout())
                 .build();
@@ -143,7 +174,7 @@ class IntelligenceConfiguration {
                         .body(payload)
                         .retrieve()
                         .body(String.class),
-                objectMapper, properties);
+                objectMapper, properties, creditGuard);
     }
 
     @Bean
@@ -158,14 +189,15 @@ class IntelligenceConfiguration {
     EmbeddingService embeddingService(
             EmbeddingProviderRegistry embeddingProviderRegistry,
             com.rivell.workbench.intelligence.provider.EmbeddingProperties embeddingProperties,
-            Clock clock) {
-        return new EmbeddingService(embeddingProviderRegistry, embeddingProperties, clock);
+            Clock clock, ProviderRetry providerRetry) {
+        return new EmbeddingService(embeddingProviderRegistry, embeddingProperties, clock,
+                providerRetry);
     }
 
     @Bean
     EmbeddingProvider openAiCompatibleEmbeddingProvider(
             com.rivell.workbench.intelligence.provider.EmbeddingProperties properties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper, ProviderCreditGuard creditGuard) {
         if (!properties.isConfigured()) {
             return new EmbeddingProvider() {
                 @Override
@@ -197,6 +229,6 @@ class IntelligenceConfiguration {
                         .body(payload)
                         .retrieve()
                         .body(String.class),
-                objectMapper, properties);
+                objectMapper, properties, creditGuard);
     }
 }

@@ -19,8 +19,8 @@ import {
   type ClauseGroup,
   type ClauseVariant,
 } from '../../lib/knowledgeCatalog'
-import { positionRoles, POSITION_ROLE_LABELS, scopeLine, scopeRows } from '../../lib/knowledgePosition'
-import { sourceLocation } from '../../lib/knowledgeSource'
+import { contractTypesLabel, displayScopeRows, positionRoles, POSITION_ROLE_LABELS } from '../../lib/knowledgePosition'
+import { headingPaths, sourceLocation } from '../../lib/knowledgeSource'
 
 export function ClauseDetailPage() {
   const { clauseKey: rawKey = '' } = useParams()
@@ -42,7 +42,7 @@ export function ClauseDetailPage() {
             <CatalogNotices state={state} catalog={catalog} />
             <EmptyState
               title="This clause is not in the published clause library"
-              message={at ? `It is not part of publication ${at}.` : 'It may have been superseded, or opened from an old link.'}
+              message={at ? `It is not part of knowledge version ${at}.` : 'It may have been superseded, or opened from an old link.'}
               action={<LinkButton to="/knowledge/clauses">Clause library</LinkButton>}
             />
           </KnowledgeFrame>
@@ -60,7 +60,11 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
     { label: 'Clause library', to: '/knowledge/clauses' },
     { label: group.title },
   ]
-  const scope = scopeLine([variant.candidate])
+  const scopeTypes =
+    variant.candidate.sourceContractTypes.length > 0
+      ? variant.candidate.sourceContractTypes
+      : variant.candidate.declaredContractTypes
+  const scope = contractTypesLabel(scopeTypes)
 
   return (
     <KnowledgeFrame
@@ -69,8 +73,8 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
       meta={
         <>
           <span className="rv-stb rv-stb--ok">Published</span>
-          <Chip>Publication {variant.publication.number}</Chip>
-          {scope ? <Chip>{scope}</Chip> : null}
+          <Chip>Knowledge version {variant.publication.number}</Chip>
+          <Chip>{scope}</Chip>
         </>
       }
       actions={
@@ -102,7 +106,7 @@ function ClauseDetail({ catalog, group, state }: { catalog: Catalog; group: Clau
                 )
               }
             >
-              {entry.candidate.rawLabel}
+              {entry.candidate.title}
             </button>
           ))}
         </div>
@@ -117,7 +121,9 @@ function VariantBody({ variant }: { variant: ClauseVariant }) {
   const units = useExtractionUnitsQuery(artifact.id)
   const structure = useKnowledgeStructureQuery(artifact.id)
   const located = units.data && structure.data ? resolveCandidateSource(candidate, units.data, structure.data) : null
-  const location = located ? sourceLocation(located.nodes) : null
+  const location = located
+    ? sourceLocation(located.nodes, structure.data ? headingPaths(structure.data) : undefined)
+    : null
   const text = positionText(candidate)
   const roles = positionRoles(candidate).filter((role) => role !== 'COMMENTARY')
   const [copied, setCopied] = useState<'idle' | 'done' | 'failed'>('idle')
@@ -143,7 +149,7 @@ function VariantBody({ variant }: { variant: ClauseVariant }) {
             </button>
           ) : null}
         </div>
-        {text ? <p>{text}</p> : <p className="rv-k-loc">This variant has no authored wording.</p>}
+        {text ? <p>{text}</p> : <p className="rv-k-loc">This clause has no approved wording.</p>}
         <span role="status" className="rv-visually-hidden">
           {copied === 'done' ? 'Copied the approved wording' : copied === 'failed' ? 'The wording could not be copied' : ''}
         </span>
@@ -156,16 +162,16 @@ function VariantBody({ variant }: { variant: ClauseVariant }) {
               <dd>{roles.map((role) => POSITION_ROLE_LABELS[role]).join(', ')}</dd>
             </>
           ) : null}
-          {scopeRows(candidate).map((row) => (
+          {displayScopeRows(candidate).map((row) => (
             <ScopeRow key={row.label} label={row.label} value={row.value} />
           ))}
           <dt>Published</dt>
           <dd>
-            Publication {publication.number}, {longDate(publication.createdAt)}
+            Knowledge version {publication.number}, {longDate(publication.createdAt)}
           </dd>
         </dl>
         <div className="rv-k-prov">
-          <span className="rv-k-loc">Provenance</span>
+          <span className="rv-k-loc">Source</span>
           <b>{artifact.filename}</b>
           {location ? <span className="rv-k-loc">{location}</span> : null}
           <Link className="rv-k-lnk" to={`/knowledge/sources/${artifact.id}?position=${candidate.id}`}>

@@ -6,6 +6,7 @@ import java.util.regex.Pattern;
 import org.docx4j.model.PropertyResolver;
 import org.docx4j.model.listnumbering.Emulator;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
+import org.docx4j.openpackaging.parts.WordprocessingML.StyleDefinitionsPart;
 import org.docx4j.wml.Br;
 import org.docx4j.wml.JcEnumeration;
 import org.docx4j.wml.P;
@@ -43,12 +44,28 @@ final class ParagraphLayoutReader {
         this.warnings = warnings;
         PropertyResolver resolved;
         try {
+            attachDefaultStylesWhenMissing(wordPackage);
             resolved = wordPackage.getMainDocumentPart().getPropertyResolver();
         } catch (Exception e) {
             warnings.accept("STYLES_UNRESOLVED");
             resolved = null;
         }
         this.resolver = resolved;
+    }
+
+    /**
+     * A package with no relationship to a styles part gets docx4j's default styles. Left to
+     * docx4j, it loads them before the part joins the package and logs an ERROR for it; adding
+     * the part first gives the same styles without the noise (DW-087). Nothing is saved.
+     */
+    private static void attachDefaultStylesWhenMissing(WordprocessingMLPackage wordPackage)
+            throws Exception {
+        var mainPart = wordPackage.getMainDocumentPart();
+        if (mainPart.getStyleDefinitionsPart(false) == null) {
+            var styles = new StyleDefinitionsPart();
+            mainPart.addTargetPart(styles);
+            styles.unmarshalDefaultStyles();
+        }
     }
 
     ParagraphFeatures read(P paragraph, String text) {

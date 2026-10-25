@@ -27,9 +27,11 @@ import org.docx4j.wml.RunIns;
 import org.docx4j.wml.SectPr;
 import org.docx4j.wml.Tbl;
 import org.docx4j.wml.Text;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.rivell.workbench.foundation.Hashes;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.platform.parsing.WordText;
 import com.rivell.workbench.redline.AppliedChangeReport;
 import com.rivell.workbench.redline.DocumentExecutionPlan;
@@ -54,27 +56,40 @@ public class DocxRedlineRenderer implements RedlineRenderer {
     private static final String MAIN_DOCUMENT_ENTRY = "word/document.xml";
 
     private final com.rivell.workbench.platform.parsing.DocxParserProperties properties;
+    private final DocumentWorkLimiter limiter;
 
     public DocxRedlineRenderer(
             com.rivell.workbench.platform.parsing.DocxParserProperties properties) {
+        this(properties, new DocumentWorkLimiter(DocumentWorkLimiter.DEFAULT_MAX_CONCURRENT));
+    }
+
+    @Autowired
+    public DocxRedlineRenderer(
+            com.rivell.workbench.platform.parsing.DocxParserProperties properties,
+            DocumentWorkLimiter limiter) {
         this.properties = properties;
+        this.limiter = limiter;
     }
 
     @Override
     public RenderedRedline render(byte[] sourceBytes, DocumentExecutionPlan plan) {
+        return limiter.run(() -> renderWithinLimit(sourceBytes, plan));
+    }
+
+    private RenderedRedline renderWithinLimit(byte[] sourceBytes, DocumentExecutionPlan plan) {
         var loaded = load(sourceBytes);
         var wordPackage = loaded.wordPackage();
         if (!DocxRedlineSupport.isDocxMainPart(wordPackage)) {
             throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_FORMAT, null,
-                    "Only tracked-change-capable DOCX documents can be executed.");
+                    "Rivell can only build a redline on a Word file that supports tracked changes.");
         }
         if (DocxRedlineSupport.isProtected(wordPackage)) {
             throw failure(RedlineFailureCode.PROTECTED_DOCUMENT_UNSUPPORTED, null,
-                    "The source document enforces editing protection.");
+                    "This contract is protected against editing, so Rivell cannot add tracked changes.");
         }
         if (DocxRedlineSupport.hasPreexistingRevisions(sourceBytes)) {
             throw failure(RedlineFailureCode.PREEXISTING_REVISIONS_UNSUPPORTED, null,
-                    "The source document already contains tracked revisions.");
+                    "This contract already contains tracked changes. Accept or reject them in Word, then upload it again.");
         }
 
         var body = mainBody(wordPackage);
@@ -82,7 +97,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
         if (!allBodyContentRepresented(sourceBytes, content)) {
             // saving would silently drop the elements the package model could not read
             throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE, null,
-                    "The source document has body content that cannot be carried into a redline.");
+                    "This contract has content Rivell cannot carry into a redline.");
         }
         var paragraphByAnchor = new HashMap<String, P>();
         for (var ref : DocxRedlineSupport.paragraphs(content)) {
@@ -147,15 +162,13 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             if (paragraph == null
                     || !DocxRedlineSupport.paragraphText(paragraph).equals(target.expectedText())) {
                 throw failure(RedlineFailureCode.TARGET_NOT_FOUND, operation.approvedChangeId(),
-                        "Approved change " + operation.ordinal() + " (" + operation.actionType()
-                                + ") cannot be resolved against the frozen document.");
+                        "An approved change no longer matches the text in the contract.");
             }
             if (isBodyFinalParagraph(paragraph, content)
                     || carriesSectionProperties(paragraph)) {
                 throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
                         operation.approvedChangeId(),
-                        "Approved change " + operation.ordinal()
-                                + " would delete a paragraph whose mark cannot be removed "
+                        "An approved change would delete a paragraph that Word cannot delete "
                                 + "as a tracked change.");
             }
             validateSupportedInline(paragraph, operation.approvedChangeId(),
@@ -170,8 +183,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             if (trimmed == null
                     || !DocxRedlineSupport.paragraphText(trimmed).equals(trim.expectedText())) {
                 throw failure(RedlineFailureCode.TARGET_NOT_FOUND, operation.approvedChangeId(),
-                        "Approved change " + operation.ordinal() + " (" + operation.actionType()
-                                + ") cannot be resolved against the frozen document.");
+                        "An approved change no longer matches the text in the contract.");
             }
             validateSupportedInline(trimmed, operation.approvedChangeId(), operation.ordinal());
         }
@@ -188,16 +200,14 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                 if (after >= content.size()) {
                     throw failure(RedlineFailureCode.TARGET_NOT_FOUND,
                             operation.approvedChangeId(),
-                            "Approved change " + operation.ordinal()
-                                    + " cannot be resolved against the frozen document.");
+                            "An approved change no longer matches the text in the contract.");
                 }
                 rawAnchor = content.get(after);
                 var element = DocxRedlineSupport.unwrap(rawAnchor);
                 if (!(element instanceof P || element instanceof Tbl)) {
                     throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
                             operation.approvedChangeId(),
-                            "Approved change " + operation.ordinal()
-                                    + " anchors to unsupported document content.");
+                            "An approved change sits next to content Rivell cannot redline.");
                 }
                 if (operation.insertion().anchorExpectedText() != null) {
                     var anchorParagraph = paragraphByAnchor.get(anchorKey(after,
@@ -207,15 +217,13 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                                     .equals(operation.insertion().anchorExpectedText())) {
                         throw failure(RedlineFailureCode.TARGET_NOT_FOUND,
                                 operation.approvedChangeId(),
-                                "Approved change " + operation.ordinal()
-                                        + " cannot be resolved against the frozen document.");
+                                "An approved change no longer matches the text in the contract.");
                     }
                     if (carriesSectionProperties(anchorParagraph)) {
                         throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
                                 operation.approvedChangeId(),
-                                "Approved change " + operation.ordinal()
-                                        + " anchors to a paragraph that carries section "
-                                        + "properties.");
+                                "An approved change sits next to a section break, where Rivell "
+                                        + "cannot insert text.");
                     }
                 }
                 anchorKey = rawAnchor;
@@ -227,8 +235,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                 if (templateParagraph == null) {
                     throw failure(RedlineFailureCode.TARGET_NOT_FOUND,
                             operation.approvedChangeId(),
-                            "Approved change " + operation.ordinal()
-                                    + " cannot be resolved against the frozen document.");
+                            "An approved change no longer matches the text in the contract.");
                 }
                 validateSupportedInline(templateParagraph, operation.approvedChangeId(),
                         operation.ordinal());
@@ -276,8 +283,8 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             } else {
                 throw failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE,
                         operation.approvedChangeId(),
-                        "Approved change " + operation.ordinal()
-                                + " targets a clause whose heading and text share a hyperlink.");
+                        "An approved change targets a clause whose heading and text share a "
+                                + "hyperlink.");
             }
             offset += length;
         }
@@ -505,8 +512,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
 
     private RedlineRenderException unsupported(UUID approvedChangeId, int ordinal) {
         return failure(RedlineFailureCode.UNSUPPORTED_SOURCE_STRUCTURE, approvedChangeId,
-                "Approved change " + ordinal + " targets document content that cannot be "
-                        + "executed deterministically.");
+                "An approved change targets content Rivell cannot redline.");
     }
 
     private org.docx4j.wml.Body mainBody(WordprocessingMLPackage wordPackage) {
@@ -519,7 +525,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             return body;
         } catch (RuntimeException e) {
             throw failure(RedlineFailureCode.DOCX_LOAD_FAILED, null,
-                    "The source document could not be loaded for execution.");
+                    "Rivell could not open this contract to build the redline.");
         }
     }
 
@@ -540,10 +546,10 @@ public class DocxRedlineRenderer implements RedlineRenderer {
                     repair.bytes());
         } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {
             throw failure(RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED, null,
-                    "The source document expands beyond the permitted size for execution.");
+                    "This contract is too large once unpacked, so Rivell cannot build a redline on it.");
         } catch (Exception e) {
             throw failure(RedlineFailureCode.DOCX_LOAD_FAILED, null,
-                    "The source document could not be loaded for execution.");
+                    "Rivell could not open this contract to build the redline.");
         }
     }
 
@@ -562,7 +568,7 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             return DocxRedlineSupport.withEntryReplaced(sourceBytes, MAIN_DOCUMENT_ENTRY, document);
         } catch (Exception e) {
             throw failure(RedlineFailureCode.DOCX_SERIALIZATION_FAILED, null,
-                    "The redline document could not be serialized.");
+                    "Rivell could not save the redline file.");
         }
     }
 

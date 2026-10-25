@@ -13,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -85,6 +87,9 @@ class ReviewApiIT {
     LiabilityReviewIT.MutableIdentity identityProvider;
 
     @Autowired
+    LiabilityReviewIT.ReviewScriptedProvider scriptedProvider;
+
+    @Autowired
     M6EvidenceCorpus corpusBuilder;
 
     @Autowired
@@ -109,6 +114,7 @@ class ReviewApiIT {
     void freshOrganization() {
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
+        scriptedProvider.reset();
     }
 
     private UUID organizationId() {
@@ -175,6 +181,51 @@ class ReviewApiIT {
                         .value(greaterThan(0)))
                 .andExpect(jsonPath("$.data.analysisWarnings[0].reasonCode")
                         .value("SURVIVAL_COVERAGE_PARTIAL"));
+    }
+
+    @Test
+    void summaryFreezesTheApplicablePlaybooksAtCreation() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+
+        var used = created.get("snapshot").get("playbooksUsed");
+        assertThat(used.isArray()).isTrue();
+        assertThat(used.size()).isPositive();
+        for (var knowledge : used) {
+            assertThat(knowledge.get("artifactId").asText()).isNotBlank();
+            assertThat(knowledge.get("artifactType").asText())
+                    .isIn("PLAYBOOK", "CLAUSE_LIBRARY");
+            assertThat(knowledge.get("name").asText()).isNotBlank();
+            assertThat(knowledge.get("publicationNumber").asLong()).isPositive();
+        }
+
+        // A review created before the freeze has no list, and reading it must not recompute one.
+        var reviewId = UUID.fromString(created.get("id").asText());
+        jdbcClient.sql("""
+                        update review_snapshot set applicable_knowledge_frozen = false
+                        where review_id = :id
+                        """)
+                .param("id", reviewId)
+                .update();
+        var summary = json(mockMvc.perform(get("/api/reviews/{id}", reviewId))
+                .andExpect(status().isOk())
+                .andReturn()).get("data");
+        assertThat(summary.get("snapshot").get("playbooksUsed").isNull()).isTrue();
+    }
+
+    @Test
+    void createStoresADeclaredJurisdictionBeyondUsAndUk() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        enrichmentService.enrich(corpus.contract().contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.AUSTRALIA,
+                        ReviewPackRegistry.MSA_PACK));
+
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+        assertThat(created.get("snapshot").get("profile").get("jurisdiction").asText())
+                .isEqualTo("AUSTRALIA");
     }
 
     @Test
@@ -452,7 +503,7 @@ class ReviewApiIT {
                         .content("{\"contractPackKey\":\"UNKNOWN_PACK\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("400"))
-                .andExpect(jsonPath("$.title").value("Invalid review configuration"));
+                .andExpect(jsonPath("$.title").value("Review setup not accepted"));
 
         enrichmentService.enrich(corpus.contract().contractId(), 1,
                 new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
@@ -522,7 +573,7 @@ class ReviewApiIT {
                 .andExpect(jsonPath("$.data.analysisWarnings[0].reasonCode")
                         .value("SEMANTICS_CHANGED"))
                 .andExpect(jsonPath("$.data.analysisWarnings[0].message")
-                        .value(containsString("semantics changed")))
+                        .value(containsString("contract analysis changed")))
                 .andReturn()).get("data");
         assertThat(summary.get("degradedChecks").asInt())
                 .isEqualTo(summary.get("plannedChecks").asInt())
@@ -808,6 +859,33 @@ class ReviewApiIT {
                         PaperSource.COUNTERPARTY_PAPER, Jurisdiction.US,
                         ReviewPackRegistry.MSA_PACK));
         return ingested.contractId();
+    }
+
+    @Test
+    void anOutOfCreditAnalysisWarnsTheReviewerToAddCredit() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+        var reviewId = UUID.fromString(created.get("id").asText());
+        scriptedProvider.failPolicyComparisonOutOfCredit = true;
+
+        analysisService.analyze(organizationId(), reviewId);
+
+        var summary = json(mockMvc.perform(get("/api/reviews/{id}", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.analysisWarnings").isNotEmpty())
+                .andReturn()).get("data");
+        var warning = summary.get("analysisWarnings").findValues("reasonCode").stream()
+                .filter(value -> "PROVIDER_OUT_OF_CREDIT".equals(value.asText()))
+                .findFirst().orElseThrow();
+        assertThat(warning).isNotNull();
+        var message = summary.get("analysisWarnings").findValues("message").stream()
+                .filter(value -> value.asText().contains("out of credit"))
+                .findFirst().orElseThrow();
+        assertThat(message.asText()).isEqualTo(
+                "The analysis account is out of credit. An administrator needs to add credit, "
+                        + "then run the review again.");
     }
 
     private void updateEnrichmentStatus(UUID versionId, String status) {

@@ -812,6 +812,9 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("concepts", conceptNames(classification.concepts()));
         payload.put("secondaryConcepts", conceptNames(classification.secondaryConcepts()));
+        if (classification.headingTopic() != null) {
+            payload.put("headingTopic", classification.headingTopic().value());
+        }
         var probabilities = new LinkedHashMap<String, Object>();
         for (var entry : classification.probabilities().entrySet()) {
             probabilities.put(entry.getKey().value(), entry.getValue());
@@ -849,7 +852,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                 }
             });
         }
-        return new ConceptClassification(concepts, secondaries, probabilities);
+        var headingTopic = conceptOrNull(node.path("headingTopic").asText(null));
+        return new ConceptClassification(concepts, secondaries, probabilities, headingTopic);
     }
 
     private List<Map<String, Object>> facts(List<LegalFact> facts) {

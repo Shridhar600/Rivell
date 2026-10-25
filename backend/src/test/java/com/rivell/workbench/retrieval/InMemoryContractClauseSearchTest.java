@@ -114,6 +114,76 @@ class InMemoryContractClauseSearchTest {
         assertThat(ids(result).getFirst()).isEqualTo(DATA.headingNodeId());
     }
 
+    /**
+     * Final review I1: the per-text fallback is for a rejected batch, not for a timeout. Retrying
+     * every clause one call at a time while the endpoint is not answering is what blew the review
+     * budget.
+     */
+    @Test
+    void aTimedOutBatchIsNotRetriedPerText() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        EmbeddingProvider down = new EmbeddingProvider() {
+            @Override
+            public String id() {
+                return FakeEmbeddingProvider.PROVIDER_ID;
+            }
+
+            @Override
+            public EmbeddingBatch embed(EmbeddingRequest request) {
+                calls.incrementAndGet();
+                throw new com.rivell.workbench.intelligence.ProviderTimeoutException(
+                        "provider did not respond in time");
+            }
+        };
+        var search = new InMemoryContractClauseSearch(embeddings(down, true));
+
+        var result = search.search(List.of(DPA_POSITION), List.of(GOVERNING_LAW, DATA, FEES), 3);
+
+        assertThat(calls).as("one batch call, no per-text retry").hasValue(1);
+        assertThat(result.degradation()).containsExactly("VECTOR_LANE_UNAVAILABLE");
+        assertThat(ids(result).getFirst()).isEqualTo(DATA.headingNodeId());
+    }
+
+    @Test
+    void oneBadInputOnlyLosesItsOwnVectorLaneSlot() {
+        var fake = new FakeEmbeddingProvider();
+        var bad = clause("bad clause text");
+        var good = clause("Customer records stay secret between us.");
+        var query = "Personal information must be kept confidential.";
+        fake.anchor(good.text(), basis(4));
+        fake.anchor(query, basis(4));
+        EmbeddingProvider partial = new EmbeddingProvider() {
+            @Override
+            public String id() {
+                return FakeEmbeddingProvider.PROVIDER_ID;
+            }
+
+            @Override
+            public EmbeddingBatch embed(EmbeddingRequest request) {
+                if (request.inputs().size() > 1) {
+                    throw new com.rivell.workbench.intelligence.ProviderRejectedException(
+                            "batch rejected");
+                }
+                if (request.inputs().get(0).equals(bad.text())) {
+                    throw new com.rivell.workbench.intelligence.ProviderRejectedException(
+                            "input rejected");
+                }
+                return fake.embed(request);
+            }
+        };
+        var search = new InMemoryContractClauseSearch(embeddings(partial, true));
+
+        var result = search.search(List.of(query), List.of(bad, good), 2);
+
+        assertThat(result.degradation()).containsExactly("VECTOR_LANE_PARTIAL");
+        var goodHit = result.hits().getFirst().stream()
+                .filter(hit -> hit.headingNodeId().equals(good.headingNodeId()))
+                .findFirst().orElseThrow();
+        assertThat(goodHit.vectorRank()).isEqualTo(1);
+        assertThat(result.hits().getFirst()).noneMatch(
+                hit -> hit.headingNodeId().equals(bad.headingNodeId()) && hit.vectorRank() != null);
+    }
+
     @Test
     void eachQueryGetsItsOwnRankingFromOneEmbeddingCallPerSide() {
         var calls = new java.util.concurrent.atomic.AtomicInteger();

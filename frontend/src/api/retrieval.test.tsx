@@ -68,6 +68,8 @@ const policyItem = {
     positions: ['PREFERRED', 'FALLBACK'],
     requiresApproval: true,
     escalationTrigger: 'Uncapped liability or consequential damages',
+    authorityRules: [],
+    authorityConflicts: [],
   },
   contractFacts: [],
   retrievalReason: 'STRUCTURED',
@@ -218,6 +220,8 @@ describe('parseEvidenceBundle', () => {
       positions: ['PREFERRED', 'FALLBACK'],
       requiresApproval: true,
       escalationTrigger: 'Uncapped liability or consequential damages',
+      authorityRules: [],
+      authorityConflicts: [],
     })
     expect(policy.publicationNumber).toBe(2)
     expect(policy.laneInfo.fusedRank).toBeNull()
@@ -274,14 +278,14 @@ describe('parseEvidenceBundle', () => {
 
   it('rejects malformed bundles', () => {
     expect(() => parseEvidenceBundle({ ...hybridBundle, bundleId: undefined })).toThrow(
-      /Malformed/,
+      /could not read this response/,
     )
     expect(() => parseEvidenceBundle({ ...hybridBundle, items: 'none' })).toThrow(
-      /Malformed/,
+      /could not read this response/,
     )
     expect(() =>
       parseEvidenceBundle({ ...hybridBundle, items: [{ ...policyItem, evidenceId: null }] }),
-    ).toThrow(/Malformed/)
+    ).toThrow(/could not read this response/)
   })
 })
 

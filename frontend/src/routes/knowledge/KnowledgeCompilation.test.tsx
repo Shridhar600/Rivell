@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { SRC, renderApp, reviewWorld, requests, startFakeServer, type Fake } from './compileWorld'
+import { SRC, publishedWorld, renderApp, reviewWorld, requests, startFakeServer, type Fake } from './compileWorld'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -12,7 +12,7 @@ async function open(world: Fake = reviewWorld(), query = '') {
   return { world, ...view }
 }
 
-const rail = () => screen.getByRole('navigation', { name: 'Candidate list' })
+const rail = () => screen.getByRole('navigation', { name: 'Entry list' })
 const heading = () => screen.getByRole('heading', { level: 1 })
 const decisionBar = () => document.querySelector('.rv-kc-decide') as HTMLElement
 
@@ -22,17 +22,113 @@ describe('compilation workspace', () => {
     expect(heading()).toHaveTextContent('Assignment')
     const source = screen.getByRole('region', { name: 'Source passage' })
     expect(within(source).getByText('Assignment is allowed with consent.')).toBeInTheDocument()
-    const interpretation = screen.getByRole('region', { name: 'Structured interpretation' })
+    const interpretation = screen.getByRole('region', { name: 'What Rivell read' })
     expect(within(interpretation).getByText('Limitation of liability')).toBeInTheDocument()
-    expect(screen.getByText('Candidate 1 of 7')).toBeInTheDocument()
+    expect(screen.getByText('Entry 1 of 7')).toBeInTheDocument()
+  })
+
+  it('names an entry by the title a reviewer sees, not the machine label', async () => {
+    const world = reviewWorld()
+    world.candidates[SRC] = (world.candidates[SRC] ?? []).map((entry) =>
+      entry.id === 'conflict' ? { ...entry, rawLabel: 'Assignment | MSA | one-sided', editedTitle: 'Assignment', title: 'Assignment' } : entry,
+    )
+    await open(world, '?candidate=conflict')
+    expect(heading()).toHaveTextContent('Assignment')
+    expect(heading()).not.toHaveTextContent('MSA')
+    expect(within(rail()).getByRole('button', { name: /Assignment/ })).toHaveTextContent('Assignment')
+  })
+
+  it('names the source sheet by the title a reviewer sees', async () => {
+    const world = reviewWorld()
+    world.candidates[SRC] = (world.candidates[SRC] ?? []).map((entry) =>
+      entry.id === 'conflict' ? { ...entry, rawLabel: 'Assignment | MSA', editedTitle: 'Assignment and novation', title: 'Assignment and novation' } : entry,
+    )
+    await open(world, '?candidate=conflict')
+    await userEvent.click(screen.getByRole('button', { name: 'View source context' }))
+    expect(await screen.findByRole('dialog', { name: 'Assignment and novation' })).toBeInTheDocument()
+  })
+
+  it('names the draft by its document title in the header and breadcrumb, while the source keeps its file name', async () => {
+    const world = reviewWorld()
+    world.artifacts = world.artifacts.map((entry) =>
+      entry.id === SRC ? { ...entry, documentTitle: 'Mutual NDA Negotiation Guide' } : entry,
+    )
+    await open(world, '?candidate=conflict')
+    expect(document.title).toBe('Mutual NDA Negotiation Guide · Rivell')
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumbs).getByText('Mutual NDA Negotiation Guide')).toBeInTheDocument()
+    const source = screen.getByRole('region', { name: 'Source passage' })
+    expect(within(source).getByText('Commercial MSA Playbook v4.docx')).toBeInTheDocument()
+  })
+
+  it('moves focus to the page heading after the loading state resolves', async () => {
+    await open()
+    expect(heading()).toHaveFocus()
+  })
+
+  it('moves focus to the state heading when a source is still being read', async () => {
+    const world = reviewWorld()
+    world.artifacts = world.artifacts.map((entry) => ({ ...entry, ingestStatus: 'EXTRACTING' as const }))
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Rivell is reading this file' }),
+    ).toHaveFocus()
+  })
+
+  it('moves focus to the loading status while the entries are still loading', async () => {
+    const world = reviewWorld()
+    let releaseCandidates: () => void = () => undefined
+    world.holdCandidates = new Promise<void>((resolve) => {
+      releaseCandidates = resolve
+    })
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    await screen.findByText('Loading entries…')
+    expect(screen.getByRole('status')).toHaveFocus()
+    releaseCandidates()
+    await screen.findByRole('heading', { level: 1 })
+  })
+
+  it('moves focus to the permission heading when the source is not readable', async () => {
+    const world = reviewWorld()
+    world.fail[`GET artifact ${SRC}`] = 403
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Knowledge is not available to you' }),
+    ).toHaveFocus()
+  })
+
+  it('moves focus to the state heading when a source could not be read', async () => {
+    const world = reviewWorld()
+    world.artifacts = world.artifacts.map((entry) => ({ ...entry, ingestStatus: 'FAILED' as const }))
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Rivell could not read this file' }),
+    ).toHaveFocus()
+  })
+
+  it('moves focus to the state heading when a published source has nothing left to review', async () => {
+    startFakeServer(publishedWorld())
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Commercial MSA Playbook v4' }),
+    ).toHaveFocus()
   })
 
   it('groups the list the way a reviewer works', async () => {
     await open()
     const list = rail()
     expect(within(list).getByRole('heading', { name: /Needs attention/ })).toHaveTextContent('4')
-    expect(within(list).getByRole('heading', { name: /Grouped review/ })).toBeInTheDocument()
-    expect(within(list).getByRole('button', { name: /3 straightforward candidates/ })).toBeInTheDocument()
+    expect(within(list).getByRole('heading', { name: /Review together/ })).toBeInTheDocument()
+    expect(within(list).getByRole('button', { name: /3 routine entries/ })).toBeInTheDocument()
     // The routine candidates are only in the group, not listed one by one.
     expect(within(list).queryByRole('button', { name: /Notices/ })).not.toBeInTheDocument()
   })
@@ -57,7 +153,7 @@ describe('compilation workspace', () => {
     const { world } = await open()
     await userEvent.click(within(rail()).getByRole('button', { name: /Subcontracting/ }))
     await screen.findByRole('group', { name: 'Possible duplicate' })
-    await userEvent.click(within(decisionBar()).getByRole('button', { name: /Approve/ }))
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Approve entry' }))
     await waitFor(() => expect(requests(world, 'POST', /\/approve$/)).toHaveLength(1))
     await userEvent.click(await within(rail()).findByRole('button', { name: /Subcontracting/ }))
     expect(screen.queryByRole('group', { name: 'Possible duplicate' })).not.toBeInTheDocument()
@@ -71,22 +167,23 @@ describe('compilation workspace', () => {
     expect(within(source).getByText('Assignment')).toBeInTheDocument()
     expect(source.textContent).not.toMatch(/page \d/i)
     expect(document.body.textContent).not.toMatch(/page \d/i)
-    expect(within(source).getByText('Original retained')).toBeInTheDocument()
+    expect(within(source).queryByText('Original retained')).not.toBeInTheDocument()
   })
 
   it('opens the source in context and returns to the candidate', async () => {
     await open()
     await userEvent.click(screen.getByRole('button', { name: 'View source context' }))
     const sheet = await screen.findByRole('dialog', { name: 'Assignment' })
-    expect(within(sheet).getByText('Source and provenance')).toBeInTheDocument()
+    // The sheet header and the source row both name the source.
+    expect(within(sheet).getAllByText('Source')).toHaveLength(2)
     expect(within(sheet).getByText('Original retained unchanged')).toBeInTheDocument()
     // Neighbouring source is shown, and the candidate's own passage is the marked one.
     expect(within(sheet).getByText('Subcontracting')).toBeInTheDocument()
     expect(within(sheet).getByText('Assignment is allowed with consent.').closest('mark')).not.toBeNull()
-    expect(within(sheet).getByText(/does not record page numbers or sub-paragraph spans/)).toBeInTheDocument()
-    expect(within(sheet).getByText(/Extraction unit/)).toBeInTheDocument()
+    expect(within(sheet).queryByText(/does not record page numbers or sub-paragraph spans/)).not.toBeInTheDocument()
+    expect(within(sheet).getByText(/Source part/)).toBeInTheDocument()
 
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Back to the candidate' }))
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Back to the entry' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(heading()).toHaveTextContent('Assignment')
   })
@@ -101,12 +198,12 @@ describe('compilation workspace', () => {
   it('keeps a unit that became no candidate visible, secondary, with Rivell\u2019s reading of it', async () => {
     await open()
     const list = rail()
-    expect(within(list).getByRole('heading', { name: /Not a position \(Rivell\u2019s reading\)/ })).toHaveTextContent('1')
+    expect(within(list).getByRole('heading', { name: /Not treated as a position/ })).toHaveTextContent('1')
     const title = within(list).getByText('How to use this playbook')
     const row = title.closest('.rv-kc-unit') as HTMLElement
     expect(row).not.toBeNull()
     expect(row).toHaveTextContent('Guidance')
-    expect(row).toHaveTextContent('Heading section')
+    expect(row).toHaveTextContent('Section')
     // It is not a candidate: it cannot be selected or decided, only made a position.
     expect(within(row).getAllByRole('button').map((button) => button.textContent)).toEqual(['Make this a position'])
   })
@@ -124,7 +221,7 @@ describe('compilation workspace', () => {
     expect(made).toHaveTextContent('Added by a reviewer')
     expect(made).toHaveTextContent('Rivell\u2019s reading: Guidance')
     expect(made).not.toHaveTextContent('Added by you')
-    expect(within(list).queryByRole('heading', { name: /Not a position/ })).not.toBeInTheDocument()
+    expect(within(list).queryByRole('heading', { name: /Not treated as a position/ })).not.toBeInTheDocument()
   })
 
   it('says so when the server refuses, and adds nothing', async () => {
@@ -163,7 +260,7 @@ describe('compilation workspace', () => {
     world.candidates[SRC] = []
     startFakeServer(world)
     renderApp(`/knowledge/compilations/${SRC}`)
-    await screen.findByRole('heading', { level: 2, name: 'No candidates were compiled' })
+    expect(await screen.findByRole('heading', { level: 2, name: 'No entries were produced' })).toHaveFocus()
     const row = (await screen.findByText('How to use this playbook')).closest('.rv-kc-unit') as HTMLElement
     expect(row).not.toBeNull()
     expect(row).toHaveTextContent('Guidance')
@@ -210,7 +307,7 @@ describe('approve and reject', () => {
     await waitFor(() => expect(requests(world, 'POST', /\/reject$/)).toHaveLength(1))
     expect(requests(world, 'POST', /publications/)).toHaveLength(0)
     await userEvent.click(await within(rail()).findByRole('button', { name: /Indemnification/ }))
-    expect(screen.getByText(/Rejected. A rejected candidate can be brought back only by correcting it/)).toBeInTheDocument()
+    expect(screen.getByText(/Rejected. A rejected entry can be brought back only by correcting it/)).toBeInTheDocument()
     // The server refuses to approve a rejected candidate, so the screen does not offer it.
     expect(within(decisionBar()).getByRole('button', { name: /Approve/ })).toBeDisabled()
     expect(within(decisionBar()).getByRole('button', { name: /Edit/ })).toBeEnabled()
@@ -246,17 +343,35 @@ describe('approve and reject', () => {
   })
 })
 
+describe('corrections', () => {
+  it('shows the correction badge only after a person saves an edit', async () => {
+    const { world } = await open(reviewWorld(), '?candidate=uncertain')
+    const interpretation = screen.getByRole('region', { name: 'What Rivell read' })
+    expect(within(interpretation).queryByText('Corrected by you')).not.toBeInTheDocument()
+    expect(within(interpretation).getByText('Rivell proposed: Any uncapped indemnity')).toBeInTheDocument()
+    expect(within(interpretation).getByText('Not stated')).toBeInTheDocument()
+
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
+    const trigger = await screen.findByLabelText('Escalate')
+    await userEvent.type(trigger, 'Over AUD 1,000,000')
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Save correction' }))
+
+    await waitFor(() => expect(requests(world, 'POST', /\/candidates\/uncertain\/edit$/)).toHaveLength(1))
+    expect(await screen.findByText('Corrected by you')).toBeInTheDocument()
+  })
+})
+
 describe('conflict', () => {
   it('does not let one click make a possible conflict publishable', async () => {
     const { world } = await open()
     expect(heading()).toHaveTextContent('Assignment')
     const approve = within(decisionBar()).getByRole('button', { name: /Approve/ })
     expect(approve).toBeDisabled()
-    expect(screen.getByText(/does not block approving a possible conflict/i)).toBeInTheDocument()
+    expect(screen.getByText(/Correct or reject it, or compare it with published knowledge and confirm below/i)).toBeInTheDocument()
     await userEvent.click(approve)
     expect(requests(world, 'POST', /\/approve$/)).toHaveLength(0)
 
-    await userEvent.click(screen.getByRole('checkbox', { name: /I compared this with the published knowledge/ }))
+    await userEvent.click(screen.getByRole('checkbox', { name: /I compared this with published knowledge/ }))
     expect(approve).toBeEnabled()
     await userEvent.click(approve)
     await waitFor(() => expect(requests(world, 'POST', /\/candidates\/conflict\/approve$/)).toHaveLength(1))
@@ -266,16 +381,18 @@ describe('conflict', () => {
     const { world } = await open()
     const section = screen.getByRole('region', { name: 'Published knowledge this was compared with' })
     expect(await within(section).findByText('Published Liability Cap')).toBeInTheDocument()
+    // The workspace reads each distinct peer once for its title map, never per row.
+    expect(world.calls.filter((call) => call.method === 'GET'
+      && call.path === '/api/knowledge/candidates/peer1')).toHaveLength(1)
     await userEvent.click(within(section).getByRole('button', { name: 'Compare' }))
     expect(await within(section).findByText('A published cap at twelve months.')).toBeInTheDocument()
-    expect(world.calls.some((call) => call.method === 'GET' && call.path === '/api/knowledge/candidates/peer1')).toBe(true)
   })
 
   it('clears the conflict only when the server says so, after a legal concept correction', async () => {
     const { world } = await open()
     await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
-    const form = await screen.findByRole('form', { name: 'Correct the structured candidate' })
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), 'GOVERNING_LAW')
+    const form = await screen.findByRole('form', { name: 'Edit this entry' })
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), 'GOVERNING_LAW')
     // Nothing is cleared by choosing a value.
     expect(screen.getByRole('group', { name: 'Conflicts with published knowledge' })).toBeInTheDocument()
     await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Save correction' }))
@@ -284,7 +401,7 @@ describe('conflict', () => {
     expect(requests(world, 'POST', /\/candidates\/conflict\/concept$/)[0]?.body).toEqual({ primary: 'GOVERNING_LAW' })
     // The server answered with no conflict, so now the condition and the gate are gone.
     await waitFor(() => expect(screen.queryByRole('group', { name: 'Conflicts with published knowledge' })).not.toBeInTheDocument())
-    expect(screen.queryByText(/does not block approving a possible conflict/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Correct or reject it, or compare it with published knowledge and confirm below/i)).not.toBeInTheDocument()
     expect(await screen.findByText('Corrected by you')).toBeInTheDocument()
     expect(screen.getByText('Rivell classified: Limitation of liability')).toBeInTheDocument()
   })
@@ -292,7 +409,7 @@ describe('conflict', () => {
   it('keeps the conflict if the server still reports it after an edit', async () => {
     await open()
     await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
-    const form = await screen.findByRole('form', { name: 'Correct the structured candidate' })
+    const form = await screen.findByRole('form', { name: 'Edit this entry' })
     await userEvent.clear(within(form).getByLabelText('Wording'))
     await userEvent.type(within(form).getByLabelText('Wording'), 'Assignment needs written consent.')
     await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Save correction' }))
@@ -311,7 +428,7 @@ describe('supersession and duplicates', () => {
     const choices = screen.getByRole('group', { name: 'When I publish this' })
     expect(within(choices).getByRole('radio', { name: /Do not replace anything/ })).toBeChecked()
     expect(await within(choices).findByRole('radio', { name: /Replace Published Liability Cap/ })).not.toBeChecked()
-    expect(choices).toHaveTextContent(/not deleted: earlier publications still show it/)
+    expect(choices).toHaveTextContent(/not deleted: earlier versions still show it/)
   })
 
   it('does not treat a duplicate as rejected or as published', async () => {
@@ -327,8 +444,8 @@ describe('provenance and states', () => {
     world.artifacts = [{ ...world.artifacts[0]!, ingestStatus: 'FAILED' }]
     startFakeServer(world)
     renderApp(`/knowledge/compilations/${SRC}`)
-    expect(await screen.findByRole('heading', { name: 'Rivell could not extract this file' })).toBeInTheDocument()
-    expect(screen.getByText(/Nothing was compiled and nothing was published/)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Rivell could not read this file' })).toBeInTheDocument()
+    expect(screen.getByText(/Nothing was published/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Approve/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Publish/ })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open the source' })).toHaveAttribute('href', `/knowledge/sources/${SRC}`)
@@ -339,7 +456,7 @@ describe('provenance and states', () => {
     world.artifacts = [{ ...world.artifacts[0]!, ingestStatus: 'EXTRACTING' }]
     startFakeServer(world)
     renderApp(`/knowledge/compilations/${SRC}`)
-    expect(await screen.findByRole('heading', { name: 'Rivell is extracting this file' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Rivell is reading this file' })).toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/\d+\s?%|minutes|seconds|ETA/i)
   })
 
@@ -348,7 +465,7 @@ describe('provenance and states', () => {
     world.candidates[SRC] = []
     startFakeServer(world)
     renderApp(`/knowledge/compilations/${SRC}`)
-    expect(await screen.findByRole('heading', { name: 'No candidates were compiled' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'No entries were produced' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Publish/ })).not.toBeInTheDocument()
   })
 
@@ -358,7 +475,7 @@ describe('provenance and states', () => {
     startFakeServer(world)
     renderApp(`/knowledge/compilations/${SRC}`)
     expect(await screen.findByRole('heading', { name: 'Knowledge is not available to you' })).toBeInTheDocument()
-    expect(screen.queryByText(/No candidates/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/No entries/)).not.toBeInTheDocument()
   })
 
   it('states a permission failure on the candidates too', async () => {
@@ -374,15 +491,15 @@ describe('provenance and states', () => {
     world.fail[`GET candidates ${SRC}`] = 500
     startFakeServer(world)
     renderApp(`/knowledge/compilations/${SRC}`)
-    expect(await screen.findByRole('heading', { name: 'The candidates could not be loaded' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'The entries could not be loaded' }, { timeout: 3000 })).toHaveFocus()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/at \w+\.|Exception|stack/i)
   })
 
-  it('says when a source cannot be found', async () => {
+  it('says when a source cannot be found, and focuses the heading', async () => {
     startFakeServer(reviewWorld())
     renderApp('/knowledge/compilations/missing')
-    expect(await screen.findByRole('heading', { name: 'This source could not be found' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'This source could not be found' })).toHaveFocus()
   })
 
   it('keeps the old compilation address working, with the candidate it named', async () => {
@@ -395,7 +512,7 @@ describe('provenance and states', () => {
 
   it('says a candidate that is not part of this source is not, and shows the next one', async () => {
     await open(reviewWorld(), '?candidate=nope')
-    expect(screen.getByText(/That candidate is not part of this source/)).toBeInTheDocument()
+    expect(screen.getByText(/That entry is not part of this source/)).toBeInTheDocument()
     expect(heading()).toHaveTextContent('Assignment')
   })
 
@@ -404,8 +521,8 @@ describe('provenance and states', () => {
     // The default is kept in the address, so a change in the server's answers cannot move it.
     await waitFor(() => expect(router.state.location.search).toBe('?candidate=conflict'))
     await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
-    const form = await screen.findByRole('form', { name: 'Correct the structured candidate' })
-    await userEvent.selectOptions(within(form).getByLabelText('Legal concept'), 'GOVERNING_LAW')
+    const form = await screen.findByRole('form', { name: 'Edit this entry' })
+    await userEvent.selectOptions(within(form).getByLabelText('Topic'), 'GOVERNING_LAW')
     await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Save correction' }))
     await screen.findByText('Corrected by you')
     expect(heading()).toHaveTextContent('Assignment')

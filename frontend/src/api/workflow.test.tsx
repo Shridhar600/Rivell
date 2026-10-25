@@ -220,9 +220,9 @@ describe('workflow parsers', () => {
 
     expect(parseDecision(complete).actorId).toBe('u-1')
     expect(parseDecision(complete).decidedAt).toBe('2026-09-26T10:00:00Z')
-    expect(() => parseDecision({ ...complete, actorId: null })).toThrow(/malformed/i)
-    expect(() => parseDecision({ ...complete, actorId: 7 })).toThrow(/malformed/i)
-    expect(() => parseDecision({ ...complete, decidedAt: undefined })).toThrow(/malformed/i)
+    expect(() => parseDecision({ ...complete, actorId: null })).toThrow(/could not read this response/i)
+    expect(() => parseDecision({ ...complete, actorId: 7 })).toThrow(/could not read this response/i)
+    expect(() => parseDecision({ ...complete, decidedAt: undefined })).toThrow(/could not read this response/i)
   })
 
   it('keeps unknown human status and blocker codes readable', () => {
@@ -269,7 +269,7 @@ describe('workflow parsers', () => {
 
   it('rejects a malformed change set instead of showing partial truth', () => {
     expect(() => parseApprovedChangeSet({ ...changeSetPayload, changes: 'nope' })).toThrow(
-      /Malformed/,
+      /could not read this response/,
     )
   })
 })

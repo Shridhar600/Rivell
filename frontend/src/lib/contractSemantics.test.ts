@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CONTRACT_TYPES,
+  CONTRACT_TYPE_LABELS,
+  clauseHeadingTitle,
   describeFact,
   enrichmentFailureNote,
   factDivergence,
@@ -19,6 +22,49 @@ import {
 import { ENRICHMENT_FAILURE_REASONS } from '../api/semantics'
 import type { EnrichmentFailureReason, SemanticFact } from '../api/semantics'
 
+describe('contract type choices', () => {
+  it('puts the common commercial types where a reviewer looks for them', () => {
+    expect(CONTRACT_TYPES).toEqual([
+      'MNDA',
+      'ONDA',
+      'NDA',
+      'MSA',
+      'SERVICES',
+      'SUPPLY',
+      'SAAS',
+      'ORDER_FORM',
+      'SOW',
+      'DPA',
+      'SWL',
+      'RESELLER',
+      'AMENDMENT',
+      'OTHER',
+    ])
+  })
+
+  it('labels every choice in the vocabulary a reviewer uses', () => {
+    expect(CONTRACT_TYPE_LABELS).toMatchObject({
+      MNDA: 'Mutual NDA',
+      ONDA: 'One-way NDA',
+      NDA: 'NDA',
+      MSA: 'MSA',
+      SERVICES: 'Services',
+      SUPPLY: 'Supply',
+      SAAS: 'SaaS',
+      ORDER_FORM: 'Order form',
+      SOW: 'SOW',
+      DPA: 'DPA',
+      SWL: 'Software licence',
+      RESELLER: 'Reseller',
+      AMENDMENT: 'Amendment',
+      OTHER: 'Other',
+    })
+    for (const type of CONTRACT_TYPES) {
+      expect(CONTRACT_TYPE_LABELS[type]).toBeTruthy()
+    }
+  })
+})
+
 describe('label maps', () => {
   it('labels roles, metadata fields, references and verification', () => {
     expect(roleLabel('DISCLOSING_PARTY')).toBe('Disclosing party')
@@ -27,8 +73,8 @@ describe('label maps', () => {
     expect(metadataFieldLabel('COMMENCEMENT_DATE')).toBe('Commencement date')
     expect(referenceKindLabel('SECTION')).toBe('Section')
     expect(referenceStatusLabel('RESOLVED')).toBe('Resolved')
-    expect(verificationLabel('VERIFIED')).toBe('Supported by source')
-    expect(verificationLabel('NOT_VERIFIED')).toBe('Not independently verified')
+    expect(verificationLabel('VERIFIED')).toBe('Matches the source')
+    expect(verificationLabel('NOT_VERIFIED')).toBe('Not checked against a second source')
   })
 
   it('describes relationship verbs and interpretation sources', () => {
@@ -39,7 +85,7 @@ describe('label maps', () => {
       'Taken directly from the contract text',
     )
     expect(interpretationKindDescription('GENERATIVE_EXTRACTION')).toBe(
-      'Extracted from the clause text',
+      'Read from the clause text',
     )
   })
 
@@ -235,6 +281,25 @@ describe('region labels', () => {
 
   it('returns null for unknown regions', () => {
     expect(resolveRegionLabel('missing', clauses, nodes)).toBeNull()
+  })
+})
+
+describe('clause heading titles', () => {
+  it('cuts a heading that carries its first sub-clause', () => {
+    expect(
+      clauseHeadingTitle(
+        '9. Intellectual Property and Infringement Indemnity. 9.1 The Supplier and its licensors retain all right, title and interest.',
+      ),
+    ).toBe('9. Intellectual Property and Infringement Indemnity')
+  })
+
+  it('leaves a title that is only a heading unchanged', () => {
+    expect(clauseHeadingTitle('9. Intellectual Property and Infringement Indemnity')).toBe(
+      '9. Intellectual Property and Infringement Indemnity',
+    )
+    expect(clauseHeadingTitle('1. Definitions')).toBe('1. Definitions')
+    expect(clauseHeadingTitle('Section 4. Payment')).toBe('Section 4. Payment')
+    expect(clauseHeadingTitle('12. U.S. Export Controls')).toBe('12. U.S. Export Controls')
   })
 })
 

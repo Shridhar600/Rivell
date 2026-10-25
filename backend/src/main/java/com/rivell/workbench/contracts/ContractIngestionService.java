@@ -2,6 +2,7 @@ package com.rivell.workbench.contracts;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
@@ -12,6 +13,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.unit.DataSize;
 
 import com.rivell.workbench.foundation.DocumentStorage;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.foundation.StorageKey;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
@@ -40,6 +42,7 @@ public class ContractIngestionService {
     private final TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
+    private final DocumentWorkLimiter documentWorkLimiter;
     private final DataSize maxFileSize;
 
     public ContractIngestionService(
@@ -49,6 +52,7 @@ public class ContractIngestionService {
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
+            DocumentWorkLimiter documentWorkLimiter,
             DataSize maxFileSize) {
         this.documentStorage = documentStorage;
         this.documentStructureParser = documentStructureParser;
@@ -56,16 +60,37 @@ public class ContractIngestionService {
         this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+        this.documentWorkLimiter = documentWorkLimiter;
         this.maxFileSize = maxFileSize;
     }
 
+    /**
+     * The document-work slot is taken before the bytes are read, stored or recorded (DW-095). A
+     * busy limit therefore refuses the upload before any contract row or file exists; nothing is
+     * left behind for every rejected request.
+     */
     public ContractIngestionResult ingest(String filename, String contentType, InputStream source)
             throws IOException {
         var identity = identityProvider.currentIdentity();
         if (!authorizationService.isAuthorized(identity, Permissions.CONTRACT_UPLOAD)) {
             throw new UnauthorizedContractAccessException(identity.userId());
         }
+        try {
+            return documentWorkLimiter.run(() -> {
+                try {
+                    return ingestWithinLimit(identity.organizationId(), filename, contentType, source);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
+    }
 
+    private ContractIngestionResult ingestWithinLimit(
+            UUID organizationId, String filename, String contentType, InputStream source)
+            throws IOException {
         var safeFilename = sanitizeFilename(filename);
         var bytes = readBounded(source, maxFileSize.toBytes());
         var sha256 = sha256Hex(bytes);
@@ -73,7 +98,7 @@ public class ContractIngestionService {
 
         var artifactId = UUID.randomUUID();
         var storageKey = new StorageKey(
-                identity.organizationId() + "/contracts/" + artifactId + ".docx");
+                organizationId + "/contracts/" + artifactId + ".docx");
         documentStorage.store(storageKey, new ByteArrayInputStream(bytes));
 
         UUID contractId;
@@ -82,12 +107,12 @@ public class ContractIngestionService {
             var staged = transactionTemplate.execute(status -> {
                 var ids = new UUID[] {UUID.randomUUID(), UUID.randomUUID()};
                 repository.insertSourceArtifact(
-                        artifactId, identity.organizationId(), safeFilename,
+                        artifactId, organizationId, safeFilename,
                         contentType == null || contentType.isBlank()
                                 ? DOCX_CONTENT_TYPE
                                 : contentType,
                         bytes.length, sha256, storageKey.value());
-                repository.insertContract(ids[0], identity.organizationId(), null, now);
+                repository.insertContract(ids[0], organizationId, null, now);
                 repository.insertVersion(
                         ids[1], ids[0], artifactId, 1, ContractRole.ORIGINAL,
                         null, ParseStatus.PARSING, List.of(), now);

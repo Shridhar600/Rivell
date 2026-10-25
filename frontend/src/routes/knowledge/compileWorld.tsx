@@ -35,6 +35,8 @@ export interface Fake {
   uploads: { name: string; artifactType: string | null; query: Record<string, string> }[]
   /** An upload waits for this before it answers. */
   holdUpload?: Promise<void>
+  /** A source's candidate read waits for this before it answers. */
+  holdCandidates?: Promise<void>
   /** What a successful upload returns. */
   uploadResult: { id: string; status: ArtifactSummary['ingestStatus'] } | { status: number }
 }
@@ -68,7 +70,8 @@ export function reviewWorld(): Fake {
   const peer = candidate({
     id: 'peer1',
     artifactId: 'pub',
-    rawLabel: 'Published Liability Cap',
+    rawLabel: 'Published Liability Cap | MSA | 12 months',
+    title: 'Published Liability Cap',
     contentText: 'A published cap at twelve months.',
     positions: ['PREFERRED'],
     effectiveConceptKey: 'LIMITATION_OF_LIABILITY',
@@ -87,10 +90,12 @@ export function reviewWorld(): Fake {
     flagged('uncertain', {
       rawLabel: 'Indemnification',
       contentText: 'Mutual and capped.',
-      reviewReasons: ['UNVERIFIED_GENERATIVE_FIELD'],
-      escalationTrigger: 'Any uncapped indemnity',
+      reviewReasons: ['UNVERIFIED_GENERATIVE_FIELD', 'VERIFICATION_DISPUTED'],
+      // The read proposed a trigger, but the source check disputed it, so it was stored as a
+      // proposal only and never became an effective value.
+      escalationTrigger: null,
       interpretations: [
-        { field: 'escalationTrigger', proposedValue: 'Any uncapped indemnity', kind: 'GENERATIVE_EXTRACTION', specId: 's', specVersion: 1, supportingSourceNodes: 1, verification: 'UNCERTAIN' },
+        { field: 'escalationTrigger', proposedValue: 'Any uncapped indemnity', kind: 'GENERATIVE_EXTRACTION', specId: 's', specVersion: 1, supportingSourceNodes: 1, verification: 'DISPUTED' },
       ],
     }),
     flagged('duplicate', {
@@ -335,10 +340,11 @@ export function startFakeServer(fake: Fake) {
         if (current.reviewStatus === 'PUBLISHED') return refuse(409)
         const input = body as {
           note?: string
+          title?: string
           contentText?: string
           payloadColumns?: Record<string, string>
           scope?: Record<string, unknown>
-          semanticFields?: { positions?: Candidate['positions']; escalationTrigger?: string; requiresApproval?: boolean; variantRole?: Candidate['variantRole'] }
+          semanticFields?: { positions?: Candidate['positions']; escalationTrigger?: string; requiresApproval?: boolean | null; variantRole?: Candidate['variantRole'] }
           primary?: string
         }
         if (verb === 'approve') {
@@ -347,20 +353,47 @@ export function startFakeServer(fake: Fake) {
         }
         if (verb === 'reject') return envelope(update(fake, id, (entry) => ({ ...entry, reviewStatus: 'REJECTED' })))
         if (verb === 'edit') {
+          const approvalSent =
+            input.semanticFields !== undefined &&
+            Object.prototype.hasOwnProperty.call(input.semanticFields, 'requiresApproval')
           return envelope(
-            update(fake, id, (entry) => ({
-              ...entry,
-              reviewStatus: 'EDITED',
-              editedContentText: input.contentText ?? entry.editedContentText,
-              editedPayloadColumns: input.payloadColumns ?? entry.editedPayloadColumns,
-              positions: input.semanticFields?.positions ?? entry.positions,
-              escalationTrigger: input.semanticFields?.escalationTrigger ?? entry.escalationTrigger,
-              requiresApproval: input.semanticFields?.requiresApproval ?? entry.requiresApproval,
-              variantRole: input.semanticFields?.variantRole ?? entry.variantRole,
-              jurisdiction: typeof input.scope?.jurisdiction === 'string' ? input.scope.jurisdiction : entry.jurisdiction,
-              declaredContractTypes: Array.isArray(input.scope?.declaredContractTypes) ? (input.scope.declaredContractTypes as string[]) : entry.declaredContractTypes,
-              reviewNote: input.note ?? entry.reviewNote,
-            })),
+            update(fake, id, (entry) => {
+              const editedTitle = input.title === undefined ? entry.editedTitle : input.title.trim()
+              const semantic = input.semanticFields
+              const samePositions = (
+                left: Candidate['positions'],
+                right: Candidate['positions'],
+              ) => left.length === right.length && left.every((role) => right.includes(role))
+              // Only a value that differs from the machine value is a correction, as the backend decides.
+              const correctedFields =
+                semantic === undefined
+                  ? entry.correctedFields
+                  : [
+                      ...new Set([
+                        ...entry.correctedFields,
+                        ...(semantic.positions !== undefined && !samePositions(semantic.positions, entry.positions) ? ['positions'] : []),
+                        ...('escalationTrigger' in semantic && semantic.escalationTrigger !== entry.escalationTrigger ? ['escalationTrigger'] : []),
+                        ...('requiresApproval' in semantic && semantic.requiresApproval !== entry.requiresApproval ? ['requiresApproval'] : []),
+                        ...(semantic.variantRole !== undefined && semantic.variantRole !== entry.variantRole ? ['variantRole'] : []),
+                      ]),
+                    ]
+              return {
+                ...entry,
+                reviewStatus: 'EDITED',
+                editedTitle: editedTitle ? editedTitle : null,
+                title: editedTitle ? editedTitle : entry.rawLabel,
+                editedContentText: input.contentText ?? entry.editedContentText,
+                editedPayloadColumns: input.payloadColumns ?? entry.editedPayloadColumns,
+                positions: input.semanticFields?.positions ?? entry.positions,
+                escalationTrigger: input.semanticFields?.escalationTrigger ?? entry.escalationTrigger,
+                requiresApproval: approvalSent ? input.semanticFields?.requiresApproval ?? null : entry.requiresApproval,
+                variantRole: input.semanticFields?.variantRole ?? entry.variantRole,
+                correctedFields,
+                jurisdiction: typeof input.scope?.jurisdiction === 'string' ? input.scope.jurisdiction : entry.jurisdiction,
+                declaredContractTypes: Array.isArray(input.scope?.declaredContractTypes) ? (input.scope.declaredContractTypes as string[]) : entry.declaredContractTypes,
+                reviewNote: input.note ?? entry.reviewNote,
+              }
+            }),
           )
         }
         if (current.reviewStatus === 'REJECTED') return refuse(409)
@@ -384,6 +417,7 @@ export function startFakeServer(fake: Fake) {
         const source = fake.artifacts.find((entry) => entry.id === id)
         if (!source) return refuse(404)
         if (read[2] === 'candidates') {
+          if (fake.holdCandidates) await fake.holdCandidates
           if (fake.fail[`GET candidates ${id}`]) return refuse(fake.fail[`GET candidates ${id}`] as number)
           fake.beforeRead[id]?.()
           return envelope(fake.candidates[id] ?? [])

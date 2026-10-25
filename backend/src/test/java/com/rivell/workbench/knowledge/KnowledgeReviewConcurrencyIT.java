@@ -264,7 +264,7 @@ class KnowledgeReviewConcurrencyIT {
 
         var applied = rawRepository.updateReviewState(
                 candidate.id(), organizationId, ReviewStatus.APPROVED, ReviewStatus.PUBLISHED,
-                null, null, null, candidate.scope(), null, null, null,
+                null, null, null, null, candidate.scope(), null, null, null,
                 java.time.Instant.now(), candidate.conflictSignals(),
                 candidate.reviewCategory(), candidate.reviewReasons());
 
@@ -323,7 +323,7 @@ class KnowledgeReviewConcurrencyIT {
         @Override
         public boolean updateReviewState(
                 UUID candidateId, UUID organizationId, ReviewStatus expectedStatus,
-                ReviewStatus reviewStatus, String editedContentText,
+                ReviewStatus reviewStatus, String editedContentText, String editedTitle,
                 CandidatePayload editedPayload, SemanticFields editedSemanticFields,
                 ApplicabilityScope scope, UUID supersedingCandidateId, String reviewNote,
                 java.time.Instant reviewedAt, java.time.Instant updatedAt,
@@ -331,7 +331,8 @@ class KnowledgeReviewConcurrencyIT {
                 Set<ReviewReason> reviewReasons) {
             concurrentEdit.run();
             return delegate.updateReviewState(candidateId, organizationId, expectedStatus,
-                    reviewStatus, editedContentText, editedPayload, editedSemanticFields, scope,
+                    reviewStatus, editedContentText, editedTitle, editedPayload,
+                    editedSemanticFields, scope,
                     supersedingCandidateId, reviewNote, reviewedAt, updatedAt, conflictSignals,
                     reviewCategory, reviewReasons);
         }
@@ -339,6 +340,11 @@ class KnowledgeReviewConcurrencyIT {
         @Override
         public void insertArtifact(KnowledgeArtifact artifact) {
             delegate.insertArtifact(artifact);
+        }
+
+        @Override
+        public void updateDocumentTitle(UUID artifactId, String documentTitle) {
+            delegate.updateDocumentTitle(artifactId, documentTitle);
         }
 
         @Override
@@ -421,6 +427,28 @@ class KnowledgeReviewConcurrencyIT {
         }
 
         @Override
+        public List<CandidateUnit> listCandidateUnitsForMigration() {
+            return delegate.listCandidateUnitsForMigration();
+        }
+
+        @Override
+        public boolean updateSourceContractTypes(
+                UUID candidateId, UUID organizationId, Set<String> types) {
+            return delegate.updateSourceContractTypes(candidateId, organizationId, types);
+        }
+
+        @Override
+        public boolean dataMigrationCompleted(String migrationKey) {
+            return delegate.dataMigrationCompleted(migrationKey);
+        }
+
+        @Override
+        public void recordDataMigration(
+                String migrationKey, String detail, java.time.Instant completedAt) {
+            delegate.recordDataMigration(migrationKey, detail, completedAt);
+        }
+
+        @Override
         public Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId) {
             return delegate.findCandidate(candidateId, organizationId);
         }
@@ -441,6 +469,12 @@ class KnowledgeReviewConcurrencyIT {
         @Override
         public List<PublishedCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query) {
             return delegate.findPublishedCandidatesAsOf(query);
+        }
+
+        @Override
+        public List<com.rivell.workbench.knowledge.ApplicableKnowledge> findApplicableKnowledge(
+                com.rivell.workbench.knowledge.ApplicableKnowledgeQuery query) {
+            return delegate.findApplicableKnowledge(query);
         }
 
         @Override

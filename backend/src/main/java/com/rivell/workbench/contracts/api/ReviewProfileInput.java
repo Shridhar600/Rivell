@@ -22,7 +22,7 @@ public record ReviewProfileInput(
 
     public ReviewProfileInput {
         if (contractType == null) {
-            throw new IllegalArgumentException("contractType is required");
+            throw new IllegalArgumentException("Choose a contract type.");
         }
     }
 

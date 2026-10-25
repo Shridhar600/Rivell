@@ -84,7 +84,9 @@ public final class RetrievalResponses {
                         item.policyFacts().escalationTrigger(),
                         item.policyFacts().preferred(),
                         item.policyFacts().fallbacks(),
-                        item.policyFacts().prohibited()),
+                        item.policyFacts().prohibited(),
+                        item.policyFacts().authorityRules(),
+                        item.policyFacts().authorityConflicts()),
                 item.contractFacts(),
                 item.retrievalReason(),
                 new LaneInfoResponse(
@@ -128,7 +130,18 @@ public final class RetrievalResponses {
             String escalationTrigger,
             String preferred,
             List<String> fallbacks,
-            String prohibited) {
+            String prohibited,
+            List<com.rivell.workbench.knowledge.AuthorityRule> authorityRules,
+            List<com.rivell.workbench.knowledge.AuthorityConflict> authorityConflicts) {
+
+        /** A response written before typed rules existed carries none. */
+        public PolicyFactsResponse(
+                java.util.Set<String> positions, Boolean requiresApproval,
+                String escalationTrigger, String preferred, List<String> fallbacks,
+                String prohibited) {
+            this(positions, requiresApproval, escalationTrigger, preferred, fallbacks, prohibited,
+                    List.of(), List.of());
+        }
     }
 
     @Schema(name = "LaneInfoResponse")

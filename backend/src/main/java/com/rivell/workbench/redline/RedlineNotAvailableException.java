@@ -7,6 +7,6 @@ package com.rivell.workbench.redline;
 public class RedlineNotAvailableException extends RuntimeException {
 
     public RedlineNotAvailableException() {
-        super("No finalized approved change set exists for this review");
+        super("Finalize this review first. Rivell builds the redline from the finalized decisions.");
     }
 }

@@ -65,6 +65,18 @@ describe('version history', () => {
   })
 })
 
+describe('artifact names', () => {
+  it('uses the document title a playbook gives itself', () => {
+    expect(artifactName(artifact({ id: 'pb', filename: 'Commercial MSA Playbook.docx', documentTitle: 'Mutual NDA Negotiation Guide' }))).toBe(
+      'Mutual NDA Negotiation Guide',
+    )
+  })
+
+  it('falls back to the file name when the file names no title', () => {
+    expect(artifactName(artifact({ id: 'cl', filename: 'Clauses.xlsx', documentTitle: null }))).toBe('Clauses')
+  })
+})
+
 describe('catalog', () => {
   const candidates = new Map([
     [
@@ -79,7 +91,7 @@ describe('catalog', () => {
       [
         candidate({ id: 'c1', artifactId: 'cl', candidateType: 'CLAUSE_VARIANT', rawLabel: 'Mutual', effectiveConceptKey: 'LIMITATION_OF_LIABILITY' }),
         candidate({ id: 'c2', artifactId: 'cl', candidateType: 'CLAUSE_VARIANT', rawLabel: 'Supplier', effectiveConceptKey: 'LIMITATION_OF_LIABILITY' }),
-        candidate({ id: 'c3', artifactId: 'cl', candidateType: 'CLAUSE_VARIANT', rawLabel: 'Audit', effectiveConceptKey: null }),
+        candidate({ id: 'c3', artifactId: 'cl', candidateType: 'CLAUSE_VARIANT', rawLabel: 'Audit | MSA | 2026', title: 'Audit', effectiveConceptKey: null }),
       ],
     ],
   ])
@@ -242,14 +254,14 @@ describe('publication history isolation', () => {
 describe('presentation helpers', () => {
   it('names a source by its filename without the extension and nothing else', () => {
     expect(artifactName(pb)).toBe('Commercial MSA Playbook')
-    expect(artifactFormat(cl)).toBe('XLSX')
+    expect(artifactFormat(cl)).toBe('Excel file')
   })
 
   it('counts with the right noun and number', () => {
     expect(countNoun('PLAYBOOK', 1)).toBe('1 position')
     expect(countNoun('PLAYBOOK', 5)).toBe('5 positions')
     expect(countNoun('CLAUSE_LIBRARY', 3)).toBe('3 clause variants')
-    expect(countNoun('TEMPLATE', 2)).toBe('2 items')
+    expect(countNoun('TEMPLATE', 2)).toBe('2 entries')
   })
 
   it('describes a source from real counts only', () => {
@@ -258,6 +270,6 @@ describe('presentation helpers', () => {
       publications: [publication(1, [{ candidateId: 'p1' }])],
       candidates: new Map([['pb', [candidate({ id: 'p1', artifactId: 'pb' })]]]),
     })
-    expect(sourceNote(view.sources[0]!)).toBe('1 position published in publication 1')
+    expect(sourceNote(view.sources[0]!)).toBe('1 position published in knowledge version 1')
   })
 })

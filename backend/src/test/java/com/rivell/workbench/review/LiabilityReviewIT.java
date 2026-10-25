@@ -161,9 +161,13 @@ public class LiabilityReviewIT {
         volatile Double verificationRiskProbability;
         volatile double policyComparisonTopProbability = 0.9;
         volatile boolean failPolicyComparisonDecision;
+        /** Every policy comparison fails as if the analysis account had no credit. */
+        volatile boolean failPolicyComparisonOutOfCredit;
         volatile String policyComparisonAnswerOverride;
         /** Probability the uncovered-clause triage answers for every clause it sees. */
         volatile double uncoveredProbability = 0.05;
+        /** The uncovered-clause triage fails as if the provider were down. */
+        volatile boolean failUncoveredTriage;
         final java.util.List<String> uncoveredHeadings =
                 java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         volatile Map<String, Double> policyComparisonProbabilities;
@@ -210,6 +214,24 @@ public class LiabilityReviewIT {
         volatile String reversedOrderAnswer;
         /** The reversed-order (probe) call fails as if the provider were down. */
         volatile boolean failReversedOrder;
+
+        /** The fit check's answer for a search-found rule; null = 0.95 (fits). */
+        volatile Double ruleFitProbability;
+        /** The fit check's answer for a library wording offer; null = 0.95 (fits). */
+        volatile Double wordingFitProbability;
+        /** The fit check's answer for the meets-position question; null = wordingFitProbability. */
+        volatile Double wordingMeetsProbability;
+        /** The fit check's answer for the cures-gap question; null = wordingFitProbability. */
+        volatile Double wordingCuresProbability;
+        /** The fit check fails as if the provider were down. */
+        volatile boolean failFitDecision;
+        private final AtomicInteger fitCalls = new AtomicInteger();
+        /** One fit call: the clause heading and the question keys, in call order. */
+        public record FitCall(String heading, java.util.List<String> questionKeys) {
+        }
+
+        final java.util.List<FitCall> fitCallsMade =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
 
         /**
          * One policy-comparison call: the subject heading, the question keys, the first option offered,
@@ -321,6 +343,10 @@ public class LiabilityReviewIT {
                         new TokenUsage(140, 6));
             }
             if (request.pack().questions().containsKey(PolicyComparisonSpecs.NEEDS_REVIEW)) {
+                if (failUncoveredTriage) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "uncovered triage provider unavailable");
+                }
                 var state = (PolicyComparisonSpecs.PolicyComparisonState) request.state().payload();
                 uncoveredHeadings.add(state.heading());
                 return new ProviderExecutionResult(new LinkedHashMap<>(Map.of(
@@ -332,6 +358,10 @@ public class LiabilityReviewIT {
                     .anyMatch(name -> name.startsWith("presence_"))) {
                 return presenceDecision(request);
             }
+            if (request.pack().questions().keySet().stream()
+                    .anyMatch(name -> name.startsWith("fit_"))) {
+                return fitDecision(request);
+            }
             var firstQuestion = request.pack().questions().values().iterator().next();
             if (firstQuestion instanceof ChoiceQuestion firstChoice
                     && firstChoice.criteria().containsKey(PolicyComparisonSpecs.WALK_AWAY)) {
@@ -342,6 +372,10 @@ public class LiabilityReviewIT {
 
         private ProviderExecutionResult policyComparison(DecisionExecutionRequest request) {
             policyComparisonDecisions.incrementAndGet();
+            if (failPolicyComparisonOutOfCredit) {
+                throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
+                        "Provider account has no credits (HTTP 429)");
+            }
             if (failPolicyComparisonDecision) {
                 throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                         "policy comparison provider unavailable");
@@ -414,6 +448,44 @@ public class LiabilityReviewIT {
                 }
             }
             return null;
+        }
+
+        /**
+         * The part-4 fit check: one yes/no per candidate, all of one clause's candidates in one
+         * call. Rules and wording can be scripted apart, so one test can fit a hit and reject the
+         * wording offered for it.
+         */
+        private ProviderExecutionResult fitDecision(DecisionExecutionRequest request) {
+            fitCalls.incrementAndGet();
+            if (failFitDecision) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "fit decision provider unavailable");
+            }
+            var answers = new LinkedHashMap<String, SemanticAnswer>();
+            var keys = new java.util.ArrayList<String>();
+            for (var entry : request.pack().questions().entrySet()) {
+                var question = (com.rivell.workbench.intelligence.YesNoQuestion) entry.getValue();
+                answers.put(entry.getKey(),
+                        new com.rivell.workbench.intelligence.YesNoAnswer(
+                                fitProbability(question.instructions())));
+                keys.add(entry.getKey());
+            }
+            java.util.Collections.sort(keys);
+            var state = (com.rivell.workbench.review.check.ClauseFitSpecs.FitState)
+                    request.state().payload();
+            fitCallsMade.add(new FitCall(state.heading(), List.copyOf(keys)));
+            return new ProviderExecutionResult(answers, "fake-review-v1", new TokenUsage(80, 2));
+        }
+
+        private double fitProbability(String instructions) {
+            if (!instructions.contains("clause-library wording")) {
+                return ruleFitProbability != null ? ruleFitProbability : 0.95;
+            }
+            var wordingDefault = wordingFitProbability != null ? wordingFitProbability : 0.95;
+            if (instructions.contains("meet the playbook position")) {
+                return wordingMeetsProbability != null ? wordingMeetsProbability : wordingDefault;
+            }
+            return wordingCuresProbability != null ? wordingCuresProbability : wordingDefault;
         }
 
         /** Engine v2 omissions lane: one yes/no per candidate position, scripted by its text. */
@@ -517,6 +589,14 @@ public class LiabilityReviewIT {
             return presenceCalls.get();
         }
 
+        public int fitCalls() {
+            return fitCalls.get();
+        }
+
+        public java.util.List<FitCall> fitCallsMade() {
+            return java.util.List.copyOf(fitCallsMade);
+        }
+
         int consistencyDecisions() {
             return consistencyDecisions.get();
         }
@@ -536,6 +616,7 @@ public class LiabilityReviewIT {
             verificationRiskProbability = null;
             policyComparisonTopProbability = 0.9;
             failPolicyComparisonDecision = false;
+            failPolicyComparisonOutOfCredit = false;
             policyComparisonAnswerOverride = null;
             positionAnswers.clear();
             headingAnswers.clear();
@@ -550,11 +631,19 @@ public class LiabilityReviewIT {
             probabilityHeadings.clear();
             reversedOrderAnswer = null;
             failReversedOrder = false;
+            ruleFitProbability = null;
+            wordingFitProbability = null;
+            wordingMeetsProbability = null;
+            wordingCuresProbability = null;
+            failFitDecision = false;
+            fitCalls.set(0);
+            fitCallsMade.clear();
             indecisivePrimaryHeadings.clear();
             indecisivePrimaryAnswers.set(0);
             topiclessHeadings.clear();
             uncoveredProbability = 0.05;
             uncoveredHeadings.clear();
+            failUncoveredTriage = false;
             failConsistencyDecision = false;
             consistencyAnswerOverride = null;
             consistencyTopProbability = 0.9;
@@ -567,6 +656,8 @@ public class LiabilityReviewIT {
                 new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();
         private final AtomicInteger calls = new AtomicInteger();
         volatile boolean failOpenEnded;
+        /** The wording call fails as if the analysis account had no credit. */
+        volatile boolean openEndedOutOfCredit;
         volatile String openEndedProposed;
         volatile String openEndedExplanation;
         /** Headings the whole-contract spotting read names (MEDIUM); every other clause is fine. */
@@ -575,6 +666,13 @@ public class LiabilityReviewIT {
         final java.util.Set<String> spottedHighHeadings =
                 java.util.concurrent.ConcurrentHashMap.newKeySet();
         final AtomicInteger spottingCalls = new AtomicInteger();
+        /** Overrides the whole-contract read's raw issue lines, when a test needs a malformed one. */
+        volatile java.util.function.Function<IssueSpottingSpecs.SpottingState, String>
+                spottingOutput;
+        /** The whole-contract read fails as if the provider were down. */
+        volatile boolean failSpotting;
+        /** The whole-contract read fails as if the analysis account had no credit. */
+        volatile boolean spottingOutOfCredit;
         /** The second opinion's answer (engine v2). Its quote is the clause's first words unless set. */
         volatile String secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
         volatile String secondOpinionQuote;
@@ -582,6 +680,16 @@ public class LiabilityReviewIT {
         final AtomicInteger secondOpinionCalls = new AtomicInteger();
         /** The definitions each second-opinion call carried, in call order. */
         final java.util.List<java.util.List<String>> secondOpinionDefinitions =
+                new java.util.concurrent.CopyOnWriteArrayList<>();
+        /**
+         * The fallback-condition check (severity R3 P3): the condition lines it answers, where
+         * {@code {CLAUSE}} stands for the clause's first words (a quote the clause holds). Null: one MET line.
+         */
+        volatile String fallbackConditionLines;
+        volatile String fallbackListed = "YES";
+        volatile boolean failFallbackConditions;
+        final AtomicInteger fallbackConditionCalls = new AtomicInteger();
+        final java.util.List<FallbackConditionSpecs.FallbackConditionState> fallbackConditionStates =
                 new java.util.concurrent.CopyOnWriteArrayList<>();
 
         @Override
@@ -600,16 +708,25 @@ public class LiabilityReviewIT {
         public void reset() {
             calls.set(0);
             failOpenEnded = false;
+            openEndedOutOfCredit = false;
             openEndedProposed = null;
             openEndedExplanation = null;
             spottedHeadings.clear();
             spottedHighHeadings.clear();
             spottingCalls.set(0);
+            spottingOutput = null;
+            failSpotting = false;
+            spottingOutOfCredit = false;
             secondOpinionCategory = PolicyComparisonSpecs.MEETS_PREFERRED;
             secondOpinionQuote = null;
             failSecondOpinion = false;
             secondOpinionCalls.set(0);
             secondOpinionDefinitions.clear();
+            fallbackConditionLines = null;
+            fallbackListed = "YES";
+            failFallbackConditions = false;
+            fallbackConditionCalls.set(0);
+            fallbackConditionStates.clear();
         }
 
         @Override
@@ -630,17 +747,52 @@ public class LiabilityReviewIT {
                         "reason", "The quoted words decide how the clause meets the position."),
                         "fake-gen-v1", new TokenUsage(400, 30));
             }
+            if (request.state() instanceof FallbackConditionSpecs.FallbackConditionState conditions) {
+                fallbackConditionCalls.incrementAndGet();
+                fallbackConditionStates.add(conditions);
+                if (failFallbackConditions) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "fallback condition provider unavailable");
+                }
+                var words = conditions.clause().substring(0, Math.min(40, conditions.clause().length()))
+                        .replaceAll("\\s+", " ").strip();
+                var lines = fallbackConditionLines != null
+                        ? fallbackConditionLines.replace("{CLAUSE}", words)
+                        : "1 | MET | " + words + " | the clause meets the listed fallback";
+                return new GenerationResult(Map.of("fallbackListed", fallbackListed, "conditions", lines),
+                        "fake-gen-v1", new TokenUsage(300, 40));
+            }
             if (request.state() instanceof IssueSpottingSpecs.SpottingState spotting) {
                 spottingCalls.incrementAndGet();
+                if (spottingOutOfCredit) {
+                    throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
+                            "Provider account has no credits (HTTP 429)");
+                }
+                if (failSpotting) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "whole-contract spotting unavailable");
+                }
+                if (spottingOutput != null) {
+                    return new GenerationResult(Map.of("issues", spottingOutput.apply(spotting)),
+                            "fake-gen-v1", new TokenUsage(900, 30));
+                }
                 var lines = spotting.clauses().stream()
                         .map(clause -> {
-                            if (spottedHighHeadings.stream().anyMatch(clause.heading()::contains)) {
-                                return clause.number() + " | HIGH | one-sided term against us";
+                            var severity = spottedHighHeadings.stream().anyMatch(clause.heading()::contains)
+                                    ? "HIGH"
+                                    : spottedHeadings.stream().anyMatch(clause.heading()::contains)
+                                            ? "MEDIUM" : null;
+                            if (severity == null) {
+                                return null;
                             }
-                            if (spottedHeadings.stream().anyMatch(clause.heading()::contains)) {
-                                return clause.number() + " | MEDIUM | one-sided term against us";
+                            var quote = clause.text().strip().lines().findFirst()
+                                    .filter(line -> !line.isBlank())
+                                    .orElse(clause.heading());
+                            if (quote.length() > 160) {
+                                quote = quote.substring(0, 160);
                             }
-                            return null;
+                            return clause.number() + " | " + severity + " | " + quote
+                                    + " | one-sided term against us";
                         })
                         .filter(java.util.Objects::nonNull)
                         .collect(java.util.stream.Collectors.joining("\n"));
@@ -648,6 +800,10 @@ public class LiabilityReviewIT {
                         "fake-gen-v1", new TokenUsage(900, 30));
             }
             if (request.spec().fields().containsKey("proposedLanguage")) {
+                if (openEndedOutOfCredit) {
+                    throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
+                            "Provider account has no credits (HTTP 429)");
+                }
                 if (failOpenEnded) {
                     throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                             "generative provider unavailable");
@@ -756,8 +912,9 @@ public class LiabilityReviewIT {
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        // the liability, confidentiality and termination clauses share a topic with a published
-        // position; the governing-law clause pairs with none, so it reaches the text search
+        // council §A.4: the confidentiality record is a typed position again (the fake reads the
+        // imperative survival duty as preferred), so three clauses are compared from positions
+        // and the governing-law clause is searched once
         assertThat(scriptedProvider.policyComparisonDecisions()).isEqualTo(4);
         assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
         var executions = analysisRepository.findExecutions(organizationId, run.id());

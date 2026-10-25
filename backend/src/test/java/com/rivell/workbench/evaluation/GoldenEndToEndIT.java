@@ -228,8 +228,7 @@ class GoldenEndToEndIT {
                 "m5-nda-counterparty.docx",
                 "NDA",
                 "ABSENCE",
-                Set.of("MISSING_REQUIRED_CONCEPT", "EXPECTED_CONCEPT_ABSENT",
-                        "SURVIVAL_COVERAGE_GAP"),
+                Set.of("MISSING_REQUIRED_CONCEPT", "EXPECTED_CONCEPT_ABSENT"),
                 Set.of("ADD_REQUIRED_PROVISION"),
                 "INSERT",
                 "REDLINE_GENERATED");
@@ -703,7 +702,7 @@ class GoldenEndToEndIT {
 
         private static boolean isReviewPack(Set<String> questionNames) {
             return questionNames.stream().anyMatch(
-                            name -> name.startsWith("position_"))
+                            name -> name.startsWith("position_") || name.startsWith("fit_"))
                     || questionNames.contains(
                             com.rivell.workbench.review.M7DecisionSpecs.CONSISTENCY)
                     || questionNames.contains(

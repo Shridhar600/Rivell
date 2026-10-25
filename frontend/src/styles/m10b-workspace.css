@@ -5,6 +5,8 @@
 
 .rv-ws {
   display: grid;
+  /* One column that never grows past the window, whatever its content asks for. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--h-topbar) minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
@@ -21,16 +23,6 @@
   min-height: 0;
   overflow: auto;
 }
-
-/* ---------- top bar ---------- */
-.rv-ws-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--line);
-}
 .rv-ws .rv-iconbtn {
   color: var(--text-3);
 }
@@ -38,49 +30,8 @@
 .rv-ws .rv-iconbtn[aria-pressed='true'] {
   color: var(--text-2);
 }
-.rv-ws-back {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-3);
-  text-decoration: none;
-}
-.rv-ws-back:hover {
-  color: var(--text);
-}
-.rv-ws-sep {
-  color: var(--line-2);
-}
-.rv-ws-title {
-  overflow: hidden;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .rv-ws-sp {
   flex: 1;
-}
-.rv-ws-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  min-width: 210px;
-  padding: 0 8px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-md);
-  background: var(--bg);
-  box-shadow: var(--sh-xs);
-  color: var(--text-3);
-  font: inherit;
-  cursor: pointer;
-}
-.rv-ws-search:hover {
-  border-color: var(--text-3);
-}
-.rv-ws-search kbd {
-  margin-left: auto;
 }
 .rv-ws kbd {
   display: inline-block;
@@ -128,49 +79,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The unresolved status is stated once; the server's exact blockers open from it, never clipped. */
-.rv-ws-why {
-  position: relative;
-  max-width: 240px;
-}
-.rv-ws-why summary {
-  cursor: pointer;
-  list-style: none;
-}
-.rv-ws-why summary::-webkit-details-marker {
-  display: none;
-}
-.rv-ws-why summary::after {
-  content: ' ▾';
-  font-size: 9px;
-}
-.rv-ws-why[open] summary::after {
-  content: ' ▴';
-}
-.rv-ws-why-b {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 40;
-  width: min(320px, calc(100vw - 32px));
-  padding: 10px 12px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-lg);
-  background: var(--bg);
-  box-shadow: var(--sh-sm);
-  color: var(--text-2);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: normal;
-}
-.rv-ws-why-b div + div {
-  margin-top: 6px;
-}
-
 /* ---------- three regions ---------- */
 .rv-ws-work {
-  --lw: var(--w-findings);
-  --rw: var(--w-detail);
+  --lw: var(--lw-open, var(--w-findings));
+  --rw: var(--rw-open, var(--w-detail));
+  position: relative;
   display: grid;
   grid-template-columns: var(--lw) minmax(0, 1fr) var(--rw);
   min-height: 0;
@@ -344,10 +257,17 @@
   color: var(--text);
 }
 .rv-ws-dnote {
+  flex: 1;
   min-width: 0;
+  overflow: hidden;
   color: var(--text-3);
   font-size: 12px;
   text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-ws-details {
+  flex: none;
 }
 .rv-ws-banner {
   max-width: 720px;
@@ -416,6 +336,9 @@
 .rv-ws-cl[data-sel='1'] {
   background: var(--accent-soft);
   box-shadow: 0 0 0 1.5px var(--accent);
+}
+.rv-ws-cl-text p {
+  white-space: pre-line;
 }
 /* An evidence jump target: distinct from the finding selection, which carries data-sel. */
 .rv-ws-cl--focus {
@@ -487,6 +410,11 @@
   flex-direction: column;
   gap: 16px;
   padding: 18px 20px 28px;
+}
+.rv-ws-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 .rv-ws-kicker {
   display: flex;
@@ -593,6 +521,24 @@
   background: var(--side);
   color: var(--text-2);
   white-space: pre-line;
+}
+/* The exact contract words: the same sunken block, with a quiet quote edge. */
+.rv-ws-quote {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--side);
+  color: var(--text-2);
+  font: 14px/1.6 var(--doc);
+  white-space: pre-line;
+}
+/* The one sentence the finding stands on, set in the document face so it reads first. */
+.rv-ws-gap {
+  margin: 0;
+  color: var(--text);
+  font: 15px/1.5 var(--doc);
 }
 .rv-ws-prop {
   padding: 12px 14px;
@@ -877,6 +823,17 @@
 .rv-ws-composer textarea[aria-invalid='true'] {
   border-color: var(--red);
 }
+.rv-ws-composer input[type='text'] {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  color: var(--text);
+  font: 14px/1.4 var(--doc);
+}
+.rv-ws-composer input[type='text'][aria-invalid='true'] {
+  border-color: var(--red);
+}
 .rv-ws-composer-actions {
   display: flex;
   justify-content: flex-end;
@@ -934,8 +891,12 @@
 }
 .rv-ws-dbtns {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
+}
+/* An odd count (Accept plus four) puts the first action on its own row. */
+.rv-ws-dbtns > :first-child:nth-last-child(odd) {
+  grid-column: 1 / -1;
 }
 .rv-ws-dbtns .rv-btn {
   height: 32px;
@@ -1390,6 +1351,17 @@ h3.rv-ws-sec-h {
   font-size: 12px;
   font-weight: 500;
 }
+.rv-ws-pal-h small {
+  margin-left: 8px;
+  font-weight: 400;
+}
+.rv-ws-pal-x {
+  margin: 0;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: 12px;
+}
 .rv-ws-pal-o {
   display: flex;
   align-items: center;
@@ -1443,9 +1415,10 @@ h3.rv-ws-sec-h {
 
 /* ---------- responsive ---------- */
 @media (max-width: 1240px) {
+  /* Narrower defaults, but a width the reader dragged to still wins. */
   .rv-ws-work {
-    --lw: 240px;
-    --rw: 340px;
+    --lw: var(--lw-open, 240px);
+    --rw: var(--rw-open, 340px);
   }
   .rv-ws-work[data-l='c'] {
     --lw: 0px;
@@ -1457,10 +1430,42 @@ h3.rv-ws-sec-h {
     padding: 36px;
   }
 }
+/* A laptop-width top bar keeps the title readable: the progress bar and the finalized note step
+   back (the count stays; the note stays readable by screen readers and as the focus fallback). */
+@media (max-width: 1240px) {
+  .rv-ws-prog .rv-ws-seg {
+    display: none;
+  }
+  .rv-ws-blocker {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+/* At 1024 the centre pane is narrow: let the document toolbar wrap rather than clip the
+   Contract details button at its right edge. */
+@media (max-width: 1100px) {
+  .rv-ws-doctools {
+    flex-wrap: wrap;
+  }
+  .rv-ws-dnote {
+    flex: 1 1 120px;
+  }
+  .rv-ws-details {
+    margin-left: auto;
+  }
+}
 @media (max-width: 980px) {
   .rv-ws {
     height: auto;
     overflow: visible;
+  }
+  /* The panes stack into one column here, so there is nothing to resize. */
+  .rv-ws-resize {
+    display: none;
   }
   .rv-ws-work {
     grid-template-columns: 1fr;
@@ -1592,4 +1597,108 @@ h3.rv-ws-sec-h {
 .rv-ws-cl[data-mark='NOT_PLANNED'] {
   border-left-style: dotted;
   border-left-color: var(--line);
+}
+
+/* ---------- top bar (the shared app top bar, with this review's crumbs and progress) ---------- */
+.rv-ws-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rv-ws-crumbs .rv-crumbs {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv-ws-fin {
+  display: inline-flex;
+}
+
+/* The edges of the findings list and the detail panel. They sit on the grid, not in the panes, so
+   they do not scroll with the panes' content. */
+/* Each handle sits just inside the middle pane, clear of the side panes' scrollbars. */
+.rv-ws-resize--l {
+  left: var(--lw);
+}
+.rv-ws-resize--r {
+  right: calc(var(--rw) - 6px);
+}
+
+/* What still blocks Finalize: a small popover under an info button. */
+.rv-ws-blk {
+  position: relative;
+}
+.rv-ws-blk > summary {
+  list-style: none;
+  color: var(--amber);
+}
+.rv-ws-blk__sum {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-md);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.rv-ws-blk__sum:hover {
+  background: var(--hover);
+}
+.rv-ws-blk__sum:focus-visible {
+  outline: none;
+  box-shadow: var(--rv-focus);
+}
+.rv-ws-blk > summary::-webkit-details-marker {
+  display: none;
+}
+.rv-ws-blk__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 6px;
+  width: 300px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+  box-shadow: var(--sh-overlay);
+  color: var(--text-2);
+  font-size: 12.5px;
+  animation: rv-pop var(--t-base) var(--ease);
+}
+.rv-ws-blk__pop p {
+  margin: 0;
+}
+
+/* The keyboard shortcut list (press ?). */
+.rv-ws-keys {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.rv-ws-keys > div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.rv-ws-keys dd {
+  margin: 0;
+}
+.rv-ws-keys kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--side);
+  color: var(--text-2);
+  font: 500 12px var(--font);
 }

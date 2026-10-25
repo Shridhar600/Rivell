@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { conceptName, positionRoles, positionRow, scopeLine, scopeRows } from './knowledgePosition'
+import { conceptName, contractTypesLabel, positionRoles, positionRow, scopeLine, scopeRows } from './knowledgePosition'
 import { humanizeCode } from './domainLabels'
 import { candidate } from '../test/knowledgeFixtures'
 
@@ -33,6 +33,11 @@ describe('position row layout', () => {
   it('has no text for a blank passage', () => {
     expect(positionRow(candidate({ ...base, contentText: '   ' })).text).toBeNull()
   })
+
+  it('titles the row with the title a reviewer sees, not the machine label', () => {
+    const row = positionRow(candidate({ ...base, rawLabel: 'Limitation of Liability | one-sided', title: 'Limitation of Liability' }))
+    expect(row.title).toBe('Limitation of Liability')
+  })
 })
 
 describe('roles and scope', () => {
@@ -51,9 +56,26 @@ describe('roles and scope', () => {
     )
     expect(rows).toEqual([
       { label: 'Applies to', value: 'NDA, MSA, Commercial msa pack' },
-      { label: 'Paper', value: 'Our paper' },
+      { label: 'Whose template', value: 'Our template' },
       { label: 'Jurisdiction', value: 'United Kingdom' },
     ])
+  })
+
+  it('states an empty contract-type scope as all contract types', () => {
+    expect(contractTypesLabel([])).toBe('All contract types')
+    expect(contractTypesLabel(['MSA', 'NDA'])).toBe('MSA, NDA')
+  })
+
+  it('does not let a pack hide that an empty contract-type scope is all types', () => {
+    const rows = scopeRows(candidate({ ...base, contractPackKey: 'COMMERCIAL_MSA' }))
+    expect(rows).toEqual([
+      { label: 'Applies to', value: 'All contract types, Commercial msa pack' },
+    ])
+  })
+
+  it('shows the contract types the record itself states ahead of the file manifest', () => {
+    const rows = scopeRows(candidate({ ...base, declaredContractTypes: ['MSA'], sourceContractTypes: ['NDA'] }))
+    expect(rows[0]).toEqual({ label: 'Applies to', value: 'NDA' })
   })
 
   it('formats an effective period without shifting the calendar day', () => {

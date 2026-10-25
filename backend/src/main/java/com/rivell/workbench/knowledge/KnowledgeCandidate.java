@@ -58,7 +58,12 @@ public record KnowledgeCandidate(
         String reviewNote,
         Instant reviewedAt,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        /**
+         * A title a person typed, and nothing else. The machine title in {@link #rawLabel} is kept
+         * beside it, as for wording; {@link #effectiveTitle()} is the one to show and publish.
+         */
+        String editedTitle) {
 
     public KnowledgeCandidate {
         Objects.requireNonNull(id, "id");
@@ -81,13 +86,18 @@ public record KnowledgeCandidate(
         Objects.requireNonNull(updatedAt, "updatedAt");
     }
 
+    /** The title to show: a person's correction when there is one, else the one Rivell read. */
+    public String effectiveTitle() {
+        return editedTitle == null || editedTitle.isBlank() ? rawLabel : editedTitle;
+    }
+
     public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
                 conceptCorrectedBy, conceptCorrectedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope, signals,
-                reviewCategory, reviewReasons, reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewCategory, reviewReasons, reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     /**
@@ -102,16 +112,17 @@ public record KnowledgeCandidate(
         return conceptCorrection.isBlank() ? null : conceptCorrection;
     }
 
-    public KnowledgeCandidate withConceptCorrection(String correction) {
+    public KnowledgeCandidate withConceptCorrection(
+            String correction, UUID correctedBy, Instant correctedAt) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey,
                 correctionTopicKeys(correction),
                 correction,
-                conceptCorrectedBy, conceptCorrectedAt,
+                correctedBy, correctedAt,
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons, reviewNote, reviewedAt,
-                createdAt, Instant.now());
+                createdAt, correctedAt, editedTitle);
     }
 
     /**
@@ -135,7 +146,7 @@ public record KnowledgeCandidate(
                 fields, editedSemanticFields, fieldInterpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withSupersedingCandidateId(
@@ -152,7 +163,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersededId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withReviewOutcome(ReviewCategory category, Set<ReviewReason> reasons) {
@@ -162,7 +173,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, category, reasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withScope(ApplicabilityScope newScope) {
@@ -172,7 +183,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, newScope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public KnowledgeCandidate withReviewStatus(ReviewStatus status) {
@@ -182,7 +193,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     public boolean isPublished() {
@@ -200,10 +211,13 @@ public record KnowledgeCandidate(
      *   <li>the machine/source wording captured at extraction.</li>
      * </ol>
      *
-     * <p>The machine wording is deliberately not re-derived from the stored payload at read time:
-     * the payload is held in {@code jsonb}, which does not preserve object key order, so a
-     * re-render could place "Fallback" before "Preferred" and misrepresent the source row. The
-     * machine wording was captured in true source order at extraction and stored as text.
+     * <p>The machine wording is deliberately not re-rendered from its values at read time: the
+     * payload is held in {@code jsonb}, which does not preserve object key order, so a re-render
+     * could place "Fallback" before "Preferred" and misrepresent the source row. One exception is
+     * a clause variant's own wording column: its value does not depend on the order of the other
+     * columns, and extraction could not know the label was wording until the field-role decision
+     * answered. Reading that column is what keeps a resolved "Provision" or "Text" header from
+     * publishing the whole row.
      *
      * <p>Before this rule existed a human spreadsheet-column correction was stored but inert:
      * {@code editedPayload} was persisted while wording, duplicate/conflict analysis and
@@ -211,9 +225,28 @@ public record KnowledgeCandidate(
      * discarded the correction (AD 6.8, 6.11).
      */
     public String effectiveContentText() {
-        return firstReadable(editedContentText,
-                editedPayload == null ? null : editedPayload.render(),
-                contentText);
+        return firstReadable(editedContentText, renderedEditedColumns(),
+                renderedMachineWording(), contentText);
+    }
+
+    /** The wording column of the machine payload, when extraction or the role decision named one. */
+    private String renderedMachineWording() {
+        if (candidateType != CandidateType.CLAUSE_VARIANT || payload.columns().isEmpty()) {
+            return null;
+        }
+        return payload.wordingText().orElse(null);
+    }
+
+    /**
+     * The wording of the human's corrected columns. A clause variant's wording is its wording
+     * column, as at extraction; any other record reads its values in column order.
+     */
+    private String renderedEditedColumns() {
+        if (editedPayload == null) {
+            return null;
+        }
+        return candidateType == CandidateType.CLAUSE_VARIANT
+                ? editedPayload.renderedWording() : editedPayload.render();
     }
 
     /**
@@ -253,9 +286,186 @@ public record KnowledgeCandidate(
     }
 
     public Boolean effectiveRequiresApproval() {
-        return editedSemanticFields != null && editedSemanticFields.requiresApproval() != null
-                ? editedSemanticFields.requiresApproval()
-                : semanticFields.requiresApproval();
+        if (editedSemanticFields != null) {
+            if (editedSemanticFields.requiresApproval() != null) {
+                return editedSemanticFields.requiresApproval();
+            }
+            if (editedSemanticFields.requiresApprovalCleared()) {
+                return null;
+            }
+        }
+        return semanticFields.requiresApproval();
+    }
+
+    /** The preferred wording the source states explicitly, else null. */
+    public String effectivePreferredText() {
+        if (editedSemanticFields != null && editedSemanticFields.preferredText() != null) {
+            return editedSemanticFields.preferredText().isBlank()
+                    ? null : editedSemanticFields.preferredText();
+        }
+        return semanticFields.preferredText();
+    }
+
+    /** Every fallback wording the source states, in source order. */
+    public List<String> effectiveFallbackTexts() {
+        if (editedSemanticFields != null
+                && (!editedSemanticFields.fallbackTexts().isEmpty()
+                        || editedSemanticFields.fallbackTextsCleared())) {
+            return editedSemanticFields.fallbackTexts();
+        }
+        return semanticFields.fallbackTexts();
+    }
+
+    /** A person deliberately cleared the corrected fallback list. */
+    public boolean fallbackTextsCleared() {
+        return editedSemanticFields != null && editedSemanticFields.fallbackTextsCleared();
+    }
+
+    /** A person deliberately cleared the corrected preferred wording. */
+    public boolean preferredTextCleared() {
+        return editedSemanticFields != null && editedSemanticFields.preferredText() != null
+                && editedSemanticFields.preferredText().isBlank();
+    }
+
+    /** A person deliberately cleared the corrected walk-away wording. */
+    public boolean prohibitedTextCleared() {
+        return editedSemanticFields != null && editedSemanticFields.prohibitedText() != null
+                && editedSemanticFields.prohibitedText().isBlank();
+    }
+
+    /** The walk-away or prohibited wording the source states, else null. */
+    public String effectiveProhibitedText() {
+        if (editedSemanticFields != null && editedSemanticFields.prohibitedText() != null) {
+            return editedSemanticFields.prohibitedText().isBlank()
+                    ? null : editedSemanticFields.prohibitedText();
+        }
+        return semanticFields.prohibitedText();
+    }
+
+    /**
+     * The typed approval rules that count: the person's corrected list when one exists, else
+     * the machine rules. A cleared list is a deliberate "no rule", not a fallback to the machine.
+     * The edit form starts from this list, so a derived walk-away entry is never saved back.
+     */
+    public List<AuthorityRule> storedAuthorityRules() {
+        if (editedSemanticFields != null) {
+            if (!editedSemanticFields.authorityRules().isEmpty()) {
+                return editedSemanticFields.authorityRules();
+            }
+            if (editedSemanticFields.authorityRulesCleared()) {
+                return List.of();
+            }
+        }
+        return semanticFields.authorityRules();
+    }
+
+    /**
+     * The rules a reader sees: the stored rules with the catalog's covering expansion, so the
+     * compile view shows the walk-away coverage the review acts on.
+     */
+    public List<AuthorityRule> effectiveAuthorityRules() {
+        return AuthorityCatalog.withCoveringStances(storedAuthorityRules());
+    }
+
+    /** Lower-level rules that name a different approver for the same stance. */
+    public List<AuthorityConflict> effectiveAuthorityConflicts() {
+        if (editedSemanticFields != null && editedSemanticFields.authorityRulesCleared()) {
+            return List.of();
+        }
+        if (editedSemanticFields != null && !editedSemanticFields.authorityRules().isEmpty()
+                && !editedSemanticFields.authorityRules().equals(semanticFields.authorityRules())) {
+            // a person who changed the rules chose the approvers; their list has no conflicts
+            return editedSemanticFields.authorityConflicts();
+        }
+        return semanticFields.authorityConflicts();
+    }
+
+    /**
+     * The unmapped authority words that still need attention. A person who corrected a typed
+     * stance or an approval rule has addressed the gap, so the machine note is no longer shown.
+     */
+    public List<String> effectiveUnmappedAuthority() {
+        if (editedSemanticFields == null) {
+            return semanticFields.unmappedAuthority();
+        }
+        // only a correction that actually changes a typed value addresses the gap; the edit
+        // form always sends the complete set, so "sent" is not "changed"
+        var machinePreferred = semanticFields.preferredText() == null
+                ? "" : semanticFields.preferredText();
+        var machineProhibited = semanticFields.prohibitedText() == null
+                ? "" : semanticFields.prohibitedText();
+        var preferredChanged = editedSemanticFields.preferredText() != null
+                && !editedSemanticFields.preferredText().equals(machinePreferred);
+        var prohibitedChanged = editedSemanticFields.prohibitedText() != null
+                && !editedSemanticFields.prohibitedText().equals(machineProhibited);
+        var fallbacksSent = !editedSemanticFields.fallbackTexts().isEmpty()
+                || editedSemanticFields.fallbackTextsCleared();
+        var fallbackChanged = fallbacksSent
+                && !editedSemanticFields.fallbackTexts().equals(semanticFields.fallbackTexts());
+        var rulesSent = !editedSemanticFields.authorityRules().isEmpty()
+                || editedSemanticFields.authorityRulesCleared();
+        var rulesChanged = rulesSent
+                && !editedSemanticFields.authorityRules().equals(semanticFields.authorityRules());
+        return preferredChanged || prohibitedChanged || fallbackChanged || rulesChanged
+                ? List.of() : semanticFields.unmappedAuthority();
+    }
+
+    /**
+     * Structured fields a person corrected and saved, one name per field, when the saved value
+     * differs from the machine proposal. A machine proposal that was stored only as an
+     * interpretation (the source did not support it) is not a correction: it never reached the
+     * effective values, and no person edited anything.
+     */
+    public Set<String> correctedFields() {
+        if (editedSemanticFields == null) {
+            return Set.of();
+        }
+        var edited = editedSemanticFields;
+        var fields = new java.util.LinkedHashSet<String>();
+        if (!edited.positions().isEmpty() && !edited.positions().equals(semanticFields.positions())) {
+            fields.add("positions");
+        }
+        if (edited.variantRole() != null
+                && edited.variantRole() != semanticFields.effectiveVariantRole()) {
+            fields.add("variantRole");
+        }
+        if (edited.escalationTrigger() != null
+                && !edited.escalationTrigger().equals(semanticFields.escalationTrigger())) {
+            fields.add("escalationTrigger");
+        }
+        if ((edited.requiresApproval() != null
+                        && !edited.requiresApproval().equals(semanticFields.requiresApproval()))
+                || (edited.requiresApprovalCleared() && semanticFields.requiresApproval() != null)) {
+            fields.add("requiresApproval");
+        }
+        var machinePreferred = semanticFields.preferredText() == null
+                ? "" : semanticFields.preferredText();
+        if (edited.preferredText() != null && !edited.preferredText().equals(machinePreferred)) {
+            fields.add("preferredText");
+        }
+        if ((!edited.fallbackTexts().isEmpty() || edited.fallbackTextsCleared())
+                && !edited.fallbackTexts().equals(semanticFields.fallbackTexts())) {
+            fields.add("fallbackTexts");
+        }
+        var machineProhibited = semanticFields.prohibitedText() == null
+                ? "" : semanticFields.prohibitedText();
+        if (edited.prohibitedText() != null && !edited.prohibitedText().equals(machineProhibited)) {
+            fields.add("prohibitedText");
+        }
+        if ((!edited.authorityRules().isEmpty() || edited.authorityRulesCleared())
+                && !edited.authorityRules().equals(semanticFields.authorityRules())) {
+            fields.add("authorityRules");
+        }
+        return Set.copyOf(fields);
+    }
+
+    /**
+     * The payload a reader sees: the human's corrected columns when there are any, else the
+     * machine payload. Review classification must read the same values the API shows.
+     */
+    public CandidatePayload effectivePayload() {
+        return editedPayload != null && !editedPayload.columns().isEmpty()
+                ? editedPayload : payload;
     }
 
     /**
@@ -267,7 +477,7 @@ public record KnowledgeCandidate(
         if (known.isPresent()) {
             return known;
         }
-        var resolved = payload.fieldRoles().get(label);
+        var resolved = effectivePayload().fieldRoles().get(label);
         if (resolved == null) {
             return Optional.empty();
         }
@@ -281,7 +491,7 @@ public record KnowledgeCandidate(
     /** Label -> role name of every payload field with a known or resolved role. */
     public Map<String, String> effectiveFieldRoles() {
         var roles = new LinkedHashMap<String, String>();
-        for (var key : payload.orderedKeys()) {
+        for (var key : effectivePayload().orderedKeys()) {
             fieldRole(key).filter(role -> role != RecordFieldRole.OTHER)
                     .ifPresent(role -> roles.put(key, role.name()));
         }
@@ -295,7 +505,7 @@ public record KnowledgeCandidate(
                 semanticFields, editedSemanticFields, interpretations,
                 editedContentText, editedPayload, supersedingCandidateId, scope,
                 conflictSignals, reviewCategory, reviewReasons,
-                reviewNote, reviewedAt, createdAt, updatedAt);
+                reviewNote, reviewedAt, createdAt, updatedAt, editedTitle);
     }
 
     /**
@@ -305,8 +515,7 @@ public record KnowledgeCandidate(
      * map; the question then carries its content text as the position.
      */
     public Map<PositionRole, List<String>> effectivePositionFieldValues() {
-        var payload = editedPayload != null && !editedPayload.columns().isEmpty()
-                ? editedPayload : this.payload;
+        var payload = effectivePayload();
         var values = new LinkedHashMap<PositionRole, List<String>>();
         for (var key : payload.orderedKeys()) {
             var value = payload.columns().get(key);

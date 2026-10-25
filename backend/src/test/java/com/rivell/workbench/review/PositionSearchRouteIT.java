@@ -30,6 +30,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
+import com.rivell.workbench.contracts.FactCorrection;
 import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
@@ -38,6 +39,7 @@ import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
 import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
+import com.rivell.workbench.taxonomy.CoreConcepts;
 
 /**
  * Engine v2 SEARCH route (spec §6): a clause no topic paired with a position is compared with
@@ -113,6 +115,9 @@ class PositionSearchRouteIT {
     @Autowired
     ObjectMapper objectMapper;
 
+    @Autowired
+    ReviewRepository reviewRepository;
+
     private JsonNode json(String url, Object... variables) throws Exception {
         return objectMapper.readTree(mockMvc.perform(get(url, variables))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
@@ -151,6 +156,41 @@ class PositionSearchRouteIT {
     private UUID terminationPositionId() {
         return positions.stream().filter(position -> "Termination".equals(position.rawLabel()))
                 .findFirst().orElseThrow().id();
+    }
+
+    /**
+     * DW-071 item 1: the route records that the search ran, not that it found something. A
+     * review with no published playbook still searches every clause; a reader who counts SEARCH
+     * checks must see those searches even though every result set was empty.
+     */
+    @Test
+    void theSearchRouteIsRecordedWhenTheSearchFindsNothing() throws Exception {
+        var reviewId = reviewedContractWithoutKnowledge();
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var searched = analysisRepository.findExecutions(organizationId(), run.id()).stream()
+                .filter(execution -> execution.detail() != null
+                        && execution.detail().get("search") instanceof Map<?, ?>)
+                .toList();
+        assertThat(searched).as("the searches ran, so they must be in the run").isNotEmpty();
+        assertThat(searched).allSatisfy(execution -> {
+            assertThat(execution.detail()).containsEntry("route", "SEARCH");
+            assertThat(((Map<?, ?>) execution.detail().get("search")).get("found"))
+                    .isEqualTo(0);
+        });
+    }
+
+    /** The same contract, reviewed with no published playbook: every search has nothing to find. */
+    private UUID reviewedContractWithoutKnowledge() throws Exception {
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/pc-contract.docx"));
+        var ingested = contractIngestionService.ingest("pc-contract.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        return reviewService.create(ingested.contractId(), 1, null).id();
     }
 
     /** The termination clause's check: the only one whose comparison was found by search. */
@@ -214,11 +254,13 @@ class PositionSearchRouteIT {
         assertThat(trace.degradation()).contains("VECTOR_LANE_UNCONFIGURED");
         assertThat(trace.stages()).containsKeys("structured", "lexical", "vector", "fusion");
 
-        // diagnostics expose the search route's own numbers and the per-position foundBy
+        // diagnostics expose the search route's own numbers and the per-position foundBy. Other
+        // clauses may also have searched and found nothing, so pick the search with results.
         JsonNode searched = null;
         for (var view : json("/api/reviews/{id}/diagnostics", reviewId)
                 .at("/data/analysis/checks")) {
-            if ("SEARCH".equals(view.path("route").asText())) {
+            if ("SEARCH".equals(view.path("route").asText())
+                    && view.path("searchFound").asInt() >= 1) {
                 searched = view;
             }
         }
@@ -226,6 +268,9 @@ class PositionSearchRouteIT {
         assertThat(searched.path("addressed").asBoolean()).isTrue();
         assertThat(searched.path("searchFound").asInt()).isGreaterThanOrEqualTo(1);
         assertThat(searched.path("searchFailed").asBoolean()).isFalse();
+        // the fit question count reaches diagnostics; the skip count stays absent when none skipped
+        assertThat(searched.path("fitQuestions").asInt()).isGreaterThanOrEqualTo(1);
+        assertThat(searched.path("fitSkipped").isNull()).isTrue();
         JsonNode judgedView = null;
         for (var position : searched.path("judgedPositions")) {
             if (terminationPositionId().toString()
@@ -237,6 +282,117 @@ class PositionSearchRouteIT {
         assertThat(judgedView).as("the searched termination position must be listed").isNotNull();
         assertThat(judgedView.path("foundBy").asText()).isEqualTo("SEARCH");
         assertThat(judgedView.has("foundBy")).isTrue();
+        // the fit verdict reaches diagnostics without any clause text
+        assertThat(judgedView.path("fitVerdict").asText()).isEqualTo("FITS");
+        assertThat(judgedView.path("fitReason").asText()).isEqualTo("GOVERNS");
+        assertThat(judgedView.path("fitOutcome").isNull()).isTrue();
+    }
+
+    /**
+     * R2-006: a search-found position that does not govern the clause is not applied. The check
+     * records it as "not covered" and the diagnostics keep it visible, with no finding resting on it.
+     */
+    @Test
+    void aSearchHitThatDoesNotGovernIsReportedNotCoveredInDiagnostics() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(TERMINATION, PolicyComparisonSpecs.NOT_ADDRESSED);
+        scriptedProvider.positionAnswers.put(TERMINATION_POSITION,
+                PolicyComparisonSpecs.BEYOND_FALLBACK);
+        scriptedProvider.ruleFitProbability = 0.05;
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var check = terminationCheck(run.id());
+        assertThat(entryFor(check, terminationPositionId()))
+                .containsEntry("fitVerdict", "DOES_NOT_FIT")
+                .containsEntry("fitReason", "DIFFERENT_SUBJECT")
+                .containsEntry("fitOutcome", "not_covered");
+        assertThat(check.detail()).containsEntry("addressed", false);
+        assertThat(signalsCiting(run.id(), terminationPositionId())).isEmpty();
+
+        JsonNode searched = null;
+        for (var view : json("/api/reviews/{id}/diagnostics", reviewId)
+                .at("/data/analysis/checks")) {
+            if ("SEARCH".equals(view.path("route").asText())
+                    && view.path("searchFound").asInt() >= 1) {
+                searched = view;
+            }
+        }
+        assertThat(searched).isNotNull();
+        JsonNode judgedView = null;
+        for (var position : searched.path("judgedPositions")) {
+            if (terminationPositionId().toString()
+                    .equals(position.path("positionCandidateId").asText())) {
+                judgedView = position;
+            }
+        }
+        assertThat(judgedView).isNotNull();
+        assertThat(judgedView.path("fitVerdict").asText()).isEqualTo("DOES_NOT_FIT");
+        assertThat(judgedView.path("fitReason").asText()).isEqualTo("DIFFERENT_SUBJECT");
+        assertThat(judgedView.path("fitOutcome").asText()).isEqualTo("not_covered");
+    }
+
+    /**
+     * DW-085 (spec §6, S14): when the user corrects a clause's topic and removes the machine one,
+     * no position pairs with it by topic, so the clause goes to the text search - which used to
+     * find the removed topic's positions again and judge them, partly undoing the correction. The
+     * search must exclude positions carrying a topic the person removed from that clause, while a
+     * clause that removed nothing still finds the same position by text.
+     */
+    @Test
+    void aTopicYourCorrectionRemovedIsNotSearchedBack() throws Exception {
+        // Aggregate Cap carries no topic, so its own search lane proves the position is still
+        // reachable for a clause that did not remove the topic
+        scriptedProvider.topiclessHeadings.add("Aggregate Cap");
+        positions = corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.PC_PLAYBOOK,
+                M6EvidenceCorpus.msaManifest2026(), null).stream()
+                .filter(candidate -> candidate.candidateType() == CandidateType.PLAYBOOK_RULE)
+                .toList();
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/pc-contract.docx"));
+        var ingested = contractIngestionService.ingest("pc-contract.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        var semantics = enrichmentService.getSemantics(ingested.contractId(), 1);
+        var liability = semantics.clauses().stream()
+                .filter(clause -> clause.effectivePrimaryConcept()
+                        .filter(concept -> concept.equals(CoreConcepts.LIMITATION_OF_LIABILITY))
+                        .isPresent())
+                .findFirst().orElseThrow();
+        var cap = semantics.clauses().stream()
+                .filter(clause -> clause.contentText().contains("two times the fees paid"))
+                .findFirst().orElseThrow();
+
+        // the person takes the liability topic off the liability clause and gives it another one
+        enrichmentService.correctClause(ingested.contractId(), 1, liability.id(),
+                FactCorrection.ofPrimary(CoreConcepts.GOVERNING_LAW));
+        var reviewId = reviewService.create(ingested.contractId(), 1, null).id();
+        scriptedProvider.positionAnswers.put("fees paid in the preceding 12 months",
+                PolicyComparisonSpecs.BEYOND_FALLBACK);
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var liabilityPositionId = positions.stream()
+                .filter(position -> "Limitation of Liability".equals(position.rawLabel()))
+                .findFirst().orElseThrow().id();
+        var checks = reviewRepository.findPlanChecks(organizationId(), reviewId);
+        var liabilityCheck = checks.stream().filter(check -> check.subjectHeadingNodeId()
+                .equals(liability.headingNodeId())).findFirst().orElseThrow();
+        var capCheck = checks.stream().filter(check -> check.subjectHeadingNodeId()
+                .equals(cap.headingNodeId())).findFirst().orElseThrow();
+
+        // the removed topic is not a way back to the liability position...
+        assertThat(signalsCiting(run.id(), liabilityPositionId).stream()
+                .filter(signal -> signal.planCheckId().equals(liabilityCheck.id())).toList())
+                .isEmpty();
+        // ...while the clause that removed nothing still finds it by text
+        assertThat(signalsCiting(run.id(), liabilityPositionId).stream()
+                .filter(signal -> signal.planCheckId().equals(capCheck.id())).toList())
+                .singleElement()
+                .satisfies(signal -> assertThat(signal.quality())
+                        .containsEntry("foundBy", "SEARCH"));
     }
 
     @Test

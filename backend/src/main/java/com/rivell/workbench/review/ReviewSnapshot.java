@@ -2,6 +2,7 @@ package com.rivell.workbench.review;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -9,6 +10,7 @@ import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
+import com.rivell.workbench.knowledge.ApplicableKnowledge;
 
 /**
  * Immutable review input snapshot (Pre-M7 decision 3): copied values and referenced
@@ -37,6 +39,12 @@ public record ReviewSnapshot(
         String embeddingModelIdentity,
         ModelPolicyIdentity modelPolicy,
         ReviewEngine reviewEngine,
+        /**
+         * The published playbooks and clause libraries the analysis may use, frozen at creation.
+         * Null on a review created before the freeze existed; an empty list means the review
+         * deliberately froze that no playbook covers this contract type.
+         */
+        List<ApplicableKnowledge> applicableKnowledge,
         Instant createdAt) {
 
     public ReviewSnapshot {
@@ -64,5 +72,6 @@ public record ReviewSnapshot(
         if (contractPackKey == null && packVersion != null) {
             throw new IllegalArgumentException("packVersion requires contractPackKey");
         }
+        applicableKnowledge = applicableKnowledge == null ? null : List.copyOf(applicableKnowledge);
     }
 }

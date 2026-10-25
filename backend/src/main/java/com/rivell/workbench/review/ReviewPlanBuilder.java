@@ -37,7 +37,7 @@ public final class ReviewPlanBuilder {
         if (snapshot.contractPackKey() != null) {
             pack = packs.find(snapshot.contractPackKey())
                     .orElseThrow(() -> new InvalidReviewConfigurationException(
-                            "Unknown contract pack: " + snapshot.contractPackKey()));
+                            "That review pack is not available."));
             for (var entry : pack.conceptExpectations().entrySet()) {
                 checks.add(presenceCheck(reviewId, organizationId, snapshot.createdAt(),
                         ordinal[0]++, entry.getKey(), entry.getValue()));

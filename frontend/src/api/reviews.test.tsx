@@ -243,6 +243,45 @@ describe('review parsers', () => {
     expect(summary.coverage[0].coverage).toBe('PRESENT_PRIMARY')
   })
 
+  it('parses the playbooks a review froze, and keeps a missing freeze unknown', () => {
+    const withUsed = {
+      ...completedSummary,
+      snapshot: {
+        ...completedSummary.snapshot,
+        playbooksUsed: [
+          {
+            artifactId: 'pb-1',
+            artifactType: 'PLAYBOOK',
+            name: 'Commercial MSA Playbook',
+            publicationNumber: 4,
+          },
+          {
+            artifactId: 'cl-1',
+            artifactType: 'CLAUSE_LIBRARY',
+            name: 'Clause Library',
+            publicationNumber: 2,
+          },
+        ],
+      },
+    }
+    expect(parseReviewSummary(withUsed).snapshot?.playbooksUsed).toEqual([
+      {
+        artifactId: 'pb-1',
+        artifactType: 'PLAYBOOK',
+        name: 'Commercial MSA Playbook',
+        publicationNumber: 4,
+      },
+      {
+        artifactId: 'cl-1',
+        artifactType: 'CLAUSE_LIBRARY',
+        name: 'Clause Library',
+        publicationNumber: 2,
+      },
+    ])
+    // A review created before the freeze existed must not be recomputed at read time.
+    expect(parseReviewSummary(completedSummary).snapshot?.playbooksUsed).toBeNull()
+  })
+
   it('tolerates unknown enum-like values instead of throwing', () => {
     const summary = parseReviewSummary({
       ...completedSummary,
@@ -254,6 +293,30 @@ describe('review parsers', () => {
     const detail = parseFindingDetail({ ...clauseFindingDetail, severity: 'EXTREME' })
     expect(detail.severity).toBe('UNKNOWN')
     expect(detail.issueFamily).toBe('POSITION_NEEDS_FALLBACK')
+  })
+
+  it('parses the typed approval rule the panel shows', () => {
+    const detail = parseFindingDetail({
+      ...clauseFindingDetail,
+      quality: {
+        ...clauseFindingDetail.quality,
+        escalationApprover: 'Commercial Manager',
+        escalationCondition: 'Uncapped liability or consequential damages',
+        escalationSource: 'MATRIX',
+        escalationStance: 'FALLBACK',
+        escalationConflictApprover: 'General Counsel',
+        escalationConflictSource: 'ENTRY',
+      },
+    })
+
+    expect(detail.quality).toMatchObject({
+      escalationApprover: 'Commercial Manager',
+      escalationCondition: 'Uncapped liability or consequential damages',
+      escalationSource: 'MATRIX',
+      escalationStance: 'FALLBACK',
+      escalationConflictApprover: 'General Counsel',
+      escalationConflictSource: 'ENTRY',
+    })
   })
 
   it('parses clause finding detail including untyped quality and claims', () => {
@@ -279,7 +342,17 @@ describe('review parsers', () => {
       foundBy: null,
       spottedSeverity: null,
       spottedReason: null,
+      wordingFitVerdict: null,
+      wordingFitReason: null,
+      fitVerdict: null,
+      fitReason: null,
       presenceProbability: null,
+      escalationApprover: null,
+      escalationCondition: null,
+      escalationSource: null,
+      escalationStance: null,
+      escalationConflictApprover: null,
+      escalationConflictSource: null,
     })
     expect(detail.claims.map((claim) => claim.claimKind)).toEqual([
       'OBSERVATION',
@@ -622,7 +695,7 @@ describe('review requests', () => {
 
   it('rejects malformed payloads with a malformed-response error', async () => {
     stubFetch(() => jsonResponse(envelope({ id: 'r-1' })))
-    await expect(createReview('c-1', 1)).rejects.toThrow(/Malformed review summary/)
+    await expect(createReview('c-1', 1)).rejects.toThrow(/could not read this response/)
   })
 })
 

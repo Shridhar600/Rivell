@@ -22,15 +22,48 @@ export function effectivePayloadColumns(
     : candidate.payloadColumns
 }
 
+/** Column labels the source uses for the clause wording itself, not for the rest of the row. */
+const WORDING_HEADERS = new Set(
+  ['clause text', 'approved wording', 'approved language', 'wording', 'clause', 'clause wording', 'provision', 'text'],
+)
+
+function normalizeHeader(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/** Whether a payload column names the wording itself, by the headers a source uses for it. */
+export function isWordingHeader(name: string): boolean {
+  return WORDING_HEADERS.has(normalizeHeader(name))
+}
+
+function wordingColumn(columns: Record<string, string>): string | null {
+  return Object.keys(columns).find(isWordingHeader) ?? null
+}
+
 /**
  * The corrected columns rendered the way extraction renders machine wording: the non-blank values
  * in source order, joined by " | ". A correction replaces the values it names and never reorders
  * the row, so the order recovered from the machine wording is applied to the corrected values.
+ * A clause variant is the exception: its wording is the wording column alone, exactly as the
+ * backend reads `renderedWording`, so the rest of the row is never published as its wording.
  */
 function renderCorrectedColumns(candidate: Candidate): string | null {
   const corrected = candidate.editedPayloadColumns
   const received = Object.keys(corrected)
   if (received.length === 0) return null
+
+  if (candidate.candidateType === 'CLAUSE_VARIANT') {
+    const wording = wordingColumn(corrected) ?? wordingColumn(candidate.payloadColumns)
+    if (wording) {
+      const value = (
+        Object.prototype.hasOwnProperty.call(corrected, wording)
+          ? corrected[wording]
+          : candidate.payloadColumns[wording]
+      )?.trim()
+      if (value) return value
+      // A blank wording cell is no wording: read the corrected row instead, as the backend does.
+    }
+  }
 
   const machineOrder = recoverSourceOrder(candidate.contentText, candidate.payloadColumns)
   const ordered = machineOrder

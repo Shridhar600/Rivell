@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.retrieval.EvidenceBundle;
 import com.rivell.workbench.retrieval.EvidenceItem;
@@ -99,6 +100,7 @@ public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecut
             return CheckOutcome.failed(
                     "decision_contract_error:" + e.getClass().getSimpleName());
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
+            ProviderFailures.rethrowIfOutOfCredit(e);
             return boundedUncertainOutcome(context, detail, bundle,
                     union(subjectEvidence, counterpartEvidence),
                     "cross_clause_decision_unavailable",

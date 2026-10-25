@@ -9,7 +9,9 @@ public class RedlineExecutionFailedException extends RuntimeException {
     private final RedlineFailureCode failureCode;
 
     public RedlineExecutionFailedException(RedlineExecution execution) {
-        super("The redline execution failed: " + execution.failureCode());
+        super(execution.failureDetail() != null
+                ? execution.failureDetail()
+                : "Rivell could not generate the redline for this review.");
         this.executionId = execution.id();
         this.failureCode = execution.failureCode();
     }

@@ -1,10 +1,12 @@
 package com.rivell.workbench.platform.parsing;
 
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -12,15 +14,17 @@ import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.knowledge.IngestStatus;
 import com.rivell.workbench.knowledge.KnowledgeNodeType;
 import com.rivell.workbench.knowledge.KnowledgeSourceNode;
 import com.rivell.workbench.knowledge.KnowledgeStructureExtractor;
 import com.rivell.workbench.knowledge.MergedCellRegion;
 import com.rivell.workbench.knowledge.StructureExtraction;
-import java.util.Locale;
+
 
 /**
  * Deterministic XLSX structural extraction via Apache POI (Architecture Decision #7.5).
@@ -35,13 +39,23 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
 
     public static final String PARSER_VERSION = "rivell-xlsx-parser-1";
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(XlsxKnowledgeExtractor.class);
+
     private static final String WORKBOOK_PART_PATH = "xl/workbook.xml";
 
     private final DocxParserProperties properties;
     private final DataFormatter formatter = new DataFormatter();
+    private final DocumentWorkLimiter limiter;
 
     public XlsxKnowledgeExtractor(DocxParserProperties properties) {
+        this(properties, new DocumentWorkLimiter(DocumentWorkLimiter.DEFAULT_MAX_CONCURRENT));
+    }
+
+    @Autowired
+    public XlsxKnowledgeExtractor(DocxParserProperties properties, DocumentWorkLimiter limiter) {
         this.properties = properties;
+        this.limiter = limiter;
     }
 
     @Override
@@ -51,6 +65,10 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
 
     @Override
     public StructureExtraction extractStructure(UUID artifactId, InputStream source) {
+        return limiter.run(() -> extractWithinLimit(artifactId, source));
+    }
+
+    private StructureExtraction extractWithinLimit(UUID artifactId, InputStream source) {
         try {
             var bytes = source.readAllBytes();
             boundedScan(bytes);
@@ -74,9 +92,10 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
                         coverage);
             }
         } catch (Exception e) {
+            log.warn("Excel file could not be parsed ({}: {})", e.getClass().getSimpleName(), e.getMessage());
             return StructureExtraction.failed(
                     PARSER_VERSION,
-                    List.of("The workbook could not be parsed (" + e.getClass().getSimpleName() + ")"));
+                    List.of("Rivell could not read this Excel file. Check that it opens in Excel, then upload it again."));
         }
     }
 

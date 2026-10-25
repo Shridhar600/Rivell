@@ -363,7 +363,7 @@ class ReviewDiagnosticsQueryIT {
                 executable ? ChangeActionType.REPLACE : null,
                 executable ? "approved language " + tag : null,
                 executable ? ChangeLanguageSource.HUMAN_EDIT : null,
-                null, comment, actor, at, null, supersedes);
+                null, comment, null, null, actor, at, null, supersedes);
     }
 
     @Test

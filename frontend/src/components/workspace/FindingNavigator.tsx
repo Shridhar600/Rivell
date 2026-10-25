@@ -3,7 +3,7 @@ import type { FindingSummary } from '../../api/reviews'
 import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
 import { comparisonCategoryLabel, findingIssueLabel, findingSubjectLabel } from '../../lib/reviews'
-import { findingState, isNeedsYourLook, orderNeedsYourLook, type FindingTone } from '../../lib/workspace'
+import { findingState, isNeedsYourLook, isWholeContractSpotted, orderNeedsYourLook, type FindingTone } from '../../lib/workspace'
 import { ErrorState, LoadingState } from '../ui/State'
 import { GlyphEscalated, GlyphOpen, GlyphRejected, GlyphResolved } from './WorkspaceIcons'
 
@@ -29,6 +29,8 @@ interface Props {
   analysisComplete: boolean
   isPending: boolean
   isError: boolean
+  /** The empty frozen playbook set, stated at the top of the list; null when a playbook applied. */
+  noPlaybookNotice: string | null
   onRetry: () => void
   onSelect: (findingId: string) => void
 }
@@ -45,14 +47,20 @@ export function FindingNavigator({
   analysisComplete,
   isPending,
   isError,
+  noPlaybookNotice,
   onRetry,
   onSelect,
 }: Props) {
   const { labelFor } = useTaxonomy()
-  const [lookOpen, setLookOpen] = useState(false)
+  const [disagreeOpen, setDisagreeOpen] = useState(false)
+  const [otherOpen, setOtherOpen] = useState(false)
   const look = orderNeedsYourLook(findings.filter(isNeedsYourLook))
-  // the group opens by itself when one of its items is selected (keyboard or URL)
-  const showLook = lookOpen || look.some((finding) => finding.id === selectedId)
+  const disagreements = look.filter((finding) => !isWholeContractSpotted(finding))
+  const otherConcerns = look.filter(isWholeContractSpotted)
+  // each group opens by itself when one of its items is selected (keyboard or URL)
+  const showDisagreements =
+    disagreeOpen || disagreements.some((finding) => finding.id === selectedId)
+  const showOther = otherOpen || otherConcerns.some((finding) => finding.id === selectedId)
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>, id: string) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -60,14 +68,11 @@ export function FindingNavigator({
     }
   }
 
-  /** What a row says the item is. A look item says why Rivell left it to the user. */
+  /** What a row says the item is. A related-guidance item says why it is listed. */
   function issueLine(finding: FindingSummary): string {
-    if (finding.relatedPosition) return 'Related position'
+    if (finding.relatedPosition) return 'Related guidance'
     if (isNeedsYourLook(finding) && finding.firstReviewCategory) {
       return `First review: ${comparisonCategoryLabel(finding.firstReviewCategory)}`
-    }
-    if (isNeedsYourLook(finding) && finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ') {
-      return 'Not covered by your playbook'
     }
     return findingIssueLabel(finding)
   }
@@ -103,39 +108,54 @@ export function FindingNavigator({
     <aside className="rv-ws-pane rv-ws-fl" aria-label="Findings">
       <div className="rv-ws-fl-h">
         Findings
-        <small>{remaining !== null ? `${remaining} unresolved` : enabled && !isPending ? findings.length : ''}</small>
+        <small>{remaining !== null ? `${remaining} open` : enabled && !isPending ? findings.length : ''}</small>
       </div>
-      {!enabled ? <p className="rv-ws-fl-note">Findings appear here when the automated analysis completes.</p> : null}
+      {noPlaybookNotice !== null && analysisComplete ? (
+        <p className="rv-ws-fl-note">{noPlaybookNotice}</p>
+      ) : null}
+      {!enabled ? <p className="rv-ws-fl-note">Findings appear when analysis finishes.</p> : null}
       {enabled && isPending ? <LoadingState label="Loading findings…" /> : null}
       {enabled && isError ? <ErrorState message="Findings could not be loaded." onRetry={onRetry} /> : null}
       {enabled && !isPending && !isError && findings.length === 0 ? (
         <p className="rv-ws-fl-note">
           {analysisComplete
-            ? 'No findings. The automated review recorded none for this contract version.'
+            ? 'No findings for this contract version.'
             : 'This review did not complete an analysis, so there are no findings to show.'}
         </p>
       ) : null}
       <div role="listbox" aria-label="Findings list">
         {findings.filter((finding) => !isNeedsYourLook(finding)).map(row)}
       </div>
-      {look.length > 0 ? (
+      {disagreements.length > 0 ? (
         <div className="rv-ws-look">
           <button
             type="button"
             className="rv-ws-look-h"
-            aria-expanded={showLook}
-            onClick={() => setLookOpen(!showLook)}
+            aria-expanded={showDisagreements}
+            onClick={() => setDisagreeOpen(!showDisagreements)}
           >
-            Needs your look ({look.length})
+            Assessments disagree ({disagreements.length})
           </button>
-          <p className="rv-ws-fl-note">
-            Rivell did not decide these. Rivell’s first review and a second opinion disagreed, a second opinion
-            was not available, your playbook is silent on the clause, or Rivell is unsure a missing provision is
-            required.
-          </p>
-          {showLook ? (
-            <div role="listbox" aria-label="Needs your look list">
-              {look.map(row)}
+          {showDisagreements ? (
+            <div role="listbox" aria-label="Assessments disagree list">
+              {disagreements.map(row)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {otherConcerns.length > 0 ? (
+        <div className="rv-ws-look">
+          <button
+            type="button"
+            className="rv-ws-look-h"
+            aria-expanded={showOther}
+            onClick={() => setOtherOpen(!showOther)}
+          >
+            Other concerns ({otherConcerns.length})
+          </button>
+          {showOther ? (
+            <div role="listbox" aria-label="Other concerns list">
+              {otherConcerns.map(row)}
             </div>
           ) : null}
         </div>

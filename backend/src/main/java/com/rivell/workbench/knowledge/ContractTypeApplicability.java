@@ -11,11 +11,11 @@ import com.rivell.workbench.contracts.ContractType;
 /**
  * Reads what a playbook record says it applies to ("Applies to: MSA, Supply, Services.", a
  * contract-type column group) as contract type codes. Deterministic. A named type the
- * product does not model ("Supply") maps to OTHER, so the record still applies to contracts
- * of that unmodelled kind and not to every modelled type. Text that says "all", excludes
- * types, or reads as a sentence returns empty: the record then applies wherever its source
- * does. Text from a label the code does not know ("Variant: Preferred") narrows only when it
- * names a modelled type, so a misread label never hides a position.
+ * product does not model maps to OTHER, so the record still applies to contracts of that
+ * unmodelled kind and not to every modelled type. Text that says "all", excludes types, or
+ * reads as a sentence returns empty: the record then applies wherever its source does. Text
+ * from a label the code does not know ("Variant: Preferred") narrows only when it names a
+ * modelled type, so a misread label never hides a position.
  */
 final class ContractTypeApplicability {
 
@@ -76,31 +76,51 @@ final class ContractTypeApplicability {
                 words.add(word.substring(0, word.length() - 1)); // "NDAs", "SOWs"
             }
         }
+        name = name.replace('-', ' ');
+        // Specific document names win over the generic words they contain: "data processing
+        // addendum" is a DPA, not an amendment; "master services" is an MSA, not services.
         if (name.contains("data processing") || words.contains("dpa")) {
             return ContractType.DPA;
+        }
+        if (name.contains("amendment") || name.contains("variation") || name.contains("addendum")) {
+            return ContractType.AMENDMENT;
         }
         if (name.contains("statement of work") || words.contains("sow")) {
             return ContractType.SOW;
         }
-        if (name.contains("saas") || name.contains("subscription") || name.contains("order form")) {
+        if (name.contains("order form") || name.contains("purchase order")
+                || name.contains("order schedule")) {
+            return ContractType.ORDER_FORM;
+        }
+        if (name.contains("saas") || name.contains("subscription")) {
             return ContractType.SAAS;
         }
-        if (name.contains("licen")) {
+        if (name.contains("licen") || words.contains("swl")) {
             return ContractType.SWL;
         }
-        if (words.contains("nda") || words.contains("mnda") || name.contains("non-disclosure")
-                || name.contains("nondisclosure") || name.contains("non disclosure")
-                || name.contains("confidentiality agreement")) {
+        if (words.contains("nda") || words.contains("mnda") || words.contains("onda")
+                || name.contains("non-disclosure") || name.contains("nondisclosure")
+                || name.contains("non disclosure") || name.contains("confidentiality agreement")) {
             if (name.contains("mutual") || words.contains("mnda")) {
                 return ContractType.MNDA;
             }
-            if (name.contains("one-way") || name.contains("one way") || name.contains("unilateral")) {
+            if (name.contains("one-way") || name.contains("one way") || name.contains("unilateral")
+                    || words.contains("onda")) {
                 return ContractType.ONDA;
             }
             return ContractType.NDA;
         }
         if (words.contains("msa") || name.contains("master services") || name.contains("master agreement")) {
             return ContractType.MSA;
+        }
+        if (name.contains("service") || name.contains("consult")) {
+            return ContractType.SERVICES;
+        }
+        if (name.contains("supply") || name.contains("purchase") || name.contains("procurement")) {
+            return ContractType.SUPPLY;
+        }
+        if (name.contains("resell") || name.contains("distribut") || name.contains("channel partner")) {
+            return ContractType.RESELLER;
         }
         return ContractType.OTHER;
     }

@@ -48,7 +48,7 @@ function Group({ title, count, children }: { title: string; count: number; child
 
 function Regions({ nodeIds, regionLabels, onNavigateToNode }: { nodeIds: string[]; regionLabels: Map<string, string>; onNavigateToNode: (nodeId: string) => void }) {
   const known = nodeIds.filter((nodeId) => regionLabels.has(nodeId))
-  if (known.length === 0) return <span className="rv-ws-caption">No region in this version</span>
+  if (known.length === 0) return <span className="rv-ws-caption">No passage in this version</span>
   return (
     <span className="rv-ws-srcd-acts">
       {known.map((nodeId) => (
@@ -167,11 +167,11 @@ export function ContractAnalysis({ semantics, contractId, editable, latestVersio
   return (
     <div className="rv-ws-srcd">
       <div className="rv-ws-kicker">
-        <span>Contract analysis</span>
+        <span>Contract details</span>
         <span className="rv-ws-chip">Version {semantics.versionNumber}</span>
       </div>
       <p className="rv-ws-caption">
-        What Rivell read in this contract version. These are machine interpretations, not legal conclusions.
+        What Rivell read in this contract version. These are not legal conclusions.
       </p>
 
       <Group title="Parties" count={semantics.parties.length}>
@@ -264,7 +264,7 @@ export function ContractAnalysis({ semantics, contractId, editable, latestVersio
         <div className="rv-ws-sec">
           <h3 className="rv-ws-sec-h">Analysis quality</h3>
           {degraded ? (
-            <p className="rv-ws-warn">Some contract semantics could not be resolved automatically. What is shown is what is available.</p>
+            <p className="rv-ws-warn">Some details could not be read. Only what was found is shown.</p>
           ) : null}
           <ul className="rv-ws-cov">
             {qualityNotes.map((note) => (

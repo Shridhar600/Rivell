@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseReviewList } from '../api/reviews'
 import { LIFECYCLE_ROWS, humanWire, reviewWire } from '../test/reviewListFixtures'
-import { buildHomeSections, homeReview, RECENT_RESULTS_LIMIT } from './home'
+import { buildHomeSections, homeReview, WAITING_LONG_MS, waitingText, queuedGuidance, RECENT_RESULTS_LIMIT } from './home'
 
 function parse(...rows: unknown[]) {
   return parseReviewList({ items: rows, truncated: false }).items
@@ -15,7 +15,7 @@ describe('which Home section a Review belongs to', () => {
   it('treats queued and analyzing as running, never as needing the reviewer', () => {
     expect(sectionOf('queued').section).toBe('running')
     expect(sectionOf('analyzing').section).toBe('running')
-    expect(sectionOf('queued').stateLabel).toBe('Queued')
+    expect(sectionOf('queued').stateLabel).toBe('Waiting to start')
     expect(sectionOf('analyzing').stateLabel).toBe('Analyzing')
   })
 
@@ -29,9 +29,9 @@ describe('which Home section a Review belongs to', () => {
     ['analysisFailed', 'Analysis failed', 'danger'],
     ['unresolved', 'In review', 'attention'],
     ['notStarted', 'Ready for review', 'attention'],
-    ['escalated', 'Escalation blocking', 'attention'],
+    ['escalated', 'Escalated, needs resolution', 'attention'],
     ['ready', 'Ready to finalize', 'attention'],
-    ['degraded', 'Analysis degraded', 'attention'],
+    ['degraded', 'Analysis incomplete', 'attention'],
     ['redlineFailed', 'Redline failed', 'danger'],
   ] as const)('puts %s in Needs you with the server state "%s"', (key, label, tone) => {
     const view = sectionOf(key)
@@ -71,6 +71,26 @@ describe('which Home section a Review belongs to', () => {
     const view = homeReview(parse(reviewWire('p', 'FUTURE_STATUS', 'Future.docx'))[0]!)
     expect(view.section).toBeNull()
     expect(view.stateLabel).toBe('Status unknown')
+  })
+})
+
+describe('a waiting review says how long it has waited', () => {
+  const createdAt = '2026-10-04T09:00:00Z'
+  const at = (minutes: number) => Date.parse(createdAt) + minutes * 60_000
+
+  it('shows the wait in minutes, and adds the retry line only after ten minutes', () => {
+    expect(waitingText(createdAt, at(2))).toBe('Waiting 2 min')
+    expect(queuedGuidance(createdAt, at(2))).toBe(
+      'Waiting 2 min. You can leave this page. Analysis starts on its own.',
+    )
+    expect(queuedGuidance(createdAt, at(10))).toContain('Taking longer than usual. Rivell keeps retrying.')
+    expect(at(10) - Date.parse(createdAt)).toBe(WAITING_LONG_MS)
+  })
+
+  it('uses the waiting line for a queued row on Home', () => {
+    const row = parse(LIFECYCLE_ROWS.queued)[0]!
+    const view = homeReview(row, Date.parse(row.createdAt) + 2 * 60_000)
+    expect(view.guidance).toBe('Waiting 2 min. You can leave this page. Analysis starts on its own.')
   })
 })
 

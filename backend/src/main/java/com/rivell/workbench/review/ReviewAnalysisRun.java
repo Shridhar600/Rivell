@@ -15,7 +15,9 @@ public record ReviewAnalysisRun(
         String pipelineVersion,
         Instant startedAt,
         Instant completedAt,
-        String failureReason) {
+        String failureReason,
+        int transientFailures,
+        String lastTransientReason) {
 
     public ReviewAnalysisRun {
         Objects.requireNonNull(id, "id");
@@ -35,12 +37,15 @@ public record ReviewAnalysisRun(
             throw new IllegalArgumentException(
                     "completedAt is the terminal timestamp; unset iff RUNNING");
         }
+        if (transientFailures < 0) {
+            throw new IllegalArgumentException("transientFailures must be >= 0");
+        }
     }
 
     public static ReviewAnalysisRun running(
             UUID id, UUID organizationId, UUID reviewId, int runNumber, RunTrigger trigger,
             String pipelineVersion, Instant startedAt) {
         return new ReviewAnalysisRun(id, organizationId, reviewId, runNumber, RunStatus.RUNNING,
-                trigger, pipelineVersion, startedAt, null, null);
+                trigger, pipelineVersion, startedAt, null, null, 0, null);
     }
 }

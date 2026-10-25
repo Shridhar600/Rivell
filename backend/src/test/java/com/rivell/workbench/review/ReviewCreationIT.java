@@ -110,6 +110,7 @@ class ReviewCreationIT {
         com.rivell.workbench.intelligence.GenerativeReasoningProvider fakeGenerativeProvider() {
             return new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();
         }
+
     }
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -185,6 +186,9 @@ class ReviewCreationIT {
 
     @Autowired
     JdbcClient jdbcClient;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    org.jobrunr.scheduling.JobScheduler jobScheduler;
 
     @BeforeEach
     void freshOrganization() {
@@ -435,6 +439,34 @@ class ReviewCreationIT {
     }
 
     /**
+     * Final review C1: the creation catch used to cover the after-commit enqueue as well as the
+     * review insert. A failed enqueue was read back as the idempotency winner, so the caller was
+     * told the create succeeded while the review had no job. Only the insert may be treated as a
+     * race; an enqueue failure has to surface.
+     */
+    @Test
+    void anEnqueueFailureSurfacesInsteadOfBeingReturnedAsAReplay() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var key = UUID.randomUUID();
+
+        org.mockito.Mockito.doThrow(new org.springframework.dao.DataIntegrityViolationException(
+                        "job store is unavailable"))
+                .when(jobScheduler)
+                .enqueue(org.mockito.ArgumentMatchers.any(UUID.class),
+                        org.mockito.ArgumentMatchers.any(org.jobrunr.jobs.lambdas.JobLambda.class));
+
+        assertThatThrownBy(() -> reviewService.create(corpus.contract().contractId(), 1,
+                ReviewPackRegistry.MSA_PACK, key))
+                .as("a failed analysis enqueue must not be reported as a successful create")
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+
+        assertThat(reviewRepository.findByClientRequestId(organizationId, key))
+                .as("the review itself committed; the reconciler is what re-enqueues it")
+                .isPresent();
+    }
+
+    /**
      * M10 review finding: the idempotency pre-check cannot observe a concurrent identical request, so
      * two simultaneous submits both missed it. The unique index keeps one review, but the loser used
      * to surface a 500 - the worst possible answer to a client that asked for idempotent creation,
@@ -524,6 +556,7 @@ class ReviewCreationIT {
         var review = reviewService.create(ingested.contractId(), 1, null);
         var snapshot = reviewRepository.findSnapshot(organizationId, review.id()).orElseThrow();
         assertThat(snapshot.knowledgePinNumber()).isZero();
+        assertThat(snapshot.applicableKnowledge()).isEmpty();
 
         corpusBuilder.publishAll(organizationId, M6EvidenceCorpus.Fixture.POLICY_NDA,
                 M6EvidenceCorpus.ndaManifest(), null);

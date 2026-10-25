@@ -78,7 +78,6 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
         var candidate = switch (name) {
             case "primary_topic" -> primaryConceptCue(state, choice);
             case "variant_role" -> variantRoleCue(state, choice);
-            case "governing_law" -> cues(state).contains("england") ? "UK" : "US";
             default -> choice.criteria().keySet().iterator().next();
         };
         var selected = choice.criteria().containsKey(candidate)
@@ -235,6 +234,10 @@ public final class DemoScriptedDecisionProvider implements SemanticDecisionProvi
     }
 
     private double cueProbability(String questionName, Object state) {
+        // the part-4 fit check: the demo shows fitted playbook wording, never a replacement
+        if (questionName.startsWith("fit_")) {
+            return CONFIDENT;
+        }
         if (isConflictPair(state)) {
             return conflictRelationshipCue(questionName, state);
         }

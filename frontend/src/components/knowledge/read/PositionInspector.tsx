@@ -6,9 +6,11 @@ import { useTaxonomy } from '../../../api/taxonomy'
 import { longDate } from '../../../lib/dates'
 import { resolveCandidateSource } from '../../../lib/candidates'
 import { positionText, type PublicationRef } from '../../../lib/knowledgeCatalog'
-import { conceptName, positionRoles, POSITION_ROLE_LABELS, scopeRows } from '../../../lib/knowledgePosition'
-import { sourceLocation } from '../../../lib/knowledgeSource'
+import { conceptName, displayScopeRows, positionRoles, POSITION_ROLE_LABELS } from '../../../lib/knowledgePosition'
+import { headingPaths, sourceLocation } from '../../../lib/knowledgeSource'
+import { AUTHORITY_SOURCE_LABELS } from '../../../lib/compilationFields'
 import { ArrowRightIcon } from '../../ui/Icon'
+import { ApprovalRulesTable } from '../ApprovalRules'
 
 interface PositionInspectorProps {
   candidate: Candidate
@@ -28,7 +30,9 @@ export function PositionInspector({ candidate, artifact, publication }: Position
   const structure = useKnowledgeStructureQuery(artifact.id)
   const located =
     units.data && structure.data ? resolveCandidateSource(candidate, units.data, structure.data) : null
-  const location = located ? sourceLocation(located.nodes) : null
+  const location = located
+    ? sourceLocation(located.nodes, structure.data ? headingPaths(structure.data) : undefined)
+    : null
   const roles = positionRoles(candidate)
   const concept = conceptName(candidate, labelFor)
   const text = positionText(candidate)
@@ -37,7 +41,7 @@ export function PositionInspector({ candidate, artifact, publication }: Position
   return (
     <div className="rv-k-ins">
       <p className="rv-k-kicker">Position</p>
-      <h2>{candidate.rawLabel}</h2>
+      <h2>{candidate.title}</h2>
       <dl className="rv-k-fdl">
         {roles.length > 0 ? (
           <>
@@ -51,13 +55,62 @@ export function PositionInspector({ candidate, artifact, publication }: Position
             <dd>{escalation}</dd>
           </>
         ) : null}
+        {candidate.preferredText ? (
+          <>
+            <dt>Preferred</dt>
+            <dd>{candidate.preferredText}</dd>
+          </>
+        ) : null}
+        {candidate.fallbackTexts.length > 0 ? (
+          <>
+            <dt>{candidate.fallbackTexts.length > 1 ? 'Fallbacks' : 'Fallback'}</dt>
+            <dd>{candidate.fallbackTexts.join('; ')}</dd>
+          </>
+        ) : null}
+        {candidate.prohibitedText ? (
+          <>
+            <dt>Walk-away</dt>
+            <dd>{candidate.prohibitedText}</dd>
+          </>
+        ) : null}
+        {candidate.authorityRules.length > 0 ? (
+          <>
+            <dt>Approvals</dt>
+            <dd>
+              <ApprovalRulesTable rules={candidate.authorityRules} />
+            </dd>
+          </>
+        ) : null}
+        {candidate.authorityConflicts.length > 0 ? (
+          <>
+            <dt>Other level</dt>
+            <dd>
+              {candidate.authorityConflicts
+                .map(
+                  (conflict) =>
+                    `${conflict.approver} (${AUTHORITY_SOURCE_LABELS[conflict.source]}, ` +
+                    `${POSITION_ROLE_LABELS[conflict.stance].toLowerCase()})`,
+                )
+                .join('; ')}
+            </dd>
+          </>
+        ) : null}
+        {candidate.unmappedAuthority.length > 0 ? (
+          <>
+            <dt>Needs attention</dt>
+            <dd>
+              The source states a walk-away or an approver Rivell could not map:{' '}
+              {candidate.unmappedAuthority.join('; ')}
+            </dd>
+          </>
+        ) : null}
         {concept ? (
           <>
-            <dt>Legal concept</dt>
+            <dt>Topic</dt>
             <dd>{concept}</dd>
           </>
         ) : null}
-        {scopeRows(candidate).map((row) => (
+        {displayScopeRows(candidate).map((row) => (
           <Fragment key={row.label}>
             <dt>{row.label}</dt>
             <dd>{row.value}</dd>
@@ -65,19 +118,22 @@ export function PositionInspector({ candidate, artifact, publication }: Position
         ))}
         <dt>Published</dt>
         <dd>
-          Publication {publication.number}, {longDate(publication.createdAt)}
+          Knowledge version {publication.number}, {longDate(publication.createdAt)}
         </dd>
       </dl>
 
       <div className="rv-k-prov">
-        <span className="rv-k-loc">Provenance{location ? `, ${location}` : ''}</span>
-        {text ? (
-          <q>
-            <span className="rv-k-hl">{text}</span>
-          </q>
-        ) : (
-          <span className="rv-k-loc">This position has no authored wording.</span>
-        )}
+        <span className="rv-k-loc">Source{location ? `, ${location}` : ''}</span>
+        <details className="rv-k-fullsrc">
+          <summary>Full source text</summary>
+          {text ? (
+            <q>
+              <span className="rv-k-hl">{text}</span>
+            </q>
+          ) : (
+            <span className="rv-k-loc">This position has no authored wording.</span>
+          )}
+        </details>
         <Link className="rv-k-lnk" to={`/knowledge/sources/${artifact.id}?position=${candidate.id}`}>
           Open in original source
           <ArrowRightIcon className="rv-icon" />

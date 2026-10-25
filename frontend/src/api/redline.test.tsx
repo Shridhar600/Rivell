@@ -28,11 +28,13 @@ function envelope(data: unknown) {
   return { data, status: 200, timestamp: '2026-09-26T14:00:00Z' }
 }
 
-function errorResponse(status: number) {
-  return jsonResponse(
+function errorResponse(status: number, retryAfter: string | null = null) {
+  const response = jsonResponse(
     { code: String(status), title: 'Invalid state', detail: 'server detail text' },
     status,
   )
+  if (retryAfter) response.headers.set('Retry-After', retryAfter)
+  return response
 }
 
 function stubFetch(handler: (request: Request) => Response | Promise<Response>) {
@@ -237,11 +239,21 @@ describe('redline parsers', () => {
     ).toBe('UNKNOWN')
   })
 
-  it('names document storage, not the engine, for a storage failure', () => {
+  it('tells a busy document limit from a storage outage by its retry hint', async () => {
+    stubFetch(() => errorResponse(503, '5'))
+    const busy = await triggerRedline('r-1').catch((error) => error)
+    expect(busy).toMatchObject({ status: 503, retryAfter: '5' })
+
+    stubFetch(() => errorResponse(503))
+    const storage = await triggerRedline('r-1').catch((error) => error)
+    expect(storage).toMatchObject({ status: 503, retryAfter: null })
+  })
+
+  it('names the redline service, not document storage, for a server failure', () => {
     const storage = new RedlineApiError(503).message
     expect(storage).toMatch(/storage/i)
-    expect(storage).not.toMatch(/engine/i)
-    expect(new RedlineApiError(500).message).toMatch(/engine/i)
+    expect(storage).not.toMatch(/redlining is unavailable/i)
+    expect(new RedlineApiError(500).message).toMatch(/redlining is unavailable/i)
   })
 
   it('defaults a missing downloadAvailable flag to false', () => {
@@ -252,7 +264,7 @@ describe('redline parsers', () => {
 
   it('rejects a malformed execution envelope payload', () => {
     expect(() => parseRedlineExecution({ status: 'COMPLETED' })).toThrow(
-      /Malformed redline execution/,
+      /could not read this response/,
     )
   })
 })
@@ -280,6 +292,33 @@ describe('redline fetchers', () => {
     const conflict = await fetchRedlineExecution('r-1').catch((error) => error)
     expect(conflict).toBeInstanceOf(RedlineApiError)
     expect(conflict).toMatchObject({ status: 409 })
+  })
+
+  it('keeps the typed source code a 409 carries, and ignores an unknown one', async () => {
+    stubFetch(() =>
+      jsonResponse(
+        {
+          code: '409',
+          title: 'Action not available',
+          detail: 'The source could not be used.',
+          failureCode: 'SOURCE_INTEGRITY_MISMATCH',
+        },
+        409,
+      ),
+    )
+    const sourced = await triggerRedline('r-1').catch((error) => error)
+    expect(sourced).toBeInstanceOf(RedlineApiError)
+    expect(sourced).toMatchObject({
+      status: 409,
+      failureCode: 'SOURCE_INTEGRITY_MISMATCH',
+    })
+
+    stubFetch(() =>
+      jsonResponse({ code: '409', title: 'Action not available', detail: 'x', failureCode: 'NOT_A_CODE' }, 409),
+    )
+    const unknown = await triggerRedline('r-1').catch((error) => error)
+    expect(unknown).toBeInstanceOf(RedlineApiError)
+    expect(unknown.failureCode).toBeNull()
   })
 
   it('triggers synchronous generation with an empty POST', async () => {

@@ -23,7 +23,8 @@ export function HomeHero({ resolved, hasWork, counts, onReveal }: HomeHeroProps)
   return (
     <div className="rv-hero">
       <div>
-        <h1 className="rv-hero__title">Rivell</h1>
+        {/* The persistent logo already names the product; the page's own heading is the top bar. */}
+        <h1 className="rv-visually-hidden">Home</h1>
         {/* Claims nothing until the read settles, and never duplicates the empty state. */}
         {resolved && hasWork ? <p className="rv-hero__line">Here is where your reviews stand.</p> : null}
       </div>
@@ -36,8 +37,8 @@ export function HomeHero({ resolved, hasWork, counts, onReveal }: HomeHeroProps)
             targetId="needs"
             onReveal={() => onReveal('needs')}
           />
-          <SummaryPill count={counts.analyzing} label="analyzing" tone="active" targetId="running" onReveal={() => onReveal('running')} />
-          <SummaryPill count={counts.queued} label="queued" tone="neutral" targetId="running" onReveal={() => onReveal('running')} />
+          <SummaryPill count={counts.analyzing} label="In progress" tone="active" targetId="running" onReveal={() => onReveal('running')} />
+          <SummaryPill count={counts.queued} label="Waiting to start" tone="neutral" targetId="running" onReveal={() => onReveal('running')} />
         </div>
       ) : null}
     </div>

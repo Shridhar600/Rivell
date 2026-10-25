@@ -221,7 +221,10 @@ export interface paths {
         /** List the organization's knowledge artifacts, newest first. Supply limit to bound the read; omitting it returns every artifact. */
         get: operations["listArtifacts"];
         put?: never;
-        /** Upload a legal knowledge source with its human-declared manifest */
+        /**
+         * Upload a legal knowledge source with its human-declared manifest
+         * @description declaredContractTypes is optional. When it is empty or omitted, the source applies to every contract type; the API does not reject an empty declaration, because existing clients and the evaluation runner rely on it.
+         */
         post: operations["upload"];
         delete?: never;
         options?: never;
@@ -756,6 +759,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/knowledge/applicable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the published playbooks and clause libraries that apply to a contract type
+         * @description Applies the same matching rule as review retrieval: the contract type, its family (a mutual NDA is an NDA), the record's own declared scope, and the optional jurisdiction, pack, perspective, paper source and effective date. A source that declares no contract types applies to every contract type.
+         */
+        get: operations["applicable"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/contracts/{id}": {
         parameters: {
             query?: never;
@@ -851,17 +874,22 @@ export interface components {
             /** Format: uuid */
             clientRequestId?: string;
             /** @enum {string} */
-            action: "ACCEPT" | "EDIT" | "REJECT" | "ESCALATE";
+            action: "ACCEPT" | "EDIT" | "REJECT" | "ESCALATE" | "RESOLVE";
             /** @enum {string} */
             approvedAction?: "REPLACE" | "INSERT" | "DELETE";
             approvedLanguage?: string;
             comment?: string;
+            /** @enum {string} */
+            rejectReason?: "KEEP_AS_DRAFTED" | "FINDING_WRONG";
+            approvedBy?: string;
         };
         /** @description Error returned by contract API failures */
         ErrorResponse: {
             code: string;
             title: string;
             detail: string;
+            /** @description Typed failure code, when the error carries one; absent otherwise */
+            failureCode?: string;
         };
         ApiResultDecisionView: {
             data?: components["schemas"]["DecisionView"];
@@ -884,6 +912,8 @@ export interface components {
             /** Format: uuid */
             approvedDraftingEvidenceId?: string;
             comment?: string;
+            rejectReason?: string;
+            approvedBy?: string;
             /** Format: uuid */
             actorId?: string;
             /** Format: date-time */
@@ -905,11 +935,16 @@ export interface components {
             approvedChangeId?: string;
             /** Format: int32 */
             ordinal?: number;
-            actionType?: string;
-            targetKind?: string;
-            status?: string;
-            verification?: string;
-            failureCode?: string;
+            /** @enum {string} */
+            actionType: "REPLACE" | "INSERT" | "DELETE";
+            /** @enum {string} */
+            targetKind: "CLAUSE" | "ABSENCE";
+            /** @enum {string} */
+            status: "APPLIED" | "FAILED" | "NOT_APPLIED";
+            /** @enum {string|null} */
+            verification: "VERIFIED" | "FAILED" | null;
+            /** @enum {string|null} */
+            failureCode: "SOURCE_DOCUMENT_UNAVAILABLE" | "SOURCE_VERSION_MISMATCH" | "SOURCE_INTEGRITY_MISMATCH" | "UNSUPPORTED_SOURCE_FORMAT" | "SOURCE_EXPANSION_LIMIT_EXCEEDED" | "UNSUPPORTED_CHANGESET_VERSION" | "PROTECTED_DOCUMENT_UNSUPPORTED" | "PREEXISTING_REVISIONS_UNSUPPORTED" | "TARGET_NOT_FOUND" | "TARGET_AMBIGUOUS" | "UNSUPPORTED_SOURCE_STRUCTURE" | "CHANGE_OVERLAP" | "MISSING_APPROVED_LANGUAGE" | "INSERT_PLACEMENT_UNRESOLVED" | "APPROVED_SEMANTICS_DRIFT" | "DOCX_LOAD_FAILED" | "DOCX_SERIALIZATION_FAILED" | "ROUND_TRIP_FAILED" | "VERIFICATION_FAILED" | null;
             placement?: string;
             resolvedTarget?: string;
             /** Format: int32 */
@@ -932,9 +967,12 @@ export interface components {
             changeSetVersion?: number;
             /** Format: int32 */
             attempt?: number;
-            status?: string;
-            outcome?: string;
-            failureCode?: string;
+            /** @enum {string} */
+            status: "COMPLETED" | "FAILED";
+            /** @enum {string|null} */
+            outcome: "REDLINE_GENERATED" | "NO_CHANGES" | null;
+            /** @enum {string|null} */
+            failureCode: "SOURCE_DOCUMENT_UNAVAILABLE" | "SOURCE_VERSION_MISMATCH" | "SOURCE_INTEGRITY_MISMATCH" | "UNSUPPORTED_SOURCE_FORMAT" | "SOURCE_EXPANSION_LIMIT_EXCEEDED" | "UNSUPPORTED_CHANGESET_VERSION" | "PROTECTED_DOCUMENT_UNSUPPORTED" | "PREEXISTING_REVISIONS_UNSUPPORTED" | "TARGET_NOT_FOUND" | "TARGET_AMBIGUOUS" | "UNSUPPORTED_SOURCE_STRUCTURE" | "CHANGE_OVERLAP" | "MISSING_APPROVED_LANGUAGE" | "INSERT_PLACEMENT_UNRESOLVED" | "APPROVED_SEMANTICS_DRIFT" | "DOCX_LOAD_FAILED" | "DOCX_SERIALIZATION_FAILED" | "ROUND_TRIP_FAILED" | "VERIFICATION_FAILED" | null;
             failureDetail?: string;
             rendererVersion?: string;
             placementStrategyVersion?: string;
@@ -1043,6 +1081,21 @@ export interface components {
             /** Format: date */
             effectiveTo?: string;
         };
+        AuthorityConflict: {
+            approver?: string;
+            /** @enum {string} */
+            source?: "ENTRY" | "MATRIX" | "TABLE";
+            /** @enum {string} */
+            stance?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
+        };
+        AuthorityRule: {
+            approver?: string;
+            stances?: ("PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED")[];
+            condition?: string;
+            /** @enum {string} */
+            source?: "ENTRY" | "MATRIX" | "TABLE";
+            quote?: string;
+        };
         EvidenceBundleResponse: {
             /** Format: uuid */
             bundleId?: string;
@@ -1119,6 +1172,8 @@ export interface components {
             preferred?: string;
             fallbacks?: string[];
             prohibited?: string;
+            authorityRules?: components["schemas"]["AuthorityRule"][];
+            authorityConflicts?: components["schemas"]["AuthorityConflict"][];
         };
         SemanticAssessmentResponse: {
             judgments?: {
@@ -1186,6 +1241,8 @@ export interface components {
             /** @enum {string} */
             reviewStatus?: "PENDING" | "APPROVED" | "EDITED" | "REJECTED" | "PUBLISHED";
             rawLabel?: string;
+            editedTitle?: string;
+            title?: string;
             contentText?: string;
             payloadColumns?: {
                 [key: string]: string;
@@ -1208,6 +1265,15 @@ export interface components {
             variantRole?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
             escalationTrigger?: string;
             requiresApproval?: boolean;
+            preferredText?: string;
+            fallbackTexts?: string[];
+            prohibitedText?: string;
+            authorityRules?: components["schemas"]["AuthorityRule"][];
+            storedAuthorityRules?: components["schemas"]["AuthorityRule"][];
+            authorityConflicts?: components["schemas"]["AuthorityConflict"][];
+            unmappedAuthority?: string[];
+            needsAttention?: boolean;
+            correctedFields?: string[];
             interpretations?: components["schemas"]["InterpretationView"][];
             editedContentText?: string;
             editedPayloadColumns?: {
@@ -1228,7 +1294,7 @@ export interface components {
             conflictSignals?: components["schemas"]["ConflictSignalView"][];
             /** @enum {string} */
             reviewCategory?: "ROUTINE" | "ELEVATED" | "HIGH";
-            reviewReasons?: ("DUPLICATE_DETECTED" | "CONFLICT_DETECTED" | "SUPERSESSION_PROPOSED" | "ARTIFACT_TYPE_MISMATCH" | "VERIFICATION_DISPUTED" | "UNVERIFIED_GENERATIVE_FIELD" | "LOW_CLASSIFICATION_CONFIDENCE" | "NEW_PROHIBITED_OR_ESCALATION_POSITION" | "SCOPE_NARROWING_PROPOSED" | "SEMANTIC_ANALYSIS_UNAVAILABLE" | "SEMANTIC_COMPILATION_UNAVAILABLE")[];
+            reviewReasons?: ("DUPLICATE_DETECTED" | "CONFLICT_DETECTED" | "SUPERSESSION_PROPOSED" | "ARTIFACT_TYPE_MISMATCH" | "VERIFICATION_DISPUTED" | "UNVERIFIED_GENERATIVE_FIELD" | "LOW_CLASSIFICATION_CONFIDENCE" | "NEW_PROHIBITED_OR_ESCALATION_POSITION" | "SCOPE_NARROWING_PROPOSED" | "SEMANTIC_ANALYSIS_UNAVAILABLE" | "SEMANTIC_COMPILATION_UNAVAILABLE" | "UNMAPPED_AUTHORITY_WORDS")[];
             reviewNote?: string;
             /** Format: date-time */
             reviewedAt?: string;
@@ -1257,6 +1323,7 @@ export interface components {
             verification?: "NOT_VERIFIED" | "VERIFIED" | "UNCERTAIN" | "DISPUTED";
         };
         ReviewEditRequest: {
+            title?: string;
             contentText?: string;
             payloadColumns?: {
                 [key: string]: string;
@@ -1282,6 +1349,10 @@ export interface components {
             escalationTrigger?: string;
             /** @enum {string} */
             variantRole?: "PREFERRED" | "FALLBACK" | "PROHIBITED" | "ESCALATION" | "COMMENTARY" | "UNSPECIFIED";
+            preferredText?: string;
+            fallbackTexts?: string[];
+            prohibitedText?: string;
+            authorityRules?: components["schemas"]["AuthorityRule"][];
         };
         ConceptCorrectionRequest: {
             primary: string;
@@ -1325,6 +1396,7 @@ export interface components {
             /** @enum {string} */
             artifactType?: "PLAYBOOK" | "CLAUSE_LIBRARY" | "TEMPLATE" | "EXECUTED_PRECEDENT" | "NEGOTIATION_HISTORY" | "EXTERNAL_REFERENCE";
             filename?: string;
+            documentTitle?: string;
             contentType?: string;
             /** Format: int64 */
             sizeBytes?: number;
@@ -1574,13 +1646,13 @@ export interface components {
              * @description Declared contract type for enrichment
              * @enum {string}
              */
-            contractType: "NDA" | "MNDA" | "ONDA" | "MSA" | "SAAS" | "DPA" | "SOW" | "SWL" | "OTHER";
+            contractType: "NDA" | "MNDA" | "ONDA" | "MSA" | "SAAS" | "DPA" | "SOW" | "SWL" | "SUPPLY" | "SERVICES" | "RESELLER" | "ORDER_FORM" | "AMENDMENT" | "OTHER";
             /** @enum {string} */
             ourSideRole?: "CUSTOMER" | "SUPPLIER" | "DISCLOSING_PARTY" | "RECEIVING_PARTY" | "LICENSOR" | "LICENSEE" | "PARTY_A" | "PARTY_B";
             /** @enum {string} */
             paperSource?: "OUR_PAPER" | "COUNTERPARTY_PAPER" | "THIRD_PARTY";
             /** @enum {string} */
-            jurisdiction?: "US" | "UK" | "UNSPECIFIED";
+            jurisdiction?: "US" | "UK" | "AUSTRALIA" | "CANADA" | "IRELAND" | "INDIA" | "NEW_ZEALAND" | "SINGAPORE" | "HONG_KONG" | "GERMANY" | "FRANCE" | "NETHERLANDS" | "OTHER" | "UNSPECIFIED";
             contractPackKey?: string;
         };
         CreateReviewRequest: {
@@ -1611,6 +1683,14 @@ export interface components {
         FailureView: {
             code?: string;
             message?: string;
+        };
+        PlaybookUsedView: {
+            /** Format: uuid */
+            artifactId?: string;
+            artifactType?: string;
+            name?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
         };
         ProfileView: {
             contractType?: string;
@@ -1685,6 +1765,7 @@ export interface components {
             /** Format: date */
             effectiveOn?: string;
             engine?: string;
+            playbooksUsed?: components["schemas"]["PlaybookUsedView"][] | null;
         };
         TaxonomyConceptView: {
             key: string;
@@ -2034,8 +2115,20 @@ export interface components {
             /** Format: int64 */
             ageSeconds?: number;
             failureReason?: string;
-            /** @description Whether the snapshot the review froze still matches the live contract semantics and model configuration */
+            /**
+             * Format: int32
+             * @description Transient infrastructure failures this run has survived. A running run with a positive count is being retried by JobRunr, not dead.
+             */
+            transientFailures?: number;
+            /** @description Code-owned reason of the last transient failure, if any */
+            lastTransientReason?: string;
+            /** @description Whether the snapshot the review froze still matches the live environment: the contract semantics digest, retrieval index version, embedding model identity and model policy bindings */
             environmentMatchesSnapshot?: boolean;
+            /**
+             * Format: int32
+             * @description Issues the whole-contract read named whose quote could not be found in the contract, or that were not one issue in one line; absent when the read was not used in this run
+             */
+            spottingDropped?: number;
             checks?: components["schemas"]["CheckView"][];
         };
         ApiResultReviewDiagnosticsView: {
@@ -2113,6 +2206,16 @@ export interface components {
             flaggedBySearch?: number;
             /** @description Engine v2: defined terms whose definitions the judge read for this clause; absent when none */
             definitionTerms?: string[];
+            /**
+             * Format: int32
+             * @description Fit questions asked for this clause; null when no fit question was asked
+             */
+            fitQuestions?: number;
+            /**
+             * Format: int32
+             * @description Fit calls saved by the exact-metadata skip rule for this clause
+             */
+            fitSkipped?: number;
         };
         /** @description Finding counts, no finding content */
         CountsView: {
@@ -2167,6 +2270,16 @@ export interface components {
             secondOpinionCategory?: string;
             /** @description SEARCH when the text search, not a topic, found this position; absent otherwise */
             foundBy?: string;
+            /** @description The fit check's verdict for a searched position: FITS, DOES_NOT_FIT or UNKNOWN; null when no fit question was asked */
+            fitVerdict?: string;
+            /** @description The fit check's code-owned reason, such as GOVERNS or DIFFERENT_SUBJECT */
+            fitReason?: string;
+            /** @description not_covered when the position did not govern and was not applied; null otherwise */
+            fitOutcome?: string;
+            /** @description The fit check's verdict on the library wording offered for this position: FITS, DOES_NOT_FIT or UNKNOWN; null when no wording was offered */
+            wordingFitVerdict?: string;
+            /** @description Why the wording offer has its verdict: MEETS_POSITION_YES/NO/UNKNOWN, CURES_GAP_YES/NO/UNKNOWN, UNAVAILABLE */
+            wordingFitReasons?: string[];
         };
         /** @description Deterministic redline state */
         RedlineView: {
@@ -2304,6 +2417,7 @@ export interface components {
             /** @enum {string} */
             artifactType?: "PLAYBOOK" | "CLAUSE_LIBRARY" | "TEMPLATE" | "EXECUTED_PRECEDENT" | "NEGOTIATION_HISTORY" | "EXTERNAL_REFERENCE";
             filename?: string;
+            documentTitle?: string;
             contentType?: string;
             /** Format: int64 */
             sizeBytes?: number;
@@ -2391,6 +2505,21 @@ export interface components {
             firstColumn?: number;
             /** Format: int32 */
             lastColumn?: number;
+        };
+        ApiResultListApplicableKnowledgeView: {
+            data?: components["schemas"]["ApplicableKnowledgeView"][];
+            /** Format: int32 */
+            status?: number;
+            /** Format: date-time */
+            timestamp?: string;
+        };
+        ApplicableKnowledgeView: {
+            /** Format: uuid */
+            artifactId?: string;
+            artifactType?: string;
+            name?: string;
+            /** Format: int64 */
+            publicationNumber?: number;
         };
         ApiResultContractListResponse: {
             data?: components["schemas"]["ContractListResponse"];
@@ -4454,6 +4583,51 @@ export interface operations {
             };
             /** @description Resource does not exist in this organization */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    applicable: {
+        parameters: {
+            query: {
+                contractType: string;
+                jurisdiction?: string;
+                partyPerspective?: string;
+                paperSource?: string;
+                contractPackKey?: string;
+                effectiveOn?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResultListApplicableKnowledgeView"];
+                };
+            };
+            /** @description Missing or invalid contract type */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing knowledge:read */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

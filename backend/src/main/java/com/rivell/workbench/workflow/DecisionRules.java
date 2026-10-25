@@ -13,12 +13,14 @@ import com.rivell.workbench.review.ProposedLanguageSource;
 /**
  * Deterministic decision validation and change derivation. ACCEPT approves the machine
  * recommendation as-is (strictly executable); EDIT authors the action/language; REJECT
- * and ESCALATE produce no change. No model participates.
+ * and ESCALATE produce no change; RESOLVE records who approved an escalated clause and
+ * produces no change. No model participates.
  */
 public final class DecisionRules {
 
     public static final int MAX_COMMENT_LENGTH = 2000;
     public static final int MAX_LANGUAGE_LENGTH = 20000;
+    public static final int MAX_APPROVED_BY_LENGTH = 120;
 
     private DecisionRules() {
     }
@@ -26,16 +28,16 @@ public final class DecisionRules {
     /** Validates the request shape independently of the finding. */
     public static void validateRequest(
             DecisionAction action, ChangeActionType approvedAction,
-            String approvedLanguage, String comment) {
+            String approvedLanguage, String comment, RejectReason rejectReason,
+            String approvedBy) {
         if (action == null) {
-            throw new InvalidDecisionException("action is required");
+            throw new InvalidDecisionException("Choose a decision.");
         }
         switch (action) {
             case ACCEPT -> {
                 if (approvedAction != null || approvedLanguage != null) {
                     throw new InvalidDecisionException(
-                            "ACCEPT approves the machine recommendation as-is and carries "
-                                    + "no action or language");
+                            "Accept keeps Rivell's suggestion as it is. To change it, choose edit.");
                 }
             }
             case EDIT -> {
@@ -43,20 +45,61 @@ public final class DecisionRules {
                     requireLanguage(approvedLanguage);
                 }
             }
-            case REJECT, ESCALATE -> {
+            case REJECT -> {
                 if (approvedAction != null || approvedLanguage != null) {
                     throw new InvalidDecisionException(
-                            action + " carries no action or language");
+                            "A reject decision cannot include new wording.");
+                }
+                if (rejectReason == null && (comment == null || comment.isBlank())) {
+                    throw new InvalidDecisionException(
+                            "Add a comment that explains why you chose to reject.");
+                }
+            }
+            case ESCALATE -> {
+                if (approvedAction != null || approvedLanguage != null) {
+                    throw new InvalidDecisionException(
+                            "An escalate decision cannot include new wording.");
                 }
                 if (comment == null || comment.isBlank()) {
                     throw new InvalidDecisionException(
-                            action + " requires a comment explaining the decision");
+                            "Add a comment that explains why you chose to escalate.");
                 }
+            }
+            case RESOLVE -> {
+                if (approvedAction != null || approvedLanguage != null) {
+                    throw new InvalidDecisionException(
+                            "Resolving an escalation cannot include new wording.");
+                }
+                if (approvedBy == null || approvedBy.isBlank()) {
+                    throw new InvalidDecisionException(
+                            "Add the name of the person who approved this clause.");
+                }
+            }
+        }
+        if (rejectReason != null && action != DecisionAction.REJECT) {
+            throw new InvalidDecisionException(
+                    "A rejection reason belongs only to a reject decision.");
+        }
+        if (approvedBy != null) {
+            if (action != DecisionAction.RESOLVE) {
+                throw new InvalidDecisionException(
+                        "Only a resolved escalation carries the approver's name.");
+            }
+            var trimmed = approvedBy.strip();
+            if (trimmed.isEmpty()) {
+                throw new InvalidDecisionException(
+                        "Add the name of the person who approved this clause.");
+            }
+            if (trimmed.length() > MAX_APPROVED_BY_LENGTH) {
+                throw new InvalidDecisionException(
+                        "The approver's name is too long. Keep it to "
+                                + MAX_APPROVED_BY_LENGTH + " characters or fewer.");
             }
         }
         if (comment != null && comment.length() > MAX_COMMENT_LENGTH) {
             throw new InvalidDecisionException(
-                    "comment exceeds " + MAX_COMMENT_LENGTH + " characters");
+                    "The comment is too long. Keep it to " + MAX_COMMENT_LENGTH
+                            + " characters or fewer.");
         }
     }
 
@@ -71,7 +114,7 @@ public final class DecisionRules {
         return switch (action) {
             case ACCEPT -> acceptPlan(finding, decisionId);
             case EDIT -> editPlan(finding, requestedAction, requestedLanguage, decisionId);
-            case REJECT, ESCALATE -> throw new IllegalArgumentException(
+            case REJECT, ESCALATE, RESOLVE -> throw new IllegalArgumentException(
                     "no change is derived for " + action);
         };
     }
@@ -110,21 +153,22 @@ public final class DecisionRules {
         if (targetKind == ChangeTargetKind.CLAUSE
                 && actionType == ChangeActionType.INSERT) {
             throw new InvalidDecisionException(
-                    "a clause finding is edited as REPLACE or DELETE, not INSERT");
+                    "A finding about an existing clause is edited as a replacement or a "
+                            + "deletion, not an insertion.");
         }
         if (targetKind == ChangeTargetKind.ABSENCE
                 && actionType != ChangeActionType.INSERT) {
             throw new InvalidDecisionException(
-                    "an absence finding is edited as INSERT");
+                    "A finding about a missing clause can only be edited as an insertion.");
         }
         if (actionType == ChangeActionType.DELETE) {
             if (language != null) {
-                throw new InvalidDecisionException("a deletion carries no language");
+                throw new InvalidDecisionException("A deletion cannot include new wording.");
             }
         } else {
             if (language == null || language.isBlank()) {
                 throw new InvalidDecisionException(
-                        "the edited language is required for " + actionType);
+                        "Add the new wording for this change.");
             }
             requireLanguage(language);
         }
@@ -156,11 +200,12 @@ public final class DecisionRules {
 
     private static void requireLanguage(String language) {
         if (language.isBlank()) {
-            throw new InvalidDecisionException("approved language must not be blank");
+            throw new InvalidDecisionException("The new wording cannot be blank.");
         }
         if (language.length() > MAX_LANGUAGE_LENGTH) {
             throw new InvalidDecisionException(
-                    "approved language exceeds " + MAX_LANGUAGE_LENGTH + " characters");
+                    "The new wording is too long. Keep it to " + MAX_LANGUAGE_LENGTH
+                            + " characters or fewer.");
         }
     }
 }

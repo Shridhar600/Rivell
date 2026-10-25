@@ -22,7 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.knowledge.ApplicabilityScope;
+import com.rivell.workbench.knowledge.ApplicableKnowledge;
+import com.rivell.workbench.knowledge.ApplicableKnowledgeQuery;
 import com.rivell.workbench.knowledge.ArtifactManifest;
 import com.rivell.workbench.knowledge.ArtifactType;
 import com.rivell.workbench.knowledge.ArtifactTypeAssessment;
@@ -114,11 +117,16 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         return typeKeys(contractType, com.rivell.workbench.contracts.ContractType::recordApplicableCodes);
     }
 
+    private static List<String> positionApplicableTypeKeys(String contractType) {
+        return typeKeys(contractType, com.rivell.workbench.contracts.ContractType::positionApplicableCodes);
+    }
+
     private static List<String> typeKeys(String contractType,
             java.util.function.Function<com.rivell.workbench.contracts.ContractType, java.util.Set<String>> codesOf) {
         java.util.Set<String> codes;
         try {
-            codes = codesOf.apply(com.rivell.workbench.contracts.ContractType.valueOf(contractType.trim()));
+            codes = codesOf.apply(com.rivell.workbench.contracts.ContractType.valueOf(
+                    contractType.trim().toUpperCase(java.util.Locale.ROOT)));
         } catch (IllegalArgumentException e) {
             codes = java.util.Set.of(contractType);
         }
@@ -161,6 +169,15 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                         throw new IllegalStateException("Unreadable parse coverage for an artifact", e);
                     }
                 });
+    }
+
+    @Override
+    @Transactional
+    public void updateDocumentTitle(UUID artifactId, String documentTitle) {
+        jdbcClient.sql("update knowledge_artifact set document_title = :title where id = :id")
+                .param("title", documentTitle)
+                .param("id", artifactId)
+                .update();
     }
 
     @Override
@@ -316,7 +333,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                              review_status, raw_label, content_text, payload, legal_concept_key,
                              topic_keys,
                              semantic_fields, edited_semantic_fields, interpretations,
-                             edited_content_text, edited_payload, superseding_candidate_id,
+                             edited_content_text, edited_title, edited_payload, superseding_candidate_id,
                              contract_pack_key, declared_contract_types, party_perspective,
                              paper_source, jurisdiction, effective_from, effective_to,
                              source_contract_types,
@@ -329,7 +346,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                                     :topicKeys::text[],
                                     :semanticFields::jsonb, :editedSemanticFields::jsonb,
                                     :interpretations::jsonb,
-                                    :editedContentText, :editedPayload::jsonb, :supersedingCandidateId,
+                                    :editedContentText, :editedTitle, :editedPayload::jsonb, :supersedingCandidateId,
                                     :contractPackKey, :declaredContractTypes::jsonb,
                                     :partyPerspective, :paperSource, :jurisdiction, :effectiveFrom,
                                     :effectiveTo, :sourceContractTypes::jsonb,
@@ -348,6 +365,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     .param("legalConceptKey", candidate.legalConceptKey())
                     .param("topicKeys", topicKeysLiteral(candidate.topicKeys()))
                     .param("editedContentText", candidate.editedContentText())
+                    .param("editedTitle", candidate.editedTitle())
                     .param("editedPayload", writePayload(candidate.editedPayload()))
                     .param("supersedingCandidateId", candidate.supersedingCandidateId())
                     .param("contractPackKey", candidate.scope().contractPackKey())
@@ -460,6 +478,61 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<CandidateUnit> listCandidateUnitsForMigration() {
+        return jdbcClient.sql("""
+                        select c.*, u.kind as unit_kind, u.content_text as unit_content_text
+                        from knowledge_candidate c
+                        join knowledge_extraction_unit u
+                          on u.id = c.extraction_unit_id
+                         and u.organization_id = c.organization_id
+                        order by c.organization_id, c.id
+                        """)
+                .query((rs, rowNum) -> new CandidateUnit(
+                        mapCandidate(rs, rowNum),
+                        ExtractionUnitKind.valueOf(rs.getString("unit_kind")),
+                        rs.getString("unit_content_text")))
+                .list();
+    }
+
+    @Override
+    public boolean updateSourceContractTypes(
+            UUID candidateId, UUID organizationId, Set<String> types) {
+        return jdbcClient.sql("""
+                        update knowledge_candidate
+                        set source_contract_types = :types::jsonb
+                        where id = :id and organization_id = :organizationId
+                        """)
+                .param("types", writeStringSet(types))
+                .param("id", candidateId)
+                .param("organizationId", organizationId)
+                .update() == 1;
+    }
+
+    @Override
+    public boolean dataMigrationCompleted(String migrationKey) {
+        return Boolean.TRUE.equals(jdbcClient.sql("""
+                        select exists (select 1 from knowledge_data_migration
+                                       where migration_key = :key)
+                        """)
+                .param("key", migrationKey)
+                .query(Boolean.class)
+                .single());
+    }
+
+    @Override
+    public void recordDataMigration(String migrationKey, String detail, Instant completedAt) {
+        jdbcClient.sql("""
+                        insert into knowledge_data_migration (migration_key, completed_at, detail)
+                        values (:key, :completedAt, :detail)
+                        on conflict (migration_key) do nothing
+                        """)
+                .param("key", migrationKey)
+                .param("completedAt", Timestamp.from(completedAt))
+                .param("detail", detail)
+                .update();
+    }
+
+    @Override
     public Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId) {
         return jdbcClient.sql("""
                         select * from knowledge_candidate
@@ -510,7 +583,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     @Transactional
     public boolean updateReviewState(
             UUID candidateId, UUID organizationId, ReviewStatus expectedStatus,
-            ReviewStatus reviewStatus, String editedContentText,
+            ReviewStatus reviewStatus, String editedContentText, String editedTitle,
             CandidatePayload editedPayload, SemanticFields editedSemanticFields,
             ApplicabilityScope scope, UUID supersedingCandidateId, String reviewNote,
             Instant reviewedAt, Instant updatedAt,
@@ -519,6 +592,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         var updateCount = jdbcClient.sql("""
                         update knowledge_candidate
                         set review_status = :reviewStatus, edited_content_text = :editedContentText,
+                            edited_title = :editedTitle,
                             edited_payload = :editedPayload::jsonb,
                             edited_semantic_fields = :editedSemanticFields::jsonb,
                             superseding_candidate_id = :supersedingCandidateId,
@@ -537,6 +611,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                         """)
                 .param("reviewStatus", reviewStatus.name())
                 .param("editedContentText", editedContentText)
+                .param("editedTitle", editedTitle)
                 .param("editedPayload", writePayload(editedPayload))
                 .param("editedSemanticFields", writeNullableSemanticFields(editedSemanticFields))
                 .param("contractPackKey", scope.contractPackKey())
@@ -593,46 +668,12 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             conditions.add("c.effective_concept_key = :legalConceptKey");
             params.put("legalConceptKey", query.legalConceptKey());
         }
-        if (query.contractPackKey() != null) {
-            conditions.add("(c.contract_pack_key is null or regexp_replace(lower(c.contract_pack_key), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:contractPackKey), '[^a-z0-9]', '', 'g'))");
-            params.put("contractPackKey", query.contractPackKey());
-        }
         if (query.contractType() != null) {
-            // a source declared for the contract's type, its family or a family member applies
-            conditions.add("(c.declared_contract_types = '[]'::jsonb"
-                    + " or exists (select 1 from jsonb_array_elements_text(c.declared_contract_types)"
-                    + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = any(:contractTypes::text[])))");
-            params.put("contractTypes", topicKeysLiteral(applicableTypeKeys(query.contractType())));
-            // what the record itself says it applies to narrows further; a contract of a type the
-            // product does not model (OTHER) cannot be excluded by it
-            if (!"OTHER".equalsIgnoreCase(query.contractType().trim())) {
-                conditions.add("(c.source_contract_types = '[]'::jsonb"
-                        + " or exists (select 1 from jsonb_array_elements_text(c.source_contract_types)"
-                        + " as st where regexp_replace(lower(st), '[^a-z0-9]', '', 'g') = any(:recordContractTypes::text[])))");
-                params.put("recordContractTypes", topicKeysLiteral(recordApplicableTypeKeys(query.contractType())));
-            }
+            addContractTypeScope(conditions, params, query.contractType());
         }
-        if (query.partyPerspective() != null) {
-            conditions.add("(c.party_perspective is null or regexp_replace(lower(c.party_perspective), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:partyPerspective), '[^a-z0-9]', '', 'g'))");
-            params.put("partyPerspective", query.partyPerspective());
-        }
-        if (query.paperSource() != null) {
-            conditions.add("(c.paper_source is null or regexp_replace(lower(c.paper_source), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:paperSource), '[^a-z0-9]', '', 'g'))");
-            params.put("paperSource", query.paperSource());
-        }
-        if (query.jurisdiction() != null) {
-            conditions.add("(c.jurisdiction is null or regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g')"
-                    + " = regexp_replace(lower(:jurisdiction), '[^a-z0-9]', '', 'g'))");
-            params.put("jurisdiction", query.jurisdiction());
-        }
-        if (query.effectiveOn() != null) {
-            conditions.add("(c.effective_from is null or c.effective_from <= :effectiveOn)");
-            conditions.add("(c.effective_to is null or c.effective_to >= :effectiveOn)");
-            params.put("effectiveOn", java.sql.Date.valueOf(query.effectiveOn()));
-        }
+        addScopeDimensions(conditions, params, query.contractPackKey(),
+                query.partyPerspective(), query.paperSource(), query.jurisdiction(),
+                query.effectiveOn());
         conditions.add("""
                 not exists (
                     select 1 from knowledge_publication_item sup_item
@@ -690,6 +731,140 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                         rs.getObject("publication_id", UUID.class),
                         rs.getLong("publication_number")))
                 .list();
+    }
+
+    @Override
+    public List<ApplicableKnowledge> findApplicableKnowledge(ApplicableKnowledgeQuery query) {
+        if (query.asOfPublicationNumber() < 1) {
+            return List.of();
+        }
+        var conditions = new ArrayList<String>();
+        var params = new HashMap<String, Object>();
+        conditions.add("a.organization_id = :organizationId");
+        params.put("organizationId", query.organizationId());
+        conditions.add("c.organization_id = a.organization_id");
+        conditions.add("a.artifact_type in ('PLAYBOOK', 'CLAUSE_LIBRARY')");
+        conditions.add("c.review_status = 'PUBLISHED'");
+        addContractTypeScope(conditions, params, query.contractType());
+        addScopeDimensions(conditions, params, query.contractPackKey(),
+                query.partyPerspective(), query.paperSource(), query.jurisdiction(),
+                query.effectiveOn());
+        conditions.add("""
+                not exists (
+                    select 1 from knowledge_publication_item sup_item
+                    join knowledge_publication sp
+                         on sp.id = sup_item.publication_id
+                        and sp.organization_id = c.organization_id
+                    where sup_item.organization_id = c.organization_id
+                      and sup_item.action = 'SUPERSEDE'
+                      and sup_item.superseded_candidate_id = c.id
+                      and sp.publication_number <= :asOf)
+                """);
+        params.put("asOf", query.asOfPublicationNumber());
+        var sql = """
+                select a.id as artifact_id, a.artifact_type,
+                       coalesce(a.document_title, a.filename) as name,
+                       max(pp.publication_number) as publication_number
+                from knowledge_artifact a
+                join knowledge_candidate c
+                  on c.artifact_id = a.id and c.organization_id = a.organization_id
+                join knowledge_publication_item add_item
+                  on add_item.candidate_id = c.id
+                 and add_item.action = 'ADD'
+                 and add_item.organization_id = c.organization_id
+                join knowledge_publication pp
+                  on pp.id = add_item.publication_id
+                 and pp.organization_id = a.organization_id
+                 and pp.publication_number <= :asOf
+                where %s
+                group by a.id, a.artifact_type, a.document_title, a.filename
+                order by name, a.id
+                """.formatted(String.join(" and ", conditions));
+        var statement = jdbcClient.sql(sql);
+        for (var entry : params.entrySet()) {
+            statement = statement.param(entry.getKey(), entry.getValue());
+        }
+        return statement
+                .query((rs, rowNum) -> new ApplicableKnowledge(
+                        rs.getObject("artifact_id", UUID.class),
+                        ArtifactType.valueOf(rs.getString("artifact_type")),
+                        rs.getString("name"),
+                        rs.getLong("publication_number")))
+                .list();
+    }
+
+    /**
+     * The contract-type half of the published-knowledge rule, shared by retrieval and the
+     * applicable-knowledge read so a preview cannot drift from what the analysis uses.
+     */
+    private static void addContractTypeScope(
+            List<String> conditions, HashMap<String, Object> params, String contractType) {
+        // a source declared for the contract's type, its family or a family member applies
+        conditions.add("(c.declared_contract_types = '[]'::jsonb"
+                + " or exists (select 1 from jsonb_array_elements_text(c.declared_contract_types)"
+                + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = any(:contractTypes::text[])))");
+        params.put("contractTypes", topicKeysLiteral(applicableTypeKeys(contractType)));
+        // what the record itself says it applies to narrows further, by kind of record: a
+        // position follows its contract area, so an MSA position governs a reseller agreement;
+        // literal wording is offered for the type it was written for and the parent types it
+        // sits under
+        if ("OTHER".equalsIgnoreCase(contractType.trim())) {
+            // a contract of a type the product does not model cannot be excluded by a
+            // position's own scope, and only wording that names no type was written for it
+            conditions.add("(c.candidate_type not in ('CLAUSE_VARIANT', 'TEMPLATE_CLAUSE')"
+                    + " or c.source_contract_types = '[]'::jsonb)");
+            return;
+        }
+        conditions.add("(c.source_contract_types = '[]'::jsonb"
+                + " or (c.candidate_type in ('CLAUSE_VARIANT', 'TEMPLATE_CLAUSE')"
+                + " and exists (select 1 from jsonb_array_elements_text(c.source_contract_types)"
+                + " as st where regexp_replace(lower(st), '[^a-z0-9]', '', 'g')"
+                + " = any(:wordingContractTypes::text[])))"
+                + " or (c.candidate_type not in ('CLAUSE_VARIANT', 'TEMPLATE_CLAUSE')"
+                + " and exists (select 1 from jsonb_array_elements_text(c.source_contract_types)"
+                + " as st where regexp_replace(lower(st), '[^a-z0-9]', '', 'g')"
+                + " = any(:positionContractTypes::text[]))))");
+        params.put("wordingContractTypes",
+                topicKeysLiteral(recordApplicableTypeKeys(contractType)));
+        params.put("positionContractTypes",
+                topicKeysLiteral(positionApplicableTypeKeys(contractType)));
+    }
+
+    /** The scope dimensions other than contract type, shared by both published-knowledge reads. */
+    private static void addScopeDimensions(
+            List<String> conditions, HashMap<String, Object> params, String contractPackKey,
+            String partyPerspective, String paperSource, String jurisdiction,
+            LocalDate effectiveOn) {
+        if (contractPackKey != null) {
+            conditions.add("(c.contract_pack_key is null or regexp_replace(lower(c.contract_pack_key), '[^a-z0-9]', '', 'g')"
+                    + " = regexp_replace(lower(:contractPackKey), '[^a-z0-9]', '', 'g'))");
+            params.put("contractPackKey", contractPackKey);
+        }
+        if (partyPerspective != null) {
+            conditions.add("(c.party_perspective is null or regexp_replace(lower(c.party_perspective), '[^a-z0-9]', '', 'g')"
+                    + " = regexp_replace(lower(:partyPerspective), '[^a-z0-9]', '', 'g'))");
+            params.put("partyPerspective", partyPerspective);
+        }
+        if (paperSource != null) {
+            conditions.add("(c.paper_source is null or regexp_replace(lower(c.paper_source), '[^a-z0-9]', '', 'g')"
+                    + " = regexp_replace(lower(:paperSource), '[^a-z0-9]', '', 'g'))");
+            params.put("paperSource", paperSource);
+        }
+        if (jurisdiction != null) {
+            conditions.add("(c.jurisdiction is null or case regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g')"
+                    + " when 'unitedstates' then 'us'"
+                    + " when 'unitedstatesofamerica' then 'us'"
+                    + " when 'usa' then 'us'"
+                    + " when 'unitedkingdom' then 'uk'"
+                    + " else regexp_replace(lower(c.jurisdiction), '[^a-z0-9]', '', 'g') end"
+                    + " = :jurisdiction)");
+            params.put("jurisdiction", Jurisdiction.normalize(jurisdiction));
+        }
+        if (effectiveOn != null) {
+            conditions.add("(c.effective_from is null or c.effective_from <= :effectiveOn)");
+            conditions.add("(c.effective_to is null or c.effective_to >= :effectiveOn)");
+            params.put("effectiveOn", java.sql.Date.valueOf(effectiveOn));
+        }
     }
 
 
@@ -874,7 +1049,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("parser_version"),
                 readList(rs.getString("parse_warnings")),
                 readArtifactAssessment(rs.getString("artifact_assessment")),
-                instant(rs, "created_at"));
+                instant(rs, "created_at"),
+                rs.getString("document_title"));
     }
 
     private KnowledgeSourceNode mapNode(ResultSet rs, int rowNum) throws SQLException {
@@ -966,7 +1142,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 rs.getString("review_note"),
                 instant(rs, "reviewed_at"),
                 instant(rs, "created_at"),
-                instant(rs, "updated_at"));
+                instant(rs, "updated_at"),
+                rs.getString("edited_title"));
     }
 
     private PublicationItem mapItem(ResultSet rs, int rowNum) throws SQLException {

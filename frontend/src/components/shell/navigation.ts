@@ -20,26 +20,36 @@ export interface NavDestination {
   Icon: NavIcon
   /** Active only on the exact path. Needed where the path is a prefix of its own children. */
   end?: boolean
-  /**
-   * Contextual sections of this destination. They are listed only while the destination is
-   * active, so the sidebar never advertises a second level of the product before the reviewer is in it.
-   */
-  children?: readonly NavDestination[]
-  /** Heading shown above `children`. Defaults to the destination's own label. */
-  childrenLabel?: string
 }
 
-const KNOWLEDGE_SECTIONS: readonly NavDestination[] = [
-  { id: 'knowledge-overview', label: 'Overview', to: '/knowledge', end: true, Icon: OverviewIcon },
-  { id: 'knowledge-playbooks', label: 'Playbooks', to: '/knowledge/playbooks', Icon: BookIcon },
-  { id: 'knowledge-clauses', label: 'Clause library', to: '/knowledge/clauses', Icon: ClauseIcon },
-  { id: 'knowledge-sources', label: 'Sources', to: '/knowledge/sources', Icon: SourceIcon },
-]
+/**
+ * The sidebar is a fixed list of groups. Every destination is always listed, so opening one never
+ * pushes the rest of the sidebar around. A group without a heading is the product's own top level.
+ */
+export interface NavGroup {
+  id: string
+  heading?: string
+  items: readonly NavDestination[]
+}
 
-export const TOP_LEVEL_NAVIGATION: readonly NavDestination[] = [
-  { id: 'home', label: 'Home', to: '/', end: true, Icon: HomeIcon },
-  { id: 'reviews', label: 'Reviews', to: '/reviews', Icon: DocumentIcon },
-  { id: 'knowledge', label: 'Knowledge', to: '/knowledge', Icon: BookIcon, children: KNOWLEDGE_SECTIONS },
+export const NAV_GROUPS: readonly NavGroup[] = [
+  {
+    id: 'work',
+    items: [
+      { id: 'home', label: 'Home', to: '/', end: true, Icon: HomeIcon },
+      { id: 'reviews', label: 'Reviews', to: '/reviews', Icon: DocumentIcon },
+    ],
+  },
+  {
+    id: 'knowledge',
+    heading: 'Knowledge',
+    items: [
+      { id: 'knowledge-overview', label: 'Overview', to: '/knowledge', end: true, Icon: OverviewIcon },
+      { id: 'knowledge-playbooks', label: 'Playbooks', to: '/knowledge/playbooks', Icon: BookIcon },
+      { id: 'knowledge-clauses', label: 'Clause library', to: '/knowledge/clauses', Icon: ClauseIcon },
+      { id: 'knowledge-sources', label: 'Sources', to: '/knowledge/sources', Icon: SourceIcon },
+    ],
+  },
 ]
 
 /**
@@ -56,17 +66,7 @@ export function isActive(destination: Pick<NavDestination, 'to' | 'end'>, pathna
   return matchPath({ path: destination.to, end: destination.end ?? false }, pathname) !== null
 }
 
-/** The destinations that have contextual sections open for this path, in display order. */
-export function openSections(pathname: string): readonly NavDestination[] {
-  return TOP_LEVEL_NAVIGATION.filter((destination) => destination.children && isActive(destination, pathname))
-}
-
 /** Every address the sidebar can send a reviewer to. Used to prove none of them is dead. */
 export function allNavigationTargets(): string[] {
-  const targets: string[] = []
-  for (const destination of TOP_LEVEL_NAVIGATION) {
-    targets.push(destination.to)
-    for (const child of destination.children ?? []) targets.push(child.to)
-  }
-  return [...new Set(targets)]
+  return [...new Set(NAV_GROUPS.flatMap((group) => group.items.map((item) => item.to)))]
 }

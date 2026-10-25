@@ -4,7 +4,7 @@ The eval's checks are the diagnostics CheckViews and the findings are the list s
 with the quality subset run_contract attaches (one detail read per finding). Every function
 takes what it needs and returns plain values, so the report and its tests can rely on them.
 """
-from scoring import _content_words, _overlap, _topic_matches, section_locator
+from scoring import absence_matches, section_locator
 
 NEEDS_LOOK = "NEEDS_YOUR_LOOK"
 SEARCH = "SEARCH"
@@ -18,7 +18,15 @@ TRIAGE_FLAGGED = 0.5
 
 QUALITY_KEYS = ("route", "foundBy", "uncertaintyReason", "spottedSeverity",
                 "presenceProbability", "searchedClauses", "comparedClauses",
-                "positionLabel", "jevCategory", "secondOpinionCategory")
+                "positionLabel", "jevCategory", "secondOpinionCategory", "levers",
+                "severityWithoutLevers", "secondOpinionQuote", "secondOpinionReason",
+                "categoryBeforeLevers", "wordingFitVerdict", "wordingFitReason",
+                "wordingFitReasons", "wordingFitQuote", "fitVerdict", "fitReason", "fitReasons",
+                "escalationTrigger", "requiresApproval", "escalationApprover",
+                "escalationCondition", "escalationSource", "escalationStance",
+                "escalationConflictApprover", "escalationConflictSource")
+
+FIT_VERDICTS = ("FITS", "DOES_NOT_FIT", "UNKNOWN")
 
 LEVER_KEYS = ("issues", "issuesDetected", "falseAlarmSections",
               "seriousFalseAlarmSections", "findings")
@@ -37,6 +45,38 @@ def _addresses(position):
 def _search_positions(check):
     return [position for position in (check.get("judgedPositions") or [])
             if (position.get("positionKey") or "").startswith("search_")]
+
+
+def fit_metrics(checks):
+    """Part 4: Rivell's fit verdicts, per search hit and per wording offer, and what it cost.
+
+    Reads what the run recorded: each judged position's {fitVerdict, fitOutcome,
+    wordingFitVerdict} in the check's judged positions, and the fit call/skip counts the check
+    keeps. A wording verdict is per judged position, so two offers in one consolidated finding
+    stay countable. The fit scorer compares these verdicts with its own labels; a run from
+    before the fit check reports zeroes, never missing keys.
+    """
+    search = {verdict: 0 for verdict in FIT_VERDICTS}
+    wording = {verdict: 0 for verdict in FIT_VERDICTS}
+    not_covered = calls = questions = skipped = 0
+    for check in checks:
+        if check.get("fitQuestions") is not None:
+            calls += 1
+        questions += check.get("fitQuestions") or 0
+        skipped += check.get("fitSkipped") or 0
+        for position in check.get("judgedPositions") or []:
+            searched = (position.get("positionKey") or "").startswith("search_")
+            if searched:
+                verdict = position.get("fitVerdict")
+                if verdict in search:
+                    search[verdict] += 1
+                if position.get("fitOutcome") == "not_covered":
+                    not_covered += 1
+            verdict = position.get("wordingFitVerdict")
+            if verdict in wording:
+                wording[verdict] += 1
+    return {"search": search, "wording": wording, "notCovered": not_covered,
+            "calls": calls, "questions": questions, "skipped": skipped}
 
 
 def search_metrics(checks):
@@ -84,10 +124,10 @@ def advisory_metrics(answer, nodes, clauses, findings):
 
 
 def _matches_issue(finding, issue):
-    if _topic_matches(finding.get("absenceConcept") or "", issue.get("playbookRef")):
-        return True
-    words = _content_words(quality(finding).get("positionLabel"))
-    return bool(words) and _overlap(words, _content_words(issue.get("playbookRef"))) >= 0.5
+    # DW-069: the same whole-word label/reference rule score_contract uses, so the two agree on a
+    # given finding. The omission lane counts only MISSING_POSITION findings; score_contract also
+    # credits v1 MISSING_REQUIRED_CONCEPT absences (lane breadth, not a matcher difference).
+    return absence_matches(finding, issue)
 
 
 def omission_metrics(answer, findings):
@@ -208,5 +248,38 @@ def severity_raise_score(score_contract, answer, nodes, clauses, findings):
                              [dict(finding, severity="LOW") if severity_raised(finding) else finding
                               for finding in findings])
     return {"raised": sum(1 for finding in findings if severity_raised(finding)),
+            "seriousCaught": serious_caught(without["issues"]),
+            "seriousFalseAlarmSections": without["seriousFalseAlarmSections"]}
+
+
+SEVERITIES = ("LOW", "MEDIUM", "HIGH")
+R3_LEVERS = ("P1", "P2", "P3")
+
+
+def _tagged(finding, levers):
+    return any(lever in (quality(finding).get("levers") or []) for lever in levers)
+
+
+def lever_changed(finding, levers):
+    """Severity R3: the finding carries one of the levers and its severity moved because of them."""
+    restored = quality(finding).get("severityWithoutLevers")
+    return (_tagged(finding, levers) and restored in SEVERITIES
+            and restored != finding.get("severity"))
+
+
+def lever_tagged(findings, levers):
+    """Findings the given levers touched, whether or not their severity moved."""
+    return sum(1 for finding in findings if _tagged(finding, levers))
+
+
+def lever_severity_score(score_contract, answer, nodes, clauses, findings, levers):
+    """The same run re-scored with the findings the given levers changed back at their unchanged
+    severity (P1: agreed worse category, P2: within-split routing, P3: fallback conditions)."""
+    without = score_contract(answer, nodes, clauses,
+                             [dict(finding, severity=quality(finding)["severityWithoutLevers"])
+                              if lever_changed(finding, levers) else finding
+                              for finding in findings])
+    return {"tagged": lever_tagged(findings, levers),
+            "raised": sum(1 for finding in findings if lever_changed(finding, levers)),
             "seriousCaught": serious_caught(without["issues"]),
             "seriousFalseAlarmSections": without["seriousFalseAlarmSections"]}

@@ -14,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,6 +38,7 @@ import com.rivell.workbench.knowledge.KnowledgeArtifact;
 import com.rivell.workbench.knowledge.KnowledgeIngestionService;
 import com.rivell.workbench.knowledge.KnowledgePublicationService;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
+import com.rivell.workbench.knowledge.ReviewReason;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -84,7 +86,10 @@ class KnowledgeController {
         this.userPositionService = userPositionService;
     }
 
-    @Operation(summary = "Upload a legal knowledge source with its human-declared manifest")
+    @Operation(summary = "Upload a legal knowledge source with its human-declared manifest",
+            description = "declaredContractTypes is optional. When it is empty or omitted, the "
+                    + "source applies to every contract type; the API does not reject an empty "
+                    + "declaration, because existing clients and the evaluation runner rely on it.")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
             @ApiResponse(
@@ -147,6 +152,33 @@ class KnowledgeController {
     @GetMapping("/artifacts/{id}")
     ApiResult<KnowledgeArtifactDetailResponse> getArtifact(@PathVariable UUID id) {
         return ApiResult.ok(toDetail(queryService.getArtifact(id)));
+    }
+
+    @Operation(summary = "List the published playbooks and clause libraries that apply to a contract type",
+            description = "Applies the same matching rule as review retrieval: the contract type, "
+                    + "its family (a mutual NDA is an NDA), the record's own declared scope, and the "
+                    + "optional jurisdiction, pack, perspective, paper source and effective date. "
+                    + "A source that declares no contract types applies to every contract type.")
+    @ResponseStatus(HttpStatus.OK)
+    @ApiResponses({
+            @ApiResponse(responseCode = "403", description = "Missing knowledge:read",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Missing or invalid contract type",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/applicable")
+    ApiResult<List<ApplicableKnowledgeView>> applicable(
+            @RequestParam String contractType,
+            @RequestParam(required = false) String jurisdiction,
+            @RequestParam(required = false) String partyPerspective,
+            @RequestParam(required = false) String paperSource,
+            @RequestParam(required = false) String contractPackKey,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate effectiveOn) {
+        return ApiResult.ok(queryService.applicableKnowledge(contractType, contractPackKey,
+                        partyPerspective, paperSource, jurisdiction, effectiveOn).stream()
+                .map(ApplicableKnowledgeView::from)
+                .toList());
     }
 
     @Operation(summary = "Get the deterministic structural parse of a knowledge source")
@@ -255,7 +287,7 @@ class KnowledgeController {
     ApiResult<CandidateView> edit(
             @PathVariable UUID id, @RequestBody ReviewEditRequest request) {
         return ApiResult.ok(toCandidateView(reviewService.edit(
-                id, request.contentText(),
+                id, request.title(), request.contentText(),
                 request.payloadColumns() == null ? null : new com.rivell.workbench.knowledge.CandidatePayload(
                         request.payloadColumns()),
                 request.scope() == null ? null : new com.rivell.workbench.knowledge.ApplicabilityScope(
@@ -271,7 +303,20 @@ class KnowledgeController {
                         request.semanticFields().requiresApproval(),
                         request.semanticFields().escalationTrigger(),
                         request.semanticFields().variantRole(),
-                        java.util.Map.of()),
+                        java.util.Map.of(),
+                        false,
+                        request.semanticFields().preferredText(),
+                        request.semanticFields().fallbackTexts() == null
+                                ? java.util.List.of() : request.semanticFields().fallbackTexts(),
+                        request.semanticFields().prohibitedText(),
+                        request.semanticFields().authorityRules() == null
+                                ? java.util.List.of() : request.semanticFields().authorityRules(),
+                        java.util.List.of(),
+                        request.semanticFields().authorityRules() != null
+                                && request.semanticFields().authorityRules().isEmpty(),
+                        java.util.List.of(),
+                        request.semanticFields().fallbackTexts() != null
+                                && request.semanticFields().fallbackTexts().isEmpty()),
                 request.note())));
     }
 
@@ -413,14 +458,14 @@ class KnowledgeController {
 
     private static KnowledgeArtifactSummaryResponse toSummary(KnowledgeArtifact artifact) {
         return new KnowledgeArtifactSummaryResponse(
-                artifact.id(), artifact.artifactType(), artifact.filename(),
+                artifact.id(), artifact.artifactType(), artifact.filename(), artifact.documentTitle(),
                 artifact.contentType(), artifact.sizeBytes(), artifact.sha256(),
                 artifact.ingestStatus(), artifact.createdAt());
     }
 
     private static KnowledgeArtifactDetailResponse toDetail(KnowledgeArtifact artifact) {
         return new KnowledgeArtifactDetailResponse(
-                artifact.id(), artifact.artifactType(), artifact.filename(),
+                artifact.id(), artifact.artifactType(), artifact.filename(), artifact.documentTitle(),
                 artifact.contentType(), artifact.sizeBytes(), artifact.sha256(),
                 artifact.storageKey(),
                 artifact.manifest().declaredContractTypes(),
@@ -448,10 +493,18 @@ class KnowledgeController {
                 assessment.warnings());
     }
 
-    private static CandidateView toCandidateView(com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
+    /** Preferred, fallback, prohibited, escalation: the order a reader expects, not a set's. */
+    private static java.util.Set<com.rivell.workbench.knowledge.PositionRole> inRoleOrder(
+            java.util.Set<com.rivell.workbench.knowledge.PositionRole> positions) {
+        return positions.stream().sorted()
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    static CandidateView toCandidateView(com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
         return new CandidateView(
                 candidate.id(), candidate.artifactId(), candidate.extractionUnitId(),
                 candidate.candidateType(), candidate.reviewStatus(), candidate.rawLabel(),
+                candidate.editedTitle(), candidate.effectiveTitle(),
                 candidate.contentText(), candidate.payload().columns(),
                 candidate.effectiveFieldRoles(),
                 candidate.legalConceptKey(),
@@ -465,10 +518,19 @@ class KnowledgeController {
                                 java.util.Map.Entry::getValue,
                                 (left, right) -> left,
                                 java.util.LinkedHashMap::new)),
-                candidate.effectivePositions(),
+                inRoleOrder(candidate.effectivePositions()),
                 candidate.effectiveVariantRole(),
                 candidate.effectiveEscalationTrigger(),
                 candidate.effectiveRequiresApproval(),
+                candidate.effectivePreferredText(),
+                candidate.effectiveFallbackTexts(),
+                candidate.effectiveProhibitedText(),
+                candidate.effectiveAuthorityRules(),
+                candidate.storedAuthorityRules(),
+                candidate.effectiveAuthorityConflicts(),
+                candidate.effectiveUnmappedAuthority(),
+                candidate.reviewReasons().contains(ReviewReason.UNMAPPED_AUTHORITY_WORDS),
+                candidate.correctedFields(),
                 candidate.interpretations().stream()
                         .map(interpretation -> new CandidateView.InterpretationView(
                                 interpretation.field(), interpretation.proposedValue(),

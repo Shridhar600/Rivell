@@ -37,9 +37,9 @@ describe('Knowledge overview', () => {
     const list = recent.closest('section')?.querySelector('ul') as HTMLElement
     const rows = within(list).getAllByRole('link')
     expect(rows[0]).toHaveTextContent('Commercial MSA Playbook')
-    expect(rows[0]).toHaveTextContent('Publication 2')
+    expect(rows[0]).toHaveTextContent('Knowledge version 2')
     expect(rows[0]).toHaveAttribute('href', '/knowledge/playbooks/pb?publication=2')
-    expect(rows[1]).toHaveTextContent('Publication 1')
+    expect(rows[1]).toHaveTextContent('Knowledge version 1')
     expect(rows.some((row) => row.getAttribute('href') === '/knowledge/clauses?publication=1')).toBe(true)
   })
 
@@ -47,20 +47,20 @@ describe('Knowledge overview', () => {
     stubKnowledgeApi(buildWorld())
     renderKnowledge('/knowledge')
 
-    const heading = await screen.findByRole('heading', { name: 'In compilation' })
+    const heading = await screen.findByRole('heading', { name: 'Drafts' })
     const row = within(heading.closest('section') as HTMLElement).getByRole('link')
     expect(row).toHaveAttribute('href', '/knowledge/compilations/draft')
-    expect(row).toHaveTextContent('From Draft Playbook.docx, 1 of 2 candidates reviewed')
+    expect(row).toHaveTextContent('From Draft Playbook.docx, 1 of 2 entries reviewed')
     expect(row).toHaveTextContent('Awaiting review')
   })
 
-  it('has no In compilation section when nothing is compiling', async () => {
+  it('has no Drafts section when nothing is drafting', async () => {
     const world = buildWorld()
     world.artifacts = world.artifacts.filter((entry) => entry.id !== 'draft')
     stubKnowledgeApi(world)
     renderKnowledge('/knowledge')
     await screen.findByRole('heading', { name: 'Recently published' })
-    expect(screen.queryByRole('heading', { name: 'In compilation' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Drafts' })).not.toBeInTheDocument()
   })
 
   it('treats empty published Knowledge as a state, not an error', async () => {
@@ -135,12 +135,13 @@ describe('Knowledge navigation', () => {
     expect(within(nav).getByRole('link', { name: 'Overview' })).not.toHaveAttribute('aria-current')
   })
 
-  it('keeps the three primary destinations and shows the sections only inside Knowledge', async () => {
+  it('lists the Knowledge areas outside Knowledge too, so the sidebar never changes shape', async () => {
     stubKnowledgeApi(buildWorld())
     renderKnowledge('/reviews')
     const primary = screen.getByRole('navigation', { name: 'Primary' })
-    expect(within(primary).getAllByRole('link').map((link) => link.textContent?.trim())).toEqual(['Home', 'Reviews', 'Knowledge'])
-    expect(screen.queryByRole('navigation', { name: 'Knowledge' })).not.toBeInTheDocument()
+    expect(within(primary).getAllByRole('link').map((link) => link.textContent?.trim())).toEqual(['Home', 'Reviews'])
+    const knowledge = screen.getByRole('navigation', { name: 'Knowledge' })
+    expect(within(knowledge).queryByRole('link', { current: 'page' })).not.toBeInTheDocument()
   })
 
   it('marks Overview current on exactly the overview route', async () => {
@@ -198,7 +199,7 @@ describe('loading, error and permission states', () => {
     renderKnowledge('/knowledge')
     expect(await screen.findByText(/one source could not be read/i)).toBeInTheDocument()
     expect(screen.getByText('Recently published')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'In compilation' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Drafts' })).not.toBeInTheDocument()
   })
 })
 

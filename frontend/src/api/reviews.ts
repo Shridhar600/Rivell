@@ -71,6 +71,14 @@ export type ReviewSnapshotProfile = {
   contractPackKey: string | null
 }
 
+/** A published playbook or clause library the review froze at creation. */
+export type PlaybookUsed = {
+  artifactId: string
+  artifactType: string
+  name: string
+  publicationNumber: number
+}
+
 export type ReviewSnapshot = {
   profile: ReviewSnapshotProfile | null
   packVersion: string | null
@@ -78,6 +86,8 @@ export type ReviewSnapshot = {
   effectiveOn: string | null
   /** The review engine the review is frozen on: 'V1' (one review) or 'V2' (a second opinion when the first review is unsure). */
   engine: string | null
+  /** Null on a review created before the freeze existed; empty means none applied. */
+  playbooksUsed: PlaybookUsed[] | null
 }
 
 export const COVERAGE_STATES = [
@@ -302,11 +312,30 @@ export type FindingQuality = {
   uncertaintyReason: string | null
   /** 'SEARCH' when the position was found by searching the playbook for the clause's text. */
   foundBy: string | null
+  /** The fit check's verdict on a search-found rule: FITS, DOES_NOT_FIT or UNKNOWN. */
+  fitVerdict: string | null
+  /** The fit check's code-owned reason for a search-found rule. */
+  fitReason: string | null
   /** The whole-contract read's own severity (HIGH or MEDIUM) and reason for a playbook-silent pick. */
   spottedSeverity: string | null
   spottedReason: string | null
+  /** The fit check's verdict on the library wording offered: FITS, DOES_NOT_FIT or UNKNOWN. */
+  wordingFitVerdict: string | null
+  /** The fit check's code-owned reason for that verdict. */
+  wordingFitReason: string | null
   /** Omission check: the estimate that the playbook position requires the provision, 0–1. */
   presenceProbability: number | null
+  /** The typed approval rule behind an escalation; null when no rule applies. */
+  escalationApprover?: string | null
+  /** The rule's own condition, shown as "Escalate if". */
+  escalationCondition?: string | null
+  /** Where the rule was stated: ENTRY, MATRIX or TABLE. */
+  escalationSource?: string | null
+  /** The stance the rule was read for: FALLBACK or PROHIBITED. */
+  escalationStance?: string | null
+  /** A lower-level rule naming a different approver for the same stance. */
+  escalationConflictApprover?: string | null
+  escalationConflictSource?: string | null
 }
 
 export type AbsenceBasis = {
@@ -445,6 +474,20 @@ function parseSnapshotProfile(value: unknown, what: string): ReviewSnapshotProfi
   }
 }
 
+function parsePlaybooksUsed(value: unknown, what: string): PlaybookUsed[] | null {
+  if (value === null || value === undefined) return null
+  if (!Array.isArray(value)) throw malformed(what)
+  return value.map((entry, index) => {
+    const item = asRecord(entry, `${what}.playbooksUsed[${index}]`)
+    return {
+      artifactId: readString(item, 'artifactId', what),
+      artifactType: readString(item, 'artifactType', what),
+      name: readString(item, 'name', what),
+      publicationNumber: readNumber(item, 'publicationNumber', what),
+    }
+  })
+}
+
 function parseSnapshot(value: unknown, what: string): ReviewSnapshot | null {
   if (value === null || value === undefined) return null
   const snapshot = asRecord(value, what)
@@ -454,6 +497,7 @@ function parseSnapshot(value: unknown, what: string): ReviewSnapshot | null {
     knowledgePinNumber: readOptionalNullableNumber(snapshot, 'knowledgePinNumber', what),
     effectiveOn: readOptionalNullableString(snapshot, 'effectiveOn', what),
     engine: readOptionalNullableString(snapshot, 'engine', what),
+    playbooksUsed: parsePlaybooksUsed(snapshot.playbooksUsed, what),
   }
 }
 
@@ -761,12 +805,30 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
     secondOpinionReason: readOptionalNullableString(quality, 'secondOpinionReason', what),
     uncertaintyReason: readOptionalNullableString(quality, 'uncertaintyReason', what),
     foundBy: readOptionalNullableString(quality, 'foundBy', what),
+    fitVerdict: readOptionalNullableString(quality, 'fitVerdict', what),
+    fitReason: readOptionalNullableString(quality, 'fitReason', what),
     spottedSeverity: readOptionalNullableString(quality, 'spottedSeverity', what),
     spottedReason: readOptionalNullableString(quality, 'spottedReason', what),
+    wordingFitVerdict: readOptionalNullableString(quality, 'wordingFitVerdict', what),
+    wordingFitReason: readOptionalNullableString(quality, 'wordingFitReason', what),
     presenceProbability:
       presenceProbability !== null && presenceProbability >= 0 && presenceProbability <= 1
         ? presenceProbability
         : null,
+    escalationApprover: readOptionalNullableString(quality, 'escalationApprover', what),
+    escalationCondition: readOptionalNullableString(quality, 'escalationCondition', what),
+    escalationSource: readOptionalNullableString(quality, 'escalationSource', what),
+    escalationStance: readOptionalNullableString(quality, 'escalationStance', what),
+    escalationConflictApprover: readOptionalNullableString(
+      quality,
+      'escalationConflictApprover',
+      what,
+    ),
+    escalationConflictSource: readOptionalNullableString(
+      quality,
+      'escalationConflictSource',
+      what,
+    ),
   }
 }
 

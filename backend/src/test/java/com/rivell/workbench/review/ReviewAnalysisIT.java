@@ -229,12 +229,13 @@ class ReviewAnalysisIT {
                         .isEqualTo("survival_coverage_partial");
             }
         });
-        // this configuration's published policy carries no escalation trigger; the
-        // bounded semantic path is still exercised (no zero-signal fake artefact)
+        // the published policy states the escalation rule ("escalate to general counsel before
+        // agreeing to any cap above the preferred position"), so the deviation escalates by rule
         var signals = analysisRepository.findSignals(organizationId, run.id());
         assertThat(signals).extracting(RawReviewSignal::signalType)
                 .containsExactlyInAnyOrder(SignalType.POLICY_DEVIATION,
-                        SignalType.APPROVED_DRAFTING_AVAILABLE);
+                        SignalType.APPROVED_DRAFTING_AVAILABLE,
+                        SignalType.ESCALATION_REQUIRED);
 
         var progress = analysisService.progress(organizationId, review.id());
         assertThat(progress.reviewStatus()).isEqualTo(ReviewStatus.COMPLETED);
@@ -800,5 +801,43 @@ class ReviewAnalysisIT {
         assertThat(run.status()).isEqualTo(RunStatus.COMPLETED);
         assertThat(reviewRepository.find(organizationId, review.id())
                 .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
+    }
+
+    @Test
+    void modelExecutionEventsCarryTheReviewRunAndCheckIds() {
+        var organizationId = organizationId();
+        var corpus = corpusBuilder.buildMainCorpus(organizationId);
+        var review = reviewService.create(
+                corpus.contract().contractId(), 1, ReviewPackRegistry.MSA_PACK);
+
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory
+                .getLogger("rivell.model-execution");
+        var appender = new ch.qos.logback.core.read.ListAppender<
+                ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            var run = analysisService.analyze(organizationId, review.id());
+
+            var event = appender.list.stream()
+                    .filter(candidate -> "decision".equals(field(candidate, "kind")))
+                    .findFirst().orElseThrow();
+            assertThat(event.getMDCPropertyMap())
+                    .containsEntry("reviewId", review.id().toString())
+                    .containsEntry("runId", run.id().toString())
+                    .containsKey("checkId");
+            assertThat(event.getMDCPropertyMap().get("checkId")).isNotBlank();
+            assertThat(org.slf4j.MDC.get("reviewId")).isNull();
+        } finally {
+            logger.detachAppender(appender);
+        }
+    }
+
+    private static String field(
+            ch.qos.logback.classic.spi.ILoggingEvent event, String key) {
+        return event.getKeyValuePairs().stream()
+                .filter(pair -> key.equals(pair.key))
+                .map(pair -> String.valueOf(pair.value))
+                .findFirst().orElse(null);
     }
 }

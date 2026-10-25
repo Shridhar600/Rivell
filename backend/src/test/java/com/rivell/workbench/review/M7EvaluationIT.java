@@ -319,6 +319,9 @@ class M7EvaluationIT {
         var run = analysisService.analyze(organizationId, review.id());
         var elapsed = (System.nanoTime() - start) / 1_000_000;
 
+        assertThat(analysisRepository.findSignals(organizationId, run.id()))
+                .as("the clause states its survival, so DW-100 leaves no gap")
+                .noneMatch(signal -> signal.issueFamily() == IssueFamily.SURVIVAL_COVERAGE_GAP);
         var findings = findingRepository.findFindings(organizationId, run.id());
         assertThat(findings).extracting(Finding::issueFamily)
                 .contains(IssueFamily.POSITION_NEEDS_FALLBACK,
@@ -331,9 +334,8 @@ class M7EvaluationIT {
         record("S10 same clause, two issue families, no overmerge",
                 organizationId, review.id(),
                 Set.of(IssueFamily.POSITION_NEEDS_FALLBACK,
-                        IssueFamily.CARVE_OUT_INCONSISTENCY,
-                        IssueFamily.SURVIVAL_COVERAGE_GAP),
-                3, 0, elapsed);
+                        IssueFamily.CARVE_OUT_INCONSISTENCY),
+                2, 0, elapsed);
     }
 
     @Test
@@ -419,16 +421,15 @@ class M7EvaluationIT {
         var correctedStart = System.nanoTime();
         var correctedRun = analysisService.analyze(organizationId, correctedReview.id());
         var correctedElapsed = (System.nanoTime() - correctedStart) / 1_000_000;
-        // P6/v2: no position is paired by the corrected topic any more; the text search still
-        // finds the liability position, so the judgment says it came from the search lane
+        // DW-085/v2: no position is paired by the corrected topic any more, and the text search
+        // must not bring the removed topic's positions back: the correction stands
         var correctedDeviations = analysisRepository.findSignals(organizationId, correctedRun.id())
                 .stream().filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)
                 .toList();
-        assertThat(correctedDeviations).isNotEmpty().allSatisfy(signal ->
-                assertThat(signal.quality()).containsEntry("foundBy", "SEARCH"));
-        record("S14 corrected concept drops the topic match; the text search finds it",
+        assertThat(correctedDeviations).isEmpty();
+        record("S14 corrected concept removes the topic match; the search does not bring it back",
                 organizationId, correctedReview.id(),
-                Set.of(IssueFamily.POSITION_NEEDS_FALLBACK), 1, 0, correctedElapsed);
+                Set.of(), 0, 0, correctedElapsed);
 
         enrichmentService.correctClause(contractId, 1, liability.id(),
                 FactCorrection.ofPrimary(CoreConcepts.LIMITATION_OF_LIABILITY));
