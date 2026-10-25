@@ -558,7 +558,7 @@ describe('finding detail', () => {
     const pane = within(detailPane())
     expect(pane.getAllByText(/Unusual clause, not covered by your playbook/).length).toBeGreaterThan(0)
     expect(pane.queryByText('Policy unavailable')).not.toBeInTheDocument()
-    expect(pane.getByText(/No playbook position addresses this clause/)).toBeInTheDocument()
+    expect(pane.getByText(/No playbook position covers this clause/)).toBeInTheDocument()
     expect(pane.getByText(/Confidence: high/)).toBeInTheDocument()
     expect(pane.queryByText(/90%/)).not.toBeInTheDocument()
     // The list names the same kind, not the generic policy-unavailable family.
@@ -703,7 +703,7 @@ describe('position findings', () => {
     ).toBeInTheDocument()
   })
 
-  it('says approval is needed and shows the escalate-if condition only when a typed rule applies', async () => {
+  it('names the approver and the departure only when a typed rule applies', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-8', {
       findings: listWith({
         ...fixtureWithinFallbackFindingSummary,
@@ -719,14 +719,31 @@ describe('position findings', () => {
     // The note itself is visible before the decision bar, carries the approver, its source and
     // the rule's own condition, not only the comparison grid.
     expect(note).toBeVisible()
-    expect(note).toHaveTextContent('Approval is needed.')
     expect(note).toHaveTextContent(
-      'Commercial Manager approves this fallback, from the approval matrix.',
+      'Approval required: Commercial Manager for this fallback (from the approval matrix).',
     )
     expect(note).toHaveTextContent('Approval applies if: Uncapped liability or consequential damages.')
     expect(note).toHaveTextContent('The entry names General Counsel for this.')
     // the rule's condition and the playbook trigger are the same words; they are shown once
     expect(within(detailPane()).queryByText(/Escalate when:/)).toBeNull()
+  })
+
+  it('names a clause beyond the fallback as the departure a fallback rule covers', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({
+            ...fixtureClauseFindingDetail,
+            reviewClassification: 'REVIEW_REQUIRED',
+            quality: { ...fixtureClauseFindingDetail.quality, ...approvalQuality },
+          }),
+        ),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    expect(detailPane().querySelector('.rv-ws-note--approval')).toHaveTextContent(
+      'Approval required: General Counsel for a clause beyond the fallback (stated on this entry).',
+    )
   })
 
   const approvalQuality = {

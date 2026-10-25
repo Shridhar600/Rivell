@@ -417,7 +417,15 @@ export function findingGapText(
   )
   text = text.replace(
     /The clause deals with this subject, but its wording is ambiguous or depends on something outside the contract, so compliance cannot be decided\./gi,
-    'The clause depends on something outside the contract, so Rivell cannot tell whether it meets your playbook.',
+    'Depends on terms outside this contract; check them before deciding.',
+  )
+  text = text.replace(
+    /The clause depends on something outside the contract, so Rivell cannot tell whether it meets your playbook\./gi,
+    'Depends on terms outside this contract; check them before deciding.',
+  )
+  text = text.replace(
+    /No playbook position addresses this clause, and it reads as unusual for this kind of contract(?: and against our side)?\.?/gi,
+    'No playbook position covers this clause. It may be unusual for this kind of contract; check it.',
   )
   text = text.replace(
     /Multiple conflicting published policies apply to ([A-Z_]+); no rule was chosen and the ambiguity is preserved\./g,
@@ -705,7 +713,7 @@ export function approvalSummary(quality: FindingQuality | null): ApprovalSummary
       ? quality.escalationStance
       : null
   return {
-    // the panel opens a sentence with the approver ("General counsel approves this fallback")
+    // the panel names the approver in the approval line ("Approval required: General counsel")
     approver: approver.charAt(0).toUpperCase() + approver.slice(1),
     condition: quality.escalationCondition?.trim() || null,
     source: quality.escalationSource?.trim() || null,
@@ -716,6 +724,27 @@ export function approvalSummary(quality: FindingQuality | null): ApprovalSummary
           source: quality.escalationConflictSource?.trim() || null,
         }
       : null,
+  }
+}
+
+/**
+ * What the clause departs from, so the approval line names the departure and not the rule's
+ * stance: a fallback rule also covers a clause beyond the fallback.
+ */
+export function approvalDeparture(
+  issueFamily: string,
+  summary: ApprovalSummary | null,
+): string | null {
+  if (!summary) return null
+  switch (issueFamily) {
+    case 'POSITION_WALK_AWAY':
+      return 'for this walk-away'
+    case 'POSITION_NEEDS_FALLBACK':
+      return 'for a clause beyond the fallback'
+    case 'POSITION_ACCEPTABLE_FALLBACK':
+      return 'for this fallback'
+    default:
+      return summary.stance === 'PROHIBITED' ? 'for this walk-away' : 'for this clause'
   }
 }
 

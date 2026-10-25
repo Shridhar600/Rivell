@@ -550,7 +550,7 @@ export const fixtureNotCoveredFindingDetail = {
   ...fixturePolicyMissingFindingDetail,
   ...fixtureNotCoveredFindingSummary,
   observationText:
-    'No playbook position addresses this clause, and it reads as unusual for this kind of contract and against our side.',
+    'No playbook position covers this clause. It may be unusual for this kind of contract; check it.',
   quality: {
     sufficiency: 'POLICY_MISSING',
     verificationOutcome: null,
