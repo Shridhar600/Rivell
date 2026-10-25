@@ -123,6 +123,21 @@ class FindingAssemblerTest {
     }
 
     @Test
+    void aSpottedIssueReadsWithItsOwnWordsNotTheGenericSentence() {
+        var issue = "Permits assignment to an affiliate or successor that competes with the "
+                + "discloser.";
+        var spotted = signal(SignalType.POLICY_UNAVAILABLE, IssueFamily.POLICY_UNAVAILABLE,
+                new PolicyUnavailablePayload(PolicyUnavailablePayload.SPOTTED),
+                List.of(UUID.randomUUID()), null, Map.of("spottedReason", issue));
+
+        var finding = assembler.assemble(run(), List.of(spotted), NOW).get(0);
+
+        assertThat(finding.observationText()).isEqualTo(issue);
+        assertThat(finding.observationText())
+                .doesNotContain("A whole-contract read named this clause");
+    }
+
+    @Test
     void draftingOnAnUncertainIssueDoesNotProposeLanguage() {
         var uncertain = signal(SignalType.DEVIATION_UNCERTAIN,
                 IssueFamily.POSITION_UNCERTAIN,
@@ -352,7 +367,7 @@ class FindingAssemblerTest {
                 .allSatisfy(text -> assertThat(text).doesNotContain("lawyer", "legal review"));
         assertThat(uncoveredFinding.observationText())
                 .isEqualTo("No playbook position addresses this clause, and it reads as unusual "
-                        + "for this kind of contract and against our side.");
+                        + "for this kind of contract.");
         assertThat(spottedFinding.observationText())
                 .isEqualTo("A whole-contract read named this clause as one our side must act on, "
                         + "but no playbook position check flagged it.");

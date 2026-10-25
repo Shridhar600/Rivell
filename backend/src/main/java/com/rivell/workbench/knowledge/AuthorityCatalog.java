@@ -149,8 +149,10 @@ final class AuthorityCatalog {
     /**
      * The rules a reader sees, with the same covering expansion {@link #merge} applies. A rule
      * that names no stance or only the fallback also covers the walk-away, so it is read with
-     * that stance too. Implied entries are appended after the rules that name a stance, so a
-     * rule the source names for the stance still wins.
+     * that stance too. An implied entry is added only for a stance no rule names: once a rule
+     * names the stance, a covering rule's copy would read as a second approver for a stance the
+     * source already speaks to. Implied entries are appended after the rules that name a
+     * stance, so a rule the source names for the stance still wins.
      */
     static List<AuthorityRule> withCoveringStances(List<AuthorityRule> rules) {
         if (rules == null || rules.isEmpty()) {
@@ -158,6 +160,10 @@ final class AuthorityCatalog {
         }
         var expanded = new ArrayList<>(rules);
         for (var stance : ALL_STANCES) {
+            var named = rules.stream().anyMatch(rule -> rule.stances().contains(stance));
+            if (named) {
+                continue;
+            }
             for (var rule : rules) {
                 if (!rule.stances().contains(stance) && covers(rule, stance)) {
                     var implied = rule.forStance(stance);

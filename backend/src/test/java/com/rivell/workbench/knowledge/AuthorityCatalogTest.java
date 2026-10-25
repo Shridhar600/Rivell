@@ -179,6 +179,20 @@ class AuthorityCatalogTest {
     }
 
     @Test
+    void anExplicitStanceRuleSuppressesTheImpliedCoveringCopy() {
+        var fallback = rule("Commercial Manager", Set.of(PositionRole.FALLBACK), null,
+                AuthorityLevel.MATRIX);
+        var walkAway = rule("General Counsel", Set.of(PositionRole.PROHIBITED), null,
+                AuthorityLevel.MATRIX);
+
+        var expanded = AuthorityCatalog.withCoveringStances(List.of(fallback, walkAway));
+
+        assertThat(expanded).containsExactly(fallback, walkAway);
+        assertThat(AuthorityCatalog.withCoveringStances(List.of(fallback)))
+                .containsExactly(fallback, fallback.forStance(PositionRole.PROHIBITED));
+    }
+
+    @Test
     void noRuleMeansNoApproval() {
         var effective = AuthorityCatalog.of(List.of()).merge("Limitation of liability", "", List.of());
 

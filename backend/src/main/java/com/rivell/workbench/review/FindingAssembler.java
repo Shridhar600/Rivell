@@ -163,13 +163,19 @@ public final class FindingAssembler {
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
                 && signal.payload() instanceof PolicyUnavailablePayload unavailable
                 && PolicyUnavailablePayload.NOT_COVERED.equals(unavailable.sufficiency())) {
+            // the assembler sees the run, not the review's profile, so it cannot tell whether a
+            // side is set: the sentence never claims one
             return new Observation(PolicyUnavailablePayload.NOT_COVERED,
                     "No playbook position addresses this clause, and it reads as unusual for "
-                            + "this kind of contract and against our side.");
+                            + "this kind of contract.");
         }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
                 && signal.payload() instanceof PolicyUnavailablePayload unavailable
                 && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())) {
+            var reason = signal.quality().get("spottedReason");
+            if (reason instanceof String text && !text.isBlank()) {
+                return new Observation(PolicyUnavailablePayload.SPOTTED, text);
+            }
             return new Observation(PolicyUnavailablePayload.SPOTTED,
                     "A whole-contract read named this clause as one our side must act on, but "
                             + "no playbook position check flagged it.");
