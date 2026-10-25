@@ -116,6 +116,12 @@ describe('knowledge used', () => {
     expect(knowledgeUsedText([])).toBe(NO_PLAYBOOK_NOTICE)
   })
 
+  it('says no playbook applied when only a clause library was used', () => {
+    expect(knowledgeUsedText([used('g-clause-library.xlsx', 'CLAUSE_LIBRARY')])).toBe(
+      `g-clause-library.xlsx (Clause library). ${NO_PLAYBOOK_NOTICE}`,
+    )
+  })
+
   it('shows nothing for a review that predates the freeze', () => {
     expect(knowledgeUsedText(null)).toBeNull()
   })

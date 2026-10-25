@@ -805,9 +805,14 @@ export function routeCountsLabel(findings: readonly Pick<FindingSummary, 'decide
   return `${second} decided with a second opinion · ${look} need${look === 1 ? 's' : ''} your look`
 }
 
-/** The sentence used wherever a review's frozen knowledge set is empty. */
+/** The sentence used wherever a review's frozen knowledge holds no playbook. */
 export const NO_PLAYBOOK_NOTICE =
   'No playbook applied. General scan only; review the full contract.'
+
+/** A clause library or template offers wording; only a playbook is policy the review is judged against. */
+export function withoutPlaybook(used: readonly PlaybookUsed[] | null | undefined): boolean {
+  return used != null && !used.some((item) => item.artifactType === 'PLAYBOOK')
+}
 
 const KNOWLEDGE_KIND_LABELS: Record<string, string> = {
   PLAYBOOK: 'Playbook',
@@ -827,10 +832,11 @@ export function knowledgeUsedText(
 ): string | null {
   if (used === null) return null
   if (used.length === 0) return NO_PLAYBOOK_NOTICE
-  return used
+  const names = used
     .map((item) => {
       const kind = KNOWLEDGE_KIND_LABELS[item.artifactType]
       return kind ? `${item.name} (${kind})` : item.name
     })
     .join(', ')
+  return withoutPlaybook(used) ? `${names}. ${NO_PLAYBOOK_NOTICE}` : names
 }
