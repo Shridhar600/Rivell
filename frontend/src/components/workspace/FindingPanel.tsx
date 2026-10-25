@@ -9,6 +9,7 @@ import { authorityLabel } from '../../lib/evidence'
 import {
   absenceClaims,
   approvalConflictLine,
+  approvalDeparture,
   approvalSourceLabel,
   approvalSummary,
   assessmentSummary,
@@ -252,6 +253,7 @@ export function FindingPanel(props: Props) {
     withinFallback && finding.quality?.fallbackConditionsOutcome === 'PARTIAL'
   const fallbackConditions = finding.quality?.fallbackConditions ?? []
   const approval = approvalSummary(finding.quality)
+  const approvalDepartureLine = approvalDeparture(finding.issueFamily, approval)
   const approvalConflict = approvalConflictLine(approval)
   const escalateIf = escalateIfLine(approval)
   const approvalSource = approvalSourceLabel(approval?.source ?? null)
@@ -430,14 +432,9 @@ export function FindingPanel(props: Props) {
 
           {approval && isActionable(finding) && !related ? (
             <p className="rv-ws-note rv-ws-note--approval">
-              <b>Approval is needed.</b>{' '}
-              {approval.approver} approves{' '}
-              {approval.stance === 'PROHIBITED' ? 'this walk-away' : 'this fallback'}
-              {approvalSource ? `, ${approvalSource}` : ''}.{' '}
-              {withinFallback
-                ? 'The clause stays within an acceptable fallback, and this rule says the fallback needs approval.'
-                : 'Escalate the finding, then resolve it with the approver’s name.'}
-              {escalateIf ? ` ${escalateIf}` : ''}
+              <b>Approval required: {approval.approver}</b>
+              {approvalDepartureLine ? ` ${approvalDepartureLine}` : ''}
+              {approvalSource ? ` (${approvalSource})` : ''}.{escalateIf ? ` ${escalateIf}` : ''}
               {approvalConflict ? ` ${approvalConflict}` : ''}
             </p>
           ) : null}

@@ -215,7 +215,7 @@ describe('findingGapText', () => {
     })
 
     expect(findingGapText(finding, labelFor)).toBe(
-      'The clause depends on something outside the contract, so Rivell cannot tell whether it meets your playbook.',
+      'Depends on terms outside this contract; check them before deciding.',
     )
   })
 
@@ -226,7 +226,7 @@ describe('findingGapText', () => {
     })
 
     expect(findingGapText(finding, labelFor)).toBe(
-      'No playbook position addresses this clause, and it reads as unusual for this kind of contract and against our side.',
+      'No playbook position covers this clause. It may be unusual for this kind of contract; check it.',
     )
   })
 

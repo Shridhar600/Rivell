@@ -164,10 +164,11 @@ public final class FindingAssembler {
                 && signal.payload() instanceof PolicyUnavailablePayload unavailable
                 && PolicyUnavailablePayload.NOT_COVERED.equals(unavailable.sufficiency())) {
             // the assembler sees the run, not the review's profile, so it cannot tell whether a
-            // side is set: the sentence never claims one
+            // side is set, and the triage records a probability, not a reason: the sentence
+            // claims neither
             return new Observation(PolicyUnavailablePayload.NOT_COVERED,
-                    "No playbook position addresses this clause, and it reads as unusual for "
-                            + "this kind of contract.");
+                    "No playbook position covers this clause. It may be unusual for this kind "
+                            + "of contract; check it.");
         }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
                 && signal.payload() instanceof PolicyUnavailablePayload unavailable
@@ -281,8 +282,7 @@ public final class FindingAssembler {
                     + "every fallback the position lists.";
             case PolicyComparisonSpecs.WITHIN_FALLBACK -> "The clause departs from the "
                     + "preferred position but stays within a listed fallback; accept and note.";
-            default -> "The clause depends on something outside the contract, so Rivell "
-                    + "cannot tell whether it meets your playbook.";
+            default -> "Depends on terms outside this contract; check them before deciding.";
         };
     }
 

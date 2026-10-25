@@ -375,8 +375,7 @@ class FindingAssemblerTest {
                 run(), List.of(deviation(PolicyComparisonSpecs.UNCLEAR, false, Map.of())), NOW).get(0);
 
         assertThat(finding.observationText()).isEqualTo(
-                "The clause depends on something outside the contract, so Rivell cannot tell "
-                        + "whether it meets your playbook.");
+                "Depends on terms outside this contract; check them before deciding.");
         assertThat(finding.observationText()).doesNotContain("compliance cannot be decided");
     }
 
@@ -395,8 +394,8 @@ class FindingAssemblerTest {
         assertThat(List.of(uncoveredFinding.observationText(), spottedFinding.observationText()))
                 .allSatisfy(text -> assertThat(text).doesNotContain("lawyer", "legal review"));
         assertThat(uncoveredFinding.observationText())
-                .isEqualTo("No playbook position addresses this clause, and it reads as unusual "
-                        + "for this kind of contract.");
+                .isEqualTo("No playbook position covers this clause. It may be unusual for this "
+                        + "kind of contract; check it.");
         assertThat(spottedFinding.observationText())
                 .isEqualTo("A whole-contract read named this clause as one our side must act on, "
                         + "but no playbook position check flagged it.");
