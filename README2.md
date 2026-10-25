@@ -40,26 +40,23 @@ It has two halves that work together:
 ## How it works
 
 ```mermaid
-flowchart LR
-    subgraph KB["Knowledge base"]
-        direction TB
-        P["Playbooks and<br/>clause libraries"] --> A["Read, checked and<br/>approved by your team"]
-        A --> V["Published<br/>knowledge version"]
-    end
+flowchart TB
+    KB["<b>Knowledge base</b><br/>Your playbooks and clause libraries,<br/>approved and versioned by your team"]
+    C["<b>Word contract</b>"]
 
     subgraph EN["Review engine"]
-        direction TB
+        direction LR
         S1["System-1 model<br/>bounded judgements"]
         HS["Hybrid search<br/>finds the right rule"]
-        LLM["Language model<br/>second opinion, broad read,<br/>drafting"]
+        LLM["Language model<br/>second opinion, broad read, drafting"]
     end
 
-    C["Word contract"] --> EN
-    V --> EN
-    EN --> F["Findings with reasons<br/>and suggested wording"]
+    KB --> EN
+    C --> EN
+    EN --> F["Findings with reasons and suggested wording"]
     F --> U{{"You decide"}}
-    U --> R["Tracked-change<br/>Word redline"]
-    U -. "refine the playbook,<br/>publish a new version" .-> A
+    U --> R["Tracked-change Word redline"]
+    U -. "refine the playbook, publish a new version" .-> KB
 ```
 
 Rivell gives each step to the tool that can do it most reliably:
