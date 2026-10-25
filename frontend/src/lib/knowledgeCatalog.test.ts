@@ -4,6 +4,7 @@ import {
   artifactName,
   buildCatalog,
   buildPublicationIndex,
+  clauseGroupDetail,
   clauseGroups,
   countNoun,
   isLiveAt,
@@ -123,6 +124,44 @@ describe('catalog', () => {
     expect(audit?.variants.map((v) => v.candidate.id)).toEqual(['c3'])
     expect(audit?.key).toBe('candidate-c3')
     expect(audit?.title).toBe('Audit')
+  })
+
+  it('keeps the variants of one source clause together and shows each variant topic', () => {
+    // The two rows of G-CONF-01 in the clause library fixture: one preferred wording, one
+    // fallback, classified under different topics.
+    const rows = [
+      candidate({
+        id: 'conf-preferred',
+        artifactId: 'cl',
+        candidateType: 'CLAUSE_VARIANT',
+        title: 'Confidentiality · Preferred',
+        effectiveConceptKey: 'CONFIDENTIALITY_OBLIGATIONS',
+        payloadColumns: { 'Clause ID': 'G-CONF-01', Topic: 'Confidentiality', Variant: 'Preferred' },
+        payloadFieldRoles: { 'Clause ID': 'REFERENCE', Topic: 'TOPIC', Variant: 'VARIANT' },
+      }),
+      candidate({
+        id: 'conf-fallback',
+        artifactId: 'cl',
+        candidateType: 'CLAUSE_VARIANT',
+        title: 'Confidentiality · Fallback 1',
+        effectiveConceptKey: 'CONFIDENTIALITY_PERIOD',
+        payloadColumns: { 'Clause ID': 'G-CONF-01', Topic: 'Confidentiality', Variant: 'Fallback 1' },
+        payloadFieldRoles: { 'Clause ID': 'REFERENCE', Topic: 'TOPIC', Variant: 'VARIANT' },
+      }),
+    ]
+    const world = buildCatalog({
+      artifacts: [cl],
+      publications: [publication(1, [{ candidateId: 'conf-preferred' }, { candidateId: 'conf-fallback' }])],
+      candidates: new Map([['cl', rows]]),
+    })
+
+    const groups = clauseGroups(world.clauseLibrary, world.index, humanizeCode)
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toMatchObject({ key: 'G-CONF-01', title: 'Confidentiality' })
+    expect(clauseGroupDetail(groups[0]!, humanizeCode)).toBe(
+      'Preferred · Confidentiality obligations, Fallback 1 · Confidentiality period',
+    )
   })
 
   it('reads the clause library as of an older publication', () => {

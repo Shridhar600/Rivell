@@ -189,11 +189,16 @@ class KnowledgeImportQualityTest {
     }
 
     @Test
-    void aWorkbookHasNoDocumentTitle() {
-        var nodes = new XlsxKnowledgeExtractor(PARSER_LIMITS)
+    void aWorkbookIsTitledByItsGuideSheetFirstCell() {
+        var library = new XlsxKnowledgeExtractor(PARSER_LIMITS)
                 .extractStructure(UUID.randomUUID(), stream(LIBRARY)).nodes();
+        assertThat(KnowledgeDocumentTitle.of(library).text())
+                .isEqualTo("KELTHERA THERAPEUTICS — APPROVED CLAUSE LIBRARY");
 
-        assertThat(KnowledgeDocumentTitle.of(nodes)).isNull();
+        // A workbook with no cover sheet keeps the filename as its name.
+        var matrix = new XlsxKnowledgeExtractor(PARSER_LIMITS)
+                .extractStructure(UUID.randomUUID(), stream("fixtures/knowledge-matrix.xlsx")).nodes();
+        assertThat(KnowledgeDocumentTitle.of(matrix)).isNull();
     }
 
     private KnowledgeCompiler.CompiledKnowledge compileGuide() {

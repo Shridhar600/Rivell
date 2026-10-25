@@ -1,6 +1,6 @@
 import type { ArtifactSummary, ArtifactType, Candidate, Publication } from '../api/knowledge'
 import type { ConceptLabel } from '../api/taxonomy'
-import { effectiveContentText } from './candidates'
+import { effectiveContentText, effectivePayloadColumns } from './candidates'
 
 /**
  * The read model behind the Knowledge surfaces.
@@ -189,15 +189,37 @@ export interface ClauseVariant {
 }
 
 export interface ClauseGroup {
-  /** The legal concept key, or the candidate id when the variant has no concept. Safe to use as a route id. */
+  /** The source clause id when the source states one, else the legal concept, else the candidate id. Safe to use as a route id. */
   key: string
   title: string
   conceptKey: string | null
   variants: ClauseVariant[]
 }
 
+function payloadValue(candidate: Candidate, role: string): string | null {
+  for (const [label, value] of Object.entries(effectivePayloadColumns(candidate))) {
+    if (candidate.payloadFieldRoles[label] === role && value.trim()) return value.trim()
+  }
+  return null
+}
+
+/** The source's own clause id ("Clause ID", "Ref"), when it states one. */
+function clauseReference(candidate: Candidate): string | null {
+  return payloadValue(candidate, 'REFERENCE')
+}
+
+/** The source's own topic for the clause ("Topic", "Clause topic"), when it states one. */
+function clauseTopic(candidate: Candidate): string | null {
+  return payloadValue(candidate, 'TOPIC')
+}
+
+/** The source's own variant name ("Preferred", "Fallback 1"), when it states one. */
+function clauseVariant(candidate: Candidate): string | null {
+  return payloadValue(candidate, 'VARIANT')
+}
+
 export function clauseKey(candidate: Candidate): string {
-  return candidate.effectiveConceptKey ?? `candidate-${candidate.id}`
+  return clauseReference(candidate) ?? candidate.effectiveConceptKey ?? `candidate-${candidate.id}`
 }
 
 export interface ClauseLibraryView {
@@ -209,7 +231,11 @@ export interface ClauseLibraryView {
   sourceCount: number
 }
 
-/** Clauses grouped by legal concept, as of a publication number. With no number, as of now. */
+/**
+ * Clauses grouped by the source clause id, so the variants of one source clause stay together,
+ * and by legal concept when the source states no id. As of a publication number; with no
+ * number, as of now.
+ */
 export function clauseGroups(
   view: ClauseLibraryView,
   index: PublicationIndex,
@@ -234,7 +260,49 @@ export function clauseGroups(
     }
     group.variants.push({ candidate, artifact, publication })
   }
+  for (const group of groups.values()) {
+    group.title = familyTitle(group, label)
+  }
   return [...groups.values()]
+}
+
+/**
+ * A source clause's variants can be classified under different topics: the preferred wording
+ * sets the obligation, the fallback the period. The source's own topic then names the family;
+ * a family on one topic keeps that topic's label.
+ */
+function familyTitle(group: ClauseGroup, label: ConceptLabel): string {
+  const topics = group.variants
+    .map((variant) => variant.candidate.effectiveConceptKey)
+    .filter((key): key is string => key !== null)
+    .map(label)
+  if (new Set(topics).size < 2) return group.title
+  const first = group.variants[0]
+  return (first ? clauseTopic(first.candidate) : null) ?? group.title
+}
+
+/** The topic a variant was classified under, in words, else the source's own topic. */
+function variantTopic(candidate: Candidate, label: ConceptLabel): string | null {
+  return candidate.effectiveConceptKey ? label(candidate.effectiveConceptKey) : clauseTopic(candidate)
+}
+
+/**
+ * One line for a group. When its variants sit on different topics, each variant is shown with
+ * its own, so the topics that used to split the family read as facets of one clause.
+ */
+export function clauseGroupDetail(group: ClauseGroup, label: ConceptLabel): string {
+  const topics = group.variants.map((variant) => variantTopic(variant.candidate, label))
+  const distinct = new Set(topics.filter((topic): topic is string => topic !== null))
+  if (distinct.size < 2) {
+    return group.variants.map((variant) => variant.candidate.title).join(', ')
+  }
+  return group.variants
+    .map((variant, at) => {
+      const name = clauseVariant(variant.candidate) ?? variant.candidate.title
+      const topic = topics[at]
+      return topic && topic !== name ? `${name} · ${topic}` : name
+    })
+    .join(', ')
 }
 
 // ---------------------------------------------------------------- catalog

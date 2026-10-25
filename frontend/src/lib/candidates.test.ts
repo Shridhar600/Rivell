@@ -15,6 +15,7 @@ function candidate(
     title: 'Rule',
     contentText: 'Original text',
     payloadColumns: {},
+    payloadFieldRoles: {},
     legalConceptKey: null,
     effectiveConceptKey: null,
     conceptCorrection: null,
