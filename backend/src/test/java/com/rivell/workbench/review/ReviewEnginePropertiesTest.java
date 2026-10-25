@@ -31,6 +31,7 @@ class ReviewEnginePropertiesTest {
         var properties = new ReviewEngineProperties(null, null, null, null, null);
 
         assertThat(properties.severity().agreedWorseCategory()).isTrue();
+        assertThat(properties.severity().r1NeedsCorroboration()).isFalse();
         assertThat(properties.routing().withinSplitMargin()).isEqualTo(0.45);
         assertThat(properties.fallbackConditions().enabled()).isTrue();
         assertThat(properties.fallbackConditions().maxChecks()).isEqualTo(40);

@@ -782,6 +782,8 @@ def engine_meta():
             "omissions": os.environ.get("RIVELL_REVIEW_OMISSIONS", "false").lower(),
             "definitions": os.environ.get("RIVELL_REVIEW_DEFINITIONS", "false").lower(),
             "agreedWorseCategory": os.environ.get("RIVELL_REVIEW_AGREED_WORSE_CATEGORY", "true").lower(),
+            "r1NeedsCorroboration": os.environ.get(
+                "RIVELL_REVIEW_R1_NEEDS_CORROBORATION", "false").lower(),
             "withinSplitMargin": os.environ.get("RIVELL_REVIEW_WITHIN_SPLIT_MARGIN", "0.45").lower(),
             "fallbackConditions": os.environ.get("RIVELL_REVIEW_FALLBACK_CONDITIONS", "true").lower()}
 
@@ -799,6 +801,7 @@ def header_lines(meta):
             + (" · omissions on" if meta.get("omissions") == "true" else "")
             + (" · definitions on" if meta.get("definitions") == "true" else "")
             + (" · P1 off" if meta.get("agreedWorseCategory", "true") == "false" else "")
+            + (" · R1 needs corroboration" if meta.get("r1NeedsCorroboration") == "true" else "")
             + (" · P2 off" if meta.get("withinSplitMargin", "0.45").startswith("-")
                else f" · P2 margin {meta['withinSplitMargin']}"
                if meta.get("withinSplitMargin", "0.45") != "0.45" else "")

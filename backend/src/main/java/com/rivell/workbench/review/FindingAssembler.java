@@ -418,15 +418,26 @@ public final class FindingAssembler {
                 && List.of(DeviationUncertainPayload.SECOND_OPINION_DISAGREES,
                         DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE)
                         .contains(uncertain.reason())) {
-            // engine v2: a walk-away or beyond-fallback second opinion raises the look item to MEDIUM
+            // engine v2: a walk-away or beyond-fallback second opinion raises the look item to
+            // MEDIUM, unless the corroboration rule found no second signal to agree with it
             var secondOpinionCategory = primary.quality().get("secondOpinionCategory");
             return DeviationUncertainPayload.SECOND_OPINION_DISAGREES.equals(uncertain.reason())
                     && (PolicyComparisonSpecs.WALK_AWAY.equals(secondOpinionCategory)
                             || PolicyComparisonSpecs.BEYOND_FALLBACK
                                     .equals(secondOpinionCategory))
+                    && r1Corroborated(primary)
                     ? FindingSeverity.MEDIUM : FindingSeverity.LOW;
         }
         return FindingSeverity.MEDIUM;
+    }
+
+    /**
+     * R1 with the corroboration rule on: the comparison tags the disagreement R1:NONE when no
+     * second signal agreed, so it stays a LOW look item. An untagged signal ran with the rule off.
+     */
+    private static boolean r1Corroborated(RawReviewSignal primary) {
+        return !(primary.quality().get("levers") instanceof List<?> levers)
+                || !levers.contains(PolicyComparisonSpecs.R1_NONE);
     }
 
     private static FindingSeverity categorySeverity(String category) {
