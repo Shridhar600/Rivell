@@ -182,14 +182,17 @@ class SeverityR3BudgetIT {
     void onlyTheBudgetedNumberOfConditionChecksRunAndTheRestStayWithin() throws Exception {
         var reviewId = reviewedContract();
         jevOnLiability(CLEAN_WITHIN);
-        generativeProvider.fallbackConditionLines = "1 | UNMET | {CLAUSE} | the cap is within the fallback multiple";
+        generativeProvider.fallbackConditionLines = "1 | UNMET | {CLAUSE}"
+                + " | the cap is within the fallback multiple"
+                + " | The total liability of Supplier shall not exceed two times the fees paid in the"
+                + " preceding 12 months.";
 
         var run = analysisService.analyze(organizationId(), reviewId);
 
         assertThat(generativeProvider.fallbackConditionCalls.get()).isEqualTo(1);
         var outcomes = judged(run.id()).stream()
                 .map(position -> position.get("fallbackConditionsOutcome")).filter(java.util.Objects::nonNull).toList();
-        assertThat(outcomes).containsOnlyOnce("BEYOND").contains("OVER_BUDGET");
+        assertThat(outcomes).containsOnlyOnce("PARTIAL").contains("OVER_BUDGET");
         assertThat(findings(run.id())).anySatisfy(finding -> assertThat(finding.quality())
                 .containsEntry("fallbackConditionsOutcome", "OVER_BUDGET").doesNotContainKey("levers"));
     }

@@ -362,6 +362,41 @@ export const fixtureWithinFallbackFindingDetail = {
 }
 
 /**
+ * A within-fallback note whose fallback is only partly stated: one condition is met and one is not
+ * stated. It is a review item, not an accept-and-record note.
+ */
+export const fixturePartialFallbackFindingSummary = {
+  ...fixtureWithinFallbackFindingSummary,
+  id: 'f-19',
+  reviewClassification: 'REVIEW_REQUIRED',
+}
+
+export const fixturePartialFallbackFindingDetail = {
+  ...fixtureWithinFallbackFindingDetail,
+  ...fixturePartialFallbackFindingSummary,
+  observationText:
+    'Partly within your fallback. The clause does not state: the right to suspend performance before termination. Check whether it is elsewhere in the contract.',
+  quality: {
+    ...fixtureWithinFallbackFindingDetail.quality,
+    fallbackConditionsOutcome: 'PARTIAL',
+    fallbackConditions: [
+      {
+        fallback: 1,
+        condition: 'a thirty (30) day cure period',
+        status: 'MET',
+        quote: "thirty (30) days' notice",
+      },
+      {
+        fallback: 1,
+        condition: 'the right to suspend performance before termination',
+        status: 'NOT_STATED',
+        quote: null,
+      },
+    ],
+  },
+}
+
+/**
  * A LOW informational note whose position governs a topic the clause only touches. It must read as
  * a related position, never as a breach of the clause itself.
  */

@@ -344,6 +344,8 @@ describe('review parsers', () => {
       spottedReason: null,
       wordingFitVerdict: null,
       wordingFitReason: null,
+      fallbackConditionsOutcome: null,
+      fallbackConditions: [],
       fitVerdict: null,
       fitReason: null,
       presenceProbability: null,

@@ -653,8 +653,7 @@ public class LiabilityReviewIT {
     public static final class ReviewGenerativeProvider implements GenerativeReasoningProvider {
 
         private final com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider base =
-                new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();
-        private final AtomicInteger calls = new AtomicInteger();
+                new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();        private final AtomicInteger calls = new AtomicInteger();
         volatile boolean failOpenEnded;
         /** The wording call fails as if the analysis account had no credit. */
         volatile boolean openEndedOutOfCredit;
@@ -729,6 +728,16 @@ public class LiabilityReviewIT {
             fallbackConditionStates.clear();
         }
 
+        /** The first role-tagged line of the rendered position: words the position itself holds. */
+        private static String fallbackSource(String position) {
+            return position.lines()
+                    .filter(line -> line.startsWith("Fallback 1: ") || line.startsWith("Preferred: ")
+                            || line.startsWith("Position: "))
+                    .map(line -> line.substring(line.indexOf(':') + 2))
+                    .findFirst()
+                    .orElse(position);
+        }
+
         @Override
         public GenerationResult generate(GenerationRequest request) {
             calls.incrementAndGet();
@@ -758,7 +767,8 @@ public class LiabilityReviewIT {
                         .replaceAll("\\s+", " ").strip();
                 var lines = fallbackConditionLines != null
                         ? fallbackConditionLines.replace("{CLAUSE}", words)
-                        : "1 | MET | " + words + " | the clause meets the listed fallback";
+                        : "1 | MET | " + words + " | the clause meets the listed fallback | "
+                                + fallbackSource(conditions.position());
                 return new GenerationResult(Map.of("fallbackListed", fallbackListed, "conditions", lines),
                         "fake-gen-v1", new TokenUsage(300, 40));
             }

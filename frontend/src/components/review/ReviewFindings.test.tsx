@@ -45,6 +45,8 @@ import {
   fixtureOmissionUnsureFindingSummary,
   fixtureSearchFoundFindingDetail,
   fixtureNoApproverConditionFindingDetail,
+  fixturePartialFallbackFindingDetail,
+  fixturePartialFallbackFindingSummary,
   fixtureSearchFoundFindingSummary,
 } from './testFixtures'
 import { fixtureHumanReview } from './workflowFixtures'
@@ -80,6 +82,7 @@ const detailById: Record<string, unknown> = {
   'f-16': fixtureOmissionUnsureFindingDetail,
   'f-17': fixtureSearchFoundFindingDetail,
   'f-18': fixtureNoApproverConditionFindingDetail,
+  'f-19': fixturePartialFallbackFindingDetail,
 }
 
 /**
@@ -665,6 +668,22 @@ describe('position findings', () => {
     const pane = within(detailPane())
     expect(pane.getByText(/note, not a problem/i)).toBeInTheDocument()
     expect(pane.getByText(/accept and record/i)).toBeInTheDocument()
+  })
+
+  it('lists a fallback condition the clause does not state', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-19', {
+      findings: listWith(fixturePartialFallbackFindingSummary),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    const conditions = pane.getByTestId('fallback-conditions')
+    expect(conditions).toHaveTextContent('Stated')
+    expect(conditions).toHaveTextContent('a thirty (30) day cure period')
+    expect(conditions).toHaveTextContent('Not stated')
+    expect(conditions).toHaveTextContent('the right to suspend performance before termination')
+    // a partly stated fallback is not a note to accept and record
+    expect(pane.queryByText(/accept and record/i)).not.toBeInTheDocument()
   })
 
   it('reads a secondary-topic position as related guidance, not a breach', async () => {

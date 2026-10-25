@@ -52,6 +52,8 @@ export const fixtureAcceptableFindingDetail = {
     spottedReason: null,
     wordingFitVerdict: 'FITS',
     wordingFitReason: 'MEETS_POSITION_YES',
+    fallbackConditionsOutcome: null,
+    fallbackConditions: [],
     fitVerdict: null,
     fitReason: null,
     presenceProbability: null,

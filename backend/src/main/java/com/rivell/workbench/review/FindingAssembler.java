@@ -193,6 +193,10 @@ public final class FindingAssembler {
         }
         if (signal.signalType() == SignalType.POLICY_DEVIATION
                 && signal.payload() instanceof PositionDeviationPayload deviation) {
+            if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())
+                    && partiallyWithinFallback(signal)) {
+                return new Observation(observationKind(deviation.category()), partialFallbackText(signal));
+            }
             return new Observation(observationKind(deviation.category()),
                     observationText(deviation.category()));
         }
@@ -280,6 +284,42 @@ public final class FindingAssembler {
             default -> "The clause depends on something outside the contract, so Rivell "
                     + "cannot tell whether it meets your playbook.";
         };
+    }
+
+    private static boolean partiallyWithinFallback(RawReviewSignal signal) {
+        return FallbackConditionSpecs.PARTIAL.equals(
+                signal.quality().get("fallbackConditionsOutcome"));
+    }
+
+    /**
+     * The clause does not state every condition of the fallback. A condition the check could not
+     * verify is not named here: it reads as "could not check" in the finding's condition list.
+     */
+    private static String partialFallbackText(RawReviewSignal signal) {
+        var notStated = new ArrayList<String>();
+        var unmet = new ArrayList<String>();
+        if (signal.quality().get("fallbackConditions") instanceof List<?> conditions) {
+            for (var item : conditions) {
+                if (item instanceof Map<?, ?> condition
+                        && condition.get("condition") instanceof String text) {
+                    if (FallbackConditionSpecs.NOT_STATED.equals(condition.get("status"))) {
+                        notStated.add(text);
+                    } else if (FallbackConditionSpecs.UNMET.equals(condition.get("status"))) {
+                        unmet.add(text);
+                    }
+                }
+            }
+        }
+        var text = new StringBuilder("Partly within your fallback. ");
+        if (!notStated.isEmpty()) {
+            text.append("The clause does not state: ")
+                    .append(String.join("; ", notStated)).append(". ");
+        }
+        if (!unmet.isEmpty()) {
+            text.append("The clause does not meet: ")
+                    .append(String.join("; ", unmet)).append(". ");
+        }
+        return text.append("Check whether it is elsewhere in the contract.").toString();
     }
 
     private static ProposedAction action(
@@ -418,6 +458,9 @@ public final class FindingAssembler {
                 return FindingClassification.BLOCKING;
             }
             if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())) {
+                if (partiallyWithinFallback(primary)) {
+                    return FindingClassification.REVIEW_REQUIRED;
+                }
                 return escalation == null
                         ? FindingClassification.INFORMATIONAL
                         : FindingClassification.REVIEW_REQUIRED;
@@ -481,15 +524,6 @@ public final class FindingAssembler {
             claims.add(FindingClaim.of(claims.size(), ClaimKind.GENERATIVE_EXPLANATION,
                     openEnded.explanation(), absenceSubject, evidence));
         }
-        if (primary.quality().get("fallbackConditionsUnknown") instanceof List<?> unknown
-                && !unknown.isEmpty()) {
-            // P3: a look note, never a severity change; the conditions the contract does not settle
-            claims.add(FindingClaim.of(claims.size(), ClaimKind.OBSERVATION,
-                    "Some conditions of the listed fallback could not be checked from the clause or the "
-                            + "contract facts, so please check them yourself: "
-                            + String.join("; ", unknown.stream().map(String::valueOf).toList()) + ".",
-                    absenceSubject, evidence));
-        }
         claims.add(FindingClaim.of(claims.size(), ClaimKind.RECOMMENDATION,
                 recommendation(action, escalation, drafting), absenceSubject, evidence));
         var ordinals = new int[claims.size()];
@@ -533,7 +567,7 @@ public final class FindingAssembler {
             "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
             "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
             "positionLabel", "levers", "categoryBeforeLevers", "routeReason", "fallbackListed",
-            "fallbackConditionsOutcome", "fallbackConditionsUnknown", "fallbackConditionsUnmet", "fallbackConditionsExecutionId", "secondOpinionExecutionId", "openEndedOutcome",
+            "fallbackConditionsOutcome", "fallbackConditions", "fallbackConditionsExecutionId", "secondOpinionExecutionId", "openEndedOutcome",
             "fitVerdict", "fitReason", "fitReasons");
 
     /** The typed rule behind an escalation, kept on the finding the panel reads. */
