@@ -443,6 +443,27 @@ class DeterministicContractExtractorsTest {
     }
 
     @Test
+    void aTermDefinedByAppositionInTheIntroductionKeepsItsDescribingSentence() {
+        var introduction = paragraph("A. The Parties wish to consider a possible integration "
+                + "between their services, including technical evaluation in a non-production "
+                + "sandbox (the \"Purpose\").", 1);
+        var use = paragraph("The Purpose does not permit production deployment.", 3);
+        var nodes = List.of(bodyNode(), introduction,
+                heading("Scope", "1", 2), use);
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var terms = new DeterministicContractExtractors().definedTerms(VERSION_ID, regions, nodes);
+
+        assertThat(terms).extracting(DefinedTerm::term).containsExactly("Purpose");
+        var term = terms.get(0);
+        assertThat(term.definition()).isEqualTo("The Parties wish to consider a possible "
+                + "integration between their services, including technical evaluation in a "
+                + "non-production sandbox");
+        assertThat(term.definingNodeId()).isEqualTo(introduction.id());
+        assertThat(term.referenceNodeIds()).containsExactly(use.id());
+    }
+
+    @Test
     void duplicateDefinedTermIsFlagged() {
         var nodes = List.of(
                 bodyNode(),

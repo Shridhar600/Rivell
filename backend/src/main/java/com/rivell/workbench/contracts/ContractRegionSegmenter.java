@@ -136,6 +136,17 @@ public final class ContractRegionSegmenter {
                     }
                 }
                 case TABLE, TEXT_BOX -> {
+                    if (node.nodeType() == DocumentNodeType.TABLE
+                            && currentHeading != null && isWitnessLine(currentHeading)) {
+                        // a table after the execution block is contract content (a schedule's
+                        // figures), not part of the signatures: it starts a region of its own,
+                        // so the review reads it instead of dropping it with the signature block
+                        closeCurrent(regions, currentHeading, currentTexts, currentText);
+                        currentHeading = node;
+                        currentTexts = new ArrayList<>();
+                        currentText = new StringBuilder(tableText(node, nodes, byId).strip());
+                        continue;
+                    }
                     var tableText = node.nodeType() == DocumentNodeType.TEXT_BOX
                             ? (node.text() == null ? "" : node.text())
                             : tableText(node, nodes, byId);
