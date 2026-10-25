@@ -391,7 +391,36 @@ describe('findingPlaybookRule', () => {
       text: 'Liability must be capped at two times the fees paid.',
       basedOn: 'Mutual NDA Negotiation Guide, version 2',
       escalation: 'Uncapped liability or consequential damages',
+      appliesTo: null,
     })
+  })
+
+  it('says why a narrower position applies, through the parent agreement it sits under', () => {
+    const scoped = [
+      {
+        ...evidenceItems[0],
+        applicabilityScope: {
+          contractPackKey: null,
+          declaredContractTypes: ['MSA', 'SOW'],
+          partyPerspective: null,
+          paperSource: null,
+          jurisdiction: null,
+          effectiveFrom: null,
+          effectiveTo: null,
+          sourceContractTypes: ['MSA'],
+        },
+      },
+    ]
+    const finding = findingText({
+      concept: 'LIMITATION_OF_LIABILITY',
+      issueFamily: 'POSITION_NEEDS_FALLBACK',
+      positionComparison: position,
+      evidenceItems: scoped,
+    })
+
+    expect(findingPlaybookRule(finding, labelFor, playbooks, 'SOW')?.appliesTo).toBe(
+      'Applies to MSA; used for this statement of work because it sits under an MSA.',
+    )
   })
 
   it('names no playbook when the rule cannot be traced to one the review froze', () => {
@@ -417,6 +446,7 @@ describe('findingPlaybookRule', () => {
       text: null,
       basedOn: null,
       escalation: null,
+      appliesTo: null,
     })
   })
 
@@ -434,6 +464,7 @@ describe('findingPlaybookRule', () => {
       text: 'Liability must be capped at fees paid in the preceding 12 months.',
       basedOn: 'Mutual NDA Negotiation Guide, version 2',
       escalation: 'Uncapped liability or consequential damages',
+      appliesTo: null,
     })
   })
 

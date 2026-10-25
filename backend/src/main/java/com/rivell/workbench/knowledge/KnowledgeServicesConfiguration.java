@@ -95,6 +95,12 @@ class KnowledgeServicesConfiguration {
     }
 
     @Bean
+    KnowledgeTitleRederivationService knowledgeTitleRederivationService(
+            KnowledgeRepository knowledgeRepository, java.time.Clock clock) {
+        return new KnowledgeTitleRederivationService(knowledgeRepository, clock);
+    }
+
+    @Bean
     CandidateReviewService candidateReviewService(
             KnowledgeRepository knowledgeRepository,
             TransactionTemplate transactionTemplate,

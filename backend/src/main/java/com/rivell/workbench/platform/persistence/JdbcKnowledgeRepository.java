@@ -242,6 +242,16 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<KnowledgeArtifact> listArtifactsForMigration() {
+        return jdbcClient.sql("""
+                        select * from knowledge_artifact
+                        order by organization_id, id
+                        """)
+                .query(this::mapArtifact)
+                .list();
+    }
+
+    @Override
     public Optional<KnowledgeSource> findSource(UUID artifactId, UUID organizationId) {
         return jdbcClient.sql("""
                         select filename, content_type, sha256, storage_key

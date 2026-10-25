@@ -1080,6 +1080,7 @@ export interface components {
             effectiveFrom?: string;
             /** Format: date */
             effectiveTo?: string;
+            sourceContractTypes?: string[];
         };
         AuthorityConflict: {
             approver?: string;
@@ -1738,7 +1739,7 @@ export interface components {
             /** Format: int32 */
             runNumber?: number;
             status?: string;
-            /** @description What the run did with each applicable published playbook position; null on runs that predate the coverage list */
+            /** @description What the run did with each applicable published playbook position; null on runs that predate the coverage list or whose coverage could not be computed */
             playbookCoverage?: components["schemas"]["PlaybookCoverageEntryView"][] | null;
         };
         ReviewSummaryView: {

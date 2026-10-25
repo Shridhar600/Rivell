@@ -12,6 +12,7 @@ import type {
   FindingQuality,
 } from '../api/reviews'
 import { humanizeCode } from './domainLabels'
+import { CONTRACT_TYPE_LABELS } from './contractSemantics'
 import type { ConceptLabel } from '../api/taxonomy'
 
 const REVIEW_STATUS_LABELS: Record<string, string> = {
@@ -536,6 +537,61 @@ export type FindingPlaybookRule = {
   text: string | null
   basedOn: string | null
   escalation: string | null
+  /** Why a narrower position still governs this contract, or null when no reason needs saying. */
+  appliesTo: string | null
+}
+
+/** Contract types a child agreement is made under. */
+const CONTRACT_TYPE_PARENTS: Record<string, string[]> = {
+  DPA: ['MSA'],
+  SOW: ['MSA'],
+  ORDER_FORM: ['MSA', 'SAAS'],
+  AMENDMENT: ['MSA'],
+}
+
+/** Child types as a sentence names them, where the short label would read as a code. */
+const CONTRACT_TYPE_SENTENCE_LABELS: Record<string, string> = {
+  DPA: 'data processing agreement',
+  SOW: 'statement of work',
+  ORDER_FORM: 'order form',
+  AMENDMENT: 'amendment',
+}
+
+const PARENT_PHRASES: Record<string, string> = {
+  MSA: 'an MSA',
+  SAAS: 'a SaaS',
+}
+
+/**
+ * Why a position whose own "Applies to" is narrower than its playbook still governs this
+ * contract: either the playbook declares more types than the position, or the contract type
+ * reaches the position through the parent agreement it sits under.
+ */
+function appliesToLine(
+  scope:
+    | { declaredContractTypes: string[]; sourceContractTypes: string[] }
+    | null
+    | undefined,
+  contractType: string | null,
+): string | null {
+  if (!scope || scope.sourceContractTypes.length === 0) return null
+  const own = scope.sourceContractTypes
+  const declared = scope.declaredContractTypes
+  const narrower = declared.length === 0 || declared.some((type) => !own.includes(type))
+  const parent = contractType
+    ? (CONTRACT_TYPE_PARENTS[contractType] ?? []).find((type) => own.includes(type))
+    : undefined
+  const throughParent =
+    parent !== undefined && contractType !== null && !own.includes(contractType)
+  if (!narrower && !throughParent) return null
+  const types = own.map((type) => CONTRACT_TYPE_LABELS[type] ?? humanizeCode(type)).join(', ')
+  if (!throughParent) return `Applies to ${types}.`
+  const parentPhrase =
+    PARENT_PHRASES[parent] ?? `the ${CONTRACT_TYPE_LABELS[parent] ?? humanizeCode(parent)}`
+  const contract =
+    CONTRACT_TYPE_SENTENCE_LABELS[contractType] ??
+    (CONTRACT_TYPE_LABELS[contractType] ?? humanizeCode(contractType)).toLowerCase()
+  return `Applies to ${types}; used for this ${contract} because it sits under ${parentPhrase}.`
 }
 
 function firstNonEmpty<T>(...lists: readonly (readonly T[])[]): readonly T[] {
@@ -560,6 +616,7 @@ export function findingPlaybookRule(
   >,
   label: ConceptLabel,
   playbooks: readonly PlaybookUsed[] | null,
+  contractType: string | null = null,
 ): FindingPlaybookRule | null {
   const concept = finding.secondaryConcept ?? finding.concept
   const labelText = finding.positionLabel ?? (concept ? label(concept) : '')
@@ -568,7 +625,7 @@ export function findingPlaybookRule(
   const position = finding.positionComparison
   if (!position) {
     return omission && labelText
-      ? { label: labelText, text: null, basedOn: null, escalation: null }
+      ? { label: labelText, text: null, basedOn: null, escalation: null, appliesTo: null }
       : null
   }
   const family = finding.issueFamily
@@ -581,7 +638,7 @@ export function findingPlaybookRule(
     : firstNonEmpty(position.preferred, position.fallback, position.walkAway)
   if (chosen.length === 0) {
     return omission && labelText
-      ? { label: labelText, text: null, basedOn: null, escalation: null }
+      ? { label: labelText, text: null, basedOn: null, escalation: null, appliesTo: null }
       : null
   }
   const texts = chosen.map((entry) => entry.text.trim()).filter(Boolean)
@@ -601,11 +658,15 @@ export function findingPlaybookRule(
   const version =
     playbook?.publicationNumber ?? (chosen.length === 1 ? chosen[0].publicationNumber : null)
   const escalation = position.escalation[0]?.trigger.trim() || null
+  const scope = finding.evidenceItems.find(
+    (item) => item.evidenceId === chosen[0].evidenceItemId,
+  )?.applicabilityScope
   return {
     label: labelText,
     text: texts.length > 0 ? texts.join('\n\n') : null,
     basedOn: playbook && version !== null ? `${playbook.name}, version ${version}` : null,
     escalation,
+    appliesTo: appliesToLine(scope, contractType),
   }
 }
 

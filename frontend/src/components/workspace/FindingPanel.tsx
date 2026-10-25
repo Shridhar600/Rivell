@@ -69,6 +69,8 @@ interface Props {
   regionLabels: Map<string, string>
   /** The playbooks the review froze, used to name the source of a rule; null when unknown. */
   playbooksUsed: readonly PlaybookUsed[] | null
+  /** The contract type the review declared, for saying why a narrower position applies. */
+  contractType: string | null
   /** The clause as received, from the pinned contract structure. */
   currentText: string | null
   /** The clause body a replacement starts from, without its heading. */
@@ -298,7 +300,12 @@ export function FindingPanel(props: Props) {
   const quoteText = quote ? (quote.source === 'contract' ? clauseExcerpt(quote.text) : quote.text) : null
   const quoteReason =
     quote?.source === 'second-opinion' ? (finding.quality?.secondOpinionReason?.trim() ?? null) : null
-  const playbookRule = findingPlaybookRule(finding, labelFor, props.playbooksUsed)
+  const playbookRule = findingPlaybookRule(
+    finding,
+    labelFor,
+    props.playbooksUsed,
+    props.contractType,
+  )
   const playbookCondition = escalateIfText(playbookRule?.escalation)
   const noApproverCondition = approval ? null : playbookCondition
   // the rule's condition and the playbook trigger can be the same words; show them once
@@ -374,6 +381,9 @@ export function FindingPanel(props: Props) {
               {playbookRule.text ? <div className="rv-ws-incl">{playbookRule.text}</div> : null}
               {playbookRule.basedOn ? (
                 <p className="rv-ws-caption">Based on: {playbookRule.basedOn}</p>
+              ) : null}
+              {playbookRule.appliesTo ? (
+                <p className="rv-ws-caption">{playbookRule.appliesTo}</p>
               ) : null}
               {playbookRule.escalation && !sameEscalation && (approval || noApproverCondition) ? (
                 <p className="rv-ws-caption">

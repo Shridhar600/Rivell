@@ -35,6 +35,13 @@ public interface KnowledgeRepository {
      */
     List<KnowledgeArtifact> listArtifacts(UUID organizationId, Integer limit);
 
+    /**
+     * Every stored artifact, across organizations, for the one-time document-title
+     * re-derivation. The derivation reads each artifact's stored nodes, so this read is
+     * intentionally not organization-scoped.
+     */
+    List<KnowledgeArtifact> listArtifactsForMigration();
+
     Optional<KnowledgeSource> findSource(UUID artifactId, UUID organizationId);
 
     void insertNodes(UUID artifactId, List<KnowledgeSourceNode> nodes);

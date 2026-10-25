@@ -381,6 +381,11 @@ class KnowledgeReviewConcurrencyIT {
         }
 
         @Override
+        public List<KnowledgeArtifact> listArtifactsForMigration() {
+            return delegate.listArtifactsForMigration();
+        }
+
+        @Override
         public Optional<KnowledgeSource> findSource(UUID artifactId, UUID organizationId) {
             return delegate.findSource(artifactId, organizationId);
         }

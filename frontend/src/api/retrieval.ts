@@ -86,6 +86,8 @@ export type ApplicabilityScope = {
   jurisdiction: string | null
   effectiveFrom: string | null
   effectiveTo: string | null
+  /** The record's own "Applies to"; empty when it states none. */
+  sourceContractTypes: string[]
 }
 
 export type PolicyFacts = {
@@ -202,6 +204,10 @@ function parseApplicabilityScope(
     jurisdiction: readOptionalNullableString(scope, 'jurisdiction', what),
     effectiveFrom: readOptionalNullableString(scope, 'effectiveFrom', what),
     effectiveTo: readOptionalNullableString(scope, 'effectiveTo', what),
+    sourceContractTypes:
+      scope.sourceContractTypes === null || scope.sourceContractTypes === undefined
+        ? []
+        : readStringArray(scope, 'sourceContractTypes', what),
   }
 }
 

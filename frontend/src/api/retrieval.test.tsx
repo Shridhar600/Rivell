@@ -244,6 +244,7 @@ describe('parseEvidenceBundle', () => {
       jurisdiction: null,
       effectiveFrom: null,
       effectiveTo: null,
+      sourceContractTypes: [],
     })
 
     const contract = bundle.items[2]
