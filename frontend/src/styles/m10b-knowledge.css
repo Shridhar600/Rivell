@@ -370,10 +370,16 @@
 }
 .rv-k-appr th,
 .rv-k-appr td {
-  padding: 6px 8px;
+  padding: 6px 6px 6px 0;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
+  /* the inspector's value column breaks anywhere; a table cell wraps between words only */
+  overflow-wrap: normal;
+}
+.rv-k-appr th,
+.rv-k-appr td:first-child {
+  white-space: nowrap;
 }
 .rv-k-appr th {
   color: var(--text-3);
@@ -384,6 +390,7 @@
 }
 .rv-k-appr__cond {
   display: block;
+  white-space: normal;
   margin-top: 2px;
   color: var(--text-3);
   font-size: 12px;
