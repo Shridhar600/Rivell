@@ -720,7 +720,7 @@ export function approvalConflictLine(summary: ApprovalSummary | null): string | 
 /**
  * The rule's condition. A walk-away rule's condition is an escalation trigger; a fallback
  * rule's condition is the acceptance condition the source puts on taking the fallback, so it
- * is never labelled "Escalate if" (R3-009).
+ * is never labelled "Escalate if".
  */
 export function escalateIfLine(summary: ApprovalSummary | null): string | null {
   if (!summary?.condition) return null
