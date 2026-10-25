@@ -588,6 +588,38 @@ class DeterministicContractExtractorsTest {
     }
 
     @Test
+    void foreignLegalFormSuffixesIncludingLowercasePlcYieldParties() {
+        var nodes = List.of(
+                bodyNode(),
+                paragraph("This Agreement is entered into by and between Helvetia Systems AG "
+                        + "(\"Supplier\"), Nordwind Logistics B.V. (\"Customer\") and "
+                        + "Northgate Finance plc (\"Licensor\").", 1));
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var parties = new DeterministicContractExtractors().parties(VERSION_ID, regions, nodes);
+
+        assertThat(parties).extracting(ContractParty::rawName).containsExactly(
+                "Helvetia Systems AG", "Nordwind Logistics B.V.", "Northgate Finance plc");
+        assertThat(parties.get(0).machineRoles()).containsExactly(PartyRole.SUPPLIER);
+        assertThat(parties.get(1).machineRoles()).containsExactly(PartyRole.CUSTOMER);
+        assertThat(parties.get(2).machineRoles()).containsExactly(PartyRole.LICENSOR);
+    }
+
+    @Test
+    void shortLegalFormSuffixesDoNotMatchInsideWordsOrSentenceText() {
+        var nodes = List.of(
+                bodyNode(),
+                paragraph("Notwithstanding the foregoing, the parties agree AB testing and SE "
+                        + "region pilots, and Danish House and Nordic Grab milestones are "
+                        + "excluded.", 1));
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var parties = new DeterministicContractExtractors().parties(VERSION_ID, regions, nodes);
+
+        assertThat(parties).isEmpty();
+    }
+
+    @Test
     void partyAliasesFromReferredToAsPhrasesAreCaptured() {
         var nodes = List.of(
                 bodyNode(),
