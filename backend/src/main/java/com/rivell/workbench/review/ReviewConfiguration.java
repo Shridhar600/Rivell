@@ -36,7 +36,8 @@ class ReviewConfiguration {
     @Bean
     ReviewPlanBuilder reviewPlanBuilder(ReviewPackRegistry reviewPackRegistry,
             ReviewEngineProperties reviewEngineProperties) {
-        return new ReviewPlanBuilder(reviewPackRegistry, reviewEngineProperties.omissions());
+        return new ReviewPlanBuilder(reviewPackRegistry, reviewEngineProperties.omissions(),
+                reviewEngineProperties.walkAwayAbsence().enabled());
     }
 
     @Bean

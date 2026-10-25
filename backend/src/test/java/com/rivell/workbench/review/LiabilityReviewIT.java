@@ -210,6 +210,17 @@ public class LiabilityReviewIT {
         final java.util.List<String> presenceQuestions =
                 java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
+        /** Probability the R3-002 walk-away absence question answers per walk-away text. */
+        final Map<String, Double> walkAwayAnswers = new java.util.concurrent.ConcurrentHashMap<>();
+        /** Probability the walk-away absence question answers when nothing is scripted. */
+        volatile double defaultWalkAwayProbability = 0.05;
+        /** The walk-away absence decision fails as if the provider were down. */
+        volatile boolean failWalkAwayAbsence;
+        private final AtomicInteger walkAwayCalls = new AtomicInteger();
+        /** The question instructions of every walk-away absence question asked, in order. */
+        final java.util.List<String> walkAwayQuestions =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
         /** Answer for every position when the options arrive reversed (order probe); null = as asked. */
         volatile String reversedOrderAnswer;
         /** The reversed-order (probe) call fails as if the provider were down. */
@@ -357,6 +368,10 @@ public class LiabilityReviewIT {
             if (request.pack().questions().keySet().stream()
                     .anyMatch(name -> name.startsWith("presence_"))) {
                 return presenceDecision(request);
+            }
+            if (request.pack().questions().keySet().stream()
+                    .anyMatch(name -> name.startsWith("walk_away_"))) {
+                return walkAwayAbsenceDecision(request);
             }
             if (request.pack().questions().keySet().stream()
                     .anyMatch(name -> name.startsWith("fit_"))) {
@@ -514,6 +529,33 @@ public class LiabilityReviewIT {
             return new ProviderExecutionResult(answers, "fake-review-v1", new TokenUsage(80, 2));
         }
 
+        /** R3-002: one yes/no per walk-away, scripted by its text. */
+        private ProviderExecutionResult walkAwayAbsenceDecision(
+                DecisionExecutionRequest request) {
+            walkAwayCalls.incrementAndGet();
+            if (failWalkAwayAbsence) {
+                throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                        "walk-away absence decision provider unavailable");
+            }
+            var answers = new LinkedHashMap<String, SemanticAnswer>();
+            for (var entry : request.pack().questions().entrySet()) {
+                var question = (com.rivell.workbench.intelligence.YesNoQuestion) entry.getValue();
+                var instructions = question.instructions();
+                walkAwayQuestions.add(instructions);
+                var probability = defaultWalkAwayProbability;
+                for (var scripted : walkAwayAnswers.entrySet()) {
+                    if (instructions.toLowerCase(java.util.Locale.ROOT)
+                            .contains(scripted.getKey().toLowerCase(java.util.Locale.ROOT))) {
+                        probability = scripted.getValue();
+                        break;
+                    }
+                }
+                answers.put(entry.getKey(),
+                        new com.rivell.workbench.intelligence.YesNoAnswer(probability));
+            }
+            return new ProviderExecutionResult(answers, "fake-review-v1", new TokenUsage(80, 2));
+        }
+
         private LinkedHashMap<String, Double> uniformProbabilities(
                 ChoiceQuestion question, String selected) {
             var probabilities = new LinkedHashMap<String, Double>();
@@ -589,6 +631,14 @@ public class LiabilityReviewIT {
             return presenceCalls.get();
         }
 
+        public int walkAwayCalls() {
+            return walkAwayCalls.get();
+        }
+
+        public java.util.List<String> walkAwayQuestions() {
+            return java.util.List.copyOf(walkAwayQuestions);
+        }
+
         public int fitCalls() {
             return fitCalls.get();
         }
@@ -627,6 +677,11 @@ public class LiabilityReviewIT {
             failPresence = false;
             presenceCalls.set(0);
             presenceQuestions.clear();
+            walkAwayAnswers.clear();
+            defaultWalkAwayProbability = 0.05;
+            failWalkAwayAbsence = false;
+            walkAwayCalls.set(0);
+            walkAwayQuestions.clear();
             policyComparisonProbabilities = null;
             probabilityHeadings.clear();
             reversedOrderAnswer = null;
@@ -1000,10 +1055,12 @@ public class LiabilityReviewIT {
         assertThat(scriptedProvider.policyComparisonDecisions()).isZero();
         assertThat(analysisRepository.countSignals(organizationId, run.id())).isZero();
         var executions = analysisRepository.findExecutions(organizationId, run.id());
-        assertThat(executions).isNotEmpty().allSatisfy(execution -> {
-            assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED);
-            assertThat(execution.detail().get("positionCount")).isEqualTo(0);
-        });
+        assertThat(executions).isNotEmpty().allSatisfy(execution ->
+                assertThat(execution.status()).isEqualTo(CheckExecutionStatus.COMPLETED));
+        assertThat(executions).filteredOn(execution ->
+                        execution.detail().containsKey("positionCount"))
+                .allSatisfy(execution ->
+                        assertThat(execution.detail().get("positionCount")).isEqualTo(0));
         assertThat(reviewRepository.find(organizationId, review.id())
                 .orElseThrow().status()).isEqualTo(ReviewStatus.COMPLETED);
     }
@@ -1076,6 +1133,9 @@ public class LiabilityReviewIT {
 
         var degraded = analysisRepository.findExecutions(organizationId, run.id()).stream()
                 .filter(execution -> execution.status() == CheckExecutionStatus.DEGRADED)
+                // the absence lane has no comparison to fail; it degrades on incomplete inputs
+                .filter(execution -> !"omission_inputs_incomplete"
+                        .equals(execution.detail().get("degradedReason")))
                 .toList();
         // three position-bearing clauses degrade on the failed comparison; the clause the text
         // search found a position for degrades on the failed search judgment

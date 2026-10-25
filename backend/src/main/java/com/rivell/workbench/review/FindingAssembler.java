@@ -146,6 +146,15 @@ public final class FindingAssembler {
     private static Observation observation(RawReviewSignal signal) {
         if (signal.payload() instanceof OmissionPayload omission) {
             // engine v2 omissions lane: the code-owned text, never model prose
+            if (omission.walkAway() != null) {
+                // R3-002: the position's own walk-away states the right the contract lacks
+                var walkAway = omission.walkAway().strip();
+                return new Observation("MISSING_POSITION",
+                        "Your playbook's walk-away: " + walkAway
+                                + (walkAway.endsWith(".") ? "" : ".")
+                                + " Rivell did not find " + omission.label()
+                                + " in this contract.");
+            }
             return new Observation("MISSING_POSITION",
                     "Missing: " + omission.label() + ". Searched " + omission.searchedClauses()
                             + " clauses; none addresses it.");
@@ -566,8 +575,9 @@ public final class FindingAssembler {
             "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
             "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
             "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
-            "positionLabel", "levers", "categoryBeforeLevers", "routeReason", "fallbackListed",
-            "fallbackConditionsOutcome", "fallbackConditions", "fallbackConditionsExecutionId", "secondOpinionExecutionId", "openEndedOutcome",
+            "absenceProbability", "positionLabel", "levers", "categoryBeforeLevers", "routeReason",
+            "fallbackListed", "fallbackConditionsOutcome", "fallbackConditions",
+            "fallbackConditionsExecutionId", "secondOpinionExecutionId", "openEndedOutcome",
             "fitVerdict", "fitReason", "fitReasons");
 
     /** The typed rule behind an escalation, kept on the finding the panel reads. */
@@ -579,6 +589,14 @@ public final class FindingAssembler {
             RawReviewSignal primary, RawReviewSignal escalation, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
         for (var key : ASSESSMENT_KEYS) {
+            var value = primary.quality().get(key);
+            if (value != null) {
+                quality.put(key, value);
+            }
+        }
+        // the R3-002 absence signal carries the walk-away rule on itself; a deviation carries it
+        // on a separate escalation signal of the same position
+        for (var key : ESCALATION_KEYS) {
             var value = primary.quality().get(key);
             if (value != null) {
                 quality.put(key, value);

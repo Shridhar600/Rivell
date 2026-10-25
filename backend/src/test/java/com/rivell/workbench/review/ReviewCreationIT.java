@@ -251,7 +251,8 @@ class ReviewCreationIT {
         assertThat(checks).extracting(ReviewPlanCheck::ordinal)
                 .containsExactlyElementsOf(
                         java.util.stream.IntStream.range(0, checks.size()).boxed().toList());
-        assertThat(checks).filteredOn(check -> check.family() == CheckFamily.CONCEPT_PRESENCE)
+        assertThat(checks).filteredOn(check -> check.family() == CheckFamily.CONCEPT_PRESENCE
+                        && !"WALK_AWAY_ABSENCE".equals(check.checkKey()))
                 .extracting(ReviewPlanCheck::concept, ReviewPlanCheck::expectation)
                 .containsExactlyInAnyOrder(
                         tuple(CoreConcepts.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED),
@@ -333,8 +334,9 @@ class ReviewCreationIT {
 
         var checks = reviewRepository.findPlanChecks(organizationId, review.id());
         assertThat(checks).isNotEmpty();
-        assertThat(checks).allSatisfy(check ->
-                assertThat(check.family()).isEqualTo(CheckFamily.CLAUSE_REVIEW));
+        assertThat(checks).filteredOn(check -> !"WALK_AWAY_ABSENCE".equals(check.checkKey()))
+                .allSatisfy(check ->
+                        assertThat(check.family()).isEqualTo(CheckFamily.CLAUSE_REVIEW));
     }
 
     @Test

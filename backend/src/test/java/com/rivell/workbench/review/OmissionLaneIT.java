@@ -48,7 +48,9 @@ import com.rivell.workbench.taxonomy.CoreConcepts;
  * finding; unsure -> LOW needs-your-look item; not required -> nothing. A provider failure or
  * an incomplete run never invents an omission; the lane only exists when it is switched on.
  */
-@SpringBootTest(properties = "rivell.review.omissions=true")
+@SpringBootTest(properties = {
+        "rivell.review.omissions=true",
+        "rivell.review.walk-away-absence.enabled=false"})
 @AutoConfigureMockMvc
 @Testcontainers
 @Import({LiabilityReviewIT.FakeIntelligenceConfiguration.class,
@@ -588,7 +590,7 @@ class OmissionLaneIT {
         var semantics = enrichmentService.getSemantics(snapshot.contractId(),
                 snapshot.contractVersionNumber());
 
-        var laneOff = new ReviewPlanBuilder(reviewPackRegistry, false)
+        var laneOff = new ReviewPlanBuilder(reviewPackRegistry, false, false)
                 .build(reviewId, organizationId(), snapshot, semantics);
         assertThat(laneOff).noneMatch(check -> check.mechanism() == CheckMechanism.OMISSION);
 

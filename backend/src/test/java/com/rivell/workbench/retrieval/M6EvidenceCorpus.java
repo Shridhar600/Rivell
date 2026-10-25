@@ -63,6 +63,7 @@ public final class M6EvidenceCorpus {
         PRECEDENT_GOVERNING_LAW("m6-precedent-governing-law.docx"),
         PC_PLAYBOOK("pc-playbook.docx"),
         PC_LIBRARY("pc-clause-library.docx"),
+        WALK_AWAY_PLAYBOOK("walk-away-playbook.docx"),
         POLICY_CONFIDENTIALITY_PERIOD("m7-policy-confidentiality-period.docx");
 
         private final String filename;
@@ -258,7 +259,7 @@ public final class M6EvidenceCorpus {
     private static ArtifactType artifactTypeOf(Fixture fixture) {
         return switch (fixture) {
             case POLICY_MAIN, POLICY_UK, POLICY_NDA, POLICY_SUPPLIER, POLICY_FUTURE,
-                 POLICY_SUPERSEDED, POLICY_AMBIGUOUS, PC_PLAYBOOK,
+                 POLICY_SUPERSEDED, POLICY_AMBIGUOUS, PC_PLAYBOOK, WALK_AWAY_PLAYBOOK,
                  POLICY_CONFIDENTIALITY_PERIOD -> ArtifactType.PLAYBOOK;
             case LIBRARY_MAIN, LIBRARY_UK, PC_LIBRARY -> ArtifactType.CLAUSE_LIBRARY;
             case PRECEDENT_RELEVANT, PRECEDENT_LEXICAL, PRECEDENT_PARAPHRASE,

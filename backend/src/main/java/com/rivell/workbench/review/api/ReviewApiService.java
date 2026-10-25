@@ -65,7 +65,8 @@ public class ReviewApiService {
 
     private static final int DEFAULT_PAGE_LIMIT = 20;
     private static final int MAX_PAGE_LIMIT = 100;
-    private static final int MAX_ANALYSIS_WARNINGS = 20;
+    /** Enough for a full plan (presence, clause, cross-clause and absence checks) to stay visible. */
+    private static final int MAX_ANALYSIS_WARNINGS = 24;
 
     private final ReviewService reviewService;
     private final ReviewAnalysisService analysisService;

@@ -21,10 +21,13 @@ public final class ReviewPlanBuilder {
 
     private final ReviewPackRegistry packs;
     private final boolean omissions;
+    private final boolean walkAwayAbsence;
 
-    public ReviewPlanBuilder(ReviewPackRegistry packs, boolean omissions) {
+    public ReviewPlanBuilder(
+            ReviewPackRegistry packs, boolean omissions, boolean walkAwayAbsence) {
         this.packs = packs;
         this.omissions = omissions;
+        this.walkAwayAbsence = walkAwayAbsence;
     }
 
     public List<ReviewPlanCheck> build(
@@ -63,8 +66,14 @@ public final class ReviewPlanBuilder {
             }
         }
         if (omissions) {
-            // engine v2 omissions lane (spec §4): one check, last, once every clause was judged
+            // engine v2 omissions lane (spec §4): one check, once every clause was judged
             checks.add(omissionCheck(reviewId, organizationId, snapshot.createdAt(), ordinal[0]++));
+        }
+        if (walkAwayAbsence && !snapshot.contractType().madeUnderParentType()) {
+            // R3-002: a walk-away may state a right the contract lacks; a child agreement is
+            // read with its parent, so an absence here is not the contract's own gap
+            checks.add(walkAwayAbsenceCheck(reviewId, organizationId, snapshot.createdAt(),
+                    ordinal[0]++));
         }
         return List.copyOf(checks);
     }
@@ -112,6 +121,14 @@ public final class ReviewPlanBuilder {
             UUID reviewId, UUID organizationId, Instant createdAt, int ordinal) {
         return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,
                 "OMISSION", CheckFamily.CONCEPT_PRESENCE, CheckExpectation.REQUIRED,
+                CheckMechanism.OMISSION, ClauseTopics.NO_TOPIC, null, null, createdAt);
+    }
+
+    /** R3-002 walk-away absence check: no subject; reads the run's clause comparisons. */
+    private static ReviewPlanCheck walkAwayAbsenceCheck(
+            UUID reviewId, UUID organizationId, Instant createdAt, int ordinal) {
+        return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,
+                "WALK_AWAY_ABSENCE", CheckFamily.CONCEPT_PRESENCE, CheckExpectation.REQUIRED,
                 CheckMechanism.OMISSION, ClauseTopics.NO_TOPIC, null, null, createdAt);
     }
 }
