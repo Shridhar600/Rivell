@@ -66,6 +66,7 @@ public class ReviewAnalysisService {
     private final ModelBindingCatalog modelBindingCatalog;
     private final FindingRepository findingRepository;
     private final FindingAssembler findingAssembler;
+    private final PlaybookCoverageBuilder playbookCoverageBuilder;
     private final TransactionTemplate transactionTemplate;
     private final TransactionTemplate failureTransactionTemplate;
     private final Clock clock;
@@ -84,6 +85,7 @@ public class ReviewAnalysisService {
             ModelBindingCatalog modelBindingCatalog,
             FindingRepository findingRepository,
             FindingAssembler findingAssembler,
+            PlaybookCoverageBuilder playbookCoverageBuilder,
             TransactionTemplate transactionTemplate,
             PlatformTransactionManager transactionManager,
             Clock clock,
@@ -100,6 +102,7 @@ public class ReviewAnalysisService {
         this.modelBindingCatalog = modelBindingCatalog;
         this.findingRepository = findingRepository;
         this.findingAssembler = findingAssembler;
+        this.playbookCoverageBuilder = playbookCoverageBuilder;
         this.transactionTemplate = transactionTemplate;
         this.failureTransactionTemplate = new TransactionTemplate(transactionManager);
         this.failureTransactionTemplate.setPropagationBehavior(
@@ -562,17 +565,42 @@ public class ReviewAnalysisService {
         var executions = analysisRepository.findExecutions(organizationId, run.id());
         if (executions.size() == checks.size()
                 && executions.stream().allMatch(execution -> execution.status().terminal())) {
+            var now = clock.instant();
+            var signals = analysisRepository.findSignals(organizationId, run.id());
             // assemble before the completion transaction: a non-transient assembly failure fails
             // this generation terminally; a transient one is counted and retried by analyze
-            var assembled = findingAssembler.assemble(run,
-                    analysisRepository.findSignals(organizationId, run.id()), clock.instant());
+            var assembled = findingAssembler.assemble(run, signals, now);
+            var coverage = coverage(organizationId, reviewId, run, checks, executions, signals,
+                    assembled);
             transactionTemplate.executeWithoutResult(status -> {
-                if (analysisRepository.markRunCompleted(organizationId, run.id(), clock.instant())) {
+                if (analysisRepository.markRunCompleted(organizationId, run.id(), now)) {
+                    if (!analysisRepository.savePlaybookCoverage(organizationId, run.id(), coverage)) {
+                        throw new IllegalStateException(
+                                "Run disappeared before its coverage was stored: " + run.id());
+                    }
                     findingRepository.replaceFindings(organizationId, reviewId, run.id(),
                             assembled);
-                    reviewRepository.markCompleted(organizationId, reviewId, clock.instant());
+                    reviewRepository.markCompleted(organizationId, reviewId, now);
                 }
             });
+        }
+    }
+
+    /**
+     * Coverage is a display artifact, so a failure to read the pinned positions must not fail the
+     * review: the run completes with no coverage section rather than claiming one it could not
+     * compute. The warning is the operator's record of why it is absent.
+     */
+    private PlaybookCoverage coverage(UUID organizationId, UUID reviewId, ReviewAnalysisRun run,
+            List<ReviewPlanCheck> checks, List<ReviewCheckExecution> executions,
+            List<RawReviewSignal> signals, List<Finding> findings) {
+        try {
+            var snapshot = reviewRepository.findSnapshot(organizationId, reviewId).orElseThrow(
+                    () -> new IllegalStateException("Review snapshot missing: " + reviewId));
+            return playbookCoverageBuilder.build(snapshot, checks, executions, signals, findings);
+        } catch (RuntimeException e) {
+            LOG.warn("Could not compute playbook coverage for run {}: {}", run.id(), e.toString());
+            return null;
         }
     }
 

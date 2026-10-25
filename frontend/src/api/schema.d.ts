@@ -1684,6 +1684,24 @@ export interface components {
             code?: string;
             message?: string;
         };
+        /** @description What one analysis run did with one applicable published playbook position */
+        PlaybookCoverageEntryView: {
+            /** Format: uuid */
+            positionCandidateId?: string;
+            label?: string;
+            code?: string | null;
+            topic?: string | null;
+            /** @enum {string} */
+            state?: "COMPARED" | "NOT_FOUND" | "NOT_COMPARED" | "OUT_OF_SCOPE";
+            /** @enum {string|null} */
+            verdict?: "MEETS_PREFERRED" | "WITHIN_FALLBACK" | "PARTLY_WITHIN_FALLBACK" | "BEYOND_FALLBACK" | "WALK_AWAY" | "UNCLEAR" | null;
+            /** Format: uuid */
+            clauseHeadingNodeId?: string | null;
+            /** Format: uuid */
+            findingId?: string | null;
+            /** @enum {string|null} */
+            reason?: "NOT_CHECKED" | "FOUND_NOT_JUDGED" | "CHECK_DID_NOT_COMPLETE" | null;
+        };
         PlaybookUsedView: {
             /** Format: uuid */
             artifactId?: string;
@@ -1720,6 +1738,8 @@ export interface components {
             /** Format: int32 */
             runNumber?: number;
             status?: string;
+            /** @description What the run did with each applicable published playbook position; null on runs that predate the coverage list */
+            playbookCoverage?: components["schemas"]["PlaybookCoverageEntryView"][] | null;
         };
         ReviewSummaryView: {
             /** Format: uuid */

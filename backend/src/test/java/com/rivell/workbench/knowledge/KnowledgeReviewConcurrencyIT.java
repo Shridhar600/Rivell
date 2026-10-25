@@ -477,6 +477,17 @@ class KnowledgeReviewConcurrencyIT {
         }
 
         @Override
+        public List<PublishedCandidate> findPublishedPositionsForArtifacts(
+                UUID organizationId, long asOfPublicationNumber,
+                java.util.Collection<UUID> artifactIds, String contractPackKey,
+                String partyPerspective, String paperSource, String jurisdiction,
+                java.time.LocalDate effectiveOn) {
+            return delegate.findPublishedPositionsForArtifacts(organizationId,
+                    asOfPublicationNumber, artifactIds, contractPackKey, partyPerspective,
+                    paperSource, jurisdiction, effectiveOn);
+        }
+
+        @Override
         public List<com.rivell.workbench.knowledge.ApplicableKnowledge> findApplicableKnowledge(
                 com.rivell.workbench.knowledge.ApplicableKnowledgeQuery query) {
             return delegate.findApplicableKnowledge(query);

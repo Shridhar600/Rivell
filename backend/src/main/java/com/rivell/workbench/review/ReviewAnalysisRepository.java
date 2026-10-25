@@ -23,6 +23,10 @@ public interface ReviewAnalysisRepository {
 
     boolean markRunCompleted(UUID organizationId, UUID runId, Instant completedAt);
 
+    /** Stores the run's frozen playbook coverage; written in the completion transaction. */
+    boolean savePlaybookCoverage(
+            UUID organizationId, UUID runId, PlaybookCoverage playbookCoverage);
+
     boolean markRunFailed(UUID organizationId, UUID runId, String reason, Instant completedAt);
 
     /**

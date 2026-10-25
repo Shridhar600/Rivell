@@ -140,6 +140,22 @@ public class KnowledgeQueryService {
     }
 
     /**
+     * System-level read for analysis finalisation: every published playbook position of the
+     * playbooks the review froze, at its pinned publication, before the position's own
+     * contract-type scope is applied. Coverage classifies those as in or out of scope; retrieval
+     * never uses this read.
+     */
+    public List<PublishedCandidate> listPublishedPositionsForArtifacts(
+            UUID organizationId, long asOfPublicationNumber,
+            java.util.Collection<UUID> artifactIds, String contractPackKey,
+            String partyPerspective, String paperSource, String jurisdiction,
+            java.time.LocalDate effectiveOn) {
+        return repository.findPublishedPositionsForArtifacts(organizationId,
+                asOfPublicationNumber, artifactIds, contractPackKey, partyPerspective,
+                paperSource, jurisdiction, effectiveOn);
+    }
+
+    /**
      * The playbooks and clause libraries that apply to the caller's chosen context. The as-of
      * publication is the organization's latest, so the preview names what a review created now
      * would freeze.

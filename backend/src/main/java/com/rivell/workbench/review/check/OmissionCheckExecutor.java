@@ -199,6 +199,8 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
             }
         }
         var matched = walkAwayLane ? List.copyOf(survivors) : candidates;
+        detail.put("searchedCandidates",
+                matched.stream().map(candidate -> candidate.id().toString()).toList());
         var search = clauseSearch.search(
                 matched.stream().map(candidate -> candidate.item().text()).toList(),
                 clauses.stream().map(clause -> new ContractClauseSearch.Clause(

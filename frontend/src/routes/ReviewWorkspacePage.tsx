@@ -50,6 +50,7 @@ import {
 import { AnalysisWarnings, ReviewLifecyclePanel } from '../components/review/ReviewLifecyclePanel'
 import { ReviewContext } from '../components/review/ReviewContext'
 import { ReviewCoveragePanel } from '../components/review/ReviewCoveragePanel'
+import { PlaybookCoveragePanel } from '../components/review/PlaybookCoveragePanel'
 import { readPanelFlag, writePanelFlag } from '../components/shell/ShellContext'
 import { ErrorState, LoadingState } from '../components/ui/State'
 import type { PaletteItem } from '../components/ui/CommandPalette'
@@ -793,6 +794,14 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         {sheet?.kind === 'notes' ? (
           <>
             <ReviewContext summary={summary} findings={findings} />
+            <PlaybookCoveragePanel
+              coverage={summary.activeRun?.playbookCoverage ?? null}
+              onOpenFinding={(findingId) => {
+                setSheet(null)
+                selectFinding(findingId)
+              }}
+              onNavigateToNode={showInDocumentAt}
+            />
             <ReviewCoveragePanel coverage={summary.coverage} />
             <AnalysisWarnings summary={summary} />
           </>

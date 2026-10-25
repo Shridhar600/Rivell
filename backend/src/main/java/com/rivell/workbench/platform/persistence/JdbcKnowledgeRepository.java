@@ -48,6 +48,7 @@ import com.rivell.workbench.knowledge.KnowledgeSourceNode;
 import com.rivell.workbench.knowledge.MergedCellRegion;
 import com.rivell.workbench.knowledge.PublicationAction;
 import com.rivell.workbench.knowledge.PublicationItem;
+import com.rivell.workbench.knowledge.PublishedCandidate;
 import com.rivell.workbench.knowledge.PublishedKnowledgeQuery;
 import com.rivell.workbench.knowledge.ReviewCategory;
 import com.rivell.workbench.knowledge.ReviewReason;
@@ -742,6 +743,63 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         }
         return statement
                 .param("limit", query.limit() + 1)
+                .query((rs, rowNum) -> new com.rivell.workbench.knowledge.PublishedCandidate(
+                        mapCandidate(rs, rowNum),
+                        rs.getObject("publication_id", UUID.class),
+                        rs.getLong("publication_number")))
+                .list();
+    }
+
+    @Override
+    public List<PublishedCandidate> findPublishedPositionsForArtifacts(
+            UUID organizationId, long asOfPublicationNumber,
+            java.util.Collection<UUID> artifactIds, String contractPackKey,
+            String partyPerspective, String paperSource, String jurisdiction,
+            LocalDate effectiveOn) {
+        if (asOfPublicationNumber < 1 || artifactIds == null || artifactIds.isEmpty()) {
+            return List.of();
+        }
+        var conditions = new ArrayList<String>();
+        var params = new HashMap<String, Object>();
+        conditions.add("c.organization_id = :organizationId");
+        params.put("organizationId", organizationId);
+        conditions.add("c.review_status = 'PUBLISHED'");
+        conditions.add("c.candidate_type = 'PLAYBOOK_RULE'");
+        conditions.add("c.artifact_id = any(:artifactIds)");
+        params.put("artifactIds", artifactIds.toArray(UUID[]::new));
+        addScopeDimensions(conditions, params, contractPackKey, partyPerspective, paperSource,
+                jurisdiction, effectiveOn);
+        conditions.add("""
+                not exists (
+                    select 1 from knowledge_publication_item sup_item
+                    join knowledge_publication sp
+                         on sp.id = sup_item.publication_id
+                        and sp.organization_id = c.organization_id
+                    where sup_item.organization_id = c.organization_id
+                      and sup_item.action = 'SUPERSEDE'
+                      and sup_item.superseded_candidate_id = c.id
+                      and sp.publication_number <= :asOf)
+                """);
+        params.put("asOf", asOfPublicationNumber);
+        var sql = """
+                select c.*, pp.id as publication_id, pp.publication_number as publication_number
+                from knowledge_candidate c
+                join knowledge_publication_item add_item
+                  on add_item.candidate_id = c.id
+                 and add_item.action = 'ADD'
+                 and add_item.organization_id = c.organization_id
+                join knowledge_publication pp
+                  on pp.id = add_item.publication_id
+                 and pp.organization_id = c.organization_id
+                 and pp.publication_number <= :asOf
+                where %s
+                order by c.artifact_id, c.created_at, c.id
+                """.formatted(String.join(" and ", conditions));
+        var statement = jdbcClient.sql(sql);
+        for (var entry : params.entrySet()) {
+            statement = statement.param(entry.getKey(), entry.getValue());
+        }
+        return statement
                 .query((rs, rowNum) -> new com.rivell.workbench.knowledge.PublishedCandidate(
                         mapCandidate(rs, rowNum),
                         rs.getObject("publication_id", UUID.class),

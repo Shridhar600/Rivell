@@ -29,6 +29,11 @@ class ReviewConfiguration {
     }
 
     @Bean
+    PlaybookCoverageBuilder playbookCoverageBuilder(KnowledgeQueryService knowledgeQueryService) {
+        return new PlaybookCoverageBuilder(knowledgeQueryService);
+    }
+
+    @Bean
     ReviewPackRegistry reviewPackRegistry() {
         return new ReviewPackRegistry();
     }
@@ -125,6 +130,7 @@ class ReviewConfiguration {
             ModelBindingCatalog modelBindingCatalog,
             FindingRepository findingRepository,
             FindingAssembler findingAssembler,
+            PlaybookCoverageBuilder playbookCoverageBuilder,
             TransactionTemplate transactionTemplate,
             org.springframework.transaction.PlatformTransactionManager transactionManager,
             Clock clock,
@@ -132,8 +138,8 @@ class ReviewConfiguration {
         return new ReviewAnalysisService(reviewRepository, reviewAnalysisRepository,
                 reviewCheckExecutors, contractEnrichmentService, contractQueryService,
                 retrievalProperties, embeddingService, evidenceService, modelBindingCatalog,
-                findingRepository, findingAssembler, transactionTemplate, transactionManager,
-                clock, reviewEngineProperties.analysisBudget(),
+                findingRepository, findingAssembler, playbookCoverageBuilder, transactionTemplate,
+                transactionManager, clock, reviewEngineProperties.analysisBudget(),
                 reviewEngineProperties.maxTransientFailures());
     }
 
