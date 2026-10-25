@@ -227,8 +227,12 @@ def score_contract(answer, structure_nodes, clauses, findings):
         # stricter: a HIGH/MEDIUM planted issue caught by a MEDIUM/HIGH finding in its section
         serious = any(f.get("severity") in ("MEDIUM", "HIGH")
                       for sid in issue.get("sectionIds", []) for f in finding_sections.get(sid, []))
+        # a section hit can credit a missing provision through an unrelated finding on that
+        # clause; this says whether the review actually reported the provision as missing
+        named = issue["category"] == "MISSING_PROVISION" and index in absence_hit
         issues.append({"id": issue["id"], "category": issue["category"],
-                       "severity": issue.get("severity"), "detected": hit, "detectedSerious": serious})
+                       "severity": issue.get("severity"), "detected": hit, "detectedSerious": serious,
+                       "namedAsMissing": named})
 
     compliant = answer.get("compliantSectionIds", [])
     false_alarms = [sid for sid in compliant if sid in finding_sections]
@@ -245,6 +249,7 @@ def score_contract(answer, structure_nodes, clauses, findings):
         "findingsOffAnswerKey": len(located) - sum(len(v) for v in finding_sections.values()),
         "issues": issues,
         "issuesDetected": sum(1 for i in issues if i["detected"]),
+        "missingNamed": sum(1 for i in issues if i["namedAsMissing"]),
         "compliantSections": len(compliant),
         "falseAlarmSections": len(false_alarms),
         "seriousFalseAlarmSections": len(serious_alarms),

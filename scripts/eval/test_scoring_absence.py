@@ -105,6 +105,29 @@ class OneAbsenceOneIssueTest(unittest.TestCase):
         self.assertEqual([row["detected"] for row in scored["issues"]], [True, True])
 
 
+class NamedAsMissingTest(unittest.TestCase):
+
+    def test_a_finding_in_the_section_detects_but_does_not_name_the_missing_provision(self):
+        planted = {"id": "I4", "category": "MISSING_PROVISION", "severity": "MEDIUM",
+                   "sectionIds": ["S12"], "playbookRef": "F-11 Termination for convenience"}
+        nodes = [{"id": "n12", "nodeType": "HEADING", "text": "12. Term and Termination"}]
+        on_section = {"subjectHeadingNodeId": "n12", "severity": "LOW"}
+        scored = scoring.score_contract(
+            {"sections": [{"id": "S12", "heading": "12. Term and Termination"}],
+             "expectedIssues": [planted], "compliantSectionIds": []},
+            nodes, [], [on_section])
+        self.assertTrue(scored["issues"][0]["detected"])
+        self.assertFalse(scored["issues"][0]["namedAsMissing"])
+        self.assertEqual(scored["missingNamed"], 0)
+
+    def test_an_absence_finding_naming_the_position_names_it(self):
+        scored = scoring.score_contract(
+            answer("F-11 Termination for convenience"), [], [],
+            [absence("F-11 Termination for convenience", concept="TERMINATION_FOR_CONVENIENCE")])
+        self.assertTrue(scored["issues"][0]["namedAsMissing"])
+        self.assertEqual(scored["missingNamed"], 1)
+
+
 class P4AgreesWithScoringTest(unittest.TestCase):
 
     def test_omission_metrics_use_the_same_whole_word_rule(self):

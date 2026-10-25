@@ -565,6 +565,14 @@ def volume_line(results):
             f"planted issues found per 10 findings: {per_ten}") if contracts else "- Findings: 0"
 
 
+def missing_line(results):
+    """Missing provisions the review reported as missing, not just credited by a finding on the clause."""
+    issues = [i for r in results for c in r["contracts"] for i in c["issues"]
+              if i["category"] == "MISSING_PROVISION"]
+    named = sum(1 for i in issues if i.get("namedAsMissing"))
+    return f"- Missing provisions reported as missing: {pct(named, len(issues))}"
+
+
 def spotting_line(results):
     contracts = [c for r in results for c in r["contracts"]]
     spotted = sum(c.get("spottedFindings", 0) for c in contracts)
@@ -840,6 +848,7 @@ def write_report(out, results, meta):
               f"- False-alarm compliant sections: {pct(tot['fa'], tot['cs'])}"
               f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})",
               volume_line(results),
+              missing_line(results),
               cost_speed_line(results, meta),
               *spotting_line(results),
               *needs_look_line(results),
