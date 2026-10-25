@@ -774,8 +774,9 @@ class ReviewAnalysisIT {
         var review = reviewService.create(ingested.contractId(), 1, null);
 
         var plan = reviewRepository.findPlanChecks(organizationId, review.id());
-        assertThat(plan).isNotEmpty().allSatisfy(check -> assertThat(check.mechanism())
-                .isEqualTo(CheckMechanism.POLICY_COMPARISON));
+        assertThat(plan).filteredOn(check -> check.mechanism() != CheckMechanism.OMISSION)
+                .isNotEmpty().allSatisfy(check -> assertThat(check.mechanism())
+                        .isEqualTo(CheckMechanism.POLICY_COMPARISON));
 
         var run = analysisService.analyze(organizationId, review.id());
 

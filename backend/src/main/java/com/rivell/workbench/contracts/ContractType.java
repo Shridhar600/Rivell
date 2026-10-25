@@ -63,6 +63,11 @@ public enum ContractType {
         return Optional.ofNullable(area);
     }
 
+    /** Whether this type is made under a parent agreement (a statement of work, an amendment, ...). */
+    public boolean madeUnderParentType() {
+        return !parentTypeCodes.isEmpty();
+    }
+
     /**
      * Declared types under which a knowledge source applies to a contract of this type: the type
      * itself, its family, and for a family type every member (a source declared for NDA applies

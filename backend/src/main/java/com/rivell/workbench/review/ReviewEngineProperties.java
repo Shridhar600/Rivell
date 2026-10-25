@@ -19,14 +19,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * BEYOND and WALK_AWAY mass reaches the margin also gets a second opinion; negative turns it off),
  * {@code fallbackConditions} (P3: a condition-by-condition check of every final WITHIN_FALLBACK).
  *
+ * <p>{@code walkAwayAbsence} (R3-002): one check reports a published position whose walk-away
+ * describes an absent right or protection and that no clause of the contract addresses; on by
+ * default, and never on a contract type made under a parent agreement.
+ *
  * <p>{@code maxTransientFailures}: how many transient infrastructure failures one analysis run may
  * survive before it is failed terminally (default 3; 0 makes every transient failure terminal).
  */
 @ConfigurationProperties("rivell.review")
 public record ReviewEngineProperties(
         Routing routing, Boolean omissions, Boolean definitions, Severity severity,
-        FallbackConditions fallbackConditions, Duration analysisBudget,
-        Integer maxTransientFailures) {
+        FallbackConditions fallbackConditions, WalkAwayAbsence walkAwayAbsence,
+        Duration analysisBudget, Integer maxTransientFailures) {
 
     @org.springframework.boot.context.properties.bind.ConstructorBinding
     public ReviewEngineProperties {
@@ -36,6 +40,8 @@ public record ReviewEngineProperties(
         severity = severity == null ? new Severity(null) : severity;
         fallbackConditions = fallbackConditions == null
                 ? new FallbackConditions(null, null) : fallbackConditions;
+        walkAwayAbsence = walkAwayAbsence == null
+                ? new WalkAwayAbsence(null) : walkAwayAbsence;
         analysisBudget = analysisBudget == null ? Duration.ofMinutes(30) : analysisBudget;
         if (analysisBudget.isZero() || analysisBudget.isNegative()) {
             throw new IllegalArgumentException("rivell.review.analysis-budget must be positive");
@@ -49,13 +55,21 @@ public record ReviewEngineProperties(
 
     public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
             Severity severity, FallbackConditions fallbackConditions,
+            Duration analysisBudget, Integer maxTransientFailures) {
+        this(routing, omissions, definitions, severity, fallbackConditions, null,
+                analysisBudget, maxTransientFailures);
+    }
+
+    public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
+            Severity severity, FallbackConditions fallbackConditions,
             Duration analysisBudget) {
-        this(routing, omissions, definitions, severity, fallbackConditions, analysisBudget, null);
+        this(routing, omissions, definitions, severity, fallbackConditions, null,
+                analysisBudget, null);
     }
 
     public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
             Severity severity, FallbackConditions fallbackConditions) {
-        this(routing, omissions, definitions, severity, fallbackConditions, null, null);
+        this(routing, omissions, definitions, severity, fallbackConditions, null, null, null);
     }
 
     /** P1: on an agreed second opinion the finding takes the worse of the two categories. */
@@ -79,6 +93,17 @@ public record ReviewEngineProperties(
                 throw new IllegalArgumentException(
                         "rivell.review.fallback-conditions.max-checks must be >= 0");
             }
+        }
+    }
+
+    /**
+     * R3-002: report a walk-away that describes an absent right when no clause addresses the
+     * position. On by default; the omission lane's own trigger stays behind {@code omissions}.
+     */
+    public record WalkAwayAbsence(Boolean enabled) {
+
+        public WalkAwayAbsence {
+            enabled = enabled == null ? Boolean.TRUE : enabled;
         }
     }
 
