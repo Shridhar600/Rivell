@@ -327,7 +327,10 @@ export type FindingQuality = {
   presenceProbability: number | null
   /** The typed approval rule behind an escalation; null when no rule applies. */
   escalationApprover?: string | null
-  /** The rule's own condition, shown as "Escalate if". */
+  /**
+   * The rule's own condition: an escalation trigger for a walk-away, an acceptance condition
+   * for a fallback.
+   */
   escalationCondition?: string | null
   /** Where the rule was stated: ENTRY, MATRIX or TABLE. */
   escalationSource?: string | null
