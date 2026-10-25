@@ -19,6 +19,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * BEYOND and WALK_AWAY mass reaches the margin also gets a second opinion; negative turns it off),
  * {@code fallbackConditions} (P3: a condition-by-condition check of every final WITHIN_FALLBACK;
  * on by default, it reports the conditions on the finding and never changes the category).
+ * {@code severity.r1NeedsCorroboration} (R1: a disagreement the second opinion calls a walk-away
+ * or beyond-fallback raises the finding to MEDIUM only when the fallback-condition check found it
+ * PARTIAL or the whole-contract read named the clause; off by default for the luna calibration).
  *
  * <p>{@code walkAwayAbsence}: one check reports a published position whose walk-away
  * describes an absent right or protection the contract does not meet, whether no clause
@@ -39,7 +42,7 @@ public record ReviewEngineProperties(
         routing = routing == null ? new Routing(null, null, null, null) : routing;
         omissions = omissions == null ? Boolean.FALSE : omissions;
         definitions = definitions == null ? Boolean.FALSE : definitions;
-        severity = severity == null ? new Severity(null) : severity;
+        severity = severity == null ? new Severity(null, null) : severity;
         fallbackConditions = fallbackConditions == null
                 ? new FallbackConditions(null, null) : fallbackConditions;
         walkAwayAbsence = walkAwayAbsence == null
@@ -74,11 +77,17 @@ public record ReviewEngineProperties(
         this(routing, omissions, definitions, severity, fallbackConditions, null, null, null);
     }
 
-    /** P1: on an agreed second opinion the finding takes the worse of the two categories. */
-    public record Severity(Boolean agreedWorseCategory) {
+    /**
+     * P1: on an agreed second opinion the finding takes the worse of the two categories.
+     * R1: when {@code r1NeedsCorroboration} is on, a disagreement the second opinion calls a
+     * walk-away or beyond-fallback needs a second signal on the clause to raise to MEDIUM.
+     */
+    public record Severity(Boolean agreedWorseCategory, Boolean r1NeedsCorroboration) {
 
         public Severity {
             agreedWorseCategory = agreedWorseCategory == null ? Boolean.TRUE : agreedWorseCategory;
+            r1NeedsCorroboration = r1NeedsCorroboration == null
+                    ? Boolean.FALSE : r1NeedsCorroboration;
         }
     }
 

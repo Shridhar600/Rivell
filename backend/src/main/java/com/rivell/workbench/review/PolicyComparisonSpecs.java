@@ -44,6 +44,14 @@ public final class PolicyComparisonSpecs {
     public static final java.util.List<String> FLAGGING = java.util.List.of(
             WALK_AWAY, BEYOND_FALLBACK, UNCLEAR, WITHIN_FALLBACK);
 
+    /**
+     * R1 corroboration tags (levers on a "needs your look" finding): the rule's raise needs one
+     * of these second signals on the clause, and {@code R1_NONE} records that none agreed.
+     */
+    public static final String R1_P3 = "R1:P3";
+    public static final String R1_SPOT = "R1:SPOT";
+    public static final String R1_NONE = "R1:NONE";
+
     private PolicyComparisonSpecs() {
     }
 

@@ -229,6 +229,7 @@ class SeverityR3LeversOffIT {
                 .filter(execution -> execution.detail().containsKey("positions")).toList())
                 .isNotEmpty().allSatisfy(execution -> assertThat(execution.detail().get("levers"))
                         .isEqualTo(Map.of("agreedWorseCategory", false, "withinSplitMargin", -1.0,
+                                "r1NeedsCorroboration", false,
                                 "fallbackConditions", false, "fallbackConditionsMaxChecks", 40)));
     }
 }

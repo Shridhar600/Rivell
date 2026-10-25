@@ -81,6 +81,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private final LlmAdjudicator adjudicator;
     private final AdjudicationBudget budget;
     private final boolean agreedWorseCategory;
+    private final boolean r1NeedsCorroboration;
     private final boolean fallbackConditionsEnabled;
     private final int maxConditionChecks;
     private final FallbackConditionChecker conditionChecker;
@@ -109,6 +110,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         this.adjudicator = new LlmAdjudicator(reasoningService);
         this.budget = new AdjudicationBudget(routing.maxAdjudications());
         this.agreedWorseCategory = engineProperties.severity().agreedWorseCategory();
+        this.r1NeedsCorroboration = engineProperties.severity().r1NeedsCorroboration();
         this.fallbackConditionsEnabled = engineProperties.fallbackConditions().enabled();
         this.maxConditionChecks = engineProperties.fallbackConditions().maxChecks();
         this.splitBudget = new AdjudicationBudget(routing.maxAdjudications());
@@ -154,6 +156,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var positions = bundle.policyItems();
         // reviews stay reproducible: the lever settings this comparison ran with are kept with it
         detail.put("levers", Map.of("agreedWorseCategory", agreedWorseCategory,
+                "r1NeedsCorroboration", r1NeedsCorroboration,
                 "withinSplitMargin", routing.withinSplitMargin(),
                 "fallbackConditions", fallbackConditionsEnabled,
                 "fallbackConditionsMaxChecks", maxConditionChecks));
@@ -439,6 +442,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
      * Severity R3 on one judged position. P1: an agreed second opinion lends its category when it is
      * worse. P3: a final WITHIN_FALLBACK on the clause's own topic is checked against the conditions of
      * its fallback; the conditions are recorded on the finding and never change its category.
+     * R1: a disagreement the second opinion calls a walk-away or beyond-fallback records the
+     * corroborating signal the severity rule needs when that rule is on.
      * {@code levers} lists the levers whose work this finding's category or kind depends on, so a
      * counterfactual can drop them; a lever that could not answer changes nothing.
      */
@@ -453,6 +458,10 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             // Jev's WITHIN note became a "needs your look" item because P2 asked
             if (routeReason != null) {
                 levers.add(P2);
+            }
+            // R1 calibration: the raise to MEDIUM needs a second signal on the same clause
+            if (r1NeedsCorroboration && r1NamesWorse(opinion)) {
+                levers.add(r1Corroboration(context, clause, state, judged, contractFacts));
             }
             return new Resolution(null, List.copyOf(levers), routeReason, null, null);
         }
@@ -479,6 +488,33 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             conditions = checkConditions(context, clause, state, judged, contractFacts);
         }
         return new Resolution(category, List.copyOf(levers), routeReason, secondOpinionCategory, conditions);
+    }
+
+    /** R1: a second opinion that names a walk-away or beyond-fallback can raise the look item. */
+    private static boolean r1NamesWorse(LlmAdjudicator.SecondOpinion opinion) {
+        return PolicyComparisonSpecs.WALK_AWAY.equals(opinion.category())
+                || PolicyComparisonSpecs.BEYOND_FALLBACK.equals(opinion.category());
+    }
+
+    /**
+     * R1 corroboration: the second signal on this clause that agrees the clause is worse than the
+     * preferred position. The fallback-condition check answers first (PARTIAL means the clause
+     * fails the listed fallback); otherwise the whole-contract read is asked whether it named this
+     * clause. Neither signal answering leaves the rule's raise without support.
+     */
+    private String r1Corroboration(
+            ReviewCheckContext context, ClauseSemantics clause,
+            PolicyComparisonSpecs.PolicyComparisonState state, JudgedPosition judged,
+            List<String> contractFacts) {
+        if (fallbackConditionsEnabled) {
+            var conditions = checkConditions(context, clause, state, judged, contractFacts);
+            if (FallbackConditionChecker.Result.PARTIAL.equals(conditions.outcome())) {
+                return PolicyComparisonSpecs.R1_P3;
+            }
+        }
+        var spots = spotter.spots(context, judged.bundle().request());
+        return !spots.unavailable() && spots.spots().containsKey(clause.headingNodeId())
+                ? PolicyComparisonSpecs.R1_SPOT : PolicyComparisonSpecs.R1_NONE;
     }
 
     private FallbackConditionChecker.Result checkConditions(
@@ -519,7 +555,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * The lever work on one judged position. {@code category}: the final category of a flagged finding
      * (null when the position yields none or a "needs your look" item); {@code conditions}: the P3 check
-     * when one ran.
+     * when one ran; {@code levers}: the tags recorded for the eval, including R1's corroboration tag
+     * (R1:P3, R1:SPOT or R1:NONE) on a disagreement.
      */
     private record Resolution(
             String category, List<String> levers, String routeReason, String secondOpinionCategory,
@@ -529,7 +566,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * Jev and the second opinion disagree, or the second opinion could not be had (failed, invalid,
      * over budget): the position becomes a LOW "needs your look" item with both views, never a
-     * MEDIUM+ finding and never a silent pass (spec §6 HUMAN, §7). No null goes into the quality.
+     * silent pass (spec §6 HUMAN, §7). R1 raises a disagreement that names a walk-away or
+     * beyond-fallback to MEDIUM; with the corroboration rule on, only a second signal on the clause
+     * lets it raise. No null goes into the quality.
      */
     private RawReviewSignal needsYourLook(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
@@ -555,7 +594,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         }
         if (!resolution.levers().isEmpty()) {
             quality.put("levers", resolution.levers());
-            quality.put("categoryBeforeLevers", jev.category());
+            if (jev.category() != null) {
+                quality.put("categoryBeforeLevers", jev.category());
+            }
         }
         if (judged.searched()) {
             quality.put("foundBy", SEARCH);
