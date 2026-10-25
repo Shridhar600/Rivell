@@ -4,11 +4,13 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -37,6 +39,23 @@ public final class DeterministicContractExtractors {
     private static final Pattern DEFINITION_START_PATTERN = Pattern.compile(
             "[\"“]([A-Z][^\"“”]{1,60})[\"”]\\s+"
                     + "(?:means|shall mean|refers to|refers solely to)\\s+");
+    /**
+     * A term named by apposition at the end of the sentence that describes it:
+     * "The parties wish to evaluate a relationship (the \"Purpose\")." The sentence before the
+     * bracket is the definition.
+     */
+    private static final Pattern APPOSITIVE_DEFINITION_PATTERN = Pattern.compile(
+            "\\(\\s*the\\s+[\"“]([A-Z][^\"“”]{1,60})[\"”]\\s*\\)");
+    private static final Pattern LIST_LABEL =
+            Pattern.compile("^(?:\\(?[A-Z0-9]{1,3}[.)]|\\([a-z0-9]{1,3}\\))\\s+");
+    /** Party, document and schedule aliases: named in brackets but not concepts to define. */
+    private static final Set<String> DEFINITION_ALIASES = Set.of(
+            "AGREEMENT", "CONTRACT", "SOW", "MSA", "DPA", "NDA", "DEED", "AMENDMENT",
+            "STATEMENT OF WORK", "ORDER FORM", "SCHEDULE", "ANNEX", "EXHIBIT", "APPENDIX",
+            "ATTACHMENT", "DISCLOSER", "RECIPIENT", "CLIENT", "AGENCY", "CUSTOMER",
+            "SUPPLIER", "CONTRACTOR", "LICENSOR", "LICENSEE", "PURCHASER", "VENDOR",
+            "COMPANY", "PARTY", "PARTIES");
+    private static final int MAX_APPOSITIVE_DEFINITION = 500;
     private static final List<String> DEFINITION_SEPARATORS =
             List.of("; and", ", and", ";", ",", " and");
     private static final Pattern EFFECTIVE_DATE_PATTERN = Pattern.compile(
@@ -197,7 +216,7 @@ public final class DeterministicContractExtractors {
     public List<ContractParty> parties(
             UUID versionId, List<ContractRegionSegmenter.Region> regions, List<DocumentNode> nodes) {
         var parties = new ArrayList<ContractParty>();
-        var seen = new java.util.HashSet<String>();
+        var seen = new HashSet<String>();
 
         for (var region : regions) {
             if (!region.isPreamble()) {
@@ -218,9 +237,18 @@ public final class DeterministicContractExtractors {
             UUID versionId, List<ContractRegionSegmenter.Region> regions, List<DocumentNode> nodes) {
         var texts = proseTexts(nodes);
         var definitions = new ArrayList<DefinitionHit>();
+        var statedTerms = new HashSet<String>();
 
         for (var entry : texts.entrySet()) {
-            definitions.addAll(definitionsIn(entry.getKey(), entry.getValue()));
+            var stated = definitionsIn(entry.getKey(), entry.getValue());
+            for (var hit : stated) {
+                statedTerms.add(normalize(hit.term()));
+            }
+            definitions.addAll(stated);
+        }
+        for (var entry : texts.entrySet()) {
+            definitions.addAll(appositiveDefinitionsIn(
+                    entry.getKey(), entry.getValue(), statedTerms));
         }
 
         var countByTerm = new HashMap<String, Integer>();
@@ -294,7 +322,7 @@ public final class DeterministicContractExtractors {
                     matcher.end()));
         }
         var hits = new ArrayList<DefinitionHit>();
-        var seenTerms = new java.util.HashSet<String>();
+        var seenTerms = new HashSet<String>();
         for (var i = 0; i < heads.size(); i++) {
             var head = heads.get(i);
             var end = i + 1 < heads.size() ? heads.get(i + 1).start() : text.length();
@@ -309,6 +337,59 @@ public final class DeterministicContractExtractors {
             hits.add(new DefinitionHit(head.term(), definition, nodeId));
         }
         return hits;
+    }
+
+    private List<DefinitionHit> appositiveDefinitionsIn(
+            UUID nodeId, String text, Set<String> statedTerms) {
+        var hits = new ArrayList<DefinitionHit>();
+        var seen = new HashSet<String>();
+        var matcher = APPOSITIVE_DEFINITION_PATTERN.matcher(text);
+        while (matcher.find()) {
+            var term = matcher.group(1).strip();
+            if (!seen.add(term) || statedTerms.contains(normalize(term))
+                    || isNonConceptAlias(term)) {
+                continue;
+            }
+            var definition = text.substring(sentenceStartBefore(text, matcher.start()),
+                    matcher.start()).strip();
+            definition = stripListLabel(definition)
+                    .replaceAll("[\\s,;:]+$", "").strip();
+            if (definition.split("\\s+").length < 4
+                    || definition.chars().noneMatch(Character::isLowerCase)) {
+                continue;
+            }
+            if (definition.length() > MAX_APPOSITIVE_DEFINITION) {
+                definition = definition.substring(0, MAX_APPOSITIVE_DEFINITION).strip();
+            }
+            hits.add(new DefinitionHit(term, definition, nodeId));
+        }
+        return hits;
+    }
+
+    /** The start of the sentence or list item the bracket closes. */
+    private static int sentenceStartBefore(String text, int end) {
+        var start = 0;
+        for (int index = 0; index < end; index++) {
+            var character = text.charAt(index);
+            if (character == '\n' || character == ';') {
+                start = index + 1;
+            } else if (character == '.'
+                    && (index + 1 >= end || Character.isWhitespace(text.charAt(index + 1)))) {
+                start = index + 1;
+            }
+        }
+        return start;
+    }
+
+    private static String stripListLabel(String value) {
+        var matcher = LIST_LABEL.matcher(value);
+        return matcher.find() ? value.substring(matcher.end()) : value;
+    }
+
+    private static boolean isNonConceptAlias(String term) {
+        var upper = term.toUpperCase(Locale.ROOT);
+        return DEFINITION_ALIASES.contains(upper)
+                || upper.endsWith(" PARTY") || upper.endsWith(" PARTIES");
     }
 
     private String definitionText(String slice, boolean last) {

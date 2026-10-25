@@ -78,15 +78,15 @@ class ClauseDefinitionsIT {
     }
 
     /** Jev flags the clause without conviction: flag mass 0.68, inside the doubt band. */
-    private static final Map<String, Double> UNSURE_FLAG = Map.of(
+    static final Map<String, Double> UNSURE_FLAG = Map.of(
             PolicyComparisonSpecs.MEETS_PREFERRED, 0.30,
             PolicyComparisonSpecs.WITHIN_FALLBACK, 0.02,
             PolicyComparisonSpecs.BEYOND_FALLBACK, 0.62,
             PolicyComparisonSpecs.WALK_AWAY, 0.02,
             PolicyComparisonSpecs.UNCLEAR, 0.02,
             PolicyComparisonSpecs.NOT_ADDRESSED, 0.02);
-    private static final String LIABILITY = "Limitation of Liability";
-    private static final String FEES_DEFINITION =
+    static final String LIABILITY = "Limitation of Liability";
+    static final String FEES_DEFINITION =
             "Fees means the fees paid by Customer under an Order Form";
 
     @Autowired

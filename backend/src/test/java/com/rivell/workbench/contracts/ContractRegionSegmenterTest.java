@@ -2,11 +2,15 @@ package com.rivell.workbench.contracts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.InputStream;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+
+import com.rivell.workbench.platform.parsing.DocxParserProperties;
+import com.rivell.workbench.platform.parsing.DocxStructuralParser;
 
 class ContractRegionSegmenterTest {
 
@@ -253,6 +257,38 @@ class ContractRegionSegmenterTest {
                 .as("the schedule keeps its content and loses the signatures")
                 .contains("greater of 5% or CPI").doesNotContain("IN WITNESS");
         assertThat(regions.get(2).headingNodeId()).isEqualTo(witness.id());
+    }
+
+    /**
+     * The SOW file holds its milestone and rate tables after the signature block. They must stay
+     * in the text the review reads, in row and cell order; folded into the signature block they
+     * were dropped, and a whole-contract read said the milestone schedule was missing.
+     */
+    @Test
+    void tablesAfterTheExecutionBlockStayReviewableContent() throws Exception {
+        var parser = new DocxStructuralParser(new DocxParserProperties(200L * 1024 * 1024));
+        ParseResult parsed;
+        try (InputStream in = getClass().getClassLoader()
+                .getResourceAsStream("fixtures/h-sow-under-msa.docx")) {
+            parsed = parser.parse(in, VERSION);
+        }
+        var regions = new ContractRegionSegmenter().segment(parsed.nodes());
+
+        var reviewable = regions.stream()
+                .filter(region -> region.kind() != ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK)
+                .map(ContractRegionSegmenter.Region::contentText)
+                .reduce("", (left, right) -> left + "\n" + right);
+        assertThat(reviewable).containsSubsequence(
+                "M1", "Brand strategy and positioning", "30 April 2025", "CAD 60,000",
+                "M2", "Visual identity system", "31 May 2025", "CAD 75,000",
+                "M3", "Campaign creative and media plan", "30 June 2025", "CAD 110,000",
+                "Creative director", "CAD 2,400");
+
+        var signature = regions.stream()
+                .filter(region -> region.kind()
+                        == ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK)
+                .findFirst().orElseThrow();
+        assertThat(signature.contentText()).doesNotContain("CAD 60,000");
     }
 
     @Test

@@ -165,10 +165,11 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 bundle.degradationWarnings().contains("POLICY_POSITIONS_TRUNCATED"));
         var state = comparisonState(context, clause);
         // engine v2 P3: the judge reads the definitions of the terms the clause uses; with the
-        // property off the state stays as before, and the triage and probe keep it always
-        var definitions = definitionsEnabled
-                ? ClauseDefinitions.of(bundle) : ClauseDefinitions.empty();
-        var judgeState = comparisonState(context, clause, definitions.texts());
+        // property off the judge state stays as before. The second opinion always reads them: it
+        // is the fallback that decides whether the clause's own words were enough.
+        var definitions = ClauseDefinitions.of(bundle);
+        var judgeDefinitions = definitionsEnabled ? definitions.texts() : List.<String>of();
+        var judgeState = comparisonState(context, clause, judgeDefinitions);
         var definitionsUsed = new boolean[1];
         var judgedPositions = new ArrayList<JudgedPosition>(positions.size());
         Map<String, PolicyComparisonOutcome.Judgement> probe = Map.of();
@@ -177,7 +178,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             try {
                 execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
                         PolicyPositionQuestions.build(positions, clause, conceptRegistry)), judgeState);
-                definitionsUsed[0] |= !definitions.isEmpty();
+                definitionsUsed[0] |= !judgeDefinitions.isEmpty();
             } catch (SpecStateMismatchException | UnknownDecisionSpecException
                     | NoProviderConfiguredException e) {
                 return CheckOutcome.failed(
@@ -215,7 +216,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 try {
                     var execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
                             PolicyPositionQuestions.build(found, clause, conceptRegistry)), judgeState);
-                    definitionsUsed[0] |= !definitions.isEmpty();
+                    definitionsUsed[0] |= !judgeDefinitions.isEmpty();
                     var missing = judge(found, execution, searchBundle, SEARCH_KEY_PREFIX,
                             judgedPositions);
                     if (missing != null) {
@@ -263,7 +264,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     .toList());
         }
         var signals = new ArrayList<RawReviewSignal>();
-        var definitionsCarried = !definitions.isEmpty();
+        var judgeDefinitionsCarried = !judgeDefinitions.isEmpty();
+        var opinionDefinitionsCarried = !definitions.isEmpty();
         for (var judged : judgedPositions) {
             if (!applied(judged, fit)) {
                 // a search hit that does not govern the clause is not applied; the detail keeps it
@@ -272,11 +274,12 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             var opinion = opinions.effective(judged.key());
             var resolution = resolutions.get(judged.key());
             if (opinion != null && !opinion.agreed()) {
-                signals.add(needsYourLook(context, clause, judged, opinion, definitionsCarried,
-                        resolution, fit));
+                signals.add(needsYourLook(context, clause, judged, opinion,
+                        opinionDefinitionsCarried, resolution, fit));
             } else if (judged.judgement().flagged()) {
                 signals.addAll(flaggedSignals(context, clause, judged, opinion, detail,
-                        definitionsCarried, resolution, wordingByKey, fit));
+                        judgeDefinitionsCarried || (opinion != null && opinionDefinitionsCarried),
+                        resolution, wordingByKey, fit));
             }
         }
         if (definitionsUsed[0]) {
@@ -541,7 +544,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             ClauseFitCheck.Outcome fit) {
         var bundle = judged.bundle();
         var execution = judged.execution();
-        // when the judge read this position's own bundle's definitions, the finding cites them
+        // when the definitions of this position's own bundle were read, the finding cites them
         var evidence = definitionsCarried
                 ? union(union(List.of(judged.position().evidenceId()),
                         subjectEvidence(bundle, clause.id())),
@@ -622,7 +625,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var execution = judged.execution();
         var category = resolution.category();
         var family = PolicyComparisonOutcome.family(category);
-        // when the judge read this position's own bundle's definitions, the finding cites them
+        // when the definitions of this position's own bundle were read, the finding cites them
         var evidence = definitionsCarried
                 ? union(union(List.of(judged.position().evidenceId()),
                         subjectEvidence(bundle, clause.id())),

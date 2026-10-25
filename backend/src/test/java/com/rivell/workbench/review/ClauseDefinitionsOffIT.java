@@ -139,4 +139,37 @@ class ClauseDefinitionsOffIT {
                 .findFirst().orElseThrow().detail())
                 .doesNotContainKey("definitionTerms");
     }
+
+    /**
+     * The definitions lever governs what Jev the judge reads; the second opinion is the fallback
+     * that decides whether the clause's own words were enough, so it reads the clause's defined
+     * terms even when the lever is off.
+     */
+    @Test
+    void theSecondOpinionSeesTheDefinitionsEvenWhenTheJudgeDoesNot() throws Exception {
+        corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.PC_PLAYBOOK,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var ingested = contractIngestionService.ingest("definitions-off-opinion.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE,
+                new ByteArrayInputStream(ClauseDefinitionsIT.definitionsContract()));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        var reviewId = reviewService.create(ingested.contractId(), 1, null).id();
+        scriptedProvider.policyComparisonProbabilities = ClauseDefinitionsIT.UNSURE_FLAG;
+        scriptedProvider.probabilityHeadings.add(ClauseDefinitionsIT.LIABILITY);
+
+        analysisService.analyze(organizationId(), reviewId);
+
+        var call = scriptedProvider.policyComparisonCalls().stream()
+                .filter(candidate -> candidate.heading().contains(ClauseDefinitionsIT.LIABILITY))
+                .findFirst().orElseThrow();
+        var state = objectMapper.readTree(objectMapper.writeValueAsString(call.state()));
+        assertThat(state.has("definitions"))
+                .as("the judge still reads the clause without the definitions lever")
+                .isFalse();
+        assertThat(generativeProvider.secondOpinionDefinitions).isNotEmpty()
+                .allSatisfy(definitions -> assertThat(definitions)
+                        .containsExactly(ClauseDefinitionsIT.FEES_DEFINITION));
+    }
 }
