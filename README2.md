@@ -56,7 +56,6 @@ flowchart TB
     EN --> F["Findings with reasons and suggested wording"]
     F --> U{{"You decide"}}
     U --> R["Tracked-change Word redline"]
-    U -. "refine the playbook, publish a new version" .-> KB
 ```
 
 Rivell gives each step to the tool that can do it most reliably:
