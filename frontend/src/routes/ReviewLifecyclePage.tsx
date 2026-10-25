@@ -37,7 +37,7 @@ import { buildRegionLabelMap } from '../lib/contractSemantics'
 import { contractPackLabel } from '../lib/evidence'
 import { dateTime } from '../lib/dates'
 import { clauseBodyText, sideChip, typeChip } from '../lib/lifecycleView'
-import { playbooksUsedText } from '../lib/reviews'
+import { knowledgeUsedText } from '../lib/reviews'
 import { classifyTriggerError, redlineTriggerErrorNotice } from '../lib/redline'
 import {
   REVIEWS_PATH,
@@ -166,7 +166,7 @@ export function ReviewLifecyclePage() {
   const status = key ? lifecycleStatus(key) : null
   const type = typeChip(profile)
   const side = sideChip(profile)
-  const playbooksUsed = playbooksUsedText(summary.snapshot?.playbooksUsed ?? null)
+  const knowledgeUsed = knowledgeUsedText(summary.snapshot?.playbooksUsed ?? null)
   const humanReadFailed = completed && humanReviewQuery.isError
   const changeSetFailed = finalized && changeSetQuery.isError && !isWorkflowNotFoundError(changeSetQuery.error)
   const redlineFailedToLoad = finalized && redlineQuery.isError && !redlineNotStarted
@@ -328,8 +328,10 @@ export function ReviewLifecyclePage() {
           </div>
         </div>
       </header>
-      {playbooksUsed !== null ? (
-        <p className="rv-lc-quiet">Playbooks used: {playbooksUsed}</p>
+      {knowledgeUsed !== null ? (
+        <p className="rv-lc-quiet">
+          {summary.snapshot?.playbooksUsed?.length === 0 ? knowledgeUsed : `Knowledge used: ${knowledgeUsed}`}
+        </p>
       ) : null}
       {key ? <Journey steps={journey(key, humanReview)} /> : null}
       {body}

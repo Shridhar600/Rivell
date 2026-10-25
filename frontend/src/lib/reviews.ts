@@ -805,17 +805,32 @@ export function routeCountsLabel(findings: readonly Pick<FindingSummary, 'decide
   return `${second} decided with a second opinion · ${look} need${look === 1 ? 's' : ''} your look`
 }
 
-/** The sentence used wherever a review's frozen playbook set is empty. */
-export const NO_PLAYBOOK_COVERS =
-  'No playbook covers this contract type, so this is not a policy review. Rivell flagged only clauses that read as unusual. Read the whole contract yourself.'
+/** The sentence used wherever a review's frozen knowledge set is empty. */
+export const NO_PLAYBOOK_NOTICE =
+  'No playbook applied. General scan only; review the full contract.'
+
+const KNOWLEDGE_KIND_LABELS: Record<string, string> = {
+  PLAYBOOK: 'Playbook',
+  CLAUSE_LIBRARY: 'Clause library',
+  TEMPLATE: 'Template',
+  EXECUTED_PRECEDENT: 'Signed precedent',
+  NEGOTIATION_HISTORY: 'Negotiation history',
+  EXTERNAL_REFERENCE: 'External reference',
+}
 
 /**
- * The names of the playbooks a review actually froze. Null means the review predates the freeze,
- * so there is nothing honest to show; an empty list is a real answer.
+ * The knowledge a review actually froze, each with the kind of source it is. Null means the
+ * review predates the freeze, so there is nothing honest to show; an empty list is a real answer.
  */
-export function playbooksUsedText(
-  used: readonly Pick<PlaybookUsed, 'name'>[] | null,
+export function knowledgeUsedText(
+  used: readonly PlaybookUsed[] | null,
 ): string | null {
   if (used === null) return null
-  return used.length === 0 ? NO_PLAYBOOK_COVERS : used.map((playbook) => playbook.name).join(', ')
+  if (used.length === 0) return NO_PLAYBOOK_NOTICE
+  return used
+    .map((item) => {
+      const kind = KNOWLEDGE_KIND_LABELS[item.artifactType]
+      return kind ? `${item.name} (${kind})` : item.name
+    })
+    .join(', ')
 }

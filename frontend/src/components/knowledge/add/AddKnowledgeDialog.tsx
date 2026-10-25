@@ -262,7 +262,7 @@ export function AddKnowledgeDialog({ preset, onClose }: AddKnowledgeDialogProps)
               <input value={details.partyPerspective} onChange={set('partyPerspective')} disabled={busy} />
             </label>
             <label>
-              Paper source
+              Whose template
               <input value={details.paperSource} onChange={set('paperSource')} disabled={busy} />
             </label>
             <label>

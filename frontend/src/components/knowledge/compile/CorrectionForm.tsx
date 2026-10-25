@@ -29,7 +29,7 @@ const RULE_STANCE_LABELS: Record<(typeof RULE_STANCE_OPTIONS)[number], string> =
 }
 
 const AUTHORITY_SOURCE_OPTIONS = {
-  ENTRY: 'Stated on this entry',
+  ENTRY: 'Entry',
   MATRIX: 'Approval matrix',
   TABLE: 'Approval table',
 } as const satisfies Record<(typeof AUTHORITY_LEVELS)[number], string>
@@ -195,7 +195,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
               <textarea id={id} rows={3} value={draft.semantic.fallbackTexts} disabled={pending} onChange={(event) => semantic({ fallbackTexts: event.target.value })} />
             )}
           </Field>
-          <Field label="Walk-away wording" hint="The walk-away or prohibited position exactly as the source states it. An empty field means the source states none.">
+          <Field label="Walk-away wording" hint="The walk-away position exactly as the source states it. An empty field means the source states none.">
             {(id) => (
               <textarea id={id} rows={3} value={draft.semantic.prohibitedText} disabled={pending} onChange={(event) => semantic({ prohibitedText: event.target.value })} />
             )}
@@ -318,7 +318,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
             <input value={draft.scope.partyPerspective} onChange={scope('partyPerspective')} />
           </label>
           <label>
-            Paper source
+            Whose template
             <input value={draft.scope.paperSource} onChange={scope('paperSource')} />
           </label>
           <label>

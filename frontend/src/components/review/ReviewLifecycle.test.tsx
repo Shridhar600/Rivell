@@ -114,23 +114,22 @@ describe('review lifecycle states', () => {
       },
     })
     const sheet = await openReviewNotes()
-    expect(within(sheet).getByText('Playbooks used')).toBeInTheDocument()
+    expect(within(sheet).getByText('Knowledge used')).toBeInTheDocument()
     expect(
-      within(sheet).getByText('Commercial MSA Playbook, Clause Library'),
+      within(sheet).getByText('Commercial MSA Playbook (Playbook), Clause Library (Clause library)'),
     ).toBeInTheDocument()
   })
 
-  it('states the empty case in the review notes when no playbook applied', async () => {
+  it('does not repeat the no-playbook notice in the review notes', async () => {
     renderReview({
       ...fixtureCompletedReviewSummary,
       snapshot: { ...fixtureCompletedReviewSummary.snapshot, playbooksUsed: [] },
     })
     const sheet = await openReviewNotes()
+    expect(within(sheet).queryByText('Knowledge used')).not.toBeInTheDocument()
     expect(
-      within(sheet).getByText(
-        'No playbook covers this contract type, so this is not a policy review. Rivell flagged only clauses that read as unusual. Read the whole contract yourself.',
-      ),
-    ).toBeInTheDocument()
+      within(sheet).queryByText('No playbook applied. General scan only; review the full contract.'),
+    ).not.toBeInTheDocument()
   })
 
   it('renders a technical failure distinctly and never leaks the raw reason', async () => {

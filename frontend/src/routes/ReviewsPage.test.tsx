@@ -138,7 +138,7 @@ describe('Reviews page', () => {
     const row = await screen.findByRole('link', { name: /Atlas Mutual NDA\.docx/ })
     expect(within(row).getByText('v1')).toBeInTheDocument()
     expect(within(row).getByText('NDA')).toBeInTheDocument()
-    expect(within(row).getByText('Customer side, counterparty paper, United Kingdom')).toBeInTheDocument()
+    expect(within(row).getByText('Customer side, their template, United Kingdom')).toBeInTheDocument()
   })
 
   it('names only what was declared, and not an undeclared jurisdiction', async () => {

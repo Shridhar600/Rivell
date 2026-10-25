@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CONTRACT_TYPES,
   CONTRACT_TYPE_LABELS,
+  clauseHeadingTitle,
   describeFact,
   enrichmentFailureNote,
   factDivergence,
@@ -280,6 +281,25 @@ describe('region labels', () => {
 
   it('returns null for unknown regions', () => {
     expect(resolveRegionLabel('missing', clauses, nodes)).toBeNull()
+  })
+})
+
+describe('clause heading titles', () => {
+  it('cuts a heading that carries its first sub-clause', () => {
+    expect(
+      clauseHeadingTitle(
+        '9. Intellectual Property and Infringement Indemnity. 9.1 The Supplier and its licensors retain all right, title and interest.',
+      ),
+    ).toBe('9. Intellectual Property and Infringement Indemnity')
+  })
+
+  it('leaves a title that is only a heading unchanged', () => {
+    expect(clauseHeadingTitle('9. Intellectual Property and Infringement Indemnity')).toBe(
+      '9. Intellectual Property and Infringement Indemnity',
+    )
+    expect(clauseHeadingTitle('1. Definitions')).toBe('1. Definitions')
+    expect(clauseHeadingTitle('Section 4. Payment')).toBe('Section 4. Payment')
+    expect(clauseHeadingTitle('12. U.S. Export Controls')).toBe('12. U.S. Export Controls')
   })
 })
 

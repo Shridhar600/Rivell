@@ -153,7 +153,7 @@ describe('compilation workspace', () => {
     const { world } = await open()
     await userEvent.click(within(rail()).getByRole('button', { name: /Subcontracting/ }))
     await screen.findByRole('group', { name: 'Possible duplicate' })
-    await userEvent.click(within(decisionBar()).getByRole('button', { name: /Approve/ }))
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Approve entry' }))
     await waitFor(() => expect(requests(world, 'POST', /\/approve$/)).toHaveLength(1))
     await userEvent.click(await within(rail()).findByRole('button', { name: /Subcontracting/ }))
     expect(screen.queryByRole('group', { name: 'Possible duplicate' })).not.toBeInTheDocument()
@@ -167,7 +167,7 @@ describe('compilation workspace', () => {
     expect(within(source).getByText('Assignment')).toBeInTheDocument()
     expect(source.textContent).not.toMatch(/page \d/i)
     expect(document.body.textContent).not.toMatch(/page \d/i)
-    expect(within(source).getByText('Original retained')).toBeInTheDocument()
+    expect(within(source).queryByText('Original retained')).not.toBeInTheDocument()
   })
 
   it('opens the source in context and returns to the candidate', async () => {

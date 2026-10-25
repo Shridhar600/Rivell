@@ -10,6 +10,7 @@ import { conceptName, displayScopeRows, positionRoles, POSITION_ROLE_LABELS } fr
 import { headingPaths, sourceLocation } from '../../../lib/knowledgeSource'
 import { AUTHORITY_SOURCE_LABELS } from '../../../lib/compilationFields'
 import { ArrowRightIcon } from '../../ui/Icon'
+import { ApprovalRulesTable } from '../ApprovalRules'
 
 interface PositionInspectorProps {
   candidate: Candidate
@@ -72,19 +73,14 @@ export function PositionInspector({ candidate, artifact, publication }: Position
             <dd>{candidate.prohibitedText}</dd>
           </>
         ) : null}
-        {candidate.authorityRules.map((rule, index) => (
-          <Fragment key={`approval-${index}`}>
-            <dt>Approval</dt>
+        {candidate.authorityRules.length > 0 ? (
+          <>
+            <dt>Approvals</dt>
             <dd>
-              {rule.approver} for{' '}
-              {rule.stances.length > 0
-                ? rule.stances.map((role) => POSITION_ROLE_LABELS[role].toLowerCase()).join(', ')
-                : 'fallback and walk-away'}{' '}
-              ({AUTHORITY_SOURCE_LABELS[rule.source]})
-              {rule.condition ? `, if ${rule.condition}` : ''}
+              <ApprovalRulesTable rules={candidate.authorityRules} />
             </dd>
-          </Fragment>
-        ))}
+          </>
+        ) : null}
         {candidate.authorityConflicts.length > 0 ? (
           <>
             <dt>Other level</dt>
@@ -128,13 +124,16 @@ export function PositionInspector({ candidate, artifact, publication }: Position
 
       <div className="rv-k-prov">
         <span className="rv-k-loc">Source{location ? `, ${location}` : ''}</span>
-        {text ? (
-          <q>
-            <span className="rv-k-hl">{text}</span>
-          </q>
-        ) : (
-          <span className="rv-k-loc">This position has no authored wording.</span>
-        )}
+        <details className="rv-k-fullsrc">
+          <summary>Full source text</summary>
+          {text ? (
+            <q>
+              <span className="rv-k-hl">{text}</span>
+            </q>
+          ) : (
+            <span className="rv-k-loc">This position has no authored wording.</span>
+          )}
+        </details>
         <Link className="rv-k-lnk" to={`/knowledge/sources/${artifact.id}?position=${candidate.id}`}>
           Open in original source
           <ArrowRightIcon className="rv-icon" />

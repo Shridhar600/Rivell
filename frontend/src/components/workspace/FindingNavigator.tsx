@@ -3,7 +3,7 @@ import type { FindingSummary } from '../../api/reviews'
 import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanDecision } from '../../api/workflow'
 import { comparisonCategoryLabel, findingIssueLabel, findingSubjectLabel } from '../../lib/reviews'
-import { findingState, isNeedsYourLook, orderNeedsYourLook, type FindingTone } from '../../lib/workspace'
+import { findingState, isNeedsYourLook, isWholeContractSpotted, orderNeedsYourLook, type FindingTone } from '../../lib/workspace'
 import { ErrorState, LoadingState } from '../ui/State'
 import { GlyphEscalated, GlyphOpen, GlyphRejected, GlyphResolved } from './WorkspaceIcons'
 
@@ -52,10 +52,15 @@ export function FindingNavigator({
   onSelect,
 }: Props) {
   const { labelFor } = useTaxonomy()
-  const [lookOpen, setLookOpen] = useState(false)
+  const [disagreeOpen, setDisagreeOpen] = useState(false)
+  const [otherOpen, setOtherOpen] = useState(false)
   const look = orderNeedsYourLook(findings.filter(isNeedsYourLook))
-  // the group opens by itself when one of its items is selected (keyboard or URL)
-  const showLook = lookOpen || look.some((finding) => finding.id === selectedId)
+  const disagreements = look.filter((finding) => !isWholeContractSpotted(finding))
+  const otherConcerns = look.filter(isWholeContractSpotted)
+  // each group opens by itself when one of its items is selected (keyboard or URL)
+  const showDisagreements =
+    disagreeOpen || disagreements.some((finding) => finding.id === selectedId)
+  const showOther = otherOpen || otherConcerns.some((finding) => finding.id === selectedId)
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>, id: string) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -63,9 +68,9 @@ export function FindingNavigator({
     }
   }
 
-  /** What a row says the item is. A look item says why Rivell left it to the user. */
+  /** What a row says the item is. A related-guidance item says why it is listed. */
   function issueLine(finding: FindingSummary): string {
-    if (finding.relatedPosition) return 'Related position'
+    if (finding.relatedPosition) return 'Related guidance'
     if (isNeedsYourLook(finding) && finding.firstReviewCategory) {
       return `First review: ${comparisonCategoryLabel(finding.firstReviewCategory)}`
     }
@@ -121,25 +126,36 @@ export function FindingNavigator({
       <div role="listbox" aria-label="Findings list">
         {findings.filter((finding) => !isNeedsYourLook(finding)).map(row)}
       </div>
-      {look.length > 0 ? (
+      {disagreements.length > 0 ? (
         <div className="rv-ws-look">
           <button
             type="button"
             className="rv-ws-look-h"
-            aria-expanded={showLook}
-            onClick={() => setLookOpen(!showLook)}
+            aria-expanded={showDisagreements}
+            onClick={() => setDisagreeOpen(!showDisagreements)}
           >
-            Needs your look ({look.length})
+            Assessments disagree ({disagreements.length})
           </button>
-          <p
-            className="rv-ws-fl-note"
-            title="Rivell did not decide these. The first check and a second opinion disagreed, a second opinion was not available, your playbook is silent on the clause, or Rivell is not sure that a missing provision is required."
+          {showDisagreements ? (
+            <div role="listbox" aria-label="Assessments disagree list">
+              {disagreements.map(row)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {otherConcerns.length > 0 ? (
+        <div className="rv-ws-look">
+          <button
+            type="button"
+            className="rv-ws-look-h"
+            aria-expanded={showOther}
+            onClick={() => setOtherOpen(!showOther)}
           >
-            Rivell left these to you.
-          </p>
-          {showLook ? (
-            <div role="listbox" aria-label="Needs your look list">
-              {look.map(row)}
+            Other concerns ({otherConcerns.length})
+          </button>
+          {showOther ? (
+            <div role="listbox" aria-label="Other concerns list">
+              {otherConcerns.map(row)}
             </div>
           ) : null}
         </div>

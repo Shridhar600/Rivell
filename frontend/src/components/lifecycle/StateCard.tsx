@@ -3,6 +3,7 @@ import type { SemanticContract } from '../../api/semantics'
 import { useTaxonomy } from '../../api/taxonomy'
 import type { HumanReview } from '../../api/workflow'
 import { metadataFieldLabel } from '../../lib/contractSemantics'
+import { isWaitingLong, waitingText } from '../../lib/home'
 import {
   classificationCounts,
   decisionSegments,
@@ -42,7 +43,9 @@ interface Props {
 export function StateCard(props: Props) {
   const { state, summary, humanReview, workspaceTo } = props
   switch (state) {
-    case 'queued':
+    case 'queued': {
+      const waited = waitingText(summary.createdAt)
+      const long = isWaitingLong(summary.createdAt)
       return (
         <LcCard label="Analysis waiting to start">
           <LcBody>
@@ -51,12 +54,16 @@ export function StateCard(props: Props) {
             </BigGlyph>
             <h2>Waiting for analysis to start</h2>
             <p role="status">
-              Your contract and review details are saved. Analysis starts on its own, so you can leave
-              this page.
+              {waited ? `${waited}. ` : ''}Your contract and review details are saved. Analysis starts
+              on its own, so you can leave this page.
             </p>
+            {long ? (
+              <p className="rv-lc-quiet">Taking longer than usual. Rivell keeps retrying.</p>
+            ) : null}
           </LcBody>
         </LcCard>
       )
+    }
     case 'analyzing':
       return (
         <LcCard label="Analyzing">
@@ -238,7 +245,7 @@ function ProposedChanges({ counts }: { counts: ProposedChangeCounts }) {
         label="What Rivell proposes"
         stats={[
           { figure: counts.replace, label: 'Replacement wording' },
-          { figure: counts.insert, label: 'Missing provisions to draft' },
+          { figure: counts.insert, label: 'Missing-provision drafts' },
         ]}
       />
       {counts.insert > 0 ? (
@@ -287,13 +294,9 @@ function ReadyForReview({ summary, findings, findingsComplete, semantics, worksp
           </BigGlyph>
           <h2>
             {summary.findings === 1
-              ? '1 finding is ready for your review'
-              : `${summary.findings} findings are ready for your review`}
+              ? '1 finding to review'
+              : `${summary.findings} findings to review`}
           </h2>
-          <p>
-            Analysis is complete. The contract does not change until you resolve the findings and
-            finalize.
-          </p>
           {findingsComplete && findings.length > 0 ? (
             <Stat3
               label="By classification"
@@ -303,6 +306,7 @@ function ReadyForReview({ summary, findings, findingsComplete, semantics, worksp
           <ProposedChanges counts={summary.proposedChanges} />
         </LcBody>
         <LcFoot>
+          <span className="rv-lc-quiet">The contract does not change until you finalize.</span>
           <Spacer />
           <LinkButton to={workspaceTo} variant="primary">
             Open review

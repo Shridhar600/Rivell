@@ -15,7 +15,8 @@ import {
   PARTY_ROLES,
   roleLabel,
 } from '../lib/contractSemantics'
-import { NO_PLAYBOOK_COVERS } from '../lib/reviews'
+import { NO_PLAYBOOK_NOTICE } from '../lib/reviews'
+import { kindLabel } from '../lib/compilation'
 import { EMPTY_CONTEXT, STAGE_LABELS, canStart, contextSummary, filenameSuggestedType, fileSizeLabel, isDocx, type StartContext, startNeeds } from '../lib/startReview'
 import { useStartReview } from '../lib/useStartReview'
 
@@ -201,14 +202,14 @@ export function StartReviewPage() {
                   {context.contractType ? <ApplicablePlaybooks context={context} /> : null}
 
                   <OptionGroup
-                    label="Our side"
+                    label="Party you represent"
                     options={PARTY_ROLES.map((role) => ({ value: role, label: roleLabel(role) }))}
                     selected={context.ourSideRole}
                     disabled={running}
                     onToggle={(value) => toggle('ourSideRole', value)}
                   />
                   <OptionGroup
-                    label="Paper source"
+                    label="Whose template"
                     options={PAPER_SOURCES.map((source) => ({ value: source, label: PAPER_SOURCE_LABELS[source] }))}
                     selected={context.paperSource}
                     disabled={running}
@@ -311,13 +312,13 @@ function ApplicablePlaybooks({ context }: { context: StartContext }) {
   const shown = items.slice(0, 5)
   return (
     <div className="rv-fld">
-      <div className="rv-lb rv-lb--field">Playbooks that will apply</div>
+      <div className="rv-lb rv-lb--field">Knowledge that will apply</div>
       {query.isPending ? (
         <p className="rv-hint">Checking which playbooks apply.</p>
       ) : query.isError ? (
         <p className="rv-hint">The published playbooks could not be loaded.</p>
       ) : items.length === 0 ? (
-        <p className="rv-hint">{NO_PLAYBOOK_COVERS}</p>
+        <p className="rv-hint">{NO_PLAYBOOK_NOTICE}</p>
       ) : (
         <ul className="rv-startpb">
           {shown.map((item) => (
@@ -331,9 +332,8 @@ function ApplicablePlaybooks({ context }: { context: StartContext }) {
 }
 
 function applicableKnowledgeLabel(item: ApplicableKnowledge): string {
-  return item.publicationNumber
-    ? `${item.name}, version ${item.publicationNumber}`
-    : item.name
+  const version = item.publicationNumber ? `, version ${item.publicationNumber}` : ''
+  return `${item.name} (${kindLabel(item.artifactType)})${version}`
 }
 
 function Kept({ children }: { children: string }) {

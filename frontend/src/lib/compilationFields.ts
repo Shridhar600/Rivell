@@ -45,9 +45,9 @@ const SUPPORT_NOTES: Partial<Record<VerificationState, string>> = {
 
 /** Where an approval rule was stated, in words a reader can check. */
 export const AUTHORITY_SOURCE_LABELS: Record<AuthorityLevel, string> = {
-  ENTRY: 'stated on this entry',
-  MATRIX: 'approval matrix',
-  TABLE: 'approval table',
+  ENTRY: 'Entry',
+  MATRIX: 'Approval matrix',
+  TABLE: 'Approval table',
 }
 
 /**
@@ -245,9 +245,8 @@ export function interpretationRows(
         key: 'authorityRules',
         label: 'Approvals',
         value: authorityText(candidate),
-        machine: fieldCorrected(candidate, 'authorityRules')
-          ? `Rivell read: ${interpretationFor(candidate, 'authorityRules')?.proposedValue ?? 'not stated'}`
-          : null,
+        // The table renders the rules themselves; the raw extraction tokens stay out of the main view.
+        machine: null,
         support: supportNote(interpretationFor(candidate, 'authorityRules')),
         corrected: fieldCorrected(candidate, 'authorityRules'),
       })

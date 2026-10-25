@@ -233,7 +233,7 @@ export function applicabilityDimensions(
   if (scope.paperSource) {
     dimensions.push({
       key: 'paperSource',
-      label: 'Paper source',
+      label: 'Whose template',
       value: PAPER_SOURCE_LABELS[scope.paperSource] ?? humanizeCode(scope.paperSource),
     })
   }
@@ -429,8 +429,8 @@ const REQUEST_KEY_LABELS: Record<string, string> = {
   versionNumber: 'Version',
   clauseId: 'Clause',
   contractType: 'Contract type',
-  ourSideRole: 'Our side',
-  paperSource: 'Paper source',
+  ourSideRole: 'Party you represent',
+  paperSource: 'Whose template',
   jurisdiction: 'Jurisdiction',
   clauseText: 'Subject clause text',
 }

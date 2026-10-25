@@ -36,6 +36,7 @@ import { policyPositionView } from '../../lib/positionComparison'
 import {
   clauseExcerpt,
   findingState,
+  isActionable,
   isWordingGrounded,
   languageAuthority,
   proposedChangeType,
@@ -63,7 +64,6 @@ interface Props {
   isError: boolean
   onRetry: () => void
   position: { index: number; total: number } | null
-  context: string | null
   regionLabels: Map<string, string>
   /** The playbooks the review froze, used to name the source of a rule; null when unknown. */
   playbooksUsed: readonly PlaybookUsed[] | null
@@ -162,9 +162,8 @@ function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'summar
           <b>Approved changes are final</b>
           <p>
             {props.frozenChanges === null
-              ? 'The approved changes cannot be changed.'
-              : `${plural(props.frozenChanges, 'approved change', 'approved changes')} fixed for this review.`}{' '}
-            Next, create the redline as a Word file.
+              ? 'The approved changes are fixed for this review.'
+              : `${plural(props.frozenChanges, 'approved change', 'approved changes')} fixed for this review.`}
           </p>
         </div>
       </div>
@@ -305,7 +304,7 @@ export function FindingPanel(props: Props) {
       <div key="in" className="rv-ws-dt-in">
         <div className="rv-ws-kicker">
           {related ? (
-            <span className="rv-ws-typ rv-ws-typ--related">Related position</span>
+            <span className="rv-ws-typ rv-ws-typ--related">Related guidance</span>
           ) : (
             <span className={`rv-ws-typ${change ? ` rv-ws-typ--${change}` : ''}`}>
               {change ?? classificationLabel(finding.reviewClassification)}
@@ -320,7 +319,6 @@ export function FindingPanel(props: Props) {
           {props.position ? `${props.position.index} of ${props.position.total}` : null}
         </div>
         <h2>{title}</h2>
-        {props.context ? <div className="rv-ws-ctx">{props.context}</div> : null}
         <div className="rv-ws-main" data-testid="finding-main">
           {quote && quoteText ? (
             <div className="rv-ws-sec">
@@ -426,7 +424,7 @@ export function FindingPanel(props: Props) {
             </div>
           ) : null}
 
-          {approval ? (
+          {approval && isActionable(finding) && !related ? (
             <p className="rv-ws-note rv-ws-note--approval">
               <b>Approval is needed.</b>{' '}
               {approval.approver} approves{' '}
@@ -458,7 +456,7 @@ export function FindingPanel(props: Props) {
             ) : null}
             {related ? (
               <p className="rv-ws-note rv-ws-note--related">
-                <b>Related position, not a breach.</b> It covers a topic this clause touches but does not
+                <b>Related guidance, not a breach.</b> It covers a topic this clause touches but does not
                 govern.
               </p>
             ) : null}
@@ -474,7 +472,7 @@ export function FindingPanel(props: Props) {
                 <div className="rv-ws-machine">
                   <p>
                     <span className="rv-ws-authority">
-                      {related ? 'Related position on a secondary topic' : observationKindLabel(finding.observationKind)}
+                      {related ? 'Related guidance on a secondary topic' : observationKindLabel(finding.observationKind)}
                     </span>
                   </p>
                   {absences.map((claim) => (
@@ -644,7 +642,6 @@ export function FindingPanel(props: Props) {
             <LockIcon />
             <div>
               <b>Decision final: {decision ? state.label : 'None'}</b>
-              <div>This review is finalized. Approved changes cannot be changed.</div>
             </div>
           </div>
         ) : !props.analysisComplete ? (
@@ -657,7 +654,7 @@ export function FindingPanel(props: Props) {
           <>
             <div className="rv-ws-decide-h">
               <span>Your decision{decision ? `: ${state.label}` : ''}</span>
-              {added ? null : <span>Rivell’s recommendation is kept separately</span>}
+              {/* Rivell's recommendation is a separate record: deciding does not overwrite it. */}
             </div>
             <div className="rv-ws-dbtns">
               {eligible ? (
