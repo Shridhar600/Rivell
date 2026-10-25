@@ -2004,6 +2004,7 @@ export interface components {
             /** @enum {string} */
             proposedLanguageSource?: "APPROVED_DRAFTING" | "GENERATIVE" | "NONE";
             relatedPosition?: boolean;
+            partlyWithinFallback?: boolean;
             decidedBy?: string;
             /** Format: date-time */
             createdAt?: string;

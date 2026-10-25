@@ -677,7 +677,18 @@ describe('position findings', () => {
 
     await findDetailTitle('6. Limitation of Liability')
     const pane = within(detailPane())
+    // The finding is only partly within its fallback, and says so in the list, the header and Rivell found.
+    expect(
+      await (await findFindingsList()).findByRole('option', { name: /Partly within your fallback/ }),
+    ).toBeInTheDocument()
+    expect(detailPane().querySelector('.rv-ws-kicker')).toHaveTextContent(
+      'Partly within your fallback',
+    )
+    expect(section('Rivell found')).toHaveTextContent('Partly within your fallback')
+    // The conditions are the finding's substance, so they sit under the gap, not inside Details.
     const conditions = pane.getByTestId('fallback-conditions')
+    expect(conditions).toBeVisible()
+    expect(conditions.closest('details')).toBeNull()
     expect(conditions).toHaveTextContent('Stated')
     expect(conditions).toHaveTextContent('a thirty (30) day cure period')
     expect(conditions).toHaveTextContent('Not stated')

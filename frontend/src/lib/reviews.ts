@@ -700,10 +700,17 @@ export function isRelatedPosition(
  * The issue line a finding is listed under. A clause no playbook position addresses is its own
  * kind: the family alone would read as the older "policy unavailable" case. The whole-contract
  * read's advisory is the same gap said in different words, so it uses the same line (DW-070).
+ * A partly-met fallback is not simply within it, so it says so wherever the line appears.
  */
 export function findingIssueLabel(
-  finding: Pick<FindingSummary, 'issueFamily' | 'observationKind'>,
+  finding: Pick<FindingSummary, 'issueFamily' | 'observationKind'> & {
+    partlyWithinFallback?: boolean
+    quality?: FindingQuality | null
+  },
 ): string {
+  if (finding.partlyWithinFallback || finding.quality?.fallbackConditionsOutcome === 'PARTIAL') {
+    return 'Partly within your fallback'
+  }
   if (finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK') {
     return observationKindLabel(finding.observationKind)
   }

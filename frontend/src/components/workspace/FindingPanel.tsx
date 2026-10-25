@@ -252,6 +252,28 @@ export function FindingPanel(props: Props) {
   const partialFallback =
     withinFallback && finding.quality?.fallbackConditionsOutcome === 'PARTIAL'
   const fallbackConditions = finding.quality?.fallbackConditions ?? []
+  // A partly-met fallback is the finding's substance, not a detail: its conditions sit under the gap.
+  const fallbackConditionList =
+    fallbackConditions.length > 0 ? (
+      <div className="rv-ws-sec" data-testid="fallback-conditions">
+        <div className="rv-ws-sec-h">Fallback conditions</div>
+        <ul className="rv-ws-conds">
+          {fallbackConditions.map((condition, index) => (
+            <li key={`${condition.fallback}-${index}`}>
+              <span className="rv-ws-cond-status">
+                {fallbackConditionStatusLabel(condition.status)}
+              </span>
+              <span className="rv-ws-cond-text">
+                {condition.condition}
+                {condition.quote ? (
+                  <span className="rv-ws-caption"> “{condition.quote}”</span>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null
   const approval = approvalSummary(finding.quality)
   const approvalDepartureLine = approvalDeparture(finding.issueFamily, approval)
   const approvalConflict = approvalConflictLine(approval)
@@ -370,6 +392,8 @@ export function FindingPanel(props: Props) {
             </div>
           ) : null}
 
+          {partialFallback ? fallbackConditionList : null}
+
           {finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT' && !proposedLanguage && !related ? (
             <p className="rv-ws-note">
               The clause library wording for this position did not fit this clause. No replacement
@@ -473,7 +497,11 @@ export function FindingPanel(props: Props) {
                 <div className="rv-ws-machine">
                   <p>
                     <span className="rv-ws-authority">
-                      {related ? 'Related guidance on a secondary topic' : observationKindLabel(finding.observationKind)}
+                      {related
+                        ? 'Related guidance on a secondary topic'
+                        : withinFallback
+                          ? findingIssueLabel(finding)
+                          : observationKindLabel(finding.observationKind)}
                     </span>
                   </p>
                   {absences.map((claim) => (
@@ -521,26 +549,7 @@ export function FindingPanel(props: Props) {
               />
             ) : null}
 
-            {fallbackConditions.length > 0 ? (
-              <div className="rv-ws-sec" data-testid="fallback-conditions">
-                <div className="rv-ws-sec-h">Fallback conditions</div>
-                <ul className="rv-ws-conds">
-                  {fallbackConditions.map((condition, index) => (
-                    <li key={`${condition.fallback}-${index}`}>
-                      <span className="rv-ws-cond-status">
-                        {fallbackConditionStatusLabel(condition.status)}
-                      </span>
-                      <span className="rv-ws-cond-text">
-                        {condition.condition}
-                        {condition.quote ? (
-                          <span className="rv-ws-caption"> “{condition.quote}”</span>
-                        ) : null}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+            {partialFallback ? null : fallbackConditionList}
 
             {finding.evidenceItems.length > 0 ? (
               // Condensed: the main blocks say what matters, so the full source list is one

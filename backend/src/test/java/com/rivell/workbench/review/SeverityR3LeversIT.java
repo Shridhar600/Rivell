@@ -1,6 +1,8 @@
 package com.rivell.workbench.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
@@ -12,15 +14,19 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
@@ -39,6 +45,7 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
  * answer leaves the finding as it was.
  */
 @SpringBootTest
+@AutoConfigureMockMvc
 @Testcontainers
 @Import({LiabilityReviewIT.FakeIntelligenceConfiguration.class,
         LiabilityReviewIT.CorpusConfiguration.class,
@@ -128,6 +135,17 @@ class SeverityR3LeversIT {
 
     @Autowired
     ContractEnrichmentService enrichmentService;
+
+    @Autowired
+    MockMvc mockMvc;
+
+    @Autowired
+    ObjectMapper objectMapper;
+
+    private JsonNode json(String url, Object... variables) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(get(url, variables))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
 
     @BeforeEach
     void freshOrganization() {
@@ -326,6 +344,14 @@ class SeverityR3LeversIT {
         });
         assertThat(judged(run.id())).anySatisfy(position -> assertThat(position)
                 .containsEntry("fallbackConditionsOutcome", "PARTIAL"));
+        JsonNode summary = null;
+        for (var item : json("/api/reviews/{id}/findings?limit=100", reviewId).at("/data/items")) {
+            if (kept.getFirst().id().toString().equals(item.path("id").asText())) {
+                summary = item;
+            }
+        }
+        assertThat(summary).as("the partly-within finding must be listed").isNotNull();
+        assertThat(summary.path("partlyWithinFallback").asBoolean()).isTrue();
         // the conditions check sees the party and governing-law facts of the contract
         assertThat(generativeProvider.fallbackConditionStates).allSatisfy(state ->
                 assertThat(state.facts()).isNotEmpty().anyMatch(fact -> fact.startsWith("Our side")));
