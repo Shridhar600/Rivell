@@ -23,9 +23,21 @@ public final class DeterministicContractExtractors {
     private static final DateTimeFormatter US_DATE =
             DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH);
 
-    private static final String ENTITY_SUFFIX = "Inc|LLC|Ltd|GmbH|Corp|Corporation|Company|Limited";
+    /**
+     * Legal-form suffixes, matched case-insensitively so "plc" and "AG" are read as written.
+     * The dotted forms allow their dots to be dropped ("B.V." or "BV"), and the word boundary
+     * in front keeps short ones (AB, SE, AG, Oy) out of longer words such as "Grab" or "House".
+     */
+    private static final String ENTITY_SUFFIX = "(?i:Inc|LLC|Ltd|Limited|Corp|Corporation|Company"
+            + "|GmbH|AG|SE|Oy|AB|A/S|plc|N\\.?V\\.?|B\\.?V\\.?|S\\.?A\\.?S\\.?|S\\.?A\\.?"
+            + "|S\\.?p\\.?A\\.?|S\\.?r\\.?l\\.?|K\\.?K\\.?)";
+    /**
+     * A capitalised run of name words. A trailing lowercase "plc" is part of the run, because
+     * otherwise the name would stop before its own legal form.
+     */
     private static final Pattern CAPITALIZED_RUN = Pattern.compile(
-            "([A-Z][A-Za-z0-9&.,'’\\-]*(?:[ ]+[A-Z][A-Za-z0-9&.,'’\\-]*)*)");
+            "([A-Z][A-Za-z0-9&.,'’\\-]*(?:[ ]+[A-Z][A-Za-z0-9&.,'’\\-]*)*"
+                    + "(?:[ ]+(?i:plc)\\.?)?)");
     private static final Pattern ROLE_LABEL_PATTERN = Pattern.compile(
             "\\(\\s*(?:the\\s+)?\"([^\"]{2,60})\"\\s*\\)");
     private static final Pattern REFERENCE_PATTERN = Pattern.compile(
