@@ -130,8 +130,8 @@ describe('profileLine', () => {
       engine: null,
       playbooksUsed: null,
     }
-    expect(profileLine(snapshot)).toBe('MSA, counterparty paper, our side: Customer')
-    expect(profileLine({ ...snapshot, profile: { ...snapshot.profile, ourSideRole: 'PARTY_A' } })).toContain('our side: Party A')
+    expect(profileLine(snapshot)).toBe('MSA, their template, party you represent: Customer')
+    expect(profileLine({ ...snapshot, profile: { ...snapshot.profile, ourSideRole: 'PARTY_A' } })).toContain('party you represent: Party A')
     expect(profileLine({ ...snapshot, profile: null })).toBeNull()
     expect(profileLine(null)).toBeNull()
   })

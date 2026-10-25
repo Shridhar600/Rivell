@@ -43,7 +43,7 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
           ) : null}
           <div>
             <dt>Version</dt>
-            <dd>{version !== null ? `v${version}, cannot be changed` : 'Not recorded'}</dd>
+            <dd>{version !== null ? `v${version}, fixed for this review` : 'Not recorded'}</dd>
           </div>
           {document ? (
             <div>
@@ -76,7 +76,6 @@ export function LifecycleRail({ summary, document, packLabel, events }: Props) {
       </div>
       <div>
         <h3>Knowledge used</h3>
-        <p className="rv-lc-quiet">The knowledge and review details are fixed for this review.</p>
         <dl className="rv-lc-fdl rv-lc-fdl--rail">
           <div>
             <dt>Knowledge</dt>

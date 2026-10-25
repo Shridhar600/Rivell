@@ -17,9 +17,9 @@ import {
   findingIssueLabel,
   findingPlaybookRule,
   findingQuote,
-  NO_PLAYBOOK_COVERS,
+  knowledgeUsedText,
+  NO_PLAYBOOK_NOTICE,
   observationKindLabel,
-  playbooksUsedText,
 } from './reviews'
 
 const quality = (overrides: Partial<FindingQuality>): FindingQuality => ({
@@ -92,22 +92,32 @@ describe('a finding a reviewer added', () => {
   })
 })
 
-describe('playbooks used', () => {
-  it('names what the review froze, in the order it froze them', () => {
-    expect(playbooksUsedText([{ name: 'Commercial MSA Playbook' }, { name: 'Clause Library' }])).toBe(
-      'Commercial MSA Playbook, Clause Library',
-    )
+describe('knowledge used', () => {
+  const used = (name: string, artifactType = 'PLAYBOOK'): PlaybookUsed => ({
+    artifactId: name,
+    artifactType,
+    name,
+    publicationNumber: 1,
+  })
+
+  it('names what the review froze, with the kind of source beside it', () => {
+    expect(
+      knowledgeUsedText([
+        used('Commercial MSA Playbook'),
+        used('g-clause-library.xlsx', 'CLAUSE_LIBRARY'),
+      ]),
+    ).toBe('Commercial MSA Playbook (Playbook), g-clause-library.xlsx (Clause library)')
   })
 
   it('states the empty case plainly, so an unusual clause is not read as a policy review', () => {
-    expect(NO_PLAYBOOK_COVERS).toBe(
-      'No playbook covers this contract type, so this is not a policy review. Rivell flagged only clauses that read as unusual. Read the whole contract yourself.',
+    expect(NO_PLAYBOOK_NOTICE).toBe(
+      'No playbook applied. General scan only; review the full contract.',
     )
-    expect(playbooksUsedText([])).toBe(NO_PLAYBOOK_COVERS)
+    expect(knowledgeUsedText([])).toBe(NO_PLAYBOOK_NOTICE)
   })
 
   it('shows nothing for a review that predates the freeze', () => {
-    expect(playbooksUsedText(null)).toBeNull()
+    expect(knowledgeUsedText(null)).toBeNull()
   })
 })
 

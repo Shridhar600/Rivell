@@ -359,7 +359,8 @@ describe('workflow state availability and conflict truth', () => {
     const card = (await findingDetail().findByText('Approved changes are final')).closest(
       '.rv-ws-phase',
     ) as HTMLElement
-    expect(card).toHaveTextContent('The approved changes cannot be changed.')
+    expect(card).toHaveTextContent('The approved changes are fixed for this review.')
+    expect(card).not.toHaveTextContent('cannot be changed')
     expect(card).not.toHaveTextContent(/\d+ approved changes? fixed for this review/)
     expect(findingDetail().getByText(/Decision final/)).toBeInTheDocument()
     await waitFor(() =>

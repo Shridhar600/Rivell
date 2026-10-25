@@ -16,7 +16,7 @@ export { VERIFICATION_LABELS, humanizeCode } from './domainLabels'
 export const POSITION_LABELS: Record<PositionRole, string> = {
   PREFERRED: 'Preferred',
   FALLBACK: 'Fallback',
-  PROHIBITED: 'Prohibited',
+  PROHIBITED: 'Walk-away',
   ESCALATION: 'Escalation',
   COMMENTARY: 'Commentary',
   UNSPECIFIED: 'Unspecified',
@@ -235,7 +235,7 @@ export function scopeDifferences(
     artifact.declaredContractTypes.join(', ') || null,
   )
   compare('Party perspective', candidate.partyPerspective, artifact.partyPerspective)
-  compare('Paper source', candidate.paperSource, artifact.paperSource)
+  compare('Whose template', candidate.paperSource, artifact.paperSource)
   compare(
     'Jurisdiction',
     candidate.jurisdiction,

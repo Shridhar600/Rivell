@@ -155,7 +155,7 @@ describe('applicability scope presentation', () => {
       'Contract types: MSA',
       'Review pack: MSA pack',
       'Perspective: Customer',
-      'Paper source: Third-party paper',
+      'Whose template: Third-party template',
       'Jurisdiction: United States',
       'Effective period: 2026-01-01 – 2026-12-31',
     ])
@@ -346,16 +346,16 @@ describe('traceRequestEntries', () => {
     expect(labels).toContain('Topic')
     expect(labels).toContain('Effective on')
     expect(labels).toContain('Contract type')
-    expect(labels).toContain('Our side')
+    expect(labels).toContain('Party you represent')
     expect(labels).toContain('Knowledge version')
     expect(labels).toContain('Knowledge version used')
     expect(entries.find((entry) => entry.label === 'Topic')?.value).toBe(
       'Limitation of liability',
     )
     expect(entries.find((entry) => entry.label === 'Purpose')?.value).toBe('Clause review')
-    expect(entries.find((entry) => entry.label === 'Our side')?.value).toBe('Customer')
-    expect(entries.find((entry) => entry.label === 'Paper source')?.value).toBe(
-      'Counterparty paper',
+    expect(entries.find((entry) => entry.label === 'Party you represent')?.value).toBe('Customer')
+    expect(entries.find((entry) => entry.label === 'Whose template')?.value).toBe(
+      'Their template',
     )
     expect(entries.find((entry) => entry.label === 'Subject clause text')?.long).toBe(true)
     expect(JSON.stringify(entries)).not.toMatch(/nope/)

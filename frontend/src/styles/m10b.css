@@ -924,6 +924,12 @@ a {
   margin: 0;
   color: var(--text-2);
 }
+.rv-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
 .rv-state--error {
   border-color: var(--red);
 }

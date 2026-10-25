@@ -51,7 +51,7 @@ describe('M10B shell', () => {
   it('renders Home at the root', async () => {
     stubApi()
     renderAt('/')
-    expect(await screen.findByRole('heading', { name: 'Rivell' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Home' })).toBeInTheDocument()
   })
 
   it('no longer redirects the root to Reviews', () => {
@@ -358,7 +358,7 @@ describe('one search menu for the whole app', () => {
   it('lists a review by filename under Reviews and opens its overview', async () => {
     stubApi([reviewWire('r-1', 'COMPLETED', 'Acme MSA.docx', { contractId: 'c9' })])
     const { router } = renderAt('/')
-    await screen.findByRole('heading', { name: 'Rivell' })
+    await screen.findByRole('heading', { name: 'Home' })
     await userEvent.keyboard('{Meta>}k{/Meta}')
     const dialog = await screen.findByRole('dialog', { name: 'Search' })
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Search' }), 'Acme')

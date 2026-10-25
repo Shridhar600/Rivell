@@ -48,7 +48,7 @@ import {
   fixtureSearchFoundFindingSummary,
 } from './testFixtures'
 import { fixtureHumanReview } from './workflowFixtures'
-import { NO_PLAYBOOK_COVERS } from '../../lib/reviews'
+import { NO_PLAYBOOK_NOTICE } from '../../lib/reviews'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -199,7 +199,7 @@ describe('findings list', () => {
     renderWorkspace('/reviews/c1/analysis/r-1', { reviewSummary: summaryWithPlaybooks([]) })
 
     const findingsPane = await screen.findByRole('complementary', { name: 'Findings' })
-    const notice = await within(findingsPane).findByText(NO_PLAYBOOK_COVERS)
+    const notice = await within(findingsPane).findByText(NO_PLAYBOOK_NOTICE)
     const listbox = within(findingsPane).getByRole('listbox', { name: 'Findings list' })
     expect(
       notice.compareDocumentPosition(listbox) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -220,7 +220,7 @@ describe('findings list', () => {
     expect(
       await within(findingsPane).findByText('Findings appear when analysis finishes.'),
     ).toBeInTheDocument()
-    expect(within(findingsPane).queryByText(NO_PLAYBOOK_COVERS)).not.toBeInTheDocument()
+    expect(within(findingsPane).queryByText(NO_PLAYBOOK_NOTICE)).not.toBeInTheDocument()
   })
 
   it('does not claim no playbook covered the review when one was frozen', async () => {
@@ -228,7 +228,7 @@ describe('findings list', () => {
 
     const findingsPane = await screen.findByRole('complementary', { name: 'Findings' })
     await within(findingsPane).findByRole('listbox', { name: 'Findings list' })
-    expect(within(findingsPane).queryByText(NO_PLAYBOOK_COVERS)).not.toBeInTheDocument()
+    expect(within(findingsPane).queryByText(NO_PLAYBOOK_NOTICE)).not.toBeInTheDocument()
   })
 
   it('lists findings with distinguishable subjects and opens one', async () => {
@@ -667,20 +667,20 @@ describe('position findings', () => {
     expect(pane.getByText(/accept and record/i)).toBeInTheDocument()
   })
 
-  it('reads a secondary-topic position as a related note, not a breach', async () => {
+  it('reads a secondary-topic position as related guidance, not a breach', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-9', {
       findings: listWith(fixtureRelatedPositionFindingSummary),
     })
 
     await findDetailTitle('6. Limitation of Liability')
     const pane = within(detailPane())
-    const label = pane.getByText('Related position')
+    const label = pane.getByText('Related guidance')
     expect(label).toHaveClass('rv-ws-typ--related')
     expect(pane.getByText(/not a breach/i)).toBeInTheDocument()
     expect(pane.getByText(/covers a topic this clause touches/i)).toBeInTheDocument()
     // The list reads the server's relatedPosition flag, not the severity.
     expect(
-      await (await findFindingsList()).findByRole('option', { name: /Related position/ }),
+      await (await findFindingsList()).findByRole('option', { name: /Related guidance/ }),
     ).toBeInTheDocument()
   })
 
@@ -708,6 +708,45 @@ describe('position findings', () => {
     expect(note).toHaveTextContent('The entry names General Counsel for this.')
     // the rule's condition and the playbook trigger are the same words; they are shown once
     expect(within(detailPane()).queryByText(/Escalate when:/)).toBeNull()
+  })
+
+  const approvalQuality = {
+    escalationApprover: 'General Counsel',
+    escalationCondition: 'Any departure',
+    escalationSource: 'ENTRY',
+    escalationStance: 'FALLBACK',
+  } as const
+
+  it('never shows an approval note on an informational finding', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({
+            ...fixtureClauseFindingDetail,
+            reviewClassification: 'INFORMATIONAL',
+            quality: { ...fixtureClauseFindingDetail.quality, ...approvalQuality },
+          }),
+        ),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    expect(detailPane().querySelector('.rv-ws-note--approval')).toBeNull()
+  })
+
+  it('never shows an approval note on a related-guidance finding', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-9', {
+      findings: listWith(fixtureRelatedPositionFindingSummary),
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({
+            ...fixtureRelatedPositionFindingDetail,
+            quality: { ...fixtureRelatedPositionFindingDetail.quality, ...approvalQuality },
+          }),
+        ),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    expect(detailPane().querySelector('.rv-ws-note--approval')).toBeNull()
   })
 
   it('keeps a within-fallback note with no approval rule behind it as a note', async () => {
@@ -1120,16 +1159,16 @@ describe('engine v2: who decided', () => {
     },
   }
 
-  it('keeps "needs your look" items in their own group, collapsed until opened', async () => {
+  it('puts first-review disagreements in their own group, collapsed until opened', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', withV2)
 
-    const toggle = await screen.findByRole('button', { name: 'Needs your look (1)' })
+    const toggle = await screen.findByRole('button', { name: 'Assessments disagree (1)' })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     expect(findingsList().queryByRole('option', { name: /Rivell is unsure/ })).not.toBeInTheDocument()
 
     await userEvent.click(toggle)
 
-    const group = within(screen.getByRole('listbox', { name: 'Needs your look list' }))
+    const group = within(screen.getByRole('listbox', { name: 'Assessments disagree list' }))
     expect(group.getByRole('option', { name: /Rivell is unsure/ })).toBeInTheDocument()
   })
 
@@ -1145,7 +1184,7 @@ describe('engine v2: who decided', () => {
     expect(views.getByText(/liability shall not exceed the fees paid/)).toBeInTheDocument()
     expect(within(detailPane()).getByTestId('finding-decided-by')).toHaveTextContent('Needs your look')
     // the selected item's group opens by itself
-    expect(screen.getByRole('button', { name: 'Needs your look (1)' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Assessments disagree (1)' })).toHaveAttribute('aria-expanded', 'true')
     expect(document.body.textContent ?? '').not.toMatch(/\bJev\b|OpenAI|OpenRouter/i)
   })
 
@@ -1215,37 +1254,33 @@ describe('engine v2: the items P4 adds', () => {
     },
   }
 
-  async function openLookGroup() {
-    await userEvent.click(await screen.findByRole('button', { name: 'Needs your look (4)' }))
-    return within(screen.getByRole('listbox', { name: 'Needs your look list' }))
+  async function openDisagreements() {
+    await userEvent.click(await screen.findByRole('button', { name: 'Assessments disagree (3)' }))
+    return within(screen.getByRole('listbox', { name: 'Assessments disagree list' }))
   }
 
-  it('puts walk-away items first in needs your look and shows the first review on the row', async () => {
+  async function openOtherConcerns() {
+    await userEvent.click(await screen.findByRole('button', { name: 'Other concerns (1)' }))
+    return within(screen.getByRole('listbox', { name: 'Other concerns list' }))
+  }
+
+  it('puts walk-away items first among the disagreements and shows the first review on the row', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', withP4)
 
-    const options = (await openLookGroup()).getAllByRole('option')
+    const options = (await openDisagreements()).getAllByRole('option')
     expect(options[0]).toHaveTextContent('First review: Breaches the walk-away')
     // the rest keep the server's order
     expect(options[1]).toHaveTextContent(/Rivell is unsure/)
   })
 
-  it('tells the reviewer what each kind of look item is', async () => {
+  it('separates whole-contract concerns from the assessment disagreements, with no leftover note', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', withP4)
 
-    const lookNote = await screen.findByText('Rivell left these to you.')
-    expect(lookNote).toHaveAttribute(
-      'title',
-      'Rivell did not decide these. The first check and a second opinion disagreed, a second opinion was not available, your playbook is silent on the clause, or Rivell is not sure that a missing provision is required.',
-    )
-    // The long explanation is no longer visible prose; it is the tooltip only.
-    expect(
-      screen.queryByText(
-        'Rivell did not decide these. Rivell’s first review and a second opinion disagreed, a second opinion was not available, your playbook is silent on the clause, or Rivell is unsure a missing provision is required.',
-      ),
-    ).not.toBeInTheDocument()
-    const group = await openLookGroup()
-    expect(group.getByRole('option', { name: /Not covered by your playbook/ })).toBeInTheDocument()
-    expect(group.getByRole('option', { name: /Missing: Data protection/ })).toHaveTextContent('Not in contract')
+    expect(screen.queryByText('Rivell left these to you.')).not.toBeInTheDocument()
+    const disagreements = await openDisagreements()
+    expect(disagreements.getByRole('option', { name: /Missing: Data protection/ })).toHaveTextContent('Not in contract')
+    const concerns = await openOtherConcerns()
+    expect(concerns.getByRole('option', { name: /Not covered by your playbook/ })).toBeInTheDocument()
   })
 
   it('shows the playbook and the whole-contract read side by side on a playbook-silent item', async () => {
@@ -1303,7 +1338,7 @@ describe('engine v2: the items P4 adds', () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-14', withP4)
 
     await findDetailText('Two readings of this clause disagree')
-    await openLookGroup()
+    await userEvent.click(await screen.findByRole('button', { name: 'Other concerns (1)' }))
     // Rivell's own words only: the contract pane shows the document as received
     expect(screen.getByRole('complementary', { name: 'Findings' }).textContent ?? '').not.toMatch(/\u2014/)
     expect(detailPane().textContent ?? '').not.toMatch(/\u2014/)

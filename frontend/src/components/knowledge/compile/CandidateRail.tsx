@@ -172,7 +172,6 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         <small>
           {kindLabel(artifact.artifactType)} · {artifactFormat(artifact)} source
         </small>
-        <small>Original retained unchanged</small>
       </div>
       <nav className="rv-kc-list" aria-label="Entry list">
         <Group title="Needs attention" count={groups.attention.length}>
@@ -204,7 +203,7 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
         <Group title="Reviewed" count={groups.reviewed.length}>
           {rows(groups.reviewed)}
         </Group>
-        <Group title="Published, cannot be changed" count={groups.published.length}>
+        <Group title="Published" count={groups.published.length}>
           {rows(groups.published)}
         </Group>
         <UnitGroup title="Missed" units={missed} onMakePosition={onMakePosition} />
@@ -234,7 +233,9 @@ export function CandidateRail({ id, artifact, groups, readiness, locations, unit
           {readiness.attention > 0 ? <CautionIcon className="rv-icon" /> : <CheckIcon className="rv-icon" />}
           {readiness.attention > 0 ? `${readiness.attention} need closer review` : 'No flagged entries remain'}
         </p>
-        <p className="rv-kc-ready__hint">{done ? 'Published knowledge cannot be changed.' : 'Nothing is published until you publish it.'}</p>
+        {done ? null : (
+          <p className="rv-kc-ready__hint">Nothing is published until you publish it.</p>
+        )}
       </div>
     </aside>
   )

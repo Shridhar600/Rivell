@@ -86,7 +86,7 @@ afterEach(() => {
 })
 
 describe('analysis states', () => {
-  it('names the playbooks the review froze on the overview', async () => {
+  it('names the knowledge the review froze on the overview', async () => {
     stubContractApi({
       reviewSummary: {
         ...fixtureQueuedReviewSummary,
@@ -105,15 +105,15 @@ describe('analysis states', () => {
     })
     renderAt(PATH)
     expect(
-      await screen.findByText('Playbooks used: Commercial MSA Playbook'),
+      await screen.findByText('Knowledge used: Commercial MSA Playbook (Playbook)'),
     ).toBeInTheDocument()
   })
 
-  it('shows nothing for a review created before the playbook freeze existed', async () => {
+  it('shows nothing for a review created before the knowledge freeze existed', async () => {
     stubContractApi({ reviewSummary: fixtureQueuedReviewSummary })
     renderAt(PATH)
     await screen.findByRole('heading', { name: 'Waiting for analysis to start' })
-    expect(screen.queryByText(/Playbooks used/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Knowledge used:/)).not.toBeInTheDocument()
   })
 
   it('states the empty case when the analysis used no playbook', async () => {
@@ -126,7 +126,7 @@ describe('analysis states', () => {
     renderAt(PATH)
     expect(
       await screen.findByText(
-        'Playbooks used: No playbook covers this contract type, so this is not a policy review. Rivell flagged only clauses that read as unusual. Read the whole contract yourself.',
+        'No playbook applied. General scan only; review the full contract.',
       ),
     ).toBeInTheDocument()
   })
@@ -199,7 +199,7 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
   it('ready for review: orients the reviewer and opens the real Workspace route', async () => {
     const api = completed(fixtureHumanReview({ status: 'NOT_STARTED' }))
     const router = renderAt(PATH)
-    expect(await screen.findByRole('heading', { name: '2 findings are ready for your review' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '2 findings to review' })).toBeInTheDocument()
     expect(screen.getByText('Ready for review', { selector: '.rv-stb' })).toBeInTheDocument()
     const link = screen.getAllByRole('link', { name: 'Open review' })[0]
     expect(link).toHaveAttribute('href', '/reviews/c1/analysis/r-1')
@@ -210,7 +210,7 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
     // Rivell's own proposals are orientation only, and the kinds are not interchangeable.
     const proposals = screen.getByLabelText('What Rivell proposes')
     expect(proposals).toHaveTextContent('1Replacement wording')
-    expect(proposals).toHaveTextContent('1Missing provisions to draft')
+    expect(proposals).toHaveTextContent('1Missing-provision drafts')
     expect(screen.getByText(/proposes no wording for it; a person authors the clause/)).toBeInTheDocument()
     // Nothing on this page can decide a Finding.
     for (const name of ['Accept', 'Reject', 'Escalate', 'Edit']) {
@@ -226,7 +226,7 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
       reviewSummary: { ...fixtureCompletedReviewSummary, proposedChanges: { replace: 0, insert: 0, delete: 0 } },
     })
     renderAt(PATH)
-    await screen.findByRole('heading', { name: '2 findings are ready for your review' })
+    await screen.findByRole('heading', { name: '2 findings to review' })
     expect(screen.queryByLabelText('What Rivell proposes')).not.toBeInTheDocument()
   })
 
@@ -303,7 +303,7 @@ describe('human-review states lead to the Workspace and decide nothing', () => {
     // The read is retried once before it is reported, so the failure takes a moment to appear.
     expect(await screen.findByText(/Could not load this review's progress/, {}, { timeout: 4000 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: /findings are ready/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /findings to review/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Review Workspace/ })).not.toBeInTheDocument()
   })
 })
@@ -618,10 +618,10 @@ describe('the pinned version', () => {
       humanReview: fixtureHumanReview({ status: 'NOT_STARTED' }),
     })
     renderAt(PATH)
-    await screen.findByRole('heading', { name: '2 findings are ready for your review' })
+    await screen.findByRole('heading', { name: '2 findings to review' })
     await waitFor(() => expect(calls(api, '/versions/2/semantics').length).toBeGreaterThan(0))
     expect(calls(api, '/versions/1/')).toHaveLength(0)
-    expect(screen.getByText('v2, cannot be changed')).toBeInTheDocument()
+    expect(screen.getByText('v2, fixed for this review')).toBeInTheDocument()
   })
 
   it('names the document the Review itself reports, never the contract’s latest', async () => {
@@ -650,7 +650,7 @@ describe('the pinned version', () => {
     renderAt(PATH)
     await screen.findByRole('heading', { name: 'Waiting for analysis to start' })
     const rail = screen.getByRole('complementary', { name: 'Details' })
-    expect(within(rail).getByText('Counterparty paper')).toBeInTheDocument()
+    expect(within(rail).getByText('Their template')).toBeInTheDocument()
     expect(within(rail).getByText('United Kingdom')).toBeInTheDocument()
     expect(within(rail).getByText('Knowledge version 6')).toBeInTheDocument()
   })

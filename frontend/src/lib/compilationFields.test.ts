@@ -68,8 +68,9 @@ describe('structured interpretation', () => {
     expect(row(rows, 'fallbackTexts')?.value).toBe('Net 30.; Net 60 for Tier 1.')
     expect(row(rows, 'prohibitedText')?.value).toBe('Payment in advance.')
     expect(row(rows, 'authorityRules')?.value).toBe(
-      'Commercial Manager for fallback (approval matrix). Other level: General Counsel (stated on this entry, fallback)',
+      'Commercial Manager for fallback (Approval matrix). Other level: General Counsel (Entry, fallback)',
     )
+    expect(row(rows, 'authorityRules')?.machine).toBeNull()
   })
 
   it('never invents a value that was not extracted', () => {

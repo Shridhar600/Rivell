@@ -95,7 +95,7 @@ export function profileLine(snapshot: ReviewSnapshot | null | undefined): string
   const parts = [
     profile.contractType ? (CONTRACT_TYPE_LABELS[profile.contractType] ?? profile.contractType) : null,
     profile.paperSource ? (PAPER_SOURCE_LABELS[profile.paperSource] ?? profile.paperSource).toLowerCase() : null,
-    profile.ourSideRole ? `our side: ${roleLabel(profile.ourSideRole)}` : null,
+    profile.ourSideRole ? `party you represent: ${roleLabel(profile.ourSideRole)}` : null,
   ].filter((part): part is string => part !== null)
   return parts.length > 0 ? parts.join(', ') : null
 }
@@ -323,6 +323,13 @@ export function acceptEligibilityFor(finding: FindingDetail): AcceptEligibility 
  */
 export function isNeedsYourLook(finding: Pick<FindingSummary, 'decidedBy'>): boolean {
   return finding.decidedBy === 'NEEDS_YOUR_LOOK'
+}
+
+/** A clause the whole-contract read picked out, rather than a first-review/second-opinion split. */
+export function isWholeContractSpotted(
+  finding: Pick<FindingSummary, 'observationKind'>,
+): boolean {
+  return finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ'
 }
 
 type Ordered = Pick<FindingSummary, 'decidedBy'> & {

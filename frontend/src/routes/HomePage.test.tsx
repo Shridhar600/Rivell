@@ -12,7 +12,7 @@ function envelope(data: unknown) {
 }
 
 /** Serves the Review list, records every path asked for, and answers Knowledge with data Home must ignore. */
-function stubApi(options: { reviews?: unknown[]; reviewsStatus?: number; nextCursor?: string | null } = {}) {
+function stubApi(options: { reviews?: unknown[]; reviewsStatus?: number; nextCursor?: string | null; publications?: unknown[] } = {}) {
   const paths: string[] = []
   vi.stubGlobal(
     'fetch',
@@ -33,23 +33,8 @@ function stubApi(options: { reviews?: unknown[]; reviewsStatus?: number; nextCur
           ),
         )
       }
-      if (url.pathname === '/api/knowledge/artifacts') {
-        return new Response(
-          JSON.stringify(
-            envelope([
-              {
-                id: 'k1',
-                artifactType: 'PLAYBOOK',
-                filename: 'Compiling Playbook.docx',
-                contentType: 'x',
-                sizeBytes: 1,
-                sha256: 's',
-                ingestStatus: 'EXTRACTING',
-                createdAt: '2026-10-04T08:00:00Z',
-              },
-            ]),
-          ),
-        )
+      if (url.pathname === '/api/knowledge/publications') {
+        return new Response(JSON.stringify(envelope(options.publications ?? [])))
       }
       return new Response(JSON.stringify(envelope([])))
     }),
@@ -82,7 +67,7 @@ describe('Home starts work', () => {
     const bar = document.querySelector('.rv-topbar') as HTMLElement
     expect(within(bar).getByRole('link', { name: 'Start review' })).toHaveAttribute('href', '/reviews/new')
     expect(within(bar).getByRole('link', { name: 'Add knowledge' })).toHaveAttribute('href', '/knowledge?add=1')
-    await screen.findByText('No reviews yet')
+    await screen.findByText('Add your company’s playbook')
   })
 
   it('goes to the Start review page', async () => {
@@ -233,10 +218,38 @@ describe('Home inspector', () => {
 })
 
 describe('Home states', () => {
+  it('offers the knowledge setup first when nothing has been published', async () => {
+    stubApi({ reviews: [] })
+    renderHome()
+    expect(await screen.findByText('Add your company’s playbook')).toBeInTheDocument()
+    const card = screen.getByText('Add your company’s playbook').closest('.rv-state') as HTMLElement
+    expect(within(card).getByRole('link', { name: 'Add knowledge' })).toHaveAttribute('href', '/knowledge?add=1')
+    expect(within(card).getByRole('link', { name: 'Start review' })).toHaveAttribute('href', '/reviews/new')
+  })
+
+  it('keeps the ordinary empty state once knowledge is published', async () => {
+    stubApi({
+      reviews: [],
+      publications: [
+        {
+          id: 'p1',
+          organizationId: 'o1',
+          publicationNumber: 3,
+          note: null,
+          items: [],
+          createdAt: '2026-10-01T09:00:00Z',
+        },
+      ],
+    })
+    renderHome()
+    expect(await screen.findByText('No reviews yet')).toBeInTheDocument()
+    expect(screen.queryByText('Add your company’s playbook')).not.toBeInTheDocument()
+  })
+
   it('shows an empty state only after a successful empty read', async () => {
     stubApi({ reviews: [] })
     renderHome()
-    expect(await screen.findByText('No reviews yet')).toBeInTheDocument()
+    expect(await screen.findByText('Add your company’s playbook')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Needs you' })).not.toBeInTheDocument()
   })
 

@@ -202,9 +202,9 @@ export function contextRows(profile: ReviewSnapshotProfile | null, packLabel: st
       label: 'Type',
       value: profile?.contractType ? (CONTRACT_TYPE_LABELS[profile.contractType] ?? profile.contractType) : none,
     },
-    { label: 'Our side', value: profile?.ourSideRole ? roleLabel(profile.ourSideRole) : none },
+    { label: 'Party you represent', value: profile?.ourSideRole ? roleLabel(profile.ourSideRole) : none },
     {
-      label: 'Paper',
+      label: 'Whose template',
       value: profile?.paperSource ? (PAPER_SOURCE_LABELS[profile.paperSource] ?? profile.paperSource) : none,
     },
     {

@@ -176,10 +176,15 @@ describe('Playbook detail', () => {
     expect(details).toHaveTextContent('Cap at twelve months of fees.')
     expect(details).toHaveTextContent('Cap at eighteen months for Tier 1 deals.')
     expect(details).toHaveTextContent('Unlimited liability.')
-    expect(details).toHaveTextContent(
-      'Commercial Manager for fallback (approval matrix), if above the preferred position',
-    )
-    expect(details).toHaveTextContent('General Counsel (stated on this entry, fallback)')
+    const table = within(details).getByRole('table')
+    expect(table).toHaveTextContent('Situation')
+    expect(table).toHaveTextContent('Approver')
+    expect(table).toHaveTextContent('Source')
+    expect(table).toHaveTextContent('Fallback')
+    expect(table).toHaveTextContent('Commercial Manager')
+    expect(table).toHaveTextContent('Approval matrix')
+    expect(table).toHaveTextContent('If above the preferred position')
+    expect(details).toHaveTextContent('General Counsel (Entry, fallback)')
   })
 
   it('shows provenance from the extraction record and links to the original source position', async () => {
