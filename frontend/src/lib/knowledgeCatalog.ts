@@ -189,7 +189,7 @@ export interface ClauseVariant {
 }
 
 export interface ClauseGroup {
-  /** The source clause id when the source states one, else the legal concept, else the candidate id. Safe to use as a route id. */
+  /** The source clause id when it is unique to one library, else the concept, else the candidate id. Safe to use as a route id. */
   key: string
   title: string
   conceptKey: string | null
@@ -218,8 +218,29 @@ function clauseVariant(candidate: Candidate): string | null {
   return payloadValue(candidate, 'VARIANT')
 }
 
-export function clauseKey(candidate: Candidate): string {
-  return clauseReference(candidate) ?? candidate.effectiveConceptKey ?? `candidate-${candidate.id}`
+export function clauseKey(candidate: Candidate, sharedReferences: ReadonlySet<string> = new Set()): string {
+  const reference = clauseReference(candidate)
+  if (reference && !sharedReferences.has(reference)) return reference
+  return candidate.effectiveConceptKey ?? `candidate-${candidate.id}`
+}
+
+/**
+ * Source clause references that more than one clause library states. A reference identifies a
+ * clause only inside its own source, so these fall back to the concept or the candidate id as a
+ * group key; the reference itself stays on the variant as its source's display text.
+ */
+export function sharedClauseReferences(view: ClauseLibraryView): ReadonlySet<string> {
+  const sourcesByReference = new Map<string, Set<string>>()
+  for (const { candidate, artifact } of view.published) {
+    const reference = clauseReference(candidate)
+    if (!reference) continue
+    const sources = sourcesByReference.get(reference) ?? new Set<string>()
+    sources.add(artifact.id)
+    sourcesByReference.set(reference, sources)
+  }
+  return new Set(
+    [...sourcesByReference].filter(([, sources]) => sources.size > 1).map(([reference]) => reference),
+  )
 }
 
 export interface ClauseLibraryView {
@@ -232,8 +253,9 @@ export interface ClauseLibraryView {
 }
 
 /**
- * Clauses grouped by the source clause id, so the variants of one source clause stay together,
- * and by legal concept when the source states no id. As of a publication number; with no
+ * Clauses grouped by the source clause id, so the variants of one source clause stay together;
+ * a reference that more than one source states falls back to the legal concept or candidate id,
+ * and a variant with no concept is its own clause. As of a publication number; with no
  * number, as of now.
  */
 export function clauseGroups(
@@ -243,11 +265,12 @@ export function clauseGroups(
   at?: number,
 ): ClauseGroup[] {
   const groups = new Map<string, ClauseGroup>()
+  const sharedReferences = sharedClauseReferences(view)
   for (const { candidate, artifact } of view.published) {
     if (!isLiveAt(index, candidate.id, at)) continue
     const publication = index.added.get(candidate.id)
     if (!publication) continue
-    const key = clauseKey(candidate)
+    const key = clauseKey(candidate, sharedReferences)
     let group = groups.get(key)
     if (!group) {
       group = {

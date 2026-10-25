@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""R3-002 fixtures: a playbook whose walk-away states an absent right and a contract
+"""Walk-away absence fixtures: a playbook whose walk-away states an absent right and a contract
 that does not grant it, with no termination-for-convenience right."""
 import sys
 from pathlib import Path

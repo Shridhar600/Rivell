@@ -211,6 +211,22 @@ public class KnowledgeQueryService {
                         ExtractionUnit::id, unit -> unit));
     }
 
+    /**
+     * Source-node ids per extraction unit, for the units a bundle's items cite: one query, and a
+     * unit the organization cannot see is left out so its item carries no provenance.
+     */
+    public java.util.Map<UUID, java.util.List<String>> sourceNodeIdsForUnits(
+            UUID organizationId, java.util.Set<UUID> unitIds) {
+        if (unitIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+        var byUnit = new java.util.LinkedHashMap<UUID, java.util.List<String>>();
+        for (var unit : findUnitsForOrganization(organizationId, unitIds).values()) {
+            byUnit.put(unit.id(), unit.sourceNodeIds().stream().map(UUID::toString).toList());
+        }
+        return java.util.Map.copyOf(byUnit);
+    }
+
     public boolean publicationNumberExists(long publicationNumber) {
         requireRead();
         return repository.publicationNumberExists(organizationId(), publicationNumber);

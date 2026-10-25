@@ -101,6 +101,34 @@ class FindingAssemblerTest {
     }
 
     @Test
+    void aWalkAwayAbsenceNamesTheClauseThatMatchesItInsteadOfClaimingNothingWasFound() {
+        var candidateId = UUID.randomUUID();
+        var omission = new OmissionPayload(candidateId, "Termination for convenience", 12,
+                "No termination for convenience", "Term and termination");
+        var signal = new RawReviewSignal(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, RUN_ID,
+                UUID.randomUUID(), SignalType.MISSING_REQUIRED_CONCEPT,
+                FindingSubjectKind.ABSENCE, null, CoreConcepts.TERM, CoreConcepts.TERM, null,
+                IssueFamily.MISSING_REQUIRED_PROVISION, omission, List.of(UUID.randomUUID()),
+                WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_SPEC,
+                WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_VERSION, null, null, null, null, null,
+                Map.of("absenceProbability", 0.92, "route", "JEV"),
+                SignalType.MISSING_REQUIRED_CONCEPT.name() + ":" + candidateId, NOW);
+
+        var finding = assembler.assemble(run(), List.of(signal), NOW).get(0);
+
+        assertThat(finding.observationText()).isEqualTo(
+                "Your playbook's walk-away: No termination for convenience. "
+                        + "The closest clause, Term and termination, matches it.");
+        assertThat(finding.observationText()).doesNotContain("did not find");
+        assertThat(finding.claims())
+                .filteredOn(claim -> claim.claimKind() == ClaimKind.ABSENCE_BASIS)
+                .singleElement()
+                .satisfies(claim -> assertThat(claim.text())
+                        .contains("closest clause matches your playbook's walk-away")
+                        .doesNotContain("No clause in this contract addresses"));
+    }
+
+    @Test
     void clauseSignalWithoutEvidenceFailsAssemblyLoudly() {
         var signal = signal(SignalType.DEVIATION_UNCERTAIN, IssueFamily.POSITION_UNCERTAIN,
                 new DeviationUncertainPayload("bounded_decision_unavailable"), List.of(), null);

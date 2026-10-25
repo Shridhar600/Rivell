@@ -20,9 +20,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * {@code fallbackConditions} (P3: a condition-by-condition check of every final WITHIN_FALLBACK;
  * on by default, it reports the conditions on the finding and never changes the category).
  *
- * <p>{@code walkAwayAbsence} (R3-002): one check reports a published position whose walk-away
- * describes an absent right or protection and that no clause of the contract addresses; on by
- * default, and never on a contract type made under a parent agreement.
+ * <p>{@code walkAwayAbsence}: one check reports a published position whose walk-away
+ * describes an absent right or protection the contract does not meet, whether no clause
+ * addresses it or a clause grants it; on by default, and never on a contract type made under a
+ * parent agreement.
  *
  * <p>{@code maxTransientFailures}: how many transient infrastructure failures one analysis run may
  * survive before it is failed terminally (default 3; 0 makes every transient failure terminal).
@@ -98,8 +99,9 @@ public record ReviewEngineProperties(
     }
 
     /**
-     * R3-002: report a walk-away that describes an absent right when no clause addresses the
-     * position. On by default; the omission lane's own trigger stays behind {@code omissions}.
+     * The walk-away absence check: report a walk-away that describes an absent right when no
+     * clause addresses the position. On by default; the omission lane's own trigger stays behind
+     * {@code omissions}.
      */
     public record WalkAwayAbsence(Boolean enabled) {
 

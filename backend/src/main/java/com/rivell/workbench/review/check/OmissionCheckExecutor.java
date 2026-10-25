@@ -46,14 +46,14 @@ import com.rivell.workbench.taxonomy.ConceptRegistry;
  * Engine v2 absence lane (spec §4, D4/D5/D6): the trailing check of a plan. It reads the
  * clause checks' judged positions, applies the lane's position-text search and asks one
  * bounded question. The presence trigger (behind {@code rivell.review.omissions}) asks
- * whether a position requires a provision; the walk-away trigger (R3-002) asks whether the
+ * whether a position requires a provision; the walk-away trigger asks whether the
  * position's walk-away describes an absent right. Only a required position becomes a finding;
  * an unsure presence asks for a look. A provider failure never invents an absence, and an
  * incomplete run degrades the check.
  */
 public final class OmissionCheckExecutor implements ReviewCheckExecutor {
 
-    /** The plan key of the R3-002 trigger; the presence trigger keeps the key OMISSION. */
+    /** The plan key of the walk-away absence trigger; the presence trigger keeps the key OMISSION. */
     public static final String WALK_AWAY_ABSENCE_CHECK_KEY = "WALK_AWAY_ABSENCE";
     /** Applicable positions judged per run; beyond this the detail says the lane was truncated. */
     private static final int MAX_OMISSIONS = 12;
@@ -145,6 +145,7 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
         if (candidates.isEmpty()) {
             detail.put("addressedBySearch", List.of());
             detail.put("flaggedBySearch", List.of());
+            detail.put("matchedWalkAwayBySearch", List.of());
             detail.put("presence", List.of());
             detail.put("walkAwayAbsence", List.of());
             detail.put("searchDegradation", List.of());
@@ -192,6 +193,7 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
             if (survivors.isEmpty()) {
                 detail.put("addressedBySearch", List.of());
                 detail.put("flaggedBySearch", List.of());
+                detail.put("matchedWalkAwayBySearch", List.of());
                 putTriggerAnswers(detail, true, triggerAnswers);
                 detail.put("searchDegradation", List.of());
                 return CheckOutcome.completed(List.of(), detail, applicable.bundle().traceId())
@@ -237,6 +239,7 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
         var compared = new int[matched.size()];
         var addressedBySearch = new LinkedHashSet<UUID>();
         var flaggedBySearch = new ArrayList<Map<String, Object>>();
+        var walkAwayMatches = new LinkedHashMap<UUID, UUID>();
         try {
             for (var group : groups.entrySet()) {
                 var clause = clausesByHeading.get(group.getKey());
@@ -254,10 +257,12 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
                     var candidateIndex = group.getValue().get(index);
                     var candidate = matched.get(candidateIndex);
                     if (judgement.flagged()) {
-                        // R-d: a flagged pair is recorded for the eval and counts as addressed,
-                        // except that a clause matching an absence walk-away confirms the absence
-                        if (!walkAwayLane
-                                || !PolicyComparisonSpecs.WALK_AWAY.equals(judgement.category())) {
+                        // a flagged pair counts as addressed, except that a clause matching an
+                        // absence walk-away is the finding itself: it matches what we never accept
+                        if (walkAwayLane
+                                && PolicyComparisonSpecs.WALK_AWAY.equals(judgement.category())) {
+                            walkAwayMatches.putIfAbsent(candidate.id(), clause.headingNodeId());
+                        } else {
                             addressedBySearch.add(candidate.id());
                         }
                         var flagged = new LinkedHashMap<String, Object>();
@@ -281,11 +286,13 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
             detail.put("addressedBySearch",
                     addressedBySearch.stream().map(UUID::toString).toList());
             detail.put("flaggedBySearch", flaggedBySearch);
+            detail.put("matchedWalkAwayBySearch", matchedWalkAwayDetail(walkAwayMatches));
             putTriggerAnswers(detail, walkAwayLane, triggerAnswers);
             return providerUnavailable(detail, applicable);
         }
         detail.put("addressedBySearch", addressedBySearch.stream().map(UUID::toString).toList());
         detail.put("flaggedBySearch", flaggedBySearch);
+        detail.put("matchedWalkAwayBySearch", matchedWalkAwayDetail(walkAwayMatches));
         var remaining = new ArrayList<Integer>();
         for (int index = 0; index < matched.size(); index++) {
             if (!addressedBySearch.contains(matched.get(index).id())) {
@@ -296,8 +303,26 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
         if (walkAwayLane) {
             for (int index : remaining) {
                 var candidate = matched.get(index);
-                signals.add(walkAwaySignal(context, candidate, clauses.size(), compared[index],
-                        absentRights.get(candidate.id()), absenceExecution));
+                var matchedHeading = walkAwayMatches.get(candidate.id());
+                var headingText = matchedHeading == null ? ""
+                        : context.headingTexts().getOrDefault(matchedHeading, "");
+                var quality = new LinkedHashMap<String, Object>();
+                quality.put("absenceProbability", absentRights.get(candidate.id()));
+                quality.put("route", JEV);
+                var facts = candidate.item().policyFacts();
+                var authority = EscalationAuthority.decide(facts, PolicyComparisonSpecs.WALK_AWAY);
+                if (authority != null) {
+                    quality.putAll(PolicyComparisonCheckExecutor.escalationQuality(
+                            authority, facts.escalationTrigger()));
+                }
+                signals.add(signal(context, candidate, clauses.size(), compared[index],
+                        new OmissionPayload(candidate.id(), candidate.label(), clauses.size(),
+                                candidate.walkAway(),
+                                headingText.isBlank() ? null : headingText.strip()),
+                        WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_SPEC,
+                        WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_VERSION,
+                        SignalType.MISSING_REQUIRED_CONCEPT.name() + ":", quality,
+                        absenceExecution));
             }
         } else if (!remaining.isEmpty()) {
             DecisionExecution presenceExecution;
@@ -330,14 +355,20 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
                 entry.put("candidateId", candidate.id().toString());
                 entry.put("probability", probability);
                 triggerAnswers.add(entry);
-                if (probability >= REQUIRES_PROVISION) {
-                    signals.add(signal(context, candidate, clauses.size(),
-                            compared[candidateIndex], probability, JEV, presenceExecution));
-                } else if (probability >= UNSURE) {
-                    signals.add(signal(context, candidate, clauses.size(),
-                            compared[candidateIndex], probability, NEEDS_YOUR_LOOK,
-                            presenceExecution));
+                if (probability < UNSURE) {
+                    continue;
                 }
+                var route = probability >= REQUIRES_PROVISION ? JEV : NEEDS_YOUR_LOOK;
+                var quality = new LinkedHashMap<String, Object>();
+                quality.put("presenceProbability", probability);
+                quality.put("route", route);
+                if (NEEDS_YOUR_LOOK.equals(route)) {
+                    quality.put("uncertaintyReason", OMISSION_UNSURE);
+                }
+                signals.add(signal(context, candidate, clauses.size(), compared[candidateIndex],
+                        new OmissionPayload(candidate.id(), candidate.label(), clauses.size()),
+                        PresenceSpecs.PRESENCE_SPEC, PresenceSpecs.PRESENCE_VERSION, "OMISSION:",
+                        quality, presenceExecution));
             }
         }
         putTriggerAnswers(detail, walkAwayLane, triggerAnswers);
@@ -359,66 +390,42 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
                 .withCitedEvidence(List.of(applicable.bundle()));
     }
 
-    private static RawReviewSignal signal(
-            ReviewCheckContext context, Candidate candidate, int searchedClauses,
-            int comparedClauses, double probability, String route, DecisionExecution execution) {
-        var check = context.check();
-        var concept = candidate.item().legalConcept() == null
-                ? ClauseTopics.NO_TOPIC : candidate.item().legalConcept();
-        var quality = new LinkedHashMap<String, Object>();
-        quality.put("searchedClauses", searchedClauses);
-        quality.put("comparedClauses", comparedClauses);
-        quality.put("presenceProbability", probability);
-        quality.put("positionLabel", candidate.label());
-        quality.put("route", route);
-        if (NEEDS_YOUR_LOOK.equals(route)) {
-            quality.put("uncertaintyReason", OMISSION_UNSURE);
-        }
-        return new RawReviewSignal(
-                UUID.randomUUID(), check.organizationId(), check.reviewId(), context.runId(),
-                check.id(), SignalType.MISSING_REQUIRED_CONCEPT, FindingSubjectKind.ABSENCE, null,
-                concept, concept, null, IssueFamily.MISSING_REQUIRED_PROVISION,
-                new OmissionPayload(candidate.id(), candidate.label(), searchedClauses),
-                List.of(candidate.item().evidenceId()),
-                PresenceSpecs.PRESENCE_SPEC, PresenceSpecs.PRESENCE_VERSION,
-                execution.executionId(), null, null,
-                execution.metadata().resolvedModel(), execution.metadata().usage(),
-                quality, "OMISSION:" + check.id() + ":" + candidate.id(), context.executedAt());
+    /** The matched pairs as detail JSON: a candidate and the clause heading its walk-away matched. */
+    private static List<Map<String, Object>> matchedWalkAwayDetail(Map<UUID, UUID> matched) {
+        var entries = new ArrayList<Map<String, Object>>(matched.size());
+        matched.forEach((candidateId, headingNodeId) -> {
+            var entry = new LinkedHashMap<String, Object>();
+            entry.put("candidateId", candidateId.toString());
+            entry.put("headingNodeId", headingNodeId.toString());
+            entries.add(entry);
+        });
+        return entries;
     }
 
-    /** R3-002: a walk-away that states an absent right, and no clause addresses the position. */
-    private static RawReviewSignal walkAwaySignal(
+    /**
+     * One absence signal. Both triggers share the subject, family, action, evidence and quality
+     * keys; the lane supplies its own spec, quality and payload.
+     */
+    private static RawReviewSignal signal(
             ReviewCheckContext context, Candidate candidate, int searchedClauses,
-            int comparedClauses, double probability, DecisionExecution execution) {
+            int comparedClauses, OmissionPayload payload, String specId, int specVersion,
+            String dedupePrefix, Map<String, Object> laneQuality, DecisionExecution execution) {
         var check = context.check();
         var concept = candidate.item().legalConcept() == null
                 ? ClauseTopics.NO_TOPIC : candidate.item().legalConcept();
         var quality = new LinkedHashMap<String, Object>();
         quality.put("searchedClauses", searchedClauses);
         quality.put("comparedClauses", comparedClauses);
-        quality.put("absenceProbability", probability);
         quality.put("positionLabel", candidate.label());
-        quality.put("walkAway", candidate.walkAway());
-        quality.put("route", JEV);
-        var facts = candidate.item().policyFacts();
-        var authority = EscalationAuthority.decide(facts, PolicyComparisonSpecs.WALK_AWAY);
-        if (authority != null) {
-            quality.putAll(PolicyComparisonCheckExecutor.escalationQuality(
-                    authority, facts.escalationTrigger()));
-        }
+        quality.putAll(laneQuality);
         return new RawReviewSignal(
                 UUID.randomUUID(), check.organizationId(), check.reviewId(), context.runId(),
                 check.id(), SignalType.MISSING_REQUIRED_CONCEPT, FindingSubjectKind.ABSENCE, null,
-                concept, concept, null, IssueFamily.MISSING_REQUIRED_PROVISION,
-                new OmissionPayload(candidate.id(), candidate.label(), searchedClauses,
-                        candidate.walkAway()),
-                List.of(candidate.item().evidenceId()),
-                WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_SPEC,
-                WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_VERSION,
+                concept, concept, null, IssueFamily.MISSING_REQUIRED_PROVISION, payload,
+                List.of(candidate.item().evidenceId()), specId, specVersion,
                 execution.executionId(), null, null,
                 execution.metadata().resolvedModel(), execution.metadata().usage(),
-                quality, SignalType.MISSING_REQUIRED_CONCEPT.name() + ":" + check.id() + ":"
-                        + candidate.id(), context.executedAt());
+                quality, dedupePrefix + check.id() + ":" + candidate.id(), context.executedAt());
     }
 
     /** Every clause check of the run must have completed, or its positions would read as unaddressed. */
@@ -526,6 +533,7 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
         detail.put("searchedClauses", searchedClauses);
         detail.put("addressedBySearch", List.of());
         detail.put("flaggedBySearch", List.of());
+        detail.put("matchedWalkAwayBySearch", List.of());
         detail.put("presence", List.of());
         detail.put("walkAwayAbsence", List.of());
         detail.put("searchDegradation", List.of());

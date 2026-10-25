@@ -6,9 +6,11 @@ import java.util.UUID;
 
 /**
  * What one analysis run did with every published playbook position that applies to its contract
- * type (R3-002): judged with a verdict, searched and not found, not compared, or out of scope by
+ * type: judged with a verdict, searched and not found, not compared, or out of scope by
  * the position's own "Applies to". Computed once when the run finishes from the run's check
  * detail, then frozen on the run. It is never re-resolved from live knowledge at read time.
+ * A run whose coverage could not be computed carries no list at all, which reads the same as a
+ * run that predates the list: neither claims anything.
  *
  * <p>"Not found in this contract" means a search ran for the position and no clause addressed it.
  * It never means the provision does not exist. "Not compared" covers both "no check judged or

@@ -10,7 +10,7 @@ import com.rivell.workbench.intelligence.SemanticState;
 import com.rivell.workbench.intelligence.YesNoQuestion;
 
 /**
- * The {@code walk-away-absence} decision (R3-002): does a published position's walk-away
+ * The {@code walk-away-absence} decision: does a published position's walk-away
  * describe the absence of a right or protection ("No termination for convenience"), rather
  * than wording we would reject? One yes/no question per candidate, keyed
  * {@code walk_away_0..n} so code maps answers back by index.

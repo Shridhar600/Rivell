@@ -14,10 +14,10 @@ import java.util.UUID;
 public final class ContractRegionSegmenter {
 
     private static final int MAX_CONTAINER_WORDS = 12;
-    /** "SCHEDULE 1", also after a list number the heading text carries ("XXVI SCHEDULE 1"). */
     /** Words that mark a table as the signature block itself rather than contract content. */
     private static final java.util.regex.Pattern SIGNATURE_CUE = java.util.regex.Pattern.compile(
             "(?i)\\b(?:signature|signed|authori[sz]ed signatory)\\b|\\bby:");
+    /** "SCHEDULE 1", also after a list number the heading text carries ("XXVI SCHEDULE 1"). */
     private static final java.util.regex.Pattern SCHEDULE_HEADING = java.util.regex.Pattern.compile(
             "(?s)(?:(?:\\d+(?:\\.\\d+)*|[IVXLC]+|[A-Z])[.):]?\\s+)?"
                     + "(?:SCHEDULE|EXHIBIT|ANNEX|APPENDIX|ATTACHMENT)\\b.*");

@@ -164,6 +164,35 @@ describe('catalog', () => {
     )
   })
 
+  it('does not merge equal clause references from two clause libraries', () => {
+    const second = artifact({ id: 'cl2', artifactType: 'CLAUSE_LIBRARY', filename: 'Other clauses.xlsx' })
+    const row = (id: string, artifactId: string, concept: string | null) =>
+      candidate({
+        id,
+        artifactId,
+        candidateType: 'CLAUSE_VARIANT',
+        title: `${artifactId} clause ${id}`,
+        effectiveConceptKey: concept,
+        payloadColumns: { Ref: '1', Variant: id },
+        payloadFieldRoles: { Ref: 'REFERENCE', Variant: 'VARIANT' },
+      })
+    const world = buildCatalog({
+      artifacts: [cl, second],
+      publications: [publication(1, [{ candidateId: 'cl-a' }, { candidateId: 'cl2-a' }])],
+      candidates: new Map([
+        ['cl', [row('cl-a', 'cl', 'GOVERNING_LAW')]],
+        ['cl2', [row('cl2-a', 'cl2', null)]],
+      ]),
+    })
+
+    const groups = clauseGroups(world.clauseLibrary, world.index, humanizeCode)
+
+    // A reference identifies a clause only inside its own source, so it cannot key the group.
+    expect(groups.map((group) => group.key).sort()).toEqual(['GOVERNING_LAW', 'candidate-cl2-a'])
+    // It stays on the variant as the source's own display text.
+    expect(groups.flatMap((group) => group.variants.map((variant) => variant.candidate.payloadColumns.Ref))).toEqual(['1', '1'])
+  })
+
   it('reads the clause library as of an older publication', () => {
     const at2 = clauseGroups(catalog.clauseLibrary, catalog.index, humanizeCode, 2)
     expect(at2.find((g) => g.conceptKey === 'LIMITATION_OF_LIABILITY')?.variants).toHaveLength(1)

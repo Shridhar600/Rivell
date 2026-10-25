@@ -17,7 +17,7 @@ ADDRESSED = 0.5
 TRIAGE_FLAGGED = 0.5
 
 QUALITY_KEYS = ("route", "foundBy", "uncertaintyReason", "spottedSeverity",
-                "presenceProbability", "searchedClauses", "comparedClauses",
+                "presenceProbability", "absenceProbability", "searchedClauses", "comparedClauses",
                 "positionLabel", "jevCategory", "secondOpinionCategory", "levers",
                 "severityWithoutLevers", "secondOpinionQuote", "secondOpinionReason",
                 "categoryBeforeLevers", "wordingFitVerdict", "wordingFitReason",
@@ -148,7 +148,8 @@ def omission_metrics(answer, findings):
             low += 1
         listed.append({"label": quality(finding).get("positionLabel") or "",
                        "severity": severity,
-                       "presence": quality(finding).get("presenceProbability"),
+                       "presence": (quality(finding).get("presenceProbability")
+                                    or quality(finding).get("absenceProbability")),
                        "matched": matched})
     return {"medium": medium, "low": low, "alarms": alarms, "list": listed}
 

@@ -424,7 +424,7 @@ class AdvisoryPickIT {
         var snapshot = reviewRepository.findSnapshot(organizationId(), reviewId).orElseThrow();
         assertThat(snapshot.reviewEngine()).isEqualTo(ReviewEngine.V2);
         // this IT leaves rivell.review.omissions unset: the wired bean must keep that lane off
-        // (the R3-002 walk-away check shares the mechanism but has its own key and default)
+        // (the walk-away absence check shares the mechanism but has its own key and default)
         assertThat(reviewRepository.findPlanChecks(organizationId(), reviewId))
                 .noneMatch(check -> "OMISSION".equals(check.checkKey()));
     }

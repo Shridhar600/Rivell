@@ -12,6 +12,7 @@ public record ReviewRunView(
         String status,
         @Schema(nullable = true,
                 description = "What the run did with each applicable published playbook position; "
-                        + "null on runs that predate the coverage list")
+                        + "null on runs that predate the coverage list or whose coverage could "
+                        + "not be computed")
         List<PlaybookCoverageEntryView> playbookCoverage) {
 }
