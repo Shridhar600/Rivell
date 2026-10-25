@@ -30,6 +30,7 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     title: 'Rule',
     contentText: 'Rule content',
     payloadColumns: {},
+    payloadFieldRoles: {},
     legalConceptKey: 'LIMITATION_OF_LIABILITY',
     effectiveConceptKey: 'LIMITATION_OF_LIABILITY',
     conceptCorrection: null,

@@ -107,13 +107,14 @@ class KnowledgeImportQualityApiIT {
     }
 
     @Test
-    void aWordSourceReportsItsOwnTitleAndAWorkbookReportsNone() throws Exception {
+    void aWordSourceAndAWorkbookReportTheirOwnTitles() throws Exception {
         var guide = upload(GUIDE, ArtifactType.PLAYBOOK);
         var library = upload(LIBRARY, ArtifactType.CLAUSE_LIBRARY);
 
         assertThat(guide.get("documentTitle").asText()).isEqualTo("Mutual NDA Negotiation Guide");
         assertThat(guide.get("filename").asText()).isEqualTo(GUIDE);
-        assertThat(library.get("documentTitle").isNull()).isTrue();
+        assertThat(library.get("documentTitle").asText())
+                .isEqualTo("KELTHERA THERAPEUTICS — APPROVED CLAUSE LIBRARY");
 
         var detail = json(get("/api/knowledge/artifacts/{id}", guide.get("id").asText()));
         assertThat(detail.get("documentTitle").asText()).isEqualTo("Mutual NDA Negotiation Guide");

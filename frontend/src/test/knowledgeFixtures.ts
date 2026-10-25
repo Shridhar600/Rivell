@@ -33,6 +33,7 @@ export function candidate(over: Partial<Candidate> & { id: string; artifactId: s
     title: over.title ?? over.editedTitle ?? rawLabel,
     contentText: `Wording of ${over.id}`,
     payloadColumns: {},
+    payloadFieldRoles: {},
     legalConceptKey: null,
     effectiveConceptKey: null,
     conceptCorrection: null,

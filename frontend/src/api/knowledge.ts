@@ -301,6 +301,8 @@ export interface Candidate {
   title: string
   contentText: string | null
   payloadColumns: Record<string, string>
+  /** Role of each payload label ("REFERENCE", "TOPIC", "VARIANT"), as the compiler resolved it. */
+  payloadFieldRoles: Record<string, string>
   legalConceptKey: string | null
   /** The human correction when one exists, otherwise the classified concept. Absent when neither is set. */
   effectiveConceptKey: string | null
@@ -590,6 +592,7 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     title: readString(record, 'title', what),
     contentText: readNullableString(record, 'contentText', what),
     payloadColumns: readStringMap(record, 'payloadColumns', what),
+    payloadFieldRoles: readStringMap(record, 'payloadFieldRoles', what),
     legalConceptKey: readNullableString(record, 'legalConceptKey', what),
     effectiveConceptKey: readNullableString(record, 'effectiveConceptKey', what),
     conceptCorrection: readNullableString(record, 'conceptCorrection', what),
