@@ -49,23 +49,23 @@ export function PlaybookCoveragePanel({ coverage, onOpenFinding, onNavigateToNod
       </button>
       <div id={bodyId} hidden={!open} className="rv-ws-ca-body">
         <p className="rv-ws-caption">
-          Each published position in the playbooks this review froze, and what the review did with
-          it.
+          Every position in the playbooks this review used, and what the review did with it.{' '}
+          {playbookCoverageSummary(coverage)}
         </p>
-        <p className="rv-ws-caption">{playbookCoverageSummary(coverage)}</p>
         <ul className="rv-ws-cov">
           {coverage.map((entry) => {
             const clauseId = entry.clauseHeadingNodeId
             const findingId = entry.findingId
+            const topic = entry.topic ? labelFor(entry.topic) : null
             return (
               <li key={entry.positionCandidateId}>
                 <span className="rv-ws-cov-c">
                   {entry.label}
                   {entry.code && entry.code !== entry.label ? ` (${entry.code})` : ''}
                 </span>
-                <span className="rv-ws-cov-e">
-                  {entry.topic ? labelFor(entry.topic) : 'No topic'}
-                </span>
+                {topic && topic.toLowerCase() !== entry.label.toLowerCase() ? (
+                  <span className="rv-ws-cov-e">{topic}</span>
+                ) : null}
                 <span
                   className="rv-ws-chip"
                   data-tone={
