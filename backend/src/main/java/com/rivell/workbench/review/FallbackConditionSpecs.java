@@ -14,9 +14,10 @@ import com.rivell.workbench.intelligence.SemanticState;
  * when all its conditions hold, and a condition can live outside the clause (who the parties are, the
  * governing law). For every condition the call answers MET, UNMET or UNKNOWN and quotes the words it
  * rests on, from the clause or from the contract facts it is given. Its answer grounds every condition
- * in the position's own words and is carried to the finding: when no listed fallback is fully met and a
- * grounded condition is not stated or unmet, the state is PARTIAL; never a finding by itself and never
- * a category change.
+ * in the position's own words and is carried to the finding: the state is PARTIAL when every listed
+ * fallback was reported and each has a grounded condition that is not stated or unmet, and never
+ * PARTIAL when the position lists no fallback. It is never a finding by itself and never a category
+ * change.
  */
 public final class FallbackConditionSpecs {
 

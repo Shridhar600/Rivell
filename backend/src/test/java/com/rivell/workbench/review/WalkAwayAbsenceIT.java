@@ -39,10 +39,10 @@ import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
- * R3-002: a walk-away that states the absence of a right ("No termination for convenience")
- * becomes a MEDIUM missing-provision finding when no clause addresses the position. A contract
- * made under a parent gets no check, a walk-away about bad wording gets nothing, and a position
- * a clause addresses gets nothing.
+ * The walk-away absence check: a walk-away that states the absence of a right ("No termination
+ * for convenience") becomes a MEDIUM missing-provision finding when no clause addresses the
+ * position. A contract made under a parent gets no check, a walk-away about bad wording gets
+ * nothing, and a position a clause addresses gets nothing.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

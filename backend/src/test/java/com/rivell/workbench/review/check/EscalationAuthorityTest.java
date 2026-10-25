@@ -119,7 +119,7 @@ class EscalationAuthorityTest {
 
     @Test
     void anUnclearReadingDoesNotBorrowTheWalkAwayRule() {
-        // R2-003: an unclear reading may be a fallback, not a walk-away. Only a rule that names
+        // an unclear reading may be a fallback, not a walk-away. Only a rule that names
         // the fallback can ask for approval; the walk-away approver is named only for a walk-away.
         var walkAwayOnly = facts(List.of(rule("Head of Legal",
                 PositionRole.PROHIBITED, null, AuthorityLevel.ENTRY)), List.of(), "Head of Legal");

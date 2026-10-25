@@ -17,9 +17,10 @@ import com.rivell.workbench.review.FallbackConditionSpecs;
  * Severity R3 lever P3: asks whether a clause judged "within a listed fallback" meets that fallback's
  * conditions, one by one (see {@link FallbackConditionSpecs}). Code owns the rule: a condition is
  * kept only when its source words are in the position text, and MET or UNMET only with a quote the
- * clause or the contract facts hold. A fallback is PARTIAL when no listed fallback has all its
- * conditions MET and a grounded condition is NOT_STATED or UNMET. The check reports; it never changes
- * the category and every failure becomes an outcome the executor keeps as "unchanged".
+ * clause or the contract facts hold. The fallback is PARTIAL when every listed fallback was reported
+ * and each has a grounded condition that is NOT_STATED or UNMET; a listed fallback left unreported
+ * keeps it WITHIN, and with no fallback listed it is never PARTIAL. The check reports; it never
+ * changes the category and every failure becomes an outcome the executor keeps as "unchanged".
  */
 final class FallbackConditionChecker {
 
@@ -39,9 +40,10 @@ final class FallbackConditionChecker {
     }
 
     /**
-     * {@code outcome}: PARTIAL (a grounded condition is not stated or unmet and no listed fallback
-     * has every condition met) or WITHIN; UNAVAILABLE, INVALID or OVER_BUDGET when the check did not
-     * answer, and then there are no conditions. {@code executionId} links the generation when one ran.
+     * {@code outcome}: PARTIAL (every listed fallback was reported and each has a grounded condition
+     * that is not stated or unmet) or WITHIN; UNAVAILABLE, INVALID or OVER_BUDGET when the check did
+     * not answer, and then there are no conditions. {@code executionId} links the generation when one
+     * ran.
      */
     record Result(String outcome, boolean fallbackListed, List<FallbackCondition> conditions,
             UUID executionId) {

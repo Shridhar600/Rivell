@@ -146,7 +146,7 @@ class LabelledFieldStageTest {
 
     @Test
     void aReviewersOwnAuthorityToApplyAFallbackIsNotAnApproval() {
-        // R3-004: the source says the person doing the review may take the fallback and record
+        // the source says the person doing the review may take the fallback and record
         // why; that is their authority, not a second approver to route to
         var sentence = LabelledFieldStage.documentRules(
                 "The lawyer handling the NDA may apply the fallbacks above and record the reason in the matter file.",

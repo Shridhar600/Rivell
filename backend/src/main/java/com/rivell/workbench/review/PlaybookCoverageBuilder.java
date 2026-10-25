@@ -41,9 +41,10 @@ public final class PlaybookCoverageBuilder {
     }
 
     /**
-     * Returns null when the review predates the frozen applicable-knowledge list: there is no
-     * honest position set to report. An empty list means the frozen playbooks published no
-     * position that applies to this contract type.
+     * Returns null when the review predates the frozen applicable-knowledge list, or when the
+     * coverage could not be computed: in both cases there is no honest position set to report.
+     * An empty list means the frozen playbooks published no position that applies to this
+     * contract type.
      */
     public PlaybookCoverage build(
             ReviewSnapshot snapshot,
@@ -137,7 +138,14 @@ public final class PlaybookCoverageBuilder {
         var byCandidate = new HashMap<UUID, List<CandidateVerdict>>();
         for (var execution : executions) {
             var check = checksById.get(execution.planCheckId());
-            if (check == null || check.mechanism() != CheckMechanism.POLICY_COMPARISON) {
+            if (check == null) {
+                continue;
+            }
+            if (check.mechanism() == CheckMechanism.OMISSION) {
+                addMatchedWalkAway(byCandidate, execution.detail());
+                continue;
+            }
+            if (check.mechanism() != CheckMechanism.POLICY_COMPARISON) {
                 continue;
             }
             if (!(execution.detail().get("positions") instanceof List<?> positions)) {
@@ -160,6 +168,29 @@ public final class PlaybookCoverageBuilder {
             }
         }
         return byCandidate;
+    }
+
+    /**
+     * The pairs the walk-away lane searched, matched to a clause and judged the playbook's own
+     * walk-away. The executor keeps them out of "addressed" because they are the finding, so they
+     * are a judged position here, never a clean "not found".
+     */
+    private static void addMatchedWalkAway(
+            Map<UUID, List<CandidateVerdict>> byCandidate, Map<String, Object> detail) {
+        if (!(detail.get("matchedWalkAwayBySearch") instanceof List<?> matches)) {
+            return;
+        }
+        for (var match : matches) {
+            if (!(match instanceof Map<?, ?> entry)) {
+                continue;
+            }
+            var candidateId = uuid(entry.get("candidateId"));
+            var headingNodeId = uuid(entry.get("headingNodeId"));
+            if (candidateId != null && headingNodeId != null) {
+                byCandidate.computeIfAbsent(candidateId, key -> new ArrayList<>())
+                        .add(new CandidateVerdict(Verdict.WALK_AWAY, headingNodeId));
+            }
+        }
     }
 
     /**

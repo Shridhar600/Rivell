@@ -210,7 +210,7 @@ public class LiabilityReviewIT {
         final java.util.List<String> presenceQuestions =
                 java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
-        /** Probability the R3-002 walk-away absence question answers per walk-away text. */
+        /** Probability the walk-away absence question answers per walk-away text. */
         final Map<String, Double> walkAwayAnswers = new java.util.concurrent.ConcurrentHashMap<>();
         /** Probability the walk-away absence question answers when nothing is scripted. */
         volatile double defaultWalkAwayProbability = 0.05;
@@ -529,7 +529,7 @@ public class LiabilityReviewIT {
             return new ProviderExecutionResult(answers, "fake-review-v1", new TokenUsage(80, 2));
         }
 
-        /** R3-002: one yes/no per walk-away, scripted by its text. */
+        /** The walk-away absence check: one yes/no per walk-away, scripted by its text. */
         private ProviderExecutionResult walkAwayAbsenceDecision(
                 DecisionExecutionRequest request) {
             walkAwayCalls.incrementAndGet();
@@ -708,7 +708,8 @@ public class LiabilityReviewIT {
     public static final class ReviewGenerativeProvider implements GenerativeReasoningProvider {
 
         private final com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider base =
-                new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();        private final AtomicInteger calls = new AtomicInteger();
+                new com.rivell.workbench.contracts.ContractEnrichmentIT.M5FakeGenerativeProvider();
+        private final AtomicInteger calls = new AtomicInteger();
         volatile boolean failOpenEnded;
         /** The wording call fails as if the analysis account had no credit. */
         volatile boolean openEndedOutOfCredit;

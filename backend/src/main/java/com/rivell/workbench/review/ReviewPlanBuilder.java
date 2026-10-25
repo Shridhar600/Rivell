@@ -70,7 +70,7 @@ public final class ReviewPlanBuilder {
             checks.add(omissionCheck(reviewId, organizationId, snapshot.createdAt(), ordinal[0]++));
         }
         if (walkAwayAbsence && !snapshot.contractType().madeUnderParentType()) {
-            // R3-002: a walk-away may state a right the contract lacks; a child agreement is
+            // a walk-away may state a right the contract lacks; a child agreement is
             // read with its parent, so an absence here is not the contract's own gap
             checks.add(walkAwayAbsenceCheck(reviewId, organizationId, snapshot.createdAt(),
                     ordinal[0]++));
@@ -124,7 +124,7 @@ public final class ReviewPlanBuilder {
                 CheckMechanism.OMISSION, ClauseTopics.NO_TOPIC, null, null, createdAt);
     }
 
-    /** R3-002 walk-away absence check: no subject; reads the run's clause comparisons. */
+    /** The walk-away absence check: no subject; reads the run's clause comparisons. */
     private static ReviewPlanCheck walkAwayAbsenceCheck(
             UUID reviewId, UUID organizationId, Instant createdAt, int ordinal) {
         return new ReviewPlanCheck(UUID.randomUUID(), organizationId, reviewId, ordinal,

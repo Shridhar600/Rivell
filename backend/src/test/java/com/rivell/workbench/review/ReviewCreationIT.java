@@ -56,6 +56,7 @@ import com.rivell.workbench.retrieval.EvidenceSufficiency;
 import com.rivell.workbench.retrieval.KnowledgePin;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 import com.rivell.workbench.retrieval.RetrievalProperties;
+import com.rivell.workbench.review.check.OmissionCheckExecutor;
 
 @SpringBootTest
 @Testcontainers
@@ -252,7 +253,7 @@ class ReviewCreationIT {
                 .containsExactlyElementsOf(
                         java.util.stream.IntStream.range(0, checks.size()).boxed().toList());
         assertThat(checks).filteredOn(check -> check.family() == CheckFamily.CONCEPT_PRESENCE
-                        && !"WALK_AWAY_ABSENCE".equals(check.checkKey()))
+                        && !OmissionCheckExecutor.WALK_AWAY_ABSENCE_CHECK_KEY.equals(check.checkKey()))
                 .extracting(ReviewPlanCheck::concept, ReviewPlanCheck::expectation)
                 .containsExactlyInAnyOrder(
                         tuple(CoreConcepts.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED),
@@ -334,7 +335,7 @@ class ReviewCreationIT {
 
         var checks = reviewRepository.findPlanChecks(organizationId, review.id());
         assertThat(checks).isNotEmpty();
-        assertThat(checks).filteredOn(check -> !"WALK_AWAY_ABSENCE".equals(check.checkKey()))
+        assertThat(checks).filteredOn(check -> !OmissionCheckExecutor.WALK_AWAY_ABSENCE_CHECK_KEY.equals(check.checkKey()))
                 .allSatisfy(check ->
                         assertThat(check.family()).isEqualTo(CheckFamily.CLAUSE_REVIEW));
     }

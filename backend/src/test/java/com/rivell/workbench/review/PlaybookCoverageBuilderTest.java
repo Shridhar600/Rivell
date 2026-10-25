@@ -35,6 +35,7 @@ import com.rivell.workbench.review.PlaybookCoverage.Entry;
 import com.rivell.workbench.review.PlaybookCoverage.Reason;
 import com.rivell.workbench.review.PlaybookCoverage.State;
 import com.rivell.workbench.review.PlaybookCoverage.Verdict;
+import com.rivell.workbench.review.check.OmissionCheckExecutor;
 import com.rivell.workbench.taxonomy.CoreConcepts;
 
 class PlaybookCoverageBuilderTest {
@@ -122,6 +123,30 @@ class PlaybookCoverageBuilderTest {
                 .isEqualTo(Reason.CHECK_DID_NOT_COMPLETE);
     }
 
+    @Test
+    void aClauseMatchedToTheWalkAwayIsComparedAsAWalkAwayWithThatClause() {
+        var matched = position("Termination for convenience", "T-11", "TERM", Set.of());
+        when(knowledge.listPublishedPositionsForArtifacts(
+                any(), anyLong(), anyCollection(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(matched));
+        var absenceCheck = absenceCheck();
+        var absenceExecution = execution(absenceCheck.id(), Map.of(
+                "searchedCandidates", List.of(matched.candidate().id().toString()),
+                "addressedBySearch", List.of(),
+                "matchedWalkAwayBySearch", List.of(Map.of(
+                        "candidateId", matched.candidate().id().toString(),
+                        "headingNodeId", HEADING_ID.toString())),
+                "searchDegradation", List.of()));
+
+        var coverage = builder.build(snapshot(), List.of(absenceCheck),
+                List.of(absenceExecution), List.of(), List.of());
+
+        var entry = entry(coverage, matched.candidate().id());
+        assertThat(entry.state()).isEqualTo(State.COMPARED);
+        assertThat(entry.verdict()).isEqualTo(Verdict.WALK_AWAY);
+        assertThat(entry.clauseHeadingNodeId()).isEqualTo(HEADING_ID);
+    }
+
     private static Entry entry(PlaybookCoverage coverage, UUID candidateId) {
         return coverage.entries().stream()
                 .filter(entry -> entry.positionCandidateId().equals(candidateId))
@@ -150,8 +175,9 @@ class PlaybookCoverageBuilderTest {
 
     private static ReviewPlanCheck absenceCheck() {
         return new ReviewPlanCheck(ABSENCE_CHECK_ID, ORGANIZATION_ID, REVIEW_ID, 1,
-                "WALK_AWAY_ABSENCE", CheckFamily.CONCEPT_PRESENCE, CheckExpectation.REQUIRED,
-                CheckMechanism.OMISSION, ClauseTopics.NO_TOPIC, null, null, NOW);
+                OmissionCheckExecutor.WALK_AWAY_ABSENCE_CHECK_KEY, CheckFamily.CONCEPT_PRESENCE,
+                CheckExpectation.REQUIRED, CheckMechanism.OMISSION, ClauseTopics.NO_TOPIC, null,
+                null, NOW);
     }
 
     private static ReviewCheckExecution execution(

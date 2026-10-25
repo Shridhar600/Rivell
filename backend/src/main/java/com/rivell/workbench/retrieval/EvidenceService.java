@@ -520,13 +520,6 @@ public class EvidenceService {
         for (var resolution : resolutions) {
             resolution.candidates().forEach(candidate -> unitIds.add(candidate.extractionUnitId()));
         }
-        if (unitIds.isEmpty()) {
-            return Map.of();
-        }
-        var byUnit = new LinkedHashMap<UUID, List<String>>();
-        for (var unit : knowledgeQueries.findUnitsForOrganization(organizationId, unitIds).values()) {
-            byUnit.put(unit.id(), unit.sourceNodeIds().stream().map(UUID::toString).toList());
-        }
-        return Map.copyOf(byUnit);
+        return knowledgeQueries.sourceNodeIdsForUnits(organizationId, unitIds);
     }
 }

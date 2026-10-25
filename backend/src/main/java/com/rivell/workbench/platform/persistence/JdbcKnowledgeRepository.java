@@ -691,18 +691,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         addScopeDimensions(conditions, params, query.contractPackKey(),
                 query.partyPerspective(), query.paperSource(), query.jurisdiction(),
                 query.effectiveOn());
-        conditions.add("""
-                not exists (
-                    select 1 from knowledge_publication_item sup_item
-                    join knowledge_publication sp
-                         on sp.id = sup_item.publication_id
-                        and sp.organization_id = c.organization_id
-                    where sup_item.organization_id = c.organization_id
-                      and sup_item.action = 'SUPERSEDE'
-                      and sup_item.superseded_candidate_id = c.id
-                      and sp.publication_number <= :asOf)
-                """);
-        params.put("asOf", query.asOfPublicationNumber());
+        addPinVisibility(conditions, params, query.asOfPublicationNumber());
         // a candidate has at most one ADD publication (DB-enforced), so this join
         // cannot fan out; it both constrains pin visibility and exposes the
         // publication identity for provenance
@@ -769,18 +758,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         params.put("artifactIds", artifactIds.toArray(UUID[]::new));
         addScopeDimensions(conditions, params, contractPackKey, partyPerspective, paperSource,
                 jurisdiction, effectiveOn);
-        conditions.add("""
-                not exists (
-                    select 1 from knowledge_publication_item sup_item
-                    join knowledge_publication sp
-                         on sp.id = sup_item.publication_id
-                        and sp.organization_id = c.organization_id
-                    where sup_item.organization_id = c.organization_id
-                      and sup_item.action = 'SUPERSEDE'
-                      and sup_item.superseded_candidate_id = c.id
-                      and sp.publication_number <= :asOf)
-                """);
-        params.put("asOf", asOfPublicationNumber);
+        addPinVisibility(conditions, params, asOfPublicationNumber);
         var sql = """
                 select c.*, pp.id as publication_id, pp.publication_number as publication_number
                 from knowledge_candidate c
@@ -823,18 +801,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         addScopeDimensions(conditions, params, query.contractPackKey(),
                 query.partyPerspective(), query.paperSource(), query.jurisdiction(),
                 query.effectiveOn());
-        conditions.add("""
-                not exists (
-                    select 1 from knowledge_publication_item sup_item
-                    join knowledge_publication sp
-                         on sp.id = sup_item.publication_id
-                        and sp.organization_id = c.organization_id
-                    where sup_item.organization_id = c.organization_id
-                      and sup_item.action = 'SUPERSEDE'
-                      and sup_item.superseded_candidate_id = c.id
-                      and sp.publication_number <= :asOf)
-                """);
-        params.put("asOf", query.asOfPublicationNumber());
+        addPinVisibility(conditions, params, query.asOfPublicationNumber());
         var sql = """
                 select a.id as artifact_id, a.artifact_type,
                        coalesce(a.document_title, a.filename) as name,
@@ -941,6 +908,26 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         }
     }
 
+    /**
+     * A candidate is visible at a publication pin when a publication at or before the pin added
+     * it and no publication at or before the pin superseded it. Every published read shares the
+     * rule, so coverage and retrieval cannot disagree about what is published.
+     */
+    private static void addPinVisibility(
+            List<String> conditions, HashMap<String, Object> params, long asOf) {
+        conditions.add("""
+                not exists (
+                    select 1 from knowledge_publication_item sup_item
+                    join knowledge_publication sp
+                         on sp.id = sup_item.publication_id
+                        and sp.organization_id = c.organization_id
+                    where sup_item.organization_id = c.organization_id
+                      and sup_item.action = 'SUPERSEDE'
+                      and sup_item.superseded_candidate_id = c.id
+                      and sp.publication_number <= :asOf)
+                """);
+        params.put("asOf", asOf);
+    }
 
     @Override
     @Transactional

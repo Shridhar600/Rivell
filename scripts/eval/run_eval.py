@@ -567,9 +567,9 @@ def volume_line(results):
 
 def missing_line(results):
     """Missing provisions the review reported as missing, not just credited by a finding on the clause."""
-    issues = [i for r in results for c in r["contracts"] for i in c["issues"]
-              if i["category"] == "MISSING_PROVISION"]
-    named = sum(1 for i in issues if i.get("namedAsMissing"))
+    contracts = [c for r in results for c in r["contracts"]]
+    issues = [i for c in contracts for i in c["issues"] if i["category"] == "MISSING_PROVISION"]
+    named = sum(c["missingNamed"] for c in contracts)
     return f"- Missing provisions reported as missing: {pct(named, len(issues))}"
 
 

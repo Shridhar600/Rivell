@@ -147,12 +147,16 @@ public final class FindingAssembler {
         if (signal.payload() instanceof OmissionPayload omission) {
             // engine v2 omissions lane: the code-owned text, never model prose
             if (omission.walkAway() != null) {
-                // R3-002: the position's own walk-away states the right the contract lacks
+                // the position's own walk-away states the right the contract lacks, or matches
                 var walkAway = omission.walkAway().strip();
+                var text = "Your playbook's walk-away: " + walkAway
+                        + (walkAway.endsWith(".") ? "" : ".");
+                if (omission.matchedClause() != null) {
+                    return new Observation("MISSING_POSITION", text + " The closest clause, "
+                            + omission.matchedClause() + ", matches it.");
+                }
                 return new Observation("MISSING_POSITION",
-                        "Your playbook's walk-away: " + walkAway
-                                + (walkAway.endsWith(".") ? "" : ".")
-                                + " Rivell did not find " + omission.label()
+                        text + " Rivell did not find " + omission.label()
                                 + " in this contract.");
             }
             return new Observation("MISSING_POSITION",
@@ -488,11 +492,17 @@ public final class FindingAssembler {
         // absence-subject findings are grounded in the plan-check/absence identity
         var absenceSubject = primary.subjectKind() == FindingSubjectKind.ABSENCE;
         if (absenceSubject) {
-            var basis = primary.payload() instanceof OmissionPayload
-                    ? "No clause in this contract addresses this playbook position; the "
-                            + "absence is the observation."
-                    : "No clause in this contract carries " + primary.absenceConcept().value()
-                            + "; the absence is the observation.";
+            String basis;
+            if (primary.payload() instanceof OmissionPayload omission) {
+                basis = omission.matchedClause() != null
+                        ? "The closest clause matches your playbook's walk-away; the position it "
+                                + "rules out is what this contract grants."
+                        : "No clause in this contract addresses this playbook position; the "
+                                + "absence is the observation.";
+            } else {
+                basis = "No clause in this contract carries " + primary.absenceConcept().value()
+                        + "; the absence is the observation.";
+            }
             claims.add(FindingClaim.of(0, ClaimKind.ABSENCE_BASIS, basis, true, List.of()));
         } else {
             claims.add(FindingClaim.of(0, ClaimKind.OBSERVATION, observation.text(),
@@ -597,7 +607,7 @@ public final class FindingAssembler {
                 quality.put(key, value);
             }
         }
-        // the R3-002 absence signal carries the walk-away rule on itself; a deviation carries it
+        // the absence signal carries the walk-away rule on itself; a deviation carries it
         // on a separate escalation signal of the same position
         for (var key : ESCALATION_KEYS) {
             var value = primary.quality().get(key);

@@ -589,7 +589,7 @@ public class ReviewAnalysisService {
     /**
      * Coverage is a display artifact, so a failure to read the pinned positions must not fail the
      * review: the run completes with no coverage section rather than claiming one it could not
-     * compute. The warning is the operator's record of why it is absent.
+     * compute. The warning is the operator's record of why it is absent, with the cause.
      */
     private PlaybookCoverage coverage(UUID organizationId, UUID reviewId, ReviewAnalysisRun run,
             List<ReviewPlanCheck> checks, List<ReviewCheckExecution> executions,
@@ -599,7 +599,7 @@ public class ReviewAnalysisService {
                     () -> new IllegalStateException("Review snapshot missing: " + reviewId));
             return playbookCoverageBuilder.build(snapshot, checks, executions, signals, findings);
         } catch (RuntimeException e) {
-            LOG.warn("Could not compute playbook coverage for run {}: {}", run.id(), e.toString());
+            LOG.warn("Could not compute playbook coverage for run {}", run.id(), e);
             return null;
         }
     }
