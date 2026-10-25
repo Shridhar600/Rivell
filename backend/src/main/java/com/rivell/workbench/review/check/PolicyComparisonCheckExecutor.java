@@ -244,7 +244,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         }
         // one fit pack for the clause: the positions the text search found and the library
         // wording a flagged position would offer (engine decision §B.1)
-        var wordingByKey = wordingFor(judgedPositions, resolutions);
+        var wordingByKey = wordingFor(clause, judgedPositions, resolutions);
         var fit = fit(context, clause, judgedPositions, wordingByKey);
         putFitSummary(detail, fit);
         if (searchDetail != null) {
@@ -897,15 +897,19 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * The library wording each flagged position would offer, and the gap that wording must cure.
      * Selection is the same one {@code flaggedSignals} uses, so the fit question is asked about
-     * exactly the variant that would be proposed.
+     * exactly the variant that would be proposed. A related position never offers wording, so its
+     * variant is not asked about at all.
      */
-    private Map<String, Wording> wordingFor(List<JudgedPosition> judgedPositions,
-            Map<String, Resolution> resolutions) {
+    private Map<String, Wording> wordingFor(ClauseSemantics clause,
+            List<JudgedPosition> judgedPositions, Map<String, Resolution> resolutions) {
         var wording = new LinkedHashMap<String, Wording>();
         for (var judged : judgedPositions) {
             var resolution = resolutions.get(judged.key());
             if (resolution == null || resolution.category() == null
                     || !wantsLanguage(resolution.category())) {
+                continue;
+            }
+            if (!judged.searched() && governsOnlySecondaryTopic(clause, judged.position())) {
                 continue;
             }
             // the bundle that judged the position carries its drafting: the search bundle for a

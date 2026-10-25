@@ -49,6 +49,9 @@ public interface KnowledgeRepository {
 
     Optional<ExtractionUnit> findUnit(UUID unitId, UUID organizationId);
 
+    /** Every named unit that belongs to the organization: one read for a bundle's provenance. */
+    List<ExtractionUnit> findUnits(Set<UUID> unitIds, UUID organizationId);
+
     /**
      * Records a person's record-kind correction on one part, once: false when the part already
      * carries a correction (or is not this organization's), and nothing is written then.

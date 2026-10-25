@@ -187,6 +187,14 @@ public class KnowledgeQueryService {
         return repository.findUnit(unitId, organizationId);
     }
 
+    /** System-level read of the named units, keyed by id: one query for a bundle's provenance. */
+    public java.util.Map<UUID, ExtractionUnit> findUnitsForOrganization(
+            UUID organizationId, java.util.Set<UUID> unitIds) {
+        return repository.findUnits(unitIds, organizationId).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        ExtractionUnit::id, unit -> unit));
+    }
+
     public boolean publicationNumberExists(long publicationNumber) {
         requireRead();
         return repository.publicationNumberExists(organizationId(), publicationNumber);

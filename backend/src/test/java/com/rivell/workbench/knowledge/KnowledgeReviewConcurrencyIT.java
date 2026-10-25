@@ -416,6 +416,11 @@ class KnowledgeReviewConcurrencyIT {
         }
 
         @Override
+        public List<ExtractionUnit> findUnits(Set<UUID> unitIds, UUID organizationId) {
+            return delegate.findUnits(unitIds, organizationId);
+        }
+
+        @Override
         public boolean overrideRecordKind(UUID unitId, UUID organizationId,
                 KnowledgeRecordKind kind, UUID by, java.time.Instant at) {
             return delegate.overrideRecordKind(unitId, organizationId, kind, by, at);

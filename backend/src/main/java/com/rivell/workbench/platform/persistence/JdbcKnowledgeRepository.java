@@ -464,6 +464,22 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<ExtractionUnit> findUnits(Set<UUID> unitIds, UUID organizationId) {
+        if (unitIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcClient.sql("""
+                        select u.* from knowledge_extraction_unit u
+                        join knowledge_artifact a on a.id = u.artifact_id
+                        where u.id = any(:unitIds) and a.organization_id = :organizationId
+                        """)
+                .param("unitIds", unitIds.toArray(UUID[]::new))
+                .param("organizationId", organizationId)
+                .query(this::mapUnit)
+                .list();
+    }
+
+    @Override
     public List<KnowledgeCandidate> loadCandidates(UUID artifactId, UUID organizationId) {
         return jdbcClient.sql("""
                         select c.* from knowledge_candidate c

@@ -50,6 +50,21 @@ final class LabelledFieldStage {
     private static final Set<String> BOUNDARY_WORDS = Set.of(
             "before", "if", "when", "where", "unless", "on", "for", "after", "once");
 
+    private static final java.util.regex.Pattern APPROVAL_REQUIRED =
+            java.util.regex.Pattern.compile(
+                    "(?i)^(.+?)\\s+(?:written\\s+)?(?:approval|authorisation|authorization)"
+                            + "\\s+(?:is|are)\\s+required\\b(.*)$");
+    private static final java.util.regex.Pattern OWNS_POSITIONS =
+            java.util.regex.Pattern.compile(
+                    "(?i)^(.+?)\\s+owns?\\s+(?:the\\s+)?(.+?)\\s+positions?\\b(.*)$");
+    private static final java.util.regex.Pattern PASSIVE_APPROVAL =
+            java.util.regex.Pattern.compile(
+                    "(?i)\\b(?:approved|authorised|authorized)\\s+by\\b");
+    private static final java.util.regex.Pattern APPROVAL_VERB =
+            java.util.regex.Pattern.compile("(?i)\\bapprove[sd]?\\b");
+    private static final java.util.regex.Pattern REQUIRES_VERB =
+            java.util.regex.Pattern.compile("(?i)\\brequires?\\b");
+
     private enum Field {
         PREFERRED, FALLBACK, PROHIBITED, ESCALATION, APPROVER
     }
@@ -701,10 +716,7 @@ final class LabelledFieldStage {
     /** "CFO approval is required for fallbacks above 10%": the role comes first. */
     private static void ruleFromApprovalRequired(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern
-                .compile("(?i)^(.+?)\\s+(?:written\\s+)?(?:approval|authorisation|authorization)"
-                        + "\\s+(?:is|are)\\s+required\\b(.*)$")
-                .matcher(sentence);
+        var matcher = APPROVAL_REQUIRED.matcher(sentence);
         if (!matcher.find()) {
             return;
         }
@@ -723,9 +735,7 @@ final class LabelledFieldStage {
     /** "Legal owns the commercial positions": an ownership row names the default approver. */
     private static void ruleFromOwnership(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern
-                .compile("(?i)^(.+?)\\s+owns?\\s+(?:the\\s+)?(.+?)\\s+positions?\\b(.*)$")
-                .matcher(sentence);
+        var matcher = OWNS_POSITIONS.matcher(sentence);
         if (!matcher.find()) {
             return;
         }
@@ -742,8 +752,7 @@ final class LabelledFieldStage {
     /** "Fallbacks must be approved by the Commercial Manager": the role follows the verb. */
     private static void ruleFromPassiveApproval(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern
-                .compile("(?i)\\b(?:approved|authorised|authorized)\\s+by\\b").matcher(sentence);
+        var matcher = PASSIVE_APPROVAL.matcher(sentence);
         if (!matcher.find() || matcher.start() == 0) {
             return;
         }
@@ -772,7 +781,7 @@ final class LabelledFieldStage {
 
     private static void ruleFromApprovalVerb(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern.compile("(?i)\\bapprove[sd]?\\b").matcher(sentence);
+        var matcher = APPROVAL_VERB.matcher(sentence);
         if (!matcher.find() || matcher.start() == 0) {
             return;
         }
@@ -832,7 +841,7 @@ final class LabelledFieldStage {
 
     private static void ruleFromRequiresApproval(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern.compile("(?i)\\brequires?\\b").matcher(sentence);
+        var matcher = REQUIRES_VERB.matcher(sentence);
         if (!matcher.find()) {
             return;
         }

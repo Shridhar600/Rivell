@@ -167,6 +167,10 @@ public final class DeterministicContractExtractors {
     }
     private static final Pattern LEADING_NUMBER_PATTERN = Pattern.compile(
             "^(\\d+(?:\\.\\d+)*)[.)]?\\s+");
+    private static final Pattern TERM_WORD_MONTHS =
+            Pattern.compile("initial term of ([a-z]+) \\((\\d+)\\) months");
+    private static final Pattern TERM_NUMERIC_YEARS =
+            Pattern.compile("continues for a period of (\\d+) \\([a-z ]+\\) years?");
 
     public List<MetadataFact> metadata(
             UUID versionId, List<ContractRegionSegmenter.Region> regions, List<DocumentNode> nodes) {
@@ -763,12 +767,11 @@ public final class DeterministicContractExtractors {
     }
 
     private Optional<String> termOf(String text) {
-        var matcher = Pattern.compile("initial term of ([a-z]+) \\((\\d+)\\) months").matcher(text);
+        var matcher = TERM_WORD_MONTHS.matcher(text);
         if (matcher.find()) {
             return Optional.of(matcher.group(2) + " months");
         }
-        matcher = Pattern.compile("continues for a period of (\\d+) \\([a-z ]+\\) years?")
-                .matcher(text);
+        matcher = TERM_NUMERIC_YEARS.matcher(text);
         if (matcher.find()) {
             return Optional.of(matcher.group(1) + " years");
         }

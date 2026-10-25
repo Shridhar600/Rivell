@@ -129,13 +129,14 @@ public class PrecedentLane {
                 degradation, modelVersions, stages);
 
         var items = new ArrayList<EvidenceItem>();
+        var provenance = provenance(request.organizationId(), byId, reranked);
         for (var candidateId : reranked) {
-            items.add(item(request.organizationId(), byId.get(candidateId),
+            items.add(item(byId.get(candidateId),
                     publicationById.get(candidateId),
                     rankOf(lexicalHits, candidateId),
                     rankOf(vectorHits, candidateId), fusedHit(fused, candidateId),
                     compatibilities.getOrDefault(candidateId, PolicyCompatibility.NOT_ASSESSED),
-                    relevanceExecutions.get(candidateId)));
+                    relevanceExecutions.get(candidateId), provenance));
         }
         return new Outcome(List.copyOf(items), List.copyOf(stages), List.copyOf(rejected),
                 List.copyOf(degradation), List.copyOf(modelVersions));
@@ -268,19 +269,35 @@ public class PrecedentLane {
         }
     }
 
+    private Map<UUID, List<String>> provenance(UUID organizationId,
+            Map<UUID, KnowledgeCandidate> byId, List<UUID> candidateIds) {
+        var unitIds = new java.util.LinkedHashSet<UUID>();
+        for (var candidateId : candidateIds) {
+            var candidate = byId.get(candidateId);
+            if (candidate != null) {
+                unitIds.add(candidate.extractionUnitId());
+            }
+        }
+        if (unitIds.isEmpty()) {
+            return Map.of();
+        }
+        var byUnit = new LinkedHashMap<UUID, List<String>>();
+        for (var unit : knowledgeQueries.findUnitsForOrganization(organizationId, unitIds).values()) {
+            byUnit.put(unit.id(), unit.sourceNodeIds().stream().map(UUID::toString).toList());
+        }
+        return Map.copyOf(byUnit);
+    }
+
     private EvidenceItem item(
-            java.util.UUID organizationId,
             KnowledgeCandidate candidate,
             com.rivell.workbench.knowledge.PublishedCandidate published,
             Integer lexicalRank,
             Integer vectorRank,
             RankFusion.FusedHit fused,
             PolicyCompatibility compatibility,
-            com.rivell.workbench.intelligence.DecisionExecution relevanceExecution) {
-        var unit = knowledgeQueries.findUnitForOrganization(
-                organizationId, candidate.extractionUnitId()).orElse(null);
-        var provenance = unit == null ? List.<String>of()
-                : unit.sourceNodeIds().stream().map(UUID::toString).toList();
+            com.rivell.workbench.intelligence.DecisionExecution relevanceExecution,
+            Map<UUID, List<String>> provenance) {
+        var sourceNodeIds = provenance.getOrDefault(candidate.extractionUnitId(), List.of());
         return new EvidenceItem(
                 UUID.randomUUID(),
                 AuthorityClass.PRECEDENT,
@@ -302,7 +319,7 @@ public class PrecedentLane {
                         ? null
                         : semanticAssessment(relevanceExecution, judgments(relevanceExecution)),
                 compatibility,
-                provenance,
+                sourceNodeIds,
                 published == null ? null : published.publicationId(),
                 published == null ? null : published.publicationNumber());
     }
