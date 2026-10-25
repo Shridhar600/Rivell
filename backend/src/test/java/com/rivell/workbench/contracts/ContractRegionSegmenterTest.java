@@ -284,11 +284,37 @@ class ContractRegionSegmenterTest {
                 "M3", "Campaign creative and media plan", "30 June 2025", "CAD 110,000",
                 "Creative director", "CAD 2,400");
 
-        var signature = regions.stream()
-                .filter(region -> region.kind()
-                        == ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK)
+        var milestones = regions.stream()
+                .filter(region -> region.contentText().contains("CAD 60,000"))
                 .findFirst().orElseThrow();
-        assertThat(signature.contentText()).doesNotContain("CAD 60,000");
+        assertThat(milestones.isPreamble()).as("enrichment skips preamble regions").isFalse();
+        assertThat(milestones.kind()).isNotEqualTo(ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK);
+        assertThat(milestones.headingText()).isNotBlank();
+    }
+
+    @Test
+    void aSignatureTableAfterTheExecutionBlockStaysPartOfTheSignatures() {
+        var witness = paragraph("IN WITNESS WHEREOF the parties have executed this Agreement.", 2);
+        var table = new DocumentNode(UUID.randomUUID(), VERSION, BODY_ID,
+                DocumentNodeType.TABLE, 3, null, null, null,
+                SourceSpan.ofTable("word/document.xml", 3, 0), null);
+        var row = new DocumentNode(UUID.randomUUID(), VERSION, table.id(),
+                DocumentNodeType.TABLE_ROW, 0, null, null, null,
+                SourceSpan.ofTable("word/document.xml", 3, 0), null);
+        var nodes = List.of(
+                BODY_NODE,
+                heading("1. Term", "1", 0),
+                paragraph("This Agreement lasts three years.", 1),
+                witness,
+                table, row,
+                tableCell(row, "Signature:", 1L, 0),
+                tableCell(row, "Name: Jane Doe, Title: Director", 2L, 1));
+
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        assertThat(regions).noneMatch(region -> region.kind()
+                != ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK
+                && region.contentText().contains("Jane Doe"));
     }
 
     @Test

@@ -301,6 +301,10 @@ class FindingAssemblerTest {
                 "Partly within your fallback. The clause does not state: the right to suspend "
                         + "performance before termination. Check whether it is elsewhere in the contract.");
         assertThat(finding.observationText()).doesNotContain("accept and note", "missing");
+        assertThat(finding.claims()).filteredOn(claim -> claim.claimKind() == ClaimKind.RECOMMENDATION)
+                .singleElement()
+                .satisfies(claim -> assertThat(claim.text()).isEqualTo(
+                        "Decide whether the clause is acceptable without these terms, or ask for them."));
         assertThat(finding.quality())
                 .containsEntry("fallbackConditionsOutcome", FallbackConditionSpecs.PARTIAL)
                 .containsKey("fallbackConditions")

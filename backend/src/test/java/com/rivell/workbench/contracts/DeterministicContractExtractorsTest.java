@@ -464,6 +464,18 @@ class DeterministicContractExtractorsTest {
     }
 
     @Test
+    void aPartyRoleNamedInBracketsIsNotADefinedTerm() {
+        var introduction = paragraph("Northwind Analytics Limited, a company that provides hosted "
+                + "analytics services (the \"Service Provider\"), and Kestrel Foods Limited, which "
+                + "buys those services for its stores (the \"Buyer\").", 1);
+        var nodes = List.of(bodyNode(), introduction);
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        assertThat(new DeterministicContractExtractors().definedTerms(VERSION_ID, regions, nodes))
+                .isEmpty();
+    }
+
+    @Test
     void duplicateDefinedTermIsFlagged() {
         var nodes = List.of(
                 bodyNode(),

@@ -215,6 +215,37 @@ class FallbackConditionCheckerTest {
     }
 
     @Test
+    void aListedFallbackTheModelDidNotReportIsNotCountedAsFailed() {
+        var onlyFirst = checkerAnswering(request -> answer("YES",
+                condition("1 | UNKNOWN | - | fallback one wants English courts")));
+
+        assertThat(onlyFirst.check(ask(true, 2)).outcome())
+                .isEqualTo(FallbackConditionChecker.Result.WITHIN);
+    }
+
+    @Test
+    void aConditionTakenFromTheWalkAwayIsNotAFallbackCondition() {
+        var checker = checkerAnswering(request -> answer("YES",
+                condition("1 | UNKNOWN | - | a cure period", "No cure period")));
+
+        var result = checker.check(calderAsk());
+
+        assertThat(result.conditions()).isEmpty();
+        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.INVALID);
+    }
+
+    @Test
+    void aBlankConditionPhraseIsDropped() {
+        var checker = checkerAnswering(request -> answer("YES",
+                "1 | UNKNOWN | - |   | " + CALDER_SOURCE,
+                condition("1 | UNKNOWN | - | a right to suspend performance", CALDER_SOURCE)));
+
+        assertThat(checker.check(calderAsk()).conditions())
+                .extracting(FallbackCondition::condition)
+                .containsExactly("a right to suspend performance");
+    }
+
+    @Test
     void aPositionWithNoListedFallbackIsCheckedAgainstThePreferredPosition() {
         var fails = checkerAnswering(request -> answer("NO",
                 condition("1 | UNMET | laws of Switzerland | the clause meets the preferred position")));
@@ -223,8 +254,9 @@ class FallbackConditionCheckerTest {
         var unsure = checkerAnswering(request -> answer("NO",
                 condition("1 | MET | the law is certainly Swiss | the clause meets the preferred position")));
 
+        // with no fallback listed there is nothing to be "partly within": no claim is made
         var shortfall = fails.check(ask(false));
-        assertThat(shortfall.outcome()).isEqualTo(FallbackConditionChecker.Result.PARTIAL);
+        assertThat(shortfall.outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
         assertThat(shortfall.fallbackListed()).isFalse();
         assertThat(meets.check(ask(false)).outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
         // an unverifiable quote stays UNKNOWN and never makes the preferred position partial
@@ -239,7 +271,8 @@ class FallbackConditionCheckerTest {
         var result = checker.check(ask(null));
 
         assertThat(result.fallbackListed()).isFalse();
-        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.PARTIAL);
+        // no listed fallback, so nothing is "partly within"
+        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
     }
 
     @Test

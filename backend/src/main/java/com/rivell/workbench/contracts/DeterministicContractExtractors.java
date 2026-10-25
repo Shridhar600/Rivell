@@ -31,7 +31,7 @@ public final class DeterministicContractExtractors {
      * in front keeps short ones (AB, SE, AG, Oy) out of longer words such as "Grab" or "House".
      */
     private static final String ENTITY_SUFFIX = "(?i:Inc|LLC|Ltd|Limited|Corp|Corporation|Company"
-            + "|GmbH|AG|SE|Oy|AB|A/S|plc|N\\.?V\\.?|B\\.?V\\.?|S\\.?A\\.?S\\.?|S\\.?A\\.?"
+            + "|GmbH|AG|SE|Oy|AB|plc|N\\.?V\\.?|B\\.?V\\.?|S\\.?A\\.?S\\.?|S\\.?A\\.?"
             + "|S\\.?p\\.?A\\.?|S\\.?r\\.?l\\.?|K\\.?K\\.?)";
     /**
      * A capitalised run of name words. A trailing lowercase "plc" is part of the run, because
@@ -66,7 +66,9 @@ public final class DeterministicContractExtractors {
             "STATEMENT OF WORK", "ORDER FORM", "SCHEDULE", "ANNEX", "EXHIBIT", "APPENDIX",
             "ATTACHMENT", "DISCLOSER", "RECIPIENT", "CLIENT", "AGENCY", "CUSTOMER",
             "SUPPLIER", "CONTRACTOR", "LICENSOR", "LICENSEE", "PURCHASER", "VENDOR",
-            "COMPANY", "PARTY", "PARTIES");
+            "COMPANY", "PARTY", "PARTIES", "PROVIDER", "BUYER", "SELLER", "CONTROLLER",
+            "PROCESSOR", "DISTRIBUTOR", "RESELLER", "CONSULTANT", "LESSOR", "LESSEE",
+            "LENDER", "BORROWER");
     private static final int MAX_APPOSITIVE_DEFINITION = 500;
     private static final List<String> DEFINITION_SEPARATORS =
             List.of("; and", ", and", ";", ",", " and");
@@ -405,7 +407,8 @@ public final class DeterministicContractExtractors {
     private static boolean isNonConceptAlias(String term) {
         var upper = term.toUpperCase(Locale.ROOT);
         return DEFINITION_ALIASES.contains(upper)
-                || upper.endsWith(" PARTY") || upper.endsWith(" PARTIES");
+                || upper.endsWith(" PARTY") || upper.endsWith(" PARTIES")
+                || upper.endsWith(" PROVIDER");
     }
 
     private String definitionText(String slice, boolean last) {

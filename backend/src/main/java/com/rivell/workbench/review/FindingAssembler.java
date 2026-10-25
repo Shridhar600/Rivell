@@ -534,7 +534,10 @@ public final class FindingAssembler {
                     openEnded.explanation(), absenceSubject, evidence));
         }
         claims.add(FindingClaim.of(claims.size(), ClaimKind.RECOMMENDATION,
-                recommendation(action, escalation, drafting), absenceSubject, evidence));
+                partiallyWithinFallback(primary) && action == ProposedAction.NO_ACTION
+                        ? "Decide whether the clause is acceptable without these terms, or ask for them."
+                        : recommendation(action, escalation, drafting),
+                absenceSubject, evidence));
         var ordinals = new int[claims.size()];
         for (var index = 0; index < claims.size(); index++) {
             ordinals[index] = claims.get(index).ordinal();

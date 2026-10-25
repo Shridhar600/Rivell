@@ -99,7 +99,8 @@ final class FallbackConditionChecker {
                 return new Result(Result.INVALID, listed, List.of(), execution.executionId());
             }
             var grouped = listed ? conditions : asSingleGroup(conditions);
-            return new Result(outcome(grouped), listed, grouped, execution.executionId());
+            return new Result(listed ? outcome(grouped, ask.fallbackCount()) : Result.WITHIN,
+                    listed, grouped, execution.executionId());
         } catch (ProviderProtocolException e) {
             return Result.failed(Result.INVALID);
         } catch (RuntimeException e) {
@@ -118,6 +119,7 @@ final class FallbackConditionChecker {
             return List.of();
         }
         var haystack = ask.clause() + "\n" + String.join("\n", ask.facts());
+        var fallbackWords = fallbackLines(ask);
         var conditions = new ArrayList<FallbackCondition>();
         for (var line : lines.split("\\R")) {
             var matcher = LINE.matcher(line);
@@ -128,7 +130,8 @@ final class FallbackConditionChecker {
             if (ask.fallbackCount() != null && (fallback < 1 || fallback > ask.fallbackCount())) {
                 continue;
             }
-            if (!LlmAdjudicator.quoted(matcher.group(5).strip(), ask.position())) {
+            if (matcher.group(4).isBlank()
+                    || !LlmAdjudicator.quoted(matcher.group(5).strip(), fallbackWords)) {
                 continue;
             }
             var status = matcher.group(2).toUpperCase(Locale.ROOT);
@@ -142,6 +145,19 @@ final class FallbackConditionChecker {
         return conditions;
     }
 
+    /**
+     * The words a condition may be grounded in: the position's "Fallback N:" lines when it lists
+     * fallbacks, so a condition cannot be lifted from the preferred or walk-away wording; the
+     * whole position for a prose position.
+     */
+    private static String fallbackLines(Ask ask) {
+        if (!Boolean.TRUE.equals(ask.listed())) {
+            return ask.position();
+        }
+        return String.join("\n", ask.position().lines()
+                .filter(line -> line.startsWith("Fallback")).toList());
+    }
+
     /** With no fallback listed there is one condition group, the preferred position, whatever the model numbered it. */
     private static List<FallbackCondition> asSingleGroup(List<FallbackCondition> conditions) {
         return conditions.stream()
@@ -151,23 +167,23 @@ final class FallbackConditionChecker {
     }
 
     /**
-     * PARTIAL when no listed fallback has all its conditions MET and at least one grounded condition
-     * is NOT_STATED or UNMET; WITHIN otherwise. An UNKNOWN condition never makes a fallback partial.
+     * PARTIAL when every listed fallback was reported and each has a grounded condition that is
+     * NOT_STATED or UNMET; WITHIN otherwise. A fallback with no such shortfall still holds, and a
+     * listed fallback the model did not report is never counted as failed.
      */
-    private static String outcome(List<FallbackCondition> conditions) {
-        var shortfall = conditions.stream().anyMatch(condition ->
-                FallbackConditionSpecs.NOT_STATED.equals(condition.status())
-                        || FallbackConditionSpecs.UNMET.equals(condition.status()));
-        if (!shortfall) {
+    private static String outcome(List<FallbackCondition> conditions, Integer fallbackCount) {
+        var shortfall = new LinkedHashMap<Integer, Boolean>();
+        for (var condition : conditions) {
+            shortfall.merge(condition.fallback(),
+                    FallbackConditionSpecs.NOT_STATED.equals(condition.status())
+                            || FallbackConditionSpecs.UNMET.equals(condition.status()),
+                    Boolean::logicalOr);
+        }
+        if (fallbackCount != null && shortfall.size() < fallbackCount) {
             return Result.WITHIN;
         }
-        var fullyMet = new LinkedHashMap<Integer, Boolean>();
-        for (var condition : conditions) {
-            fullyMet.merge(condition.fallback(), FallbackConditionSpecs.MET.equals(condition.status()),
-                    Boolean::logicalAnd);
-        }
-        return fullyMet.values().stream().anyMatch(Boolean::booleanValue)
-                ? Result.WITHIN : Result.PARTIAL;
+        return !shortfall.isEmpty() && shortfall.values().stream().allMatch(Boolean::booleanValue)
+                ? Result.PARTIAL : Result.WITHIN;
     }
 
     private static String capped(String text) {
