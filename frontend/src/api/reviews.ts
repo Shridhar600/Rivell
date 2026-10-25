@@ -284,6 +284,17 @@ export type FindingClaim = {
   evidenceItemIds: string[]
 }
 
+export type FallbackConditionQuality = {
+  /** The fallback number the condition belongs to, in the position's own order. */
+  fallback: number
+  /** The condition in a short phrase, as the check stated it. */
+  condition: string
+  /** MET, UNMET, NOT_STATED or UNKNOWN. */
+  status: string
+  /** The clause or contract-fact words the status rests on; null when there is none. */
+  quote: string | null
+}
+
 export type FindingQuality = {
   sufficiency: string | null
   verificationOutcome: string | null
@@ -323,6 +334,10 @@ export type FindingQuality = {
   wordingFitVerdict: string | null
   /** The fit check's code-owned reason for that verdict. */
   wordingFitReason: string | null
+  /** P3's code-owned state: WITHIN when a listed fallback is fully met, PARTIAL when one is not. */
+  fallbackConditionsOutcome: string | null
+  /** P3: the conditions of the listed fallback, each with the words the status rests on. */
+  fallbackConditions: FallbackConditionQuality[]
   /** Omission check: the estimate that the playbook position requires the provision, 0–1. */
   presenceProbability: number | null
   /** The typed approval rule behind an escalation; null when no rule applies. */
@@ -778,6 +793,16 @@ function parseClaim(value: unknown, what: string): FindingClaim {
   }
 }
 
+function parseFallbackCondition(value: unknown, what: string): FallbackConditionQuality {
+  const condition = asRecord(value, what)
+  return {
+    fallback: readOptionalNumber(condition, 'fallback', what),
+    condition: readString(condition, 'condition', what),
+    status: readOptionalNullableString(condition, 'status', what) ?? 'UNKNOWN',
+    quote: readOptionalNullableString(condition, 'quote', what),
+  }
+}
+
 function parseQuality(value: unknown, what: string): FindingQuality | null {
   if (value === null || value === undefined) return null
   const quality = asRecord(value, what)
@@ -814,6 +839,11 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
     spottedReason: readOptionalNullableString(quality, 'spottedReason', what),
     wordingFitVerdict: readOptionalNullableString(quality, 'wordingFitVerdict', what),
     wordingFitReason: readOptionalNullableString(quality, 'wordingFitReason', what),
+    fallbackConditionsOutcome: readOptionalNullableString(quality, 'fallbackConditionsOutcome', what),
+    fallbackConditions:
+      quality.fallbackConditions === null || quality.fallbackConditions === undefined
+        ? []
+        : readArray(quality, 'fallbackConditions', what, parseFallbackCondition),
     presenceProbability:
       presenceProbability !== null && presenceProbability >= 0 && presenceProbability <= 1
         ? presenceProbability

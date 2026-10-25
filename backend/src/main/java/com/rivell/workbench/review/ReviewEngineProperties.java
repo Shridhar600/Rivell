@@ -17,7 +17,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * changes: {@code severity.agreedWorseCategory} (P1: an agreed second opinion lends its category
  * when it is worse), {@code routing.withinSplitMargin} (P2: a WITHIN_FALLBACK judgement whose
  * BEYOND and WALK_AWAY mass reaches the margin also gets a second opinion; negative turns it off),
- * {@code fallbackConditions} (P3: a condition-by-condition check of every final WITHIN_FALLBACK).
+ * {@code fallbackConditions} (P3: a condition-by-condition check of every final WITHIN_FALLBACK;
+ * on by default, it reports the conditions on the finding and never changes the category).
  *
  * <p>{@code maxTransientFailures}: how many transient infrastructure failures one analysis run may
  * survive before it is failed terminally (default 3; 0 makes every transient failure terminal).
@@ -67,13 +68,13 @@ public record ReviewEngineProperties(
     }
 
     /**
-     * P3: the condition-by-condition check; at most {@code maxChecks} calls per analysis run. Off by
-     * default: on gpt-6-luna it raised more compliant clauses than planted issues.
+     * P3: the condition-by-condition check; at most {@code maxChecks} calls per analysis run. On by
+     * default: it reports the fallback's conditions on the finding and never changes the category.
      */
     public record FallbackConditions(Boolean enabled, Integer maxChecks) {
 
         public FallbackConditions {
-            enabled = enabled == null ? Boolean.FALSE : enabled;
+            enabled = enabled == null ? Boolean.TRUE : enabled;
             maxChecks = maxChecks == null ? 40 : maxChecks;
             if (maxChecks < 0) {
                 throw new IllegalArgumentException(

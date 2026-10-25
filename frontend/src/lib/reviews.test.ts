@@ -43,6 +43,8 @@ const quality = (overrides: Partial<FindingQuality>): FindingQuality => ({
   spottedReason: null,
   wordingFitVerdict: null,
   wordingFitReason: null,
+  fallbackConditionsOutcome: null,
+  fallbackConditions: [],
   fitVerdict: null,
   fitReason: null,
   presenceProbability: null,

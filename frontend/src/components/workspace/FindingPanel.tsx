@@ -18,6 +18,7 @@ import {
   decidedByLabel,
   escalateIfLine,
   escalateIfText,
+  fallbackConditionStatusLabel,
   findingGapText,
   findingIssueLabel,
   findingPlaybookRule,
@@ -247,6 +248,9 @@ export function FindingPanel(props: Props) {
   // A within-fallback finding is a note, not a defect. It becomes an approval question only
   // when a typed rule says the fallback needs approval (council §A.3), never from a trigger text.
   const withinFallback = finding.issueFamily === 'POSITION_ACCEPTABLE_FALLBACK'
+  const partialFallback =
+    withinFallback && finding.quality?.fallbackConditionsOutcome === 'PARTIAL'
+  const fallbackConditions = finding.quality?.fallbackConditions ?? []
   const approval = approvalSummary(finding.quality)
   const approvalConflict = approvalConflictLine(approval)
   const escalateIf = escalateIfLine(approval)
@@ -438,7 +442,7 @@ export function FindingPanel(props: Props) {
             </p>
           ) : null}
 
-          {withinFallback && !approval ? (
+          {withinFallback && !partialFallback && !approval ? (
             <p className="rv-ws-note">
               <b>This is a note, not a problem.</b> The clause departs from the preferred position
               but stays within an acceptable fallback; you may accept it and record your reason.
@@ -518,6 +522,27 @@ export function FindingPanel(props: Props) {
                 onOpenSource={props.onOpenSource}
                 caption={finding.quality?.foundBy === 'SEARCH' ? SEARCH_CAPTION : null}
               />
+            ) : null}
+
+            {fallbackConditions.length > 0 ? (
+              <div className="rv-ws-sec" data-testid="fallback-conditions">
+                <div className="rv-ws-sec-h">Fallback conditions</div>
+                <ul className="rv-ws-conds">
+                  {fallbackConditions.map((condition, index) => (
+                    <li key={`${condition.fallback}-${index}`}>
+                      <span className="rv-ws-cond-status">
+                        {fallbackConditionStatusLabel(condition.status)}
+                      </span>
+                      <span className="rv-ws-cond-text">
+                        {condition.condition}
+                        {condition.quote ? (
+                          <span className="rv-ws-caption"> “{condition.quote}”</span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
 
             {finding.evidenceItems.length > 0 ? (

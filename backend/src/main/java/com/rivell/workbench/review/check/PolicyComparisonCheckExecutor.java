@@ -30,7 +30,6 @@ import com.rivell.workbench.review.ApprovedDraftingPayload;
 import com.rivell.workbench.review.CheckMechanism;
 import com.rivell.workbench.review.ClauseTopics;
 import com.rivell.workbench.review.DeviationUncertainPayload;
-import com.rivell.workbench.review.FallbackConditionSpecs;
 import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.OpenEndedAnalysisPayload;
 import com.rivell.workbench.review.OurSide;
@@ -68,9 +67,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /** Severity R3 lever tags (P7) and the route reason of a position P2 sent to the second opinion. */
     private static final String P1 = "P1";
     private static final String P2 = "P2";
-    private static final String P3 = "P3";
     private static final String P2_WITHIN_SPLIT = "P2_WITHIN_SPLIT";
-    private static final int MAX_UNKNOWN_NOTES = 5;
 
     private final SemanticDecisionService decisionService;
     private final PositionLanguageGenerator languageGenerator;
@@ -441,9 +438,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * Severity R3 on one judged position. P1: an agreed second opinion lends its category when it is
      * worse. P3: a final WITHIN_FALLBACK on the clause's own topic is checked against the conditions of
-     * its fallback; a quoted unmet condition in every listed fallback makes it BEYOND_FALLBACK, nothing
-     * else changes it. {@code levers} lists the levers whose work this finding's category or kind depends
-     * on, so a counterfactual can drop them; a lever that could not answer changes nothing.
+     * its fallback; the conditions are recorded on the finding and never change its category.
+     * {@code levers} lists the levers whose work this finding's category or kind depends on, so a
+     * counterfactual can drop them; a lever that could not answer changes nothing.
      */
     private Resolution resolve(
             ReviewCheckContext context, ClauseSemantics clause,
@@ -480,10 +477,6 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         if (fallbackConditionsEnabled && PolicyComparisonSpecs.WITHIN_FALLBACK.equals(category)
                 && (judged.searched() || !governsOnlySecondaryTopic(clause, judged.position()))) {
             conditions = checkConditions(context, clause, state, judged, contractFacts);
-            if (conditions.raises()) {
-                category = PolicyComparisonSpecs.BEYOND_FALLBACK;
-                levers.add(P3);
-            }
         }
         return new Resolution(category, List.copyOf(levers), routeReason, secondOpinionCategory, conditions);
     }
@@ -660,9 +653,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                         execution.executionId())
                 .resolvedModel(execution.metadata().resolvedModel())
                 .usage(execution.metadata().usage())
-                .generativeExecution(resolution.conditions() != null && resolution.conditions().raises()
-                        ? resolution.conditions().executionId()
-                        : opinion == null ? null : opinion.executionId())
+                .generativeExecution(opinion == null ? null : opinion.executionId())
                 .quality(flaggedQuality(judged, secondaryTopic,
                         opinion == null ? JEV : SECOND_OPINION, resolution, opinion,
                         attempt == null ? null : attempt.failure(), fit))
@@ -1055,7 +1046,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         if (!resolution.levers().isEmpty()) {
             quality.put("levers", resolution.levers());
             quality.put("categoryBeforeLevers", judged.judgement().category());
-            // the signal links one generation; when P3 raised it, the second opinion's is kept here
+            // the signal links one generation; when a lever changed the category, the second
+            // opinion's is kept here
             if (opinion != null && opinion.executionId() != null) {
                 quality.put("secondOpinionExecutionId", opinion.executionId().toString());
             }
@@ -1068,16 +1060,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 if (conditions.executionId() != null) {
                     quality.put("fallbackConditionsExecutionId", conditions.executionId().toString());
                 }
-                var unknown = conditions.unknown().stream()
-                        .map(FallbackConditionChecker.Condition::text).limit(MAX_UNKNOWN_NOTES).toList();
-                if (!unknown.isEmpty()) {
-                    quality.put("fallbackConditionsUnknown", unknown);
-                }
-                if (conditions.raises()) {
-                    quality.put("fallbackConditionsUnmet", conditions.conditions().stream()
-                            .filter(condition -> FallbackConditionSpecs.UNMET.equals(condition.status()))
-                            .map(condition -> condition.text() + " (\"" + condition.quote() + "\")").toList());
-                }
+                quality.put("fallbackConditions", conditions.conditions());
             }
         }
         return quality;

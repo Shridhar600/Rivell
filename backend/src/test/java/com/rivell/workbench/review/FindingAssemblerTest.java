@@ -284,13 +284,42 @@ class FindingAssemblerTest {
     }
 
     @Test
-    void p3AFindingRaisedByTheConditionCheckIsMediumAndRestorableToLow() {
-        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.BEYOND_FALLBACK, false,
-                Map.of("levers", List.of("P3"), "categoryBeforeLevers", PolicyComparisonSpecs.WITHIN_FALLBACK))),
-                NOW).get(0);
+    void aPartialFallbackIsLowAndReviewRequiredAndNamesWhatTheClauseDoesNotState() {
+        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
+                Map.of("fallbackConditionsOutcome", FallbackConditionSpecs.PARTIAL,
+                        "fallbackConditions", List.of(
+                                Map.of("fallback", 1, "condition", "a thirty (30) day cure period",
+                                        "status", FallbackConditionSpecs.MET,
+                                        "quote", "thirty (30) days' notice"),
+                                Map.of("fallback", 1,
+                                        "condition", "the right to suspend performance before termination",
+                                        "status", FallbackConditionSpecs.NOT_STATED))))), NOW).get(0);
 
-        assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
-        assertThat(finding.quality()).containsEntry("severityWithoutLevers", "LOW");
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.REVIEW_REQUIRED);
+        assertThat(finding.observationText()).isEqualTo(
+                "Partly within your fallback. The clause does not state: the right to suspend "
+                        + "performance before termination. Check whether it is elsewhere in the contract.");
+        assertThat(finding.observationText()).doesNotContain("accept and note", "missing");
+        assertThat(finding.quality())
+                .containsEntry("fallbackConditionsOutcome", FallbackConditionSpecs.PARTIAL)
+                .containsKey("fallbackConditions")
+                .doesNotContainKeys("levers", "fallbackConditionsUnknown");
+    }
+
+    @Test
+    void aFullyMetWithinFallbackKeepsTodaysNote() {
+        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
+                Map.of("fallbackConditionsOutcome", "WITHIN",
+                        "fallbackConditions", List.of(Map.of("fallback", 1, "condition", "the law is Swiss",
+                                "status", FallbackConditionSpecs.MET,
+                                "quote", "laws of Switzerland"))))), NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.INFORMATIONAL);
+        assertThat(finding.observationText()).isEqualTo(
+                "The clause departs from the preferred position but stays within a listed fallback; "
+                        + "accept and note.");
     }
 
     @Test
@@ -404,18 +433,6 @@ class FindingAssemblerTest {
                         + "together. Please check both clauses yourself.");
         assertThat(classification.observationText() + carveOut.observationText())
                 .doesNotContain("bounded", "Please take a look");
-    }
-
-    @Test
-    void unknownFallbackConditionsAddALookNoteAndNeverChangeTheSeverity() {
-        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
-                Map.of("fallbackConditionsUnknown", List.of("the work is delivered from our UK studio")))),
-                NOW).get(0);
-
-        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
-        assertThat(finding.claims()).anySatisfy(claim -> assertThat(claim.text())
-                .contains("could not be checked").contains("the work is delivered from our UK studio"));
-        assertThat(finding.quality()).doesNotContainKey("levers");
     }
 
     private static final String LIBRARY_WORDING =

@@ -130,6 +130,17 @@ export function comparisonCategoryLabel(category: string): string {
   return COMPARISON_CATEGORY_LABELS[category] ?? humanizeCode(category)
 }
 
+const FALLBACK_CONDITION_STATUS_LABELS: Record<string, string> = {
+  MET: 'Stated',
+  UNMET: 'Not met',
+  NOT_STATED: 'Not stated',
+  UNKNOWN: 'Could not check',
+}
+
+export function fallbackConditionStatusLabel(status: string): string {
+  return FALLBACK_CONDITION_STATUS_LABELS[status] ?? humanizeCode(status)
+}
+
 /**
  * The comparison's own assessment in one line: the code-owned category, then how sure Rivell is,
  * in words. A percentage read as false precision to lawyers, so the model's flag probability (or
