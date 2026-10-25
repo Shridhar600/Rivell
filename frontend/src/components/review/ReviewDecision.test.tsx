@@ -48,6 +48,7 @@ function summaryOf(detail: FindingDetail): FindingSummary {
     proposedAction: detail.proposedAction,
     proposedLanguageSource: detail.proposedLanguageSource,
     relatedPosition: detail.relatedPosition,
+    partlyWithinFallback: detail.partlyWithinFallback,
     decidedBy: detail.decidedBy,
     addedBy: detail.addedBy,
     firstReviewCategory: detail.firstReviewCategory,

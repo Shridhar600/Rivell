@@ -191,6 +191,7 @@ export const fixtureClauseFindingSummary = {
   proposedAction: 'USE_APPROVED_FALLBACK',
   proposedLanguageSource: 'APPROVED_DRAFTING',
   relatedPosition: false,
+  partlyWithinFallback: false,
   createdAt: '2026-09-25T09:01:10Z',
 }
 
@@ -208,6 +209,7 @@ export const fixtureAbsenceFindingSummary = {
   proposedAction: 'ADD_REQUIRED_PROVISION',
   proposedLanguageSource: 'NONE',
   relatedPosition: false,
+  partlyWithinFallback: false,
   createdAt: '2026-09-25T09:01:10Z',
 }
 
@@ -369,6 +371,7 @@ export const fixturePartialFallbackFindingSummary = {
   ...fixtureWithinFallbackFindingSummary,
   id: 'f-19',
   reviewClassification: 'REVIEW_REQUIRED',
+  partlyWithinFallback: true,
 }
 
 export const fixturePartialFallbackFindingDetail = {
@@ -407,6 +410,7 @@ export const fixtureRelatedPositionFindingSummary = {
   issueFamily: 'POSITION_WALK_AWAY',
   observationKind: 'POSITION_WALK_AWAY',
   relatedPosition: true,
+  partlyWithinFallback: false,
 }
 
 export const fixtureRelatedPositionFindingDetail = {

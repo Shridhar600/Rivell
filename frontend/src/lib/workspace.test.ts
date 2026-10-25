@@ -36,6 +36,7 @@ function finding(id: string, overrides: Partial<FindingSummary> = {}): FindingSu
     proposedAction: 'ESCALATE_TO_HUMAN',
     proposedLanguageSource: 'NONE',
     relatedPosition: false,
+    partlyWithinFallback: false,
     decidedBy: null,
     addedBy: null,
     firstReviewCategory: null,

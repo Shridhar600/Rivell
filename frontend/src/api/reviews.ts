@@ -303,6 +303,8 @@ export type FindingSummary = {
   proposedLanguageSource: string
   /** True when the position governs a topic the clause only touches: a LOW note, not a breach. */
   relatedPosition: boolean
+  /** True when the fallback's conditions are only partly met: a review item, not a plain note. */
+  partlyWithinFallback: boolean
   /** Who decided: 'JEV' (Rivell's first review), 'SECOND_OPINION' or 'NEEDS_YOUR_LOOK' (the user decides). Null for other findings. */
   decidedBy: string | null
   createdAt: string
@@ -806,6 +808,7 @@ function parseFindingSummary(value: unknown, what: string): FindingSummary {
     proposedLanguageSource:
       readOptionalNullableString(finding, 'proposedLanguageSource', what) ?? 'UNKNOWN',
     relatedPosition: readOptionalBoolean(finding, 'relatedPosition', what),
+    partlyWithinFallback: readOptionalBoolean(finding, 'partlyWithinFallback', what),
     decidedBy: readOptionalNullableString(finding, 'decidedBy', what),
     createdAt: readOptionalNullableString(finding, 'createdAt', what) ?? '',
     addedBy: readOptionalNullableString(finding, 'addedBy', what),

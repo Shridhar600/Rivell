@@ -697,6 +697,7 @@ public class ReviewApiService {
                 finding.severity(), finding.reviewClassification(), finding.proposedAction(),
                 finding.proposedLanguageSource(),
                 Boolean.TRUE.equals(finding.quality().get("secondaryTopic")),
+                "PARTIAL".equals(finding.quality().get("fallbackConditionsOutcome")),
                 finding.quality().get("route") instanceof String route ? route : null,
                 finding.createdAt(), addedBy(finding),
                 firstReviewCategory(finding), positionLabel(finding));

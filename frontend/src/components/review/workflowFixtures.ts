@@ -16,6 +16,7 @@ export const fixtureAcceptableFinding = {
   proposedAction: 'USE_APPROVED_FALLBACK',
   proposedLanguageSource: 'APPROVED_DRAFTING',
   relatedPosition: false,
+  partlyWithinFallback: false,
   decidedBy: null,
   addedBy: null,
   firstReviewCategory: null,
