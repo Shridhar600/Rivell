@@ -3,6 +3,7 @@ package com.rivell.workbench.knowledge;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
@@ -17,6 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.unit.DataSize;
 
 import com.rivell.workbench.foundation.DocumentStorage;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.foundation.FilenameSanitizer;
 import com.rivell.workbench.foundation.StorageKey;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
@@ -49,6 +51,7 @@ public class KnowledgeIngestionService {
     private final TransactionTemplate transactionTemplate;
     private final IdentityProvider identityProvider;
     private final AuthorizationService authorizationService;
+    private final DocumentWorkLimiter documentWorkLimiter;
     private final DataSize maxFileSize;
 
     public KnowledgeIngestionService(
@@ -59,6 +62,7 @@ public class KnowledgeIngestionService {
             TransactionTemplate transactionTemplate,
             IdentityProvider identityProvider,
             AuthorizationService authorizationService,
+            DocumentWorkLimiter documentWorkLimiter,
             DataSize maxFileSize) {
         this.documentStorage = documentStorage;
         this.structureExtractors = List.copyOf(structureExtractors);
@@ -67,9 +71,16 @@ public class KnowledgeIngestionService {
         this.transactionTemplate = transactionTemplate;
         this.identityProvider = identityProvider;
         this.authorizationService = authorizationService;
+        this.documentWorkLimiter = documentWorkLimiter;
         this.maxFileSize = maxFileSize;
     }
 
+    /**
+     * The document-work slot is taken before the bytes are read, stored or recorded (DW-095). A
+     * busy limit therefore refuses the upload before any artifact row or file exists. The slot
+     * covers only the file work (read, store, structure extraction); it is released before the
+     * semantic compile, which can take minutes and does not hold the document in memory.
+     */
     public KnowledgeArtifact ingest(
             String filename, String contentType, ArtifactType artifactType,
             ArtifactManifest manifest, InputStream source)
@@ -78,7 +89,38 @@ public class KnowledgeIngestionService {
         if (!authorizationService.isAuthorized(identity, Permissions.KNOWLEDGE_UPLOAD)) {
             throw new UnauthorizedKnowledgeAccessException(identity.userId());
         }
+        Staged staged;
+        try {
+            staged = documentWorkLimiter.run(() -> {
+                try {
+                    return stageWithinLimit(identity.organizationId(), filename, contentType,
+                            artifactType, manifest, source);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        } catch (UncheckedIOException e) {
+            throw e.getCause();
+        }
+        try {
+            return complete(staged);
+        } catch (RuntimeException e) {
+            markFailedQuietly(staged.artifact().id(), e);
+            throw e;
+        }
+    }
 
+    /** What the file work produced, handed from inside the document slot to the compile after it. */
+    private record Staged(
+            KnowledgeArtifact artifact,
+            StructureExtraction extraction,
+            KnowledgeDocumentTitle.DocumentTitle documentTitle,
+            KnowledgeCompiler.CompiledKnowledge compiled) {
+    }
+
+    private Staged stageWithinLimit(
+            UUID organizationId, String filename, String contentType, ArtifactType artifactType,
+            ArtifactManifest manifest, InputStream source) throws IOException {
         var safeFilename = FilenameSanitizer.sanitize(
                 filename, Set.of(DOCX_EXTENSION, XLSX_EXTENSION));
         var bytes = readBounded(source, maxFileSize.toBytes());
@@ -88,7 +130,7 @@ public class KnowledgeIngestionService {
         var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         var artifactId = UUID.randomUUID();
         var storageKey = new StorageKey(
-                identity.organizationId() + "/knowledge/" + artifactId + extensionOf(safeFilename));
+                organizationId + "/knowledge/" + artifactId + extensionOf(safeFilename));
 
         documentStorage.store(storageKey, new ByteArrayInputStream(bytes));
 
@@ -96,7 +138,7 @@ public class KnowledgeIngestionService {
                 ? new ArtifactManifest(Set.of(), null, null, null, null, null, null, null, null)
                 : manifest;
         var artifact = new KnowledgeArtifact(
-                artifactId, identity.organizationId(), artifactType,
+                artifactId, organizationId, artifactType,
                 safeFilename, resolvedContentType(safeFilename, contentType),
                 bytes.length, sha256, storageKey.value(),
                 effectiveManifest, IngestStatus.EXTRACTING, null, List.of(), null, now, null);
@@ -111,60 +153,76 @@ public class KnowledgeIngestionService {
             var compiled = extraction.status() == IngestStatus.FAILED
                     ? new KnowledgeCompiler.CompiledKnowledge(List.of(), List.of(), extraction.warnings())
                     : KnowledgeCompiler.compile(artifact, extraction.nodes());
-
-            var initialAssessment = artifact.assessment();
-            var initialCandidates = compiled.candidates();
-            var semanticAvailable = true;
-            ArtifactTypeAssessment assessment = initialAssessment;
-            List<KnowledgeCandidate> candidates = initialCandidates;
-            List<ExtractionUnit> units = compiled.units();
-            if (extraction.status() != IngestStatus.FAILED && !compiled.units().isEmpty()) {
-                var publishedBefore = repository.findPublishedCandidates(identity.organizationId());
-                var semantic = semanticCompilation.compile(
-                        artifact, compiled.units(), compiled.candidates(), publishedBefore);
-                semanticAvailable = semantic.semanticAvailable();
-                assessment = semantic.assessment();
-                candidates = semantic.candidates();
-                units = semantic.units();
-            }
-            var finalAssessment = assessment;
-            var finalCandidates = candidates;
-            var finalUnits = units;
-
-            var outcomeWarnings = new ArrayList<>(extraction.warnings());
-            if (!semanticAvailable) {
-                outcomeWarnings.add("SEMANTIC_COMPILATION_UNAVAILABLE");
-            }
-            var outcomeStatus = extraction.status();
-            transactionTemplate.executeWithoutResult(status -> {
-                repository.updateIngestOutcome(
-                        artifactId, extraction.parserVersion(), outcomeStatus,
-                        outcomeWarnings);
-                if (extraction.coverage() != null) {
-                    repository.updateParseCoverage(artifactId, extraction.coverage());
-                }
-                if (finalAssessment != null) {
-                    repository.updateArtifactAssessment(artifactId, finalAssessment);
-                }
-                if (documentTitle != null) {
-                    repository.updateDocumentTitle(artifactId, documentTitle.text());
-                }
-                if (!extraction.nodes().isEmpty()) {
-                    repository.insertNodes(artifactId, extraction.nodes());
-                    repository.insertUnits(artifactId, finalUnits);
-                    repository.insertCandidates(artifactId, finalCandidates);
-                }
-            });
-
-            return artifact
-                    .withDocumentTitle(documentTitle == null ? null : documentTitle.text())
-                    .withAssessment(finalAssessment)
-                    .withIngestOutcome(
-                            extraction.parserVersion(), outcomeStatus, outcomeWarnings);
+            return new Staged(artifact, extraction, documentTitle, compiled);
         } catch (RuntimeException e) {
             markFailedQuietly(artifactId, e);
             throw e;
         }
+    }
+
+    private KnowledgeArtifact complete(Staged staged) {
+        var artifact = staged.artifact();
+        var artifactId = artifact.id();
+        try (var ignored = org.slf4j.MDC.putCloseable("artifactId", artifactId.toString())) {
+            return completeInScope(staged, artifact, artifactId);
+        }
+    }
+
+    private KnowledgeArtifact completeInScope(Staged staged, KnowledgeArtifact artifact,
+            UUID artifactId) {
+        var organizationId = artifact.organizationId();
+        var extraction = staged.extraction();
+        var documentTitle = staged.documentTitle();
+        var compiled = staged.compiled();
+        var initialAssessment = artifact.assessment();
+        var initialCandidates = compiled.candidates();
+        var semanticAvailable = true;
+        ArtifactTypeAssessment assessment = initialAssessment;
+        List<KnowledgeCandidate> candidates = initialCandidates;
+        List<ExtractionUnit> units = compiled.units();
+        if (extraction.status() != IngestStatus.FAILED && !compiled.units().isEmpty()) {
+            var publishedBefore = repository.findPublishedCandidates(organizationId);
+            var semantic = semanticCompilation.compile(
+                    artifact, compiled.units(), compiled.candidates(), publishedBefore);
+            semanticAvailable = semantic.semanticAvailable();
+            assessment = semantic.assessment();
+            candidates = semantic.candidates();
+            units = semantic.units();
+        }
+        var finalAssessment = assessment;
+        var finalCandidates = candidates;
+        var finalUnits = units;
+
+        var outcomeWarnings = new ArrayList<>(extraction.warnings());
+        if (!semanticAvailable) {
+            outcomeWarnings.add("SEMANTIC_COMPILATION_UNAVAILABLE");
+        }
+        var outcomeStatus = extraction.status();
+        transactionTemplate.executeWithoutResult(status -> {
+            repository.updateIngestOutcome(
+                    artifactId, extraction.parserVersion(), outcomeStatus,
+                    outcomeWarnings);
+            if (extraction.coverage() != null) {
+                repository.updateParseCoverage(artifactId, extraction.coverage());
+            }
+            if (finalAssessment != null) {
+                repository.updateArtifactAssessment(artifactId, finalAssessment);
+            }
+            if (documentTitle != null) {
+                repository.updateDocumentTitle(artifactId, documentTitle.text());
+            }
+            if (!extraction.nodes().isEmpty()) {
+                repository.insertNodes(artifactId, extraction.nodes());
+                repository.insertUnits(artifactId, finalUnits);
+                repository.insertCandidates(artifactId, finalCandidates);
+            }
+        });
+
+        return artifact
+                .withDocumentTitle(documentTitle == null ? null : documentTitle.text())
+                .withAssessment(finalAssessment)
+                .withIngestOutcome(
+                        extraction.parserVersion(), outcomeStatus, outcomeWarnings);
     }
 
     /**

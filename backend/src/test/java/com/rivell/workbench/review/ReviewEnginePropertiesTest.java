@@ -27,12 +27,13 @@ class ReviewEnginePropertiesTest {
     }
 
     @Test
-    void theSeverityR3LeversDefaultOnWithTheMeasuredMargin() {
+    void theSecondOpinionLeverDefaultsOnAndTheFallbackConditionLeverOff() {
+        // P3 measured on three luna runs: +0/0/1 serious catches for +1/1/2 serious false alarms
         var properties = new ReviewEngineProperties(null, null, null, null, null);
 
         assertThat(properties.severity().agreedWorseCategory()).isTrue();
         assertThat(properties.routing().withinSplitMargin()).isEqualTo(0.45);
-        assertThat(properties.fallbackConditions().enabled()).isTrue();
+        assertThat(properties.fallbackConditions().enabled()).isFalse();
         assertThat(properties.fallbackConditions().maxChecks()).isEqualTo(40);
     }
 
@@ -51,5 +52,24 @@ class ReviewEnginePropertiesTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ReviewEngineProperties.FallbackConditions(true, -1))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void theWholeReviewBudgetDefaultsToThirtyMinutesAndMustBePositive() {
+        assertThat(new ReviewEngineProperties(null, null, null, null, null).analysisBudget())
+                .isEqualTo(java.time.Duration.ofMinutes(30));
+        assertThatThrownBy(() -> new ReviewEngineProperties(null, null, null, null, null,
+                java.time.Duration.ZERO))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("analysis-budget");
+    }
+
+    @Test
+    void theTransientFailureLimitDefaultsToThreeAndMustNotBeNegative() {
+        assertThat(new ReviewEngineProperties(null, null, null, null, null).maxTransientFailures())
+                .isEqualTo(3);
+        assertThatThrownBy(() -> new ReviewEngineProperties(null, null, null, null, null, null, -1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("max-transient-failures");
     }
 }

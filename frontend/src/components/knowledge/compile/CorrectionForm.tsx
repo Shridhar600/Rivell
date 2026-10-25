@@ -1,11 +1,38 @@
 import { useId, type FormEvent, type ReactNode } from 'react'
-import { POSITION_ROLES, type ArtifactDetail, type Candidate, type PositionRole } from '../../../api/knowledge'
+import { AUTHORITY_LEVELS, POSITION_ROLES, type ArtifactDetail, type Candidate, type PositionRole } from '../../../api/knowledge'
 import { useTaxonomy } from '../../../api/taxonomy'
 import { humanizeCode } from '../../../lib/domainLabels'
 import { artifactFormat } from '../../../lib/knowledgeCatalog'
 import { POSITION_LABELS, formatPositions, proposedPositions, positionsDiverge, scopeDifferences } from '../../../lib/semantics'
 import type { SemanticDraft } from '../../../lib/semantics'
 import type { Correction } from './useCorrection'
+
+/** The one stance a rule is edited for; an empty set means fallback and walk-away. */
+const RULE_STANCE_OPTIONS = ['FALLBACK', 'PROHIBITED', 'BOTH'] as const
+
+function ruleStanceValue(stances: PositionRole[]): (typeof RULE_STANCE_OPTIONS)[number] {
+  if (stances.includes('PROHIBITED')) return 'PROHIBITED'
+  if (stances.includes('FALLBACK')) return 'FALLBACK'
+  return 'BOTH'
+}
+
+function stancesFromValue(value: (typeof RULE_STANCE_OPTIONS)[number]): PositionRole[] {
+  if (value === 'FALLBACK') return ['FALLBACK']
+  if (value === 'PROHIBITED') return ['PROHIBITED']
+  return []
+}
+
+const RULE_STANCE_LABELS: Record<(typeof RULE_STANCE_OPTIONS)[number], string> = {
+  FALLBACK: 'Fallback',
+  PROHIBITED: 'Walk-away',
+  BOTH: 'Fallback and walk-away',
+}
+
+const AUTHORITY_SOURCE_OPTIONS = {
+  ENTRY: 'Entry',
+  MATRIX: 'Approval matrix',
+  TABLE: 'Approval table',
+} as const satisfies Record<(typeof AUTHORITY_LEVELS)[number], string>
 
 /** A labelled control. The label is tied to the control by id, so each one has a real accessible name. */
 function Field({ label, hint, className, children }: { label: string; hint?: ReactNode; className?: string; children: (id: string) => ReactNode }) {
@@ -49,6 +76,23 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
     selectedIsLeaf || taxonomy.parents.some((parent) => parent.key === draft.concept)
 
   const semantic = (change: Partial<SemanticDraft>) => setDraft((previous) => ({ ...previous, semantic: { ...previous.semantic, ...change } }))
+  const rule = (index: number, change: Partial<SemanticDraft['authorityRules'][number]>) =>
+    semantic({
+      authorityRules: draft.semantic.authorityRules.map((entry, position) =>
+        position === index ? { ...entry, ...change } : entry,
+      ),
+    })
+  const removeRule = (index: number) =>
+    semantic({
+      authorityRules: draft.semantic.authorityRules.filter((_, position) => position !== index),
+    })
+  const addRule = () =>
+    semantic({
+      authorityRules: [
+        ...draft.semantic.authorityRules,
+        { approver: '', stances: ['FALLBACK'], condition: '', source: 'ENTRY', quote: null },
+      ],
+    })
   const scope = (key: keyof typeof draft.scope) => (event: { target: { value: string } }) =>
     setDraft((previous) => ({ ...previous, scope: { ...previous.scope, [key]: event.target.value } }))
   const togglePosition = (role: PositionRole) =>
@@ -141,6 +185,81 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
           <Field label="Escalate">
             {(id) => <input id={id} value={draft.semantic.escalationTrigger} disabled={pending} onChange={(event) => semantic({ escalationTrigger: event.target.value })} />}
           </Field>
+          <Field label="Preferred wording" hint="The preferred position exactly as the source states it. An empty field means the source states none.">
+            {(id) => (
+              <textarea id={id} rows={3} value={draft.semantic.preferredText} disabled={pending} onChange={(event) => semantic({ preferredText: event.target.value })} />
+            )}
+          </Field>
+          <Field label="Fallback wording" hint="One fallback per line, in source order. An empty field means the source states none.">
+            {(id) => (
+              <textarea id={id} rows={3} value={draft.semantic.fallbackTexts} disabled={pending} onChange={(event) => semantic({ fallbackTexts: event.target.value })} />
+            )}
+          </Field>
+          <Field label="Walk-away wording" hint="The walk-away position exactly as the source states it. An empty field means the source states none.">
+            {(id) => (
+              <textarea id={id} rows={3} value={draft.semantic.prohibitedText} disabled={pending} onChange={(event) => semantic({ prohibitedText: event.target.value })} />
+            )}
+          </Field>
+          <fieldset className="rv-kc-ef" disabled={pending}>
+            <legend>Approvals</legend>
+            <small>
+              An approval exists only when a rule here names an approver. Leave the list empty when the source states none.
+            </small>
+            {draft.semantic.authorityRules.map((entry, index) => (
+              <div className="rv-kc-grid" key={`rule-${index}`}>
+                <Field label="Approver">
+                  {(id) => (
+                    <input id={id} value={entry.approver} onChange={(event) => rule(index, { approver: event.target.value })} />
+                  )}
+                </Field>
+                <Field label="For">
+                  {(id) => (
+                    <select
+                      id={id}
+                      value={ruleStanceValue(entry.stances)}
+                      onChange={(event) =>
+                        rule(index, {
+                          stances: stancesFromValue(event.target.value as (typeof RULE_STANCE_OPTIONS)[number]),
+                        })
+                      }
+                    >
+                      {RULE_STANCE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {RULE_STANCE_LABELS[option]}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                <Field label="Condition, optional">
+                  {(id) => (
+                    <input id={id} value={entry.condition} onChange={(event) => rule(index, { condition: event.target.value })} />
+                  )}
+                </Field>
+                <Field label="Stated in">
+                  {(id) => (
+                    <select
+                      id={id}
+                      value={entry.source}
+                      onChange={(event) => rule(index, { source: event.target.value as SemanticDraft['authorityRules'][number]['source'] })}
+                    >
+                      {AUTHORITY_LEVELS.map((level) => (
+                        <option key={level} value={level}>
+                          {AUTHORITY_SOURCE_OPTIONS[level]}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                <button type="button" className="rv-lnk" onClick={() => removeRule(index)}>
+                  Remove this approval
+                </button>
+              </div>
+            ))}
+            <button type="button" className="rv-lnk" onClick={addRule}>
+              Add an approval
+            </button>
+          </fieldset>
           <Field label="Counsel approval">
             {(id) => (
               <select
@@ -199,7 +318,7 @@ export function CorrectionForm({ id, candidate, artifact, correction, onSubmit }
             <input value={draft.scope.partyPerspective} onChange={scope('partyPerspective')} />
           </label>
           <label>
-            Paper source
+            Whose template
             <input value={draft.scope.paperSource} onChange={scope('paperSource')} />
           </label>
           <label>

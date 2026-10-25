@@ -3,18 +3,23 @@ import type { FindingDetail, FindingQuality, PlaybookUsed } from '../api/reviews
 import {
   analysisWarningCheckLabel,
   analysisWarningMessage,
+  approvalConflictLine,
+  approvalSourceLabel,
+  approvalSummary,
   checkKeyLabel,
   clauseMarkLabel,
   clauseMarksLegend,
   coverageLimitationSummary,
   decidedByLabel,
+  escalateIfLine,
+  escalateIfText,
   findingGapText,
   findingIssueLabel,
   findingPlaybookRule,
   findingQuote,
-  NO_PLAYBOOK_COVERS,
+  knowledgeUsedText,
+  NO_PLAYBOOK_NOTICE,
   observationKindLabel,
-  playbooksUsedText,
 } from './reviews'
 
 const quality = (overrides: Partial<FindingQuality>): FindingQuality => ({
@@ -36,6 +41,10 @@ const quality = (overrides: Partial<FindingQuality>): FindingQuality => ({
   foundBy: null,
   spottedSeverity: null,
   spottedReason: null,
+  wordingFitVerdict: null,
+  wordingFitReason: null,
+  fitVerdict: null,
+  fitReason: null,
   presenceProbability: null,
   ...overrides,
 })
@@ -83,19 +92,38 @@ describe('a finding a reviewer added', () => {
   })
 })
 
-describe('playbooks used', () => {
-  it('names what the review froze, in the order it froze them', () => {
-    expect(playbooksUsedText([{ name: 'Commercial MSA Playbook' }, { name: 'Clause Library' }])).toBe(
-      'Commercial MSA Playbook, Clause Library',
+describe('knowledge used', () => {
+  const used = (name: string, artifactType = 'PLAYBOOK'): PlaybookUsed => ({
+    artifactId: name,
+    artifactType,
+    name,
+    publicationNumber: 1,
+  })
+
+  it('names what the review froze, with the kind of source beside it', () => {
+    expect(
+      knowledgeUsedText([
+        used('Commercial MSA Playbook'),
+        used('g-clause-library.xlsx', 'CLAUSE_LIBRARY'),
+      ]),
+    ).toBe('Commercial MSA Playbook (Playbook), g-clause-library.xlsx (Clause library)')
+  })
+
+  it('states the empty case plainly, so an unusual clause is not read as a policy review', () => {
+    expect(NO_PLAYBOOK_NOTICE).toBe(
+      'No playbook applied. General scan only; review the full contract.',
+    )
+    expect(knowledgeUsedText([])).toBe(NO_PLAYBOOK_NOTICE)
+  })
+
+  it('says no playbook applied when only a clause library was used', () => {
+    expect(knowledgeUsedText([used('g-clause-library.xlsx', 'CLAUSE_LIBRARY')])).toBe(
+      `g-clause-library.xlsx (Clause library). ${NO_PLAYBOOK_NOTICE}`,
     )
   })
 
-  it('states the empty case plainly', () => {
-    expect(playbooksUsedText([])).toBe(NO_PLAYBOOK_COVERS)
-  })
-
   it('shows nothing for a review that predates the freeze', () => {
-    expect(playbooksUsedText(null)).toBeNull()
+    expect(knowledgeUsedText(null)).toBeNull()
   })
 })
 
@@ -446,6 +474,15 @@ describe('findingPlaybookRule', () => {
       ),
     ).toBeNull()
   })
+
+  it('never labels a playbook-silent advisory "Policy unavailable"', () => {
+    expect(
+      findingIssueLabel({
+        issueFamily: 'POLICY_UNAVAILABLE',
+        observationKind: 'SPOTTED_IN_WHOLE_CONTRACT_READ',
+      }),
+    ).toBe('Not covered by your playbook')
+  })
 })
 
 describe('coverage notes and check labels', () => {
@@ -490,5 +527,79 @@ describe('coverage notes and check labels', () => {
       'Rivell is unsure',
     )
     expect(observationKindLabel('UNCERTAINTY:second_opinion_unavailable')).toBe('Not double-checked')
+  })
+
+  it('starts the approver with a capital, since the panel opens a sentence with it', () => {
+    expect(approvalSummary(quality({ escalationApprover: 'general counsel' }))?.approver).toBe(
+      'General counsel',
+    )
+  })
+
+  it('shows an approval only when a typed rule names an approver', () => {
+    // a trigger text alone is not an approval
+    expect(
+      approvalSummary(quality({ escalationCondition: 'Escalate above net 90' })),
+    ).toBeNull()
+
+    const summary = approvalSummary(
+      quality({
+        escalationApprover: 'Commercial Manager',
+        escalationCondition: 'Uncapped liability or consequential damages',
+        escalationSource: 'MATRIX',
+        escalationStance: 'FALLBACK',
+        escalationConflictApprover: 'General Counsel',
+        escalationConflictSource: 'ENTRY',
+      }),
+    )
+
+    expect(summary).toEqual({
+      approver: 'Commercial Manager',
+      condition: 'Uncapped liability or consequential damages',
+      source: 'MATRIX',
+      stance: 'FALLBACK',
+      conflict: { approver: 'General Counsel', source: 'ENTRY' },
+    })
+    expect(escalateIfLine(summary)).toBe(
+      'Escalate if: Uncapped liability or consequential damages.',
+    )
+    expect(escalateIfText('Escalate shorter periods for source code or customer data.')).toBe(
+      'shorter periods for source code or customer data',
+    )
+    expect(escalateIfText('Escalate to the named approver at a walk-away')).toBeNull()
+    expect(
+      escalateIfText('Escalate to general counsel before agreeing to any cap above the preferred position'),
+    ).toBe('agreeing to any cap above the preferred position')
+    expect(escalateIfText('  ')).toBeNull()
+    expect(escalateIfText('Escalate.')).toBeNull()
+    expect(approvalConflictLine(summary)).toBe('The entry names General Counsel for this.')
+    expect(approvalSourceLabel(summary?.source ?? null)).toBe('from the approval matrix')
+    expect(approvalConflictLine(null)).toBeNull()
+    expect(escalateIfLine(null)).toBeNull()
+  })
+
+  it('names the approval matrix or table in the conflict line, whichever is lower', () => {
+    const matrix = approvalSummary(
+      quality({
+        escalationApprover: 'The lawyer handling the NDA',
+        escalationSource: 'ENTRY',
+        escalationConflictApprover: 'Reviewing Commercial Legal counsel',
+        escalationConflictSource: 'TABLE',
+      }),
+    )
+    expect(approvalConflictLine(matrix)).toBe(
+      'The approval table names Reviewing Commercial Legal counsel for this.',
+    )
+
+    const higher = approvalSummary(
+      quality({
+        escalationApprover: 'Commercial Legal Director',
+        escalationSource: 'ENTRY',
+        escalationConflictApprover: 'Commercial Manager',
+        escalationConflictSource: 'MATRIX',
+      }),
+    )
+    expect(approvalConflictLine(higher)).toBe(
+      'The approval matrix names Commercial Manager for this.',
+    )
   })
 })

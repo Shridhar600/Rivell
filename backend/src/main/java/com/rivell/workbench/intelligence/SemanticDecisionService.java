@@ -45,8 +45,9 @@ public class SemanticDecisionService {
         var startedAt = clock.instant();
         try {
             var request = new DecisionExecutionRequest(binding.modelAlias(), state, spec.pack());
-            var result = retry.call(() -> provider.execute(request), failure -> ExecutionLog.retried(
-                    "decision", spec.id(), spec.version(), binding.providerId(), failure));
+            var result = retry.call(binding.providerId(), () -> provider.execute(request),
+                    event -> ExecutionLog.retried(
+                            "decision", spec.id(), spec.version(), binding.providerId(), event));
             validateAnswers(spec, result.answers());
             var metadata = completedMetadata(spec, binding, result, questionCount(spec), startedAt);
             ExecutionLog.completed("decision", metadata);

@@ -196,7 +196,7 @@ public record CandidatePayload(
         return Optional.empty();
     }
 
-    private Optional<RecordFieldRole> roleOf(String label) {
+    Optional<RecordFieldRole> roleOf(String label) {
         var known = RecordLabelRoles.known(label);
         if (known.isPresent()) {
             return known;

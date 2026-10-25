@@ -14,6 +14,7 @@ import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.DecisionExecution;
 import com.rivell.workbench.intelligence.NoProviderConfiguredException;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.SpecStateMismatchException;
@@ -209,6 +210,7 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
                 | NoProviderConfiguredException e) {
             return CheckOutcome.failed("decision_contract_error:" + e.getClass().getSimpleName());
         } catch (SemanticDecisionException e) {
+            ProviderFailures.rethrowIfOutOfCredit(e);
             detail.put("addressedBySearch",
                     addressedBySearch.stream().map(UUID::toString).toList());
             detail.put("flaggedBySearch", flaggedBySearch);
@@ -240,6 +242,7 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
                 return CheckOutcome.failed(
                         "decision_contract_error:" + e.getClass().getSimpleName());
             } catch (SemanticDecisionException e) {
+                ProviderFailures.rethrowIfOutOfCredit(e);
                 detail.put("presence", presence);
                 return providerUnavailable(detail, applicable);
             }

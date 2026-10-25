@@ -30,7 +30,7 @@ import org.docx4j.wml.Tr;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.rivell.workbench.platform.parsing.DocumentWorkLimiter;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.redline.AppliedChangeReport;
 import com.rivell.workbench.redline.ChangeVerification;
 import com.rivell.workbench.redline.DocumentExecutionPlan;

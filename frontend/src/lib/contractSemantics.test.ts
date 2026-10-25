@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CONTRACT_TYPES,
+  CONTRACT_TYPE_LABELS,
+  clauseHeadingTitle,
   describeFact,
   enrichmentFailureNote,
   factDivergence,
@@ -18,6 +21,49 @@ import {
 } from './contractSemantics'
 import { ENRICHMENT_FAILURE_REASONS } from '../api/semantics'
 import type { EnrichmentFailureReason, SemanticFact } from '../api/semantics'
+
+describe('contract type choices', () => {
+  it('puts the common commercial types where a reviewer looks for them', () => {
+    expect(CONTRACT_TYPES).toEqual([
+      'MNDA',
+      'ONDA',
+      'NDA',
+      'MSA',
+      'SERVICES',
+      'SUPPLY',
+      'SAAS',
+      'ORDER_FORM',
+      'SOW',
+      'DPA',
+      'SWL',
+      'RESELLER',
+      'AMENDMENT',
+      'OTHER',
+    ])
+  })
+
+  it('labels every choice in the vocabulary a reviewer uses', () => {
+    expect(CONTRACT_TYPE_LABELS).toMatchObject({
+      MNDA: 'Mutual NDA',
+      ONDA: 'One-way NDA',
+      NDA: 'NDA',
+      MSA: 'MSA',
+      SERVICES: 'Services',
+      SUPPLY: 'Supply',
+      SAAS: 'SaaS',
+      ORDER_FORM: 'Order form',
+      SOW: 'SOW',
+      DPA: 'DPA',
+      SWL: 'Software licence',
+      RESELLER: 'Reseller',
+      AMENDMENT: 'Amendment',
+      OTHER: 'Other',
+    })
+    for (const type of CONTRACT_TYPES) {
+      expect(CONTRACT_TYPE_LABELS[type]).toBeTruthy()
+    }
+  })
+})
 
 describe('label maps', () => {
   it('labels roles, metadata fields, references and verification', () => {
@@ -235,6 +281,25 @@ describe('region labels', () => {
 
   it('returns null for unknown regions', () => {
     expect(resolveRegionLabel('missing', clauses, nodes)).toBeNull()
+  })
+})
+
+describe('clause heading titles', () => {
+  it('cuts a heading that carries its first sub-clause', () => {
+    expect(
+      clauseHeadingTitle(
+        '9. Intellectual Property and Infringement Indemnity. 9.1 The Supplier and its licensors retain all right, title and interest.',
+      ),
+    ).toBe('9. Intellectual Property and Infringement Indemnity')
+  })
+
+  it('leaves a title that is only a heading unchanged', () => {
+    expect(clauseHeadingTitle('9. Intellectual Property and Infringement Indemnity')).toBe(
+      '9. Intellectual Property and Infringement Indemnity',
+    )
+    expect(clauseHeadingTitle('1. Definitions')).toBe('1. Definitions')
+    expect(clauseHeadingTitle('Section 4. Payment')).toBe('Section 4. Payment')
+    expect(clauseHeadingTitle('12. U.S. Export Controls')).toBe('12. U.S. Export Controls')
   })
 })
 

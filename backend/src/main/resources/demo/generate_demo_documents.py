@@ -244,7 +244,7 @@ SCENARIO_CONTRACTS = [
      'Master Services Agreement - Umbrella'),
     ('Soylent MSA - Limited analysis.docx', msa_body,
      'Master Services Agreement - Soylent'),
-    ('Vandelay MSA - Analysis queued.docx', msa_body,
+    ('Vandelay MSA - Waiting to start.docx', msa_body,
      'Master Services Agreement - Vandelay'),
 ]
 

@@ -27,6 +27,13 @@ public interface ReviewRepository {
     List<ReviewPlanCheck> findPlanChecks(UUID organizationId, UUID reviewId);
 
     /**
+     * Reviews whose analysis never started: still {@code ANALYSIS_QUEUED} and created before the
+     * given instant. Not organization-scoped because the analysis reconciler is a platform job
+     * across every tenant; it only reads the review's own identity and creation time.
+     */
+    List<Review> findQueuedBefore(java.time.Instant createdBefore);
+
+    /**
      * Pessimistic row lock serializing human decision writes and finalization for one
      * review; false when the review does not exist in the organization.
      */

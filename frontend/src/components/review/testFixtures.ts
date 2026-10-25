@@ -298,6 +298,8 @@ export const fixtureClauseFindingDetail = {
     category: 'BEYOND_FALLBACK',
     flagProbability: 0.87,
     probabilities: { BEYOND_FALLBACK: 0.87, WALK_AWAY: 0.05 },
+    wordingFitVerdict: 'FITS',
+    wordingFitReason: 'MEETS_POSITION_YES',
   },
   claims: clauseClaims,
   evidenceItems: [
@@ -402,6 +404,25 @@ export const fixtureEscalatedFallbackFindingDetail = {
   reviewClassification: 'REVIEW_REQUIRED',
   proposedAction: 'ESCALATE_TO_HUMAN',
   positionComparison: { ...withinFallbackComparison, escalation: [escalationSlot('e-policy')] },
+  // a typed rule says the fallback needs approval; the entry names a different approver
+  quality: {
+    ...fixtureWithinFallbackFindingDetail.quality,
+    escalationApprover: 'Commercial Manager',
+    escalationCondition: 'Uncapped liability or consequential damages',
+    escalationSource: 'MATRIX',
+    escalationStance: 'FALLBACK',
+    escalationConflictApprover: 'General Counsel',
+    escalationConflictSource: 'ENTRY',
+  },
+}
+
+export const fixtureNoApproverConditionFindingDetail = {
+  ...fixtureWithinFallbackFindingDetail,
+  id: 'f-18',
+  positionComparison: {
+    ...withinFallbackComparison,
+    escalation: [escalationSlot('e-policy')],
+  },
 }
 
 export const fixtureAbsenceFindingDetail = {

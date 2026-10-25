@@ -55,6 +55,11 @@ final class DemoFaultingReviewRepository implements ReviewRepository {
     }
 
     @Override
+    public List<Review> findQueuedBefore(Instant createdBefore) {
+        return delegate.findQueuedBefore(createdBefore);
+    }
+
+    @Override
     public boolean lock(UUID organizationId, UUID reviewId) {
         return delegate.lock(organizationId, reviewId);
     }

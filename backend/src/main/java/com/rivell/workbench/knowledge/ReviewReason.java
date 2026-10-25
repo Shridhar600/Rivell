@@ -14,5 +14,7 @@ public enum ReviewReason {
     NEW_PROHIBITED_OR_ESCALATION_POSITION,
     SCOPE_NARROWING_PROPOSED,
     SEMANTIC_ANALYSIS_UNAVAILABLE,
-    SEMANTIC_COMPILATION_UNAVAILABLE
+    SEMANTIC_COMPILATION_UNAVAILABLE,
+    /** The source states a walk-away or an approver the labelled-field stage could not map. */
+    UNMAPPED_AUTHORITY_WORDS
 }

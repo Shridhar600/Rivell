@@ -9,6 +9,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +30,9 @@ import org.testcontainers.utility.DockerImageName;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "rivell.document-work.max-concurrent=1",
+        "rivell.document-work.max-wait=50ms"})
 @AutoConfigureMockMvc
 @Testcontainers
 class ContractApiIT {
@@ -212,6 +217,47 @@ class ContractApiIT {
     }
 
     @Test
+    void aBusyDocumentLimitRefusesTheUploadBeforeAnythingIsStored() throws Exception {
+        var slotTaken = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var holder = CompletableFuture.runAsync(() -> documentWorkLimiter.run(() -> {
+            slotTaken.countDown();
+            try {
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        }));
+        assertThat(slotTaken.await(5, TimeUnit.SECONDS)).isTrue();
+
+        var contractsBefore = jdbcClient.sql("select count(*) from contract")
+                .query(Long.class).single();
+        var filesBefore = jdbcClient.sql("select count(*) from source_artifact")
+                .query(Long.class).single();
+        byte[] bytes;
+        try (var stream = getClass().getClassLoader()
+                .getResourceAsStream("fixtures/simple-contract.docx")) {
+            bytes = stream.readAllBytes();
+        }
+        var file = new MockMultipartFile("file", "simple-contract.docx", DOCX_MEDIA_TYPE, bytes);
+        try {
+            mockMvc.perform(multipart("/api/contracts").file(file))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(header().string("Retry-After", "5"))
+                    .andExpect(jsonPath("$.title").value("Service busy"));
+        } finally {
+            release.countDown();
+        }
+        holder.get(5, TimeUnit.SECONDS);
+
+        assertThat(jdbcClient.sql("select count(*) from contract").query(Long.class).single())
+                .as("a refused upload creates no contract").isEqualTo(contractsBefore);
+        assertThat(jdbcClient.sql("select count(*) from source_artifact").query(Long.class).single())
+                .as("a refused upload stores no file record").isEqualTo(filesBefore);
+    }
+
+    @Test
     void rejectsUploadsBeyondConfiguredLimitWith413() throws Exception {
         var file = new MockMultipartFile(
                 "file", "large.docx", DOCX_MEDIA_TYPE, new byte[8192]);
@@ -275,6 +321,9 @@ class ContractApiIT {
 
     @Autowired
     org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
+
+    @Autowired
+    com.rivell.workbench.foundation.DocumentWorkLimiter documentWorkLimiter;
 
     private UploadResult uploadFixture(String fixture, String filename) throws Exception {
         byte[] bytes;

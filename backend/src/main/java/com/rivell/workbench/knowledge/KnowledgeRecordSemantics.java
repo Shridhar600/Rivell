@@ -24,7 +24,7 @@ final class KnowledgeRecordSemantics {
 
     static final String FIELD_ROLE_SPEC = "knowledge-field-role";
     static final String RECORD_KIND_SPEC = "knowledge-record-kind";
-    static final int FIELD_ROLE_VERSION = 1;
+    static final int FIELD_ROLE_VERSION = 2;
     static final int RECORD_KIND_VERSION = 3;
 
     private static final int MAX_RECORD_TEXT = 2000;
@@ -40,10 +40,21 @@ final class KnowledgeRecordSemantics {
 
     /**
      * One decision per artifact: a Choice question per distinct unknown label over the
-     * field roles plus OTHER. Provider failure returns an empty map; unknown labels then
-     * simply contribute no role.
+     * field roles plus OTHER. Provider failure is reported as unavailable; unknown labels then
+     * simply contribute no role, and the caller records the semantic gap.
      */
-    Map<String, RecordFieldRole> resolveUnknownLabels(
+    record LabelRoles(Map<String, RecordFieldRole> roles, boolean available) {
+
+        static LabelRoles none() {
+            return new LabelRoles(Map.of(), true);
+        }
+
+        static LabelRoles failed() {
+            return new LabelRoles(Map.of(), false);
+        }
+    }
+
+    LabelRoles resolveUnknownLabels(
             KnowledgeArtifact artifact, List<KnowledgeCandidate> candidates) {
         var unknown = new LinkedHashMap<String, String>();
         for (var candidate : candidates) {
@@ -60,7 +71,7 @@ final class KnowledgeRecordSemantics {
             }
         }
         if (unknown.isEmpty()) {
-            return Map.of();
+            return LabelRoles.none();
         }
         var labels = new ArrayList<LabelSample>(unknown.size());
         for (var entry : unknown.entrySet()) {
@@ -79,12 +90,12 @@ final class KnowledgeRecordSemantics {
                 resolved.put(RecordLabelRoles.normalize(labels.get(index).label()),
                         roleOf(choice.selected()));
             }
-            return resolved;
+            return new LabelRoles(Map.copyOf(resolved), true);
         } catch (com.rivell.workbench.intelligence.SemanticDecisionException e) {
             org.slf4j.LoggerFactory.getLogger(KnowledgeRecordSemantics.class)
                     .warn("Field role decision unavailable for artifact {} ({} {})",
                             artifact.id(), e.getClass().getSimpleName(), e.getMessage());
-            return Map.of();
+            return LabelRoles.failed();
         }
     }
 
@@ -99,6 +110,17 @@ final class KnowledgeRecordSemantics {
     Optional<KnowledgeRecordKind> decideKind(
             KnowledgeArtifact artifact, ExtractionUnit unit, KnowledgeCandidate candidate,
             Map<String, RecordFieldRole> roles) {
+        // explicit before inferred: a label the source states is a position without a call. A
+        // clause library's "Variant: Preferred" is a wording variant, not a playbook position.
+        var labelled = candidate.payload().columns().isEmpty()
+                ? LabelledFieldStage.parse(unit.title(), unit.contentText(), Map.of())
+                : LabelledFieldStage.parse(unit.title(), null, candidate.payload().columns());
+        if (artifact.artifactType() == ArtifactType.PLAYBOOK
+                && labelled.statedRoles().stream().anyMatch(role ->
+                        role == PositionRole.PREFERRED || role == PositionRole.FALLBACK
+                                || role == PositionRole.PROHIBITED)) {
+            return Optional.of(KnowledgeRecordKind.POSITION);
+        }
         // Only a code-known stance label proves a position; a label the model resolved
         // (e.g. an approval matrix's "Situation" read as PREFERRED) still needs the kind call.
         var knownStance = roles.entrySet().stream().anyMatch(entry ->
@@ -171,7 +193,7 @@ final class KnowledgeRecordSemantics {
     private static Map<String, String> roleCriteria() {
         var criteria = new LinkedHashMap<String, String>();
         criteria.put("PREFERRED", "The organisation's standard or preferred position.");
-        criteria.put("FALLBACK", "An acceptable fallback position, normally requiring approval.");
+        criteria.put("FALLBACK", "An acceptable fallback position.");
         criteria.put("PROHIBITED", "A walk-away or red line the organisation must not accept.");
         criteria.put("ESCALATION", "Who must approve a deviation, or how to escalate.");
         criteria.put("COMMENTARY", "Drafting notes, rationale, or when-to-use guidance.");

@@ -31,7 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.rivell.workbench.foundation.Hashes;
-import com.rivell.workbench.platform.parsing.DocumentWorkLimiter;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.platform.parsing.WordText;
 import com.rivell.workbench.redline.AppliedChangeReport;
 import com.rivell.workbench.redline.DocumentExecutionPlan;

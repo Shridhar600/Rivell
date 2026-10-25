@@ -136,6 +136,7 @@ class ContractIngestionFailureTest {
                 new TransactionTemplate(noopTransactionManager()),
                 () -> new UserIdentity(UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")),
                 (identity, permission) -> true,
+                new com.rivell.workbench.foundation.DocumentWorkLimiter(1),
                 org.springframework.util.unit.DataSize.ofMegabytes(10));
 
         byte[] docx;

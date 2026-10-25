@@ -52,6 +52,20 @@ class ContractsSchemaIT {
     }
 
     @Test
+    void theReviewSnapshotCheckAcceptsEveryDeclaredContractType() {
+        var definition = jdbcClient.sql("""
+                select pg_get_constraintdef(oid)
+                from pg_constraint
+                where conrelid = 'review_snapshot'::regclass
+                  and conname = 'review_snapshot_contract_type_check'
+                """).query(String.class).single();
+
+        for (var type : ContractType.values()) {
+            assertThat(definition).as(type.name()).contains("'" + type.name() + "'");
+        }
+    }
+
+    @Test
     void insertsAndReloadsContractStructure() {
         var organizationId = UUID.randomUUID();
         var artifactId = UUID.randomUUID();

@@ -184,7 +184,7 @@ export async function uploadContract(file: File): Promise<IngestResponse> {
     bodySerializer: () => createUploadFormData(file),
   })
 
-  if (!data) throw new UploadApiError(response.status)
+  if (!data) throw new UploadApiError(response.status, {}, response.headers.get('Retry-After'))
   return parseApiResult(data, parseIngestResponse, 'upload')
 }
 

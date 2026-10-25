@@ -70,10 +70,13 @@ public class ContractEnrichmentService {
             if (structure.nodes().isEmpty()) {
                 throw new ContractNotReadableException();
             }
-            var result = enricher.enrich(structure.nodes(), profile, structure.parseWarnings());
-            var merged = mergeCorrections(prior, result);
-            transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(
-                    ready(merged, versionId, organizationId, profile)));
+            try (var ignored = org.slf4j.MDC.putCloseable(
+                    "artifactId", versionId.toString())) {
+                var result = enricher.enrich(structure.nodes(), profile, structure.parseWarnings());
+                var merged = mergeCorrections(prior, result);
+                transactionTemplate.executeWithoutResult(status -> semanticsRepository.replaceSemantics(
+                        ready(merged, versionId, organizationId, profile)));
+            }
             return getSemantics(contractId, versionNumber);
         } catch (RuntimeException e) {
             persistFailed(versionId, organizationId, profile, e);

@@ -19,12 +19,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import com.rivell.workbench.foundation.DocumentWorkBusyException;
+import com.rivell.workbench.foundation.DocumentWorkLimiter;
 import com.rivell.workbench.platform.docx.DocxRedlineRenderer;
 import com.rivell.workbench.platform.docx.DocxRedlineVerifier;
 
 /**
- * DW-081: expensive document work (parse, redline render, redline verify) runs at most N at a
- * time. Extra callers wait for a free slot; they are never refused.
+ * DW-081 / DW-095: expensive document work (parse, redline render, redline verify) runs at most N
+ * at a time. Extra callers wait for a bounded budget, then are refused instead of queueing.
  */
 class DocumentWorkLimiterTest {
 
@@ -74,6 +76,40 @@ class DocumentWorkLimiterTest {
                 () -> limiter.run(() -> limiter.run(() -> "nested")));
 
         assertThat(result).isEqualTo("nested");
+    }
+
+    @Test
+    void aCallerThatWaitsPastTheBudgetIsRefusedInsteadOfQueuedForever() throws Exception {
+        var limiter = new DocumentWorkLimiter(1, Duration.ofMillis(100));
+        var slotTaken = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var holder = CompletableFuture.runAsync(() -> limiter.run(() -> {
+            slotTaken.countDown();
+            await(release);
+            return null;
+        }), executor);
+        assertThat(slotTaken.await(5, TimeUnit.SECONDS)).isTrue();
+
+        try {
+            var outcome = CompletableFuture.supplyAsync(() -> {
+                try {
+                    limiter.run(() -> "ran");
+                    return "ran";
+                } catch (DocumentWorkBusyException refused) {
+                    return "refused";
+                }
+            }, executor);
+            try {
+                assertThat(outcome.get(2, TimeUnit.SECONDS))
+                        .as("a caller never waits for a slot forever")
+                        .isEqualTo("refused");
+            } finally {
+                release.countDown();
+            }
+            holder.get(5, TimeUnit.SECONDS);
+        } finally {
+            release.countDown();
+        }
     }
 
     @Test

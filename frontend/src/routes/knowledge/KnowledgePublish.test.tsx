@@ -219,9 +219,14 @@ describe('publish readiness and confirmation', () => {
     decided(same, ['duplicate'])
     await client.invalidateQueries()
     await waitFor(() => expect(publishButton()).toBeEnabled())
+    const peerReads = () => world.calls.filter(
+      (call) => call.path === '/api/knowledge/candidates/peer1').length
+    const readsBeforeDialog = peerReads()
     await userEvent.click(publishButton())
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(/Replaces earlier published knowledge/)).toHaveTextContent('Published Liability Cap')
+    // Opening the dialog adds no candidate read per row: the workspace's map already has it.
+    expect(peerReads()).toBe(readsBeforeDialog)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Publish' }))
     await waitFor(() => expect(requests(world, 'POST', /publications/)).toHaveLength(1))
     const sent = requests(world, 'POST', /publications/)[0]
@@ -293,14 +298,15 @@ describe('a published compilation', () => {
     expect(screen.queryByRole('button', { name: /Back to compilation|Reopen|Edit/ })).not.toBeInTheDocument()
     expect(publishButton()).toBeDisabled()
     expect(publishButton()).toHaveTextContent('Published')
-    expect(within(panel()).getByText('Published, cannot be changed')).toBeInTheDocument()
+    expect(within(panel()).getByText('Published', { selector: '.rv-kc-fgrp span' })).toBeInTheDocument()
+    expect(within(panel()).queryByText(/cannot be changed/)).not.toBeInTheDocument()
   })
 
   it('shows a published candidate read-only, and offers no decision', async () => {
     const world = publishedWorld()
     const target = world.candidates[SRC]?.[1]?.id ?? ''
     await open(world, `?candidate=${target}`)
-    expect(screen.getByText(/Published in knowledge version 2\. Published knowledge cannot be changed\./)).toBeInTheDocument()
+    expect(screen.getByText('Published · v2 · Read-only')).toBeInTheDocument()
     expect(within(decisionBar()).queryByRole('button', { name: /Approve|Reject|Edit/ })).not.toBeInTheDocument()
     expect(within(decisionBar()).getByRole('link', { name: 'Open in the source' })).toHaveAttribute('href', expect.stringContaining(`/knowledge/sources/${SRC}?position=`))
   })
@@ -313,7 +319,7 @@ describe('a published compilation', () => {
     same.candidates[SRC] = (same.candidates[SRC] ?? []).map((entry) => (entry.id === 'uncertain' ? { ...entry, reviewStatus: 'PUBLISHED' as const } : entry))
     await client.invalidateQueries()
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Edit this entry' })).not.toBeInTheDocument())
-    expect(screen.getByText(/Published knowledge cannot be changed/)).toBeInTheDocument()
+    expect(screen.getByText('Published · Read-only')).toBeInTheDocument()
     expect(within(decisionBar()).queryByRole('button', { name: /Save correction|Approve|Reject/ })).not.toBeInTheDocument()
   })
 })

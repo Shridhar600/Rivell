@@ -10,6 +10,7 @@ import {
   executableChange,
   finalizeSummary,
   findingState,
+  languageAuthority,
   nextOpenFinding,
   orderForReview,
   profileLine,
@@ -129,8 +130,8 @@ describe('profileLine', () => {
       engine: null,
       playbooksUsed: null,
     }
-    expect(profileLine(snapshot)).toBe('MSA, counterparty paper, our side: Customer')
-    expect(profileLine({ ...snapshot, profile: { ...snapshot.profile, ourSideRole: 'PARTY_A' } })).toContain('our side: Party A')
+    expect(profileLine(snapshot)).toBe('MSA, their template, party you represent: Customer')
+    expect(profileLine({ ...snapshot, profile: { ...snapshot.profile, ourSideRole: 'PARTY_A' } })).toContain('party you represent: Party A')
     expect(profileLine({ ...snapshot, profile: null })).toBeNull()
     expect(profileLine(null)).toBeNull()
   })
@@ -299,6 +300,49 @@ describe('approved wording', () => {
   })
 })
 
+describe('where proposed wording came from', () => {
+  it('calls library wording approved only when the fit check passed', () => {
+    const fits = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: { wordingFitVerdict: 'FITS' },
+    } as never)
+    expect(fits?.strong).toBe('Approved organizational drafting')
+  })
+
+  it('does not call library wording approved without a fit verdict', () => {
+    const unchecked = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: null,
+    } as never)
+    expect(unchecked?.strong).toBe('Library wording, not checked against this position')
+  })
+
+  it('says library wording was not checked when the fit call gave no answer', () => {
+    const unchecked = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: { wordingFitVerdict: 'UNKNOWN' },
+    } as never)
+    expect(unchecked?.strong).toBe('Library wording, not checked against this position')
+    expect(unchecked?.rest).not.toMatch(/approved/i)
+  })
+
+  it('never calls wording that did not fit approved', () => {
+    const checked = languageAuthority({
+      proposedLanguageSource: 'APPROVED_DRAFTING',
+      quality: { wordingFitVerdict: 'DOES_NOT_FIT' },
+    } as never)
+    expect(checked?.strong).toBe('Library wording that does not fit this position')
+  })
+
+  it('keeps machine wording labelled as Rivell\'s', () => {
+    const generated = languageAuthority({
+      proposedLanguageSource: 'GENERATIVE',
+      quality: { wordingFitVerdict: 'DOES_NOT_FIT' },
+    } as never)
+    expect(generated?.strong).toBe('Proposed by Rivell')
+  })
+})
+
 describe('orderForReview', () => {
   it('puts "needs your look" items after the others and keeps each group in server order', () => {
     const findings = [
@@ -319,5 +363,20 @@ describe('orderForReview', () => {
       { id: 'e', decidedBy: 'NEEDS_YOUR_LOOK', firstReviewCategory: 'WALK_AWAY' },
     ]
     expect(orderForReview(findings).map((finding) => finding.id)).toEqual(['b', 'd', 'e', 'a', 'c'])
+  })
+
+  it('puts absence findings after the disagreements inside "needs your look"', () => {
+    const findings = [
+      { id: 'absence', decidedBy: 'NEEDS_YOUR_LOOK', subjectKind: 'ABSENCE' as const },
+      { id: 'disagreement', decidedBy: 'NEEDS_YOUR_LOOK', subjectKind: 'CLAUSE' as const },
+      { id: 'walk-away', decidedBy: 'NEEDS_YOUR_LOOK', firstReviewCategory: 'WALK_AWAY', subjectKind: 'ABSENCE' as const },
+      { id: 'second', decidedBy: 'NEEDS_YOUR_LOOK', subjectKind: 'CLAUSE' as const },
+    ]
+    expect(orderForReview(findings).map((finding) => finding.id)).toEqual([
+      'walk-away',
+      'disagreement',
+      'second',
+      'absence',
+    ])
   })
 })

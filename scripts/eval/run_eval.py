@@ -30,7 +30,7 @@ import prices
 from provider_guard import LogWatch, ProviderFatal, preflight
 from redline_flow import run_redline
 from rivell_api import ApiError, RivellApi, items
-from scoring import score_contract, score_knowledge
+from scoring import ABSENCE_CREDIT, score_contract, score_knowledge
 import p3_metrics
 import p4_metrics
 
@@ -52,6 +52,20 @@ def guard():
 
 # ---------- backend process ----------
 
+# DW-059(4): a measurement-only probe call that only succeeds on a retry waited the provider's
+# full 2 s + 8 s + 30 s backoff before every check (~40 s). A probe run is bounded unless the
+# operator set the budget; the report header records which budget scored it.
+PROBE_RETRY_BACKOFF = "2s,4s"
+
+
+def probe_retry_backoff(environ=None):
+    """The retry budget a backend should start with, or None to leave the provider default."""
+    env = os.environ if environ is None else environ
+    if env.get("RIVELL_ORDER_PROBE", "off").lower() == "off":
+        return None
+    return env.get("RIVELL_INTELLIGENCE_RETRY_BACKOFF") or PROBE_RETRY_BACKOFF
+
+
 def build_jar():
     subprocess.run(["./mvnw", "-q", "-DskipTests", "package"], cwd=BACKEND, check=True)
 
@@ -67,6 +81,9 @@ def start_backend(jar, org_id, log_path):
     java = pathlib.Path(os.environ["JAVA_HOME"], "bin", "java") if "JAVA_HOME" in os.environ else "java"
     env = dict(os.environ, RIVELL_DEV_ORGANIZATION_ID=org_id, RIVELL_JOB_WORKER_ENABLED="true",
                SERVER_PORT=PORT)
+    backoff = probe_retry_backoff(env)
+    if backoff:
+        env["RIVELL_INTELLIGENCE_RETRY_BACKOFF"] = backoff
     log = open(log_path, "w")
     proc = subprocess.Popen([str(java), "-jar", str(jar)], cwd=BACKEND, env=env,
                             stdout=log, stderr=subprocess.STDOUT)
@@ -87,24 +104,37 @@ def stop_backend(proc, log):
 
 def contract_type(answer):
     """Answer-key free text -> the product's contract type code. Order matters: an SOW under an
-    MSA is an SOW; a data processing addendum is a DPA."""
-    text = answer.get("contractType", "").lower()
+    MSA is an SOW; a data processing addendum is a DPA; a master services agreement is an MSA, not
+    a services agreement; an order form is its own type, not SaaS."""
+    text = answer.get("contractType", "").lower().replace("-", " ").replace("_", " ")
     if "data processing" in text or "dpa" in text.split():
         return "DPA"
+    if "amendment" in text or "variation" in text or "addendum" in text:
+        return "AMENDMENT"
     if "statement of work" in text or "sow" in text.split():
         return "SOW"
-    if "saas" in text or "subscription" in text or "order form" in text:
+    if "order form" in text or "purchase order" in text or "order schedule" in text:
+        return "ORDER_FORM"
+    if "saas" in text or "subscription" in text:
         return "SAAS"
-    if "licen" in text:
+    if "licen" in text or "swl" in text.split():
         return "SWL"
-    if "nda" in text or "non-disclosure" in text or "confidentiality agreement" in text:
-        if "mutual" in text:
+    if ("nda" in text.split() or "mnda" in text.split() or "onda" in text.split()
+            or "non disclosure" in text or "nondisclosure" in text
+            or "confidentiality agreement" in text):
+        if "mutual" in text or "mnda" in text.split():
             return "MNDA"
-        if "one-way" in text or "one way" in text or "unilateral" in text:
+        if "one way" in text or "unilateral" in text or "onda" in text.split():
             return "ONDA"
         return "NDA"
-    if "master services" in text or "msa" in text.split() or "services agreement" in text:
+    if "master services" in text or "msa" in text.split() or "master agreement" in text:
         return "MSA"
+    if "service" in text or "consult" in text:
+        return "SERVICES"
+    if "supply" in text or "purchase" in text or "procurement" in text:
+        return "SUPPLY"
+    if "resell" in text or "distribut" in text or "channel partner" in text:
+        return "RESELLER"
     return "OTHER"
 
 
@@ -148,16 +178,18 @@ def review_profile(answer):
 
 # ---------- pipeline ----------
 
-def wait_candidates(api, artifact_id, timeout_s=600):
+def wait_candidates(api, artifact_id, timeout_s=600, with_status=False):
+    """The artifact's candidates once the list has settled; with_status also says whether it did."""
     deadline, last = time.time() + timeout_s, -1
     while time.time() < deadline:
         guard()
         cands = items(api.get(f"/api/knowledge/artifacts/{artifact_id}/candidates"))
         if cands and len(cands) == last and all(c.get("reviewStatus") for c in cands):
-            return cands
+            return (cands, True) if with_status else cands
         last = len(cands)
         time.sleep(5)
-    return items(api.get(f"/api/knowledge/artifacts/{artifact_id}/candidates"))
+    cands = items(api.get(f"/api/knowledge/artifacts/{artifact_id}/candidates"))
+    return (cands, False) if with_status else cands
 
 
 def run_knowledge(api, corpus, entry, kind, contract_types, errors):
@@ -234,6 +266,8 @@ def run_contract(api, corpus, entry, answer, raw_dir, redline=True):
                                                               "seriousFalseAlarmSections", "findings")}
     # engine v2 P4: the levers and the diagnostics-only measurements, pure functions of this run
     score["search"] = p4_metrics.search_metrics(checks)
+    # part 4: Rivell's fit verdicts, per search hit and per wording offer
+    score["fit"] = p4_metrics.fit_metrics(checks)
     score["advisory"] = p4_metrics.advisory_metrics(answer, nodes, clauses, findings)
     score["omissions"] = p4_metrics.omission_metrics(answer, findings)
     score["lookReasons"] = p4_metrics.look_reasons(findings)
@@ -571,7 +605,9 @@ P4_D12B_CELLS = ("flaggedPicked", "flaggedUnpicked", "clearPicked", "clearUnpick
 def p4_data(contract):
     """Any engine v2 P4 activity in one scored contract; a v1 contract has none."""
     search = contract.get("search") or {}
+    fit = contract.get("fit") or {}
     return bool(search.get("route") or search.get("found")
+                or fit.get("calls") or fit.get("skipped") or fit.get("questions")
                 or (contract.get("advisory") or {}).get("picks")
                 or (contract.get("omissions") or {}).get("list")
                 or any((contract.get("lookReasons") or {}).values()))
@@ -617,6 +653,15 @@ def p4_lines(results):
     medium = sum(o.get("medium", 0) for o in omissions)
     low = sum(o.get("low", 0) for o in omissions)
     alarms = sum(o.get("alarms", 0) for o in omissions)
+    fits = [c.get("fit") or {} for c in contracts]
+    fit_calls = sum(f.get("calls", 0) for f in fits)
+    fit_questions = sum(f.get("questions", 0) for f in fits)
+    fit_skipped = sum(f.get("skipped", 0) for f in fits)
+    fit_not_covered = sum(f.get("notCovered", 0) for f in fits)
+    fit_search = {key: sum((f.get("search") or {}).get(key, 0) for f in fits)
+                  for key in ("FITS", "DOES_NOT_FIT", "UNKNOWN")}
+    fit_wording = {key: sum((f.get("wording") or {}).get(key, 0) for f in fits)
+                   for key in ("FITS", "DOES_NOT_FIT", "UNKNOWN")}
     reasons = {key: sum((c.get("lookReasons") or {}).get(key, 0) for c in contracts)
                for key in P4_LOOK_REASONS}
     lines = ["", "## Engine v2 P4", "",
@@ -626,7 +671,12 @@ def p4_lines(results):
              f"- Advisory picks: {picks} ({picks / n:.1f}/contract; as if all were HIGH: {high}); "
              f"issue-section hits {pct(hits, picks)} (HIGH {pct(high_hits, high)})",
              f"- Omissions: MEDIUM {medium} ({medium / n:.1f}/contract), LOW {low} "
-             f"({low / n:.1f}/contract); alarms (MEDIUM matching no MISSING_PROVISION issue) {alarms}"]
+             f"({low / n:.1f}/contract); alarms (MEDIUM matching no MISSING_PROVISION issue) {alarms}",
+             f"- Fit: {fit_calls} calls, {fit_questions} questions, saved calls: {fit_skipped} "
+             f"by the skip rule; search FITS {fit_search['FITS']}, DOES_NOT_FIT "
+             f"{fit_search['DOES_NOT_FIT']}, UNKNOWN {fit_search['UNKNOWN']}, not covered "
+             f"{fit_not_covered}; wording FITS {fit_wording['FITS']}, DOES_NOT_FIT "
+             f"{fit_wording['DOES_NOT_FIT']}, UNKNOWN {fit_wording['UNKNOWN']}"]
     for contract in contracts:
         for omission in (contract.get("omissions") or {}).get("list", []):
             presence = omission.get("presence")
@@ -732,8 +782,11 @@ def header_lines(meta):
     return [f"# Eval run {meta['runId']}", "",
             f"Corpus `{meta['corpus']}` · git `{meta['git']}` · {meta['started']}"
             + (f" · decisions `{meta['decisions']}`" if meta.get("decisions") else "")
-            + (f" · order probe `{meta['orderProbe']}` (measurement only)"
+            + (f" · order probe `{meta['orderProbe']}` (measurement only"
+               + (f"; retry budget {meta['probeRetryBackoff']}" if meta.get("probeRetryBackoff") else "")
+               + ")"
                if meta.get("orderProbe", "off") != "off" else "")
+            + (f" · absence credit {meta['absenceCredit']}" if meta.get("absenceCredit") else "")
             + (f" · engine `{meta['engine']}`" if meta.get("engine", "v2") != "v2" else "")
             + (" · omissions on" if meta.get("omissions") == "true" else "")
             + (" · definitions on" if meta.get("definitions") == "true" else "")
@@ -832,7 +885,9 @@ def main():
     meta = {"runId": run_id, "corpus": str(args.corpus), "git": git,
             "started": time.strftime("%Y-%m-%d %H:%M"), "decisions": decisions,
             "orderProbe": os.environ.get("RIVELL_ORDER_PROBE", "off").lower(),
-            **engine_meta()}
+            "absenceCredit": ABSENCE_CREDIT, **engine_meta()}
+    if probe_retry_backoff():
+        meta["probeRetryBackoff"] = probe_retry_backoff()
     started = time.monotonic()
 
     if not args.no_build:

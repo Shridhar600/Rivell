@@ -38,6 +38,7 @@ import com.rivell.workbench.knowledge.KnowledgeArtifact;
 import com.rivell.workbench.knowledge.KnowledgeIngestionService;
 import com.rivell.workbench.knowledge.KnowledgePublicationService;
 import com.rivell.workbench.knowledge.KnowledgeQueryService;
+import com.rivell.workbench.knowledge.ReviewReason;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -302,7 +303,20 @@ class KnowledgeController {
                         request.semanticFields().requiresApproval(),
                         request.semanticFields().escalationTrigger(),
                         request.semanticFields().variantRole(),
-                        java.util.Map.of()),
+                        java.util.Map.of(),
+                        false,
+                        request.semanticFields().preferredText(),
+                        request.semanticFields().fallbackTexts() == null
+                                ? java.util.List.of() : request.semanticFields().fallbackTexts(),
+                        request.semanticFields().prohibitedText(),
+                        request.semanticFields().authorityRules() == null
+                                ? java.util.List.of() : request.semanticFields().authorityRules(),
+                        java.util.List.of(),
+                        request.semanticFields().authorityRules() != null
+                                && request.semanticFields().authorityRules().isEmpty(),
+                        java.util.List.of(),
+                        request.semanticFields().fallbackTexts() != null
+                                && request.semanticFields().fallbackTexts().isEmpty()),
                 request.note())));
     }
 
@@ -486,7 +500,7 @@ class KnowledgeController {
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
-    private static CandidateView toCandidateView(com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
+    static CandidateView toCandidateView(com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
         return new CandidateView(
                 candidate.id(), candidate.artifactId(), candidate.extractionUnitId(),
                 candidate.candidateType(), candidate.reviewStatus(), candidate.rawLabel(),
@@ -508,6 +522,15 @@ class KnowledgeController {
                 candidate.effectiveVariantRole(),
                 candidate.effectiveEscalationTrigger(),
                 candidate.effectiveRequiresApproval(),
+                candidate.effectivePreferredText(),
+                candidate.effectiveFallbackTexts(),
+                candidate.effectiveProhibitedText(),
+                candidate.effectiveAuthorityRules(),
+                candidate.storedAuthorityRules(),
+                candidate.effectiveAuthorityConflicts(),
+                candidate.effectiveUnmappedAuthority(),
+                candidate.reviewReasons().contains(ReviewReason.UNMAPPED_AUTHORITY_WORDS),
+                candidate.correctedFields(),
                 candidate.interpretations().stream()
                         .map(interpretation -> new CandidateView.InterpretationView(
                                 interpretation.field(), interpretation.proposedValue(),

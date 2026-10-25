@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { SRC, renderApp, reviewWorld, requests, startFakeServer, type Fake } from './compileWorld'
+import { SRC, publishedWorld, renderApp, reviewWorld, requests, startFakeServer, type Fake } from './compileWorld'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -61,6 +61,68 @@ describe('compilation workspace', () => {
     expect(within(source).getByText('Commercial MSA Playbook v4.docx')).toBeInTheDocument()
   })
 
+  it('moves focus to the page heading after the loading state resolves', async () => {
+    await open()
+    expect(heading()).toHaveFocus()
+  })
+
+  it('moves focus to the state heading when a source is still being read', async () => {
+    const world = reviewWorld()
+    world.artifacts = world.artifacts.map((entry) => ({ ...entry, ingestStatus: 'EXTRACTING' as const }))
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Rivell is reading this file' }),
+    ).toHaveFocus()
+  })
+
+  it('moves focus to the loading status while the entries are still loading', async () => {
+    const world = reviewWorld()
+    let releaseCandidates: () => void = () => undefined
+    world.holdCandidates = new Promise<void>((resolve) => {
+      releaseCandidates = resolve
+    })
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    await screen.findByText('Loading entries…')
+    expect(screen.getByRole('status')).toHaveFocus()
+    releaseCandidates()
+    await screen.findByRole('heading', { level: 1 })
+  })
+
+  it('moves focus to the permission heading when the source is not readable', async () => {
+    const world = reviewWorld()
+    world.fail[`GET artifact ${SRC}`] = 403
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Knowledge is not available to you' }),
+    ).toHaveFocus()
+  })
+
+  it('moves focus to the state heading when a source could not be read', async () => {
+    const world = reviewWorld()
+    world.artifacts = world.artifacts.map((entry) => ({ ...entry, ingestStatus: 'FAILED' as const }))
+    startFakeServer(world)
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Rivell could not read this file' }),
+    ).toHaveFocus()
+  })
+
+  it('moves focus to the state heading when a published source has nothing left to review', async () => {
+    startFakeServer(publishedWorld())
+    renderApp(`/knowledge/compilations/${SRC}`)
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Commercial MSA Playbook v4' }),
+    ).toHaveFocus()
+  })
+
   it('groups the list the way a reviewer works', async () => {
     await open()
     const list = rail()
@@ -91,7 +153,7 @@ describe('compilation workspace', () => {
     const { world } = await open()
     await userEvent.click(within(rail()).getByRole('button', { name: /Subcontracting/ }))
     await screen.findByRole('group', { name: 'Possible duplicate' })
-    await userEvent.click(within(decisionBar()).getByRole('button', { name: /Approve/ }))
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Approve entry' }))
     await waitFor(() => expect(requests(world, 'POST', /\/approve$/)).toHaveLength(1))
     await userEvent.click(await within(rail()).findByRole('button', { name: /Subcontracting/ }))
     expect(screen.queryByRole('group', { name: 'Possible duplicate' })).not.toBeInTheDocument()
@@ -105,7 +167,7 @@ describe('compilation workspace', () => {
     expect(within(source).getByText('Assignment')).toBeInTheDocument()
     expect(source.textContent).not.toMatch(/page \d/i)
     expect(document.body.textContent).not.toMatch(/page \d/i)
-    expect(within(source).getByText('Original retained')).toBeInTheDocument()
+    expect(within(source).queryByText('Original retained')).not.toBeInTheDocument()
   })
 
   it('opens the source in context and returns to the candidate', async () => {
@@ -198,7 +260,7 @@ describe('compilation workspace', () => {
     world.candidates[SRC] = []
     startFakeServer(world)
     renderApp(`/knowledge/compilations/${SRC}`)
-    await screen.findByRole('heading', { level: 2, name: 'No entries were produced' })
+    expect(await screen.findByRole('heading', { level: 2, name: 'No entries were produced' })).toHaveFocus()
     const row = (await screen.findByText('How to use this playbook')).closest('.rv-kc-unit') as HTMLElement
     expect(row).not.toBeNull()
     expect(row).toHaveTextContent('Guidance')
@@ -281,6 +343,24 @@ describe('approve and reject', () => {
   })
 })
 
+describe('corrections', () => {
+  it('shows the correction badge only after a person saves an edit', async () => {
+    const { world } = await open(reviewWorld(), '?candidate=uncertain')
+    const interpretation = screen.getByRole('region', { name: 'What Rivell read' })
+    expect(within(interpretation).queryByText('Corrected by you')).not.toBeInTheDocument()
+    expect(within(interpretation).getByText('Rivell proposed: Any uncapped indemnity')).toBeInTheDocument()
+    expect(within(interpretation).getByText('Not stated')).toBeInTheDocument()
+
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: /Edit/ }))
+    const trigger = await screen.findByLabelText('Escalate')
+    await userEvent.type(trigger, 'Over AUD 1,000,000')
+    await userEvent.click(within(decisionBar()).getByRole('button', { name: 'Save correction' }))
+
+    await waitFor(() => expect(requests(world, 'POST', /\/candidates\/uncertain\/edit$/)).toHaveLength(1))
+    expect(await screen.findByText('Corrected by you')).toBeInTheDocument()
+  })
+})
+
 describe('conflict', () => {
   it('does not let one click make a possible conflict publishable', async () => {
     const { world } = await open()
@@ -301,9 +381,11 @@ describe('conflict', () => {
     const { world } = await open()
     const section = screen.getByRole('region', { name: 'Published knowledge this was compared with' })
     expect(await within(section).findByText('Published Liability Cap')).toBeInTheDocument()
+    // The workspace reads each distinct peer once for its title map, never per row.
+    expect(world.calls.filter((call) => call.method === 'GET'
+      && call.path === '/api/knowledge/candidates/peer1')).toHaveLength(1)
     await userEvent.click(within(section).getByRole('button', { name: 'Compare' }))
     expect(await within(section).findByText('A published cap at twelve months.')).toBeInTheDocument()
-    expect(world.calls.some((call) => call.method === 'GET' && call.path === '/api/knowledge/candidates/peer1')).toBe(true)
   })
 
   it('clears the conflict only when the server says so, after a legal concept correction', async () => {
@@ -409,15 +491,15 @@ describe('provenance and states', () => {
     world.fail[`GET candidates ${SRC}`] = 500
     startFakeServer(world)
     renderApp(`/knowledge/compilations/${SRC}`)
-    expect(await screen.findByRole('heading', { name: 'The entries could not be loaded' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'The entries could not be loaded' }, { timeout: 3000 })).toHaveFocus()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/at \w+\.|Exception|stack/i)
   })
 
-  it('says when a source cannot be found', async () => {
+  it('says when a source cannot be found, and focuses the heading', async () => {
     startFakeServer(reviewWorld())
     renderApp('/knowledge/compilations/missing')
-    expect(await screen.findByRole('heading', { name: 'This source could not be found' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'This source could not be found' })).toHaveFocus()
   })
 
   it('keeps the old compilation address working, with the candidate it named', async () => {

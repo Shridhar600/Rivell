@@ -42,7 +42,35 @@ describe('structured interpretation', () => {
     expect(row(rows, 'positions')?.value).toBe('Preferred, Fallback')
     expect(row(rows, 'escalation')?.value).toBe('Below six months')
     expect(row(rows, 'approval')?.value).toBe('Required')
+    expect(row(rows, 'preferredText')).toBeUndefined()
     expect(row(rows, 'concept')?.value).toBe('Limitation of liability')
+  })
+
+  it('shows the typed stances and approval rules it holds', () => {
+    const rows = interpretationRows(
+      make({
+        preferredText: 'Net 45 from a valid invoice.',
+        fallbackTexts: ['Net 30.', 'Net 60 for Tier 1.'],
+        prohibitedText: 'Payment in advance.',
+        authorityRules: [
+          {
+            approver: 'Commercial Manager',
+            stances: ['FALLBACK'],
+            condition: null,
+            source: 'MATRIX',
+            quote: null,
+          },
+        ],
+        authorityConflicts: [{ approver: 'General Counsel', source: 'ENTRY', stance: 'FALLBACK' }],
+      }),
+    )
+    expect(row(rows, 'preferredText')?.value).toBe('Net 45 from a valid invoice.')
+    expect(row(rows, 'fallbackTexts')?.value).toBe('Net 30.; Net 60 for Tier 1.')
+    expect(row(rows, 'prohibitedText')?.value).toBe('Payment in advance.')
+    expect(row(rows, 'authorityRules')?.value).toBe(
+      'Commercial Manager for fallback (Approval matrix). Other level: General Counsel (Entry, fallback)',
+    )
+    expect(row(rows, 'authorityRules')?.machine).toBeNull()
   })
 
   it('never invents a value that was not extracted', () => {
@@ -229,5 +257,128 @@ describe('human correction', () => {
     expect(hasHumanCorrection(make({ conceptCorrection: 'GOVERNING_LAW' }))).toBe(true)
     expect(hasHumanCorrection(make({ editedPayloadColumns: { A: 'b' } }))).toBe(true)
     expect(hasHumanCorrection(make({ editedTitle: 'A shorter title' }))).toBe(true)
+  })
+
+  it('is false for a machine proposal the source did not support, in every field type', () => {
+    const proposal = (field: string, proposedValue: string) => ({
+      field,
+      proposedValue,
+      kind: 'GENERATIVE_EXTRACTION',
+      specId: 's',
+      specVersion: 1,
+      supportingSourceNodes: 1,
+      verification: 'DISPUTED' as const,
+    })
+    const unresolved = (field: string, proposedValue: string) =>
+      make({
+        positions: [],
+        variantRole: null,
+        escalationTrigger: null,
+        requiresApproval: null,
+        interpretations: [proposal(field, proposedValue)],
+      })
+
+    const rowsFor = (field: string, proposedValue: string) => {
+      const entry = unresolved(field, proposedValue)
+      return interpretationRows(
+        field === 'variantRole' ? { ...entry, candidateType: 'CLAUSE_VARIANT' } : entry,
+      )
+    }
+
+    // A stored proposal is not a saved correction: the effective value stays empty and no
+    // "Corrected by you" badge appears.
+    expect(hasHumanCorrection(unresolved('positions', 'PREFERRED'))).toBe(false)
+    expect(hasHumanCorrection(unresolved('variantRole', 'FALLBACK'))).toBe(false)
+    expect(hasHumanCorrection(unresolved('escalationTrigger', 'Any uncapped indemnity'))).toBe(false)
+    expect(hasHumanCorrection(unresolved('requiresApproval', 'true'))).toBe(false)
+
+    expect(row(rowsFor('positions', 'PREFERRED'), 'positions')).toMatchObject({
+      value: 'Not specified',
+      machine: 'Rivell proposed: Preferred',
+      corrected: false,
+    })
+    expect(row(rowsFor('variantRole', 'FALLBACK'), 'variantRole')).toMatchObject({
+      value: 'Unspecified',
+      machine: 'Rivell proposed: Fallback',
+      corrected: false,
+    })
+    expect(row(rowsFor('escalationTrigger', 'Any uncapped indemnity'), 'escalation')).toMatchObject({
+      value: 'Not stated',
+      machine: 'Rivell proposed: Any uncapped indemnity',
+      corrected: false,
+    })
+    expect(row(rowsFor('requiresApproval', 'true'), 'approval')).toMatchObject({
+      value: 'Not specified',
+      machine: 'Rivell proposed: Required',
+      corrected: false,
+    })
+  })
+
+  it('is true for a structured field a person saved, in every field type', () => {
+    expect(hasHumanCorrection(make({ correctedFields: ['positions'] }))).toBe(true)
+    expect(hasHumanCorrection(make({ correctedFields: ['variantRole'] }))).toBe(true)
+    expect(hasHumanCorrection(make({ correctedFields: ['escalationTrigger'] }))).toBe(true)
+    expect(hasHumanCorrection(make({ correctedFields: ['requiresApproval'] }))).toBe(true)
+
+    expect(row(interpretationRows(make({ correctedFields: ['positions'] })), 'positions')?.corrected).toBe(true)
+    expect(
+      row(
+        interpretationRows(make({ candidateType: 'CLAUSE_VARIANT', correctedFields: ['variantRole'] })),
+        'variantRole',
+      )?.corrected,
+    ).toBe(true)
+    expect(row(interpretationRows(make({ correctedFields: ['escalationTrigger'] })), 'escalation')?.corrected).toBe(true)
+    expect(row(interpretationRows(make({ requiresApproval: true, correctedFields: ['requiresApproval'] })), 'approval')?.corrected).toBe(true)
+  })
+
+  it('reads typed wording and approval rule corrections from the API, not a value comparison', () => {
+    const interpretation = (field: string, proposedValue: string) => ({
+      field,
+      proposedValue,
+      kind: 'DETERMINISTIC' as const,
+      specId: 's',
+      specVersion: 1,
+      supportingSourceNodes: 1,
+      verification: 'VERIFIED' as const,
+    })
+    const machine = make({
+      preferredText: 'Net 45.',
+      fallbackTexts: ['Net 30.'],
+      prohibitedText: 'Payment in advance.',
+      authorityRules: [
+        {
+          approver: 'Commercial Manager',
+          stances: ['FALLBACK'],
+          condition: null,
+          source: 'MATRIX',
+          quote: null,
+        },
+      ],
+      interpretations: [
+        interpretation('preferredText', 'Net 45.'),
+        interpretation('fallbackTexts', 'Net 30.'),
+        interpretation('prohibitedText', 'Payment in advance.'),
+        interpretation('authorityRules', 'MATRIX: Commercial Manager [FALLBACK]'),
+      ],
+    })
+
+    // a stored machine rendering is not a correction, even when it does not match the signature
+    expect(hasHumanCorrection(machine)).toBe(false)
+    const staleRendering = make({
+      ...machine,
+      interpretations: [
+        ...machine.interpretations.filter((entry) => entry.field !== 'authorityRules'),
+        interpretation('authorityRules', 'TABLE: Someone else [FALLBACK]'),
+      ],
+    })
+    expect(hasHumanCorrection(staleRendering)).toBe(false)
+    expect(row(interpretationRows(staleRendering), 'authorityRules')?.corrected).toBe(false)
+
+    const keys = ['preferredText', 'fallbackTexts', 'prohibitedText', 'authorityRules'] as const
+    for (const field of keys) {
+      const corrected = make({ ...machine, correctedFields: [field] })
+      expect(hasHumanCorrection(corrected)).toBe(true)
+      expect(row(interpretationRows(corrected), field)?.corrected).toBe(true)
+    }
   })
 })

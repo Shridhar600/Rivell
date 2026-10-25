@@ -352,6 +352,49 @@
   font-weight: 500;
   overflow-wrap: anywhere;
 }
+.rv-k-fullsrc summary,
+.rv-kc-fullsrc summary {
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.rv-k-fullsrc[open] q,
+.rv-kc-fullsrc[open] p {
+  display: block;
+  margin-top: 8px;
+}
+.rv-k-appr {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.rv-k-appr th,
+.rv-k-appr td {
+  padding: 6px 6px 6px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  /* the inspector's value column breaks anywhere; a table cell wraps between words only */
+  overflow-wrap: normal;
+}
+.rv-k-appr th,
+.rv-k-appr td:first-child {
+  white-space: nowrap;
+}
+.rv-k-appr th {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.rv-k-appr tbody tr:last-child td {
+  border-bottom: 0;
+}
+.rv-k-appr__cond {
+  display: block;
+  white-space: normal;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .rv-k-loc {
   color: var(--text-3);
   font-size: 12px;

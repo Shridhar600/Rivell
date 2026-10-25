@@ -52,4 +52,53 @@ class StructuredPolicyResolverTest {
                 "This Agreement is governed by the laws of New Zealand.", profile,
                 LocalDate.of(2026, 1, 1), KnowledgePin.LATEST);
     }
+
+    @Test
+    void aPublishedPlaybookRuleWithNoRoleIsStillReadAsAPosition() {
+        // prose playbooks (one rule per paragraph, no stance labels) compile with no role; the
+        // whole rule is the position. Leaving them out lost 10 dev issues (release-4 eval).
+        var organizationId = UUID.randomUUID();
+        var noRole = candidate(Set.of(), java.util.Map.of(), "Indemnities",
+                "The supplier must indemnify us for third-party IP claims without a cap.");
+        var position = candidate(Set.of(com.rivell.workbench.knowledge.PositionRole.PREFERRED),
+                java.util.Map.of(), "Limitation of liability",
+                "Preferred: cap at the fees paid in the preceding 12 months.");
+        var queryService = new KnowledgeQueryService(null, null, null, java.time.Clock.systemUTC()) {
+            @Override
+            public List<PublishedCandidate> listPublishedCandidatesForOrganization(
+                    PublishedKnowledgeQuery query) {
+                return List.of(
+                        new PublishedCandidate(noRole, UUID.randomUUID(), 1),
+                        new PublishedCandidate(position, UUID.randomUUID(), 1));
+            }
+        };
+        var resolver = new StructuredPolicyResolver(queryService);
+
+        var resolution = resolver.resolveAll(request(organizationId, Jurisdiction.UNSPECIFIED),
+                Set.of(com.rivell.workbench.knowledge.CandidateType.PLAYBOOK_RULE), 1, 10);
+
+        assertThat(resolution.candidates())
+                .extracting(candidate -> candidate.rawLabel())
+                .containsExactly("Indemnities", "Limitation of liability");
+    }
+
+    private static com.rivell.workbench.knowledge.KnowledgeCandidate candidate(
+            Set<com.rivell.workbench.knowledge.PositionRole> positions,
+            java.util.Map<String, String> columns, String label, String content) {
+        var now = java.time.Instant.now();
+        var scope = new com.rivell.workbench.knowledge.ApplicabilityScope(
+                null, Set.of(), null, null, null, null, null);
+        return new com.rivell.workbench.knowledge.KnowledgeCandidate(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                com.rivell.workbench.knowledge.CandidateType.PLAYBOOK_RULE,
+                com.rivell.workbench.knowledge.ReviewStatus.PUBLISHED, label, content,
+                new com.rivell.workbench.knowledge.CandidatePayload(columns),
+                CoreConcepts.LIMITATION_OF_LIABILITY.value(),
+                List.of(CoreConcepts.LIMITATION_OF_LIABILITY.value()),
+                null, null, null,
+                new com.rivell.workbench.knowledge.SemanticFields(positions, null, null, null,
+                        java.util.Map.of()),
+                null, List.of(), null, null, null, scope, List.of(), null, null, null, null,
+                now, now, null);
+    }
 }

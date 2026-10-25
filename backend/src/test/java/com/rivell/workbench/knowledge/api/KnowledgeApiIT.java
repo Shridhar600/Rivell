@@ -1,6 +1,8 @@
 package com.rivell.workbench.knowledge.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -14,6 +16,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +33,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.junit.jupiter.Container;
@@ -38,10 +44,13 @@ import org.testcontainers.utility.DockerImageName;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.knowledge.ArtifactType;
+import com.rivell.workbench.knowledge.SemanticCompilationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "rivell.document-work.max-concurrent=1",
+        "rivell.document-work.max-wait=50ms"})
 @AutoConfigureMockMvc
 @Testcontainers
 class KnowledgeApiIT {
@@ -105,7 +114,16 @@ class KnowledgeApiIT {
     ObjectMapper objectMapper;
 
     @Autowired
+    org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
+
+    @Autowired
+    com.rivell.workbench.foundation.DocumentWorkLimiter documentWorkLimiter;
+
+    @Autowired
     MutableIdentityProvider identityProvider;
+
+    @MockitoSpyBean
+    SemanticCompilationService semanticCompilationService;
 
     @BeforeEach
     void freshOrganization() {
@@ -469,6 +487,68 @@ class KnowledgeApiIT {
         assertThat(stored.path("requiresApproval").isNull())
                 .as("a cleared approval is not specified, not the machine answer")
                 .isTrue();
+    }
+
+    @Test
+    void aBusyDocumentLimitRefusesTheUploadBeforeAnythingIsStored() throws Exception {
+        var slotTaken = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var holder = CompletableFuture.runAsync(() -> documentWorkLimiter.run(() -> {
+            slotTaken.countDown();
+            try {
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return null;
+        }));
+        assertThat(slotTaken.await(5, TimeUnit.SECONDS)).isTrue();
+
+        var artifactsBefore = jdbcClient.sql("select count(*) from knowledge_artifact")
+                .query(Long.class).single();
+        byte[] bytes;
+        try (var stream = getClass().getClassLoader()
+                .getResourceAsStream("fixtures/knowledge-playbook.docx")) {
+            bytes = stream.readAllBytes();
+        }
+        try {
+            mockMvc.perform(multipart("/api/knowledge/artifacts")
+                            .file(new MockMultipartFile("file", "knowledge-playbook.docx",
+                                    "application/vnd.openxmlformats-officedocument."
+                                            + "wordprocessingml.document", bytes))
+                            .param("artifactType", "PLAYBOOK"))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(header().string("Retry-After", "5"))
+                    .andExpect(jsonPath("$.title").value("Service busy"));
+        } finally {
+            release.countDown();
+        }
+        holder.get(5, TimeUnit.SECONDS);
+
+        assertThat(jdbcClient.sql("select count(*) from knowledge_artifact")
+                .query(Long.class).single())
+                .as("a refused upload creates no source").isEqualTo(artifactsBefore);
+    }
+
+    @Test
+    void theModelCompileRunsOutsideTheDocumentSlot() throws Exception {
+        // The slot bounds files held in memory while they are parsed. The model compile that
+        // follows can take minutes; holding the slot through it would refuse every other upload
+        // and redline for that time.
+        var otherWorkDuringCompile = new ArrayList<String>();
+        doAnswer(invocation -> {
+            otherWorkDuringCompile.add(CompletableFuture
+                    .supplyAsync(() -> documentWorkLimiter.run(() -> "ran"))
+                    .handle((result, failure) -> failure == null ? result : "refused")
+                    .get(5, TimeUnit.SECONDS));
+            return invocation.callRealMethod();
+        }).when(semanticCompilationService).compile(any(), any(), any(), any());
+
+        upload("knowledge-playbook.docx", ArtifactType.PLAYBOOK, null, null, null, null, null);
+
+        assertThat(otherWorkDuringCompile)
+                .as("another document job runs while the model compile is in progress")
+                .containsExactly("ran");
     }
 
     private JsonNode upload(

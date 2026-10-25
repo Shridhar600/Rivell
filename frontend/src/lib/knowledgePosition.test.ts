@@ -56,7 +56,7 @@ describe('roles and scope', () => {
     )
     expect(rows).toEqual([
       { label: 'Applies to', value: 'NDA, MSA, Commercial msa pack' },
-      { label: 'Paper', value: 'Our paper' },
+      { label: 'Whose template', value: 'Our template' },
       { label: 'Jurisdiction', value: 'United Kingdom' },
     ])
   })

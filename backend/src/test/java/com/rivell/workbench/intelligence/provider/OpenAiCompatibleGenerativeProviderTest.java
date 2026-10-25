@@ -88,6 +88,30 @@ class OpenAiCompatibleGenerativeProviderTest {
     }
 
     @Test
+    void configuredReasoningEffortIsSentAndUnsetIsOmitted() {
+        var sent = new java.util.ArrayList<String>();
+        var accessor = scripted(request -> {
+            sent.add(request);
+            return chatResponse(
+                    "{\"liabilityCapMultiple\":\"3\",\"capBasis\":\"PRECEDING_12_MONTH_FEES\"}",
+                    "stop", null);
+        });
+        var reasoningOff = new OpenAiCompatibleGenerativeProvider(accessor, MAPPER,
+                new GenerativeProperties("openai-compatible", "https://gateway.test/v1", "key",
+                        "gpt-test", null, null, null, null, null,
+                        new GenerativeProperties.Reasoning(false, null)));
+        var unset = new OpenAiCompatibleGenerativeProvider(accessor, MAPPER,
+                new GenerativeProperties("openai-compatible", "https://gateway.test/v1", "key",
+                        "gpt-test", null, null));
+
+        reasoningOff.generate(new GenerationRequest("cap-model", state("cap text"), capSpec()));
+        unset.generate(new GenerationRequest("cap-model", state("cap text"), capSpec()));
+
+        assertThat(sent.get(0)).contains("\"reasoning_effort\":\"none\"");
+        assertThat(sent.get(1)).doesNotContain("reasoning_effort");
+    }
+
+    @Test
     void aLongRedraftedClauseIsAcceptedWhileAnOverlongFieldIsRejected() {
         var spec = new ReasoningSpec("m7-open-ended-position", 2, "Redraft the clause.", 2,
                 new LinkedHashMap<>(Map.of("proposedLanguage", "new clause text")));
@@ -369,8 +393,158 @@ class OpenAiCompatibleGenerativeProviderTest {
 
         assertThatThrownBy(() -> provider.generate(
                 new GenerationRequest("cap-model", state("t"), capSpec())))
-                .isInstanceOf(com.rivell.workbench.intelligence.ProviderRejectedException.class)
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class)
                 .hasMessageContaining("no credits");
+    }
+
+    @Test
+    void everyDocumentedBillingCodeIsOutOfCredit() {
+        for (var code : java.util.List.of("credit_balance_exhausted",
+                "organization_spend_limit_exceeded", "project_spend_limit_exceeded",
+                "organization_usage_limit_exceeded")) {
+            var body = "{\"error\":{\"code\":\"" + code + "\",\"type\":\"invalid_request_error\"}}";
+            var provider = new OpenAiCompatibleGenerativeProvider(
+                    scripted(request -> {
+                        throw new org.springframework.web.client.RestClientResponseException(
+                                "rejected", 429, "Too Many Requests", null,
+                                body.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+                    }),
+                    MAPPER, new GenerativeProperties(
+                            "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+            assertThatThrownBy(() -> provider.generate(
+                    new GenerationRequest("cap-model", state("t"), capSpec())))
+                    .as(code)
+                    .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        }
+    }
+
+    @Test
+    void aSpendLimitInTheTypeFieldIsOutOfCredit() {
+        var body = "{\"error\":{\"type\":\"insufficient_quota\"}}";
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> {
+                    throw new org.springframework.web.client.RestClientResponseException(
+                            "rejected", 429, "Too Many Requests", null,
+                            body.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+                }),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+        assertThatThrownBy(() -> provider.generate(
+                new GenerationRequest("cap-model", state("t"), capSpec())))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+    }
+
+    @Test
+    void slowDownAndAPlain429CarryTheRetryAfter() {
+        for (var body : java.util.List.of(
+                "{\"error\":{\"code\":\"slow_down\",\"type\":\"rate_limit_error\"}}",
+                "{\"error\":{\"code\":\"rate_limit_exceeded\",\"type\":\"rate_limit_error\"}}")) {
+            var headers = new org.springframework.http.HttpHeaders();
+            headers.set(org.springframework.http.HttpHeaders.RETRY_AFTER, "7");
+            var provider = new OpenAiCompatibleGenerativeProvider(
+                    scripted(request -> {
+                        throw new org.springframework.web.client.RestClientResponseException(
+                                "rejected", 429, "Too Many Requests", headers,
+                                body.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+                    }),
+                    MAPPER, new GenerativeProperties(
+                            "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+
+            assertThatThrownBy(() -> provider.generate(
+                    new GenerationRequest("cap-model", state("t"), capSpec())))
+                    .as(body)
+                    .isInstanceOfSatisfying(
+                            com.rivell.workbench.intelligence.ProviderRateLimitedException.class,
+                            failure -> assertThat(failure.retryAfter())
+                                    .isEqualTo(java.time.Duration.ofSeconds(7)));
+        }
+    }
+
+    @Test
+    void outOfCreditShortCircuitsTheSameProviderForAMinute() {
+        var clock = new TestClock();
+        var guard = new com.rivell.workbench.intelligence.ProviderCreditGuard(clock);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var billing = "{\"error\":{\"code\":\"credit_balance_exhausted\"}}";
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> {
+                    calls.incrementAndGet();
+                    throw new org.springframework.web.client.RestClientResponseException(
+                            "rejected", 429, "Too Many Requests", null,
+                            billing.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+                }),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null),
+                guard);
+
+        assertThatThrownBy(() -> provider.generate(
+                new GenerationRequest("cap-model", state("t"), capSpec())))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        assertThat(calls).hasValue(1);
+
+        assertThatThrownBy(() -> provider.generate(
+                new GenerationRequest("cap-model", state("t"), capSpec())))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        assertThat(calls).hasValue(1);
+
+        clock.advance(java.time.Duration.ofSeconds(61));
+        assertThatThrownBy(() -> provider.generate(
+                new GenerationRequest("cap-model", state("t"), capSpec())))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        assertThat(calls).hasValue(2);
+    }
+
+    @Test
+    void aLongReadCallUsesTheLongRestClient() {
+        var shortCalls = new java.util.concurrent.atomic.AtomicInteger();
+        var longCalls = new java.util.concurrent.atomic.AtomicInteger();
+        var body = chatResponse(
+                "{\"liabilityCapMultiple\":\"3\",\"capBasis\":\"ANNUAL_FEES\"}", "stop", null);
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                (path, payload) -> {
+                    shortCalls.incrementAndGet();
+                    return body;
+                },
+                (path, payload) -> {
+                    longCalls.incrementAndGet();
+                    return body;
+                },
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null),
+                new com.rivell.workbench.intelligence.ProviderCreditGuard(
+                        java.time.Clock.systemUTC()));
+
+        provider.generate(new GenerationRequest("cap-model", state("t"), capSpec()));
+        provider.generate(new GenerationRequest("cap-model", state("t"), capSpec(), true));
+
+        assertThat(shortCalls).hasValue(1);
+        assertThat(longCalls).hasValue(1);
+    }
+
+    private static final class TestClock extends java.time.Clock {
+
+        private java.time.Instant instant = java.time.Instant.parse("2026-10-24T10:00:00Z");
+
+        void advance(java.time.Duration duration) {
+            instant = instant.plus(duration);
+        }
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return java.time.ZoneOffset.UTC;
+        }
+
+        @Override
+        public java.time.Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public java.time.Instant instant() {
+            return instant;
+        }
     }
 
     @Test

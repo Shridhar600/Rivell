@@ -519,7 +519,8 @@ describe('workspace decisions — current decision and revision', () => {
     expect(detailPane().queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument()
     expect(detailPane().queryByRole('button', { name: 'Resolve' })).not.toBeInTheDocument()
     expect(detailPane().queryByRole('button', { name: 'Escalate' })).not.toBeInTheDocument()
-    expect(detailPane().getByText(/finalized/i)).toBeInTheDocument()
+    expect(detailPane().getByText('Decision final: Accepted')).toBeInTheDocument()
+    expect(detailPane().queryByText(/review is finalized/i)).not.toBeInTheDocument()
   })
 
   it('says why decisions are unavailable until the review workflow state is available', async () => {

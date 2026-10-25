@@ -161,8 +161,8 @@ describe('review context', () => {
   it('reads the context frozen on the Review, never anything newer', () => {
     expect(contextRows(profile, 'MSA pack')).toEqual([
       { label: 'Type', value: 'MSA' },
-      { label: 'Our side', value: 'Supplier' },
-      { label: 'Paper', value: 'Counterparty paper' },
+      { label: 'Party you represent', value: 'Supplier' },
+      { label: 'Whose template', value: 'Their template' },
       { label: 'Jurisdiction', value: 'United Kingdom' },
       { label: 'Pack', value: 'MSA pack' },
     ])
@@ -170,7 +170,7 @@ describe('review context', () => {
 
   it('says Not specified for an undeclared value, and None for no pack', () => {
     const rows = contextRows({ ...profile, ourSideRole: null, contractPackKey: null }, null)
-    expect(rows.find((row) => row.label === 'Our side')?.value).toBe('Not specified')
+    expect(rows.find((row) => row.label === 'Party you represent')?.value).toBe('Not specified')
     expect(rows.find((row) => row.label === 'Pack')?.value).toBe('None')
   })
 

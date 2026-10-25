@@ -28,7 +28,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
+import com.rivell.workbench.contracts.ContractRepository;
 import com.rivell.workbench.contracts.ContractType;
+import com.rivell.workbench.contracts.DocumentNode;
+import com.rivell.workbench.contracts.DocumentNodeType;
 import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.contracts.PaperSource;
 import com.rivell.workbench.contracts.PartyRole;
@@ -89,6 +92,9 @@ class AdvisoryPickIT {
 
     @Autowired
     ReviewRepository reviewRepository;
+
+    @Autowired
+    ContractRepository contractRepository;
 
     @Autowired
     LiabilityReviewIT.ReviewScriptedProvider scriptedProvider;
@@ -159,8 +165,7 @@ class AdvisoryPickIT {
     }
 
     @Test
-    void aPlaybookSilentClauseTheReadPicksIsALowNeedsYourLookItem() throws Exception {
-        var reviewId = reviewedContract();
+    void aPlaybookSilentClauseTheReadPicksIsALowNeedsYourLookItem() throws Exception {        var reviewId = reviewedContract();
         // Governing Law is playbook-silent: no position addresses it, the triage finds it normal
         scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
         generativeProvider.spottedHighHeadings.add(GOVERNING_LAW);
@@ -267,6 +272,149 @@ class AdvisoryPickIT {
                 .containsEntry("uncertaintyReason", "playbook_silent")
                 .containsEntry("spottedSeverity", "HIGH")
                 .containsEntry("uncoveredProbability", 0.05);
+    }
+
+    @Test
+    void anIssueIsAttachedToTheClauseContainingItsQuote() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
+        scriptedProvider.headingAnswers.put(TERMINATION, PolicyComparisonSpecs.NOT_ADDRESSED);
+        var review = reviewRepository.find(organizationId(), reviewId).orElseThrow();
+        var structure = contractRepository.loadStructure(review.contractVersionId());
+        var terminationHeading = heading(structure.nodes(), TERMINATION);
+        var governingHeading = heading(structure.nodes(), GOVERNING_LAW);
+        // The read names the termination clause but quotes the governing-law clause. The quote
+        // decides: the issue belongs to governing law, and termination gets nothing.
+        generativeProvider.spottingOutput = state -> {
+            var termination = spottingClause(state, TERMINATION);
+            var governing = spottingClause(state, GOVERNING_LAW);
+            var quote = governing.text().lines().map(String::strip)
+                    .filter(line -> !line.isBlank() && !line.equals(governing.heading()))
+                    .findFirst().orElseThrow();
+            return termination.number() + " | HIGH | " + quote + " | governing law is foreign";
+        };
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var spotted = spottedFindings(findings(run.id()));
+        assertThat(spotted).hasSize(1);
+        assertThat(spotted.getFirst().subjectHeadingNodeId()).isEqualTo(governingHeading.id());
+        assertThat(spotted).noneMatch(
+                finding -> terminationHeading.id().equals(finding.subjectHeadingNodeId()));
+    }
+
+    @Test
+    void twoGroundedIssuesOnOneClauseAreTwoFindings() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
+        var review = reviewRepository.find(organizationId(), reviewId).orElseThrow();
+        var governingHeading = heading(
+                contractRepository.loadStructure(review.contractVersionId()).nodes(), GOVERNING_LAW);
+        generativeProvider.spottingOutput = state -> {
+            var governing = spottingClause(state, GOVERNING_LAW);
+            var lines = governing.text().lines().map(String::strip)
+                    .filter(line -> !line.isBlank()).toList();
+            return governing.number() + " | HIGH | " + lines.get(0) + " | first issue\n"
+                    + governing.number() + " | MEDIUM | " + lines.get(1) + " | second issue";
+        };
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var spotted = spottedFindings(findings(run.id()));
+        assertThat(spotted).hasSize(2);
+        assertThat(spotted).allSatisfy(finding -> {
+            assertThat(finding.subjectHeadingNodeId()).isEqualTo(governingHeading.id());
+            assertThat(finding.quality()).containsEntry("route", "NEEDS_YOUR_LOOK");
+        });
+        assertThat(spotted).extracting(finding -> finding.quality().get("spottedSeverity"))
+                .containsExactlyInAnyOrder("HIGH", "MEDIUM");
+    }
+
+    @Test
+    void anIssueWhoseQuoteIsNotFoundIsDroppedAndCounted() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
+        generativeProvider.spottingOutput = state -> spottingClause(state, GOVERNING_LAW).number()
+                + " | HIGH | words that appear in no clause | invented issue";
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        assertThat(spottedFindings(findings(run.id()))).isEmpty();
+        var execution = analysisRepository.findExecutions(organizationId(), run.id()).stream()
+                .filter(candidate -> candidate.detail().containsKey("spottingDropped"))
+                .findFirst().orElseThrow();
+        assertThat(execution.detail()).containsEntry("spottingDropped", 1);
+        // The run-level diagnostics expose the dropped count once, so a quiet read is not
+        // mistaken for a clean one and summing per-clause rows cannot overstate it.
+        assertThat(json("/api/reviews/{id}/diagnostics", reviewId)
+                .at("/data/analysis/spottingDropped").asInt(-1)).isEqualTo(1);
+    }
+
+    private static DocumentNode heading(List<DocumentNode> nodes, String text) {
+        return nodes.stream()
+                .filter(node -> node.nodeType() == DocumentNodeType.HEADING)
+                .filter(node -> node.text() != null && node.text().contains(text))
+                .findFirst().orElseThrow();
+    }
+
+    private static IssueSpottingSpecs.SpottingClause spottingClause(
+            IssueSpottingSpecs.SpottingState state, String heading) {
+        return state.clauses().stream()
+                .filter(clause -> clause.heading().contains(heading))
+                .findFirst().orElseThrow();
+    }
+
+    @Test
+    void aFailedTriageDegradesTheClauseCheckInsteadOfReadingAsClean() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
+        scriptedProvider.failUncoveredTriage = true;
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var execution = analysisRepository.findExecutions(organizationId(), run.id()).stream()
+                .filter(candidate -> Boolean.TRUE.equals(
+                        candidate.detail().get("uncoveredTriageUnavailable")))
+                .findFirst().orElseThrow();
+        assertThat(execution.status()).isEqualTo(CheckExecutionStatus.DEGRADED);
+        assertThat(execution.detail()).containsEntry(
+                "degradedReason", "uncovered_triage_unavailable");
+        assertThat(reviewRepository.find(organizationId(), reviewId).orElseThrow().status())
+                .isEqualTo(ReviewStatus.COMPLETED);
+    }
+
+    @Test
+    void outOfCreditOnTheWholeContractReadDegradesWithItsOwnReason() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
+        generativeProvider.spottingOutOfCredit = true;
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        assertThat(analysisRepository.findExecutions(organizationId(), run.id()))
+                .anySatisfy(execution -> assertThat(execution.detail())
+                        .containsEntry("degradedReason", "provider_out_of_credit"));
+        assertThat(spottedFindings(findings(run.id()))).isEmpty();
+        assertThat(reviewRepository.find(organizationId(), reviewId).orElseThrow().status())
+                .isEqualTo(ReviewStatus.COMPLETED);
+    }
+
+    @Test
+    void aFailedWholeContractReadIsRecordedOnTheClauseCheck() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(GOVERNING_LAW, PolicyComparisonSpecs.NOT_ADDRESSED);
+        generativeProvider.failSpotting = true;
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        assertThat(analysisRepository.findExecutions(organizationId(), run.id()))
+                .anySatisfy(execution -> {
+                    assertThat(execution.detail()).containsEntry("addressed", false);
+                    assertThat(execution.detail()).containsEntry("spottingUnavailable", true);
+                });
+        assertThat(spottedFindings(findings(run.id()))).isEmpty();
+        assertThat(reviewRepository.find(organizationId(), reviewId).orElseThrow().status())
+                .isEqualTo(ReviewStatus.COMPLETED);
     }
 
     @Test

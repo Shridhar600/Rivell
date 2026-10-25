@@ -69,7 +69,6 @@ function toneOf(lifecycle: Lifecycle): HomeTone {
 }
 
 const GUIDANCE: Partial<Record<LifecycleKey, string>> = {
-  queued: 'You can leave this page. Analysis starts on its own.',
   analyzing: 'You can leave this page. Analysis keeps running.',
   failed: 'The contract is unchanged. Open the review to see what stopped it.',
   completed: "No decision yet. Your decisions are kept separate from Rivell's recommendations.",
@@ -81,6 +80,36 @@ const GUIDANCE: Partial<Record<LifecycleKey, string>> = {
   finalized_zero: 'Finalized with no approved changes, so no redline was needed.',
   rl_verified: 'Built from your final decisions and checked.',
   rl_failed: 'The redline could not be produced. Your decisions are unchanged.',
+}
+
+/** After this long, a waiting analysis is no longer ordinary queueing. */
+export const WAITING_LONG_MS = 10 * 60 * 1000
+
+/** How long an analysis has waited, in words. Null when the timestamp cannot be read. */
+export function waitingText(createdAt: string, now = Date.now()): string | null {
+  const started = Date.parse(createdAt)
+  if (!Number.isFinite(started)) return null
+  const minutes = Math.max(0, Math.floor((now - started) / 60000))
+  if (minutes < 1) return 'Waiting under 1 min'
+  if (minutes < 60) return `Waiting ${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `Waiting ${hours} hr${hours === 1 ? '' : 's'}`
+  const days = Math.floor(hours / 24)
+  return `Waiting ${days} day${days === 1 ? '' : 's'}`
+}
+
+export function isWaitingLong(createdAt: string, now = Date.now()): boolean {
+  const started = Date.parse(createdAt)
+  return Number.isFinite(started) && now - started >= WAITING_LONG_MS
+}
+
+/** The waiting state's own line: how long it has waited, then the retry promise after ten minutes. */
+export function queuedGuidance(createdAt: string, now = Date.now()): string {
+  const waited = waitingText(createdAt, now)
+  const line = `${waited ? `${waited}. ` : ''}You can leave this page. Analysis starts on its own.`
+  return isWaitingLong(createdAt, now)
+    ? `${line} Taking longer than usual. Rivell keeps retrying.`
+    : line
 }
 
 /** When something last happened to the Review, by the most specific fact the server gives. */
@@ -116,13 +145,15 @@ function detailsOf(review: ReviewListItem, lifecycle: Lifecycle, typeLabel: stri
   return details
 }
 
-export function homeReview(review: ReviewListItem): HomeReview {
+export function homeReview(review: ReviewListItem, now = Date.now()): HomeReview {
   const row = reviewRowView(review)
   const { lifecycle } = row
   const time = timeOf(review)
   // The row's second line is the real progress where the list proves one, and the version otherwise.
   const progress = row.progress === '—' ? null : row.progress
   const meta = [row.versionChip, progress].filter(Boolean).join(' · ')
+  const guidance =
+    lifecycle.key === 'queued' ? queuedGuidance(review.createdAt, now) : (GUIDANCE[lifecycle.key] ?? null)
   return {
     id: review.id,
     title: row.title,
@@ -139,7 +170,7 @@ export function homeReview(review: ReviewListItem): HomeReview {
     timeLabelKind: time.kind,
     to: row.to,
     primaryActionLabel: 'Open review',
-    guidance: GUIDANCE[lifecycle.key] ?? null,
+    guidance,
     details: detailsOf(review, lifecycle, row.typeChip),
   }
 }

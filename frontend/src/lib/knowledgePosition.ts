@@ -16,10 +16,21 @@ const ROLE_ORDER: PositionRole[] = ['PREFERRED', 'FALLBACK', 'PROHIBITED', 'ESCA
 export const POSITION_ROLE_LABELS: Record<PositionRole, string> = {
   PREFERRED: 'Preferred',
   FALLBACK: 'Fallback',
-  PROHIBITED: 'Prohibited',
+  PROHIBITED: 'Walk-away',
   ESCALATION: 'Escalation',
   COMMENTARY: 'Commentary',
   UNSPECIFIED: 'Unspecified',
+}
+
+/** The stance an approval rule covers, as the Situation column reads it. */
+export function approvalSituationLabel(stances: PositionRole[]): string {
+  const held = new Set(stances)
+  const covered = ROLE_ORDER.filter(
+    (role) => held.has(role) && role !== 'COMMENTARY' && role !== 'UNSPECIFIED',
+  )
+  return covered.length > 0
+    ? covered.map((role) => POSITION_ROLE_LABELS[role]).join(', ')
+    : 'Any departure (no stance)'
 }
 
 /** The roles the compilation recorded for a passage, in reading order. Never inferred from its wording. */
@@ -104,7 +115,7 @@ export function scopeRows(
   } else if (pack) {
     rows.push({ label: 'Applies to', value: `All contract types, ${pack}` })
   }
-  if (candidate.paperSource) rows.push({ label: 'Paper', value: labelled(PAPER_SOURCE_LABELS, candidate.paperSource) })
+  if (candidate.paperSource) rows.push({ label: 'Whose template', value: labelled(PAPER_SOURCE_LABELS, candidate.paperSource) })
   if (candidate.partyPerspective) rows.push({ label: 'Perspective', value: roleLabel(candidate.partyPerspective) })
   if (candidate.jurisdiction) rows.push({ label: 'Jurisdiction', value: labelled(JURISDICTION_LABELS, candidate.jurisdiction) })
   const from = candidate.effectiveFrom ? dateOnly(candidate.effectiveFrom) : ''

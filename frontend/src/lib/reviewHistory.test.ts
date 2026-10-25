@@ -177,7 +177,7 @@ describe('reviewRowView', () => {
     expect(row).toMatchObject({
       versionChip: 'v2',
       typeChip: 'MSA',
-      detail: 'Supplier side, counterparty paper, United Kingdom',
+      detail: 'Supplier side, their template, United Kingdom',
       title: 'Acme MSA.docx',
     })
   })

@@ -12,6 +12,7 @@ import {
   editLanguageRequired,
   validateDecisionForm,
 } from '../../lib/workflow'
+import { isRelatedPosition } from '../../lib/reviews'
 import { Button } from '../ui/Button'
 
 export type ComposeKind = 'EDIT' | 'KEEP_AS_DRAFTED' | 'FINDING_WRONG' | 'ESCALATE' | 'RESOLVE'
@@ -32,6 +33,8 @@ interface Props {
   currentText: string | null
   /** The starting text: the clause as received, or the wording of the existing edit. */
   initialLanguage: string
+  /** What an edit is compared with to refuse an unchanged save. Defaults to initialLanguage. */
+  baselineLanguage?: string
   isSubmitting: boolean
   error: string | null
   onSubmit: (submission: DecisionSubmission) => void
@@ -52,7 +55,7 @@ const TITLES: Record<ComposeKind, string> = {
  * needs the name of the person who approved the clause. No action asks a person to retype
  * text: a replacement starts from the clause as received.
  */
-export function DecisionComposer({ kind, finding, currentText, initialLanguage, isSubmitting, error, onSubmit, onCancel }: Props) {
+export function DecisionComposer({ kind, finding, currentText, initialLanguage, baselineLanguage, isSubmitting, error, onSubmit, onCancel }: Props) {
   const changeTypes = editActionsForSubject(finding.subjectKind)
   const [approvedAction, setApprovedAction] = useState<ChangeActionType>(defaultEditAction(finding.subjectKind))
   const [language, setLanguage] = useState(initialLanguage)
@@ -78,7 +81,8 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
     kind === 'EDIT' || kind === 'ESCALATE' || kind === 'RESOLVE' ? kind : 'REJECT'
 
   function save() {
-    if (isEdit && needsLanguage && initialLanguage !== '' && language === initialLanguage) {
+    if (isEdit && needsLanguage && (baselineLanguage ?? initialLanguage) !== ''
+        && language === (baselineLanguage ?? initialLanguage)) {
       setErrors({ approvedLanguage: 'Change the wording before you save.' })
       return
     }
@@ -172,7 +176,7 @@ export function DecisionComposer({ kind, finding, currentText, initialLanguage, 
                 aria-invalid={errors.approvedLanguage ? true : undefined}
                 onChange={(event) => setLanguage(event.target.value)}
               />
-              {finding.proposedLanguage ? (
+              {finding.proposedLanguage && !isRelatedPosition(finding) ? (
                 <div style={{ marginTop: 7 }}>
                   <button type="button" className="rv-ws-link" onClick={() => setLanguage(finding.proposedLanguage ?? '')}>
                     Use proposed language

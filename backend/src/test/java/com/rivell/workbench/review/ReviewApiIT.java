@@ -87,6 +87,9 @@ class ReviewApiIT {
     LiabilityReviewIT.MutableIdentity identityProvider;
 
     @Autowired
+    LiabilityReviewIT.ReviewScriptedProvider scriptedProvider;
+
+    @Autowired
     M6EvidenceCorpus corpusBuilder;
 
     @Autowired
@@ -111,6 +114,7 @@ class ReviewApiIT {
     void freshOrganization() {
         identityProvider.use(new UserIdentity(
                 UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
+        scriptedProvider.reset();
     }
 
     private UUID organizationId() {
@@ -855,6 +859,33 @@ class ReviewApiIT {
                         PaperSource.COUNTERPARTY_PAPER, Jurisdiction.US,
                         ReviewPackRegistry.MSA_PACK));
         return ingested.contractId();
+    }
+
+    @Test
+    void anOutOfCreditAnalysisWarnsTheReviewerToAddCredit() throws Exception {
+        var corpus = corpusBuilder.buildMainCorpus(organizationId());
+        var created = createReview(corpus.contract().contractId(),
+                ReviewPackRegistry.MSA_PACK);
+        var reviewId = UUID.fromString(created.get("id").asText());
+        scriptedProvider.failPolicyComparisonOutOfCredit = true;
+
+        analysisService.analyze(organizationId(), reviewId);
+
+        var summary = json(mockMvc.perform(get("/api/reviews/{id}", reviewId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.analysisWarnings").isNotEmpty())
+                .andReturn()).get("data");
+        var warning = summary.get("analysisWarnings").findValues("reasonCode").stream()
+                .filter(value -> "PROVIDER_OUT_OF_CREDIT".equals(value.asText()))
+                .findFirst().orElseThrow();
+        assertThat(warning).isNotNull();
+        var message = summary.get("analysisWarnings").findValues("message").stream()
+                .filter(value -> value.asText().contains("out of credit"))
+                .findFirst().orElseThrow();
+        assertThat(message.asText()).isEqualTo(
+                "The analysis account is out of credit. An administrator needs to add credit, "
+                        + "then run the review again.");
     }
 
     private void updateEnrichmentStatus(UUID versionId, String status) {

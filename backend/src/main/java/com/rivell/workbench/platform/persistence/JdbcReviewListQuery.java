@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.rivell.workbench.review.ReviewAnalysisService;
 import com.rivell.workbench.review.ReviewExecutionCounts;
 import com.rivell.workbench.review.ReviewContextSummary;
 import com.rivell.workbench.review.ReviewListFinalization;
@@ -191,19 +192,24 @@ class JdbcReviewListQuery implements ReviewListQuery {
                 select run_id,
                        count(*) filter (where status = 'COMPLETED') as completed,
                        count(*) filter (where status = 'DEGRADED') as degraded,
-                       count(*) filter (where status = 'FAILED') as failed
+                       count(*) filter (where status = 'FAILED') as failed,
+                       count(*) filter (where status = 'FAILED' or status = 'SKIPPED'
+                           or (status = 'DEGRADED'
+                               and detail ->> 'degradedReason' = :deadlineReason)) as did_not_run
                 from review_check_execution
                 where organization_id = :organizationId and run_id = any(:runIds)
                 group by run_id
                 """)
                 .param("organizationId", organizationId)
                 .param("runIds", runIds.toArray(UUID[]::new))
+                .param("deadlineReason", ReviewAnalysisService.DEADLINE_DEGRADED_REASON)
                 .query((rs, rowNum) -> Map.entry(
                         rs.getObject("run_id", UUID.class),
                         new ReviewExecutionCounts(
                                 rs.getInt("completed"),
                                 rs.getInt("degraded"),
-                                rs.getInt("failed"))))
+                                rs.getInt("failed"),
+                                rs.getInt("did_not_run"))))
                 .list()
                 .stream()
                 .collect(java.util.stream.Collectors.toUnmodifiableMap(

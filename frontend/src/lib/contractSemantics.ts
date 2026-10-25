@@ -14,10 +14,15 @@ export const CONTRACT_TYPES = [
   'ONDA',
   'NDA',
   'MSA',
+  'SERVICES',
+  'SUPPLY',
   'SAAS',
-  'DPA',
+  'ORDER_FORM',
   'SOW',
+  'DPA',
   'SWL',
+  'RESELLER',
+  'AMENDMENT',
   'OTHER',
 ] as const satisfies readonly NonNullable<
   ReviewProfileInput['contractType']
@@ -129,17 +134,22 @@ export const CONTRACT_TYPE_LABELS: Record<string, string> = {
   ONDA: 'One-way NDA',
   NDA: 'NDA',
   MSA: 'MSA',
+  SERVICES: 'Services',
+  SUPPLY: 'Supply',
   SAAS: 'SaaS',
-  DPA: 'DPA',
+  ORDER_FORM: 'Order form',
   SOW: 'SOW',
+  DPA: 'DPA',
   SWL: 'Software licence',
+  RESELLER: 'Reseller',
+  AMENDMENT: 'Amendment',
   OTHER: 'Other',
 }
 
 export const PAPER_SOURCE_LABELS: Record<string, string> = {
-  OUR_PAPER: 'Our paper',
-  COUNTERPARTY_PAPER: 'Counterparty paper',
-  THIRD_PARTY: 'Third-party paper',
+  OUR_PAPER: 'Our template',
+  COUNTERPARTY_PAPER: 'Their template',
+  THIRD_PARTY: 'Third-party template',
 }
 
 export const JURISDICTION_LABELS: Record<string, string> = {
@@ -469,6 +479,31 @@ function truncateLabel(label: string): string {
   return `${label.slice(0, REGION_LABEL_MAX_LENGTH - 1).trimEnd()}…`
 }
 
+/**
+ * A clause heading alone, never the sub-clause body a heading label can carry with it.
+ *
+ * The backend sometimes sends "9. Intellectual Property and Infringement Indemnity. 9.1 The
+ * Supplier and its licensors retain..." as the heading. Cut where a sub-clause number starts
+ * ("9.1 "). Without one, cut at a sentence end only when the label is too long to be a heading,
+ * so "Section 4. Payment" and "U.S. Export Controls" stay whole.
+ */
+export function clauseHeadingTitle(label: string): string {
+  const text = label.replace(/\s+/g, ' ').trim()
+  const subClause = /\.\s+(?=\d+(?:\.\d+)+\.?\s)/.exec(text)
+  if (subClause && subClause.index > 0) return text.slice(0, subClause.index).trim()
+  if (text.length <= HEADING_MAX_LENGTH) return text
+  // the first sentence end that leaves at least two words of heading
+  const sentence = /\.\s+(?=[A-Z])/g
+  for (let match = sentence.exec(text); match; match = sentence.exec(text)) {
+    const heading = text.slice(0, match.index).trim()
+    if (heading.replace(/^\d+(?:\.\d+)*\.?\s*/, '').split(' ').length >= 2) return heading
+  }
+  return text
+}
+
+/** Longer than this, a label is a heading with its body attached. */
+const HEADING_MAX_LENGTH = 100
+
 export function buildRegionLabelMap(
   clauses: RegionLabelSource[],
   nodes: RegionLabelNode[],
@@ -481,7 +516,7 @@ export function buildRegionLabelMap(
         : node.numberingLabel ?? node.text
     if (label) labels.set(node.id, truncateLabel(label))
   }
-  for (const clause of clauses) labels.set(clause.headingNodeId, clause.heading)
+  for (const clause of clauses) labels.set(clause.headingNodeId, clauseHeadingTitle(clause.heading))
   return labels
 }
 

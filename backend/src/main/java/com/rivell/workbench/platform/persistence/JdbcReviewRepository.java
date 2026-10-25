@@ -174,20 +174,7 @@ class JdbcReviewRepository implements ReviewRepository {
                 """)
                 .param("organizationId", organizationId)
                 .param("clientRequestId", clientRequestId)
-.query((rs, rowNum) -> new Review(
-                        rs.getObject("id", UUID.class),
-                        rs.getObject("organization_id", UUID.class),
-                        rs.getObject("contract_id", UUID.class),
-                        rs.getObject("contract_version_id", UUID.class),
-                        rs.getInt("contract_version_number"),
-                        ReviewStatus.valueOf(rs.getString("status")),
-                        rs.getString("failure_reason"),
-                        rs.getObject("created_by", UUID.class),
-                        rs.getTimestamp("created_at").toInstant(),
-                        rs.getTimestamp("updated_at").toInstant(),
-                        rs.getTimestamp("started_at") == null ? null : rs.getTimestamp("started_at").toInstant(),
-                        rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant(),
-                        rs.getObject("client_request_id", UUID.class)))
+                .query(JdbcReviewRepository::review)
                 .optional();
     }
 
@@ -204,21 +191,44 @@ class JdbcReviewRepository implements ReviewRepository {
                 """)
                 .param("reviewId", reviewId)
                 .param("organizationId", organizationId)
-                .query((rs, rowNum) -> new Review(
-                        rs.getObject("id", UUID.class),
-                        rs.getObject("organization_id", UUID.class),
-                        rs.getObject("contract_id", UUID.class),
-                        rs.getObject("contract_version_id", UUID.class),
-                        rs.getInt("contract_version_number"),
-                        ReviewStatus.valueOf(rs.getString("status")),
-                        rs.getString("failure_reason"),
-                        rs.getObject("created_by", UUID.class),
-                        rs.getTimestamp("created_at").toInstant(),
-                        rs.getTimestamp("updated_at").toInstant(),
-                        rs.getTimestamp("started_at") == null ? null : rs.getTimestamp("started_at").toInstant(),
-                        rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant(),
-                        rs.getObject("client_request_id", UUID.class)))
+                .query(JdbcReviewRepository::review)
                 .optional();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Review> findQueuedBefore(java.time.Instant createdBefore) {
+        return jdbcClient.sql("""
+                select id, organization_id, contract_id, contract_version_id,
+                       contract_version_number, status, failure_reason, created_by,
+                       client_request_id,
+                       created_at, updated_at, started_at, completed_at
+                from review
+                where status = 'ANALYSIS_QUEUED'
+                  and created_at < :createdBefore
+                order by created_at
+                """)
+                .param("createdBefore", timestamp(createdBefore))
+                .query(JdbcReviewRepository::review)
+                .list();
+    }
+
+    private static Review review(java.sql.ResultSet rs, int rowNum)
+            throws java.sql.SQLException {
+        return new Review(
+                rs.getObject("id", UUID.class),
+                rs.getObject("organization_id", UUID.class),
+                rs.getObject("contract_id", UUID.class),
+                rs.getObject("contract_version_id", UUID.class),
+                rs.getInt("contract_version_number"),
+                ReviewStatus.valueOf(rs.getString("status")),
+                rs.getString("failure_reason"),
+                rs.getObject("created_by", UUID.class),
+                rs.getTimestamp("created_at").toInstant(),
+                rs.getTimestamp("updated_at").toInstant(),
+                rs.getTimestamp("started_at") == null ? null : rs.getTimestamp("started_at").toInstant(),
+                rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant(),
+                rs.getObject("client_request_id", UUID.class));
     }
 
     @Override

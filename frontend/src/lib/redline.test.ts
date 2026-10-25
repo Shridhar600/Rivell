@@ -363,14 +363,63 @@ describe('trigger error classification', () => {
       classifyTriggerError({ status: 409, execution: null, executionStateKnown: false }),
     ).toBe('UNCONFIRMED')
     expect(
+      classifyTriggerError({
+        status: 409,
+        execution: null,
+        executionStateKnown: true,
+        failureCode: 'SOURCE_INTEGRITY_MISMATCH',
+      }),
+    ).toBe('SOURCE_UNAVAILABLE')
+    expect(
+      classifyTriggerError({
+        status: 409,
+        execution: null,
+        executionStateKnown: true,
+        failureCode: 'APPROVED_SEMANTICS_DRIFT',
+      }),
+    ).toBe('NOT_AVAILABLE')
+    expect(
+      classifyTriggerError({
+        status: 409,
+        execution: fixtureExecution({ status: 'FAILED' }),
+        executionStateKnown: true,
+        failureCode: 'SOURCE_INTEGRITY_MISMATCH',
+      }),
+    ).toBe('SOURCE_UNAVAILABLE')
+    expect(
+      classifyTriggerError({
+        status: 409,
+        execution: null,
+        executionStateKnown: false,
+        failureCode: 'SOURCE_DOCUMENT_UNAVAILABLE',
+      }),
+    ).toBe('SOURCE_UNAVAILABLE')
+    expect(
       classifyTriggerError({ status: 500, execution: null, executionStateKnown: true }),
     ).toBe('ENGINE_UNAVAILABLE')
     expect(
       classifyTriggerError({ status: 503, execution: null, executionStateKnown: true }),
     ).toBe('STORAGE_UNAVAILABLE')
     expect(
+      classifyTriggerError({
+        status: 503,
+        execution: null,
+        executionStateKnown: true,
+        retryAfter: '5',
+      }),
+    ).toBe('BUSY')
+    expect(
       classifyTriggerError({ status: null, execution: null, executionStateKnown: true }),
     ).toBe('TRANSPORT')
+  })
+
+  it('uses the server source code for plain copy on a source-unavailable 409', () => {
+    const notice = redlineTriggerErrorNotice('SOURCE_UNAVAILABLE', 'SOURCE_INTEGRITY_MISMATCH')
+
+    expect(notice).toBe(redlineFailureTitle('SOURCE_INTEGRITY_MISMATCH'))
+    expect(notice).toMatch(/integrity/i)
+    expect(notice).toMatch(/original document/i)
+    expect(notice).not.toMatch(/Exception|com\.rivell|stack/i)
   })
 
   it('distinguishes artifact storage failure from an engine failure and keeps a retry honest', () => {
@@ -403,8 +452,10 @@ describe('trigger error classification', () => {
       'NOT_FOUND',
       'FAILED_EXECUTION',
       'NOT_AVAILABLE',
+      'SOURCE_UNAVAILABLE',
       'UNCONFIRMED',
       'ENGINE_UNAVAILABLE',
+      'BUSY',
       'STORAGE_UNAVAILABLE',
       'TRANSPORT',
     ] as const

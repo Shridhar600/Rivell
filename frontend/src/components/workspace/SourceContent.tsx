@@ -1,6 +1,7 @@
 import type { EvidenceItem } from '../../api/retrieval'
 import { useTaxonomy } from '../../api/taxonomy'
 import { describeFact, factSchemaLabel } from '../../lib/contractSemantics'
+import { approvalSourceLabel } from '../../lib/reviews'
 import {
   applicabilityDimensions,
   applicabilityNote,
@@ -74,10 +75,23 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
             <dd>{positions.join(', ')}</dd>
           </div>
         ) : null}
-        {item.policyFacts && item.policyFacts.requiresApproval !== null ? (
+        {item.policyFacts && item.policyFacts.authorityRules.length > 0 ? (
           <div>
             <dt>Approval</dt>
-            <dd>{item.policyFacts.requiresApproval ? 'Approval required' : 'No approval required'}</dd>
+            <dd>
+              {item.policyFacts.authorityRules
+                .map((rule) => {
+                  const stance =
+                    rule.stances.includes('PROHIBITED')
+                      ? 'walk-away'
+                      : rule.stances.includes('FALLBACK')
+                        ? 'fallback'
+                        : 'fallback and walk-away'
+                  const source = approvalSourceLabel(rule.source)
+                  return `${rule.approver} approves the ${stance}${source ? `, ${source}` : ''}`
+                })
+                .join('; ')}
+            </dd>
           </div>
         ) : null}
         {item.policyFacts?.escalationTrigger ? (
@@ -104,16 +118,16 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
       {scopeNote ? <p className="rv-ws-caption">{scopeNote}</p> : null}
 
       <div className="rv-ws-sec">
-        <div className="rv-ws-sec-h">{TEXT_LABELS[item.authorityClass] ?? 'Text'}</div>
+        <h3 className="rv-ws-sec-h">{TEXT_LABELS[item.authorityClass] ?? 'Text'}</h3>
         <div className={item.authorityClass === 'APPROVED_DRAFTING' ? 'rv-ws-prop' : 'rv-ws-incl'}>{item.text}</div>
         {item.authorityClass === 'APPROVED_DRAFTING' && item.publicationNumber !== null ? (
-          <p className="rv-ws-caption">Approved organizational drafting · Knowledge version {item.publicationNumber}</p>
+          <p className="rv-ws-caption">Published clause-library wording · Knowledge version {item.publicationNumber}</p>
         ) : null}
       </div>
 
       {item.contractFacts.map((fact) => (
         <div className="rv-ws-sec" key={`${fact.factSchema}-${fact.schemaVersion}`}>
-          <div className="rv-ws-sec-h">{factSchemaLabel(fact.factSchema)}</div>
+          <h3 className="rv-ws-sec-h">{factSchemaLabel(fact.factSchema)}</h3>
           <dl className="rv-ws-props">
             {describeFact({ ...fact, sourceNodeIds: [] }).map((row) => (
               <div key={row.field}>
@@ -127,7 +141,7 @@ export function SourceContent({ item, regionLabels, clauseHeadings, onNavigateTo
 
       {onNavigateToNode && regions.length > 0 ? (
         <div className="rv-ws-sec">
-          <div className="rv-ws-sec-h">View in document</div>
+          <h3 className="rv-ws-sec-h">View in document</h3>
           <div className="rv-ws-srcd-acts">
             {regions.map((nodeId) => (
               <button key={nodeId} type="button" className="rv-ws-link" onClick={() => onNavigateToNode(nodeId)}>

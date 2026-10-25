@@ -117,11 +117,16 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         return typeKeys(contractType, com.rivell.workbench.contracts.ContractType::recordApplicableCodes);
     }
 
+    private static List<String> positionApplicableTypeKeys(String contractType) {
+        return typeKeys(contractType, com.rivell.workbench.contracts.ContractType::positionApplicableCodes);
+    }
+
     private static List<String> typeKeys(String contractType,
             java.util.function.Function<com.rivell.workbench.contracts.ContractType, java.util.Set<String>> codesOf) {
         java.util.Set<String> codes;
         try {
-            codes = codesOf.apply(com.rivell.workbench.contracts.ContractType.valueOf(contractType.trim()));
+            codes = codesOf.apply(com.rivell.workbench.contracts.ContractType.valueOf(
+                    contractType.trim().toUpperCase(java.util.Locale.ROOT)));
         } catch (IllegalArgumentException e) {
             codes = java.util.Set.of(contractType);
         }
@@ -473,6 +478,61 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<CandidateUnit> listCandidateUnitsForMigration() {
+        return jdbcClient.sql("""
+                        select c.*, u.kind as unit_kind, u.content_text as unit_content_text
+                        from knowledge_candidate c
+                        join knowledge_extraction_unit u
+                          on u.id = c.extraction_unit_id
+                         and u.organization_id = c.organization_id
+                        order by c.organization_id, c.id
+                        """)
+                .query((rs, rowNum) -> new CandidateUnit(
+                        mapCandidate(rs, rowNum),
+                        ExtractionUnitKind.valueOf(rs.getString("unit_kind")),
+                        rs.getString("unit_content_text")))
+                .list();
+    }
+
+    @Override
+    public boolean updateSourceContractTypes(
+            UUID candidateId, UUID organizationId, Set<String> types) {
+        return jdbcClient.sql("""
+                        update knowledge_candidate
+                        set source_contract_types = :types::jsonb
+                        where id = :id and organization_id = :organizationId
+                        """)
+                .param("types", writeStringSet(types))
+                .param("id", candidateId)
+                .param("organizationId", organizationId)
+                .update() == 1;
+    }
+
+    @Override
+    public boolean dataMigrationCompleted(String migrationKey) {
+        return Boolean.TRUE.equals(jdbcClient.sql("""
+                        select exists (select 1 from knowledge_data_migration
+                                       where migration_key = :key)
+                        """)
+                .param("key", migrationKey)
+                .query(Boolean.class)
+                .single());
+    }
+
+    @Override
+    public void recordDataMigration(String migrationKey, String detail, Instant completedAt) {
+        jdbcClient.sql("""
+                        insert into knowledge_data_migration (migration_key, completed_at, detail)
+                        values (:key, :completedAt, :detail)
+                        on conflict (migration_key) do nothing
+                        """)
+                .param("key", migrationKey)
+                .param("completedAt", Timestamp.from(completedAt))
+                .param("detail", detail)
+                .update();
+    }
+
+    @Override
     public Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId) {
         return jdbcClient.sql("""
                         select * from knowledge_candidate
@@ -744,14 +804,30 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 + " or exists (select 1 from jsonb_array_elements_text(c.declared_contract_types)"
                 + " as dt where regexp_replace(lower(dt), '[^a-z0-9]', '', 'g') = any(:contractTypes::text[])))");
         params.put("contractTypes", topicKeysLiteral(applicableTypeKeys(contractType)));
-        // what the record itself says it applies to narrows further; a contract of a type the
-        // product does not model (OTHER) cannot be excluded by it
-        if (!"OTHER".equalsIgnoreCase(contractType.trim())) {
-            conditions.add("(c.source_contract_types = '[]'::jsonb"
-                    + " or exists (select 1 from jsonb_array_elements_text(c.source_contract_types)"
-                    + " as st where regexp_replace(lower(st), '[^a-z0-9]', '', 'g') = any(:recordContractTypes::text[])))");
-            params.put("recordContractTypes", topicKeysLiteral(recordApplicableTypeKeys(contractType)));
+        // what the record itself says it applies to narrows further, by kind of record: a
+        // position follows its contract area, so an MSA position governs a reseller agreement;
+        // literal wording is offered for the type it was written for and the parent types it
+        // sits under
+        if ("OTHER".equalsIgnoreCase(contractType.trim())) {
+            // a contract of a type the product does not model cannot be excluded by a
+            // position's own scope, and only wording that names no type was written for it
+            conditions.add("(c.candidate_type not in ('CLAUSE_VARIANT', 'TEMPLATE_CLAUSE')"
+                    + " or c.source_contract_types = '[]'::jsonb)");
+            return;
         }
+        conditions.add("(c.source_contract_types = '[]'::jsonb"
+                + " or (c.candidate_type in ('CLAUSE_VARIANT', 'TEMPLATE_CLAUSE')"
+                + " and exists (select 1 from jsonb_array_elements_text(c.source_contract_types)"
+                + " as st where regexp_replace(lower(st), '[^a-z0-9]', '', 'g')"
+                + " = any(:wordingContractTypes::text[])))"
+                + " or (c.candidate_type not in ('CLAUSE_VARIANT', 'TEMPLATE_CLAUSE')"
+                + " and exists (select 1 from jsonb_array_elements_text(c.source_contract_types)"
+                + " as st where regexp_replace(lower(st), '[^a-z0-9]', '', 'g')"
+                + " = any(:positionContractTypes::text[]))))");
+        params.put("wordingContractTypes",
+                topicKeysLiteral(recordApplicableTypeKeys(contractType)));
+        params.put("positionContractTypes",
+                topicKeysLiteral(positionApplicableTypeKeys(contractType)));
     }
 
     /** The scope dimensions other than contract type, shared by both published-knowledge reads. */

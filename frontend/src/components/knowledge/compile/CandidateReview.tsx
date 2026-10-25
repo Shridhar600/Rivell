@@ -3,7 +3,6 @@ import { Link } from 'react-router'
 import { useApproveCandidate, useRejectCandidate, type ArtifactDetail, type Candidate } from '../../../api/knowledge'
 import {
   OUTCOME_LABELS,
-  conditionsOf,
   kindLabel,
   needsConflictAcknowledgement,
   outcomeOf,
@@ -12,7 +11,7 @@ import {
 import type { PublicationRef } from '../../../lib/knowledgeCatalog'
 import { useHeadingFocus } from '../../../lib/useHeadingFocus'
 import { Button } from '../../ui/Button'
-import { CautionIcon, CheckIcon, CloseIcon, EditIcon } from '../../ui/Icon'
+import { CheckIcon, CloseIcon, EditIcon } from '../../ui/Icon'
 import { ConditionChoices, ConditionNotice } from './Conditions'
 import { CorrectionForm } from './CorrectionForm'
 import { Transform, type SourceState } from './Transform'
@@ -38,6 +37,8 @@ interface Props {
   onReplace: (published: string | null) => void
   /** The publication this candidate is part of, once it is published. */
   publishedIn: PublicationRef | null
+  /** Titles of the candidates this compilation was compared with, loaded once by the workspace. */
+  candidateTitles: ReadonlyMap<string, string>
   actions: RefObject<ReviewActions | null>
   onDecided: (candidateId: string) => void
   onNext: () => void
@@ -50,7 +51,7 @@ interface Props {
  * One candidate in review: where it came from, what Rivell made of it, why it needs attention,
  * and the reviewer's own decision. Every outcome shown is the one the server returned.
  */
-export function CandidateReview({ artifact, candidate, index, total, source, location, readiness, replaces, onReplace, publishedIn, actions, onDecided, onNext, onContext, onFailed }: Props) {
+export function CandidateReview({ artifact, candidate, index, total, source, location, readiness, replaces, onReplace, publishedIn, candidateTitles, actions, onDecided, onNext, onContext, onFailed }: Props) {
   const approve = useApproveCandidate()
   const reject = useRejectCandidate()
   const [wantsEdit, setEditing] = useState(false)
@@ -65,7 +66,6 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
   // A candidate the server has since published can no longer be edited, whatever was open.
   const editing = wantsEdit && !published
   const open = outcome === 'pending' || outcome === 'corrected'
-  const conditions = open ? conditionsOf(candidate) : []
   const blockedByConflict = open && needsConflictAcknowledgement(candidate) && !acknowledged
   const busy = approve.isPending || reject.isPending || correction.pending
   const canApprove = (outcome === 'pending' || outcome === 'corrected') && !blockedByConflict && !editing && !busy
@@ -88,7 +88,9 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
   useImperativeHandle(actions, () => ({ approve: doApprove, reject: doReject, edit: doEdit }))
 
   const statusText = (() => {
-    if (published) return `Published${publishedIn ? ` in knowledge version ${publishedIn.number}` : ''}. Published knowledge cannot be changed.`
+    if (published) {
+      return `Published${publishedIn ? ` · v${publishedIn.number}` : ''} · Read-only`
+    }
     if (outcome === 'approved') return 'Approved. The outcome can still change before it is published.'
     if (outcome === 'rejected') return 'Rejected. A rejected entry can be brought back only by correcting it.'
     if (outcome === 'corrected') return 'Corrected. Approve the corrected value to include it in the new version.'
@@ -108,12 +110,6 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
             </h1>
             <div className="rv-kc-meta">
               <span className={`rv-kc-stb${outcome === 'approved' || outcome === 'published' || outcome === 'corrected' ? ' rv-kc-stb--ok' : ''}`}>{OUTCOME_LABELS[outcome]}</span>
-              {conditions[0] ? (
-                <span className="rv-kc-condition">
-                  <CautionIcon className="rv-icon" />
-                  {conditions[0].label}
-                </span>
-              ) : null}
               <span className="rv-chip">{kindLabel(artifact.artifactType)}</span>
               {location ? <span className="rv-chip">{location}</span> : null}
             </div>
@@ -139,7 +135,7 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
             editing={editing ? <CorrectionForm id={formId} candidate={candidate} artifact={artifact} correction={correction} onSubmit={() => void correction.save()} /> : null}
           />
 
-          {open ? <ConditionChoices candidate={candidate} acknowledged={acknowledged} onAcknowledge={setAcknowledged} replaces={replaces} onReplace={onReplace} /> : null}
+          {open ? <ConditionChoices candidate={candidate} acknowledged={acknowledged} onAcknowledge={setAcknowledged} replaces={replaces} onReplace={onReplace} peerTitles={candidateTitles} /> : null}
 
           {candidate.reviewNote && !editing ? <p className="rv-kc-note">Review note: {candidate.reviewNote}</p> : null}
         </div>
@@ -196,7 +192,7 @@ export function CandidateReview({ artifact, candidate, index, total, source, loc
                   }
                 >
                   <CheckIcon className="rv-icon" />
-                  {outcome === 'corrected' ? 'Approve correction' : 'Approve'}
+                  {outcome === 'corrected' ? 'Approve correction' : 'Approve entry'}
                 </Button>
               )}
               <Button onClick={onNext} title="Next (N)">

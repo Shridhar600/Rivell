@@ -41,6 +41,12 @@ public final class FindingAssembler {
         if (signal.payload() instanceof OmissionPayload omission) {
             key = key + ":" + omission.candidateId();
         }
+        // The whole-contract read names one finding per issue. Two grounded issues on one clause
+        // are two findings, not one finding that holds both.
+        if (signal.payload() instanceof PolicyUnavailablePayload unavailable
+                && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())) {
+            key = key + ":spotted:" + signal.dedupeKey();
+        }
         return key;
     }
 
@@ -53,16 +59,36 @@ public final class FindingAssembler {
                     "Clause-subject signal without evidence: " + primary.signalType()
                             + " for " + primary.concept());
         }
-        ApprovedDraftingPayload drafting = firstPayload(group,
-                SignalType.APPROVED_DRAFTING_AVAILABLE);
-        EscalationPayload escalation = firstPayload(group, SignalType.ESCALATION_REQUIRED);
-        OpenEndedAnalysisPayload openEnded = firstPayload(group,
-                SignalType.OPEN_ENDED_ANALYSIS_RESULT);
+        var draftingSignal = positionSignal(primary, group, SignalType.APPROVED_DRAFTING_AVAILABLE);
+        ApprovedDraftingPayload drafting = draftingSignal == null
+                ? null : (ApprovedDraftingPayload) draftingSignal.payload();
+        var escalationSignal = positionSignal(primary, group, SignalType.ESCALATION_REQUIRED);
+        EscalationPayload escalation = escalationSignal == null
+                ? null : (EscalationPayload) escalationSignal.payload();
+        var openEndedSignal = positionSignal(primary, group, SignalType.OPEN_ENDED_ANALYSIS_RESULT);
+        OpenEndedAnalysisPayload openEnded = openEndedSignal == null
+                ? null : (OpenEndedAnalysisPayload) openEndedSignal.payload();
 
         var observation = observation(primary);
         var action = action(primary, drafting, openEnded, escalation);
         var severity = severity(primary);
-        var quality = quality(primary, group);
+        var quality = quality(primary, escalationSignal, group);
+        if (drafting != null && drafting.fitVerdict() != null) {
+            // the fit verdict lives on the drafting signal, which is never the primary one
+            quality.put("wordingFitVerdict", drafting.fitVerdict());
+            var fitReason = draftingSignal.quality().get("wordingFitReason");
+            if (fitReason != null) {
+                quality.put("wordingFitReason", fitReason.toString());
+            }
+            var fitReasons = draftingSignal.quality().get("wordingFitReasons");
+            if (fitReasons != null) {
+                quality.put("wordingFitReasons", fitReasons);
+            }
+            var fitQuote = draftingSignal.quality().get("wordingFitQuote");
+            if (fitQuote != null) {
+                quality.put("wordingFitQuote", fitQuote.toString());
+            }
+        }
         var evidence = evidence(group);
         var concepts = concepts(group);
 
@@ -80,7 +106,7 @@ public final class FindingAssembler {
             languageSource = ProposedLanguageSource.GENERATIVE;
         }
 
-        var claims = claims(primary, group, action, drafting, openEnded);
+        var claims = claims(primary, group, action, drafting, openEnded, escalation);
 
         return new Finding(
                 UUID.randomUUID(), run.organizationId(), run.reviewId(), run.id(), key,
@@ -137,13 +163,19 @@ public final class FindingAssembler {
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
                 && signal.payload() instanceof PolicyUnavailablePayload unavailable
                 && PolicyUnavailablePayload.NOT_COVERED.equals(unavailable.sufficiency())) {
+            // the assembler sees the run, not the review's profile, so it cannot tell whether a
+            // side is set: the sentence never claims one
             return new Observation(PolicyUnavailablePayload.NOT_COVERED,
                     "No playbook position addresses this clause, and it reads as unusual for "
-                            + "this kind of contract and against our side.");
+                            + "this kind of contract.");
         }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
                 && signal.payload() instanceof PolicyUnavailablePayload unavailable
                 && PolicyUnavailablePayload.SPOTTED.equals(unavailable.sufficiency())) {
+            var reason = signal.quality().get("spottedReason");
+            if (reason instanceof String text && !text.isBlank()) {
+                return new Observation(PolicyUnavailablePayload.SPOTTED, text);
+            }
             return new Observation(PolicyUnavailablePayload.SPOTTED,
                     "A whole-contract read named this clause as one our side must act on, but "
                             + "no playbook position check flagged it.");
@@ -262,6 +294,12 @@ public final class FindingAssembler {
         if (primary.signalType() == SignalType.POLICY_DEVIATION
                 && primary.payload() instanceof PositionDeviationPayload deviation) {
             var category = deviation.category();
+            // a position on a topic the clause only touches is a note: it never proposes or
+            // applies library wording, even when the library has wording for its own topic
+            if (deviation.secondaryTopic()) {
+                return escalation != null
+                        ? ProposedAction.ESCALATE_TO_HUMAN : ProposedAction.NO_ACTION;
+            }
             if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(category)) {
                 return escalation != null
                         ? ProposedAction.ESCALATE_TO_HUMAN : ProposedAction.NO_ACTION;
@@ -269,7 +307,9 @@ public final class FindingAssembler {
             if (PolicyComparisonSpecs.UNCLEAR.equals(category)) {
                 return ProposedAction.REVIEW_AMBIGUITY;
             }
-            if (drafting != null) {
+            // library wording is proposed as approved only when it fits; a wording that does not
+            // fit this position gives way to Rivell's own proposal, or to a person
+            if (drafting != null && !FitVerdicts.DOES_NOT_FIT.equals(drafting.fitVerdict())) {
                 return ProposedAction.USE_APPROVED_FALLBACK;
             }
             if (openEnded != null && "VERIFIED".equals(openEnded.verificationOutcome())) {
@@ -388,7 +428,8 @@ public final class FindingAssembler {
 
     private static List<FindingClaim> claims(
             RawReviewSignal primary, List<RawReviewSignal> group, ProposedAction action,
-            ApprovedDraftingPayload drafting, OpenEndedAnalysisPayload openEnded) {
+            ApprovedDraftingPayload drafting, OpenEndedAnalysisPayload openEnded,
+            EscalationPayload escalation) {
         var claims = new ArrayList<FindingClaim>();
         var observation = observation(primary);
         var evidence = evidence(group);
@@ -422,13 +463,17 @@ public final class FindingAssembler {
         }
         if (drafting != null && action == ProposedAction.USE_APPROVED_FALLBACK) {
             var preferredOnly = "PREFERRED".equals(drafting.variantRole());
+            var fits = FitVerdicts.FITS.equals(drafting.fitVerdict());
             claims.add(FindingClaim.of(2, ClaimKind.EVIDENCE_BASIS,
-                    preferredOnly
-                            ? "Approved drafting is available in the clause library; the "
-                                    + "preferred variant is proposed because no fallback "
-                                    + "variant is published."
-                            : "Approved drafting is available in the clause library and is "
-                                    + "proposed as the acceptable second position.",
+                    !fits
+                            ? "Clause library wording is available for this position. It was "
+                                    + "not checked against this position; read it before you use it."
+                            : preferredOnly
+                                    ? "Approved drafting is available in the clause library; the "
+                                            + "preferred variant is proposed because no fallback "
+                                            + "variant is published."
+                                    : "Approved drafting is available in the clause library and is "
+                                            + "proposed as the acceptable second position.",
                     absenceSubject, List.of(drafting.draftingEvidenceId())));
         }
         if (openEnded != null
@@ -446,7 +491,7 @@ public final class FindingAssembler {
                     absenceSubject, evidence));
         }
         claims.add(FindingClaim.of(claims.size(), ClaimKind.RECOMMENDATION,
-                recommendation(action), absenceSubject, evidence));
+                recommendation(action, escalation, drafting), absenceSubject, evidence));
         var ordinals = new int[claims.size()];
         for (var index = 0; index < claims.size(); index++) {
             ordinals[index] = claims.get(index).ordinal();
@@ -459,16 +504,22 @@ public final class FindingAssembler {
         return List.copyOf(claims);
     }
 
-    private static String recommendation(ProposedAction action) {
+    private static String recommendation(ProposedAction action, EscalationPayload escalation,
+            ApprovedDraftingPayload drafting) {
         return switch (action) {
-            case USE_APPROVED_FALLBACK -> "Recommend replacing the clause with the "
-                    + "approved fallback wording.";
+            case USE_APPROVED_FALLBACK -> FitVerdicts.FITS.equals(
+                    drafting == null ? null : drafting.fitVerdict())
+                    ? "Recommend replacing the clause with the approved fallback wording."
+                    : "Consider the clause library wording for this position. It was not "
+                            + "checked against it, so read it before you use it.";
             case ADD_REQUIRED_PROVISION -> "Recommend adding the required provision before "
                     + "signature.";
             case REVIEW_AMBIGUITY -> "Decide which position applies before changing the "
                     + "clause.";
-            case ESCALATE_TO_HUMAN -> "Your playbook says this needs approval. Rivell "
-                    + "proposes no wording.";
+            case ESCALATE_TO_HUMAN -> escalation != null && escalation.approver() != null
+                    ? "Your playbook says this needs approval. Rivell proposes no wording."
+                    : "This needs a person to decide. Rivell proposes no wording. "
+                            + "Check it yourself.";
             case CONSIDER_GENERATED_LANGUAGE -> "Rivell suggests wording below. It is not "
                     + "from your playbook, so check it before you use it.";
             case NO_ACTION -> "No change needed. This is for your information.";
@@ -482,14 +533,31 @@ public final class FindingAssembler {
             "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
             "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
             "positionLabel", "levers", "categoryBeforeLevers", "routeReason", "fallbackListed",
-            "fallbackConditionsOutcome", "fallbackConditionsUnknown", "fallbackConditionsUnmet", "fallbackConditionsExecutionId", "secondOpinionExecutionId");
+            "fallbackConditionsOutcome", "fallbackConditionsUnknown", "fallbackConditionsUnmet", "fallbackConditionsExecutionId", "secondOpinionExecutionId", "openEndedOutcome",
+            "fitVerdict", "fitReason", "fitReasons");
 
-    private static Map<String, Object> quality(RawReviewSignal primary, List<RawReviewSignal> group) {
+    /** The typed rule behind an escalation, kept on the finding the panel reads. */
+    private static final List<String> ESCALATION_KEYS = List.of("escalationTrigger",
+            "requiresApproval", "escalationApprover", "escalationCondition", "escalationSource",
+            "escalationStance", "escalationConflictApprover", "escalationConflictSource");
+
+    private static Map<String, Object> quality(
+            RawReviewSignal primary, RawReviewSignal escalation, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
         for (var key : ASSESSMENT_KEYS) {
             var value = primary.quality().get(key);
             if (value != null) {
                 quality.put(key, value);
+            }
+        }
+        // the typed approval rule of the position the action uses travels on its own signal; the
+        // panel names that approver, never one from another position merged into the same finding
+        if (escalation != null) {
+            for (var key : ESCALATION_KEYS) {
+                var value = escalation.quality().get(key);
+                if (value != null) {
+                    quality.put(key, value);
+                }
             }
         }
         if (primary.quality().get("levers") instanceof List<?> levers && !levers.isEmpty()) {
@@ -555,9 +623,18 @@ public final class FindingAssembler {
         return List.copyOf(ids);
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> T firstPayload(List<RawReviewSignal> group, SignalType type) {
-        return (T) group.stream().filter(signal -> signal.signalType() == type)
-                .map(RawReviewSignal::payload).findFirst().orElse(null);
+    /**
+     * A support signal of the position the finding's action uses. A group can hold several
+     * positions of one issue family; the deciding deviation's dedupe suffix names its own
+     * escalation, drafting and generated-language signals, never another position's. No own
+     * signal means the deciding position has no rule or wording, so the finding claims none.
+     */
+    private static RawReviewSignal positionSignal(
+            RawReviewSignal primary, List<RawReviewSignal> group, SignalType type) {
+        var suffix = primary.dedupeSuffix();
+        return group.stream()
+                .filter(signal -> signal.signalType() == type)
+                .filter(signal -> signal.dedupeSuffix().equals(suffix))
+                .findFirst().orElse(null);
     }
 }

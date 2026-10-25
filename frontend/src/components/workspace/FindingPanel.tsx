@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import type { EvidenceItem } from '../../api/retrieval'
 import type { FindingClaim, FindingDetail, FindingQuality, PlaybookUsed } from '../../api/reviews'
@@ -8,11 +8,16 @@ import type { HumanDecision } from '../../api/workflow'
 import { authorityLabel } from '../../lib/evidence'
 import {
   absenceClaims,
+  approvalConflictLine,
+  approvalSourceLabel,
+  approvalSummary,
   assessmentSummary,
   claimKindLabel,
   classificationLabel,
   comparisonCategoryLabel,
   decidedByLabel,
+  escalateIfLine,
+  escalateIfText,
   findingGapText,
   findingIssueLabel,
   findingPlaybookRule,
@@ -31,6 +36,7 @@ import { policyPositionView } from '../../lib/positionComparison'
 import {
   clauseExcerpt,
   findingState,
+  isActionable,
   isWordingGrounded,
   languageAuthority,
   proposedChangeType,
@@ -58,7 +64,6 @@ interface Props {
   isError: boolean
   onRetry: () => void
   position: { index: number; total: number } | null
-  context: string | null
   regionLabels: Map<string, string>
   /** The playbooks the review froze, used to name the source of a rule; null when unknown. */
   playbooksUsed: readonly PlaybookUsed[] | null
@@ -120,11 +125,26 @@ function ClaimEvidence({ claim, items, onOpen }: { claim: FindingClaim; items: M
   )
 }
 
-function sourceRow(item: EvidenceItem, regionLabels: Map<string, string>, label: ConceptLabel): { title: string; detail: string } {
+function sourceRow(
+  item: EvidenceItem,
+  regionLabels: Map<string, string>,
+  label: ConceptLabel,
+  wordingFitVerdict: string | null = null,
+): { title: string; detail: string } {
   const region = item.provenanceNodeIds.map((id) => regionLabels.get(id)).find(Boolean)
   const subject = region ?? (item.legalConcept ? label(item.legalConcept) : '')
   const snippet = item.text.replace(/\s+/g, ' ').trim()
-  return { title: authorityLabel(item.authorityClass), detail: [subject, snippet].filter(Boolean).join(' · ') }
+  const title =
+    item.authorityClass === 'APPROVED_DRAFTING'
+      ? wordingFitVerdict === 'DOES_NOT_FIT'
+        ? 'Library wording (did not fit this position)'
+        : wordingFitVerdict === 'UNKNOWN'
+          ? 'Library wording (not checked against this position)'
+          : wordingFitVerdict === 'FITS'
+            ? authorityLabel(item.authorityClass)
+            : 'Library wording'
+      : authorityLabel(item.authorityClass)
+  return { title, detail: [subject, snippet].filter(Boolean).join(' · ') }
 }
 
 /**
@@ -142,9 +162,8 @@ function FrozenCard(props: Pick<Props, 'isFinalized' | 'frozenChanges' | 'summar
           <b>Approved changes are final</b>
           <p>
             {props.frozenChanges === null
-              ? 'The approved changes cannot be changed.'
-              : `${plural(props.frozenChanges, 'approved change', 'approved changes')} fixed for this review.`}{' '}
-            Next, create the redline as a Word file.
+              ? 'The approved changes are fixed for this review.'
+              : `${plural(props.frozenChanges, 'approved change', 'approved changes')} fixed for this review.`}
           </p>
         </div>
       </div>
@@ -161,6 +180,12 @@ export function FindingPanel(props: Props) {
   const { finding, flow, decision } = props
   const { labelFor } = useTaxonomy()
   const [showAll, setShowAll] = useState(false)
+  // A library wording that did not fit is still the person's to take: this opens Edit with it.
+  const [libraryPrefill, setLibraryPrefill] = useState<{ text: string; seq: number } | null>(null)
+  const prefillSeq = useRef(0)
+  useEffect(() => {
+    setLibraryPrefill(null)
+  }, [props.finding?.id])
 
   // The loading, empty and error states share the host elements of the full panel, and the frozen
   // card is keyed, so the card is never remounted as the finding arrives.
@@ -183,6 +208,30 @@ export function FindingPanel(props: Props) {
   }
 
   const items = new Map(finding.evidenceItems.map((item) => [item.evidenceId, item]))
+  // A position on a topic the clause only touches is a related note, never a defect in the clause.
+  const related = isRelatedPosition(finding)
+  // A wording that did not fit, or was not checked, is still offered as a source; the person can
+  // take it from here when it did not fit. A related position never offers library wording.
+  const libraryWording =
+    !related &&
+    (finding.proposedLanguageSource === 'APPROVED_DRAFTING' ||
+      finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT')
+      ? (finding.evidenceItems.find((item) => item.authorityClass === 'APPROVED_DRAFTING') ?? null)
+      : null
+  const canTakeLibraryWording =
+    !props.isFinalized &&
+    props.analysisComplete &&
+    props.canDecide &&
+    props.decisionsLoaded &&
+    !flow.readOnly &&
+    !flow.isSubmitting
+  const editBaseline = props.replacementText ?? props.currentText ?? ''
+  const takeLibraryWording = (text: string) => {
+    if (!canTakeLibraryWording) return
+    prefillSeq.current += 1
+    setLibraryPrefill({ text, seq: prefillSeq.current })
+    flow.decide('EDIT')
+  }
   const why = whyClaims(finding.claims)
   const recommendations = recommendationClaims(finding.claims)
   const absences = absenceClaims(finding.claims)
@@ -195,13 +244,13 @@ export function FindingPanel(props: Props) {
   const decidedBy = added ? null : decidedByLabel(finding.quality)
   const note = policyNoteText(finding)
   const position = policyPositionView(finding.positionComparison)
-  // A within-fallback finding is a note, not a defect; a position that names an approver makes it
-  // an approval question instead.
+  // A within-fallback finding is a note, not a defect. It becomes an approval question only
+  // when a typed rule says the fallback needs approval (council §A.3), never from a trigger text.
   const withinFallback = finding.issueFamily === 'POSITION_ACCEPTABLE_FALLBACK'
-  const approvalNeeded = withinFallback && finding.proposedAction === 'ESCALATE_TO_HUMAN'
-  const escalationTriggers = (finding.positionComparison?.escalation ?? [])
-    .map((slot) => slot.trigger.trim())
-    .filter((trigger) => trigger !== '')
+  const approval = approvalSummary(finding.quality)
+  const approvalConflict = approvalConflictLine(approval)
+  const escalateIf = escalateIfLine(approval)
+  const approvalSource = approvalSourceLabel(approval?.source ?? null)
   const change = proposedChangeType(finding)
   const grounded = isWordingGrounded(finding)
   const authority = !grounded ? null : languageAuthority(finding, items.get(finding.approvedDraftingEvidenceId ?? '')?.publicationNumber ?? null)
@@ -214,8 +263,6 @@ export function FindingPanel(props: Props) {
   const dismissed = decision?.action === 'REJECT' && decision.rejectReason === 'FINDING_WRONG'
   const missingEvidence = finding.claims.some((claim) => claim.evidenceItemIds.some((id) => !items.has(id)))
   const title = findingSubjectLabel(finding, props.regionLabels, labelFor)
-  // A position on a topic the clause only touches is a related note, never a defect in the clause.
-  const related = isRelatedPosition(finding)
   // The four things a reader needs first: the words, the rule, the gap and the fix. Everything
   // else is one closed disclosure away.
   const gapText = findingGapText(finding, labelFor)
@@ -224,6 +271,11 @@ export function FindingPanel(props: Props) {
   const quoteReason =
     quote?.source === 'second-opinion' ? (finding.quality?.secondOpinionReason?.trim() ?? null) : null
   const playbookRule = findingPlaybookRule(finding, labelFor, props.playbooksUsed)
+  const playbookCondition = escalateIfText(playbookRule?.escalation)
+  const noApproverCondition = approval ? null : playbookCondition
+  // the rule's condition and the playbook trigger can be the same words; show them once
+  const sameEscalation =
+    approval !== null && playbookCondition !== null && playbookCondition === approval.condition
   const proposedLanguage = finding.proposedLanguage
   const showDetails =
     !added ||
@@ -252,7 +304,7 @@ export function FindingPanel(props: Props) {
       <div key="in" className="rv-ws-dt-in">
         <div className="rv-ws-kicker">
           {related ? (
-            <span className="rv-ws-typ rv-ws-typ--related">Related position</span>
+            <span className="rv-ws-typ rv-ws-typ--related">Related guidance</span>
           ) : (
             <span className={`rv-ws-typ${change ? ` rv-ws-typ--${change}` : ''}`}>
               {change ?? classificationLabel(finding.reviewClassification)}
@@ -267,7 +319,6 @@ export function FindingPanel(props: Props) {
           {props.position ? `${props.position.index} of ${props.position.total}` : null}
         </div>
         <h2>{title}</h2>
-        {props.context ? <div className="rv-ws-ctx">{props.context}</div> : null}
         <div className="rv-ws-main" data-testid="finding-main">
           {quote && quoteText ? (
             <div className="rv-ws-sec">
@@ -296,8 +347,12 @@ export function FindingPanel(props: Props) {
               {playbookRule.basedOn ? (
                 <p className="rv-ws-caption">Based on: {playbookRule.basedOn}</p>
               ) : null}
-              {playbookRule.escalation ? (
-                <p className="rv-ws-caption">Escalate when: {playbookRule.escalation}.</p>
+              {playbookRule.escalation && !sameEscalation && (approval || noApproverCondition) ? (
+                <p className="rv-ws-caption">
+                  {approval
+                    ? `Escalate when: ${playbookRule.escalation}.`
+                    : `Escalate if: ${noApproverCondition}. No approver is named.`}
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -309,7 +364,33 @@ export function FindingPanel(props: Props) {
             </div>
           ) : null}
 
-          {proposedLanguage && grounded ? (
+          {finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT' && !proposedLanguage && !related ? (
+            <p className="rv-ws-note">
+              The clause library wording for this position did not fit this clause. No replacement
+              wording is proposed; please check it yourself.
+              {canTakeLibraryWording && libraryWording ? (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    className="rv-ws-link"
+                    onClick={() => takeLibraryWording(libraryWording.text)}
+                  >
+                    Use the library wording
+                  </button>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+
+          {finding.quality?.foundBy === 'SEARCH' && finding.quality?.fitVerdict === 'UNKNOWN' ? (
+            <p className="rv-ws-note">
+              Rivell could not check that this rule governs this clause. Read it before you rely on
+              it.
+            </p>
+          ) : null}
+
+          {proposedLanguage && grounded && !related ? (
             <div className="rv-ws-sec">
               <div className="rv-ws-sec-h">Suggested change</div>
               <div className="rv-ws-prop">
@@ -321,24 +402,46 @@ export function FindingPanel(props: Props) {
                   <span>{authority.rest}</span>
                 </div>
               ) : null}
+              {finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT' ? (
+                <p className="rv-ws-caption">
+                  The clause library wording for this position did not fit this clause, so Rivell's proposal is
+                  shown instead. Check it before you use it.
+                  {canTakeLibraryWording && libraryWording ? (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="rv-ws-link"
+                        onClick={() => takeLibraryWording(libraryWording.text)}
+                      >
+                        Use the library wording
+                      </button>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
               {edited ? <div className="rv-ws-src">Your edit differs from the proposed wording.</div> : null}
             </div>
           ) : null}
 
-          {withinFallback ? (
-            <p className={approvalNeeded ? 'rv-ws-note rv-ws-note--approval' : 'rv-ws-note'}>
-              {approvalNeeded ? (
-                <>
-                  <b>Approval is needed.</b> This position names an approver. Escalate the finding,
-                  then resolve it with the approver's name.
-                  {escalationTriggers.length > 0 ? ` Escalate when: ${escalationTriggers.join('; ')}.` : ''}
-                </>
-              ) : (
-                <>
-                  <b>This is a note, not a problem.</b> The clause departs from the preferred position
-                  but stays within an acceptable fallback; accept and record it.
-                </>
-              )}
+          {approval && isActionable(finding) && !related ? (
+            <p className="rv-ws-note rv-ws-note--approval">
+              <b>Approval is needed.</b>{' '}
+              {approval.approver} approves{' '}
+              {approval.stance === 'PROHIBITED' ? 'this walk-away' : 'this fallback'}
+              {approvalSource ? `, ${approvalSource}` : ''}.{' '}
+              {withinFallback
+                ? 'The clause stays within an acceptable fallback, and this rule says the fallback needs approval.'
+                : 'Escalate the finding, then resolve it with the approver’s name.'}
+              {escalateIf ? ` ${escalateIf}` : ''}
+              {approvalConflict ? ` ${approvalConflict}` : ''}
+            </p>
+          ) : null}
+
+          {withinFallback && !approval ? (
+            <p className="rv-ws-note">
+              <b>This is a note, not a problem.</b> The clause departs from the preferred position
+              but stays within an acceptable fallback; accept and record it.
             </p>
           ) : null}
         </div>
@@ -353,7 +456,7 @@ export function FindingPanel(props: Props) {
             ) : null}
             {related ? (
               <p className="rv-ws-note rv-ws-note--related">
-                <b>Related position, not a breach.</b> It covers a topic this clause touches but does not
+                <b>Related guidance, not a breach.</b> It covers a topic this clause touches but does not
                 govern.
               </p>
             ) : null}
@@ -369,7 +472,7 @@ export function FindingPanel(props: Props) {
                 <div className="rv-ws-machine">
                   <p>
                     <span className="rv-ws-authority">
-                      {related ? 'Related position on a secondary topic' : observationKindLabel(finding.observationKind)}
+                      {related ? 'Related guidance on a secondary topic' : observationKindLabel(finding.observationKind)}
                     </span>
                   </p>
                   {absences.map((claim) => (
@@ -386,7 +489,7 @@ export function FindingPanel(props: Props) {
                     </p>
                   ))}
                   <p>
-                    <b>Recommendation:</b> {proposedActionLabel(finding.proposedAction)}.
+                    <b>Recommendation:</b> {proposedActionLabel(finding.proposedAction, finding)}.
                     {recommendations.map((claim) => (
                       <span key={claim.ordinal}>
                         {' '}
@@ -426,7 +529,14 @@ export function FindingPanel(props: Props) {
                   <small>{finding.evidenceItems.length}</small>
                 </summary>
                 {sources.map((item) => {
-                  const row = sourceRow(item, props.regionLabels, labelFor)
+                  const row = sourceRow(
+                    item,
+                    props.regionLabels,
+                    labelFor,
+                    item.evidenceId === libraryWording?.evidenceId
+                      ? (finding.quality?.wordingFitVerdict ?? 'UNKNOWN')
+                      : null,
+                  )
                   return (
                     <button key={item.evidenceId} type="button" className="rv-ws-srow" onClick={() => props.onOpenSource(item.evidenceId)}>
                       <span className="rv-ws-sico">
@@ -497,15 +607,25 @@ export function FindingPanel(props: Props) {
 
         {flow.compose ? (
           <DecisionComposer
-            key={`${finding.id}-${flow.compose}`}
+            key={`${finding.id}-${flow.compose}-${libraryPrefill?.seq ?? 0}`}
             kind={flow.compose}
             finding={finding}
             currentText={props.currentText}
-            initialLanguage={decision?.action === 'EDIT' ? (decision.approvedLanguage ?? '') : (props.replacementText ?? props.currentText ?? '')}
+            initialLanguage={
+              libraryPrefill?.text ??
+              (decision?.action === 'EDIT' ? (decision.approvedLanguage ?? '') : editBaseline)
+            }
+            baselineLanguage={editBaseline}
             isSubmitting={flow.isSubmitting}
             error={flow.error}
-            onSubmit={flow.submit}
-            onCancel={flow.cancel}
+            onSubmit={(submission) => {
+              setLibraryPrefill(null)
+              flow.submit(submission)
+            }}
+            onCancel={() => {
+              setLibraryPrefill(null)
+              flow.cancel()
+            }}
           />
         ) : flow.error ? (
           <p className="rv-ws-error" role="alert">
@@ -522,7 +642,6 @@ export function FindingPanel(props: Props) {
             <LockIcon />
             <div>
               <b>Decision final: {decision ? state.label : 'None'}</b>
-              <div>This review is finalized. Approved changes cannot be changed.</div>
             </div>
           </div>
         ) : !props.analysisComplete ? (
@@ -535,7 +654,7 @@ export function FindingPanel(props: Props) {
           <>
             <div className="rv-ws-decide-h">
               <span>Your decision{decision ? `: ${state.label}` : ''}</span>
-              {added ? null : <span>Rivell’s recommendation is kept separately</span>}
+              {/* Rivell's recommendation is a separate record: deciding does not overwrite it. */}
             </div>
             <div className="rv-ws-dbtns">
               {eligible ? (

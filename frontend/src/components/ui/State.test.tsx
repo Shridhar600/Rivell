@@ -12,4 +12,9 @@ describe('LoadingState', () => {
     render(<LoadingState label="Loading review…" />)
     expect(screen.getByRole('status')).toHaveTextContent(/^Loading review…$/)
   })
+
+  it('takes focus when a page asks, so a load never drops focus to the body', () => {
+    render(<LoadingState label="Loading the source" focus />)
+    expect(screen.getByRole('status')).toHaveFocus()
+  })
 })

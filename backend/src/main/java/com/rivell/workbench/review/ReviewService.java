@@ -178,10 +178,18 @@ public class ReviewService {
         var review = Review.analysisQueued(
                 reviewId, organizationId, contractId, version.versionId(), versionNumber,
                 identity.userId(), now, clientRequestId);
+        var inserted = new java.util.concurrent.atomic.AtomicBoolean();
         try {
             transactionTemplate.executeWithoutResult(status -> {
                 reviewRepository.create(review, snapshot, planBuilder.build(reviewId,
                         organizationId, snapshot, semantics));
+                inserted.set(true);
+                // Published inside the creation transaction so the listener runs after its commit.
+                // `inserted` is what tells the catch below whether a DataIntegrityViolation is the
+                // review insert or this after-commit enqueue: only the insert can be an idempotency
+                // conflict, and an enqueue failure must surface rather than be read back as the
+                // winner of a race. The reconciler re-enqueues a review that was committed without
+                // a job.
                 eventPublisher.publishEvent(new ReviewCreatedEvent(organizationId, reviewId));
             });
         } catch (org.springframework.dao.DataIntegrityViolationException conflict) {
@@ -189,18 +197,17 @@ public class ReviewService {
             // simultaneous submits both missed it and the loser's insert violated the unique index.
             // The index enforces the invariant but does not return the winner, so read it back: the
             // client asked for an idempotent create and must get the original review, not a 500.
-            if (clientRequestId == null) {
-                throw conflict;
+            if (!inserted.get() && clientRequestId != null) {
+                var winner = reviewRepository.findByClientRequestId(organizationId, clientRequestId);
+                if (winner.isPresent()) {
+                    // The read-back is a replay like any other, so it goes through the same check:
+                    // two racing requests can carry different packs, and the loser must not be
+                    // handed the winner's review as if it had asked for it.
+                    return requireSameOperation(winner.get(), contractId, versionNumber, packKey,
+                            organizationId);
+                }
             }
-            var winner = reviewRepository.findByClientRequestId(organizationId, clientRequestId);
-            if (winner.isEmpty()) {
-                throw conflict;
-            }
-            // The read-back is a replay like any other, so it goes through the same check: two
-            // racing requests can carry different packs, and the loser must not be handed the
-            // winner's review as if it had asked for it.
-            return requireSameOperation(winner.get(), contractId, versionNumber, packKey,
-                    organizationId);
+            throw conflict;
         }
         return review;
     }

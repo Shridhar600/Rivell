@@ -12,6 +12,7 @@ import {
   parseApiResult,
   readArray,
   readArrayValue,
+  readBoolean,
   readEnum,
   readEnumArray,
   readNullableBoolean,
@@ -136,7 +137,12 @@ export const REVIEW_REASONS = [
   'SCOPE_NARROWING_PROPOSED',
   'SEMANTIC_ANALYSIS_UNAVAILABLE',
   'SEMANTIC_COMPILATION_UNAVAILABLE',
+  'UNMAPPED_AUTHORITY_WORDS',
 ] as const satisfies readonly SchemaReviewReason[]
+
+export const AUTHORITY_LEVELS = ['ENTRY', 'MATRIX', 'TABLE'] as const
+
+export type AuthorityLevel = (typeof AUTHORITY_LEVELS)[number]
 
 export const VERIFICATION_STATES = [
   'NOT_VERIFIED',
@@ -261,6 +267,26 @@ export interface Interpretation {
   verification: VerificationState
 }
 
+/**
+ * One typed approval rule a playbook states: who approves, which stances it governs, an
+ * optional condition, where it was stated, and the source words. It is the only thing that can
+ * make an approval in review.
+ */
+export interface AuthorityRule {
+  approver: string
+  stances: PositionRole[]
+  condition: string | null
+  source: AuthorityLevel
+  quote: string | null
+}
+
+/** A lower-level rule naming a different approver for the same stance. */
+export interface AuthorityConflict {
+  approver: string
+  source: AuthorityLevel
+  stance: PositionRole
+}
+
 export interface Candidate {
   id: string
   artifactId: string
@@ -285,6 +311,24 @@ export interface Candidate {
   variantRole: PositionRole | null
   escalationTrigger: string | null
   requiresApproval: boolean | null
+  /** The preferred wording the source states explicitly; null when it states none. */
+  preferredText: string | null
+  /** Every fallback wording the source states, in source order. */
+  fallbackTexts: string[]
+  /** The walk-away or prohibited wording the source states; null when it states none. */
+  prohibitedText: string | null
+  /** Typed approval rules, one per stance, with their source level and quote. */
+  authorityRules: AuthorityRule[]
+  /** The rules the edit form starts from: the saved list, else the machine rules. */
+  storedAuthorityRules: AuthorityRule[]
+  /** Lower-level rules naming a different approver for the same stance. */
+  authorityConflicts: AuthorityConflict[]
+  /** Label-shaped walk-away or approver words the stage could not map. */
+  unmappedAuthority: string[]
+  /** True while this entry needs attention for an unmapped walk-away or approver word. */
+  needsAttention: boolean
+  /** Structured fields a person corrected and saved. A machine proposal that was not applied is not one. */
+  correctedFields: string[]
   interpretations: Interpretation[]
   editedContentText: string | null
   editedPayloadColumns: Record<string, string>
@@ -494,8 +538,47 @@ export function parseInterpretation(
   }
 }
 
+export function parseAuthorityRule(value: unknown, what = 'approval rule'): AuthorityRule {
+  const record = asRecord(value, what)
+  return {
+    approver: readString(record, 'approver', what),
+    stances: record.stances === undefined
+      ? []
+      : readEnumArray(record, 'stances', what, POSITION_ROLES),
+    condition: optionalString(record, 'condition', what),
+    source: readEnum(record, 'source', what, AUTHORITY_LEVELS),
+    quote: optionalString(record, 'quote', what),
+  }
+}
+
+/** A key an older response does not carry reads as absent, not as malformed. */
+function optionalString(
+  record: Record<string, unknown>,
+  key: string,
+  what: string,
+): string | null {
+  return record[key] === undefined ? null : readNullableString(record, key, what)
+}
+
+export function parseAuthorityConflict(
+  value: unknown,
+  what = 'approval conflict',
+): AuthorityConflict {
+  const record = asRecord(value, what)
+  return {
+    approver: readString(record, 'approver', what),
+    source: readEnum(record, 'source', what, AUTHORITY_LEVELS),
+    stance: readEnum(record, 'stance', what, POSITION_ROLES),
+  }
+}
+
 export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
   const record = asRecord(value, what)
+  // An older server has only the effective list; it is also the list the form starts from.
+  const authorityRules =
+    record.authorityRules === undefined
+      ? []
+      : readArray(record, 'authorityRules', what, parseAuthorityRule)
   return {
     id: readString(record, 'id', what),
     artifactId: readString(record, 'artifactId', what),
@@ -515,6 +598,29 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     variantRole: readNullableEnum(record, 'variantRole', what, POSITION_ROLES),
     escalationTrigger: readNullableString(record, 'escalationTrigger', what),
     requiresApproval: readNullableBoolean(record, 'requiresApproval', what),
+    // The typed stances and rules are additive: a response from an older server has no key.
+    preferredText: optionalString(record, 'preferredText', what),
+    fallbackTexts: record.fallbackTexts === undefined
+      ? []
+      : readStringArray(record, 'fallbackTexts', what),
+    prohibitedText: optionalString(record, 'prohibitedText', what),
+    authorityRules,
+    storedAuthorityRules: record.storedAuthorityRules === undefined
+      ? authorityRules
+      : readArray(record, 'storedAuthorityRules', what, parseAuthorityRule),
+    authorityConflicts: record.authorityConflicts === undefined
+      ? []
+      : readArray(record, 'authorityConflicts', what, parseAuthorityConflict),
+    unmappedAuthority: record.unmappedAuthority === undefined
+      ? []
+      : readStringArray(record, 'unmappedAuthority', what),
+    needsAttention: record.needsAttention === undefined
+      ? false
+      : readBoolean(record, 'needsAttention', what),
+    correctedFields:
+      record.correctedFields === undefined
+        ? []
+        : readStringArray(record, 'correctedFields', what),
     interpretations: readArray(record, 'interpretations', what, parseInterpretation),
     editedContentText: readNullableString(record, 'editedContentText', what),
     editedPayloadColumns: readStringMap(record, 'editedPayloadColumns', what),
@@ -875,7 +981,7 @@ export async function uploadKnowledge(
     bodySerializer: () => formData,
   })
 
-  if (!data) throw new UploadApiError(response.status, KNOWLEDGE_UPLOAD_MESSAGES)
+  if (!data) throw new UploadApiError(response.status, KNOWLEDGE_UPLOAD_MESSAGES, response.headers.get('Retry-After'))
   return parseApiResult(data, parseArtifactDetail, 'knowledge source')
 }
 
@@ -923,6 +1029,14 @@ export interface SemanticFieldsEditInput {
   requiresApproval?: boolean | null
   escalationTrigger?: string
   variantRole?: PositionRole
+  /** The preferred wording a person states; an empty string clears it. */
+  preferredText?: string
+  /** The full corrected fallback list; an empty list clears it. */
+  fallbackTexts?: string[]
+  /** The walk-away wording a person states; an empty string clears it. */
+  prohibitedText?: string
+  /** The full corrected rule list; an empty list clears every rule. */
+  authorityRules?: AuthorityRule[]
 }
 
 export interface EditCandidateInput {
@@ -940,14 +1054,14 @@ type GeneratedEditRequestBody = NonNullable<
 >['content']['application/json']
 
 /**
- * The contract accepts an explicit null for counsel approval ("not specified"), but the generated
- * schema types it as boolean only.
+ * The contract accepts an explicit null for counsel approval ("not specified") and for a rule's
+ * condition and quote, but the generated schema types them as non-null only.
  */
 type EditRequestBody = Omit<GeneratedEditRequestBody, 'semanticFields'> & {
   semanticFields?: Omit<
     NonNullable<GeneratedEditRequestBody['semanticFields']>,
-    'requiresApproval'
-  > & { requiresApproval?: boolean | null }
+    'requiresApproval' | 'authorityRules'
+  > & { requiresApproval?: boolean | null; authorityRules?: AuthorityRule[] }
 }
 
 async function editCandidate(input: EditCandidateInput): Promise<Candidate> {

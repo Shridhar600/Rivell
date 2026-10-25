@@ -68,6 +68,8 @@ const policyItem = {
     positions: ['PREFERRED', 'FALLBACK'],
     requiresApproval: true,
     escalationTrigger: 'Uncapped liability or consequential damages',
+    authorityRules: [],
+    authorityConflicts: [],
   },
   contractFacts: [],
   retrievalReason: 'STRUCTURED',
@@ -218,6 +220,8 @@ describe('parseEvidenceBundle', () => {
       positions: ['PREFERRED', 'FALLBACK'],
       requiresApproval: true,
       escalationTrigger: 'Uncapped liability or consequential damages',
+      authorityRules: [],
+      authorityConflicts: [],
     })
     expect(policy.publicationNumber).toBe(2)
     expect(policy.laneInfo.fusedRank).toBeNull()

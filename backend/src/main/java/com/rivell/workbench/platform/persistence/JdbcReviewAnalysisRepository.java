@@ -5,6 +5,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -43,7 +44,8 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
     public Optional<ReviewAnalysisRun> findRunningRun(UUID organizationId, UUID reviewId) {
         return jdbcClient.sql("""
                 select id, organization_id, review_id, run_number, status, trigger,
-                       pipeline_version, started_at, completed_at, failure_reason
+                       pipeline_version, started_at, completed_at, failure_reason,
+                       transient_failures, last_transient_reason
                 from review_analysis_run
                 where review_id = :reviewId and organization_id = :organizationId
                   and status = 'RUNNING'
@@ -58,7 +60,8 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
     public Optional<ReviewAnalysisRun> findLatestRun(UUID organizationId, UUID reviewId) {
         return jdbcClient.sql("""
                 select id, organization_id, review_id, run_number, status, trigger,
-                       pipeline_version, started_at, completed_at, failure_reason
+                       pipeline_version, started_at, completed_at, failure_reason,
+                       transient_failures, last_transient_reason
                 from review_analysis_run
                 where review_id = :reviewId and organization_id = :organizationId
                 order by run_number desc
@@ -75,7 +78,8 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
             UUID organizationId, UUID reviewId) {
         return jdbcClient.sql("""
                 select id, organization_id, review_id, run_number, status, trigger,
-                       pipeline_version, started_at, completed_at, failure_reason
+                       pipeline_version, started_at, completed_at, failure_reason,
+                       transient_failures, last_transient_reason
                 from review_analysis_run
                 where review_id = :reviewId and organization_id = :organizationId
                   and status = 'COMPLETED'
@@ -112,9 +116,11 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
             jdbcClient.sql("""
                     insert into review_analysis_run
                       (id, organization_id, review_id, run_number, status, trigger,
-                       pipeline_version, started_at, completed_at, failure_reason)
+                       pipeline_version, started_at, completed_at, failure_reason,
+                       transient_failures, last_transient_reason)
                     values (:id, :organizationId, :reviewId, :runNumber, :status, :trigger,
-                       :pipelineVersion, :startedAt, :completedAt, :failureReason)
+                       :pipelineVersion, :startedAt, :completedAt, :failureReason,
+                       :transientFailures, :lastTransientReason)
                     """)
                     .param("id", run.id())
                     .param("organizationId", run.organizationId())
@@ -126,6 +132,8 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                     .param("startedAt", timestamp(run.startedAt()))
                     .param("completedAt", run.completedAt() == null ? null : timestamp(run.completedAt()))
                     .param("failureReason", run.failureReason())
+                    .param("transientFailures", run.transientFailures())
+                    .param("lastTransientReason", run.lastTransientReason())
                     .update();
             return true;
         } catch (org.springframework.dao.DuplicateKeyException e) {
@@ -161,6 +169,47 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 .param("reason", reason)
                 .param("completedAt", timestamp(completedAt))
                 .update() == 1;
+    }
+
+    @Override
+    @Transactional
+    public OptionalInt recordTransientFailure(UUID organizationId, UUID runId, String reason,
+            UUID executionId, UUID leaseId) {
+        var counted = jdbcClient.sql("""
+                update review_analysis_run
+                set transient_failures = transient_failures + 1,
+                    last_transient_reason = :reason
+                where id = :runId and organization_id = :organizationId and status = 'RUNNING'
+                """)
+                .param("runId", runId)
+                .param("organizationId", organizationId)
+                .param("reason", reason)
+                .update();
+        if (counted == 0) {
+            return OptionalInt.empty();
+        }
+        if (executionId != null && leaseId != null) {
+            // Release only the lease this worker actually held. A reclaimed lease belongs to the
+            // other worker's retry, which must keep its fence.
+            jdbcClient.sql("""
+                    update review_check_execution
+                    set status = 'PENDING', lease_id = null, started_at = null, completed_at = null
+                    where id = :executionId and organization_id = :organizationId
+                      and status = 'RUNNING' and lease_id = :leaseId
+                    """)
+                    .param("executionId", executionId)
+                    .param("organizationId", organizationId)
+                    .param("leaseId", leaseId)
+                    .update();
+        }
+        return OptionalInt.of(jdbcClient.sql("""
+                select transient_failures from review_analysis_run
+                where id = :runId and organization_id = :organizationId
+                """)
+                .param("runId", runId)
+                .param("organizationId", organizationId)
+                .query(Integer.class)
+                .single());
     }
 
     @Override
@@ -494,7 +543,9 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 rs.getString("pipeline_version"),
                 rs.getTimestamp("started_at").toInstant(),
                 rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant(),
-                rs.getString("failure_reason"));
+                rs.getString("failure_reason"),
+                rs.getInt("transient_failures"),
+                rs.getString("last_transient_reason"));
     }
 
     private ReviewCheckExecution mapExecution(java.sql.ResultSet rs) throws java.sql.SQLException {

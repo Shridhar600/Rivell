@@ -39,10 +39,10 @@ public class RedlineApiService {
         var artifact = execution.artifact();
         var changes = execution.changes().stream()
                 .map(change -> new RedlineExecutionChangeView(change.approvedChangeId(),
-                        change.ordinal(), change.actionType().name(),
-                        change.targetKind().name(), change.status().name(),
-                        change.verification() == null ? null : change.verification().name(),
-                        change.failureCode() == null ? null : change.failureCode().name(),
+                        change.ordinal(), change.actionType(),
+                        change.targetKind(), change.status(),
+                        change.verification(),
+                        change.failureCode(),
                         change.placement(), change.resolvedTarget(),
                         change.paragraphsDeleted(), change.paragraphsInserted()))
                 .toList();
@@ -50,9 +50,9 @@ public class RedlineApiService {
                 execution.changeSetId(), execution.contractId(),
                 execution.contractVersionNumber(), execution.changeSetVersion(),
                 execution.attemptNumber(),
-                execution.status().name(),
-                execution.outcome() == null ? null : execution.outcome().name(),
-                execution.failureCode() == null ? null : execution.failureCode().name(),
+                execution.status(),
+                execution.outcome(),
+                execution.failureCode(),
                 execution.failureDetail(), execution.rendererVersion(),
                 execution.placementStrategyVersion(), execution.sourceSha256(),
                 execution.changeCount(), execution.requestedBy(), execution.startedAt(),

@@ -14,25 +14,22 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.rivell.workbench.contracts.ContractEnrichmentService;
-import com.rivell.workbench.contracts.SemanticsDigest;
 import com.rivell.workbench.organization.AuthorizationService;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
-import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.redline.ApprovedChangeSetRepository;
 import com.rivell.workbench.redline.RedlineExecutionRepository;
-import com.rivell.workbench.review.Finding;
 import com.rivell.workbench.review.FindingClassification;
 import com.rivell.workbench.review.FindingRepository;
 import com.rivell.workbench.review.Review;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
 import com.rivell.workbench.review.ReviewAnalysisRun;
+import com.rivell.workbench.review.ReviewAnalysisService;
 import com.rivell.workbench.review.ReviewNotFoundException;
 import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewSnapshot;
 import com.rivell.workbench.workflow.DecisionAction;
 import com.rivell.workbench.workflow.HumanDecisionRepository;
-import com.rivell.workbench.workflow.ReviewFinalizationService;
 import com.rivell.workbench.workflow.UnauthorizedWorkflowAccessException;
 
 /**
@@ -66,6 +63,7 @@ public class ReviewDiagnosticsService {
     private final ApprovedChangeSetRepository changeSetRepository;
     private final RedlineExecutionRepository redlineExecutionRepository;
     private final ContractEnrichmentService contractEnrichmentService;
+    private final ReviewAnalysisService analysisService;
     private final Clock clock;
     private final boolean backgroundWorkerEnabled;
 
@@ -79,6 +77,7 @@ public class ReviewDiagnosticsService {
             ApprovedChangeSetRepository changeSetRepository,
             RedlineExecutionRepository redlineExecutionRepository,
             ContractEnrichmentService contractEnrichmentService,
+            ReviewAnalysisService analysisService,
             Clock clock,
             @Value("${jobrunr.background-job-server.enabled:false}")
             boolean backgroundWorkerEnabled) {
@@ -91,6 +90,7 @@ public class ReviewDiagnosticsService {
         this.changeSetRepository = changeSetRepository;
         this.redlineExecutionRepository = redlineExecutionRepository;
         this.contractEnrichmentService = contractEnrichmentService;
+        this.analysisService = analysisService;
         this.clock = clock;
         this.backgroundWorkerEnabled = backgroundWorkerEnabled;
     }
@@ -143,9 +143,9 @@ public class ReviewDiagnosticsService {
     private ReviewDiagnosticsView.AnalysisRunView analysisView(
             UUID organizationId, ReviewAnalysisRun run, List<String> stalled) {
         var now = clock.instant();
+        var endedAt = run.completedAt() == null ? now : run.completedAt();
         var age = run.startedAt() == null ? null
-                : Duration.between(run.startedAt(), completion(run.startedAt(),
-                        run.completedAt())).toSeconds();
+                : Duration.between(run.startedAt(), endedAt).toSeconds();
         if (run.completedAt() == null && run.startedAt() != null
                 && Duration.between(run.startedAt(), now).compareTo(STUCK_RUN_THRESHOLD) > 0) {
             stalled.add("The analysis has been running for " + age
@@ -155,7 +155,11 @@ public class ReviewDiagnosticsService {
         // whole plan for every execution.
         var planChecks = planChecks(organizationId, run.reviewId());
         var checks = new ArrayList<ReviewDiagnosticsView.CheckView>();
+        Integer spottingDropped = null;
         for (var execution : analysisRepository.findExecutions(organizationId, run.id())) {
+            if (spottingDropped == null) {
+                spottingDropped = integer(execution.detail(), "spottingDropped");
+            }
             var degraded = execution.detail() == null ? null
                     : (String) execution.detail().get("degradedReason");
             var plan = planChecks.get(execution.planCheckId());
@@ -183,18 +187,23 @@ public class ReviewDiagnosticsService {
                     presenceProbabilities(execution.detail()),
                     count(execution.detail(), "addressedBySearch"),
                     count(execution.detail(), "flaggedBySearch"),
-                    strings(execution.detail(), "definitionTerms")));
+                    strings(execution.detail(), "definitionTerms"),
+                    integer(execution.detail(), "fitQuestions"),
+                    integer(execution.detail(), "fitSkipped")));
         }
         return new ReviewDiagnosticsView.AnalysisRunView(run.id(), run.runNumber(),
                 run.status().name(), run.trigger().name(), run.pipelineVersion(),
                 run.startedAt(), run.completedAt(), age, run.failureReason(),
-                environmentMatches(organizationId, run.reviewId()), checks);
+                run.transientFailures(), run.lastTransientReason(),
+                environmentMatches(organizationId, run.reviewId()), spottingDropped, checks);
     }
 
     /**
      * Whether the frozen snapshot still describes the live world. This is the same comparison the
      * analysis itself makes, reported rather than acted on, so an operator can see drift before it
-     * turns into a degraded run.
+     * turns into a degraded run. It covers all four inputs, not only the semantics digest (DW-019):
+     * a changed retrieval index or model binding degrades checks even when the contract text has
+     * not moved.
      */
     private Boolean environmentMatches(UUID organizationId, UUID reviewId) {
         var snapshot = reviewRepository.findSnapshot(organizationId, reviewId);
@@ -207,10 +216,8 @@ public class ReviewDiagnosticsService {
     private Boolean environmentMatches(ReviewSnapshot snapshot) {
         try {
             var semantics = contractEnrichmentService.getSemanticsForOrganization(
-                    snapshot.organizationId(), snapshot.contractId(),
-                    snapshot.contractVersionNumber());
-            return semantics != null
-                    && SemanticsDigest.of(semantics).equals(snapshot.semanticsDigest());
+                    snapshot.organizationId(), snapshot.contractVersionId());
+            return analysisService.environmentFullyMatches(snapshot, semantics);
         } catch (RuntimeException e) {
             return null;
         }
@@ -226,8 +233,9 @@ public class ReviewDiagnosticsService {
 
     /**
      * A policy comparison's judged positions as the check stored them: keys, categories,
-     * probabilities and, on engine v2, the route and the second opinion's outcome and category.
-     * Clause and position text, and the second opinion's words, never reach the check detail.
+     * probabilities and, on engine v2, the route, the second opinion's outcome and category, and
+     * (part 4) the fit verdict of a searched position. Clause and position text, and the second
+     * opinion's words, never reach the check detail.
      */
     static List<ReviewDiagnosticsView.JudgedPositionView> judgedPositions(Map<String, Object> detail) {
         if (detail == null || !(detail.get("positions") instanceof List<?> positions)) {
@@ -247,7 +255,12 @@ public class ReviewDiagnosticsService {
                         text(entry.get("route")),
                         text(entry.get("secondOpinionOutcome")),
                         text(entry.get("secondOpinionCategory")),
-                        text(entry.get("foundBy"))));
+                        text(entry.get("foundBy")),
+                        text(entry.get("fitVerdict")),
+                        text(entry.get("fitReason")),
+                        text(entry.get("fitOutcome")),
+                        text(entry.get("wordingFitVerdict")),
+                        strings(entry, "wordingFitReasons")));
             }
         }
         return views;
@@ -284,7 +297,7 @@ public class ReviewDiagnosticsService {
     }
 
     /** The detail's string list under one key; null when the detail does not carry it. */
-    private static List<String> strings(Map<String, Object> detail, String key) {
+    private static List<String> strings(Map<?, ?> detail, String key) {
         if (detail == null || !(detail.get(key) instanceof List<?> entries)) {
             return null;
         }

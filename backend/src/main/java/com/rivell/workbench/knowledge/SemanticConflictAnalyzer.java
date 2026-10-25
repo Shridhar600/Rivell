@@ -2,8 +2,8 @@ package com.rivell.workbench.knowledge;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
+import com.rivell.workbench.contracts.ContractType;
 import com.rivell.workbench.contracts.Jurisdiction;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.intelligence.SemanticDecisionService;
@@ -12,8 +12,8 @@ import com.rivell.workbench.intelligence.YesNoAnswer;
 /**
  * M4 duplicate/conflict/supersession analysis behind the M2 hook port.
  * Stage A (code) narrows plausible published peers by organization-scoped compatibility:
- * same candidate family, same primary concept, compatible declared contract types and
- * paper source, known compatible jurisdiction, and overlapping effective periods.
+ * same candidate family, same primary concept, compatible contract types (declared and record
+ * scope) and paper source, known compatible jurisdiction, and overlapping effective periods.
  * Stage B (code) detects exact duplicates. Stage C (code) resolves deterministic scope
  * overlap. Stage D (Jev) judges each narrowed peer pair for material contradiction and
  * supersession intent — machine proposals only; a human must approve any publication
@@ -146,20 +146,16 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
     }
 
     private static boolean compatibleContractTypes(KnowledgeCandidate a, KnowledgeCandidate b) {
-        return overlap(a.scope().declaredContractTypes(), b.scope().declaredContractTypes())
-                && overlap(a.scope().sourceContractTypes(), b.scope().sourceContractTypes());
+        return ContractType.recordsMeetInAContractType(
+                literalWording(a.candidateType()),
+                a.scope().declaredContractTypes(), a.scope().sourceContractTypes(),
+                b.scope().declaredContractTypes(), b.scope().sourceContractTypes());
     }
 
-    private static boolean overlap(Set<String> aTypes, Set<String> bTypes) {
-        if (aTypes.isEmpty() || bTypes.isEmpty()) {
-            return true;
-        }
-        for (var type : aTypes) {
-            if (bTypes.contains(type)) {
-                return true;
-            }
-        }
-        return false;
+    /** A position states a general stance; literal wording is text written for one type. */
+    private static boolean literalWording(CandidateType candidateType) {
+        return candidateType == CandidateType.CLAUSE_VARIANT
+                || candidateType == CandidateType.TEMPLATE_CLAUSE;
     }
 
     private static boolean compatibleJurisdiction(KnowledgeCandidate a, KnowledgeCandidate b) {

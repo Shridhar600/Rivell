@@ -1,14 +1,13 @@
 import { useId, useState } from 'react'
-import { useCandidateQuery, type ArtifactDetail, type Candidate } from '../../../api/knowledge'
+import type { ArtifactDetail, Candidate } from '../../../api/knowledge'
 import { PublicationNotReadyError, usePublishCompilation, type PublishedCompilation } from '../../../api/knowledgeCompile'
 import { conditionsOf, kindLabel, readiness } from '../../../lib/compilation'
 import { hasHumanCorrection } from '../../../lib/compilationFields'
 import { Button } from '../../ui/Button'
 import { Dialog } from '../../ui/Dialog'
 
-function PeerLabel({ candidateId }: { candidateId: string }) {
-  const peer = useCandidateQuery(candidateId)
-  return <strong>{peer.data ? peer.data.title : 'earlier published knowledge'}</strong>
+function PeerLabel({ candidateId, titles }: { candidateId: string; titles: ReadonlyMap<string, string> }) {
+  return <strong>{titles.get(candidateId) ?? 'earlier published knowledge'}</strong>
 }
 
 interface Props {
@@ -16,6 +15,8 @@ interface Props {
   candidates: Candidate[]
   /** New candidate id to the published candidate it replaces. */
   supersede: Record<string, string>
+  /** Titles of every candidate in this compilation and the published ones it was compared with. */
+  candidateTitles: ReadonlyMap<string, string>
   onClose: () => void
   onPublished: (result: PublishedCompilation) => void
   /** The server's answer may have changed what is approved, so the list should be read again. */
@@ -27,7 +28,7 @@ interface Props {
  * not, and publishes only on an explicit confirmation. What is listed comes from the candidates
  * the server last returned, and the publish request reads them again before it is sent.
  */
-export function PublishDialog({ artifact, candidates, supersede, onClose, onPublished, onStale }: Props) {
+export function PublishDialog({ artifact, candidates, supersede, candidateTitles, onClose, onPublished, onStale }: Props) {
   const titleId = useId()
   const publish = usePublishCompilation(artifact.id)
   const [note, setNote] = useState('')
@@ -81,7 +82,7 @@ export function PublishDialog({ artifact, candidates, supersede, onClose, onPubl
               {replacing.map(([id, old], position) => (
                 <span key={id}>
                   {position > 0 ? ', ' : ''}
-                  <PeerLabel candidateId={old} />
+                  <PeerLabel candidateId={old} titles={candidateTitles} />
                 </span>
               ))}
               . It stays visible in earlier versions.

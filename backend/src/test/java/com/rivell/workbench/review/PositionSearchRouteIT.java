@@ -158,6 +158,41 @@ class PositionSearchRouteIT {
                 .findFirst().orElseThrow().id();
     }
 
+    /**
+     * DW-071 item 1: the route records that the search ran, not that it found something. A
+     * review with no published playbook still searches every clause; a reader who counts SEARCH
+     * checks must see those searches even though every result set was empty.
+     */
+    @Test
+    void theSearchRouteIsRecordedWhenTheSearchFindsNothing() throws Exception {
+        var reviewId = reviewedContractWithoutKnowledge();
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var searched = analysisRepository.findExecutions(organizationId(), run.id()).stream()
+                .filter(execution -> execution.detail() != null
+                        && execution.detail().get("search") instanceof Map<?, ?>)
+                .toList();
+        assertThat(searched).as("the searches ran, so they must be in the run").isNotEmpty();
+        assertThat(searched).allSatisfy(execution -> {
+            assertThat(execution.detail()).containsEntry("route", "SEARCH");
+            assertThat(((Map<?, ?>) execution.detail().get("search")).get("found"))
+                    .isEqualTo(0);
+        });
+    }
+
+    /** The same contract, reviewed with no published playbook: every search has nothing to find. */
+    private UUID reviewedContractWithoutKnowledge() throws Exception {
+        var bytes = Files.readAllBytes(java.nio.file.Path.of(
+                "src/test/resources/fixtures/pc-contract.docx"));
+        var ingested = contractIngestionService.ingest("pc-contract.docx",
+                ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
+        enrichmentService.enrich(ingested.contractId(), 1,
+                new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
+                        PaperSource.THIRD_PARTY, Jurisdiction.US));
+        return reviewService.create(ingested.contractId(), 1, null).id();
+    }
+
     /** The termination clause's check: the only one whose comparison was found by search. */
     @SuppressWarnings("unchecked")
     private ReviewCheckExecution terminationCheck(UUID runId) {
@@ -219,11 +254,13 @@ class PositionSearchRouteIT {
         assertThat(trace.degradation()).contains("VECTOR_LANE_UNCONFIGURED");
         assertThat(trace.stages()).containsKeys("structured", "lexical", "vector", "fusion");
 
-        // diagnostics expose the search route's own numbers and the per-position foundBy
+        // diagnostics expose the search route's own numbers and the per-position foundBy. Other
+        // clauses may also have searched and found nothing, so pick the search with results.
         JsonNode searched = null;
         for (var view : json("/api/reviews/{id}/diagnostics", reviewId)
                 .at("/data/analysis/checks")) {
-            if ("SEARCH".equals(view.path("route").asText())) {
+            if ("SEARCH".equals(view.path("route").asText())
+                    && view.path("searchFound").asInt() >= 1) {
                 searched = view;
             }
         }
@@ -231,6 +268,9 @@ class PositionSearchRouteIT {
         assertThat(searched.path("addressed").asBoolean()).isTrue();
         assertThat(searched.path("searchFound").asInt()).isGreaterThanOrEqualTo(1);
         assertThat(searched.path("searchFailed").asBoolean()).isFalse();
+        // the fit question count reaches diagnostics; the skip count stays absent when none skipped
+        assertThat(searched.path("fitQuestions").asInt()).isGreaterThanOrEqualTo(1);
+        assertThat(searched.path("fitSkipped").isNull()).isTrue();
         JsonNode judgedView = null;
         for (var position : searched.path("judgedPositions")) {
             if (terminationPositionId().toString()
@@ -242,6 +282,54 @@ class PositionSearchRouteIT {
         assertThat(judgedView).as("the searched termination position must be listed").isNotNull();
         assertThat(judgedView.path("foundBy").asText()).isEqualTo("SEARCH");
         assertThat(judgedView.has("foundBy")).isTrue();
+        // the fit verdict reaches diagnostics without any clause text
+        assertThat(judgedView.path("fitVerdict").asText()).isEqualTo("FITS");
+        assertThat(judgedView.path("fitReason").asText()).isEqualTo("GOVERNS");
+        assertThat(judgedView.path("fitOutcome").isNull()).isTrue();
+    }
+
+    /**
+     * R2-006: a search-found position that does not govern the clause is not applied. The check
+     * records it as "not covered" and the diagnostics keep it visible, with no finding resting on it.
+     */
+    @Test
+    void aSearchHitThatDoesNotGovernIsReportedNotCoveredInDiagnostics() throws Exception {
+        var reviewId = reviewedContract();
+        scriptedProvider.headingAnswers.put(TERMINATION, PolicyComparisonSpecs.NOT_ADDRESSED);
+        scriptedProvider.positionAnswers.put(TERMINATION_POSITION,
+                PolicyComparisonSpecs.BEYOND_FALLBACK);
+        scriptedProvider.ruleFitProbability = 0.05;
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var check = terminationCheck(run.id());
+        assertThat(entryFor(check, terminationPositionId()))
+                .containsEntry("fitVerdict", "DOES_NOT_FIT")
+                .containsEntry("fitReason", "DIFFERENT_SUBJECT")
+                .containsEntry("fitOutcome", "not_covered");
+        assertThat(check.detail()).containsEntry("addressed", false);
+        assertThat(signalsCiting(run.id(), terminationPositionId())).isEmpty();
+
+        JsonNode searched = null;
+        for (var view : json("/api/reviews/{id}/diagnostics", reviewId)
+                .at("/data/analysis/checks")) {
+            if ("SEARCH".equals(view.path("route").asText())
+                    && view.path("searchFound").asInt() >= 1) {
+                searched = view;
+            }
+        }
+        assertThat(searched).isNotNull();
+        JsonNode judgedView = null;
+        for (var position : searched.path("judgedPositions")) {
+            if (terminationPositionId().toString()
+                    .equals(position.path("positionCandidateId").asText())) {
+                judgedView = position;
+            }
+        }
+        assertThat(judgedView).isNotNull();
+        assertThat(judgedView.path("fitVerdict").asText()).isEqualTo("DOES_NOT_FIT");
+        assertThat(judgedView.path("fitReason").asText()).isEqualTo("DIFFERENT_SUBJECT");
+        assertThat(judgedView.path("fitOutcome").asText()).isEqualTo("not_covered");
     }
 
     /**

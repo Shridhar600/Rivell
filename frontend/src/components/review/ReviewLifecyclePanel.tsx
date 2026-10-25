@@ -166,11 +166,17 @@ export function ReviewLifecyclePanel({
               : `${summary.findings} ${summary.findings === 1 ? 'finding' : 'findings'} from ${summary.completedChecks} completed checks.`}
           </p>
           {summary.findings === 0 &&
+          summary.plannedChecks > 0 &&
           summary.degradedChecks === 0 &&
           summary.failedChecks === 0 &&
           !coverageLimited ? (
             <p>
               Every planned check completed without findings.
+            </p>
+          ) : null}
+          {summary.findings === 0 && summary.plannedChecks === 0 ? (
+            <p className="rv-ws-warn">
+              No checks were planned for this contract version.
             </p>
           ) : null}
           {summary.findings === 0 && coverageLimited ? (

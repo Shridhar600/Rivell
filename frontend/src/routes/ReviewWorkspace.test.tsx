@@ -253,6 +253,36 @@ describe('finalize is the server’s decision', () => {
     )
   })
 
+  it('shows the partial-analysis blocker line verbatim when some checks did not run', async () => {
+    renderWorkspace(
+      stubContractApi(
+        options({
+          humanReview: fixtureHumanReview({
+            readyToFinalize: false,
+            blockers: [
+              {
+                code: 'ANALYSIS_PARTIAL',
+                message:
+                  '3 checks did not finish, so this review does not cover the whole contract. Start a new review to analyze the contract again.',
+                findingIds: [],
+              },
+            ],
+          }),
+        }),
+      ),
+    )
+    const why = (await within(await topBar()).findByText('What is left')).closest(
+      'summary',
+    ) as HTMLElement
+    await userEvent.click(why)
+    expect(
+      screen.getByRole('group', { name: 'What is left before you can finalize' }),
+    ).toHaveTextContent(
+      '3 checks did not finish, so this review does not cover the whole contract. Start a new review to analyze the contract again.',
+    )
+    expect(within(await topBar()).getByRole('button', { name: 'Finalize review' })).toBeDisabled()
+  })
+
   it('is enabled only when the server says ready, and finalizes after one confirmation', async () => {
     const api = stubContractApi(
       options({

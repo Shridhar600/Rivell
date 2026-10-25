@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 import com.rivell.workbench.intelligence.GenerativeReasoningService;
+import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.review.FallbackConditionSpecs;
 
@@ -122,6 +123,7 @@ final class FallbackConditionChecker {
         } catch (ProviderProtocolException e) {
             return Result.failed(Result.INVALID);
         } catch (RuntimeException e) {
+            ProviderFailures.rethrowIfOutOfCredit(e);
             return Result.failed(Result.UNAVAILABLE);
         }
     }

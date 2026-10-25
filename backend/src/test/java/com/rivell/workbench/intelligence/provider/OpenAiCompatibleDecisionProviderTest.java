@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -86,6 +87,41 @@ class OpenAiCompatibleDecisionProviderTest {
     }
 
     @Test
+    void disabledReasoningIsSentAsEffortNone() throws Exception {
+        var sent = new AtomicReference<String>();
+        var noReasoning = new GenerativeProperties(
+                "openai-compatible", "https://api.example.test/v1", "test-key", "gpt-test",
+                null, null, Duration.ofSeconds(1), Duration.ofSeconds(1), null,
+                new GenerativeProperties.Reasoning(false, null));
+        var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> {
+            sent.set(payload);
+            return response("""
+                    {"needs_review":{"answer":"no","confidence":0.9},
+                     "position_1":{"answer":"WALK_AWAY","confidence":0.8}}""");
+        }, objectMapper, noReasoning);
+
+        provider.execute(request());
+
+        assertThat(objectMapper.readTree(sent.get()).path("reasoning_effort").asText())
+                .isEqualTo("none");
+    }
+
+    @Test
+    void unsetReasoningSendsNoEffortField() throws Exception {
+        var sent = new AtomicReference<String>();
+        var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> {
+            sent.set(payload);
+            return response("""
+                    {"needs_review":{"answer":"no","confidence":0.9},
+                     "position_1":{"answer":"WALK_AWAY","confidence":0.8}}""");
+        }, objectMapper, properties);
+
+        provider.execute(request());
+
+        assertThat(objectMapper.readTree(sent.get()).has("reasoning_effort")).isFalse();
+    }
+
+    @Test
     void anAnswerOutsideTheOfferedOptionsIsAProtocolError() {
         var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> response("""
                 {"needs_review":{"answer":"yes","confidence":0.7},
@@ -94,5 +130,137 @@ class OpenAiCompatibleDecisionProviderTest {
         assertThatThrownBy(() -> provider.execute(request()))
                 .isInstanceOf(ProviderProtocolException.class)
                 .hasMessageContaining("not an offered option");
+    }
+
+    @Test
+    void everyBillingCodeAndTheLegacyQuotaTypeAreOutOfCredit() {
+        for (var body : List.of(
+                "{\"error\":{\"code\":\"credit_balance_exhausted\"}}",
+                "{\"error\":{\"code\":\"organization_spend_limit_exceeded\"}}",
+                "{\"error\":{\"code\":\"project_spend_limit_exceeded\"}}",
+                "{\"error\":{\"code\":\"organization_usage_limit_exceeded\"}}",
+                "{\"error\":{\"type\":\"insufficient_quota\"}}")) {
+            var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> {
+                throw new org.springframework.web.client.RestClientResponseException(
+                        "rejected", 429, "Too Many Requests", null,
+                        body.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+            }, objectMapper, properties);
+
+            assertThatThrownBy(() -> provider.execute(request()))
+                    .as(body)
+                    .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        }
+    }
+
+    @Test
+    void aBillingCodeIsOutOfCreditAndShortCircuitsTheProvider() {
+        var clock = new TestClock();
+        var guard = new com.rivell.workbench.intelligence.ProviderCreditGuard(clock);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var body = "{\"error\":{\"code\":\"project_spend_limit_exceeded\"}}";
+        var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> {
+            calls.incrementAndGet();
+            throw new org.springframework.web.client.RestClientResponseException(
+                    "rejected", 429, "Too Many Requests", null,
+                    body.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+        }, objectMapper, properties, guard);
+
+        assertThatThrownBy(() -> provider.execute(request()))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        assertThat(calls).hasValue(1);
+        assertThatThrownBy(() -> provider.execute(request()))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        assertThat(calls).hasValue(1);
+
+        clock.advance(Duration.ofSeconds(61));
+        assertThatThrownBy(() -> provider.execute(request()))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        assertThat(calls).hasValue(2);
+    }
+
+    @Test
+    void slowDownAndAPlain429CarryRetryAfter() {
+        for (var code : List.of("slow_down", "rate_limit_exceeded")) {
+            var headers = new org.springframework.http.HttpHeaders();
+            headers.set(org.springframework.http.HttpHeaders.RETRY_AFTER, "7");
+            var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> {
+                throw new org.springframework.web.client.RestClientResponseException(
+                        "rejected", 429, "Too Many Requests", headers,
+                        ("{\"error\":{\"code\":\"" + code + "\"}}")
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+            }, objectMapper, properties);
+
+            assertThatThrownBy(() -> provider.execute(request()))
+                    .as(code)
+                    .isInstanceOfSatisfying(
+                            com.rivell.workbench.intelligence.ProviderRateLimitedException.class,
+                            failure -> assertThat(failure.retryAfter())
+                                    .isEqualTo(Duration.ofSeconds(7)));
+        }
+    }
+
+    @Test
+    void theShortCircuitDoesNotBlockAnotherProviderIdentity() {
+        var guard = new com.rivell.workbench.intelligence.ProviderCreditGuard(
+                java.time.Clock.systemUTC());
+        var generative = new OpenAiCompatibleGenerativeProvider(
+                (path, payload) -> {
+                    throw new org.springframework.web.client.RestClientResponseException(
+                            "rejected", 429, "Too Many Requests", null,
+                            "{\"error\":{\"code\":\"credit_balance_exhausted\"}}"
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+                },
+                objectMapper, new GenerativeProperties(
+                        "openai-compatible", "https://generation.test/v1", "key", "gpt", null, null),
+                guard);
+        var decision = new OpenAiCompatibleDecisionProvider(
+                (path, payload) -> response("""
+                        {"needs_review":{"answer":"no","confidence":0.9},
+                         "position_1":{"answer":"WALK_AWAY","confidence":0.8}}"""),
+                objectMapper, new GenerativeProperties(
+                        "openai-compatible", "https://decision.test/v1", "key", "gpt", null, null),
+                guard);
+
+        assertThatThrownBy(() -> generative.generate(
+                new com.rivell.workbench.intelligence.GenerationRequest(
+                        "gpt", new SemanticState() {
+                            @Override
+                            public int schemaVersion() {
+                                return 1;
+                            }
+
+                            @Override
+                            public Object payload() {
+                                return Map.of("text", "t");
+                            }
+                        }, new com.rivell.workbench.intelligence.ReasoningSpec(
+                                "spec", 1, "p", 1, Map.of("field", "d")))))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+
+        assertThat(decision.execute(request()).answers()).isNotEmpty();
+    }
+
+    private static final class TestClock extends java.time.Clock {
+
+        private java.time.Instant instant = java.time.Instant.parse("2026-10-24T10:00:00Z");
+
+        void advance(Duration duration) {
+            instant = instant.plus(duration);
+        }
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return java.time.ZoneOffset.UTC;
+        }
+
+        @Override
+        public java.time.Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public java.time.Instant instant() {
+            return instant;
+        }
     }
 }

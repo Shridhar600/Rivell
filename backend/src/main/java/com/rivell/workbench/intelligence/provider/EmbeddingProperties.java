@@ -44,6 +44,11 @@ public record EmbeddingProperties(
         if (maxInputsPerBatch < 1) {
             maxInputsPerBatch = 64;
         }
+        if (maxInputsPerBatch > 2048) {
+            throw new IllegalArgumentException(
+                    "rivell.intelligence.embeddings.max-inputs-per-batch "
+                            + maxInputsPerBatch + " exceeds the provider limit of 2048");
+        }
         if (dimensions != null) {
             if (dimensions < 1) {
                 throw new IllegalArgumentException("Embedding dimensions must be positive");

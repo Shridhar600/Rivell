@@ -115,6 +115,7 @@ class KnowledgeImportQualityIT {
 
         volatile double requiresApproval = 0.5;
         volatile double ipIndemnityTopic = 0.7;
+        volatile boolean failLabels;
 
         @Override
         public String id() {
@@ -125,6 +126,10 @@ class KnowledgeImportQualityIT {
         public ProviderExecutionResult execute(DecisionExecutionRequest request) {
             var answers = new LinkedHashMap<String, SemanticAnswer>();
             for (var entry : request.pack().questions().entrySet()) {
+                if (failLabels && entry.getKey().startsWith("label_")) {
+                    throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
+                            "label role provider unavailable");
+                }
                 if (entry.getValue() instanceof ChoiceQuestion choice) {
                     var selected = selected(entry.getKey(), choice, request.state().payload());
                     var probabilities = new LinkedHashMap<String, Double>();
@@ -206,6 +211,21 @@ class KnowledgeImportQualityIT {
     void defaults() {
         provider.requiresApproval = 0.5;
         provider.ipIndemnityTopic = 0.7;
+        provider.failLabels = false;
+    }
+
+    @Test
+    void aFailedLabelRoleCallMarksCompilationAndCandidateSemanticsUnavailable() throws Exception {
+        provider.failLabels = true;
+
+        var artifact = ingest("fixtures/import-quality-clause-library.xlsx",
+                "g-unknown-labels.xlsx", ArtifactType.CLAUSE_LIBRARY);
+
+        assertThat(artifact.parseWarnings()).contains("SEMANTIC_COMPILATION_UNAVAILABLE");
+        assertThat(queryService.getCandidates(artifact.id()))
+                .isNotEmpty()
+                .allSatisfy(candidate -> assertThat(candidate.reviewReasons())
+                        .contains(ReviewReason.SEMANTIC_ANALYSIS_UNAVAILABLE));
     }
 
     @Test
@@ -240,7 +260,7 @@ class KnowledgeImportQualityIT {
         var row = variant(queryService.getCandidates(artifact.id()), "G-IND-01", "Fallback 1");
 
         assertThat(row.scope().sourceContractTypes())
-                .containsExactlyInAnyOrder(ContractType.SWL.name(), ContractType.SAAS.name());
+                .containsExactlyInAnyOrder(ContractType.SWL.name(), ContractType.ORDER_FORM.name());
     }
 
     @Test

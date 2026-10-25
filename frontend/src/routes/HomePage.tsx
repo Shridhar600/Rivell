@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useOrganizationReviewsQuery } from '../api/reviews'
+import { usePublicationsQuery } from '../api/knowledge'
 import { buildHomeSections, homeReview, type HomeSectionKey, type HomeSections } from '../lib/home'
 import { useHomeResume } from '../lib/useHomeResume'
 import { CREATE_ACTIONS } from '../components/shell/navigation'
@@ -54,6 +55,10 @@ export function HomePage() {
   const liveReview = resume.record ? reviews.data?.items.find((review) => review.id === resume.record?.reviewId) : undefined
   const live = liveReview ? homeReview(liveReview) : null
   const hasReviews = (reviews.data?.items.length ?? 0) > 0
+  // Only an empty Home needs to know whether there is any published knowledge to review against.
+  const publications = usePublicationsQuery(reviews.isSuccess && !hasReviews)
+  const knowledgeSettled = publications.isSuccess || publications.isError
+  const noPublishedKnowledge = publications.isSuccess && publications.data.length === 0
 
   return (
     <>
@@ -90,17 +95,36 @@ export function HomePage() {
             {reviews.isPending ? <LoadingState label="Loading your reviews" /> : null}
             {reviews.isError ? <ReviewReadProblem error={reviews.error} onRetry={() => void reviews.refetch()} /> : null}
 
-            {reviews.isSuccess && !hasReviews ? (
-              <EmptyState
-                title="No reviews yet"
-                message="Start a review to see its progress here."
-                action={
-                  <LinkButton to={CREATE_ACTIONS.startReview} variant="primary" compact>
-                    <DocumentIcon className="rv-icon" />
-                    Start review
-                  </LinkButton>
-                }
-              />
+            {reviews.isSuccess && !hasReviews && knowledgeSettled ? (
+              noPublishedKnowledge ? (
+                <EmptyState
+                  title="Add your company’s playbook"
+                  message="Rivell reviews each contract against the playbook you publish."
+                  action={
+                    <div className="rv-state__actions">
+                      <LinkButton to={CREATE_ACTIONS.addKnowledge} variant="primary" compact>
+                        <PlusIcon className="rv-icon" />
+                        Add knowledge
+                      </LinkButton>
+                      <LinkButton to={CREATE_ACTIONS.startReview} compact>
+                        <DocumentIcon className="rv-icon" />
+                        Start review
+                      </LinkButton>
+                    </div>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  title="No reviews yet"
+                  message="Start a review to see its progress here."
+                  action={
+                    <LinkButton to={CREATE_ACTIONS.startReview} variant="primary" compact>
+                      <DocumentIcon className="rv-icon" />
+                      Start review
+                    </LinkButton>
+                  }
+                />
+              )
             ) : null}
 
             {resume.show && resume.record ? <ContinueCard record={resume.record} live={live} onDismiss={resume.dismiss} /> : null}

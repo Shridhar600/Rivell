@@ -95,7 +95,7 @@ export function profileLine(snapshot: ReviewSnapshot | null | undefined): string
   const parts = [
     profile.contractType ? (CONTRACT_TYPE_LABELS[profile.contractType] ?? profile.contractType) : null,
     profile.paperSource ? (PAPER_SOURCE_LABELS[profile.paperSource] ?? profile.paperSource).toLowerCase() : null,
-    profile.ourSideRole ? `our side: ${roleLabel(profile.ourSideRole)}` : null,
+    profile.ourSideRole ? `party you represent: ${roleLabel(profile.ourSideRole)}` : null,
   ].filter((part): part is string => part !== null)
   return parts.length > 0 ? parts.join(', ') : null
 }
@@ -128,11 +128,25 @@ export function defaultFinding(
 
 /** Where the approved wording came from, in the canonical authority line. */
 export function languageAuthority(
-  finding: Pick<FindingDetail, 'proposedLanguageSource'>,
+  finding: Pick<FindingDetail, 'proposedLanguageSource' | 'quality'>,
   /** The publication the approved wording was quoted from, when its evidence names one. */
   publicationNumber: number | null = null,
 ): { strong: string; rest: string } | null {
   if (finding.proposedLanguageSource === 'APPROVED_DRAFTING') {
+    // A search hit or a library variant is offered as approved only when the fit check passed.
+    // UNKNOWN, a missing verdict and DOES_NOT_FIT are never shown as approved.
+    if (finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT') {
+      return {
+        strong: 'Library wording that does not fit this position',
+        rest: 'Rivell did not propose this wording for the clause.',
+      }
+    }
+    if (finding.quality?.wordingFitVerdict !== 'FITS') {
+      return {
+        strong: 'Library wording, not checked against this position',
+        rest: 'Rivell could not confirm that it meets this position and cures the gap. Read it before you use it.',
+      }
+    }
     return {
       strong: 'Approved organizational drafting',
       rest: publicationNumber === null ? 'Quoted from published wording' : `Knowledge version ${publicationNumber} · Source: Clause library`,
@@ -311,15 +325,33 @@ export function isNeedsYourLook(finding: Pick<FindingSummary, 'decidedBy'>): boo
   return finding.decidedBy === 'NEEDS_YOUR_LOOK'
 }
 
-type Ordered = Pick<FindingSummary, 'decidedBy'> & { firstReviewCategory?: string | null }
+/** A clause the whole-contract read picked out, rather than a first-review/second-opinion split. */
+export function isWholeContractSpotted(
+  finding: Pick<FindingSummary, 'observationKind'>,
+): boolean {
+  return finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ'
+}
+
+type Ordered = Pick<FindingSummary, 'decidedBy'> & {
+  subjectKind?: FindingSummary['subjectKind']
+  firstReviewCategory?: string | null
+}
 
 /**
  * "Needs your look" items with the first review's walk-away answer first: a possible walk-away
- * breach is the one to look at before the rest. Each part keeps the server's order.
+ * breach is the one to look at before the rest. Disagreements about a clause then come before
+ * absence findings, whose subject is a provision the contract does not have. Each part keeps
+ * the server's order.
  */
 export function orderNeedsYourLook<T extends Ordered>(look: readonly T[]): T[] {
   const walkAway = (finding: T) => finding.firstReviewCategory === 'WALK_AWAY'
-  return [...look.filter(walkAway), ...look.filter((finding) => !walkAway(finding))]
+  const absence = (finding: T) => finding.subjectKind === 'ABSENCE'
+  const rest = look.filter((finding) => !walkAway(finding))
+  return [
+    ...look.filter(walkAway),
+    ...rest.filter((finding) => !absence(finding)),
+    ...rest.filter(absence),
+  ]
 }
 
 /** Findings in review order: "needs your look" items after the others, each group in server order. */

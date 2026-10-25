@@ -146,11 +146,11 @@ describe('Start Review: the canonical page', () => {
     renderPage()
     await userEvent.selectOptions(await screen.findByLabelText('Contract type'), 'MSA')
 
-    expect(await screen.findByText('Applicable 1, version 1')).toBeInTheDocument()
-    expect(screen.getByText('Applicable 2, version 2')).toBeInTheDocument()
-    expect(screen.getByText('Applicable 5, version 5')).toBeInTheDocument()
+    expect(await screen.findByText('Applicable 1 (Playbook), version 1')).toBeInTheDocument()
+    expect(screen.getByText('Applicable 2 (Clause library), version 2')).toBeInTheDocument()
+    expect(screen.getByText('Applicable 5 (Playbook), version 5')).toBeInTheDocument()
     expect(screen.getByText('and 1 more')).toBeInTheDocument()
-    expect(screen.queryByText('Applicable 6, version 6')).not.toBeInTheDocument()
+    expect(screen.queryByText('Applicable 6 (Playbook), version 6')).not.toBeInTheDocument()
   })
 
   it('says plainly when no playbook covers the chosen contract type', async () => {
@@ -158,7 +158,9 @@ describe('Start Review: the canonical page', () => {
     renderPage()
     await userEvent.selectOptions(await screen.findByLabelText('Contract type'), 'MSA')
     expect(
-      await screen.findByText('No playbook covers this contract type. Rivell checks general risks only.'),
+      await screen.findByText(
+        'No playbook applied. General scan only; review the full contract.',
+      ),
     ).toBeInTheDocument()
   })
 
@@ -228,7 +230,7 @@ describe('Start Review: the canonical page', () => {
   it('lets optional choices be cleared by choosing them again', async () => {
     stub()
     renderPage()
-    const side = within(await screen.findByRole('group', { name: /Our side/ }))
+    const side = within(await screen.findByRole('group', { name: /Party you represent/ }))
     await userEvent.click(side.getByRole('button', { name: 'Customer' }))
     expect(side.getByRole('button', { name: 'Customer' })).toHaveAttribute('aria-pressed', 'true')
     await userEvent.click(side.getByRole('button', { name: 'Customer' }))
@@ -240,8 +242,8 @@ describe('Start Review: the canonical page', () => {
     renderPage()
     await fill({ type: 'MSA', file: docx('Vendor NDA.docx') })
     await userEvent.click(screen.getByRole('button', { name: 'Supplier' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Counterparty paper' }))
-    expect(screen.getByText('MSA, Supplier side, counterparty paper')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Their template' }))
+    expect(screen.getByText('MSA, Supplier side, their template')).toBeInTheDocument()
     expect(screen.getByRole('note')).toHaveTextContent('The file name looks like an NDA, but you chose MSA.')
     expect(startButton()).toBeEnabled()
     await userEvent.selectOptions(screen.getByLabelText('Contract type'), 'NDA')
@@ -281,7 +283,7 @@ describe('Start Review: the three requests', () => {
     const router = renderPage()
     await fill()
     await userEvent.click(screen.getByRole('button', { name: 'Customer' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Counterparty paper' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Their template' }))
     await userEvent.selectOptions(screen.getByLabelText('Jurisdiction'), 'UK')
     const pack = screen.getByLabelText(/Review pack/)
     await waitFor(() => expect(within(pack).getByRole('option', { name: 'NDA pack' })).toBeInTheDocument())

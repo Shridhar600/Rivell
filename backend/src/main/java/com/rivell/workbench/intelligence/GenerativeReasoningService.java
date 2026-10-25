@@ -33,6 +33,19 @@ public class GenerativeReasoningService {
     }
 
     public GenerativeExecution generate(ReasoningSpec spec, SemanticState state) {
+        return generate(spec, state, false);
+    }
+
+    /**
+     * A generative call that may legitimately run longer than an ordinary one (the
+     * whole-contract spotter on a slow model). The spec, prompt and validation are unchanged.
+     */
+    public GenerativeExecution generateLong(ReasoningSpec spec, SemanticState state) {
+        return generate(spec, state, true);
+    }
+
+    private GenerativeExecution generate(
+            ReasoningSpec spec, SemanticState state, boolean longRead) {
         if (state.schemaVersion() != spec.stateSchemaVersion()) {
             throw new SpecStateMismatchException(
                     "Reasoning spec " + spec.id() + " v" + spec.version() + " expects state schema v"
@@ -46,9 +59,10 @@ public class GenerativeReasoningService {
 
         var startedAt = clock.instant();
         try {
-            var request = new GenerationRequest(binding.modelAlias(), state, spec);
-            var result = retry.call(() -> provider.generate(request), failure -> ExecutionLog.retried(
-                    "generation", spec.id(), spec.version(), binding.providerId(), failure));
+            var request = new GenerationRequest(binding.modelAlias(), state, spec, longRead);
+            var result = retry.call(binding.providerId(), () -> provider.generate(request),
+                    event -> ExecutionLog.retried(
+                            "generation", spec.id(), spec.version(), binding.providerId(), event));
             validateFields(spec, result.fields());
             var metadata = new DecisionExecutionMetadata(
                     UUID.randomUUID(), spec.id(), spec.version(), spec.stateSchemaVersion(),

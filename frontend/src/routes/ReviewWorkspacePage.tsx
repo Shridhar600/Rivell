@@ -35,7 +35,7 @@ import { useSemanticsQuery } from '../api/semantics'
 import { useTaxonomy } from '../api/taxonomy'
 import { buildRegionLabelMap, CONTRACT_TYPE_LABELS } from '../lib/contractSemantics'
 import { clearResumeFor, writeResume } from '../lib/resume'
-import { coverageLimitationSummary, coverageLimitations, findingSubjectLabel, hasNewerRun, playbooksUsedText } from '../lib/reviews'
+import { NO_PLAYBOOK_NOTICE, coverageLimitationSummary, withoutPlaybook, coverageLimitations, findingSubjectLabel, hasNewerRun } from '../lib/reviews'
 import {
   defaultFinding,
   executableChange,
@@ -44,7 +44,6 @@ import {
   isActionable,
   nextOpenFinding,
   orderForReview,
-  profileLine,
   regionBodyText,
   regionText,
 } from '../lib/workspace'
@@ -592,16 +591,8 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
         semantics?.structuralRegions.find((region) => region.headingNodeId === sheet.headingNodeId))
       : undefined
   const contractType = summary.snapshot?.profile?.contractType
-  const pin = summary.snapshot?.knowledgePinNumber
-  const playbooksUsed = playbooksUsedText(summary.snapshot?.playbooksUsed ?? null)
-  const context =
-    [
-      profileLine(summary.snapshot),
-      pin ? `Knowledge version ${pin}` : null,
-      playbooksUsed !== null ? `Playbooks used: ${playbooksUsed}` : null,
-    ]
-      .filter(Boolean)
-      .join('. ') || null
+  const noPlaybookNotice =
+    withoutPlaybook(summary.snapshot?.playbooksUsed) ? NO_PLAYBOOK_NOTICE : null
 
   // The search menu lists this review's findings and commands first, and can find text in the contract.
   usePageCommands(() => ({
@@ -673,6 +664,7 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           analysisComplete={analysisCompleted}
           isPending={findingsQuery.isPending}
           isError={findingsQuery.isError}
+          noPlaybookNotice={noPlaybookNotice}
           onRetry={() => void findingsQuery.refetch()}
           onSelect={chooseFinding}
         />
@@ -711,7 +703,6 @@ function Workspace({ contractId, reviewId, contract, summary, onRefresh }: Works
           isError={findingQuery.isError}
           onRetry={() => void findingQuery.refetch()}
           position={index >= 0 ? { index: index + 1, total: findings.length } : null}
-          context={context}
           regionLabels={regionLabels}
           playbooksUsed={summary.snapshot?.playbooksUsed ?? null}
           currentText={currentText}

@@ -180,7 +180,17 @@ const PROPOSED_ACTION_LABELS: Record<string, string> = {
   UNKNOWN: 'Recommended action',
 }
 
-export function proposedActionLabel(action: string): string {
+export function proposedActionLabel(
+  action: string,
+  wording?: Pick<FindingDetail, 'proposedLanguageSource' | 'quality'> | null,
+): string {
+  if (
+    action === 'USE_APPROVED_FALLBACK' &&
+    wording?.proposedLanguageSource === 'APPROVED_DRAFTING' &&
+    wording.quality?.wordingFitVerdict !== 'FITS'
+  ) {
+    return 'Use the library wording (not checked against this position)'
+  }
   return PROPOSED_ACTION_LABELS[action] ?? humanizeCode(action)
 }
 
@@ -619,12 +629,20 @@ export function isRelatedPosition(
 
 /**
  * The issue line a finding is listed under. A clause no playbook position addresses is its own
- * kind: the family alone would read as the older "policy unavailable" case.
+ * kind: the family alone would read as the older "policy unavailable" case. The whole-contract
+ * read's advisory is the same gap said in different words, so it uses the same line (DW-070).
  */
 export function findingIssueLabel(
   finding: Pick<FindingSummary, 'issueFamily' | 'observationKind'>,
 ): string {
-  if (finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK') return observationKindLabel(finding.observationKind)
+  if (finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK') {
+    return observationKindLabel(finding.observationKind)
+  }
+  if (finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ') {
+    // The whole-contract read picks the same gap a clause mark calls "Not covered by your
+    // playbook"; the header says the same, never the older "Policy unavailable" (DW-070).
+    return 'Not covered by your playbook'
+  }
   if (finding.observationKind.startsWith('UNCERTAINTY:second_opinion_')) {
     return observationKindLabel(finding.observationKind)
   }
@@ -647,6 +665,92 @@ export function decidedByLabel(quality: FindingQuality | null): string | null {
   }
   if (quality.route === 'SECOND_OPINION') return 'Decided with a second opinion'
   if (quality.route === 'NEEDS_YOUR_LOOK') return 'Needs your look'
+  return null
+}
+
+/**
+ * The typed approval rule behind a finding, as the panel shows it. Council §A.3: an approval
+ * exists only when a rule names an approver, so this is null when no rule applies, whatever the
+ * finding's trigger text says.
+ */
+export type ApprovalSummary = {
+  approver: string
+  /** The rule's own condition, shown after "Escalate if". */
+  condition: string | null
+  source: string | null
+  stance: 'FALLBACK' | 'PROHIBITED' | null
+  /** A lower-level rule naming a different approver for the same stance. */
+  conflict: { approver: string; source: string | null } | null
+}
+
+export function approvalSummary(quality: FindingQuality | null): ApprovalSummary | null {
+  const approver = quality?.escalationApprover?.trim()
+  if (!quality || !approver) return null
+  const stance =
+    quality.escalationStance === 'PROHIBITED' || quality.escalationStance === 'FALLBACK'
+      ? quality.escalationStance
+      : null
+  return {
+    // the panel opens a sentence with the approver ("General counsel approves this fallback")
+    approver: approver.charAt(0).toUpperCase() + approver.slice(1),
+    condition: quality.escalationCondition?.trim() || null,
+    source: quality.escalationSource?.trim() || null,
+    stance,
+    conflict: quality.escalationConflictApprover
+      ? {
+          approver: quality.escalationConflictApprover.trim(),
+          source: quality.escalationConflictSource?.trim() || null,
+        }
+      : null,
+  }
+}
+
+/** The one line that shows a lower-level rule naming another approver (council §A.2). */
+export function approvalConflictLine(summary: ApprovalSummary | null): string | null {
+  if (!summary?.conflict) return null
+  const { approver, source } = summary.conflict
+  if (source === 'MATRIX') return `The approval matrix names ${approver} for this.`
+  if (source === 'TABLE') return `The approval table names ${approver} for this.`
+  return `The entry names ${approver} for this.`
+}
+
+/** The rule's condition, in the council's own "Escalate if" form. */
+export function escalateIfLine(summary: ApprovalSummary | null): string | null {
+  return summary?.condition ? `Escalate if: ${summary.condition}.` : null
+}
+
+/**
+ * A source condition the playbook states without naming who approves it. The panel shows it,
+ * followed by "No approver is named.", so it never reads as a broken approval (council §E).
+ * An "Escalate to <role>" route is not a condition: only the part after a boundary word is,
+ * and a route without one yields nothing.
+ */
+export function escalateIfText(trigger: string | null | undefined): string | null {
+  const text = trigger?.trim()
+  if (!text) return null
+  const routed = /^escalate\s+to\b/i.test(text)
+  const withoutVerb = text
+    .replace(/^escalate\b[\s.,;:]*/i, '')
+    .replace(/[.;,]+$/, '')
+    .trim()
+  if (!routed) {
+    return withoutVerb.length > 0 ? withoutVerb : null
+  }
+  const boundary = withoutVerb.match(/\b(before|if|when|where|unless|on|for|after|once)\b/i)
+  if (!boundary || boundary.index === undefined) return null
+  const condition = withoutVerb
+    .slice(boundary.index + boundary[0].length)
+    .replace(/^[\s,;:.]+/, '')
+    .replace(/[.;,]+$/, '')
+    .trim()
+  return condition.length > 0 ? condition : null
+}
+
+/** Where the approval rule was stated, in words a reader can check. */
+export function approvalSourceLabel(source: string | null): string | null {
+  if (source === 'ENTRY') return 'stated on this entry'
+  if (source === 'MATRIX') return 'from the approval matrix'
+  if (source === 'TABLE') return 'from the approval table'
   return null
 }
 
@@ -701,17 +805,38 @@ export function routeCountsLabel(findings: readonly Pick<FindingSummary, 'decide
   return `${second} decided with a second opinion · ${look} need${look === 1 ? 's' : ''} your look`
 }
 
-/** The sentence used wherever a review's frozen playbook set is empty. */
-export const NO_PLAYBOOK_COVERS =
-  'No playbook covers this contract type. Rivell checks general risks only.'
+/** The sentence used wherever a review's frozen knowledge holds no playbook. */
+export const NO_PLAYBOOK_NOTICE =
+  'No playbook applied. General scan only; review the full contract.'
+
+/** A clause library or template offers wording; only a playbook is policy the review is judged against. */
+export function withoutPlaybook(used: readonly PlaybookUsed[] | null | undefined): boolean {
+  return used != null && !used.some((item) => item.artifactType === 'PLAYBOOK')
+}
+
+const KNOWLEDGE_KIND_LABELS: Record<string, string> = {
+  PLAYBOOK: 'Playbook',
+  CLAUSE_LIBRARY: 'Clause library',
+  TEMPLATE: 'Template',
+  EXECUTED_PRECEDENT: 'Signed precedent',
+  NEGOTIATION_HISTORY: 'Negotiation history',
+  EXTERNAL_REFERENCE: 'External reference',
+}
 
 /**
- * The names of the playbooks a review actually froze. Null means the review predates the freeze,
- * so there is nothing honest to show; an empty list is a real answer.
+ * The knowledge a review actually froze, each with the kind of source it is. Null means the
+ * review predates the freeze, so there is nothing honest to show; an empty list is a real answer.
  */
-export function playbooksUsedText(
-  used: readonly Pick<PlaybookUsed, 'name'>[] | null,
+export function knowledgeUsedText(
+  used: readonly PlaybookUsed[] | null,
 ): string | null {
   if (used === null) return null
-  return used.length === 0 ? NO_PLAYBOOK_COVERS : used.map((playbook) => playbook.name).join(', ')
+  if (used.length === 0) return NO_PLAYBOOK_NOTICE
+  const names = used
+    .map((item) => {
+      const kind = KNOWLEDGE_KIND_LABELS[item.artifactType]
+      return kind ? `${item.name} (${kind})` : item.name
+    })
+    .join(', ')
+  return withoutPlaybook(used) ? `${names}. ${NO_PLAYBOOK_NOTICE}` : names
 }

@@ -55,6 +55,12 @@ public class PrecedentLane {
 
     public Outcome gather(EvidenceRequest request, long asOfPublicationNumber,
             PolicyContext policyContext) {
+        return gather(request, asOfPublicationNumber, policyContext, null);
+    }
+
+    public Outcome gather(EvidenceRequest request, long asOfPublicationNumber,
+            PolicyContext policyContext,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
         var resolution = resolver.resolve(request, java.util.Set.of(CandidateType.PRECEDENT),
                 asOfPublicationNumber);
         if (resolution.candidates().isEmpty()) {
@@ -80,12 +86,23 @@ public class PrecedentLane {
         if (!unindexed.isEmpty()) {
             degradation.add("INDEX_INCOMPLETE");
         }
+        // a row whose embedding failed is searchable by text only: the vector lane cannot see it
+        if (embeddingService.isConfigured() && !ids.isEmpty()) {
+            var withoutVectors = new ArrayList<>(ids);
+            withoutVectors.removeAll(repository.findEmbeddingReadyIds(
+                    request.organizationId(), ids, properties.indexVersion()));
+            // A row with no index entry has no vector to report; INDEX_INCOMPLETE already says it.
+            withoutVectors.removeAll(unindexed);
+            if (!withoutVectors.isEmpty()) {
+                degradation.add("VECTOR_INDEX_INCOMPLETE");
+            }
+        }
 
         var lexicalHits = repository.findLexicalCandidates(
                 request.organizationId(), ids,
                 LexicalQueries.orTerms(request.clauseText()), properties.lexicalLimit(),
                 properties.indexVersion());
-        var vectorHits = vectorHits(request, ids, degradation);
+        var vectorHits = vectorHits(request, ids, degradation, embeddingLookup);
         var lanes = new java.util.LinkedHashMap<String, List<RankFusion.LaneHit>>();
         lanes.put("lexical", lanesOf(lexicalHits));
         lanes.put("vector", lanesOf(vectorHits));
@@ -213,8 +230,10 @@ public class PrecedentLane {
     }
 
     private List<RetrievalRepository.CandidateHit> vectorHits(
-            EvidenceRequest request, List<UUID> ids, List<String> degradation) {
-        return vectorHits(embeddingService, repository, properties, request, ids, degradation);
+            EvidenceRequest request, List<UUID> ids, List<String> degradation,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
+        return vectorHits(embeddingService, repository, properties, request, ids, degradation,
+                embeddingLookup);
     }
 
     /** The vector lane over narrowed ids: the clause text embedded once, nearest first. */
@@ -222,13 +241,23 @@ public class PrecedentLane {
             com.rivell.workbench.intelligence.EmbeddingService embeddingService,
             RetrievalRepository repository, RetrievalProperties properties,
             EvidenceRequest request, List<UUID> ids, List<String> degradation) {
+        return vectorHits(embeddingService, repository, properties, request, ids, degradation,
+                null);
+    }
+
+    static List<RetrievalRepository.CandidateHit> vectorHits(
+            com.rivell.workbench.intelligence.EmbeddingService embeddingService,
+            RetrievalRepository repository, RetrievalProperties properties,
+            EvidenceRequest request, List<UUID> ids, List<String> degradation,
+            com.rivell.workbench.intelligence.EmbeddingLookup embeddingLookup) {
         if (!embeddingService.isConfigured()) {
             degradation.add("VECTOR_LANE_UNCONFIGURED");
             return List.of();
         }
         try {
-            var query = embeddingService.embed(List.of(request.clauseText()));
-            var vector = query.vectors().get(0);
+            var vector = embeddingLookup == null
+                    ? embeddingService.embed(List.of(request.clauseText())).vectors().get(0)
+                    : embeddingLookup.vector(request.clauseText());
             return repository.findVectorCandidates(
                     request.organizationId(), ids, embeddingService.modelIdentity(),
                     vector.length, VectorLiterals.of(vector), properties.vectorLimit(),

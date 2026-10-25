@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+
 /** Shape checks on machine wording, with cases taken from real generated proposals. */
 class PositionLanguageGeneratorTest {
 
@@ -53,6 +54,81 @@ class PositionLanguageGeneratorTest {
         assertThat(PositionLanguageGenerator.body(paragraph, paragraph, "5. Residual Knowledge."))
                 .isEqualTo("The Recipient may use information retained in unaided memory.");
         assertThat(PositionLanguageGenerator.body("Term\n" + TERM, "Term", null)).isEqualTo(TERM);
+    }
+
+    @Test
+    void outOfCreditDuringVerificationIsNotRecordedAsUncertain() {
+        var generation = new com.rivell.workbench.intelligence.GenerativeReasoningService(
+                asset -> new com.rivell.workbench.intelligence.ModelBinding("fake", "fake-gen"),
+                id -> java.util.Optional.of(
+                        new com.rivell.workbench.intelligence.GenerativeReasoningProvider() {
+                            @Override
+                            public String id() {
+                                return "fake";
+                            }
+
+                            @Override
+                            public com.rivell.workbench.intelligence.GenerationResult generate(
+                                    com.rivell.workbench.intelligence.GenerationRequest request) {
+                                return new com.rivell.workbench.intelligence.GenerationResult(
+                                        java.util.Map.of(
+                                                com.rivell.workbench.review.M7ReasoningSpecs
+                                                        .PROPOSED_LANGUAGE,
+                                                "Either party may terminate on 30 days' notice.",
+                                                com.rivell.workbench.review.M7ReasoningSpecs
+                                                        .EXPLANATION,
+                                                "Adds a notice period."),
+                                        "fake-gen",
+                                        new com.rivell.workbench.intelligence.TokenUsage(1, 1));
+                            }
+                        }),
+                java.time.Clock.systemUTC());
+        var decisions = new com.rivell.workbench.intelligence.SemanticDecisionService(
+                asset -> new com.rivell.workbench.intelligence.ModelBinding("fake", "fake-model"),
+                id -> java.util.Optional.of(
+                        new com.rivell.workbench.intelligence.SemanticDecisionProvider() {
+                            @Override
+                            public String id() {
+                                return "fake";
+                            }
+
+                            @Override
+                            public com.rivell.workbench.intelligence.ProviderExecutionResult execute(
+                                    com.rivell.workbench.intelligence.DecisionExecutionRequest request) {
+                                throw new com.rivell.workbench.intelligence
+                                        .ProviderOutOfCreditException(
+                                                "Provider account has no credits");
+                            }
+                        }),
+                java.time.Clock.systemUTC());
+        var generator = new PositionLanguageGenerator(generation, decisions);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> generator.propose(
+                new PositionLanguageGenerator.Draft("CUSTOMER", "MSA", "Term",
+                        "Either party may terminate on notice.", "Termination on notice.")))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+    }
+
+    @Test
+    void outOfCreditIsNotRecordedAsAnOrdinaryRejection() {
+        var generation = new com.rivell.workbench.intelligence.GenerativeReasoningService(
+                asset -> null, id -> java.util.Optional.empty(), java.time.Clock.systemUTC()) {
+            @Override
+            public com.rivell.workbench.intelligence.GenerativeReasoningService.GenerativeExecution generate(
+                    com.rivell.workbench.intelligence.ReasoningSpec spec,
+                    com.rivell.workbench.intelligence.SemanticState state) {
+                throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
+                        "Provider account has no credits");
+            }
+        };
+        var decisions = new com.rivell.workbench.intelligence.SemanticDecisionService(
+                asset -> null, id -> java.util.Optional.empty(), java.time.Clock.systemUTC());
+        var generator = new PositionLanguageGenerator(generation, decisions);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> generator.propose(
+                new PositionLanguageGenerator.Draft("CUSTOMER", "MSA", "Term",
+                        "Either party may terminate on notice.", "Termination on notice.")))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
     }
 
     @Test

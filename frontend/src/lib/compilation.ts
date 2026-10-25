@@ -105,8 +105,8 @@ const KIND_COPY: Record<Exclude<ConditionKind, 'other'>, { label: string; detail
       'Published knowledge already holds the same content and scope. A duplicate is not rejected for you. Decide whether to publish it again.',
   },
   uncertain: {
-    label: 'Uncertain interpretation',
-    detail: 'Rivell could not fully support this reading from the source. Check the source before you approve.',
+    label: 'Source support unclear',
+    detail: 'Verify before approval.',
   },
   type: {
     label: 'Source type may not match',
@@ -114,7 +114,7 @@ const KIND_COPY: Record<Exclude<ConditionKind, 'other'>, { label: string; detail
   },
   position: {
     label: 'New prohibited or escalation position',
-    detail: 'This proposes a prohibited or escalation position, so it needs a closer look before it is published.',
+    detail: '',
   },
   scope: {
     label: 'Scope narrowed by the source',

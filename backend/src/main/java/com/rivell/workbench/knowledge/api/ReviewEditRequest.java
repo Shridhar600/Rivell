@@ -30,6 +30,14 @@ public record ReviewEditRequest(
             Set<com.rivell.workbench.knowledge.PositionRole> positions,
             Boolean requiresApproval,
             String escalationTrigger,
-            com.rivell.workbench.knowledge.PositionRole variantRole) {
+            com.rivell.workbench.knowledge.PositionRole variantRole,
+            /** The preferred wording the person states; an empty string clears it. */
+            String preferredText,
+            /** The full corrected fallback list; an empty list clears it. */
+            java.util.List<String> fallbackTexts,
+            /** The walk-away wording the person states; an empty string clears it. */
+            String prohibitedText,
+            /** The full corrected rule list; an empty list clears every rule. */
+            java.util.List<com.rivell.workbench.knowledge.AuthorityRule> authorityRules) {
     }
 }

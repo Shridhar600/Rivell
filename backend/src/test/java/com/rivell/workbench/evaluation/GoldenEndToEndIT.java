@@ -702,7 +702,7 @@ class GoldenEndToEndIT {
 
         private static boolean isReviewPack(Set<String> questionNames) {
             return questionNames.stream().anyMatch(
-                            name -> name.startsWith("position_"))
+                            name -> name.startsWith("position_") || name.startsWith("fit_"))
                     || questionNames.contains(
                             com.rivell.workbench.review.M7DecisionSpecs.CONSISTENCY)
                     || questionNames.contains(
