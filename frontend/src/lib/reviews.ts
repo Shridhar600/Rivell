@@ -4,6 +4,7 @@ import type {
   FindingClaim,
   FindingDetail,
   FindingSummary,
+  PlaybookCoverageEntry,
   PlaybookUsed,
   ReviewCoverage,
   ReviewFailure,
@@ -361,6 +362,55 @@ export function coverageLimitationSummary(
   if (limited.length === 0) return null
   const topics = limited.map((entry) => label(entry.concept))
   return `Rivell did not check: ${topics.join(', ')}`
+}
+
+const PLAYBOOK_COVERAGE_STATE_LABELS: Record<string, string> = {
+  COMPARED: 'Compared',
+  NOT_FOUND: 'Not found in this contract',
+  NOT_COMPARED: 'Not compared',
+  OUT_OF_SCOPE: 'Out of scope',
+}
+
+export function playbookCoverageStateLabel(state: string): string {
+  return PLAYBOOK_COVERAGE_STATE_LABELS[state] ?? 'Not compared'
+}
+
+const PLAYBOOK_COVERAGE_VERDICT_LABELS: Record<string, string> = {
+  MEETS_PREFERRED: 'Meets preferred',
+  WITHIN_FALLBACK: 'Within fallback',
+  PARTLY_WITHIN_FALLBACK: 'Partly within fallback',
+  BEYOND_FALLBACK: 'Beyond fallback',
+  WALK_AWAY: 'Walk-away',
+  UNCLEAR: 'Unclear',
+}
+
+export function playbookCoverageVerdictLabel(verdict: string | null): string | null {
+  if (!verdict) return null
+  return PLAYBOOK_COVERAGE_VERDICT_LABELS[verdict] ?? null
+}
+
+const PLAYBOOK_COVERAGE_REASON_LABELS: Record<string, string> = {
+  NOT_CHECKED: 'Not checked',
+  FOUND_NOT_JUDGED: 'Found in a clause, not judged',
+  CHECK_DID_NOT_COMPLETE: 'A check did not complete',
+}
+
+export function playbookCoverageReasonLabel(reason: string | null): string {
+  if (!reason) return 'Not checked'
+  return PLAYBOOK_COVERAGE_REASON_LABELS[reason] ?? 'Not checked'
+}
+
+/**
+ * The one-line count of what the run did with its playbook positions. It names every state,
+ * including zero, so a reader cannot read "0 not found" as "everything was checked".
+ */
+export function playbookCoverageSummary(
+  entries: readonly PlaybookCoverageEntry[],
+): string {
+  const count = (state: PlaybookCoverageEntry['state']) =>
+    entries.filter((entry) => entry.state === state).length
+  const noun = entries.length === 1 ? 'position' : 'positions'
+  return `${entries.length} ${noun}: ${count('COMPARED')} compared, ${count('NOT_FOUND')} not found, ${count('NOT_COMPARED')} not compared, ${count('OUT_OF_SCOPE')} out of scope.`
 }
 
 /**

@@ -1135,6 +1135,75 @@ describe('finding evidence amendment', () => {
     ).toBeInTheDocument()
     expect(api.requests.filter((r) => r.url.includes('/findings?')).length).toBeGreaterThan(0)
   })
+
+  it('shows what the playbook coverage compared, searched, did not compare and left out of scope', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1', {
+      reviewSummary: {
+        ...summaryWithPlaybooks(),
+        activeRun: {
+          ...fixtureCompletedReviewSummary.activeRun,
+          playbookCoverage: [
+            {
+              positionCandidateId: 'p-1',
+              label: 'Limitation of liability',
+              code: 'L-1',
+              topic: 'LIMITATION_OF_LIABILITY',
+              state: 'COMPARED',
+              verdict: 'PARTLY_WITHIN_FALLBACK',
+              clauseHeadingNodeId: 'h-1',
+              findingId: 'f-7',
+              reason: null,
+            },
+            {
+              positionCandidateId: 'p-2',
+              label: 'Termination for convenience',
+              code: 'T-11',
+              topic: 'TERM',
+              state: 'NOT_FOUND',
+              verdict: null,
+              clauseHeadingNodeId: null,
+              findingId: 'f-15',
+              reason: null,
+            },
+            {
+              positionCandidateId: 'p-3',
+              label: 'Audit rights',
+              code: 'A-4',
+              topic: 'AUDIT',
+              state: 'NOT_COMPARED',
+              verdict: null,
+              clauseHeadingNodeId: null,
+              findingId: null,
+              reason: 'NOT_CHECKED',
+            },
+            {
+              positionCandidateId: 'p-4',
+              label: 'Data export',
+              code: 'D-2',
+              topic: 'DATA_PROTECTION',
+              state: 'OUT_OF_SCOPE',
+              verdict: null,
+              clauseHeadingNodeId: null,
+              findingId: null,
+              reason: null,
+            },
+          ],
+        },
+      },
+    })
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
+    const sheet = within(screen.getByRole('dialog', { name: 'Review notes' }))
+    expect(
+      await sheet.findByRole('button', { name: /Playbook coverage/ }),
+    ).toBeInTheDocument()
+    expect(sheet.getByText('Compared')).toBeInTheDocument()
+    expect(sheet.getByText('Partly within fallback')).toBeInTheDocument()
+    expect(sheet.getByText('Not found in this contract')).toBeInTheDocument()
+    expect(sheet.getByText('Not compared')).toBeInTheDocument()
+    expect(sheet.getByText('Not checked')).toBeInTheDocument()
+    expect(sheet.getByText('Out of scope')).toBeInTheDocument()
+  })
 })
 
 describe('review workspace authority and network guards', () => {

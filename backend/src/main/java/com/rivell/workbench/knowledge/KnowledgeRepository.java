@@ -132,6 +132,18 @@ public interface KnowledgeRepository {
     List<PublishedCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query);
 
     /**
+     * Every published playbook position of the given artifacts visible at the pinned publication,
+     * after the scope dimensions other than contract type. The position's own contract-type scope
+     * is left to the caller: coverage must be able to show an out-of-scope position rather than
+     * drop it. Retrieval never uses this read.
+     */
+    List<PublishedCandidate> findPublishedPositionsForArtifacts(
+            UUID organizationId, long asOfPublicationNumber,
+            java.util.Collection<UUID> artifactIds, String contractPackKey,
+            String partyPerspective, String paperSource, String jurisdiction,
+            java.time.LocalDate effectiveOn);
+
+    /**
      * The published playbooks and clause libraries that apply to a declared context, by the same
      * contract-type and scope rule as {@link #findPublishedCandidatesAsOf(PublishedKnowledgeQuery)}.
      */

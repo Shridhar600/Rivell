@@ -455,7 +455,12 @@ public class ReviewApiService {
                 review.startedAt(),
                 review.completedAt(),
                 activeRun.map(run -> new ReviewRunView(
-                        run.id(), run.runNumber(), run.status().name())).orElse(null),
+                        run.id(), run.runNumber(), run.status().name(),
+                        run.playbookCoverage() == null
+                                ? null
+                                : run.playbookCoverage().entries().stream()
+                                        .map(PlaybookCoverageEntryView::from)
+                                        .toList())).orElse(null),
                 latestRunStatus,
                 progress.plannedChecks(),
                 progress.completedChecks(),

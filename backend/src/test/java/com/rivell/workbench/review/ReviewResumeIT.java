@@ -214,6 +214,12 @@ class ReviewResumeIT {
         }
 
         @Override
+        public boolean savePlaybookCoverage(UUID organizationId, UUID runId,
+                PlaybookCoverage playbookCoverage) {
+            return delegate.savePlaybookCoverage(organizationId, runId, playbookCoverage);
+        }
+
+        @Override
         public boolean markRunFailed(UUID organizationId, UUID runId, String reason,
                 Instant completedAt) {
             return delegate.markRunFailed(organizationId, runId, reason, completedAt);

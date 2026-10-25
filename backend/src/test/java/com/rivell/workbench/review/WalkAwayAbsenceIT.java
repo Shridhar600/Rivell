@@ -205,6 +205,23 @@ class WalkAwayAbsenceIT {
         }
         assertThat(summary).as("the absence finding must be listed").isNotNull();
         assertThat(summary.path("positionLabel").asText()).isEqualTo(TERMINATION);
+
+        // the coverage list says what the search did with the position, on the run API
+        var coverage = json("/api/reviews/{id}", reviewId).at("/data/activeRun/playbookCoverage");
+        assertThat(coverage.isArray()).as("playbook coverage is exposed").isTrue();
+        JsonNode terminationCoverage = null;
+        for (var entry : coverage) {
+            if (termination.id().toString().equals(
+                    entry.path("positionCandidateId").asText())) {
+                terminationCoverage = entry;
+            }
+        }
+        assertThat(terminationCoverage).as("the searched position is in the coverage list")
+                .isNotNull();
+        assertThat(terminationCoverage.path("state").asText()).isEqualTo("NOT_FOUND");
+        assertThat(terminationCoverage.path("reason").isNull()).isTrue();
+        assertThat(terminationCoverage.path("findingId").asText())
+                .isEqualTo(finding.id().toString());
     }
 
     @Test

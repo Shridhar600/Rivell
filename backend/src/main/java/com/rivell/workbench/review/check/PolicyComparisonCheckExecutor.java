@@ -548,6 +548,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var jev = judged.judgement();
         var quality = new LinkedHashMap<String, Object>();
         quality.put("route", NEEDS_YOUR_LOOK);
+        // the coverage list links this finding to its position; the payload has no candidate id
+        quality.put("positionCandidateId", judged.position().sourceCandidateId().toString());
         if (resolution.routeReason() != null) {
             quality.put("routeReason", resolution.routeReason());
         }

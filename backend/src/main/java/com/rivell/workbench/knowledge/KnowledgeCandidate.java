@@ -91,6 +91,23 @@ public record KnowledgeCandidate(
         return editedTitle == null || editedTitle.isBlank() ? rawLabel : editedTitle;
     }
 
+    /**
+     * The record's own reference code ("F-11"), when its source has a reference column. The code
+     * is display only: matching and retrieval use the candidate id.
+     */
+    public String effectiveReference() {
+        var payload = effectivePayload();
+        for (var key : payload.orderedKeys()) {
+            var value = payload.columns().get(key);
+            if (value != null && !value.isBlank()
+                    && payload.roleOf(key).filter(role -> role == RecordFieldRole.REFERENCE)
+                            .isPresent()) {
+                return value.strip();
+            }
+        }
+        return null;
+    }
+
     public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,

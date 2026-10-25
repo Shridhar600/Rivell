@@ -111,10 +111,53 @@ export type ReviewPack = {
   version: string
 }
 
+export const PLAYBOOK_COVERAGE_STATES = [
+  'COMPARED',
+  'NOT_FOUND',
+  'NOT_COMPARED',
+  'OUT_OF_SCOPE',
+] as const
+export type PlaybookCoverageState = (typeof PLAYBOOK_COVERAGE_STATES)[number]
+
+export const PLAYBOOK_COVERAGE_VERDICTS = [
+  'MEETS_PREFERRED',
+  'WITHIN_FALLBACK',
+  'PARTLY_WITHIN_FALLBACK',
+  'BEYOND_FALLBACK',
+  'WALK_AWAY',
+  'UNCLEAR',
+] as const
+export type PlaybookCoverageVerdict = (typeof PLAYBOOK_COVERAGE_VERDICTS)[number]
+
+export const PLAYBOOK_COVERAGE_REASONS = [
+  'NOT_CHECKED',
+  'FOUND_NOT_JUDGED',
+  'CHECK_DID_NOT_COMPLETE',
+] as const
+export type PlaybookCoverageReason = (typeof PLAYBOOK_COVERAGE_REASONS)[number]
+
+/**
+ * What one analysis run did with one published playbook position. `verdict` is present only for
+ * `COMPARED`; `reason` only for `NOT_COMPARED`. A null `playbookCoverage` means the run predates
+ * the list, which is not the same as a run that checked nothing.
+ */
+export type PlaybookCoverageEntry = {
+  positionCandidateId: string
+  label: string
+  code: string | null
+  topic: string | null
+  state: PlaybookCoverageState
+  verdict: PlaybookCoverageVerdict | null
+  clauseHeadingNodeId: string | null
+  findingId: string | null
+  reason: PlaybookCoverageReason | null
+}
+
 export type ReviewRun = {
   id: string
   runNumber: number
   status: RunStatus
+  playbookCoverage: PlaybookCoverageEntry[] | null
 }
 
 export type ReviewDocument = {
@@ -561,12 +604,45 @@ function parseReviewPack(value: unknown, what: string): ReviewPack {
   }
 }
 
+function parsePlaybookCoverage(value: unknown, what: string): PlaybookCoverageEntry[] | null {
+  if (value === null || value === undefined) return null
+  if (!Array.isArray(value)) throw malformed(what)
+  return value.map((entry, index) => {
+    const item = asRecord(entry, `${what}.playbookCoverage[${index}]`)
+    const state = readOptionalNullableString(item, 'state', what)
+    const verdict = readOptionalNullableString(item, 'verdict', what)
+    const reason = readOptionalNullableString(item, 'reason', what)
+    return {
+      positionCandidateId: readString(item, 'positionCandidateId', what),
+      label: readString(item, 'label', what),
+      code: readOptionalNullableString(item, 'code', what),
+      topic: readOptionalNullableString(item, 'topic', what),
+      // An unrecognised state must never read as absence: fall back to "not compared".
+      state:
+        state && (PLAYBOOK_COVERAGE_STATES as readonly string[]).includes(state)
+          ? (state as PlaybookCoverageState)
+          : 'NOT_COMPARED',
+      verdict:
+        verdict && (PLAYBOOK_COVERAGE_VERDICTS as readonly string[]).includes(verdict)
+          ? (verdict as PlaybookCoverageVerdict)
+          : null,
+      clauseHeadingNodeId: readOptionalNullableString(item, 'clauseHeadingNodeId', what),
+      findingId: readOptionalNullableString(item, 'findingId', what),
+      reason:
+        reason && (PLAYBOOK_COVERAGE_REASONS as readonly string[]).includes(reason)
+          ? (reason as PlaybookCoverageReason)
+          : null,
+    }
+  })
+}
+
 function parseReviewRun(value: unknown, what: string): ReviewRun {
   const run = asRecord(value, what)
   return {
     id: readString(run, 'id', what),
     runNumber: readOptionalNumber(run, 'runNumber', what),
     status: readStatus(run, 'status', RUN_STATUSES),
+    playbookCoverage: parsePlaybookCoverage(run.playbookCoverage, what),
   }
 }
 

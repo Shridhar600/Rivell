@@ -19,6 +19,7 @@ import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.review.CheckExecutionStatus;
 import com.rivell.workbench.review.FindingSubjectKind;
 import com.rivell.workbench.review.IssueFamily;
+import com.rivell.workbench.review.PlaybookCoverage;
 import com.rivell.workbench.review.PresencePayload;
 import com.rivell.workbench.review.RawReviewSignal;
 import com.rivell.workbench.review.ReviewAnalysisRepository;
@@ -45,14 +46,14 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
         return jdbcClient.sql("""
                 select id, organization_id, review_id, run_number, status, trigger,
                        pipeline_version, started_at, completed_at, failure_reason,
-                       transient_failures, last_transient_reason
+                       transient_failures, last_transient_reason, playbook_coverage
                 from review_analysis_run
                 where review_id = :reviewId and organization_id = :organizationId
                   and status = 'RUNNING'
                 """)
                 .param("reviewId", reviewId)
                 .param("organizationId", organizationId)
-                .query(JdbcReviewAnalysisRepository::mapRun)
+                .query(this::mapRun)
                 .optional();
     }
 
@@ -61,7 +62,7 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
         return jdbcClient.sql("""
                 select id, organization_id, review_id, run_number, status, trigger,
                        pipeline_version, started_at, completed_at, failure_reason,
-                       transient_failures, last_transient_reason
+                       transient_failures, last_transient_reason, playbook_coverage
                 from review_analysis_run
                 where review_id = :reviewId and organization_id = :organizationId
                 order by run_number desc
@@ -69,7 +70,7 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 """)
                 .param("reviewId", reviewId)
                 .param("organizationId", organizationId)
-                .query(JdbcReviewAnalysisRepository::mapRun)
+                .query(this::mapRun)
                 .optional();
     }
 
@@ -79,7 +80,7 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
         return jdbcClient.sql("""
                 select id, organization_id, review_id, run_number, status, trigger,
                        pipeline_version, started_at, completed_at, failure_reason,
-                       transient_failures, last_transient_reason
+                       transient_failures, last_transient_reason, playbook_coverage
                 from review_analysis_run
                 where review_id = :reviewId and organization_id = :organizationId
                   and status = 'COMPLETED'
@@ -88,7 +89,7 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 """)
                 .param("reviewId", reviewId)
                 .param("organizationId", organizationId)
-                .query(JdbcReviewAnalysisRepository::mapRun)
+                .query(this::mapRun)
                 .optional();
     }
 
@@ -152,6 +153,37 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 .param("runId", runId)
                 .param("organizationId", organizationId)
                 .param("completedAt", timestamp(completedAt))
+                .update() == 1;
+    }
+
+    @Override
+    @Transactional
+    public boolean savePlaybookCoverage(UUID organizationId, UUID runId,
+            PlaybookCoverage playbookCoverage) {
+        if (playbookCoverage == null) {
+            return jdbcClient.sql("""
+                    update review_analysis_run
+                    set playbook_coverage = null
+                    where id = :runId and organization_id = :organizationId
+                    """)
+                    .param("runId", runId)
+                    .param("organizationId", organizationId)
+                    .update() == 1;
+        }
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(playbookCoverage);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialise playbook coverage", e);
+        }
+        return jdbcClient.sql("""
+                update review_analysis_run
+                set playbook_coverage = cast(:coverage as jsonb)
+                where id = :runId and organization_id = :organizationId
+                """)
+                .param("coverage", json)
+                .param("runId", runId)
+                .param("organizationId", organizationId)
                 .update() == 1;
     }
 
@@ -531,7 +563,7 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 .single();
     }
 
-    private static ReviewAnalysisRun mapRun(java.sql.ResultSet rs, int rowNum)
+    private ReviewAnalysisRun mapRun(java.sql.ResultSet rs, int rowNum)
             throws java.sql.SQLException {
         return new ReviewAnalysisRun(
                 rs.getObject("id", UUID.class),
@@ -545,7 +577,19 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant(),
                 rs.getString("failure_reason"),
                 rs.getInt("transient_failures"),
-                rs.getString("last_transient_reason"));
+                rs.getString("last_transient_reason"),
+                playbookCoverage(rs.getString("playbook_coverage")));
+    }
+
+    private PlaybookCoverage playbookCoverage(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, PlaybookCoverage.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Unreadable playbook coverage", e);
+        }
     }
 
     private ReviewCheckExecution mapExecution(java.sql.ResultSet rs) throws java.sql.SQLException {

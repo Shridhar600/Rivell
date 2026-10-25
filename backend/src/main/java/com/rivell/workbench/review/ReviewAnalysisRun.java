@@ -17,7 +17,9 @@ public record ReviewAnalysisRun(
         Instant completedAt,
         String failureReason,
         int transientFailures,
-        String lastTransientReason) {
+        String lastTransientReason,
+        /** Frozen at completion; null on runs that predate coverage or could not compute it. */
+        PlaybookCoverage playbookCoverage) {
 
     public ReviewAnalysisRun {
         Objects.requireNonNull(id, "id");
@@ -46,6 +48,6 @@ public record ReviewAnalysisRun(
             UUID id, UUID organizationId, UUID reviewId, int runNumber, RunTrigger trigger,
             String pipelineVersion, Instant startedAt) {
         return new ReviewAnalysisRun(id, organizationId, reviewId, runNumber, RunStatus.RUNNING,
-                trigger, pipelineVersion, startedAt, null, null, 0, null);
+                trigger, pipelineVersion, startedAt, null, null, 0, null, null);
     }
 }
