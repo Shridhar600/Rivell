@@ -158,9 +158,11 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
         var survivors = new ArrayList<Candidate>();
         DecisionExecution absenceExecution = null;
         if (walkAwayLane) {
+            var casesByCandidate = candidates.stream()
+                    .map(candidate -> WalkAwayAbsenceSpecs.cases(candidate.walkAway())).toList();
             try {
-                absenceExecution = decisionService.evaluate(WalkAwayAbsenceSpecs.spec(
-                                candidates.stream().map(Candidate::walkAway).toList()),
+                absenceExecution = decisionService.evaluate(
+                        WalkAwayAbsenceSpecs.spec(casesByCandidate),
                         new WalkAwayAbsenceSpecs.AbsenceState(
                                 WalkAwayAbsenceSpecs.STATE_SCHEMA_VERSION,
                                 context.snapshot().contractType().label(),
@@ -176,12 +178,16 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
                 return providerUnavailable(detail, applicable);
             }
             for (int index = 0; index < candidates.size(); index++) {
-                var key = WalkAwayAbsenceSpecs.key(index);
-                if (!(absenceExecution.answers().get(key) instanceof YesNoAnswer answer)) {
-                    return CheckOutcome.failed("walk_away_answer_missing:" + key);
-                }
                 var candidate = candidates.get(index);
-                var probability = answer.probability();
+                var probability = 0.0;
+                for (int walkAwayCase = 0; walkAwayCase < casesByCandidate.get(index).size();
+                        walkAwayCase++) {
+                    var key = WalkAwayAbsenceSpecs.key(index, walkAwayCase);
+                    if (!(absenceExecution.answers().get(key) instanceof YesNoAnswer answer)) {
+                        return CheckOutcome.failed("walk_away_answer_missing:" + key);
+                    }
+                    probability = Math.max(probability, answer.probability());
+                }
                 var entry = new LinkedHashMap<String, Object>();
                 entry.put("candidateId", candidate.id().toString());
                 entry.put("probability", probability);
