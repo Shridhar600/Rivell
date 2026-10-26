@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
 
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,10 +36,14 @@ import com.rivell.workbench.review.SignalType;
 class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
 
     private final JdbcClient jdbcClient;
+    private final NamedParameterJdbcTemplate namedTemplate;
     private final ObjectMapper objectMapper;
 
-    JdbcReviewAnalysisRepository(JdbcClient jdbcClient, ObjectMapper objectMapper) {
+    JdbcReviewAnalysisRepository(
+            JdbcClient jdbcClient, NamedParameterJdbcTemplate namedTemplate,
+            ObjectMapper objectMapper) {
         this.jdbcClient = jdbcClient;
+        this.namedTemplate = namedTemplate;
         this.objectMapper = objectMapper;
     }
 
@@ -352,8 +358,38 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
     @Override
     @Transactional
     public void insertSignals(List<RawReviewSignal> signals) {
-        for (var signal : signals) {
-            jdbcClient.sql("""
+        var rows = signals.stream()
+                .map(signal -> new MapSqlParameterSource()
+                        .addValue("id", signal.id())
+                        .addValue("organizationId", signal.organizationId())
+                        .addValue("reviewId", signal.reviewId())
+                        .addValue("runId", signal.runId())
+                        .addValue("planCheckId", signal.planCheckId())
+                        .addValue("signalType", signal.signalType().name())
+                        .addValue("subjectKind", signal.subjectKind().name())
+                        .addValue("subjectHeadingNodeId", signal.subjectHeadingNodeId())
+                        .addValue("absenceConcept", signal.absenceConcept() == null
+                                ? null : signal.absenceConcept().value())
+                        .addValue("concept", signal.concept().value())
+                        .addValue("secondaryConcept", signal.secondaryConcept() == null
+                                ? null : signal.secondaryConcept().value())
+                        .addValue("issueFamily", signal.issueFamily().name())
+                        .addValue("payload", json(signal.payload()))
+                        .addValue("evidenceItemIds", json(signal.evidenceItemIds()))
+                        .addValue("decisionSpecId", signal.decisionSpecId())
+                        .addValue("decisionSpecVersion", signal.decisionSpecVersion())
+                        .addValue("jevExecutionId", signal.jevExecutionId())
+                        .addValue("generativeExecutionId", signal.generativeExecutionId())
+                        .addValue("verificationOutcome", signal.verificationOutcome())
+                        .addValue("resolvedModel", signal.resolvedModel())
+                        .addValue("usage", signal.usage() == null ? null
+                                : json(signal.usage()))
+                        .addValue("quality", json(signal.quality()))
+                        .addValue("dedupeKey", signal.dedupeKey())
+                        .addValue("createdAt", timestamp(signal.createdAt())))
+                .toArray(MapSqlParameterSource[]::new);
+        if (rows.length > 0) {
+            namedTemplate.batchUpdate("""
                     insert into raw_review_signal
                       (id, organization_id, review_id, run_id, plan_check_id, signal_type,
                        subject_kind, subject_heading_node_id, absence_concept, concept,
@@ -368,38 +404,27 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                        :jevExecutionId, :generativeExecutionId, :verificationOutcome,
                         :resolvedModel, cast(:usage as jsonb),
                        cast(:quality as jsonb), :dedupeKey, :createdAt)
-                    """)
-                    .param("id", signal.id())
-                    .param("organizationId", signal.organizationId())
-                    .param("reviewId", signal.reviewId())
-                    .param("runId", signal.runId())
-                    .param("planCheckId", signal.planCheckId())
-                    .param("signalType", signal.signalType().name())
-                    .param("subjectKind", signal.subjectKind().name())
-                    .param("subjectHeadingNodeId", signal.subjectHeadingNodeId())
-                    .param("absenceConcept", signal.absenceConcept() == null ? null : signal.absenceConcept().value())
-                    .param("concept", signal.concept().value())
-                    .param("secondaryConcept", signal.secondaryConcept() == null ? null : signal.secondaryConcept().value())
-                    .param("issueFamily", signal.issueFamily().name())
-                    .param("payload", json(signal.payload()))
-                    .param("evidenceItemIds", json(signal.evidenceItemIds()))
-                    .param("decisionSpecId", signal.decisionSpecId())
-                    .param("decisionSpecVersion", signal.decisionSpecVersion())
-                    .param("jevExecutionId", signal.jevExecutionId())
-                    .param("generativeExecutionId", signal.generativeExecutionId())
-                    .param("verificationOutcome", signal.verificationOutcome())
-                    .param("resolvedModel", signal.resolvedModel())
-                    .param("usage", signal.usage() == null ? null : json(signal.usage()))
-                    .param("quality", json(signal.quality()))
-                    .param("dedupeKey", signal.dedupeKey())
-                    .param("createdAt", timestamp(signal.createdAt()))
-                    .update();
+                    """, rows);
         }
     }
 
     @Override
     @Transactional
     public int deleteSignals(UUID organizationId, UUID runId, UUID planCheckId) {
+        jdbcClient.sql("""
+                delete from finding_signal
+                where finding_id in (
+                    select id from finding
+                    where run_id = :runId and organization_id = :organizationId)
+                  and signal_id in (
+                    select id from raw_review_signal
+                    where run_id = :runId and plan_check_id = :planCheckId
+                      and organization_id = :organizationId)
+                """)
+                .param("runId", runId)
+                .param("planCheckId", planCheckId)
+                .param("organizationId", organizationId)
+                .update();
         return jdbcClient.sql("""
                 delete from raw_review_signal
                 where run_id = :runId and plan_check_id = :planCheckId
@@ -425,8 +450,23 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                 .param("planCheckId", planCheckId)
                 .param("organizationId", organizationId)
                 .update();
-        for (var item : items) {
-            jdbcClient.sql("""
+        var createdAt = OffsetDateTime.now(ZoneOffset.UTC);
+        var rows = items.stream()
+                .map(item -> new MapSqlParameterSource()
+                        .addValue("id", UUID.randomUUID())
+                        .addValue("organizationId", organizationId)
+                        .addValue("reviewId", reviewId)
+                        .addValue("runId", runId)
+                        .addValue("planCheckId", planCheckId)
+                        .addValue("evidenceItemId", item.evidenceId())
+                        .addValue("authorityClass", item.authorityClass().name())
+                        .addValue("sourceClauseId", item.sourceClauseId())
+                        .addValue("publicationNumber", item.publicationNumber())
+                        .addValue("payload", json(item))
+                        .addValue("createdAt", createdAt))
+                .toArray(MapSqlParameterSource[]::new);
+        if (rows.length > 0) {
+            namedTemplate.batchUpdate("""
                     insert into review_evidence_item (
                         id, organization_id, review_id, run_id, plan_check_id,
                         evidence_item_id, authority_class, source_clause_id,
@@ -435,19 +475,7 @@ class JdbcReviewAnalysisRepository implements ReviewAnalysisRepository {
                         :id, :organizationId, :reviewId, :runId, :planCheckId,
                         :evidenceItemId, :authorityClass, :sourceClauseId,
                         :publicationNumber, cast(:payload as jsonb), :createdAt)
-                    """)
-                    .param("id", UUID.randomUUID())
-                    .param("organizationId", organizationId)
-                    .param("reviewId", reviewId)
-                    .param("runId", runId)
-                    .param("planCheckId", planCheckId)
-                    .param("evidenceItemId", item.evidenceId())
-                    .param("authorityClass", item.authorityClass().name())
-                    .param("sourceClauseId", item.sourceClauseId())
-                    .param("publicationNumber", item.publicationNumber())
-                    .param("payload", json(item))
-                    .param("createdAt", OffsetDateTime.now(ZoneOffset.UTC))
-                    .update();
+                    """, rows);
         }
     }
 

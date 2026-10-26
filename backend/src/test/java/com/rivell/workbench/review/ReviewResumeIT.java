@@ -327,6 +327,9 @@ class ReviewResumeIT {
     ReviewRepository reviewRepository;
 
     @Autowired
+    FindingRepository findingRepository;
+
+    @Autowired
     ReviewDiagnosticsService diagnosticsService;
 
     @Autowired
@@ -437,6 +440,48 @@ class ReviewResumeIT {
         assertThat(callsAfterResume.subList(callsAfterFailure.size(), callsAfterResume.size()))
                 .as("the resumed attempt re-runs the failed check, not the finished one")
                 .noneMatch(call -> call.heading().equals(firstHeading));
+    }
+
+    @Test
+    void aResumedRunAfterCompletedChecksEndsWithExactlyOneFindingSet() {
+        var organizationId = organizationId();
+        var review = reviewWithoutPack(organizationId);
+        var checks = reviewRepository.findPlanChecks(organizationId, review.id());
+        assertThat(checks).hasSizeGreaterThan(1);
+
+        fault.failOnCall(2, new TransientDataAccessResourceException("connection reset"));
+
+        assertThatThrownBy(() -> analysisService.analyze(organizationId, review.id()))
+                .isInstanceOf(TransientDataAccessResourceException.class);
+
+        var running = analysisRepository.findRunningRun(organizationId, review.id())
+                .orElseThrow();
+        assertThat(analysisRepository.findExecutions(organizationId, running.id()))
+                .anySatisfy(execution -> assertThat(execution.status())
+                        .isEqualTo(CheckExecutionStatus.COMPLETED));
+        assertThat(findingRepository.countFindings(organizationId, running.id())).isZero();
+
+        fault.disarm();
+        var resumed = analysisService.analyze(organizationId, review.id());
+
+        assertThat(resumed.id()).isEqualTo(running.id());
+        assertThat(resumed.status()).isEqualTo(RunStatus.COMPLETED);
+        var findings = findingRepository.findFindings(organizationId, resumed.id());
+        assertThat(findings).isNotEmpty();
+        assertThat(findings).flatExtracting(Finding::concepts).isNotEmpty();
+        assertThat(findings).flatExtracting(Finding::claims).isNotEmpty();
+        assertThat(findings).flatExtracting(Finding::evidenceItemIds).isNotEmpty();
+        assertThat(findings).flatExtracting(Finding::signalIds).isNotEmpty();
+        assertThat(findings).extracting(Finding::consolidationKey).doesNotHaveDuplicates();
+        assertThat(findingRepository.countFindings(organizationId, resumed.id()))
+                .isEqualTo(findings.size());
+        assertThat(findings).allSatisfy(finding -> {
+            assertThat(finding.concepts()).doesNotHaveDuplicates();
+            assertThat(finding.claims()).extracting(FindingClaim::ordinal)
+                    .doesNotHaveDuplicates();
+            assertThat(finding.evidenceItemIds()).doesNotHaveDuplicates();
+            assertThat(finding.signalIds()).doesNotHaveDuplicates();
+        });
     }
 
     @Test

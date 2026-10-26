@@ -34,6 +34,14 @@ public interface ReviewRepository {
     List<Review> findQueuedBefore(java.time.Instant createdBefore);
 
     /**
+     * Reviews still {@code ANALYZING} whose RUNNING run started before the given instant. The
+     * database allows one RUNNING run per review, so that run is also the latest. The analysis
+     * reconciler re-enqueues them after a database outage lost the job that would have finished the
+     * run. Not organization-scoped, like {@link #findQueuedBefore}.
+     */
+    List<Review> findAnalyzingWithRunStartedBefore(java.time.Instant startedBefore);
+
+    /**
      * Pessimistic row lock serializing human decision writes and finalization for one
      * review; false when the review does not exist in the organization.
      */

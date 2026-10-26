@@ -64,6 +64,7 @@ public interface ReviewAnalysisRepository {
 
     void insertSignals(List<RawReviewSignal> signals);
 
+    /** Deletes one check's signals and the finding links that cite them. */
     int deleteSignals(UUID organizationId, UUID runId, UUID planCheckId);
 
     List<RawReviewSignal> findSignals(UUID organizationId, UUID runId);

@@ -213,6 +213,29 @@ class JdbcReviewRepository implements ReviewRepository {
                 .list();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<Review> findAnalyzingWithRunStartedBefore(java.time.Instant startedBefore) {
+        return jdbcClient.sql("""
+                select r.id, r.organization_id, r.contract_id, r.contract_version_id,
+                       r.contract_version_number, r.status, r.failure_reason, r.created_by,
+                       r.client_request_id,
+                       r.created_at, r.updated_at, r.started_at, r.completed_at
+                from review r
+                where r.status = 'ANALYZING'
+                  and exists (
+                      select 1 from review_analysis_run analysis_run
+                      where analysis_run.review_id = r.id
+                        and analysis_run.organization_id = r.organization_id
+                        and analysis_run.status = 'RUNNING'
+                        and analysis_run.started_at < :startedBefore)
+                order by r.created_at
+                """)
+                .param("startedBefore", timestamp(startedBefore))
+                .query(JdbcReviewRepository::review)
+                .list();
+    }
+
     private static Review review(java.sql.ResultSet rs, int rowNum)
             throws java.sql.SQLException {
         return new Review(
