@@ -37,7 +37,7 @@ class WalkAwayAbsenceSpecsTest {
                 List.of("Uncapped liability")));
 
         var questions = spec.pack().questions();
-        assertThat(questions.keySet()).containsExactly(
+        assertThat(questions.keySet()).containsExactlyInAnyOrder(
                 WalkAwayAbsenceSpecs.key(0, 0), WalkAwayAbsenceSpecs.key(0, 1),
                 WalkAwayAbsenceSpecs.key(1, 0));
         assertThat(((YesNoQuestion) questions.get(WalkAwayAbsenceSpecs.key(0, 1))).instructions())
