@@ -207,12 +207,6 @@ public final class FindingAssembler {
         }
         if (signal.signalType() == SignalType.POLICY_DEVIATION
                 && signal.payload() instanceof PositionDeviationPayload deviation) {
-            if (PolicyComparisonSpecs.WALK_AWAY.equals(deviation.category())
-                    && signal.quality().get("absenceWalkAway") instanceof String walkAway) {
-                // the walk-away is the absence of a right: matching it means the right is missing
-                return new Observation(observationKind(deviation.category()),
-                        "Your playbook's walk-away: " + walkAway + ". This clause matches it.");
-            }
             if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())
                     && partiallyWithinFallback(signal)) {
                 return new Observation(observationKind(deviation.category()), partialFallbackText(signal));

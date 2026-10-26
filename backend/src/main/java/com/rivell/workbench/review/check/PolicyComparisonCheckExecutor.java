@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 
 import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.contracts.ReviewProfile;
@@ -57,8 +56,6 @@ import com.rivell.workbench.taxonomy.ConceptRegistry;
  */
 public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor {
 
-    /** A walk-away that names a missing right ("No termination for convenience"). */
-    private static final Pattern ABSENCE_WALK_AWAY = Pattern.compile("(?i)\\s*no\\s");
     private static final int MAX_CLAUSE_LENGTH = 4000;
     private static final String JEV = "JEV";
     private static final String SECOND_OPINION = "SECOND_OPINION";
@@ -1076,12 +1073,6 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         quality.put("probabilities", judged.judgement().probabilities());
         quality.put("secondaryTopic", secondaryTopic);
         quality.put("route", route);
-        var facts = judged.position().policyFacts();
-        var walkAway = facts == null ? null : facts.prohibited();
-        if (PolicyComparisonSpecs.WALK_AWAY.equals(resolution.category()) && walkAway != null
-                && ABSENCE_WALK_AWAY.matcher(walkAway).lookingAt()) {
-            quality.put("absenceWalkAway", walkAway.strip().replaceAll("[.\\s]+$", ""));
-        }
         if (openEndedOutcome != null) {
             quality.put("openEndedOutcome", openEndedOutcome);
         }

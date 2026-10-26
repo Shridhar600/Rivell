@@ -294,18 +294,6 @@ class FindingAssemblerTest {
     }
 
     @Test
-    void aWalkAwayThatIsTheAbsenceOfARightIsQuotedInsteadOfSayingTheClausePermitsIt() {
-        var absence = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WALK_AWAY, false,
-                Map.of("absenceWalkAway", "No termination for convenience"))), NOW).get(0);
-        var wording = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WALK_AWAY, false,
-                Map.of())), NOW).get(0);
-
-        assertThat(absence.observationText()).isEqualTo(
-                "Your playbook's walk-away: No termination for convenience. This clause matches it.");
-        assertThat(wording.observationText()).startsWith("The clause contains or permits");
-    }
-
-    @Test
     void p1AFindingRaisedBySecondOpinionCategoryGetsTheSeverityOfTheNewCategoryAndKeepsItsTag() {
         var walk = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WALK_AWAY, false,
                 Map.of("levers", List.of("P1", "P2"), "categoryBeforeLevers", PolicyComparisonSpecs.WITHIN_FALLBACK,
