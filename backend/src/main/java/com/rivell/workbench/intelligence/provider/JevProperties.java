@@ -26,6 +26,15 @@ public record JevProperties(
         readTimeout = readTimeout == null ? java.time.Duration.ofSeconds(10) : readTimeout;
     }
 
+    @Override
+    public String toString() {
+        return "JevProperties[baseUrl=" + baseUrl
+                + ", apiKey=" + (apiKey == null || apiKey.isBlank() ? "<absent>" : "<redacted>")
+                + ", model=" + model
+                + ", connectTimeout=" + connectTimeout
+                + ", readTimeout=" + readTimeout + "]";
+    }
+
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
     }

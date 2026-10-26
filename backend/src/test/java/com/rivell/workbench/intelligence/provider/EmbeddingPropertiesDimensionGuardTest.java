@@ -25,6 +25,19 @@ class EmbeddingPropertiesDimensionGuardTest {
     }
 
     @Test
+    void theApiKeyIsRedactedFromTheRecordToString() {
+        var properties = new EmbeddingProperties("openai-compatible", null,
+                "embedding-live-secret", "embedding-model", 768, 64, null, null);
+
+        assertThat(properties.toString())
+                .doesNotContain("embedding-live-secret")
+                .contains("apiKey=<redacted>");
+        assertThat(new EmbeddingProperties("openai-compatible", null, " ",
+                "embedding-model", 768, 64, null, null).toString())
+                .contains("apiKey=<absent>");
+    }
+
+    @Test
     void dimensionsBeyondPgvectorHnswCapabilityFailFast() {
         assertThatThrownBy(() -> properties(2001))
                 .isInstanceOf(IllegalArgumentException.class)

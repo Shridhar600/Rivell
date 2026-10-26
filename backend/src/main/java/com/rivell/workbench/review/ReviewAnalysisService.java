@@ -725,12 +725,14 @@ public class ReviewAnalysisService {
 
     /**
      * The attempt's own budget, capped so one run cannot keep restarting it forever: at most one
-     * budget per attempt, and at most {@code maxTransientFailures + 1} budgets for the run.
+     * budget per attempt, and at most {@code maxTransientFailures + 1} budgets for the run, capped
+     * at 1000 so an absurd retry setting cannot stretch the run window without bound.
      */
     static Instant analysisDeadline(Instant runStartedAt, Instant attemptStartedAt,
             Duration budget, int maxTransientFailures) {
         var attemptLimit = attemptStartedAt.plus(budget);
-        var runLimit = runStartedAt.plus(budget.multipliedBy(maxTransientFailures + 1L));
+        var attempts = Math.min(maxTransientFailures + 1L, 1000L);
+        var runLimit = runStartedAt.plus(budget.multipliedBy(attempts));
         return attemptLimit.isBefore(runLimit) ? attemptLimit : runLimit;
     }
 

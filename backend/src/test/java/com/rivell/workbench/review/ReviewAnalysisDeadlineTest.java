@@ -46,4 +46,12 @@ class ReviewAnalysisDeadlineTest {
                 Instant.parse("2026-10-24T10:00:00Z"), BUDGET, 0))
                 .isEqualTo(Instant.parse("2026-10-24T08:30:00Z"));
     }
+
+    @Test
+    void anAbsurdRetryCountIsClampedToABoundedRunWindow() {
+        assertThat(ReviewAnalysisService.analysisDeadline(
+                Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2026-10-24T10:00:00Z"), BUDGET, Integer.MAX_VALUE))
+                .isEqualTo(Instant.parse("2026-01-21T20:00:00Z"));
+    }
 }

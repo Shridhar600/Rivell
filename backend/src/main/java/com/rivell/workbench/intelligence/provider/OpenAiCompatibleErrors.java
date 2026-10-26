@@ -32,6 +32,12 @@ final class OpenAiCompatibleErrors {
             "organization_usage_limit_exceeded",
             "insufficient_quota");
 
+    private static final Set<String> RATE_LIMIT_CODES = Set.of(
+            "rate_limit",
+            "rate_limit_exceeded",
+            "rate_limit_error",
+            "slow_down");
+
     private OpenAiCompatibleErrors() {
     }
 
@@ -75,6 +81,29 @@ final class OpenAiCompatibleErrors {
     static boolean outOfCredit(String code, String type) {
         return OUT_OF_CREDIT_CODES.contains(normalize(code))
                 || OUT_OF_CREDIT_CODES.contains(normalize(type));
+    }
+
+    /**
+     * Maps one error object carried inside a 2xx response to the same vocabulary as
+     * {@link #httpFailure}, so a permanent rejection is not retried as if it were an outage.
+     */
+    static RuntimeException errorResponse(String code, String type, String kind) {
+        if (outOfCredit(code, type)) {
+            return new ProviderOutOfCreditException(
+                    "Provider account has no credits (error response)");
+        }
+        var detail = "type=" + type + ", code=" + code;
+        if (rateLimited(code, type)) {
+            return new ProviderRateLimitedException(
+                    "Provider rate limited (error response: " + detail + ")", null, null);
+        }
+        return new ProviderRejectedException(
+                "Provider rejected the " + kind + " request (error response: " + detail + ")");
+    }
+
+    private static boolean rateLimited(String code, String type) {
+        return RATE_LIMIT_CODES.contains(normalize(code))
+                || RATE_LIMIT_CODES.contains(normalize(type));
     }
 
     static Error error(String body) {

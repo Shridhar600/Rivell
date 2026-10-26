@@ -72,4 +72,14 @@ class ReviewEnginePropertiesTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("max-transient-failures");
     }
+
+    @Test
+    void theRetainedRunsDefaultToSixteenAndMustBePositive() {
+        assertThat(new ReviewEngineProperties(null, null, null, null, null).retainedRuns())
+                .isEqualTo(16);
+        assertThatThrownBy(() -> new ReviewEngineProperties(
+                null, null, null, null, null, null, null, null, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("retained-runs");
+    }
 }

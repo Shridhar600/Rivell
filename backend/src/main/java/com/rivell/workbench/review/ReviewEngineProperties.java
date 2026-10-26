@@ -30,12 +30,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * <p>{@code maxTransientFailures}: how many transient infrastructure failures one analysis run may
  * survive before it is failed terminally (default 3; 0 makes every transient failure terminal).
+ * {@code retainedRuns}: how many analysis runs keep their whole-contract spotting memo and
+ * second-opinion counters in memory (default 16); it must be at least the number of reviews
+ * analysed at once, with headroom for runs that finished recently, or a live run loses its
+ * counters and repeats calls.
  */
 @ConfigurationProperties("rivell.review")
 public record ReviewEngineProperties(
         Routing routing, Boolean omissions, Boolean definitions, Severity severity,
         FallbackConditions fallbackConditions, WalkAwayAbsence walkAwayAbsence,
-        Duration analysisBudget, Integer maxTransientFailures) {
+        Duration analysisBudget, Integer maxTransientFailures, Integer retainedRuns) {
 
     @org.springframework.boot.context.properties.bind.ConstructorBinding
     public ReviewEngineProperties {
@@ -56,25 +60,29 @@ public record ReviewEngineProperties(
             throw new IllegalArgumentException(
                     "rivell.review.max-transient-failures must be >= 0");
         }
+        retainedRuns = retainedRuns == null ? 16 : retainedRuns;
+        if (retainedRuns < 1) {
+            throw new IllegalArgumentException("rivell.review.retained-runs must be >= 1");
+        }
     }
 
     public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
             Severity severity, FallbackConditions fallbackConditions,
             Duration analysisBudget, Integer maxTransientFailures) {
         this(routing, omissions, definitions, severity, fallbackConditions, null,
-                analysisBudget, maxTransientFailures);
+                analysisBudget, maxTransientFailures, null);
     }
 
     public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
             Severity severity, FallbackConditions fallbackConditions,
             Duration analysisBudget) {
         this(routing, omissions, definitions, severity, fallbackConditions, null,
-                analysisBudget, null);
+                analysisBudget, null, null);
     }
 
     public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
             Severity severity, FallbackConditions fallbackConditions) {
-        this(routing, omissions, definitions, severity, fallbackConditions, null, null, null);
+        this(routing, omissions, definitions, severity, fallbackConditions, null, null, null, null);
     }
 
     /**

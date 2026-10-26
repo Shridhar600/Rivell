@@ -53,7 +53,6 @@ final class ContractIssueSpotter {
     record Parsed(Map<Integer, List<Spot>> spots, int dropped) {
     }
 
-    private static final int MAX_RUNS = 16;
     private static final int MAX_POSITIONS = 120;
     private static final int MAX_CLAUSE_TEXT = 3000;
     private static final Pattern ISSUE_LINE = Pattern.compile(
@@ -83,11 +82,13 @@ final class ContractIssueSpotter {
 
     private final GenerativeReasoningService generation;
     private final EvidenceService evidenceService;
-    private final RunMemo<Spots> runs = new RunMemo<>(MAX_RUNS);
+    private final RunMemo<Spots> runs;
 
-    ContractIssueSpotter(GenerativeReasoningService generation, EvidenceService evidenceService) {
+    ContractIssueSpotter(GenerativeReasoningService generation, EvidenceService evidenceService,
+            int retainedRuns) {
         this.generation = generation;
         this.evidenceService = evidenceService;
+        this.runs = new RunMemo<>(retainedRuns);
     }
 
     Spots spots(ReviewCheckContext context, EvidenceRequest anyClauseRequest) {
