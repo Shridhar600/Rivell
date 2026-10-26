@@ -10,7 +10,7 @@ import com.rivell.workbench.knowledge.KnowledgeQueryService;
 import com.rivell.workbench.knowledge.PublishedKnowledgeQuery;
 
 /**
- * Index reconciliation (DW-012, retrieval-owned): discover published, indexable
+ * Index reconciliation (retrieval-owned): discover published, indexable
  * evidence that should exist in the CURRENT index/model version but has no index
  * row or has one without a persisted vector, and heal it in bounded batches.
  * Idempotent by construction (upsert
@@ -54,11 +54,12 @@ public class RetrievalIndexReconciliationService {
     }
 
     /**
-     * One bounded pass over published indexable knowledge. Never throws: failures
-     * are counted and left for the next scheduled run (retries are tolerated, not
-     * looped).
+     * One page-bounded pass over published indexable knowledge: every page of every
+     * organization is examined, so a candidate older than the newest page is still healed.
+     * Never throws: failures are counted and left for the next scheduled run (retries are
+     * tolerated, not looped).
      */
-    public ReconciliationResult reconcile(int maxCandidates) {
+    public ReconciliationResult reconcile(int pageSize) {
         // an index creation that failed on the publication pass is retried even when every row
         // already has its vector and no text needs embedding
         indexService.retryPendingVectorIndexes();
@@ -68,77 +69,83 @@ public class RetrievalIndexReconciliationService {
         var failed = 0;
         var orgs = knowledgeQueries.organizationsWithPublishedKnowledge();
         for (var organizationId : orgs) {
-            if (examined >= maxCandidates) {
-                break;
-            }
             try {
                 var asOf = knowledgeQueries.maxPublicationNumberForOrganization(organizationId);
                 if (asOf < 1) {
                     continue;
                 }
-                var remaining = maxCandidates - examined;
-                var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(
-                        PublishedKnowledgeQuery.unpublishedNever(
-                                organizationId, asOf, EvidenceIndexService.INDEXABLE_TYPES,
-                                null, null, null, null, null, null, null));
-                if (candidates.size() > remaining) {
-                    candidates = candidates.subList(0, remaining);
-                }
-                var missing = new ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>();
-                var withoutVectors =
-                        new ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>();
-                var candidateIds = candidates.stream().map(match -> match.candidate().id()).toList();
-                var indexedIds = repository.findIndexedIds(organizationId, candidateIds,
-                        properties.indexVersion());
-                var embeddingsConfigured = indexService.embeddingsConfigured();
-                var vectorReadyIds = embeddingsConfigured
-                        ? repository.findEmbeddingReadyIds(organizationId, candidateIds,
-                                properties.indexVersion())
-                        : java.util.Set.<UUID>of();
-                for (var match : candidates) {
-                    if (!indexedIds.contains(match.candidate().id())) {
-                        missing.add(match);
-                    } else if (embeddingsConfigured
-                            && !vectorReadyIds.contains(match.candidate().id())) {
-                        // DW-065: the row exists, but an earlier embedding failed. It is
-                        // searchable by text only, and no pass ever filled the gap. Without a
-                        // provider there is no vector lane to heal, so the row is left alone.
-                        withoutVectors.add(match);
-                    }
-                }
-                examined += candidates.size();
-                var texts = new LinkedHashMap<UUID, String>();
-                for (var match : missing) {
-                    try {
-                        var candidate = indexService.indexCandidate(organizationId,
-                                match.candidate().id(), match.publicationNumber());
-                        if (candidate != null) {
-                            texts.put(candidate.id(), candidate.effectiveContentText());
-                            indexed++;
+                var firstPage = PublishedKnowledgeQuery.unpublishedNever(
+                        organizationId, asOf, EvidenceIndexService.INDEXABLE_TYPES,
+                        null, null, null, null, null, null, null).withLimit(pageSize);
+                com.rivell.workbench.knowledge.PublishedCandidate cursor = null;
+                while (true) {
+                    var query = cursor == null
+                            ? firstPage
+                            : firstPage.after(cursor.candidate().createdAt(),
+                                    cursor.candidate().id());
+                    var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
+                    var missing = new ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>();
+                    var withoutVectors =
+                            new ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>();
+                    var candidateIds = candidates.stream()
+                            .map(match -> match.candidate().id()).toList();
+                    var indexedIds = repository.findIndexedIds(organizationId, candidateIds,
+                            properties.indexVersion());
+                    var embeddingsConfigured = indexService.embeddingsConfigured();
+                    var vectorReadyIds = embeddingsConfigured
+                            ? repository.findEmbeddingReadyIds(organizationId, candidateIds,
+                                    properties.indexVersion())
+                            : java.util.Set.<UUID>of();
+                    for (var match : candidates) {
+                        if (!indexedIds.contains(match.candidate().id())) {
+                            missing.add(match);
+                        } else if (embeddingsConfigured
+                                && !vectorReadyIds.contains(match.candidate().id())) {
+                            // the row exists, but an earlier embedding failed. It is
+                            // searchable by text only, and no pass ever filled the gap. Without a
+                            // provider there is no vector lane to heal, so the row is left alone.
+                            withoutVectors.add(match);
                         }
-                    } catch (RuntimeException e) {
-                        failed++;
-                        log.warn("Reconciliation failed for candidate {} in org {}: {}",
-                                match.candidate().id(), organizationId, e.toString());
                     }
-                }
-                for (var match : withoutVectors) {
-                    try {
-                        // With an unchanged content hash the upsert adds no row; the read is what
-                        // is needed. A changed hash is treated as a new index row.
-                        var candidate = indexService.indexCandidate(organizationId,
-                                match.candidate().id(), match.publicationNumber());
-                        if (candidate != null) {
-                            texts.put(candidate.id(), candidate.effectiveContentText());
+                    examined += candidates.size();
+                    var texts = new LinkedHashMap<UUID, String>();
+                    for (var match : missing) {
+                        try {
+                            var candidate = indexService.indexCandidate(organizationId,
+                                    match.candidate().id(), match.publicationNumber());
+                            if (candidate != null) {
+                                texts.put(candidate.id(), candidate.effectiveContentText());
+                                indexed++;
+                            }
+                        } catch (RuntimeException e) {
+                            failed++;
+                            log.warn("Reconciliation failed for candidate {} in org {}: {}",
+                                    match.candidate().id(), organizationId, e.toString());
                         }
-                    } catch (RuntimeException e) {
-                        failed++;
-                        log.warn("Re-embedding failed for candidate {} in org {}: {}",
-                                match.candidate().id(), organizationId, e.toString());
                     }
-                }
-                if (!texts.isEmpty()) {
-                    embedded += indexService.embedBatch(organizationId, texts);
+                    for (var match : withoutVectors) {
+                        try {
+                            // With an unchanged content hash the upsert adds no row; the read is
+                            // what is needed. A changed hash is treated as a new index row.
+                            var candidate = indexService.indexCandidate(organizationId,
+                                    match.candidate().id(), match.publicationNumber());
+                            if (candidate != null) {
+                                texts.put(candidate.id(), candidate.effectiveContentText());
+                            }
+                        } catch (RuntimeException e) {
+                            failed++;
+                            log.warn("Re-embedding failed for candidate {} in org {}: {}",
+                                    match.candidate().id(), organizationId, e.toString());
+                        }
+                    }
+                    if (!texts.isEmpty()) {
+                        embedded += indexService.embedBatch(organizationId, texts);
+                    }
+                    // the read returns one row past the page to say that the corpus continues
+                    if (candidates.size() <= pageSize) {
+                        break;
+                    }
+                    cursor = candidates.getLast();
                 }
             } catch (RuntimeException e) {
                 failed++;
@@ -152,7 +159,7 @@ public class RetrievalIndexReconciliationService {
         return result;
     }
 
-    /** Scheduled entry point: one bounded pass at the configured batch size. */
+    /** Scheduled entry point: one pass at the configured page size. */
     public void reconcileFromSchedule() {
         reconcile(properties.reconciliationBatchSize());
     }

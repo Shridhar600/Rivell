@@ -29,6 +29,9 @@ public interface KnowledgeRepository {
 
     Optional<KnowledgeArtifact> findArtifact(UUID artifactId, UUID organizationId);
 
+    /** The artifact one client request key already produced, when a retry repeats that request. */
+    Optional<KnowledgeArtifact> findByClientRequestId(UUID organizationId, UUID clientRequestId);
+
     /**
      * Newest-first artifact list. {@code limit} bounds the read; null keeps the
      * unbounded behaviour existing callers rely on.
@@ -96,7 +99,7 @@ public interface KnowledgeRepository {
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);
 
     /**
-     * Human concept correction (DW-017); pre-publication only. Persists the
+     * Human concept correction; pre-publication only. Persists the
      * correction, the resulting review status (an APPROVED candidate demotes to
      * EDITED for re-approval), and the recomputed analysis outcome. Returns false
      * when the expected status no longer holds (concurrent transition).

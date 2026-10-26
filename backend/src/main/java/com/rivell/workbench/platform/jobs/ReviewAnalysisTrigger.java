@@ -13,7 +13,7 @@ import com.rivell.workbench.review.ReviewCreatedEvent;
 /**
  * After a review creation transaction commits, enqueue machine analysis.
  *
- * <p>M10 / B-4: the job id is derived from the work it describes rather than being random, so a
+ * <p>The job id is derived from the work it describes rather than being random, so a
  * duplicated trigger - a retried event, a second listener, a double submit - collapses onto the
  * existing job instead of leaving a second, invisible one in the queue. The work was already
  * idempotent at the domain boundary, so the duplicate was waste and unattributable load rather than

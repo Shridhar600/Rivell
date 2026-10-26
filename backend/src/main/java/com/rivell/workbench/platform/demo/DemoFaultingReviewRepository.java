@@ -60,6 +60,11 @@ final class DemoFaultingReviewRepository implements ReviewRepository {
     }
 
     @Override
+    public List<Review> findAnalyzingWithRunStartedBefore(Instant startedBefore) {
+        return delegate.findAnalyzingWithRunStartedBefore(startedBefore);
+    }
+
+    @Override
     public boolean lock(UUID organizationId, UUID reviewId) {
         return delegate.lock(organizationId, reviewId);
     }

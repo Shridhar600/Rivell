@@ -13,7 +13,7 @@ import {
 } from '../components/review/testFixtures'
 
 /**
- * M10A.1 / DW-045: a URL that is missing the identity it needs must not produce a request against an
+ * A URL that is missing the identity it needs must not produce a request against an
  * empty or foreign identifier.
  *
  * The cross-review case was live: `?finding=` went straight to the review-scoped detail endpoint, so
@@ -102,7 +102,7 @@ describe('missing route identity', () => {
 })
 
 /**
- * M10A.1 corrective / DW-045: the full request-behaviour matrix.
+ * The full request-behaviour matrix.
  *
  * The first version of this file asserted two cases and described the rest in prose. The omitted
  * cases are the ones where the guard *stands down*, and a guard that is only tested in the state

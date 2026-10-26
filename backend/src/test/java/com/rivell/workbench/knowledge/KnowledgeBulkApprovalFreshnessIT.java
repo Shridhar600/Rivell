@@ -25,7 +25,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Reviewer finding 7: bulk approval is the one review path that approves without a human reading
+ * Bulk approval is the one review path that approves without a human reading
  * the row, so its eligibility must be judged against current published knowledge rather than the
  * category stored when the candidate was extracted.
  *
@@ -33,8 +33,8 @@ import com.rivell.workbench.organization.UserIdentity;
  * at ingestion; if another candidate is published afterwards, the stored category is stale and the
  * candidate may now duplicate or contradict published knowledge. Acting on the stored value would
  * publish knowledge nobody reviewed, in bulk, on the strength of a decision made before the
- * conflict existed. Individually reviewed and published candidates keep the advisory behaviour
- * recorded as DW-053 - this is the boundary where the product decided freshness must be checked.
+ * conflict existed. Individually reviewed and published candidates remain advisory-only -
+ * this is the boundary where the product decided freshness must be checked.
  */
 // The scripted provider is what makes semantic compilation succeed without an API key, and a
 // candidate is only ROUTINE when its concept classified confidently. Each test uses its own

@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,10 +34,14 @@ import com.rivell.workbench.review.ProposedChangeCounts;
 class JdbcFindingRepository implements FindingRepository {
 
     private final JdbcClient jdbcClient;
+    private final NamedParameterJdbcTemplate namedTemplate;
     private final ObjectMapper objectMapper;
 
-    JdbcFindingRepository(JdbcClient jdbcClient, ObjectMapper objectMapper) {
+    JdbcFindingRepository(
+            JdbcClient jdbcClient, NamedParameterJdbcTemplate namedTemplate,
+            ObjectMapper objectMapper) {
         this.jdbcClient = jdbcClient;
+        this.namedTemplate = namedTemplate;
         this.objectMapper = objectMapper;
     }
 
@@ -46,21 +52,15 @@ class JdbcFindingRepository implements FindingRepository {
         deleteRunFindings(organizationId, runId);
         for (var finding : findings) {
             insertFinding(finding);
-            insertChildren(finding);
         }
+        insertChildren(findings);
     }
 
     @Override
     @Transactional
     public void addFinding(Finding finding) {
         insertFinding(finding);
-        insertChildren(finding);
-    }
-
-    @Override
-    @Transactional
-    public void deleteFindings(UUID organizationId, UUID runId) {
-        deleteRunFindings(organizationId, runId);
+        insertChildren(List.of(finding));
     }
 
     private void deleteRunFindings(UUID organizationId, UUID runId) {
@@ -72,23 +72,14 @@ class JdbcFindingRepository implements FindingRepository {
                 .param("organizationId", organizationId)
                 .query(UUID.class)
                 .list();
-        for (var findingId : findingIds) {
-            jdbcClient.sql("delete from finding_claim where finding_id = :id")
-                    .param("id", findingId).update();
-            jdbcClient.sql("delete from finding_concept where finding_id = :id")
-                    .param("id", findingId).update();
-            jdbcClient.sql("delete from finding_evidence where finding_id = :id")
-                    .param("id", findingId).update();
-            jdbcClient.sql("delete from finding_signal where finding_id = :id")
-                    .param("id", findingId).update();
+        if (!findingIds.isEmpty()) {
+            var ids = new MapSqlParameterSource("ids", findingIds);
+            namedTemplate.update("delete from finding_claim where finding_id in (:ids)", ids);
+            namedTemplate.update("delete from finding_concept where finding_id in (:ids)", ids);
+            namedTemplate.update("delete from finding_evidence where finding_id in (:ids)", ids);
+            namedTemplate.update("delete from finding_signal where finding_id in (:ids)", ids);
+            namedTemplate.update("delete from finding where id in (:ids)", ids);
         }
-        jdbcClient.sql("""
-                delete from finding
-                where run_id = :runId and organization_id = :organizationId
-                """)
-                .param("runId", runId)
-                .param("organizationId", organizationId)
-                .update();
     }
 
     private void insertFinding(Finding finding) {
@@ -134,64 +125,76 @@ class JdbcFindingRepository implements FindingRepository {
                 .update();
     }
 
-    private void insertChildren(Finding finding) {
-        var conceptOrdinal = 0;
-        for (var concept : finding.concepts()) {
-            jdbcClient.sql("""
-                    insert into finding_concept
-                      (id, organization_id, finding_id, ordinal, concept)
-                    values (:id, :organizationId, :findingId, :ordinal, :concept)
-                    """)
-                    .param("id", UUID.randomUUID())
-                    .param("organizationId", finding.organizationId())
-                    .param("findingId", finding.id())
-                    .param("ordinal", conceptOrdinal++)
-                    .param("concept", concept.value())
-                    .update();
+    private void insertChildren(List<Finding> findings) {
+        var concepts = new ArrayList<MapSqlParameterSource>();
+        var claims = new ArrayList<MapSqlParameterSource>();
+        var evidence = new ArrayList<MapSqlParameterSource>();
+        var signals = new ArrayList<MapSqlParameterSource>();
+        for (var finding : findings) {
+            var conceptOrdinal = 0;
+            for (var concept : finding.concepts()) {
+                concepts.add(new MapSqlParameterSource()
+                        .addValue("id", UUID.randomUUID())
+                        .addValue("organizationId", finding.organizationId())
+                        .addValue("findingId", finding.id())
+                        .addValue("ordinal", conceptOrdinal++)
+                        .addValue("concept", concept.value()));
+            }
+            for (var claim : finding.claims()) {
+                claims.add(new MapSqlParameterSource()
+                        .addValue("id", claim.id())
+                        .addValue("organizationId", finding.organizationId())
+                        .addValue("findingId", finding.id())
+                        .addValue("ordinal", claim.ordinal())
+                        .addValue("claimKind", claim.claimKind().name())
+                        .addValue("text", claim.text())
+                        .addValue("absence", claim.absence())
+                        .addValue("evidenceItemIds", json(claim.evidenceItemIds())));
+            }
+            var evidenceOrdinal = 0;
+            for (var evidenceId : finding.evidenceItemIds()) {
+                evidence.add(new MapSqlParameterSource()
+                        .addValue("id", UUID.randomUUID())
+                        .addValue("organizationId", finding.organizationId())
+                        .addValue("findingId", finding.id())
+                        .addValue("evidenceItemId", evidenceId)
+                        .addValue("ordinal", evidenceOrdinal++));
+            }
+            for (var signalId : finding.signalIds()) {
+                signals.add(new MapSqlParameterSource()
+                        .addValue("id", UUID.randomUUID())
+                        .addValue("organizationId", finding.organizationId())
+                        .addValue("findingId", finding.id())
+                        .addValue("signalId", signalId));
+            }
         }
-        for (var claim : finding.claims()) {
-            jdbcClient.sql("""
-                    insert into finding_claim
-                      (id, organization_id, finding_id, ordinal, claim_kind, text, absence,
-                       evidence_item_ids)
-                    values (:id, :organizationId, :findingId, :ordinal, :claimKind, :text,
-                       :absence, cast(:evidenceItemIds as jsonb))
-                    """)
-                    .param("id", claim.id())
-                    .param("organizationId", finding.organizationId())
-                    .param("findingId", finding.id())
-                    .param("ordinal", claim.ordinal())
-                    .param("claimKind", claim.claimKind().name())
-                    .param("text", claim.text())
-                    .param("absence", claim.absence())
-                    .param("evidenceItemIds", json(claim.evidenceItemIds()))
-                    .update();
-        }
-        var evidenceOrdinal = 0;
-        for (var evidenceId : finding.evidenceItemIds()) {
-            jdbcClient.sql("""
-                    insert into finding_evidence
-                      (id, organization_id, finding_id, evidence_item_id, ordinal)
-                    values (:id, :organizationId, :findingId, :evidenceItemId, :ordinal)
-                    """)
-                    .param("id", UUID.randomUUID())
-                    .param("organizationId", finding.organizationId())
-                    .param("findingId", finding.id())
-                    .param("evidenceItemId", evidenceId)
-                    .param("ordinal", evidenceOrdinal++)
-                    .update();
-        }
-        for (var signalId : finding.signalIds()) {
-            jdbcClient.sql("""
-                    insert into finding_signal
-                      (id, organization_id, finding_id, signal_id)
-                    values (:id, :organizationId, :findingId, :signalId)
-                    """)
-                    .param("id", UUID.randomUUID())
-                    .param("organizationId", finding.organizationId())
-                    .param("findingId", finding.id())
-                    .param("signalId", signalId)
-                    .update();
+        batch("""
+                insert into finding_concept
+                  (id, organization_id, finding_id, ordinal, concept)
+                values (:id, :organizationId, :findingId, :ordinal, :concept)
+                """, concepts);
+        batch("""
+                insert into finding_claim
+                  (id, organization_id, finding_id, ordinal, claim_kind, text, absence,
+                   evidence_item_ids)
+                values (:id, :organizationId, :findingId, :ordinal, :claimKind, :text,
+                   :absence, cast(:evidenceItemIds as jsonb))
+                """, claims);
+        batch("""
+                insert into finding_evidence
+                  (id, organization_id, finding_id, evidence_item_id, ordinal)
+                values (:id, :organizationId, :findingId, :evidenceItemId, :ordinal)
+                """, evidence);
+        batch("""
+                insert into finding_signal
+                  (id, organization_id, finding_id, signal_id)
+                values (:id, :organizationId, :findingId, :signalId)
+                """, signals);
+    }
+
+    private void batch(String sql, List<MapSqlParameterSource> rows) {
+        if (!rows.isEmpty()) {
+            namedTemplate.batchUpdate(sql, rows.toArray(MapSqlParameterSource[]::new));
         }
     }
 

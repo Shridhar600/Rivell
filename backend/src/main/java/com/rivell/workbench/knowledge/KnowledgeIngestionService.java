@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.unit.DataSize;
 
@@ -76,7 +77,7 @@ public class KnowledgeIngestionService {
     }
 
     /**
-     * The document-work slot is taken before the bytes are read, stored or recorded (DW-095). A
+     * The document-work slot is taken before the bytes are read, stored or recorded. A
      * busy limit therefore refuses the upload before any artifact row or file exists. The slot
      * covers only the file work (read, store, structure extraction); it is released before the
      * semantic compile, which can take minutes and does not hold the document in memory.
@@ -85,22 +86,54 @@ public class KnowledgeIngestionService {
             String filename, String contentType, ArtifactType artifactType,
             ArtifactManifest manifest, InputStream source)
             throws IOException {
+        return ingest(filename, contentType, artifactType, manifest, source, null);
+    }
+
+    /**
+     * With a client-supplied key, ingestion is idempotent: a retry returns the artifact the first
+     * attempt stored instead of compiling and storing a second one. The replay is resolved before
+     * any file work, and the unique index on (organization_id, client_request_id) is the
+     * authority when two identical requests race.
+     */
+    public KnowledgeArtifact ingest(
+            String filename, String contentType, ArtifactType artifactType,
+            ArtifactManifest manifest, InputStream source, UUID clientRequestId)
+            throws IOException {
         var identity = identityProvider.currentIdentity();
         if (!authorizationService.isAuthorized(identity, Permissions.KNOWLEDGE_UPLOAD)) {
             throw new UnauthorizedKnowledgeAccessException(identity.userId());
+        }
+        if (clientRequestId != null) {
+            var replay = repository.findByClientRequestId(
+                    identity.organizationId(), clientRequestId);
+            if (replay.isPresent()) {
+                return replay.get();
+            }
         }
         Staged staged;
         try {
             staged = documentWorkLimiter.run(() -> {
                 try {
                     return stageWithinLimit(identity.organizationId(), filename, contentType,
-                            artifactType, manifest, source);
+                            artifactType, manifest, clientRequestId, source);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
             });
         } catch (UncheckedIOException e) {
             throw e.getCause();
+        } catch (DataIntegrityViolationException conflict) {
+            // The pre-check cannot see a concurrent identical request, so the loser's insert
+            // violated the unique index. The index decides the winner; read it back so the retry
+            // receives the stored artifact rather than a 500.
+            if (clientRequestId != null) {
+                var winner = repository.findByClientRequestId(
+                        identity.organizationId(), clientRequestId);
+                if (winner.isPresent()) {
+                    return winner.get();
+                }
+            }
+            throw conflict;
         }
         try {
             return complete(staged);
@@ -120,7 +153,8 @@ public class KnowledgeIngestionService {
 
     private Staged stageWithinLimit(
             UUID organizationId, String filename, String contentType, ArtifactType artifactType,
-            ArtifactManifest manifest, InputStream source) throws IOException {
+            ArtifactManifest manifest, UUID clientRequestId, InputStream source)
+            throws IOException {
         var safeFilename = FilenameSanitizer.sanitize(
                 filename, Set.of(DOCX_EXTENSION, XLSX_EXTENSION));
         var bytes = readBounded(source, maxFileSize.toBytes());
@@ -141,12 +175,17 @@ public class KnowledgeIngestionService {
                 artifactId, organizationId, artifactType,
                 safeFilename, resolvedContentType(safeFilename, contentType),
                 bytes.length, sha256, storageKey.value(),
-                effectiveManifest, IngestStatus.EXTRACTING, null, List.of(), null, now, null);
+                effectiveManifest, IngestStatus.EXTRACTING, null, List.of(), null, now, null,
+                clientRequestId);
 
         try {
             transactionTemplate.executeWithoutResult(status ->
                     repository.insertArtifact(artifact));
-
+        } catch (DataIntegrityViolationException conflict) {
+            deleteQuietly(storageKey);
+            throw conflict;
+        }
+        try {
             var extraction = extractStructure(artifact, bytes);
             var documentTitle = extraction.status() == IngestStatus.FAILED
                     ? null : KnowledgeDocumentTitle.of(extraction.nodes());

@@ -241,7 +241,7 @@ public class KnowledgeQueryService {
 
     /**
      * Bounded, supersession-aware published-knowledge lookup for retrieval
-     * (Architecture Decision #8.1, DW-010). The query carries the organization id
+     * (Architecture Decision #8.1). The query carries the organization id
      * explicitly because retrieval planning is a server-side flow; the caller must
      * still be authorized for knowledge reads.
      */

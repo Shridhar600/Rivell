@@ -336,8 +336,8 @@ class DocxRedlineRendererTest {
     }
 
     /**
-     * M10 / DW-035(3): the redline path loads stored source bytes with no decompression bound, while
-     * the ingest parser has always had one. A package that expands far beyond its stored size must
+     * The redline path bounds decompression of stored source bytes, as the ingest parser
+     * does. A package that expands far beyond its stored size must
      * fail closed at the redline boundary with its own reason, not be handed to docx4j.
      */
     @Test

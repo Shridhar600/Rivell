@@ -52,7 +52,7 @@ def guard():
 
 # ---------- backend process ----------
 
-# DW-059(4): a measurement-only probe call that only succeeds on a retry waited the provider's
+# A measurement-only probe call that only succeeds on a retry waited the provider's
 # full 2 s + 8 s + 30 s backoff before every check (~40 s). A probe run is bounded unless the
 # operator set the budget; the report header records which budget scored it.
 PROBE_RETRY_BACKOFF = "2s,4s"

@@ -978,7 +978,7 @@ public class LiabilityReviewIT {
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        // council §A.4: the confidentiality record is a typed position again (the fake reads the
+        // the confidentiality record is a typed position again (the fake reads the
         // imperative survival duty as preferred), so three clauses are compared from positions
         // and the governing-law clause is searched once
         assertThat(scriptedProvider.policyComparisonDecisions()).isEqualTo(4);

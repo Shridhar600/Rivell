@@ -223,7 +223,7 @@ export interface paths {
         put?: never;
         /**
          * Upload a legal knowledge source with its human-declared manifest
-         * @description declaredContractTypes is optional. When it is empty or omitted, the source applies to every contract type; the API does not reject an empty declaration, because existing clients and the evaluation runner rely on it.
+         * @description declaredContractTypes is optional. When it is empty or omitted, the source applies to every contract type; the API does not reject an empty declaration, because existing clients and the evaluation runner rely on it. clientRequestId is optional: repeating an upload with the same key returns the artifact the first attempt stored.
          */
         post: operations["upload"];
         delete?: never;
@@ -3411,6 +3411,7 @@ export interface operations {
                 effectiveFrom?: string;
                 effectiveTo?: string;
                 note?: string;
+                clientRequestId?: string;
             };
             header?: never;
             path?: never;

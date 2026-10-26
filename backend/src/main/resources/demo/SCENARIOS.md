@@ -41,7 +41,7 @@ seed runtime. No document body is logged.
 | R05 | Atlas MSA - Finalized | finalized with a frozen change set containing a REPLACE | MSA body, MSA pack | 1 rejected survival gap, 1 accepted fallback | read-only | done | not generated | redline deliberately not generated here |
 | R06 | Employee NDA - Finalized, no changes | all rejected, finalized with an empty change set | NDA body, NDA pack | 2 rejected | read-only | done | not required | genuine empty change set |
 | R07 | Procurement MSA - Verified redline | finalized with changes, redline COMPLETED and verified | MSA body, MSA pack | 1 rejected survival gap, 1 accepted fallback | read-only | done | COMPLETED, download yes | artifact is a real DOCX |
-| R08 | Globex NDA - Redline failed | finalized with an INSERT, then a human semantics correction drifts the digest; execution FAILED | m5 NDA absence body, MSA pack | 1 blocking absence inserted for, 1 informational absence | read-only | done | FAILED APPROVED_SEMANTICS_DRIFT, no artifact | deterministic failure by design; not a retryable-transient promise (DW-048) |
+| R08 | Globex NDA - Redline failed | finalized with an INSERT, then a human semantics correction drifts the digest; execution FAILED | m5 NDA absence body, MSA pack | 1 blocking absence inserted for, 1 informational absence | read-only | done | FAILED APPROVED_SEMANTICS_DRIFT, no artifact | deterministic failure by design; not a retryable-transient promise |
 | R09 | Initech NDA - Retry succeeded | R08 path, correction reverted, retry attempt 2 COMPLETED | m5 NDA absence body, MSA pack | as R08 | read-only | done | attempt 1 FAILED preserved, attempt 2 COMPLETED, download yes | the only recoverable redline failure; no generic retry promise |
 | R10 | Umbrella MSA - Analysis failed | analysis genuinely FAILED at a demo-only injected service boundary | MSA body, MSA pack | 0 (failed) | unavailable | no | no | the seam exists only while demo seeding is enabled |
 | R11 | Soylent MSA - Limited analysis | COMPLETED with every check DEGRADED after a semantics correction | MSA body, MSA pack | 0 (all checks degraded) | yes | no (ANALYSIS_DEGRADED) | no | partial degradation is not modelled; this fixture degrades every check |
@@ -83,11 +83,11 @@ test also reports it. A few dozen entities, not thousands.
 
 ## Known limitations
 
-- **Retry Redline** (DW-048): every reachable persisted failure is deterministic. R08/R09
+- **Retry Redline**: every reachable persisted failure is deterministic. R08/R09
   demonstrate the one genuinely recoverable condition, a human semantics correction that is
   later reverted. No surface may promise that retrying resolves an unresolved cause.
 - **Escalation trigger** is extracted through the demo generative provider for prose playbooks
   (quoted from the source and independently verified) and through the deterministic column
   path for table-shaped playbooks. The recorded deterministic-extraction gap for prose
-  remains a Knowledge milestone item (DW-049).
+  remains a Knowledge milestone item.
 - **Document generator** is byte-deterministic; regenerating fixtures produces identical files.

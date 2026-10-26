@@ -23,7 +23,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Reviewer finding 2: a DOCX table may label two different columns with the same header text.
+ * A DOCX table may label two different columns with the same header text.
  * The structured payload is keyed by header label, so the second cell silently overwrote the
  * first and a source cell vanished from the authoritative wording - the row then read as if the
  * source said one thing where it said another. That is data loss, not a rendering preference,

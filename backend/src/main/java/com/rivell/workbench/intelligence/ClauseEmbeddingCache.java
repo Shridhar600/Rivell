@@ -17,11 +17,11 @@ import java.util.Map;
 public final class ClauseEmbeddingCache implements EmbeddingLookup {
 
     /**
-     * After a rejected prefetch batch, only this many texts are retried alone. A provider that
-     * rejects the batch for size is likely to reject many inputs too, and the callers already
-     * tolerate a cold cache; the rest stay uncached and embed on their own later use.
+     * After a rejected batch, only this many texts are retried alone. A provider that rejects the
+     * batch for size is likely to reject many inputs too, and the callers already tolerate a
+     * degraded lane; the rest either stay uncached or lose their own slot.
      */
-    static final int MAX_FALLBACK_TEXTS = 8;
+    public static final int MAX_FALLBACK_TEXTS = 8;
 
     private final EmbeddingService embeddingService;
     private final Map<String, float[]> vectors = new HashMap<>();

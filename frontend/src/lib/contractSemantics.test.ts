@@ -305,7 +305,7 @@ describe('clause heading titles', () => {
 
 describe('enrichment failure reasons', () => {
   // The tenant-facing taxonomy. The provider-level reasons the backend used to send are absent on
-  // purpose: see the DW-041 note on ENRICHMENT_FAILURE_REASONS.
+  // purpose: see the note on ENRICHMENT_FAILURE_REASONS.
   const codes: EnrichmentFailureReason[] = ['SERVICE_UNAVAILABLE', 'UNSUPPORTED_SOURCE', 'INTERNAL']
 
   const providerReasons = [
@@ -344,7 +344,7 @@ describe('enrichment failure reasons', () => {
     expect(enrichmentFailureNote('UNSUPPORTED_SOURCE').summary).not.toBe(
       enrichmentFailureNote('INTERNAL').summary,
     )
-    // SERVICE_UNAVAILABLE and INTERNAL deliberately share a sentence. After DW-041 the tenant cannot
+    // SERVICE_UNAVAILABLE and INTERNAL deliberately share a sentence. The tenant cannot
     // honestly be told which of the two occurred, and distinct wording here would assert a
     // distinction this surface does not have. There is no second signal to fall back on either: the
     // note carries a sentence and nothing else, because the boolean this view model used to carry
@@ -391,7 +391,7 @@ describe('enrichment failure reasons', () => {
   })
 
   /**
-   * M10A.1 corrective (DW-041): the narrowing collapsed five provider reasons into
+   * The narrowing collapsed five provider reasons into
    * SERVICE_UNAVAILABLE, two of which can never succeed on a retry — the deployment has no usable
    * provider, or the provider refused on auth/quota. The copy used to tell the tenant to "try again
    * in a moment", which asserts a transient, time-bounded condition this surface cannot know about,

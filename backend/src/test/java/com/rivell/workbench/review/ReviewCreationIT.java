@@ -398,9 +398,9 @@ class ReviewCreationIT {
     }
 
     /**
-     * M10 / DW-020: review creation had no client-supplied key, so a retried creation produced a
-     * second review with a second frozen snapshot and a second full analysis. The retry must return
-     * the original review, and the key must never resolve another organisation's review.
+     * Review creation is idempotent only with a client-supplied key: a retried creation with the
+     * key returns the original review instead of producing a second review with a second frozen
+     * snapshot and a second full analysis. The key must never resolve another organisation's review.
      */
     @Test
     void aRetriedCreationWithTheSameClientRequestIdReturnsTheOriginalReview() {

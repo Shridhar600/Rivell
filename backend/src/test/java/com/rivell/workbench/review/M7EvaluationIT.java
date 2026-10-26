@@ -320,7 +320,7 @@ class M7EvaluationIT {
         var elapsed = (System.nanoTime() - start) / 1_000_000;
 
         assertThat(analysisRepository.findSignals(organizationId, run.id()))
-                .as("the clause states its survival, so DW-100 leaves no gap")
+                .as("the clause states its survival, so the survival statement leaves no gap")
                 .noneMatch(signal -> signal.issueFamily() == IssueFamily.SURVIVAL_COVERAGE_GAP);
         var findings = findingRepository.findFindings(organizationId, run.id());
         assertThat(findings).extracting(Finding::issueFamily)
@@ -421,7 +421,7 @@ class M7EvaluationIT {
         var correctedStart = System.nanoTime();
         var correctedRun = analysisService.analyze(organizationId, correctedReview.id());
         var correctedElapsed = (System.nanoTime() - correctedStart) / 1_000_000;
-        // DW-085/v2: no position is paired by the corrected topic any more, and the text search
+        // no position is paired by the corrected topic any more, and the text search
         // must not bring the removed topic's positions back: the correction stands
         var correctedDeviations = analysisRepository.findSignals(organizationId, correctedRun.id())
                 .stream().filter(signal -> signal.signalType() == SignalType.POLICY_DEVIATION)

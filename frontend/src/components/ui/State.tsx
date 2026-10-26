@@ -6,7 +6,7 @@ import { InfoIcon } from './Icon'
 /**
  * Loading state. Announced politely; never a spinner without real in-progress work behind it.
  * A page-level load takes focus (`focus`) so the loading status is announced and focus does not
- * fall to the body; the heading that replaces it takes focus from there (DW-044).
+ * fall to the body; the heading that replaces it takes focus from there.
  */
 export function LoadingState({ label = 'Loading', focus = false }: { label?: string; focus?: boolean }) {
   const status = useHeadingFocus<HTMLParagraphElement>(focus ? label : null)

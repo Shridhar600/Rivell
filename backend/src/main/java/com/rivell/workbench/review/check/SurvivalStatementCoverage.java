@@ -14,7 +14,7 @@ import com.rivell.workbench.contracts.ClauseSemantics;
 import com.rivell.workbench.contracts.ContractRegionSegmenter;
 
 /**
- * DW-100: deterministic survival coverage written into the contract itself. A statement
+ * Deterministic survival coverage written into the contract itself. A statement
  * covers a confidentiality clause when it uses a survival verb, says termination does not
  * affect confidential-information obligations, or says confidentiality obligations continue
  * for a period or after termination. It must also name that clause by number, name

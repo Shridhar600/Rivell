@@ -27,7 +27,21 @@ public record KnowledgeArtifact(
         ArtifactTypeAssessment assessment,
         Instant createdAt,
         /** The title a Word source gives itself; null for a workbook or a document that names none. */
-        String documentTitle) {
+        String documentTitle,
+        /** The client's idempotency key, when the upload carried one. */
+        UUID clientRequestId) {
+
+    /** An artifact stored without an idempotency key. */
+    public KnowledgeArtifact(
+            UUID id, UUID organizationId, ArtifactType artifactType, String filename,
+            String contentType, long sizeBytes, String sha256, String storageKey,
+            ArtifactManifest manifest, IngestStatus ingestStatus, String parserVersion,
+            List<String> parseWarnings, ArtifactTypeAssessment assessment, Instant createdAt,
+            String documentTitle) {
+        this(id, organizationId, artifactType, filename, contentType, sizeBytes, sha256,
+                storageKey, manifest, ingestStatus, parserVersion, parseWarnings, assessment,
+                createdAt, documentTitle, null);
+    }
 
     public KnowledgeArtifact {
         Objects.requireNonNull(id, "id");
@@ -54,18 +68,18 @@ public record KnowledgeArtifact(
             String parserVersion, IngestStatus status, List<String> warnings) {
         return new KnowledgeArtifact(id, organizationId, artifactType, filename, contentType,
                 sizeBytes, sha256, storageKey, manifest, status, parserVersion, warnings,
-                assessment, createdAt, documentTitle);
+                assessment, createdAt, documentTitle, clientRequestId);
     }
 
     public KnowledgeArtifact withAssessment(ArtifactTypeAssessment assessed) {
         return new KnowledgeArtifact(id, organizationId, artifactType, filename, contentType,
                 sizeBytes, sha256, storageKey, manifest, ingestStatus, parserVersion,
-                parseWarnings, assessed, createdAt, documentTitle);
+                parseWarnings, assessed, createdAt, documentTitle, clientRequestId);
     }
 
     public KnowledgeArtifact withDocumentTitle(String title) {
         return new KnowledgeArtifact(id, organizationId, artifactType, filename, contentType,
                 sizeBytes, sha256, storageKey, manifest, ingestStatus, parserVersion,
-                parseWarnings, assessment, createdAt, title);
+                parseWarnings, assessment, createdAt, title, clientRequestId);
     }
 }

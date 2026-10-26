@@ -141,7 +141,7 @@ class KnowledgeIngestionIT {
     }
 
     /**
-     * DW-088: PostgreSQL timestamptz keeps microseconds. The returned artifact must already carry
+     * PostgreSQL timestamptz keeps microseconds. The returned artifact must already carry
      * microsecond precision, or it differs from the same artifact read back later.
      */
     @Test

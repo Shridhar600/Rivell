@@ -34,6 +34,18 @@ class GenerativePropertiesBindingTest {
     }
 
     @Test
+    void theApiKeyIsRedactedFromTheRecordToString() {
+        var properties = bind(Map.of(
+                "rivell.intelligence.generative.api-key", "generative-live-secret"));
+
+        assertThat(properties.toString())
+                .doesNotContain("generative-live-secret")
+                .contains("apiKey=<redacted>");
+        assertThat(bind(Map.of("rivell.intelligence.generative.api-key", "")).toString())
+                .contains("apiKey=<absent>");
+    }
+
+    @Test
     void unknownResponseModeFailsAtBinding() {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> bind(Map.of(
                 "rivell.intelligence.generative.api-key", "k",

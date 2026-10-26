@@ -32,7 +32,7 @@ import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
- * DW-106 R1 calibration: with the corroboration rule on, a disagreement the second opinion calls a
+ * R1 calibration: with the corroboration rule on, a disagreement the second opinion calls a
  * walk-away or beyond-fallback raises to MEDIUM only when a second signal on the clause agrees —
  * the fallback-condition check found the clause PARTIAL, or the whole-contract read named it.
  * Without either signal the item stays LOW. The rule is off by default; SecondOpinionIT pins that

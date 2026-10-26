@@ -491,7 +491,7 @@ class DeterministicContractExtractorsTest {
     }
 
     /**
-     * DW-080: the same term stated twice in one node is one definition (the persistence key is
+     * The same term stated twice in one node is one definition (the persistence key is
      * per defining node), and the first wording is the one kept.
      */
     @Test

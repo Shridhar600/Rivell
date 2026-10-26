@@ -16,7 +16,7 @@ import com.rivell.workbench.knowledge.PublishedCandidate;
  * apply to the contract (same metadata narrowing as every policy lookup), ranked for one
  * clause's text by the full-text and vector lanes and fused by rank (RRF), as the precedent
  * lane does. Ranking only: the caller's comparison decides whether a position addresses the
- * clause. A dedicated vector store can replace the two lanes behind this class (DW-064).
+ * clause. A dedicated vector store can replace the two lanes behind this class.
  */
 final class PositionSearch {
 
@@ -57,7 +57,7 @@ final class PositionSearch {
             if (exclude.contains(candidate.id())) {
                 continue;
             }
-            // DW-085: a topic the person removed from the clause is not a way back to its positions
+            // a topic the person removed from the clause is not a way back to its positions
             if (candidate.topicKeys().stream().anyMatch(excludedTopics::contains)) {
                 continue;
             }

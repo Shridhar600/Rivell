@@ -38,9 +38,9 @@ import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Behaviour of the review list at the HTTP boundary (GAP-A).
+ * Behaviour of the review list at the HTTP boundary.
  *
- * <p>Covers the two things the milestone exists to change: {@code contractId} becomes
+ * <p>Covers the two things this endpoint exists to do: {@code contractId} becomes
  * optional so Home can read the organization without fanning out over contracts, and each
  * row now carries enough truth to render on its own.
  *

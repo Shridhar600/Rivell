@@ -9,10 +9,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The document-level authority rules of one source, merged with an entry's own rules by the
- * precedence council §A.1 fixes: the most specific typed rule wins for one stance, a rule that
+ * The document-level authority rules of one source, merged with an entry's own rules by a fixed
+ * precedence: the most specific typed rule wins for one stance, a rule that
  * names the stance being more specific than one that names none. Lower-level rules that name a
- * different approver stay visible as conflicts (§A.2).
+ * different approver stay visible as conflicts.
  */
 final class AuthorityCatalog {
 
@@ -86,7 +86,7 @@ final class AuthorityCatalog {
             }
             var winner = candidates.getFirst();
             effective.add(winner.forStance(stance));
-            // every rule with its own condition survives (council §E); a different approver
+            // every rule with its own condition survives; a different approver
             // is also a visible conflict, and both stay readable
             var seen = new LinkedHashSet<String>();
             seen.add(ruleKey(winner));
@@ -113,7 +113,7 @@ final class AuthorityCatalog {
     }
 
     /**
-     * Council §A.1: an approver stated on the entry beats the document approval matrix, which
+     * An approver stated on the entry beats the document approval matrix, which
      * beats an approval table row. Within a level, a rule that names the stance is more specific
      * than one that does not, and a rule with its own condition is more specific still.
      */

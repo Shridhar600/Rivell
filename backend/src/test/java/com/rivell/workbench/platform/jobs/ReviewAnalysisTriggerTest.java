@@ -7,7 +7,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 /**
- * M10 / B-4: the review-analysis job id must be derived from the work, not random.
+ * The review-analysis job id must be derived from the work, not random.
  *
  * <p>A random id meant a duplicated trigger - a retried event, a second listener, a double submit -
  * created a second job. The work was already idempotent at the domain boundary, so the duplicate was

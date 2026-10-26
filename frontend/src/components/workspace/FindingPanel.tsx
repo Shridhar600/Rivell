@@ -249,7 +249,7 @@ export function FindingPanel(props: Props) {
   const note = policyNoteText(finding)
   const position = policyPositionView(finding.positionComparison)
   // A within-fallback finding is a note, not a defect. It becomes an approval question only
-  // when a typed rule says the fallback needs approval (council §A.3), never from a trigger text.
+  // when a typed rule says the fallback needs approval, never from a trigger text.
   const withinFallback = finding.issueFamily === 'POSITION_ACCEPTABLE_FALLBACK'
   const partialFallback =
     withinFallback && finding.quality?.fallbackConditionsOutcome === 'PARTIAL'

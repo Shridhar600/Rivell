@@ -209,7 +209,7 @@ class AuthorityCompilationIT {
         assertThat(liability.effectivePositions()).containsExactlyInAnyOrder(
                 PositionRole.PREFERRED, PositionRole.FALLBACK, PositionRole.PROHIBITED);
 
-        // the entry's approver wins (council §A.1); the matrix's fallback rule is kept too
+        // the entry's approver wins; the matrix's fallback rule is kept too
         var fallbackRules = liability.effectiveAuthorityRules().stream()
                 .filter(rule -> rule.stances().contains(PositionRole.FALLBACK))
                 .toList();

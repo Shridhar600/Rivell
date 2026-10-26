@@ -54,7 +54,7 @@ import com.rivell.workbench.workflow.ReviewFinalizationService;
 import com.rivell.workbench.workflow.UserFindingService;
 
 /**
- * DW-088: PostgreSQL keeps microseconds for {@code timestamptz}, so a value returned to the
+ * PostgreSQL keeps microseconds for {@code timestamptz}, so a value returned to the
  * caller must already carry microsecond precision, or it differs from the same value read back
  * later. The context clock is fixed at a nanosecond instant so these assertions fail on any
  * machine until every returned aggregate is lowered to the precision the database stores.

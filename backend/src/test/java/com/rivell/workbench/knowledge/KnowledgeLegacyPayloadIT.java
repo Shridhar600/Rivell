@@ -25,7 +25,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Reviewer finding 3: rows written before column order was recorded must keep working.
+ * Rows written before column order was recorded must keep working.
  *
  * <p>The order is carried in the payload because {@code jsonb} does not preserve object key order
  * - it returns keys ordered by length then bytes, so a row keyed Clause/Preferred/Fallback comes

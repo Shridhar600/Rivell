@@ -20,7 +20,7 @@ import com.rivell.workbench.contracts.ParseStatus;
 import com.sun.management.ThreadMXBean;
 
 /**
- * DW-081: how much heap one parse of a large contract needs. A measurement, not a regression
+ * How much heap one parse of a large contract needs. A measurement, not a regression
  * test, so it only runs on request:
  * {@code ./mvnw -q -B test -Dtest=ParseHeapMeasurementTest -Drivell.measureParseHeap=true}.
  * It prints the figures; add {@code -DargLine=-Xmx512m} to see whether a heap of that size

@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
 /**
  * Bounds how many documents are loaded at once. A Word or Excel package is held in memory whole
  * while it is parsed, rendered or verified, so several large files at the same moment could
- * exhaust the heap (DW-081). A caller that finds every slot taken waits up to a bounded budget,
- * then is refused instead of queueing with its bytes in memory (DW-095).
+ * exhaust the heap. A caller that finds every slot taken waits up to a bounded budget,
+ * then is refused instead of queueing with its bytes in memory.
  *
  * <p>A call made while the same thread already holds a slot runs inside that slot. A second
  * acquire on that thread would otherwise wait for itself.

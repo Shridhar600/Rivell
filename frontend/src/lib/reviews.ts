@@ -760,7 +760,7 @@ export function isRelatedPosition(
 /**
  * The issue line a finding is listed under. A clause no playbook position addresses is its own
  * kind: the family alone would read as the older "policy unavailable" case. The whole-contract
- * read's advisory is the same gap said in different words, so it uses the same line (DW-070).
+ * read's advisory is the same gap said in different words, so it uses the same line.
  * A partly-met fallback is not simply within it, so it says so wherever the line appears.
  */
 export function findingIssueLabel(
@@ -777,7 +777,7 @@ export function findingIssueLabel(
   }
   if (finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ') {
     // The whole-contract read picks the same gap a clause mark calls "Not covered by your
-    // playbook"; the header says the same, never the older "Policy unavailable" (DW-070).
+    // playbook"; the header says the same, never the older "Policy unavailable".
     return 'Not covered by your playbook'
   }
   if (finding.observationKind.startsWith('UNCERTAINTY:second_opinion_')) {
@@ -806,7 +806,7 @@ export function decidedByLabel(quality: FindingQuality | null): string | null {
 }
 
 /**
- * The typed approval rule behind a finding, as the panel shows it. Council §A.3: an approval
+ * The typed approval rule behind a finding, as the panel shows it. An approval
  * exists only when a rule names an approver, so this is null when no rule applies, whatever the
  * finding's trigger text says.
  */
@@ -866,7 +866,7 @@ export function approvalDeparture(
   }
 }
 
-/** The one line that shows a lower-level rule naming another approver (council §A.2). */
+/** The one line that shows a lower-level rule naming another approver. */
 export function approvalConflictLine(summary: ApprovalSummary | null): string | null {
   if (!summary?.conflict) return null
   const { approver, source } = summary.conflict
@@ -889,7 +889,7 @@ export function escalateIfLine(summary: ApprovalSummary | null): string | null {
 
 /**
  * A source condition the playbook states without naming who approves it. The panel shows it,
- * followed by "No approver is named.", so it never reads as a broken approval (council §E).
+ * followed by "No approver is named.", so it never reads as a broken approval.
  * An "Escalate to <role>" route is not a condition: only the part after a boundary word is,
  * and a route without one yields nothing.
  */
