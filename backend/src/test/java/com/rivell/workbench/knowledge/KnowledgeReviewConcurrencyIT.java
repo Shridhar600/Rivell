@@ -28,7 +28,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Reviewer finding 6: the pre-publication state transition is a compare-and-set, and a
+ * The pre-publication state transition is a compare-and-set, and a
  * compare-and-set that matched no row must never be reported as success.
  *
  * <p>The corruption this prevents: publication validates that a candidate is APPROVED, then

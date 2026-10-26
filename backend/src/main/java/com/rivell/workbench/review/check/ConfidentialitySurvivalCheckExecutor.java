@@ -44,7 +44,7 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
         // concept: one SURVIVES relationship cannot prove every obligation is
         // covered. Multi-clause coverage is clean only when every candidate clause
         // is an endpoint of a survival relationship; partial/ambiguous coverage is
-        // explicit uncertainty, never a fabricated per-clause verdict (DW-027).
+        // explicit uncertainty, never a fabricated per-clause verdict.
         var candidates = context.semantics().clauses().stream()
                 .filter(candidate -> candidate.effectivePrimaryConcept()
                         .filter(concept -> concept.equals(context.check().concept()))
@@ -62,7 +62,7 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
                 .anyMatch(item -> item.retrievalReason() != null
                         && item.retrievalReason().contains("SURVIVES"));
         var subjectCoveredByRelationship = survivalEndpoints.contains(clause.headingNodeId());
-        // DW-100: a survival statement written in the contract covers the confidentiality
+        // A survival statement written in the contract covers the confidentiality
         // clauses it names. It is deterministic evidence, so it can clear a gap that neither
         // a SURVIVES relationship nor retrieval evidence covered.
         var statementCoverage = SurvivalStatementCoverage.coverage(
@@ -83,8 +83,8 @@ public final class ConfidentialitySurvivalCheckExecutor implements ReviewCheckEx
             covered = true;
             basis = "clause_text";
         } else if (statementCoveredCount > 0) {
-            // The statement covers some confidentiality clauses but not all of them: DW-027
-            // asks for explicit uncertainty, never a clean pass and never a HIGH gap.
+            // The statement covers some confidentiality clauses but not all of them: multi-clause
+            // coverage asks for explicit uncertainty, never a clean pass and never a HIGH gap.
             covered = false;
             uncertain = true;
             basis = "partial";

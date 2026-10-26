@@ -621,8 +621,8 @@ public class ReviewApiService {
     }
 
     /**
-     * Frozen coverage per declared concept from the counted run's presence executions
-     * (DW-024). A secondary-only presence is visible as limited substantive coverage;
+     * Frozen coverage per declared concept from the counted run's presence executions.
+     * A secondary-only presence is visible as limited substantive coverage;
      * nothing is inferred when no execution recorded coverage.
      */
     private List<ReviewCoverageView> coverage(

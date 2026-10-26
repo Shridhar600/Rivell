@@ -265,7 +265,7 @@ class FitCheckIT {
                 .filter(candidate -> "SEARCH".equals(candidate.quality().get("foundBy")))
                 .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_NEEDS_FALLBACK)
                 .findFirst().orElseThrow();
-        // council §E: a partial fit is offered unchecked, not approved and not silently replaced
+        // a partial fit is offered unchecked, not approved and not silently replaced
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
         assertThat(finding.proposedLanguageSource())
                 .isEqualTo(ProposedLanguageSource.APPROVED_DRAFTING);

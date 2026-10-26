@@ -187,8 +187,8 @@ final class ClauseFitCheck {
 
     /**
      * The wording is asked twice. A wording that falls short of the position is replaced; a
-     * wording that meets the position but does not cure the gap is only offered as unchecked
-     * (council §E), so the partial fit is visible and never silently replaced. Both answers are
+     * wording that meets the position but does not cure the gap is only offered as unchecked,
+     * so the partial fit is visible and never silently replaced. Both answers are
      * kept apart as reason codes.
      */
     private static Judgment wordingJudgment(Candidate candidate, SemanticAnswer meetsAnswer,

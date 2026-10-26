@@ -2,7 +2,7 @@ package com.rivell.workbench.knowledge;
 
 /**
  * A lower-level rule that names a different approver for the same stance than the winning rule.
- * Council §A.2: conflicts are shown, never hidden, so the person can pick either.
+ * Conflicts are shown, never hidden, so the person can pick either.
  */
 public record AuthorityConflict(String approver, AuthorityLevel source, PositionRole stance) {
 

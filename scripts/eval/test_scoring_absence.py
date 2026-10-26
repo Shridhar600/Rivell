@@ -1,4 +1,4 @@
-"""Unit tests for DW-069: missing provisions are credited by position label or reference,
+"""Unit tests for absence credit: missing provisions are credited by position label or reference,
 whole-word only. Run: cd scripts/eval && python3 -m unittest test_scoring_absence.py"""
 import unittest
 
@@ -27,12 +27,12 @@ def answer(reference):
 class WholeWordAbsenceMatchTest(unittest.TestCase):
 
     def test_a_label_equal_to_the_reference_is_credited_even_when_the_concept_is_odd(self):
-        # DW-069: novacloud G-03 Data protection came back as INTERNATIONAL_TRANSFERS
+        # novacloud G-03 Data protection came back as INTERNATIONAL_TRANSFERS
         finding = absence("G-03 Data protection", concept="INTERNATIONAL_TRANSFERS")
         self.assertTrue(scoring.absence_matches(finding, issue("G-03 Data protection")))
 
     def test_stem_overlap_no_longer_credits_a_different_position(self):
-        # DW-069: "Assistance with rights requests" used to match "Governing law and regulatory
+        # "Assistance with rights requests" used to match "Governing law and regulatory
         # carve-out" through the shared stem "regulat"
         finding = absence("Assistance with rights requests", concept="RIGHTS_REQUESTS")
         self.assertFalse(scoring.absence_matches(

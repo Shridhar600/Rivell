@@ -215,7 +215,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     ? "" : searchBundle.traceId().toString());
             searchDetail = search;
             detail.put("search", search);
-            // the route records that the search ran, whatever it found (DW-071)
+            // the route records that the search ran, whatever it found
             detail.put("route", SEARCH);
             if (!found.isEmpty()) {
                 try {
@@ -732,7 +732,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             signals.add(attempt.signal());
         }
         var facts = judged.position().policyFacts();
-        // council §A.3: only a typed rule that covers this finding's stance escalates it
+        // only a typed rule that covers this finding's stance escalates it
         var authority = EscalationAuthority.decide(facts, category);
         if (authority != null) {
             signals.add(signal(context, b -> b
@@ -912,7 +912,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     }
 
     /**
-     * DW-085: a topic the person removed from this clause must not come back through the text
+     * A topic the person removed from this clause must not come back through the text
      * search, so positions carrying it are excluded from this clause's search candidates.
      */
     private static java.util.Set<String> removedTopicKeys(ClauseSemantics clause) {

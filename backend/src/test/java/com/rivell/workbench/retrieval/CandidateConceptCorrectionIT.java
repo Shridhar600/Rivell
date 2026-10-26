@@ -39,7 +39,7 @@ import com.rivell.workbench.knowledge.KnowledgeQueryService;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * DW-017 foundation flow: an adversarial precedent whose machine classification
+ * Foundation flow: an adversarial precedent whose machine classification
  * is absent is corrected by human review, published with the effective concept,
  * and M6 retrieval discovers it through published truth alone (no retrieval-side
  * override). Machine history stays inspectable; clear/change respond correctly;
@@ -207,7 +207,7 @@ class CandidateConceptCorrectionIT {
                 CoreConcepts.LIMITATION_OF_LIABILITY.value());
         var approved = reviewService.approve(precedent.clause().id(), null);
         var publication = publicationService.publish(
-                java.util.List.of(approved.id()), java.util.Map.of(), "dw-017 flow");
+                java.util.List.of(approved.id()), java.util.Map.of(), "concept correction flow");
         assertThat(publication.publicationNumber()).isPositive();
 
         var published = knowledgeQueries.getCandidate(precedent.clause().id());
@@ -236,7 +236,7 @@ class CandidateConceptCorrectionIT {
     }
 
     /**
-     * DW-088: PostgreSQL timestamptz keeps microseconds, and a correction records who and when.
+     * PostgreSQL timestamptz keeps microseconds, and a correction records who and when.
      * The candidate it returns must carry what was stored, so it equals a later read of it.
      */
     @Test

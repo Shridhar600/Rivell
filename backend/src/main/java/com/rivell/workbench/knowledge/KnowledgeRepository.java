@@ -99,7 +99,7 @@ public interface KnowledgeRepository {
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);
 
     /**
-     * Human concept correction (DW-017); pre-publication only. Persists the
+     * Human concept correction; pre-publication only. Persists the
      * correction, the resulting review status (an APPROVED candidate demotes to
      * EDITED for re-approval), and the recomputed analysis outcome. Returns false
      * when the expected status no longer holds (concurrent transition).

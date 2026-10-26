@@ -8,7 +8,7 @@ import java.util.UUID;
  * contract ranked for a position's text by shared words and by embedding similarity,
  * fused by rank. Ranking only: the caller's comparison decides whether a clause
  * addresses the position. A database or a dedicated vector store can replace the
- * implementation behind this interface (DW-064).
+ * implementation behind this interface.
  */
 public interface ContractClauseSearch {
 

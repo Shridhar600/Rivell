@@ -177,7 +177,7 @@ class UserPositionIT {
     }
 
     /**
-     * DW-088: PostgreSQL timestamptz keeps microseconds. The candidates "make this a position"
+     * PostgreSQL timestamptz keeps microseconds. The candidates "make this a position"
      * returns are the ones it wrote, so their timestamps must match a later read of them.
      */
     @Test

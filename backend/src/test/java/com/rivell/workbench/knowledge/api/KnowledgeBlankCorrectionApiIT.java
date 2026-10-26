@@ -38,7 +38,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Reviewer finding 1: a structured correction whose values are all blank must not be able to make
+ * A structured correction whose values are all blank must not be able to make
  * a candidate's effective wording blank or null while valid machine wording exists.
  *
  * <p>Two failure modes are covered, at the API boundary a reviewer actually uses:

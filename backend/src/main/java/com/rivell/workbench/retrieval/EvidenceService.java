@@ -139,7 +139,7 @@ public class EvidenceService {
      * Engine v2 SEARCH route (spec §6): positions found by a clause's text for a clause no topic
      * paired, or whose topic-matched positions all judged it off their subject. Up to
      * {@code limit} positions not in {@code alreadyJudged} and not carrying a topic a human
-     * correction removed from the clause (DW-085), in fused order, each carrying its lane
+     * correction removed from the clause, in fused order, each carrying its lane
      * ranks; approved drafting for the found positions' topics, as a topic comparison would carry
      * it; no precedents. The contract lane is gathered as for any clause, for the comparison and
      * the triage to cite. The bundle's

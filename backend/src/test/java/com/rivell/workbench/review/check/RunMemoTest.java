@@ -107,7 +107,7 @@ class RunMemoTest {
     }
 
     /**
-     * DW-067: a run becomes evictable only once it is actually in the memo, so the eviction
+     * A run becomes evictable only once it is actually in the memo, so the eviction
      * order can never name a run the map does not hold. The order entry used to be written
      * inside {@code computeIfAbsent}'s mapping function, which runs before the mapping is
      * installed; an eviction that polled it in that window removed nothing and left the run

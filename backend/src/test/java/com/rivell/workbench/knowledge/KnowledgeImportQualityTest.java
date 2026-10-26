@@ -17,8 +17,8 @@ import com.rivell.workbench.platform.parsing.DocxStructuralParser;
 import com.rivell.workbench.platform.parsing.XlsxKnowledgeExtractor;
 
 /**
- * Deterministic import quality on two real user files (fictional dev data, copied from the
- * usertest corpus): a Word negotiation guide and an Excel clause library. No model runs here;
+ * Deterministic import quality on two representative fixture files (fictional dev data): a Word
+ * negotiation guide and an Excel clause library. No model runs here;
  * what a lawyer reviews starts as what the compiler makes of the source.
  */
 class KnowledgeImportQualityTest {

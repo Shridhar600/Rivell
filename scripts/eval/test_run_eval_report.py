@@ -158,7 +158,7 @@ class StoredEngineTest(unittest.TestCase):
 
 
 class ProbeRetryBudgetTest(unittest.TestCase):
-    """DW-059(4): a probe whose call only succeeds on a retry used to wait the provider's full
+    """A probe whose call only succeeds on a retry used to wait the provider's full
     2 s + 8 s + 30 s backoff before every check. A probe run gets a bounded budget."""
 
     def test_a_run_without_the_probe_keeps_the_provider_budget(self):
@@ -289,7 +289,7 @@ class ReportHeaderTest(unittest.TestCase):
             absenceCredit="label/reference whole-word"))
                          )
         self.assertIn("absence credit label/reference whole-word", text)
-        # a run made before DW-069 carries no marker
+        # a run scored before absence credit was recorded carries no marker
         self.assertNotIn("absence credit",
                          "\n".join(run_eval.header_lines(self.meta())))
 

@@ -24,7 +24,7 @@ import com.rivell.workbench.review.PolicyComparisonSpecs;
 import com.rivell.workbench.retrieval.EvidenceItem;
 
 /**
- * Council §A.3: an approval exists only when a typed rule covers the finding's stance. A
+ * An approval exists only when a typed rule covers the finding's stance. A
  * trigger text alone never makes one, a within-fallback note escalates only when the rule says
  * the fallback needs it, and the rule's own condition travels as the panel's condition line.
  */

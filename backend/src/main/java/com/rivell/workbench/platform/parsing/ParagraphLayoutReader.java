@@ -56,7 +56,7 @@ final class ParagraphLayoutReader {
     /**
      * A package with no relationship to a styles part gets docx4j's default styles. Left to
      * docx4j, it loads them before the part joins the package and logs an ERROR for it; adding
-     * the part first gives the same styles without the noise (DW-087). Nothing is saved.
+     * the part first gives the same styles without the noise. Nothing is saved.
      */
     private static void attachDefaultStylesWhenMissing(WordprocessingMLPackage wordPackage)
             throws Exception {

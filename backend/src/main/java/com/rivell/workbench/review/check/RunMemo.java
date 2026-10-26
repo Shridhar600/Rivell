@@ -35,7 +35,7 @@ final class RunMemo<V> {
             // The order entry is written only after computeIfAbsent has installed the mapping.
             // Written inside the mapping function, another thread could evict the run before it
             // existed in the map: the remove found nothing and the run stayed past capacity
-            // without an order entry (DW-067). One lock over the deque keeps concurrent
+            // without an order entry. One lock over the deque keeps concurrent
             // insertions from each evicting a run and taking the memo below capacity.
             synchronized (order) {
                 order.addLast(runId);

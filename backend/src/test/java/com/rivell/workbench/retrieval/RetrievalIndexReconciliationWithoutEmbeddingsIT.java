@@ -21,7 +21,7 @@ import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.review.LiabilityReviewIT;
 
 /**
- * DW-065 in the default deployment: embeddings are not configured. Reconciliation may add
+ * In the default deployment embeddings are not configured. Reconciliation may add
  * missing index rows, but it has no vector to heal and must not report, re-walk or re-upsert
  * candidates as if it did.
  */

@@ -35,7 +35,7 @@ import com.rivell.workbench.intelligence.SemanticDecisionProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * DW-011 live embedding verification against the locally running Ollama
+ * Live embedding verification against the locally running Ollama
  * embeddinggemma (768-dim) through the REAL adapter chain:
  * EmbeddingService → provider registry → OpenAI-compatible adapter → Ollama →
  * vectors → pgvector storage/query → labeled M6 EvidenceRequest.

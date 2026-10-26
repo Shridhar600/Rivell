@@ -7,7 +7,7 @@ import com.rivell.workbench.retrieval.RetrievalProperties;
 
 /**
  * Platform-owned execution scheduling for retrieval index reconciliation
- * (DW-002/DW-012 partition: retrieval owns reconciliation semantics, platform owns
+ * (partition: retrieval owns reconciliation semantics, platform owns
  * execution scheduling). Registers the recurring job only when a cron is
  * configured; execution additionally requires a running background job server.
  * The fixed job id makes re-registration idempotent across restarts.

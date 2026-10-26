@@ -33,7 +33,7 @@ export type EnrichmentStatus =
   | 'UNKNOWN'
 
 /**
- * Tenant-facing enrichment failure taxonomy (M10A.1 / DW-041).
+ * Tenant-facing enrichment failure taxonomy.
  *
  * The backend records a precise operator diagnosis but projects a narrow classification onto this
  * surface, because a tenant cannot act on whether the deployment holds credentials or has hit a

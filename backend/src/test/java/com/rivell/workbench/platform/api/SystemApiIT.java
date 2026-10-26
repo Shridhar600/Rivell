@@ -160,7 +160,7 @@ class SystemApiIT {
         assertThat(openApi.at("/components/schemas/JudgedPositionView/properties/foundBy")
                 .isMissingNode()).as("JudgedPositionView.foundBy").isFalse();
 
-        // DW-037 item 1: the redline execution views carry closed sets, not free strings.
+        // the redline execution views carry closed sets, not free strings.
         assertThat(openApi.at("/components/schemas/RedlineExecutionView/properties/status/enum")
                 .toString()).contains("\"COMPLETED\"").contains("\"FAILED\"");
         assertThat(openApi.at("/components/schemas/RedlineExecutionView/properties/outcome/enum")

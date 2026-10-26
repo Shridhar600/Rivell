@@ -43,7 +43,7 @@ import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.review.LiabilityReviewIT;
 
 /**
- * M10A.1 corrective / DW-041: the WHOLE tenant-facing semantics response is inspected, not one field.
+ * The WHOLE tenant-facing semantics response is inspected, not one field.
  *
  * <p>The first M10A.1 attempt tested {@code failureReason} and stopped there. That is the field the
  * fix was written against, so it is the only field the fix was checked on, and a disclosure through
@@ -109,7 +109,7 @@ class EnrichmentTenantDisclosureIT {
     }
 
     /**
-     * Provider attribution that is permitted while DW-041's open questions are unresolved.
+     * Provider attribution that is permitted while the disclosure questions in this area stay open.
      *
      * <p>These two tokens are the only provider-attributed content permitted anywhere in the tenant
      * response, and the allow-list is deliberate rather than a test that pins them: a pinning test
@@ -160,7 +160,7 @@ class EnrichmentTenantDisclosureIT {
         // unconditionally, for every classified reason, including UNSUPPORTED_SOURCE where the
         // document is the cause. So this fixture DOES carry provider attribution through `quality`,
         // and the allow-list check below is applied to it for that reason. Whether that write is
-        // correct is escalated, not fixed here; see the ledger entry.
+        // correct is a separate open question, escalated rather than fixed here.
         assertThat(data.path("enrichmentStatus").asText()).isEqualTo("FAILED");
         assertThat(data.has("failureReason")).isTrue();
         assertThat(data.path("quality").isArray()).isTrue();

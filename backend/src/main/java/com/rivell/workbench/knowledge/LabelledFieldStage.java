@@ -13,11 +13,11 @@ import java.util.Set;
  * text and typed authority rules. This stage runs before any bounded decision: Jev answers only
  * what the text does not state. Labels are recognised at the start of a line or a table cell,
  * case-insensitively; an unknown label that still states a walk-away or an approver is reported
- * as unmapped rather than silently dropped (council §A.4).
+ * as unmapped rather than silently dropped.
  *
  * <p>The stage never guesses. A label it does not know produces no stance; a stated label with
  * no value is unmapped; a sentence creates an authority rule only when it names an approver, so a
- * trigger text alone can never make an approval (council §A.3). A grant to the person doing the
+ * trigger text alone can never make an approval. A grant to the person doing the
  * review ("reviewing counsel may apply this fallback") is that person's authority, not an
  * approval rule.
  */
@@ -40,7 +40,7 @@ final class LabelledFieldStage {
 
     /**
      * A word that points at an approver without naming one. "Escalate to the named approver"
-     * states a route, not an authority rule (council §A.3).
+     * states a route, not an authority rule.
      */
     private static final Set<String> GENERIC_APPROVERS = Set.of(
             "approver", "named approver", "the named approver", "a named approver",
@@ -817,7 +817,7 @@ final class LabelledFieldStage {
             return;
         }
         var object = stripLeadingArticle(rest);
-        // a threshold is a condition to show, never a value to evaluate (council §E)
+        // a threshold is a condition to show, never a value to evaluate
         if (condition == null) {
             condition = conditionAfterThreshold(object);
         }

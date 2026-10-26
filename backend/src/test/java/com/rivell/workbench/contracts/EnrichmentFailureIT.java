@@ -152,7 +152,7 @@ class EnrichmentFailureIT {
     }
 
     /**
-     * DW-079: analysis of a version whose stored file could not be read must answer a definite
+     * Analysis of a version whose stored file could not be read must answer a definite
      * 422 and still record the FAILED state, instead of surfacing as an unhandled 500.
      */
     @Test
@@ -180,7 +180,7 @@ class EnrichmentFailureIT {
     }
 
     /**
-     * M10A.1 / DW-041: the wire reason must never name provider or configuration state, for any
+     * The wire reason must never name provider or configuration state, for any
      * recorded reason, while the precise reason stays in state for an operator.
      *
      * <p>This is a whole-taxonomy assertion rather than a single case, because the disclosure risk

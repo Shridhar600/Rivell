@@ -3,7 +3,7 @@ package com.rivell.workbench.review.api;
 import com.rivell.workbench.review.CheckExpectation;
 
 /**
- * Frozen coverage state of one declared concept (DW-024): a concept that receives
+ * Frozen coverage state of one declared concept: a concept that receives
  * completeness credit from a secondary-only classification gets no substantive check,
  * so the review cannot silently look fully assessed.
  */

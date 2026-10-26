@@ -48,7 +48,7 @@ import com.rivell.workbench.review.ReviewPackRegistry;
 import com.rivell.workbench.review.ReviewService;
 
 /**
- * M10A.1 / DW-046: diagnostics computes four counts, and it must do so with an aggregate.
+ * Diagnostics computes four counts, and it must do so with an aggregate.
  *
  * <p>Correctness alone cannot hold this line. The hydrating shape and the aggregate shape return
  * identical numbers, so a test that only checks the counts would keep passing after a regression to
@@ -131,7 +131,7 @@ class ReviewDiagnosticsQueryIT {
 
 
     /**
-     * M10A.1 corrective / DW-046: the decision counters are the eval-label surface, so they must
+     * The decision counters are the eval-label surface, so they must
      * count the CURRENT effective decision for each finding, and only within one review, one run and
      * one organization.
      *
@@ -274,7 +274,7 @@ class ReviewDiagnosticsQueryIT {
      *
      * <p>The revision numbers and the supersedes chain are load-bearing: the aggregate selects
      * {@code distinct on (finding_id) ... order by finding_id, revision desc}, so a fixture with
-     * sloppy revisions would look rigorous while proving nothing. Dropping {@code revision desc}
+     * no real revision chain would look rigorous while proving nothing. Dropping {@code revision desc}
      * from the production query must therefore fail this test.
      */
     private void seedDecisions(
@@ -375,7 +375,7 @@ class ReviewDiagnosticsQueryIT {
         var run = analysisService.analyze(organizationId, review.id());
 
         // A realistic multi-finding run covering every classification, each with concept children.
-        // The cost DW-046 removes scales with the number of findings and their children, so a
+        // The cost the aggregate removes scales with the number of findings and their children, so a
         // single-finding fixture would make the query assertions vacuous.
         findingRepository.replaceFindings(organizationId, review.id(), run.id(),
                 multiFindingRun(organizationId, review.id(), run.id()));

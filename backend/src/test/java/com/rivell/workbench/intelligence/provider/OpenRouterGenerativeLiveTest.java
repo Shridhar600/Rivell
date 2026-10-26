@@ -26,7 +26,7 @@ import com.rivell.workbench.intelligence.ReasoningSpec;
 import com.rivell.workbench.intelligence.SemanticState;
 
 /**
- * DW-006 live generative verification against a real remote model (OpenRouter
+ * Live generative verification against a real remote model (OpenRouter
  * stealth/space-bunny-alpha, JSON mode) through the REAL chain:
  * GenerativeReasoningService → ModelPolicy → provider registry →
  * OpenAI-compatible adapter → schema/domain validation → typed result.
